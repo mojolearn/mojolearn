@@ -15,6 +15,7 @@ from std.memory import memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.os import getenv
 from core.device_plan import DevicePlan
+from training.optimizer_device_plan import optimizer_device_plan
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_copy, py_ints
 from bindings.causal_lm_construct import _model_f32, _model_shape, _model_block, _model_bindings, _model_native_buffer
 from bindings.causal_lm_public import _native_function
@@ -417,23 +418,9 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def samba_optimizer_device_plan() raises -> DevicePlan:
-    """The optimizer device plan of one Samba entry, read from the
-    environment ONCE there and passed down as a value. `setting` is the raw
-    MOJOLEARN_OPTIMIZER_DEVICE_COUNT (default "1"); `count` is that setting
-    parsed by `Int` exactly as the optimizer's owner loops parsed it. A
-    setting `Int` refuses gets count 0 here instead of raising at the entry,
-    so a call that never reads the count is unchanged and one that does
-    still refuses (the owner loops refuse a count outside 1..64)."""
-    var setting = String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))
-    var count = 0
-    try:
-        count = Int(setting)
-    except:
-        count = 0
-    var devices = List[Int]()
-    for rank in range(min(max(count, 0), 64)):  # driver-loop: over the plan's ranks
-        devices.append(rank)
-    return DevicePlan(setting=setting, count=count, root=0, devices=devices^)
+    """The optimizer device plan of one Samba entry: `optimizer_device_plan`,
+    read once here and passed down as a value."""
+    return optimizer_device_plan()
 
 
 def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObject, context: PythonObject) raises -> PythonObject:

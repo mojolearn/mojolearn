@@ -10,6 +10,7 @@ from std.os import getenv
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_plan import DevicePlan
+from training.optimizer_device_plan import optimizer_device_plan
 from core.host_parallel import host_parallelize
 from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
@@ -82,3 +83,15 @@ def parallel_accumulate_host(
     _ = contexts^
     copy_f32(result.unsafe_ptr(),out_ptr,n)
     return n
+
+
+def parallel_accumulate_host(
+    ctx: DeviceContext,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    parts_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, a: Int, t_tokens: Int,
+) raises -> Int:
+    # Plan-less entry for the native dispatch table and the training binding:
+    # the plan is read once here.
+    var plan = optimizer_device_plan()
+    return parallel_accumulate_host(ctx, plan, out_ptr, parts_ptr, n, a, t_tokens)

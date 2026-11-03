@@ -34,6 +34,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.device_plan import DevicePlan
+from training.optimizer_device_plan import optimizer_device_plan
 from training.accumulate_multi_gpu import parallel_accumulate_host
 from training.samba_ops import samba_accumulate_device
 from training.clip_multi_gpu import parallel_clip_grad_norm_host
@@ -724,3 +725,42 @@ def public_accumulate(
     scatter(f, out_addrs, nbytes, 0, req.j)
     _ = f^
     return req.n_total
+
+
+# Plan-less entries: the native dispatch tables and the training binding call
+# these; each reads the optimizer plan ONCE here and passes the value down.
+
+
+def per_call_step(
+    ctx: DeviceContext, pp: F32P, gp: F32P, mp: F32P, vp: F32P, op: I32P, ip: I32P, fp: F32P,
+    n_tensors: Int, kind: Int, t: Int, nesterov: Int, lr: Float32, beta1: Float32, beta2: Float32,
+    eps: Float32, weight_decay: Float32, momentum: Float32, dampening: Float32, max_norm: Float32,
+    maximize: Bool,
+) raises -> Int:
+    var plan = optimizer_device_plan()
+    return per_call_step(
+        ctx, plan, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov, lr, beta1, beta2,
+        eps, weight_decay, momentum, dampening, max_norm, maximize,
+    )
+
+
+def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
+    var plan = optimizer_device_plan()
+    return public_step(ctx, plan, req)
+
+
+def public_io(ctx: DeviceContext, req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
+    var plan = optimizer_device_plan()
+    return public_io(ctx, plan, req, op_code, tensor)
+
+
+def public_clip(ctx: DeviceContext, addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
+    var plan = optimizer_device_plan()
+    return public_clip(ctx, plan, addrs, nbytes, max_norm)
+
+
+def public_accumulate(
+    ctx: DeviceContext, in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int,
+) raises -> Int:
+    var plan = optimizer_device_plan()
+    return public_accumulate(ctx, plan, in_addrs, nbytes, out_addrs, a_count, tokens)
