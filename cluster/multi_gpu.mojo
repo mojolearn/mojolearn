@@ -14,7 +14,7 @@ rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no CPU route restates this driver, so no Mac and
 no CPU-only box can watch it fire.
 """
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -49,8 +49,16 @@ struct AssignmentShard(Movable):
         _ = self.ctx^
 
 
-def assignment_device_count() raises -> Int:
-    var value = device_plan_setting("MOJOLEARN_KMEANS_DEVICE_COUNT")
+def kmeans_device_plan() raises -> DevicePlan:
+    """The KMeans family's device plan, read once at a family entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    `device_plan_setting("MOJOLEARN_KMEANS_DEVICE_COUNT")` returned, so
+    `assignment_device_count` parses the same text as before."""
+    return device_plan_current("MOJOLEARN_KMEANS_DEVICE_COUNT", "")
+
+
+def assignment_device_count(dplan: DevicePlan) raises -> Int:
+    var value = dplan.setting
     if value == "":
         return 1
     var count = Int(value)
@@ -67,6 +75,7 @@ def assignment_parallel[veclen: Int, kblk: Int, tr: Int, tc: Int](
     mut centroids: DeviceBuffer[DType.float32], mut x_norm: DeviceBuffer[DType.float32],
     mut centroid_norm: DeviceBuffer[DType.float32], n_samples: Int,
     n_clusters: Int, n_features: Int, is_sqrt: Int32, count: Int,
+    dplan: DevicePlan,
 ) raises:
     comptime mblk = 4 * tr
     comptime nblk = 4 * tc
@@ -91,7 +100,7 @@ def assignment_parallel[veclen: Int, kblk: Int, tr: Int, tc: Int](
             # the assignment kernel reads do.
             if rank > 0:
                 source = begin - 1
-        var device = DeviceContext(device_id=device_plan_device(rank))
+        var device = DeviceContext(device_id=dplan.device(rank))
         var sx = device.enqueue_create_buffer[DType.float32](rows * n_features)
         var sxn = device.enqueue_create_buffer[DType.float32](rows)
         var sc = device.enqueue_create_buffer[DType.float32](n_clusters * n_features)
