@@ -129,7 +129,7 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                         var stream = step * logical_micros + micro if training else -1
                         var begin = Int64(perf_counter_ns())
                         wp[rank].evaluate(p, node, args, seed, backward, stream)
-                        wp[rank].session.ex.sync()
+                        wp[rank].executor.session.ex.sync()
                         var end = Int64(perf_counter_ns())
                         ep[slot] = PartitionEvent(node, micro, placement[node], devices[rank], backward, begin, end)
                         if backward:
@@ -216,27 +216,27 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
         self.busy = True
         self.events.clear()
         try:
-            ty = self.workers[0].session.ex.alloc(max(1, target.count()))
+            ty = self.workers[0].executor.session.ex.alloc(max(1, target.count()))
             storage.append(ty)
-            yb = self.workers[0].session.ex.alloc(max(1, bs * target.cols))
+            yb = self.workers[0].executor.session.ex.alloc(max(1, bs * target.cols))
             storage.append(yb)
-            indices = self.workers[0].session.ex.alloc(n)
+            indices = self.workers[0].executor.session.ex.alloc(n)
             storage.append(indices)
             for k in range(len(srcs)):  # driver-loop: call-scoped dataset buffers
-                var buf = self.workers[0].session.ex.alloc(srcs[k].count())
+                var buf = self.workers[0].executor.session.ex.alloc(srcs[k].count())
                 storage.append(buf)
                 full.append(buf)
-                var batch_buf = self.workers[0].session.ex.alloc(bs * (shapes[k].count() // n))
+                var batch_buf = self.workers[0].executor.session.ex.alloc(bs * (shapes[k].count() // n))
                 storage.append(batch_buf)
                 batches.append(batch_buf)
                 if p.in_kinds[k] == PROGRAM_IN_IDS:
-                    upload_cast_i32(self.workers[0].session.ex, buf, srcs[k], "partitioned ids")
+                    upload_cast_i32(self.workers[0].executor.session.ex, buf, srcs[k], "partitioned ids")
                 else:
-                    upload_cast(self.workers[0].session.ex, buf, srcs[k])
+                    upload_cast(self.workers[0].executor.session.ex, buf, srcs[k])
             if loss_kind != 0:
-                upload_cast(self.workers[0].session.ex, ty, target)
+                upload_cast(self.workers[0].executor.session.ex, ty, target)
             for e in range(epochs):  # driver-loop: epochs
-                epoch_order(self.workers[0].session.ex, shuffle, self.seed, self.epoch, n, indices)
+                epoch_order(self.workers[0].executor.session.ex, shuffle, self.seed, self.epoch, n, indices)
                 var loss_total = Float32(0)
                 var start = 0
                 while start < n:  # driver-loop: optimizer minibatches
@@ -254,14 +254,14 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                             var width = sh.count() // n
                             sh.d[0] = rows
                             var data = List[Float32](length=sh.count(), fill=Float32(0))
-                            gather_rows(self.workers[0].session.ex, full[k], indices, start + lo, rows, width, batches[k])
-                            self.workers[0].session.ex.download(FP(unsafe_from_address=Int(data.unsafe_ptr())), batches[k], sh.count())
+                            gather_rows(self.workers[0].executor.session.ex, full[k], indices, start + lo, rows, width, batches[k])
+                            self.workers[0].executor.session.ex.download(FP(unsafe_from_address=Int(data.unsafe_ptr())), batches[k], sh.count())
                             values[micro * p.n_values() + k] = GraphBytes(sh, data^, p.in_kinds[k] == PROGRAM_IN_IDS)
                         var cols = max(1, target.cols)
                         var y = List[Float32](length=rows * cols, fill=Float32(0))
                         if loss_kind != 0:
-                            gather_rows(self.workers[0].session.ex, ty, indices, start + lo, rows, cols, yb)
-                            self.workers[0].session.ex.download(FP(unsafe_from_address=Int(y.unsafe_ptr())), yb, rows * cols)
+                            gather_rows(self.workers[0].executor.session.ex, ty, indices, start + lo, rows, cols, yb)
+                            self.workers[0].executor.session.ex.download(FP(unsafe_from_address=Int(y.unsafe_ptr())), yb, rows * cols)
                         targets[micro] = GraphBytes(ShapeN.matrix(rows, cols), y^)
                     var last_wave = self.plan.max_level + micros - 1
                     for wave in range(1, last_wave + 1):  # driver-loop: overlapping forward pipeline
@@ -307,7 +307,7 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
         # One acquisition ledger handles partial setup without parallel-list
         # indexing and releases call storage before a failed object is closed.
         for k in range(len(storage)):  # driver-loop: call-scoped input owners
-            self.workers[0].session.ex.free(storage[k])
+            self.workers[0].executor.session.ex.free(storage[k])
 
     def close(mut self) raises:
         if self.busy:

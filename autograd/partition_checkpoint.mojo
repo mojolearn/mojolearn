@@ -61,14 +61,14 @@ def partition_checkpoint[E: Exec & Movable & Deinitable](mut d: PartitionedProgr
         var owner = d.plan.owners[j] % len(d.workers)
         var n = p.param_shapes[j].count()
         var off = ck.offsets[j]
-        d.workers[owner].session.ex.download(FP(unsafe_from_address=Int(ck.param.unsafe_ptr())) + off,
+        d.workers[owner].executor.session.ex.download(FP(unsafe_from_address=Int(ck.param.unsafe_ptr())) + off,
                                              d.workers[owner].params[j], n)
         if d.plan.trainable[j]:
             if slots[0]:
-                d.workers[owner].session.ex.download(FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off,
+                d.workers[owner].executor.session.ex.download(FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off,
                                                      d.workers[owner].states[j].s1, n)
             if slots[1]:
-                d.workers[owner].session.ex.download(FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off,
+                d.workers[owner].executor.session.ex.download(FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off,
                                                      d.workers[owner].states[j].s2, n)
             ck.ext_floats.append(d.workers[owner].states[j].pw1)
             ck.ext_floats.append(d.workers[owner].states[j].pw2)
@@ -144,13 +144,13 @@ def restore_partition_state[E: Exec & Movable & Deinitable](mut d: PartitionedPr
         var n = d.plan.parameters[j].shape.count()
         var off = ck.offsets[j]
         if slots[0]:
-            d.workers[owner].session.ex.upload(d.workers[owner].states[j].s1,
+            d.workers[owner].executor.session.ex.upload(d.workers[owner].states[j].s1,
                 FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off, n)
         if slots[1]:
-            d.workers[owner].session.ex.upload(d.workers[owner].states[j].s2,
+            d.workers[owner].executor.session.ex.upload(d.workers[owner].states[j].s2,
                 FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off, n)
         d.workers[owner].states[j].pw1 = ck.ext_floats[scalar + 3 * j]
         d.workers[owner].states[j].pw2 = ck.ext_floats[scalar + 3 * j + 1]
         d.workers[owner].states[j].mu_prod = ck.ext_floats[scalar + 3 * j + 2]
     for rank in range(len(d.workers)):  # driver-loop: restore completion
-        d.workers[rank].session.ex.sync()
+        d.workers[rank].executor.session.ex.sync()
