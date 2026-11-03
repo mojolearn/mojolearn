@@ -14,6 +14,7 @@ from autograd.rankn import ShapeN
 from autograd.program import PROGRAM_IN_IDS
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.data import epoch_order, gather_rows, DATA_MAX_ROWS
+from autograd.program_runtime import minibatch_rows
 from core.cast_in import CastIn
 from core.host_parallel import host_parallelize
 from checks.numerics import ftz, identical_div, identical_mul_add
@@ -239,7 +240,7 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
                 var loss_total = Float32(0)
                 var start = 0
                 while start < n:  # driver-loop: optimizer minibatches
-                    var count = min(bs, n - start)
+                    var count = minibatch_rows(start, n, bs)
                     var micros = min(self.microbatches, count)
                     var values = empty_graph_bytes(micros * p.n_values())
                     var gradients = empty_graph_bytes(micros * p.n_values())

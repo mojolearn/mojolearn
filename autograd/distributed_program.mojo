@@ -12,6 +12,7 @@ from autograd.ops import OP_AG_ACCUMULATE
 from autograd.program_executor import ProgramExecutor
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape
 from autograd.program_replay_metadata import PreparedProgramReplay
+from autograd.program_runtime import minibatch_rows
 from autograd.rankn import ShapeN
 from autograd.optim import OptimizerConfig, OptimizerState, step_lr, optimizer_slots
 from autograd.model import epoch_lr
@@ -328,7 +329,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                 var epoch_loss = Float32(0)
                 var start = 0
                 while start < n:  # driver-loop: optimizer minibatches
-                    var count = min(bs, n - start)
+                    var count = minibatch_rows(start, n, bs)
                     var shards = min(self.logical_shards, count)
                     for rank in range(len(self.workers)):  # driver-loop: reset disjoint accumulators
                         wp[rank].clear_totals()
