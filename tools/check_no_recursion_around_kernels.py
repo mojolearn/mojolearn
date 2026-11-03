@@ -205,32 +205,42 @@ def parse(sources):
         while stack:
             ind, name, start = stack.pop()
             spans.append((name, start, len(lines)))
-        names = set()
+        # One node per def span: an overload set `f` is several nodes
+        # (rel, f, 0..k). A call to `f` from one overload is an edge to its
+        # SIBLINGS, never to itself: the plan-less entries of 2026-11-03
+        # (`gemm_nt_gram(...)` calling `gemm_nt_gram(plan, ...)`) are
+        # forwarding, not recursion. A single def calling its own name is
+        # still a self edge. Blind spot, accepted: an overload that recurses
+        # into its own span is not seen (a sibling cycle A -> B -> A is).
+        names = {}
         for name, start, end in spans:
             if name is None:
                 continue
-            names.add(name)
-            bodies.setdefault((rel, name), []).append("\n".join(lines[start:end]))
+            k = len(names.setdefault(name, []))
+            names[name].append((rel, name, k))
+            bodies[(rel, name, k)] = "\n".join(lines[start:end])
         defs[rel] = names
 
     edges, lib_calls, launches = {}, {}, set()
-    for (rel, name), chunks in bodies.items():
-        key = (rel, name)
+    for key, body in bodies.items():
+        rel, name, k = key
         edges.setdefault(key, set())
-        body = "\n".join(chunks)
         # Skip the def line's own name so `def f(` is not a self call.
         body_calls = CALL_RE.findall(re.sub(r"\bdef\s+\w+", "", body))
         for callee in set(body_calls):
             if callee in defs[rel]:
-                edges[key].add((rel, callee))
+                targets = defs[rel][callee]
+                if callee == name and len(targets) > 1:
+                    targets = [t for t in targets if t != key]
+                edges[key].update(targets)
             elif callee in imports[rel]:
                 module, orig = imports[rel][callee]
                 if module.split(".")[0] in LIBRARY_KERNEL_PREFIXES:
                     lib_calls.setdefault(key, set()).add(module + "." + orig)
                     continue
                 target = _resolve_module(module, rel, known)
-                if target and orig in defs.get(target, ()):
-                    edges[key].add((target, orig))
+                if target and orig in defs.get(target, {}):
+                    edges[key].update(defs[target][orig])
         if KERNEL_LAUNCH_RE.search(body):
             launches.add(key)
     return set(bodies), edges, lib_calls, launches
@@ -292,7 +302,8 @@ def find_cycles(sources):
         reach = _reach(comp, edges)
         libs = sorted({lib for v in reach for lib in lib_calls.get(v, ())})
         ours = any(v in launches for v in reach)
-        found.append((sorted(comp), libs, ours))
+        members = sorted({(rel, name) for rel, name, _ in comp})
+        found.append((members, libs, ours))
     return found
 
 
