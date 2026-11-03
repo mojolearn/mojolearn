@@ -59,12 +59,10 @@ LIBRARY_KERNEL_PREFIXES = ("linalg", "nn")
 
 # (file, sorted cycle members) -> reason. A reviewed cycle must say why the
 # recursive edge cannot coexist with the library kernel in one instantiation.
+# The svm `kernel_op <-> _kernel_rows` cycle is gone (2026-11-03): the row
+# shards moved to svm/multi_gpu.mojo::kernel_matrix_dispatch, which calls
+# kernel_op one way and names _kernel_rows under IDENTICAL only.
 REVIEWED = {
-    ("svm/impl/distance/kernel_matrices.mojo", ("_kernel_rows", "kernel_op")): (
-        "the recursive call is `comptime if GLOBAL_NUMERIC_MODE == "
-        "NUMERIC_IDENTICAL`, and IDENTICAL reaches identical_gemm_into, "
-        "never gemm_nt/matmul (FAST)"
-    ),
     ("cluster/impl/detail/kmeans.mojo",
      ("init_scalable_kmeans_plus_plus", "kmeans_fit_main_traced")): (
         "runtime-gated only (the inner fit is INIT_ARRAY), and FAST reaches "

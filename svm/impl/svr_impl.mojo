@@ -51,6 +51,7 @@ be spelled. They are `-1` and `+1`, they are never read at
 
 from max.gpu.host import DeviceContext
 
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from svm.checks.device_select import upload_f32
 from svm.impl.smosolver import SmoSolver, SmoTrace
@@ -82,6 +83,7 @@ def svr_fit(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
     c_rows: List[Float32] = List[Float32](),
+    plan: DevicePlan = plan_for_single(),
 ) raises -> SvmModel:
     """`svrFit(handle, X, n_rows, n_cols, y, param, kernel_params, model,
     sample_weight)`. Returns the model (host values); `trace` receives the
@@ -139,7 +141,7 @@ def svr_fit(
     card.record_device[DType.float32](ctx, "svm.input.y", yv, n_rows)
 
     var smo = SmoSolver(
-        ctx, param, kp, n_rows, n_cols, kernel_tile_byte_limit,
+        ctx, plan, param, kp, n_rows, n_cols, kernel_tile_byte_limit,
         block_solve_threads, record_iterations, scratch_pad, scratch_poison,
         c_rows,
     )
@@ -162,6 +164,7 @@ def svr_predict(
     kp: KernelParams,
     buffer_size_mib: Float64,
     mut card: IdentityTrace,
+    plan: DevicePlan = plan_for_single(),
 ) raises -> List[Float32]:
     """`SVR::predict`, which the reference reaches through `SVMBase::predict` and
     therefore through `svcPredict(..., predict_class = false)`. One value
@@ -172,5 +175,6 @@ def svr_predict(
     ask for it.
     """
     return svc_predict(
-        ctx, model, x_host, n_rows, n_cols, kp, buffer_size_mib, False, card
+        ctx, model, x_host, n_rows, n_cols, kp, buffer_size_mib, False, card,
+        plan,
     )
