@@ -19,6 +19,7 @@ as its arrays and scalars; the scalars widen float32 to float64 exactly.
 """
 
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.device_plan import DevicePlan, device_plan_current, device_plan_setting
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from core.resample_impl import resample_store_indices
@@ -86,6 +87,18 @@ def resample_vendor_binding() raises -> PythonObject:
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
+def _resample_entry_plan() raises -> DevicePlan:
+    """The device plan of one resample call, read ONCE here at the entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md); everything below takes
+    the value. Its `setting` is the resample family's own, exactly what
+    `resample/estimator.mojo` read before the move: the plan's size while a
+    plan driving the RESAMPLE family is bound to this thread, else
+    MOJOLEARN_RESAMPLE_DEVICE_COUNT."""
+    var plan = device_plan_current()
+    plan.setting = device_plan_setting("MOJOLEARN_RESAMPLE_DEVICE_COUNT")
+    return plan^
+
+
 def _bootstrap_run(
     x: List[Float32],
     n: Int,
@@ -114,6 +127,7 @@ def _bootstrap_run(
         alternative,
         q_or_prop,
         r_first,
+        plan=Optional[DevicePlan](_resample_entry_plan()),
     )
     copy_f32(r.distribution.unsafe_ptr(), dp, n_resamples)
     copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
@@ -274,7 +288,8 @@ def _permutation_run(
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
     var r = permutation_test_host(
-        x, y, statistic, n_resamples, seed, alternative, r_first
+        x, y, statistic, n_resamples, seed, alternative, r_first,
+        plan=Optional[DevicePlan](_resample_entry_plan()),
     )
     copy_f32(r.null_distribution.unsafe_ptr(), np_, n_resamples)
     sp.unsafe_store(0, Float64(r.observed))
@@ -483,7 +498,8 @@ def _mc_run(
     var closed = Float32(0.0)
     if f_id == MC_F_CONST:
         var r = monte_carlo_integrate_host[MC_F_CONST](
-            lower, upper, n_samples, seed, i_first
+            lower, upper, n_samples, seed, i_first,
+            plan=Optional[DevicePlan](_resample_entry_plan()),
         )
         integral = r.integral
         mean = r.mean
@@ -491,7 +507,8 @@ def _mc_run(
         closed = mc_closed_form_for[MC_F_CONST](lower, upper)
     elif f_id == MC_F_SUM:
         var r = monte_carlo_integrate_host[MC_F_SUM](
-            lower, upper, n_samples, seed, i_first
+            lower, upper, n_samples, seed, i_first,
+            plan=Optional[DevicePlan](_resample_entry_plan()),
         )
         integral = r.integral
         mean = r.mean
@@ -499,7 +516,8 @@ def _mc_run(
         closed = mc_closed_form_for[MC_F_SUM](lower, upper)
     elif f_id == MC_F_PRODUCT:
         var r = monte_carlo_integrate_host[MC_F_PRODUCT](
-            lower, upper, n_samples, seed, i_first
+            lower, upper, n_samples, seed, i_first,
+            plan=Optional[DevicePlan](_resample_entry_plan()),
         )
         integral = r.integral
         mean = r.mean
