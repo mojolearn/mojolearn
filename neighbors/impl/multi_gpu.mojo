@@ -13,7 +13,7 @@ the shift is guarded by `rank > 0`, and `knn_device_count` caps the count at
 attributable to the define rather than to the second device. Owed a two-device
 column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.host_parallel import host_parallelize
 from std.os import getenv
@@ -27,8 +27,16 @@ from neighbors.impl.detail.knn_brute_force import (
 )
 
 
-def knn_device_count(rows: Int, method: Int) raises -> Int:
-    var count = Int(device_plan_setting("MOJOLEARN_NEIGHBORS_DEVICE_COUNT", "1"))
+def neighbors_device_plan() raises -> DevicePlan:
+    """The neighbors family's device plan, read once at a family entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    `device_plan_setting("MOJOLEARN_NEIGHBORS_DEVICE_COUNT", "1")` returned,
+    so `knn_device_count` parses the same text as before."""
+    return device_plan_current("MOJOLEARN_NEIGHBORS_DEVICE_COUNT", "1")
+
+
+def knn_device_count(dplan: DevicePlan, rows: Int, method: Int) raises -> Int:
+    var count = Int(dplan.setting)
     if count < 1 or count > 64:
         raise Error("neighbors device count must be in 1..64")
     if count > 1:
@@ -83,6 +91,7 @@ def parallel_knn_rows(
     mut out_dist: DeviceBuffer[DType.float32], mut out_idx: DeviceBuffer[DType.uint32],
     nq: Int, ni: Int, d: Int, k: Int, query_tile: Int, buf_len: Int,
     return_sqrt: Bool, method: Int, metric: Int, metric_arg: Float32, count: Int,
+    dplan: DevicePlan,
 ) raises -> Int:
     ctx.synchronize()
     var shards = List[KNNRowShard]()
@@ -95,7 +104,7 @@ def parallel_knn_rows(
             # Check-only arm: later owners read their query rows one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=device_plan_device(rank))
+        var device = DeviceContext(device_id=dplan.device(rank))
         var qv = queries.create_sub_buffer[DType.float32](source*d, rows*d)
         var nv = query_norm.create_sub_buffer[DType.float32](source, rows)
         var q = peer_clone(ctx, device, qv)
