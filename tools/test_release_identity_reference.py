@@ -101,13 +101,14 @@ class Repo:
         self.git("commit", "-q", "-m", message)
         return self.git("rev-parse", "HEAD")
 
-    def admit(self, record_commit, *, conflict=False, other_harness=False, legacy=None, legacy_ref="n/a:legacy"):
+    def admit(self, record_commit, *, conflict=False, other_harness=False, legacy=None, legacy_ref="n/a:legacy",
+              salt=""):
         """Column records at ``record_commit`` and the table that admits them, committed together."""
         records, cells = [], {}
         for index, cls in enumerate(CLASSES):
             body = dict(commit=record_commit, cells={
-                f"{lane}/base": dict(verdict="STABLE", hashes=[h16(lane, "train")],
-                                     **{p: [h16(lane, p)] for p in PARTS[1:]},
+                f"{lane}/base": dict(verdict="STABLE", hashes=[h16(lane + salt, "train")],
+                                     **{p: [h16(lane + salt, p)] for p in PARTS[1:]},
                                      **{p + "_verdict": "STABLE" for p in PARTS[1:]})
                 for lane in ("ols", "ridge")})
             raw = json.dumps(body, sort_keys=True)
@@ -116,7 +117,7 @@ class Repo:
             records.append(dict(**{"class": cls}, commit=record_commit, dir="col", file=f"{cls}.identical.json",
                                 sha256=sha, vendor=cls))
         for lane in ("ols", "ridge"):
-            cells[f"{lane}/base"] = {p: dict(ref=h16(lane, p), cols={c: i for i, c in enumerate(CLASSES)})
+            cells[f"{lane}/base"] = {p: dict(ref=h16(lane + salt, p), cols={c: i for i, c in enumerate(CLASSES)})
                                      for p in PARTS}
         if conflict:
             cells["ols/base"]["infer"]["conflict"] = True
@@ -163,9 +164,11 @@ def plan(repo, tmp_path, revision, *, attempts=(), explain=False, **kwargs):
 
 
 @pytest.fixture
-def repo(tmp_path):
+def repo(tmp_path, monkeypatch):
     IR._MEMO.clear()
     D._REVISIONS.clear()
+    # Never read the real release records (~/mojolearn-evidence/release) from a test.
+    monkeypatch.setenv(IR.RELEASE_RECORDS_ENV, str(tmp_path / "release-records"))
     made = Repo(tmp_path / "repo")
     made.record = made.commit("frozen sources")
     return made
@@ -275,16 +278,134 @@ def test_failed_attempt_on_an_unchanged_closure_is_repaired(repo, tmp_path):
     assert rows["identity-amd/ols"]["status"] == "passed"
 
 
-def test_release_floor_measures_old_records_from_the_last_release(repo, tmp_path):
+def tag_release(repo, commit, version="0.8.64"):
+    for vendor in ("nvidia", "amd"):
+        repo.git("tag", "-a", f"alpha-api-{version}-{vendor}-20261102", "-m", "release", commit)
+
+
+def test_a_release_tag_alone_is_not_a_floor(repo, tmp_path):
+    # ols changed after its record and before the release; the table admitting the old record was
+    # committed only after the tag, so the release holds no receipt for it (0.8.64/0.8.65 shipped
+    # under owner waivers: a published release is not verification).
     repo.write("core/ols.mojo", "fn ols(): return 3\n")
     tagged = repo.commit("changed before the last release")
-    for vendor in ("nvidia", "amd"):
-        repo.git("tag", "-a", f"alpha-api-0.8.64-{vendor}-20261102", "-m", "release", tagged)
+    tag_release(repo, tagged)
     freeze = repo.admit(repo.record)
     row = plan(repo, tmp_path, freeze)["identity-apple/ols"]
-    assert row["status"] == "passed"
+    assert row["status"] == "untested"
     assert row["reference"]["release_floor"]["commit"] == tagged
-    assert row["reference"]["basis"][0]["basis"] == "release-floor"
+    item = row["reference"]["basis"][0]
+    assert item["basis"] == "record" and item["base"] == repo.record
+    assert item["floor_refused"].startswith(f"no admitted receipt at the floor: no admitted reference table at {tagged[:12]}")
+    assert row["reasons"][0].startswith(f"closure changed since {repo.record[:12]} (apple metal): 1 file(s): core/ols.mojo")
+
+
+def test_floor_without_receipt_falls_back_to_the_record_revision(repo, tmp_path):
+    # The table at the floor admits the record, but the lane's closure moved between the record and
+    # the floor: the floor's own admission owed a record, so it is no receipt.
+    repo.admit(repo.record)
+    repo.write("core/ols.mojo", "fn ols(): return 3\n")
+    tagged = repo.commit("changed before the last release")
+    tag_release(repo, tagged)
+    repo.write("docs/notes.md", "after the release\n")
+    freeze = repo.commit("after the release")
+    rows = plan(repo, tmp_path, freeze)
+    row = rows["identity-nvidia/ols"]
+    assert row["status"] == "untested"
+    item = row["reference"]["basis"][0]
+    assert item["basis"] == "record" and item["base"] == repo.record
+    assert f"closure changed between its record {repo.record[:12]} and the floor {tagged[:12]}" in item["floor_refused"]
+    assert "core/ols.mojo" in row["reasons"][0]
+    # ridge's closure never moved: it holds a receipt and is measured from the floor.
+    ridge = rows["identity-nvidia/ridge"]
+    assert ridge["status"] == "passed" and ridge["reference"]["basis"][0]["basis"] == "release-floor"
+
+
+def receipted_floor(repo):
+    """Admitted at A (records at R); ridge changes; release tagged; a docs commit; the freeze."""
+    repo.admit(repo.record)
+    repo.write("core/ridge.mojo", "fn ridge(): return 2\n")
+    tagged = repo.commit("ridge changed before the last release")
+    tag_release(repo, tagged)
+    return tagged
+
+
+def test_floor_with_receipt_passes_from_the_floor(repo, tmp_path):
+    tagged = receipted_floor(repo)
+    repo.write("docs/notes.md", "after the release\n")
+    freeze = repo.commit("after the release")
+    rows = plan(repo, tmp_path, freeze)
+    row = rows["identity-amd/ols"]
+    assert row["status"] == "passed", row["reasons"]
+    item = row["reference"]["basis"][0]
+    assert item["basis"] == "release-floor" and item["base"] == tagged and item["commit"] == repo.record
+    assert IR.TABLE_PATH in item["floor_receipt"]
+    # The receipt's evidence (the floor's table and its admitted record) is cited at the floor.
+    floor_evidence = {(e["path"], e["revision"]) for e in row["evidence"] if e["revision"] == tagged}
+    assert (IR.TABLE_PATH, tagged) in floor_evidence
+    assert ("bench/results/identity_break/col/amd.identical.json", tagged) in floor_evidence
+    # ridge changed between its record and the floor: no receipt, measured from its record.
+    ridge = rows["identity-amd/ridge"]
+    assert ridge["status"] == "untested" and ridge["reference"]["basis"][0]["basis"] == "record"
+
+
+def test_floor_receipt_needs_the_same_digests(repo, tmp_path):
+    tagged = receipted_floor(repo)
+    freeze = repo.admit(repo.record, salt="-readmitted")
+    row = plan(repo, tmp_path, freeze)["identity-cpu/ols"]
+    item = row["reference"]["basis"][0]
+    assert item["basis"] == "record"
+    assert "the floor's admitted table carries" in item["floor_refused"]
+    assert tagged[:12] in item["floor_refused"]
+
+
+@pytest.mark.parametrize("source", ["committed", "release-record", "reuse-waiver"])
+def test_waived_floor_is_never_a_floor(repo, tmp_path, monkeypatch, source):
+    receipted_floor(repo)
+    if source == "committed":
+        repo.write("docs/release/0.8.64-owner-waiver.json", json.dumps(dict(
+            approved_by="owner", reason="one-time", prefixes=["identity-apple/ols", "adapters-"])))
+        # Another release's waiver does not reach this floor.
+        repo.write("docs/release/0.8.63-owner-waiver.json", json.dumps(dict(
+            approved_by="owner", reason="older", prefixes=["identity-"])))
+    elif source == "release-record":
+        state = tmp_path / "release-records" / "0.8.64" / "state.json"
+        state.parent.mkdir(parents=True)
+        state.write_text(json.dumps(dict(owner_waivers=[dict(
+            approved_by="owner", reason="one-time", file=str(tmp_path / "gone.json"), waived=["identity-apple/ols"])])))
+    else:
+        raw = (repo.root / "bench/results/identity_break/col/apple.identical.json").read_bytes()
+        repo.write("docs/release/0.8.64-identity-reuse-waiver.json", json.dumps(dict(
+            approved_by="owner", reason="reuse", records_sha256=[hashlib.sha256(raw).hexdigest()])))
+    repo.write("docs/notes.md", "after the release\n")
+    freeze = repo.commit("after the release")
+    rows = plan(repo, tmp_path, freeze)
+    item = rows["identity-apple/ols"]["reference"]["basis"][0]
+    assert item["basis"] == "record" and item["base"] == repo.record
+    want = "identity-reuse waiver" if source == "reuse-waiver" else "rests on a waived row: identity-apple/ols"
+    assert want in item["floor_refused"]
+    # The row itself is still judged, from its record: its closure did not change, so it passes.
+    assert rows["identity-apple/ols"]["status"] == "passed"
+    # Rows the waiver does not name keep the floor.
+    assert rows["identity-nvidia/ols"]["reference"]["basis"][0]["basis"] == "release-floor"
+
+
+def test_floor_waivers_read_both_sources(repo, tmp_path):
+    repo.write("docs/release/0.8.64-owner-waiver.json", json.dumps(dict(prefixes=["identity-cpu/"])))
+    revision = repo.commit("waiver")
+    state = tmp_path / "records" / "0.8.64" / "state.json"
+    state.parent.mkdir(parents=True)
+    named = tmp_path / "w.json"
+    named.write_text(json.dumps(dict(prefixes=["identity-amd/ridge"])))
+    state.write_text(json.dumps(dict(owner_waivers=[dict(file=str(named), waived=["identity-apple/ols"])])))
+    floor = dict(commit=revision, tags=dict(nvidia="alpha-api-0.8.64-nvidia-x", amd="alpha-api-0.8.64-amd-x"))
+    got = IR.floor_waivers(repo.root, revision, floor, records_dir=tmp_path / "records")
+    assert IR.waived(got, "identity-cpu/ols") == "identity-cpu/"
+    assert IR.waived(got, "identity-apple/ols") == "identity-apple/ols"
+    assert IR.waived(got, "identity-amd/ridge") == "identity-amd/ridge"
+    assert IR.waived(got, "identity-nvidia/ols") is None
+    assert IR.floor_versions(floor) == ["0.8.64"]
+    assert IR.floor_waivers(repo.root, revision, None)["sources"] == []
 
 
 def test_a_release_tag_at_the_freeze_itself_never_vouches_for_it(repo, tmp_path):
