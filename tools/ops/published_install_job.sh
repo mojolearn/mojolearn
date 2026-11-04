@@ -106,5 +106,5 @@ PHASE=published
 prc=0
 "$PY" tools/release_published_install.py run --vendor "$V" --version "$PUB_VERSION" "${wheel_args[@]}" \
     --python "$PY" --timeout "${PUB_TIMEOUT:-1800}" --out "$RES/out" > "$J/published.log" 2>&1 || prc=$?
-grep -m 2 '^PUBLISHED ' "$J/published.log" || tail -n 5 "$J/published.log"
+grep -m 2 '^PUBLISHED' "$J/published.log" || tail -n 5 "$J/published.log"
 exit "$prc"
