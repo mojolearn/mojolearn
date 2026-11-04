@@ -65,6 +65,11 @@ ID_RE = re.compile(r"identity-(apple|nvidia|amd|cpu)/([^/]+)")
 _MEMO = {}
 
 
+class NoReference(ValueError):
+    """The frozen source carries no admitted reference table (or is not a Git checkout): there is
+    nothing admitted to judge, which is "no qualification evidence", not a broken analysis."""
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -163,7 +168,7 @@ class Frozen:
         self.root, self.revision = Path(root).resolve(), revision
         raw = _blob(self.root, revision, TABLE_PATH)
         if raw is None:
-            raise ValueError(f"no admitted reference table at {revision[:12]}: {TABLE_PATH}")
+            raise NoReference(f"no admitted reference table at {revision[:12]}: {TABLE_PATH}")
         self.table_ref = dict(path=TABLE_PATH, revision=revision, sha256=hashlib.sha256(raw).hexdigest())
         self.table = json.loads(raw)
         harness = _blob(self.root, revision, HARNESS_PATH)
@@ -294,6 +299,8 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
     revision has the same closure as the freeze contradicts the admitted reference and is reported in
     ``failures`` of the verdict; the ledger keeps such a row failed (conflicts are never relaxed)."""
     root = Path(root).resolve()
+    if not (root / ".git").exists():
+        raise NoReference(f"{root} is not a Git checkout")
     revision = _commit(root, revision) or revision
     failures = failures or {}
     key = digest([str(root), revision, {k: [w.get("fingerprint"), w.get("dependency_provenance")]

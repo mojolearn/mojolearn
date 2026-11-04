@@ -462,7 +462,8 @@ class RequirementsLedger:
                      if a["status"] == "failed" and a["fingerprint"] != wanted["fingerprint"]}
             verdict, error = batch(name) if later else (None, None)
             if later and verdict is None:
-                row.update(action="complete-provenance", reasons=["cannot scope later failed run: " + error])
+                row.update(action="complete-provenance", reasons=["cannot scope later failed run: "
+                                                                  + (error or "no admitted reference")])
                 return
             contradicted = sorted(later & set((verdict or {}).get("failures", [])))
             if contradicted:
@@ -472,8 +473,27 @@ class RequirementsLedger:
             if RequirementsLedger._retained_attempt(name, candidate, row) is not None:
                 row.update(status="passed", action="reuse", reasons=["same declared inputs and verified retained evidence"])
             return
+        # The reviewed release-label rule is an exact input proof, not a selector: an attempt whose
+        # inputs differ from these only in the unconsumed `__version__` literal is the same execution.
+        passed = [a for a in attempts if a["status"] == "passed" and a["fingerprint"] != wanted["fingerprint"]]
+        if passed and not any(a["status"] == "failed" for a in attempts[attempts.index(passed[-1]) + 1:]):
+            probe = dict(reasons=[])
+            old = RequirementsLedger._retained_attempt(name, passed[-1], probe)
+            from release_requirement_dependencies import version_label_proof
+            proof = version_label_proof(root or doc.get("source_root"), old, wanted) if old is not None else None
+            if proof:
+                row.update(probe)
+                row.update(status="passed", action="reuse", dependency_decision="retained",
+                           dependency_reason="only unconsumed release version literal changed",
+                           equivalence_proof=proof,
+                           reasons=["original passed execution retained: only the unconsumed release version literal changed"])
+                return
         verdict, error = batch(name)
+        if verdict is None and error == "":
+            row["reasons"] = ["no qualification evidence recorded for this requirement"]
+            return
         if verdict is None:
+            # A broken analysis never becomes a blanket rerun: repair the tool or the provenance.
             row.update(action="complete-provenance", reasons=["reference admission unavailable: " + error])
             return
         row["reference"] = {k: copy.deepcopy(verdict[k]) for k in
@@ -514,18 +534,21 @@ class RequirementsLedger:
             revision = wanted["source_revision"]
             if revision not in found:
                 if not root:
-                    found[revision] = (None, "the frozen source root is unavailable")
+                    found[revision] = (None, "", "the frozen source root is unavailable")
                 else:
-                    from release_identity_reference import verdicts
+                    from release_identity_reference import NoReference, verdicts
                     group = units.get(revision, {})
                     try:
                         found[revision] = (verdicts(root, revision, group, log_dir=log_dir,
-                                                    failures={k: sorted(failures.get(k, ())) for k in group}), None)
+                                                    failures={k: sorted(failures.get(k, ())) for k in group}), None, None)
+                    except NoReference as error:
+                        found[revision] = (None, "", str(error))
                     except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
-                        found[revision] = (None, str(error) or type(error).__name__)
-            verdicts_, error = found[revision]
+                        found[revision] = (None, str(error) or type(error).__name__, None)
+            verdicts_, error, absent = found[revision]
             if verdicts_ is None:
-                return None, error
+                # "" marks NO admitted reference at all: the row is simply unrecorded (action run).
+                return None, (error if absent is None else "")
             if name not in verdicts_:
                 return None, "requirement inputs are unresolved"
             return verdicts_[name], None
