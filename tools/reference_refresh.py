@@ -1154,7 +1154,7 @@ def coalesce(sha, env=None, sh=None, out=say, dry=False):
         jobs = ["%s %s %s" % (c, col.get("phase"), col.get("tag") or col.get("pid") or "-")
                 for c, col in sorted((d.get("columns") or {}).items())
                 if col.get("phase") in ("submitted", "launching", "running-local", "with-cpu")]
-        out("SUPERSEDED %s by %s%s" % (d["sha"][:12], target[:12],
+        out("%s %s by %s%s" % ("WOULD SUPERSEDE" if dry else "SUPERSEDED", d["sha"][:12], target[:12],
                                        "; not waited for: %s" % ", ".join(jobs) if jobs else ""))
         if not dry:
             d.update(superseded_by=target, superseded=utc(), superseded_jobs=jobs)
