@@ -5,7 +5,7 @@
 # in the typed entries.
 from bindings.native_json import native_path
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_setitem
+from bindings.py_balanced import py_call, py_setitem, py_type
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.distributed_entries import (
@@ -14,22 +14,20 @@ from autograd.distributed_entries import (
     distributed_close_native,
 )
 from providers.python.autograd_program_pyapi import array_input, output_array
-from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, host_array_py, host_arrays_py
+from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, host_array_py, host_arrays_py, program_admit_value, program_native_input, program_numeric_scalar
+from providers.python.autograd_owned_program_public_pyapi import owned_program_object_py
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 
 
 def distributed_object(cls: PythonObject, binding: PythonObject, handle: PythonObject) raises -> PythonObject:
-    # Allocate the Python-facing shell through C builtins, without executing
-    # its Python __init__. The native registry owns all execution state.
-    var b = Python.import_module("builtins")
-    var out = py_call(b.object.__new__, cls)
-    _ = py_call(b.setattr, out, "_b", binding)
-    _ = py_call(b.setattr, out, "_id", handle)
-    return out
+    return owned_program_object_py(cls, binding, handle)
 
 
 def distributed_devices(devices: PythonObject) raises -> List[Int]:
+    program_admit_value(devices)
+    if py_type(devices) is not py_type(Python.tuple()) and py_type(devices) is not py_type(Python.list()):
+        raise Error("TypeError: devices require an exact tuple or list of native integers")
     var out = List[Int]()
     for k in range(len(devices)):  # small-loop(devices: physical device IDs): argument parsing, no data
         out.append(Int(py=devices[k]))
@@ -41,6 +39,7 @@ def distributed_open[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, pid: PythonObject, device_ids: List[Int], logical_shards: PythonObject,
     optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, var executors: List[E],
 ) raises -> PythonObject:
+    program_admit_value(Python.tuple(sid, pid, logical_shards, optimizer, parameters, seed))
     var selected = List[Int]()
     for k in range(len(parameters)):  # small-loop(parameters: the selected trainable handles): argument parsing, no data
         selected.append(Int(py=parameters[k]))
@@ -61,6 +60,8 @@ def distributed_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
     id: PythonObject, arrays: PythonObject, targets: PythonObject, loss: PythonObject,
     epochs: PythonObject, batch: PythonObject, shuffle: PythonObject, delta: PythonObject,
 ) raises -> PythonObject:
+    owned_program_fit_admission(id, arrays, loss, epochs, batch, shuffle, delta)
+    var retained = List[PythonObject]()
     var name = String(py=loss)
     var kind = -1
     if name == "output":
@@ -80,12 +81,14 @@ def distributed_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
     for k in range(len(arrays)):  # small-loop(arrays: one descriptor per program input): argument parsing, no data
-        var parsed = array_input(arrays[k], "distributed input")
+        retained.append(program_native_input(arrays[k]))
+        var parsed = array_input(retained[len(retained) - 1], "distributed input")
         srcs.append(parsed[0])
         shapes.append(parsed[1])
     var target = CastIn.f32_c(0, 1, 1)
     if kind != 0:
-        target = array_input(targets, "distributed target")[0]
+        retained.append(program_native_input(targets))
+        target = array_input(retained[len(retained) - 1], "distributed target")[0]
     var ne = Int(py=epochs)
     if ne < 1:
         raise Error("distributed fit: epochs must be positive")
@@ -97,20 +100,25 @@ def distributed_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
 
 
 def distributed_run_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, arrays: PythonObject) raises -> PythonObject:
+    owned_program_array_admission(id, arrays)
+    var retained = List[PythonObject]()
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
     for k in range(len(arrays)):  # small-loop(arrays: one descriptor per program input): argument parsing, no data
-        var parsed = array_input(arrays[k], "distributed inference input")
+        retained.append(program_native_input(arrays[k]))
+        var parsed = array_input(retained[len(retained) - 1], "distributed inference input")
         srcs.append(parsed[0])
         shapes.append(parsed[1])
     return host_array_py(distributed_run_native[E, KIND](Int(py=id), srcs, shapes))
 
 
 def distributed_save_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, path: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     return PythonObject(distributed_save_native[E, KIND](Int(py=id), String(py=native_path(path))))
 
 
 def distributed_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     var r = distributed_state_native[E, KIND](Int(py=id))
     var result = Python.dict()
     py_setitem(result, "parameters", host_arrays_py(r.parameters))
@@ -124,6 +132,7 @@ def distributed_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
 
 
 def distributed_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     var r = distributed_residency_native[E, KIND](Int(py=id))
     var result = Python.dict()
     var devices = Python.list()
@@ -150,10 +159,32 @@ def distributed_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: Pyth
 
 
 def distributed_enter_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     distributed_ready[E, KIND](Int(py=id))
     return owner
 
 
 def distributed_close_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     distributed_close_native[E, KIND](Int(py=id))
     return PythonObject(0)
+
+
+def owned_program_id_admission(id: PythonObject) raises:
+    if py_type(id) is not py_type(PythonObject(0)):
+        raise Error("TypeError: captured program handle requires an exact native integer")
+
+
+def owned_program_array_admission(id: PythonObject, arrays: PythonObject) raises:
+    owned_program_id_admission(id)
+    if py_type(arrays) is not py_type(Python.tuple()):
+        raise Error("TypeError: captured program input envelope requires an exact tuple")
+
+
+def owned_program_fit_admission(id: PythonObject, arrays: PythonObject, loss: PythonObject,
+                                epochs: PythonObject, batch: PythonObject, shuffle: PythonObject, delta: PythonObject) raises:
+    owned_program_array_admission(id, arrays)
+    if py_type(loss) is not py_type(PythonObject("")):
+        raise Error("TypeError: captured program loss requires an exact native string")
+    if not program_numeric_scalar(epochs) or not program_numeric_scalar(batch) or not program_numeric_scalar(shuffle) or not program_numeric_scalar(delta):
+        raise Error("TypeError: captured program fit settings require native numeric scalars")
