@@ -290,10 +290,28 @@ def _class_flag(cls: PythonObject, name: String, context: PythonObject) raises -
 def _owner(cls: PythonObject, context: PythonObject) raises:
     var ancestry = py_call(_b().type.__dict__["__mro__"].__get__, cls)
     var finalizer = _class_fields(context["embedding_class"])["__del__"]
+    # The saved-model CPU class (HostEmbedding, python/mojolearn/_classical_host.py)
+    # inherits Embedding's native lifetime, so the host archive connection
+    # (_native_host_archive_bridge.connect) replaces it with the host archive's
+    # native finalizer, which host_archive_check_layout requires for its load.
+    # Its lookup binding keeps no resident table (_token is 0 there), so that
+    # connected descriptor is admitted for host inference classes only, as the
+    # public archive context records it (own or peer). Any other finalizer,
+    # including every Python __del__, stays refused. Without this, `verify
+    # --cross-check` refused embedding: the CPU arm's forward raised here.
+    var archive_finalizer = PythonObject(None)
+    var peer_finalizer = PythonObject(None)
+    var archive = py_get(context, "embedding_archive_context")
+    if archive is not None and _class_flag(cls, "_HOST_INFERENCE_ONLY", context):
+        archive_finalizer = py_get(archive, "host_archive_finalizer_descriptor")
+        peer_finalizer = py_get(archive, "host_archive_peer_finalizer_descriptor")
     for i in range(len(ancestry)):  # driver-loop: require native lifetime before allocating or retaining a subclass
         var own_finalizer = py_get(_class_fields(ancestry[i]), "__del__")
         if own_finalizer is not None and own_finalizer is not finalizer:
-            raise Error("TypeError: Embedding subclasses cannot install Python finalizer callbacks")
+            var connected = (archive_finalizer is not None and own_finalizer is archive_finalizer) or (
+                peer_finalizer is not None and own_finalizer is peer_finalizer)
+            if not connected:
+                raise Error("TypeError: Embedding subclasses cannot install Python finalizer callbacks")
         if ancestry[i] is context["embedding_class"]:
             return
     raise Error("TypeError: Embedding requires its connected native class")
