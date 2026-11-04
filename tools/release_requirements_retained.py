@@ -439,8 +439,12 @@ def retained_attempts(report_paths, notes=None):
 
 
 def with_attempts(document, attempts):
-    """A copy of the ledger document with retained attempts it lacks appended (requirements present only)."""
-    doc = copy.deepcopy(document)
+    """A copy of the ledger document with retained attempts it lacks appended (requirements present only).
+
+    Shallow: historical records are immutable (release_requirements_storage) and only appended to, so
+    the copy shares them; an unchanged record is then written back by reference, never re-serialized."""
+    doc = dict(document)
+    doc["attempts"] = list(document.get("attempts", []))
     known = {a["id"] for a in doc.get("attempts", [])}
     for attempt in attempts:
         if attempt["requirement"] in doc.get("requirements", {}) and attempt["id"] not in known:

@@ -18,6 +18,7 @@ the corresponding unit; it never expands to a guessed whole-library rerun.
 from __future__ import annotations
 
 import copy
+from contextvars import ContextVar
 from functools import lru_cache
 import hashlib
 import json
@@ -28,6 +29,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 from release_requirement_routes import loader_routes
 
 SCHEMA = "mojolearn.release-dependencies.v1"
@@ -431,6 +433,196 @@ def _run_snapshot_worker(tree, temporary, request, log):
     return json.loads(out.read_text())
 
 
+# ---------------------------------------------------------------- parallel and remote analysis workers
+#
+# 0.8.65: the publish admission bundle ran its frozen dependency workers one at a time, 2h42m of the
+# macOS package's 2h46m (10 workers, 6-37 min each; ~/mojolearn-evidence/ledger-storage-notes/MEASUREMENTS.md).
+# ``prefetch`` runs the caller's computation in discovery mode: every frozen_snapshot it would start is
+# recorded instead (SnapshotPending), then all of them run at once, on all cores or on the box named by
+# MOJOLEARN_ADMISSION_WORKER, into the same content-keyed cache (token = digest(revision, request), checked
+# against the analyzer digest). A discovery round repeats until nothing new is requested; the caller then
+# runs its real computation, which finds every snapshot cached and is exactly the sequential result.
+
+_DISCOVERY = ContextVar("release_dependency_discovery", default=None)
+_FAILED = {}
+_WORKTREES = threading.Lock()
+
+
+class SnapshotPending(ValueError):
+    """Discovery only: a frozen snapshot this computation needs is not cached yet."""
+
+
+def admission_jobs():
+    value = os.environ.get("MOJOLEARN_ADMISSION_JOBS", "")
+    if value:
+        if not value.isdigit() or int(value) < 1:
+            raise ValueError("MOJOLEARN_ADMISSION_JOBS must be a positive integer")
+        return int(value)
+    return os.cpu_count() or 1
+
+
+def prefetch(compute, *, jobs=None, worker=None, rounds=8, say=None, ran=None):
+    """``compute()``, after every frozen snapshot it needs ran in parallel; returns its value.
+
+    Each round runs ``compute`` in discovery mode; a round that needed nothing uncached was an ordinary
+    run (discovery only acts on a cache miss), so its value or error is the result: no extra pass. The
+    snapshots run in a round are appended to ``ran`` ([{token, seconds, ok}])."""
+    jobs = jobs or admission_jobs()
+    worker = worker or os.environ.get("MOJOLEARN_ADMISSION_WORKER") or "local"
+    say = say or (lambda line: print(line, file=sys.stderr))
+    ran = [] if ran is None else ran
+    for round_ in range(rounds):
+        pending, value, error = {}, None, None
+        context = _DISCOVERY.set(pending)
+        try:
+            value = compute()
+        except Exception as problem:  # noqa: BLE001 - an error with nothing pending is the real result
+            error = problem
+        finally:
+            _DISCOVERY.reset(context)
+        if not pending:
+            if error is not None:
+                raise error
+            return value
+        say(f"dependency analysis round {round_ + 1}: {len(pending)} frozen snapshot(s) on {worker}, {jobs} at once")
+        ran += run_snapshots(pending, jobs=jobs, worker=worker, say=say)
+    return compute()
+
+
+def run_snapshots(pending, *, jobs, worker="local", say=print):
+    """{token: (root, revision, request, log_dir)} -> run each into its cache; failures kept in _FAILED."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    if worker != "local":
+        return remote_snapshots(pending, worker, jobs=jobs, say=say)
+
+    def one(item):
+        token, (root, revision, request, logs) = item
+        started = time.time()
+        try:
+            frozen_snapshot(root, revision, request, log_dir=logs)
+            ok = True
+        except Exception as error:  # noqa: BLE001 - recorded; the real computation raises it
+            _FAILED[token] = "frozen dependency analysis failed in prefetch: " + (str(error) or type(error).__name__)
+            ok = False
+        return dict(token=token, seconds=round(time.time() - started, 1), ok=ok)
+
+    with ThreadPoolExecutor(max_workers=max(1, min(jobs, len(pending)))) as pool:
+        results = list(pool.map(one, sorted(pending.items())))
+    for row in results:
+        say(f"  snapshot {row['token']}: {'ok' if row['ok'] else 'FAILED'} {row['seconds']} s")
+    return results
+
+
+ANALYZER_FILES = ("release_requirement_dependencies.py", "release_requirement_routes.py")
+_EMPTY_TAR = bytes(10240)
+
+
+def _analyzer():
+    return digest({name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
+                   for name in ANALYZER_FILES})
+
+
+def remote_snapshots(pending, target, *, jobs, say=print):
+    """Run the snapshots on ``target`` (ssh destination); the Mac only ships, starts and collects.
+
+    Ships the frozen source by ``git push`` of the exact revisions (and every base revision a request
+    compares with) to a bare repository on the box, plus this analyzer's own files; runs the workers there
+    in parallel (``--remote-batch``); brings each report back by its content-derived token and admits it
+    only when its analyzer digest, revision and request equal the local ones. The ledger never leaves
+    the Mac: workers read only (revision, request). Commands: MOJOLEARN_ADMISSION_SSH (default
+    ``ssh -o BatchMode=yes``), MOJOLEARN_ADMISSION_REMOTE_DIR, MOJOLEARN_ADMISSION_REMOTE_PYTHON."""
+    import io
+    import shlex
+    import tarfile
+    import time
+    ssh = shlex.split(os.environ.get("MOJOLEARN_ADMISSION_SSH") or "ssh -o BatchMode=yes")
+    base = os.environ.get("MOJOLEARN_ADMISSION_REMOTE_DIR") or "mojolearn-admission"
+    python = os.environ.get("MOJOLEARN_ADMISSION_REMOTE_PYTHON") or "python3"
+    if not re.fullmatch(r"[A-Za-z0-9._/~-]+", base) or not re.fullmatch(r"[A-Za-z0-9._/-]+", python):
+        raise ValueError("unsafe MOJOLEARN_ADMISSION_REMOTE_DIR or _REMOTE_PYTHON")
+    analyzer = _analyzer()
+
+    def remote(command, data=None):
+        return subprocess.run([*ssh, target, command], input=data, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, check=True).stdout
+
+    started = time.time()
+    results = []
+    roots = {}
+    for token, (root, revision, request, logs) in pending.items():
+        roots.setdefault(root, []).append((token, revision, request, logs))
+    for root, items in roots.items():
+        remote(f"mkdir -p {base}/logs {base}/tooling/{analyzer} && "
+               f"(test -d {base}/repo.git || git init -q --bare {base}/repo.git)")
+        revisions = sorted({revision for _, revision, _, _ in items}
+                           | {_revision(root, request["base_revision"]) for _, _, request, _ in items
+                              if request.get("base_revision")})
+        env = dict(os.environ, GIT_SSH_COMMAND=" ".join(shlex.quote(part) for part in ssh))
+        subprocess.run(["git", "-C", root, "push", "--quiet", "--force", f"{target}:{base}/repo.git",
+                        *[f"{revision}:refs/admission/{revision}" for revision in revisions]],
+                       env=env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        bundle = io.BytesIO()
+        with tarfile.open(fileobj=bundle, mode="w") as archive:
+            for name in ANALYZER_FILES:
+                archive.add(str(Path(__file__).parent / name), arcname=name, recursive=False)
+        remote(f"tar -x -C {base}/tooling/{analyzer}", bundle.getvalue())
+        batch = [dict(token=token, revision=revision, request=request) for token, revision, request, _ in items]
+        say(f"  remote {target}: {len(batch)} snapshot(s), {len(revisions)} revision(s) pushed")
+        remote(f"cd {base} && {python} tooling/{analyzer}/release_requirement_dependencies.py "
+               f"--remote-batch repo.git logs {int(jobs)}", json.dumps(batch).encode())
+        names = " ".join(f"{token}.json {token}.log" for token, _, _, _ in items)
+        archive_bytes = remote(f"cd {base}/logs && set -- && for f in {names}; do [ -f \"$f\" ] && set -- \"$@\" \"$f\"; done; "
+                               'if [ $# -gt 0 ]; then tar -cf - "$@"; fi')
+        found = {}
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes or _EMPTY_TAR), mode="r:") as archive:
+            for member in archive:
+                if not member.isfile() or not re.fullmatch(r"[0-9a-f]{16}\.(json|log)", member.name):
+                    raise ValueError("unexpected member in remote dependency results: " + member.name)
+                found[member.name] = archive.extractfile(member).read()
+        for token, revision, request, logs in items:
+            logs = Path(logs)
+            logs.mkdir(parents=True, exist_ok=True)
+            data = found.get(token + ".json")
+            ok = False
+            if data is None:
+                _FAILED[token] = "remote dependency analysis produced no report on " + target
+            else:
+                body = json.loads(data)
+                if (body.get("analyzer") != analyzer or body.get("revision") != revision
+                        or body.get("request") != request or "snapshot" not in body):
+                    _FAILED[token] = "remote dependency report differs from the requested analysis"
+                else:
+                    body["source_view"] = dict(body.get("source_view") or {}, worker=target,
+                                               report_sha256=hashlib.sha256(data).hexdigest())
+                    _write_report(logs / (token + ".json"), body)
+                    ok = True
+            if token + ".log" in found:
+                (logs / (token + ".log")).write_bytes(found[token + ".log"])
+            results.append(dict(token=token, ok=ok, seconds=None, worker=target))
+    say(f"  remote {target}: {sum(r['ok'] for r in results)}/{len(results)} ok in {round(time.time() - started, 1)} s")
+    return results
+
+
+def _remote_batch(repo, logs, jobs):
+    """Box side of remote_snapshots: run a batch (stdin JSON) of frozen snapshots in parallel."""
+    from concurrent.futures import ThreadPoolExecutor
+    batch = json.loads(sys.stdin.read())
+    repo, logs = Path(repo).resolve(), Path(logs).resolve()
+
+    def one(item):
+        try:
+            frozen_snapshot(repo, item["revision"], item["request"], log_dir=logs)
+            return item["token"], None
+        except Exception as error:  # noqa: BLE001 - reported; the Mac refuses a missing report
+            return item["token"], str(error) or type(error).__name__
+
+    with ThreadPoolExecutor(max_workers=max(1, min(int(jobs), len(batch) or 1))) as pool:
+        for token, error in pool.map(one, batch):
+            print(json.dumps(dict(token=token, ok=error is None, error=error)))
+    return 0
+
+
 def frozen_snapshot(root, revision, request, *, log_dir=None):
     """Analyze an exact detached source view, retaining the complete log."""
     root = Path(root).resolve()
@@ -441,12 +633,18 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
     report = logs / (token + ".json")
     log_path = logs / (token + ".log")
     # Never reuse a cached result under a different analyzer implementation.
-    analyzer = digest({name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
-                       for name in ("release_requirement_dependencies.py", "release_requirement_routes.py")})
+    analyzer = _analyzer()
     if report.is_file():
         old = json.loads(report.read_text())
         if old.get("analyzer") == analyzer and old.get("request") == request and old.get("revision") == revision:
             return old["snapshot"]
+    if token in _FAILED:
+        # A prefetch already ran this exact analysis and it failed: report that, never run it twice.
+        raise ValueError(_FAILED[token])
+    pending = _DISCOVERY.get()
+    if pending is not None:
+        pending.setdefault(token, (str(root), revision, copy.deepcopy(request), str(logs)))
+        raise SnapshotPending(token)
     with tempfile.TemporaryDirectory(prefix="mojolearn-dependencies-") as temporary:
         temporary = Path(temporary)
         tree = temporary / "tree"
@@ -455,7 +653,10 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
             # Only reuse exact current bytes, and exclude ALL untracked files:
             # clean Git status alone would admit generated Mojo and pyc files
             # that do not exist in the requested revision's source tree.
-            clone_current = sys.platform == "darwin" and _revision(root, "HEAD") == revision
+            # A bare repository (MOJOLEARN_ADMISSION_WORKER: the source pushed to a box) has no checkout
+            # to clone: it is always a fresh checkout of the exact revision.
+            clone_current = (sys.platform == "darwin" and not _bare(root)
+                             and _revision(root, "HEAD") == revision)
             before = _tracked_state(root, revision, tooling_from_revision=True) if clone_current else None
             # The source commit and the release tooling are two commits (tools/release.py): name both.
             source_view = dict(method="tracked-cow" if clone_current else "git-checkout",
@@ -469,7 +670,8 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                 command.append("--no-checkout")
             added = False
             try:
-                subprocess.run(command + [str(tree), revision], stdout=log, stderr=subprocess.STDOUT, check=True)
+                with _WORKTREES:
+                    subprocess.run(command + [str(tree), revision], stdout=log, stderr=subprocess.STDOUT, check=True)
                 added = True
                 if clone_current:
                     _clone_tracked_tree(root, tree, before, log)
@@ -490,11 +692,31 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                 # Failed `worktree add` can leave a registration too. Remove
                 # only this unique temporary tree; never prune other sessions.
                 if added or (tree / ".git").exists():
-                    subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
-                                   stdout=log, stderr=subprocess.STDOUT, check=True)
-    report.write_text(json.dumps(dict(analyzer=analyzer, revision=revision, request=request,
-                                     source_view=source_view, snapshot=snapshot), sort_keys=True) + "\n")
+                    with _WORKTREES:
+                        subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
+                                       stdout=log, stderr=subprocess.STDOUT, check=True)
+    _write_report(report, dict(analyzer=analyzer, revision=revision, request=request,
+                               source_view=source_view, snapshot=snapshot))
     return snapshot
+
+
+def _write_report(report, body):
+    """Atomic: parallel workers and a reader of the cache never see a partial report."""
+    fd, name = tempfile.mkstemp(prefix=report.name + ".", dir=report.parent)
+    try:
+        with os.fdopen(fd, "w") as out:
+            out.write(json.dumps(body, sort_keys=True) + "\n")
+        os.replace(name, report)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def _bare(root):
+    try:
+        return _git(root, "rev-parse", "--is-bare-repository") == "true"
+    except (OSError, subprocess.CalledProcessError):
+        return False
 
 
 def _vendor(spec):
@@ -1156,6 +1378,8 @@ def decision_proof(proof):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 5 and sys.argv[1] == "--remote-batch":
+        raise SystemExit(_remote_batch(*sys.argv[2:5]))
     if len(sys.argv) != 5 or sys.argv[1] != "--worker":
         raise SystemExit("library API: expand_catalog / equivalence_proofs / validate_equivalence_proof")
     Path(sys.argv[4]).write_text(json.dumps(_worker_snapshot(sys.argv[2], json.loads(Path(sys.argv[3]).read_text())), sort_keys=True))
