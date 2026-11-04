@@ -106,7 +106,7 @@ class Repo:
         """Column records at ``record_commit`` and the table that admits them, committed together."""
         records, cells = [], {}
         for index, cls in enumerate(CLASSES):
-            body = dict(commit=record_commit, cells={
+            body = dict(commit=record_commit, device_class=cls, cells={
                 f"{lane}/base": dict(verdict="STABLE", hashes=[h16(lane + salt, "train")],
                                      **{p: [h16(lane + salt, p)] for p in PARTS[1:]},
                                      **{p + "_verdict": "STABLE" for p in PARTS[1:]})
