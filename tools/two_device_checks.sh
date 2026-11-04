@@ -61,7 +61,7 @@ done
 # GPU bindings the drivers call, then THE COMPLETE HOST LAYOUT (`import
 # mojolearn` and the classical constructors refuse a partial one), i.e.
 # every bindings/build_*_host.sh.
-for b in main kernel_methods gp x_neighbors ivf tsa x_sequence \
+for b in main kernel_methods gp x_neighbors ivf tsa arima x_sequence estimators \
          $(ls bindings/build_*_host.sh | sed 's#bindings/build_##; s#\.sh$##'); do
     s=bindings/build_$b.sh; [ "$b" = main ] && s=bindings/build.sh
     [ -f "$s" ] || continue
