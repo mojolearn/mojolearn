@@ -171,6 +171,11 @@ only public `OpsSession` methods) are merged. Evidence under
   its own node (a plan-less entry forwarding to its plan-taking sibling is not
   recursion); it reports the same single pre-existing cycle as main.
 
+- Two-device gate (`tools/two_device_checks.sh`, 2x L40S, 2026-11-03/04): all 12
+  `*_parallel_check.mojo` PASS (two devices hash equal to one) and
+  `verify-distributed --devices 0,1` matches on every case; evidence
+  `bench/results/multi_gpu/2026-11-03/two-device-gate/`.
+
 Owed: NVIDIA and AMD identity columns re-record at the next release freeze
 (the incremental default picks up every lane whose closure changed); the
 Python-side `MOJOLEARN_OPTIMIZER_DEVICE_COUNT` reads in

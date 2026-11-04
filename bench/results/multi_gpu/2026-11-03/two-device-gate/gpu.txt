@@ -1,0 +1,3 @@
+name, compute_cap, driver_version, memory.total [MiB]
+NVIDIA L40S, 8.9, 595.91.07, 46068 MiB
+NVIDIA L40S, 8.9, 595.91.07, 46068 MiB
