@@ -359,15 +359,19 @@ class SplitWheels(unittest.TestCase):
                 self.assertFalse(any(n.startswith(pw.gpu_plugins.BUNDLED_PTX_ROOT + "/") for n in payload))
         self.assertEqual(wheel_api_audit.split_audit(list(self.split.values()))["problems"], [])
 
-    def test_upload_budget_is_pypis_100_mib_for_every_project(self):
+    def test_upload_budget_is_the_projects_configured_pypi_limit(self):
+        # packaging/pypi_limits.json: mojolearn-nvidia and mojolearn-amd 250 MiB (granted
+        # 2026-11-04), mojolearn and mojolearn-core the 100 MiB default.
         import os
         original = Path.stat
-        for key in ("mojolearn_nvidia", "mojolearn_amd", "mojolearn_core", "mojolearn"):
-            self.assertEqual(pw.gpu_plugins.wheel_size_limit(key.replace("_", "-")), 100 * 1024**2)
+        for key, mib in (("mojolearn_nvidia", 250), ("mojolearn_amd", 250), ("mojolearn_core", 100),
+                         ("mojolearn", 100)):
+            self.assertEqual(pw.pypi_limits.file_limit(key), mib * 1024**2)
         for key, mib, accepted in (("mojolearn_nvidia", 99, True),
-                                   ("mojolearn_nvidia", 101, False),
-                                   ("mojolearn_nvidia", 250, False),
-                                   ("mojolearn_amd", 101, False),
+                                   ("mojolearn_nvidia", 249, True),
+                                   ("mojolearn_nvidia", 251, False),
+                                   ("mojolearn_amd", 101, True),
+                                   ("mojolearn_amd", 251, False),
                                    ("mojolearn_core", 101, False),
                                    ("mojolearn", 101, False)):
             target = self.split[key]
@@ -678,7 +682,7 @@ class SplitWheels(unittest.TestCase):
             result = original(path, *args, **kwargs)
             if Path(path).name.startswith("mojolearn_nvidia-") and str(path).endswith(".whl"):
                 values = list(result)
-                values[6] = 120 * 1024**2
+                values[6] = 260 * 1024**2
                 return os.stat_result(values)
             return result
         err = io.StringIO()
@@ -690,13 +694,13 @@ class SplitWheels(unittest.TestCase):
             self.pack("--wheels", "nvidia")
         self.assertEqual(self.last_rc, 1)
         text = err.getvalue()
-        self.assertIn("OVER PyPI's 100 MiB FILE LIMIT", text)
+        self.assertIn("WHEEL OVER ITS PyPI FILE LIMIT", text)
         self.assertIn("cuda_native/sm_89:", text)
         self.assertNotIn("cuda_ptx/sm_80:", text)
         report = json.loads(next(self.last_out.glob("SIZES-*.json")).read_text())
         row = next(iter(report["wheels"].values()))
         self.assertTrue(row["over_limit"])
-        self.assertEqual(row["pypi_limit_bytes"], 100 * 1024**2)
+        self.assertEqual(row["pypi_limit_bytes"], 250 * 1024**2)
         self.assertNotIn("cuda_ptx/sm_80", row["payloads"])
         self.assertIn("cuda_native/sm_89", row["payloads"])
 
