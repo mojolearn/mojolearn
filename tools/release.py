@@ -163,7 +163,7 @@ THE STEPS
                      the package set pip resolves for `mojolearn`,
                      `mojolearn-nvidia` and `mojolearn-amd` (Linux)
   gate-boxes         ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1; it rents): the boxes the selected box
-                     steps (gate-*, published-nvidia/amd) still need: the shared NVIDIA pod
+                     steps (gate-*; published-smoke-* only when asked) still need: the shared NVIDIA pod
                      (tools/nvidia_central.sh up 1, out of stock retried there; lane release-gate synced to
                      the frozen source) and the DigitalOcean AMD droplet (tools/do_amd_steward.sh up 240), or
                      the live ones adopted; recorded in the state. While a box step is pending the release
@@ -179,12 +179,16 @@ THE STEPS
                          Validated unchanged autograd artifact inputs reuse their original binaries.
                          Reports come home to <version>/<commit12>/gate-<vendor>/<artifact-id>/.
   published-apple    } after publish-<platform>, with --publish pypi: tools/release_published_install.py
-  published-nvidia   }   installs the PUBLISHED release from PyPI and compares it with the candidate wheels
-  published-amd      }   (index install, artifact hashes, installed smoke, installed adapters): Apple on this
-                         Mac under the Metal lock, NVIDIA and AMD as persisted box jobs
-                         (tools/ops/published_install.py, tools/ops/published_install_job.sh); each report at
-                         <commit12>/published-<vendor>/published-report.json, where the ledger reads it
-  boxes-down         once every box step has settled: every box job's results home first
+  published-nvidia   }   check, on this Mac, no device, no box, nothing installed: pip resolves each
+  published-amd      }   published package for the candidate's platform tags and downloads it; its
+                         sha256 must equal the gated candidate wheel's (different bytes FAIL with both
+                         hashes; nothing reruns), its RECORD must hold, and the gate's receipts are the
+                         evidence by reference. Report at <commit12>/published-<vendor>/published-report.json,
+                         where the ledger reads it (Andrew 2026-11-02: no re-verification of green work)
+  published-smoke-*  ONLY with --published-smoke <vendor> --published-smoke-reason TEXT (recorded in the
+                     state): the old installed smoke from PyPI on the vendor device (Apple under the
+                     Metal lock, NVIDIA/AMD as persisted box jobs on the gate boxes); not selected otherwise
+  boxes-down         right after the gates (no published-* step needs a box): every box job's results home first
                      (tools/box_persist.py fetch --tag; none missing, or nothing is taken down), then what
                      gate-boxes rented taken down (nvidia_central.sh down, do_amd_steward.sh down); an
                      adopted box is released, left up
@@ -1110,21 +1114,30 @@ STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gate-n
                   ("gate-boxes", "finish", ["linux-pack"], "boxes"))
 STEP_TABLE = [(name, pipeline, needs + (["gate-boxes"] if name in BOX_CONSUMERS else []), resource)
               for name, pipeline, needs, resource in STEP_TABLE]
-# THE PUBLISHED-INSTALL PRODUCERS AS STEPS (lane release-no-hands; RUNBOOK 0.8.65 sections 17-18): after each
-# platform's publish, tools/release_published_install.py installs the PUBLISHED release from PyPI and compares
-# it with the candidate wheels: published-apple on this Mac (tools/mac_slot.py metal), published-nvidia and
-# published-amd as persisted box jobs (tools/ops/published_install.py), each report at
-# <commit12>/published-<vendor>/published-report.json (retained_producers admits it into the ledger).
+# THE PUBLISHED PRODUCERS (lane published-no-reverify, 2026-11-04; Andrew 2026-11-02: the gates verified the
+# exact wheel bytes, nothing reinstalls them from PyPI to verify again). After each platform's publish,
+# published-<vendor> runs tools/release_published_install.py check HERE, on no device and no box: pip resolves
+# each published package for the candidate's platform tags, the downloaded file's sha256 must equal the gated
+# candidate's and its RECORD must hold, and the gate's own receipts are its evidence by reference. The report
+# lands at <commit12>/published-<vendor>/published-report.json (retained_producers admits it into the ledger).
+# No published-<vendor> step needs gate-boxes, so boxes-down follows the gates.
 PUBLISHED_STEPS = {"published-apple": ("apple", "publish-macos"), "published-nvidia": ("nvidia", "publish-nvidia"),
                    "published-amd": ("amd", "publish-amd")}
-BOX_CONSUMERS.update({s: v for s, (v, _) in PUBLISHED_STEPS.items() if v in GATE_VENDORS})
+# The old installed smoke (a PyPI install, the eleven correctness jobs and the adapter phases on the vendor
+# device) runs only for an explicit `--published-smoke <vendor>` with `--published-smoke-reason` (recorded in
+# the state): published-smoke-apple on this Mac under the Metal lock, published-smoke-nvidia/amd as persisted
+# box jobs (tools/ops/published_install.py), each at <commit12>/published-smoke-<vendor>/. Unrequested, these
+# steps are not selected at all, so they never hold a box or delay boxes-down.
+PUBLISHED_SMOKE_STEPS = {"published-smoke-" + v: (v, "published-" + v) for v, _ in PUBLISHED_STEPS.values()}
+BOX_CONSUMERS.update({s: v for s, (v, _) in PUBLISHED_SMOKE_STEPS.items() if v in GATE_VENDORS})
 STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "record")),
                   ("boxes-down", "finish", [], "boxes"))
 STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "boxes-down")):0] = [
-    (step, "finish", [publish] + (["gate-boxes"] if step in BOX_CONSUMERS else []),
-     None if step in BOX_CONSUMERS else "mac") for step, (_, publish) in PUBLISHED_STEPS.items()]
+    (step, "finish", [publish], None) for step, (_, publish) in PUBLISHED_STEPS.items()] + [
+    (step, "finish", [after] + (["gate-boxes"] if step in BOX_CONSUMERS else []),
+     None if step in BOX_CONSUMERS else "mac") for step, (_, after) in PUBLISHED_SMOKE_STEPS.items()]
 AFTER["boxes-down"] = ["gate-boxes", *BOX_CONSUMERS]
-AFTER["record"] = AFTER["record"] + list(PUBLISHED_STEPS)
+AFTER["record"] = AFTER["record"] + list(PUBLISHED_STEPS) + list(PUBLISHED_SMOKE_STEPS)
 
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
@@ -1786,8 +1799,12 @@ class Release:
             for report in sorted((self.rel / f"gate-{vendor}").glob(f"*/runtime-{vendor}/runtime-report.json")):
                 out.append(("installed-runtime", dict(report=str(report))))
         # published-<vendor> (post stage): tools/release_published_install.py reports under published-<vendor>/.
-        for report in sorted(self.rel.glob("published-*/published-report.json")):
-            out.append(("published-install", dict(report=str(report))))
+        # Only published-<vendor>/: an explicit --published-smoke report (published-smoke-<vendor>/) is not this
+        # row's evidence.
+        for vendor, _ in PUBLISHED_STEPS.values():
+            report = self.published_out(vendor) / "published-report.json"
+            if report.is_file():
+                out.append(("published-install", dict(report=str(report))))
         # The Linux release legs (compile-<vendor>/runtime, compile-<vendor>/adapters/<arch>, compile-cpu/runtime
         # on the host leg): a leg built in this freeze, or the earlier freeze's leg a <leg>.reused.json names.
         for directory in self.retained_leg_dirs():
@@ -4452,11 +4469,16 @@ class Release:
         return None if self.held_boxes() else "have: this release holds no box"
 
     # ------------------------------------------------------------ published-<vendor> (post stage)
-    PUBLISHED_SCHEMA = "mojolearn.release-published-install.v1"
+    PUBLISHED_SCHEMA = "mojolearn.release-published-install.v2"
+    PUBLISHED_SMOKE_SCHEMA = "mojolearn.release-published-install.v1"
 
     def published_out(self, vendor):
         """Where retained_producers looks: <commit12>/published-<vendor>/published-report.json."""
         return self.rel / f"published-{vendor}"
+
+    def published_smoke_out(self, vendor):
+        """The explicit --published-smoke report: <commit12>/published-smoke-<vendor>/ (never ledger evidence)."""
+        return self.rel / f"published-smoke-{vendor}"
 
     def published_wheels(self, vendor):
         """The qualified candidate wheels the published files must equal."""
@@ -4465,37 +4487,73 @@ class Release:
         return [self.split_final("linux")] + ([self.split_final("nvidia"), self.split_final("nvidia-ptx")]
                                               if vendor == "nvidia" else [self.split_final("amd")])
 
+    def published_index_url(self):
+        """PyPI. MOJOLEARN_PUBLISHED_INDEX_URL names a mirror or a test index; a report made against any
+        index but PyPI re-derives differently in the ledger and is refused there, so it is never evidence."""
+        return os.environ.get("MOJOLEARN_PUBLISHED_INDEX_URL") or "https://pypi.org/simple"
+
+    def published_gate(self, vendor):
+        """(receipt paths, verdict): the gate that passed these candidate bytes, whose receipts are the
+        published row's evidence by reference. StepFailed when that gate has not passed: the published
+        bytes are then not verified work, and nothing here runs a device to make up for it."""
+        if vendor == "apple":
+            w = self.macos_wheel()
+            if not w:
+                raise StepFailed("published-apple: no macOS candidate wheel; run macos-build")
+            receipts, why = [], []
+            if self.macos_self_test_passed():
+                receipts.append(self.macos_self_test())
+                why.append("macOS wheel self-test PASSED")
+            elif smoke_passed(self.rel / "smoke-macos" / "results.json", w):
+                receipts.append(self.rel / "smoke-macos" / "results.json")
+                why.append("macOS smoke PASSED")
+            else:
+                raise StepFailed("published-apple: the macOS wheel's smoke has not passed for these bytes "
+                                 "(macos-smoke); the published bytes are judged against a passed gate only")
+            if adapter_gate_module().enabled():
+                ok, adapters = self.apple_adapters_ok()
+                if not ok:
+                    raise StepFailed("published-apple: the Apple adapter gate has not passed: " + adapters)
+                out = self.apple_adapters_out()
+                receipts += [p for p in (out / "wheel.json", out / adapter_gate_module().RECEIPT, out / "reuse.json")
+                             if p.is_file()]
+                why.append("adapters " + adapters)
+            return receipts, "; ".join(why)
+        ok, why = self.gate_ok(vendor)
+        if not ok:
+            raise StepFailed(f"published-{vendor}: gate-{vendor} has not passed for these candidate bytes: {why}")
+        out = self.gate_out(vendor)
+        receipts = [p for p in (out / "gate-smoke.json", out / "adapter-smoke" / adapter_gate_module().RECEIPT,
+                                out / f"runtime-{vendor}" / "runtime-report.json") if p.is_file()]
+        return receipts, f"gate-{vendor} " + why
+
     def published_ok(self, vendor):
-        """(ok, why): a passed published-install report for this version, vendor and these candidate wheels."""
+        """(ok, why): a passed published-<vendor> bytes report for this version, vendor and these candidates."""
         out = self.published_out(vendor)
         doc, req = read_json(out / "published-report.json"), read_json(out / "request.json") or {}
         if not doc:
-            return False, f"no published-install report at {out}"
+            return False, f"no published report at {out}"
         if (doc.get("schema") != self.PUBLISHED_SCHEMA or doc.get("vendor") != vendor
                 or doc.get("version") != self.version):
-            return False, f"the report at {out} is for {doc.get('vendor')} {doc.get('version')}"
+            return False, (f"the report at {out} is a {doc.get('schema')} report for {doc.get('vendor')} "
+                           f"{doc.get('version')}")
         if doc.get("status") != "passed" or doc.get("exit_code") != 0:
-            return False, f"published-{vendor} status {doc.get('status')}: {str(doc.get('error') or '')[:200]}"
+            differs = "; ".join("%s published %s, candidate %s" % (m.get("file"), m.get("published_sha256"),
+                                                                  m.get("candidate_sha256"))
+                                for m in doc.get("mismatch") or [])
+            return False, (f"published-{vendor} status {doc.get('status')}: "
+                           + (differs or str(doc.get("error") or "")[:200]
+                              or ", ".join(r["id"] for r in doc.get("coverage", []) if r.get("status") != "passed")))
         wheels = self.published_wheels(vendor)
         if not all(wheels) or req.get("candidates") != {Path(w).name: sha256(w) for w in wheels}:
             return False, f"the published-{vendor} report compared other candidate wheels than this release's"
         return True, "PASSED " + " ".join("%s=%s/%s" % (r.get("id"), r.get("completed"), r.get("expected"))
                                           for r in doc.get("coverage", []))
 
-    def published_owed(self, vendor):
-        if self.args.publish != "pypi":
-            return None
-        ok, why = self.published_ok(vendor)
-        return None if ok else why
-
-    def box_step_owed_published_nvidia(self):
-        return self.published_owed("nvidia")
-
-    def box_step_owed_published_amd(self):
-        return self.published_owed("amd")
-
     def step_published(self, vendor):
-        """published-<vendor>: the published release installed from PyPI and compared with the candidates."""
+        """published-<vendor>: the published files resolved from PyPI for the candidates' platform tags, their
+        bytes equal to the gated candidates', their RECORD intact, the gate's receipts as the evidence. No
+        device, no box, no install. Different bytes FAIL with both hashes; nothing is rerun."""
         if self.args.publish != "pypi":
             return "skipped (not published to PyPI)"
         ok, why = self.published_ok(vendor)
@@ -4504,35 +4562,31 @@ class Release:
         wheels = self.published_wheels(vendor)
         if not all(wheels) and not self.dry:
             raise StepFailed(f"published-{vendor}: a candidate wheel is missing; run linux-pack / macos-build")
-        names = [str(w) if w else "<candidate wheel>" for w in wheels]
-        out, work = self.published_out(vendor), self.rel / "published"
-        state = work / f"{vendor}.job.json"
-        if out.exists() and not self.dry and not state.is_file():
-            # the producer refuses an existing output; a failed attempt is kept beside it
-            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        if vendor == "apple":
-            cmd = [PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
-                   PY, str(ROOT / "tools" / "release_published_install.py"), "run", "--vendor", "apple",
-                   "--version", self.version, *[a for n in names for a in ("--candidate-wheel", n)],
-                   "--python", self.smoke_python() if not self.dry else "python3.12", "--out", str(out)]
+        if self.dry:
+            receipts, verdict = [], "<the gate's verdict>"
         else:
-            cmd = [PY, "tools/ops/published_install.py", vendor, self.version, "--source-commit", self.commit,
-                   "--source-tree", str(self.source_checkout(create=not self.dry)), "--out", str(out),
-                   "--state", str(state), *[a for n in names for a in ("--candidate-wheel", n)],
-                   "--max-wait-hours", "6"]
+            receipts, verdict = self.published_gate(vendor)
+        out, work = self.published_out(vendor), self.rel / "published"
+        if out.exists() and not self.dry:
+            # the producer refuses an existing output; a failed attempt is kept beside it, never deleted
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        names = [str(w) if w else "<candidate wheel>" for w in wheels]
+        cmd = [PY, str(ROOT / "tools" / "release_published_install.py"), "check", "--vendor", vendor,
+               "--version", self.version, "--source-commit", self.commit,
+               *[a for n in names for a in ("--candidate-wheel", n)],
+               *[a for r in receipts for a in ("--gate-evidence", str(r))], "--gate-verdict", verdict,
+               "--index-url", self.published_index_url(),
+               "--python", self.smoke_python() if not self.dry else "python3.12", "--out", str(out)]
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
-        self.must(cmd, log=work / f"published-{vendor}.log", what=f"the published-{vendor} producer")
+        rc = self.run(cmd, log=work / f"published-{vendor}.log")
         if self.dry:
-            if vendor != "apple":
-                sys.path.insert(0, str(ROOT / "tools" / "ops"))
-                import published_install
-                for line in published_install.Runner(published_install.parse(cmd[2:])).dry_lines():
-                    self.say("    would: " + line)
             return None
+        # the report names what failed (both hashes when the bytes differ); it is judged, never rerun
         ok, why = self.published_ok(vendor)
-        if not ok:
-            raise StepFailed(f"published-{vendor} did not pass: {why} ({work / f'published-{vendor}.log'})")
+        if not ok or rc != 0:
+            raise StepFailed(f"published-{vendor} did not pass (exit {rc}): {why} "
+                             f"({work / f'published-{vendor}.log'})")
         return why
 
     def step_published_apple(self):
@@ -4558,6 +4612,129 @@ class Release:
 
     def have_published_amd(self, rec):
         return self.have_published("amd")
+
+    # ------------------------------------------------------------ --published-smoke <vendor> (explicit only)
+    def published_smoke_vendors(self):
+        """{vendor: reason} of the explicit --published-smoke requests of this invocation."""
+        vendors = list(getattr(self.args, "published_smoke", None) or [])
+        reason = (getattr(self.args, "published_smoke_reason", None) or "").strip()
+        return {v: reason for v in vendors}
+
+    def record_published_smoke_requests(self):
+        """Refuse a --published-smoke without a stated reason; record each request in the state."""
+        wanted = self.published_smoke_vendors()
+        if not wanted:
+            return {}
+        if not next(iter(wanted.values())):
+            raise SystemExit("release: --published-smoke runs the installed smoke on a vendor device after the gates "
+                             "already verified these bytes; state why with --published-smoke-reason")
+        unknown = [v for v in wanted if v not in [x for x, _ in PUBLISHED_STEPS.values()]]
+        if unknown:
+            raise SystemExit("release: --published-smoke takes apple, nvidia or amd, not " + ", ".join(unknown))
+        if not self.dry and not self.readonly:
+            for vendor, reason in wanted.items():
+                self.state.setdefault("published_smoke_requests", []).append(
+                    dict(vendor=vendor, reason=reason, commit=self.commit, at=now()))
+            self.save()
+        return wanted
+
+    def published_smoke_ok(self, vendor):
+        """(ok, why): a passed installed-smoke report for this version, vendor and these candidate wheels."""
+        out = self.published_smoke_out(vendor)
+        doc, req = read_json(out / "published-report.json"), read_json(out / "request.json") or {}
+        if not doc:
+            return False, f"no published smoke report at {out}"
+        if (doc.get("schema") != self.PUBLISHED_SMOKE_SCHEMA or doc.get("vendor") != vendor
+                or doc.get("version") != self.version):
+            return False, f"the smoke report at {out} is for {doc.get('vendor')} {doc.get('version')}"
+        if doc.get("status") != "passed" or doc.get("exit_code") != 0:
+            return False, f"published-smoke-{vendor} status {doc.get('status')}: {str(doc.get('error') or '')[:200]}"
+        wheels = self.published_wheels(vendor)
+        if not all(wheels) or req.get("candidates") != {Path(w).name: sha256(w) for w in wheels}:
+            return False, f"the published-smoke-{vendor} report compared other candidate wheels than this release's"
+        return True, "PASSED " + " ".join("%s=%s/%s" % (r.get("id"), r.get("completed"), r.get("expected"))
+                                          for r in doc.get("coverage", []))
+
+    def published_smoke_owed(self, vendor):
+        if self.args.publish != "pypi" or vendor not in self.published_smoke_vendors():
+            return None
+        ok, why = self.published_smoke_ok(vendor)
+        return None if ok else why
+
+    def box_step_owed_published_smoke_nvidia(self):
+        return self.published_smoke_owed("nvidia")
+
+    def box_step_owed_published_smoke_amd(self):
+        return self.published_smoke_owed("amd")
+
+    def step_published_smoke(self, vendor):
+        """published-smoke-<vendor>: the PyPI install and installed smoke, ONLY on an explicit request."""
+        wanted = self.published_smoke_vendors()
+        if vendor not in wanted:
+            return f"skipped (no --published-smoke {vendor}: the gates verified these bytes)"
+        if self.args.publish != "pypi":
+            return "skipped (not published to PyPI)"
+        ok, why = self.published_smoke_ok(vendor)
+        if ok:
+            return why + " (report exists)"
+        self.say(f"  --published-smoke {vendor}: {wanted[vendor]}")
+        wheels = self.published_wheels(vendor)
+        if not all(wheels) and not self.dry:
+            raise StepFailed(f"published-smoke-{vendor}: a candidate wheel is missing; run linux-pack / macos-build")
+        names = [str(w) if w else "<candidate wheel>" for w in wheels]
+        out, work = self.published_smoke_out(vendor), self.rel / "published"
+        state = work / f"smoke-{vendor}.job.json"
+        if out.exists() and not self.dry and not state.is_file():
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        if vendor == "apple":
+            cmd = [PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+                   PY, str(ROOT / "tools" / "release_published_install.py"), "run", "--vendor", "apple",
+                   "--version", self.version, *[a for n in names for a in ("--candidate-wheel", n)],
+                   "--python", self.smoke_python() if not self.dry else "python3.12", "--out", str(out)]
+        else:
+            cmd = [PY, "tools/ops/published_install.py", vendor, self.version, "--source-commit", self.commit,
+                   "--source-tree", str(self.source_checkout(create=not self.dry)), "--out", str(out),
+                   "--state", str(state), *[a for n in names for a in ("--candidate-wheel", n)],
+                   "--max-wait-hours", "6"]
+        if not self.dry:
+            work.mkdir(parents=True, exist_ok=True)
+        self.must(cmd, log=work / f"published-smoke-{vendor}.log", what=f"the published-smoke-{vendor} producer")
+        if self.dry:
+            if vendor != "apple":
+                sys.path.insert(0, str(ROOT / "tools" / "ops"))
+                import published_install
+                for line in published_install.Runner(published_install.parse(cmd[2:])).dry_lines():
+                    self.say("    would: " + line)
+            return None
+        ok, why = self.published_smoke_ok(vendor)
+        if not ok:
+            raise StepFailed(f"published-smoke-{vendor} did not pass: {why} "
+                             f"({work / f'published-smoke-{vendor}.log'})")
+        return why, dict(reason=wanted[vendor])
+
+    def step_published_smoke_apple(self):
+        return self.step_published_smoke("apple")
+
+    def step_published_smoke_nvidia(self):
+        return self.step_published_smoke("nvidia")
+
+    def step_published_smoke_amd(self):
+        return self.step_published_smoke("amd")
+
+    def have_published_smoke(self, vendor):
+        if self.args.publish != "pypi" or vendor not in self.published_smoke_vendors():
+            return None
+        ok, why = self.published_smoke_ok(vendor)
+        return (why + " (report exists)") if ok else None
+
+    def have_published_smoke_apple(self, rec):
+        return self.have_published_smoke("apple")
+
+    def have_published_smoke_nvidia(self, rec):
+        return self.have_published_smoke("nvidia")
+
+    def have_published_smoke_amd(self, rec):
+        return self.have_published_smoke("amd")
 
     def step_record(self):
         if self.args.publish != "pypi":
@@ -4932,6 +5109,10 @@ class Release:
             if unknown:
                 raise SystemExit("release: unknown step(s) " + ", ".join(unknown) + "; steps: " + ", ".join(steps))
             steps = [s for s in steps if s in wanted]
+        # published-smoke-<vendor> only for an explicit --published-smoke <vendor> (with its reason, recorded):
+        # unrequested, the step is not selected, so it holds no box and boxes-down never waits for it
+        smoke = self.record_published_smoke_requests()
+        steps = [s for s in steps if s not in PUBLISHED_SMOKE_STEPS or PUBLISHED_SMOKE_STEPS[s][0] in smoke]
         self.selected = list(steps)
         for redo in (self.args.redo.split(",") if self.args.redo else []):
             if redo not in self.STEPS:
@@ -5165,6 +5346,12 @@ def main(argv=None):
     # Inert since 2026-10-10 (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun): the
     # Apple cross-diff and release-check they steered are deleted; kept so
     # existing invocations still parse.
+    ap.add_argument("--published-smoke", action="append", default=[], choices=["apple", "nvidia", "amd"],
+                    metavar="VENDOR",
+                    help="also run the installed smoke from PyPI on VENDOR's device after publish (repeatable; "
+                         "needs --published-smoke-reason). Never the default: the gates verified the bytes")
+    ap.add_argument("--published-smoke-reason", default="",
+                    help="why the published smoke must run again (recorded in the release state)")
     ap.add_argument("--accept-moved", action="store_true", help="inert since 2026-10-10")
     ap.add_argument("--cpu-column", action="store_true", help="inert since 2026-10-10")
     ap.add_argument("--amd-expect-from", default="",
