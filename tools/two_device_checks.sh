@@ -72,7 +72,10 @@ phase verify-distributed pixi run python -m mojolearn verify-distributed --devic
 # 3. Summary.
 {
     echo "two-device gate at $(cat "$OUT/commit.txt") on $(head -n 2 "$OUT/gpu.txt" | tail -n 1)"
-    awk -F'\t' '{ if ($2 == 0) p++; else { f++; bad = bad " " $1 } } END { printf "phases %d passed, %d failed:%s\n", p, f, bad }' "$OUT/status.tsv"
+    # the LAST row of each phase counts (a resumed run appends a new row)
+    awk -F'\t' '{ rc[$1] = $2; if (!($1 in seen)) { seen[$1] = 1; order[++n] = $1 } }
+        END { for (i = 1; i <= n; i++) { if (rc[order[i]] == 0) p++; else { f++; bad = bad " " order[i] } }
+              printf "phases %d passed, %d failed:%s\n", p, f, bad }' "$OUT/status.tsv"
 } | tee "$OUT/summary.txt"
-grep -q -v '	0$' "$OUT/status.tsv" && exit 1
-exit 0
+grep -q ' 0 failed:' "$OUT/summary.txt" && exit 0
+exit 1
