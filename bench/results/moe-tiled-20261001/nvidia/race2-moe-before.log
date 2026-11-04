@@ -1,3 +1,0 @@
-ALGOS-REFUSED lane=moe dataset=synthetic arm=ours stage=ready detail={"error": "OSError('/root/moe-nvidia/venv-before/lib/python3.14/site-packages/torch/lib/libtorch_global_deps.so: cannot open shared object file: No such file or directory')", "event": "error", "stage": "ready"}
-BOARD-PARAMS {"arms": {}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/moe", "problems": [], "reference": null, "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
-ALGOS lane=moe dataset=synthetic arm=ours status=not_ready median_ms=None quality={}
