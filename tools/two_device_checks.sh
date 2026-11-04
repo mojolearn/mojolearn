@@ -58,13 +58,11 @@ done
 # 2. verify-distributed: the Python-sharded drivers (ARIMA, Holt-Winters, GP
 # classification, disjoint IVF search). The bindings it loads
 # (python/mojolearn/_native_parallel_shard.py) are built here, once.
-# GPU bindings the drivers call, then the host layout `import mojolearn` loads
-# (python/mojolearn/_backend.py load_host_module callers) plus the drivers' own
-# host doors (forecast, gp, ivf, tsa, sequence, arima).
+# GPU bindings the drivers call, then THE COMPLETE HOST LAYOUT (`import
+# mojolearn` and the classical constructors refuse a partial one), i.e.
+# every bindings/build_*_host.sh.
 for b in main kernel_methods gp x_neighbors ivf tsa x_sequence \
-         tokenizer_host estimators_host linalg_host preprocessing_host embedding_infer_host x_prep_host \
-         runtime_manifold_host runtime_model_selection_host runtime_sequential_host \
-         forecast_host gp_host ivf_host ivf_search_host tsa_host x_sequence_host arima_host; do
+         $(ls bindings/build_*_host.sh | sed 's#bindings/build_##; s#\.sh$##'); do
     s=bindings/build_$b.sh; [ "$b" = main ] && s=bindings/build.sh
     [ -f "$s" ] || continue
     case "$b" in
