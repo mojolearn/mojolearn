@@ -89,12 +89,13 @@ def test_prefetch_runs_every_needed_snapshot_at_once_then_the_real_pass_is_all_c
                 rows.append(str(error))
         return rows
 
-    ran = deps.prefetch(compute, jobs=4, say=lambda line: None)
+    ran = []
+    deps.prefetch(compute, jobs=4, say=lambda line: None, ran=ran)
     assert len(ran) == 4 and all(row["ok"] for row in ran)
     assert slow.peak == 4   # all four at once (wall time on a loaded Mac is not a stable assertion)
     calls = len(slow.calls)
     result = compute()
-    assert len(slow.calls) == calls == 4   # the real pass ran nothing
+    assert len(slow.calls) == calls == 4   # a later pass runs nothing
     assert [list(r) for r in result] == [[f"data{n}.txt"] for n in range(4)]
 
 
@@ -111,9 +112,8 @@ def test_dependent_snapshots_take_one_round_each_and_match_a_sequential_run(repo
         return first, second
 
     rounds = []
-    deps.prefetch(lambda: compute(repo["logs"]), jobs=4, say=rounds.append)
+    parallel = deps.prefetch(lambda: compute(repo["logs"]), jobs=4, say=rounds.append)
     assert sum("round" in line for line in rounds) == 2
-    parallel = compute(repo["logs"])
     sequential = compute(tmp_path / "sequential")
     assert parallel == sequential
     assert parallel[1]["selections"]["cpu"]["changed_paths"] == ["data0.txt"]
@@ -127,7 +127,9 @@ def test_a_failed_prefetch_is_reported_never_rerun(repo, monkeypatch):
     def compute():
         return [deps.frozen_snapshot(repo["root"], repo["head"], r, log_dir=repo["logs"]) for r in requests(repo)]
 
-    ran = deps.prefetch(compute, jobs=2, say=lambda line: None)
+    ran = []
+    with pytest.raises(ValueError, match="failed in prefetch"):
+        deps.prefetch(compute, jobs=2, say=lambda line: None, ran=ran)
     assert sorted(row["ok"] for row in ran) == [False, True, True, True]
     calls = len(slow.calls)
     with pytest.raises(ValueError, match="failed in prefetch"):
@@ -182,7 +184,8 @@ def test_remote_worker_runs_on_the_box_and_brings_reports_back_by_token(repo, bo
         return [deps.frozen_snapshot(repo["root"], repo["head"], r, log_dir=logs)
                 for r in requests(repo) + [dict(extra_paths=["data1.txt"], base_revision=repo["base"])]]
 
-    ran = deps.prefetch(lambda: compute(repo["logs"]), jobs=3, worker="builder@box", say=lambda line: None)
+    ran = []
+    deps.prefetch(lambda: compute(repo["logs"]), jobs=3, worker="builder@box", say=lambda line: None, ran=ran)
     assert len(ran) == 5 and all(row["ok"] and row["worker"] == "builder@box" for row in ran)
     # The Mac ran no analysis: every report came back from the box, under its token.
     reports = sorted(repo["logs"].glob("*.json"))
@@ -204,6 +207,22 @@ def test_remote_reports_from_another_analyzer_are_refused(repo, box, monkeypatch
     def compute():
         return deps.frozen_snapshot(repo["root"], repo["head"], dict(extra_paths=["data0.txt"]), log_dir=repo["logs"])
 
-    ran = deps.prefetch(compute, jobs=1, worker="builder@box", say=lambda line: None)
+    ran = []
+    with pytest.raises(ValueError, match="remote dependency report differs"):
+        deps.prefetch(compute, jobs=1, worker="builder@box", say=lambda line: None, ran=ran)
     assert [row["ok"] for row in ran] == [False]
     assert not list(repo["logs"].glob("*.json"))
+
+
+def test_a_round_that_needs_nothing_is_the_result_without_another_pass(repo, monkeypatch):
+    passes = []
+
+    def compute():
+        passes.append(1)
+        return deps.frozen_snapshot(repo["root"], repo["head"], dict(extra_paths=["data0.txt"]), log_dir=repo["logs"])
+
+    first = deps.prefetch(compute, jobs=2, say=lambda line: None)
+    assert len(passes) == 2           # discover + the clean pass that is returned
+    passes.clear()
+    assert deps.prefetch(compute, jobs=2, say=lambda line: None) == first
+    assert len(passes) == 1           # everything cached: one ordinary run

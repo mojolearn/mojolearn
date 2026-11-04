@@ -177,10 +177,18 @@ def create_bundle(ledger_path, root, source, wheels, output, *, dependency_cache
     ledger_path, root, output = Path(ledger_path), Path(root), Path(output)
     logs = Path(dependency_cache) if dependency_cache else output.parent / "dependency-logs"
     before = ledger_path.read_bytes()
-    dependencies.prefetch(lambda: verify_ledger(ledger_path, root, source, log_dir=logs))
-    reads = {}
-    with evidence.evidence_context(collect=reads):
-        doc, manifest = verify_ledger(ledger_path, root, source, log_dir=logs)
+    collected = {}
+
+    def admit():
+        # Each pass collects its own reads; only the pass that returns (all analyses cached) counts.
+        reads = {}
+        with evidence.evidence_context(collect=reads):
+            result = verify_ledger(ledger_path, root, source, log_dir=logs)
+        collected["reads"] = reads
+        return result
+
+    doc, manifest = dependencies.prefetch(admit)
+    reads = collected["reads"]
     if ledger_path.read_bytes() != before:
         raise ValueError("canonical ledger changed during admission; retry metadata admission only")
     artifacts = [wheel_identity(path, doc["version"], source, manifest["configuration"]) for path in wheels]

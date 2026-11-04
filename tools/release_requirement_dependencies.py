@@ -461,30 +461,32 @@ def admission_jobs():
     return os.cpu_count() or 1
 
 
-def prefetch(compute, *, jobs=None, worker=None, rounds=8, say=None):
-    """Run every frozen snapshot ``compute()`` needs, in parallel, before it runs for real.
+def prefetch(compute, *, jobs=None, worker=None, rounds=8, say=None, ran=None):
+    """``compute()``, after every frozen snapshot it needs ran in parallel; returns its value.
 
-    Returns [{token, seconds, ok}] of the snapshots run. ``compute``'s own result and errors in discovery
-    are discarded: only the caller's following real call decides anything."""
+    Each round runs ``compute`` in discovery mode; a round that needed nothing uncached was an ordinary
+    run (discovery only acts on a cache miss), so its value or error is the result: no extra pass. The
+    snapshots run in a round are appended to ``ran`` ([{token, seconds, ok}])."""
     jobs = jobs or admission_jobs()
     worker = worker or os.environ.get("MOJOLEARN_ADMISSION_WORKER") or "local"
     say = say or (lambda line: print(line, file=sys.stderr))
-    ran = []
+    ran = [] if ran is None else ran
     for round_ in range(rounds):
-        pending = {}
+        pending, value, error = {}, None, None
         context = _DISCOVERY.set(pending)
         try:
-            compute()
-        except Exception:  # noqa: BLE001 - discovery is advisory; the real call reports errors
-            pass
+            value = compute()
+        except Exception as problem:  # noqa: BLE001 - an error with nothing pending is the real result
+            error = problem
         finally:
             _DISCOVERY.reset(context)
-        pending = {token: item for token, item in pending.items() if token not in _FAILED}
         if not pending:
-            break
+            if error is not None:
+                raise error
+            return value
         say(f"dependency analysis round {round_ + 1}: {len(pending)} frozen snapshot(s) on {worker}, {jobs} at once")
         ran += run_snapshots(pending, jobs=jobs, worker=worker, say=say)
-    return ran
+    return compute()
 
 
 def run_snapshots(pending, *, jobs, worker="local", say=print):
