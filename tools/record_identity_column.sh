@@ -238,6 +238,10 @@ elif [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; t
     record=$(sed -n 's/.* RECORD \([0-9]*\) .*/\1/p' <<< "$summary")
     bad=$(sed -n 's/.* KNOWN-BAD \([0-9]*\) .*/\1/p' <<< "$summary")
     echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad; decisions $OUT/$LABEL.reuse.json; FULL=1 records every lane)"
+    # RELEASE FLOOR = THE LEDGER'S RULE (lane ledger-floor-receipts): changed-lanes measures a row
+    # from the release floor only with an admitted receipt at the floor (identity_columns.py
+    # floor_receipts_for -> release_identity_reference.floor_receipts); a tag alone is no floor.
+    grep -m 1 '^# release floor' "$OUT/$LABEL.changed-lanes.txt" | cut -c1-240 || true
     # Reused rows from records that are not committed yet must reach admission.
     "${PY[@]}" -c '
 import json, sys
@@ -276,6 +280,7 @@ if [ -n "${ONLY_CHANGED:-}" ]; then
     LANES=$("${PY[@]}" tools/identity_columns.py changed-lanes --scope "${SCOPE:-routine}" ${since_arg[@]+"${since_arg[@]}"} \
             2> "$OUT/$LABEL.changed-lanes.txt" | tail -n 1) || die "could not list the changed lanes (see $OUT/$LABEL.changed-lanes.txt)"
     grep -m 1 'CHANGED-LANES' "$OUT/$LABEL.changed-lanes.txt"
+    grep -m 1 '^# release floor' "$OUT/$LABEL.changed-lanes.txt" | cut -c1-240 || true
     if [ -z "$LANES" ]; then
         echo "NOTHING-CHANGED $LABEL: no lane's closure moved since the admitted table; every row is kept"
         exit 0

@@ -11,9 +11,9 @@ admitted rows rest on. There is exactly one implementation of that comparison:
 
 | Consumer | Question | Base |
 | --- | --- | --- |
-| `tools/record_identity_column.sh` (`identity_columns.py changed-lanes --class`) | REUSED or RECORD this lane? | newest good evidence of the column's class, or the release floor |
+| `tools/record_identity_column.sh` (`identity_columns.py changed-lanes --class`) | REUSED or RECORD this lane? | newest good evidence of the column's class, or the release floor when the floor holds a receipt |
 | `tools/admit_identity_columns.sh` (`identity_columns.py reuse-check`) | may an older incoming record stand for the admitted code? | the record's commit |
-| release ledger (`tools/release_identity_reference.py`) | is `identity-<vendor>/<lane>` passed at the freeze? | every record commit the lane's admitted rows of that class rest on, or the release floor |
+| release ledger (`tools/release_identity_reference.py`) | is `identity-<vendor>/<lane>` passed at the freeze? | every record commit the lane's admitted rows of that class rest on, or the release floor when the floor holds a receipt |
 
 The ledger runs the comparison at the freeze, in a byte-exact frozen view of the freeze, with the
 freeze's own `lane_select.py` (`release_requirement_dependencies._reference_closures`). A row is
@@ -24,10 +24,28 @@ admission READMEs that name them, all at the freeze. Otherwise the row is `untes
 `closure changed since 0814836ffb72 (nvidia cuda): 3 file(s): core/a.mojo, ...`, and the recorder
 reaches the same answer and records that lane only.
 
-The release floor: a record older than the newest NVIDIA and AMD release tags that are strict
-ancestors of the freeze is measured from the floor, as the recorder measures it, because that
-release's identity check (`python -m mojolearn verify` on the boxes) verified every table row for its
-code. A tag made at the freeze itself never vouches for the freeze.
+The release floor is the rule in the next section; a release tag alone never vouches for a row.
+
+## Release floor
+
+A record older than the release floor (the earlier of the newest NVIDIA and AMD release tags that are
+strict ancestors of the code being judged) is measured from the floor only when the floor holds an
+admitted identity receipt for that lane and column: the table committed at the floor carries the
+lane's rows of that class with the same digests, every record they rest on has an unchanged closure
+up to the floor (the floor's own `lane_select.py`, in a frozen view of the floor), and no waiver of
+that release (a committed `docs/release/<version>-*.json` or its release record) names the row or
+the record. Otherwise the record is measured from its own execution revision, because a published
+release is not verification: 0.8.64 and 0.8.65 shipped under owner waivers.
+
+One implementation, `release_identity_reference.floor_receipts`, serves the ledger (`verdicts`) and
+the recorder (`identity_columns.py changed-lanes` through `floor_receipts_for`, which
+`record_identity_column.sh` runs and summarises as `# release floor <c>: n of m row(s) ... measured
+from it`). A ledger basis item carries `floor_receipt` (the floor evidence it rests on) or
+`floor_refused` (why the floor was not honoured). Replayed statically over the 0.8.65 freeze
+(`dryrun-0865b.json`, floor 47fffd4e4a = 0.8.64): 0 of the 1,281 passed rows relied on the floor
+(every passed basis rests on its own record); the 853 floor-based basis items all belonged to the 768
+untested rows, and the 0.8.64 owner waiver names every one of them, so under this rule none is a floor
+(`~/mojolearn-evidence/ledger-floor-receipts-notes/replay-floor-reliance.json`).
 
 The old cross-commit selector over ledger attempts (`dependency equivalence blocked: selector
 provenance unresolved`) no longer gates identity rows. `release_requirements.py plan --explain` still
