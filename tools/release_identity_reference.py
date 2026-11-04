@@ -219,8 +219,13 @@ class Frozen:
         return self._admissions.get(sha, [])
 
 
-def table_rows(frozen, lane, check, present, harness):
-    """({class: sorted record indices its rows rest on}, problems) for one lane of the frozen table."""
+def table_rows(frozen, lane, check, present, harness, *, declared=None):
+    """({class: sorted record indices its rows rest on}, problems) for one lane of the frozen table.
+
+    An OPTIONAL part whose agreed value is a declared ``n/a:`` carries no computed bits: it is still
+    checked for agreement, but the record it rests on is not a closure basis (0.8.65: a legacy Apple
+    ``rlpair`` n/a row from an October record, which no newer column carries, would otherwise tie 381
+    re-recorded lanes to that record). Its indices go to ``declared`` when given."""
     table, problems = frozen.table, []
     cells = frozen.lane_cells.get(lane)
     if not cells:
@@ -263,8 +268,13 @@ def table_rows(frozen, lane, check, present, harness):
                 if value != agreed and not declared_na:
                     problems.append(f"{key}/{part}: the cited {cls} record carries {value}, not the table's {agreed}")
                     continue
-                if cls in rows:
-                    rows[cls].add(index)
+                if cls not in rows:
+                    continue
+                if part in OPTIONAL_PARTS and isinstance(agreed, str) and agreed.startswith("n/a:"):
+                    if declared is not None:
+                        declared.setdefault(cls, set()).add(index)
+                    continue
+                rows[cls].add(index)
     return {cls: sorted(found) for cls, found in rows.items()}, problems
 
 
@@ -327,7 +337,11 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
     # learn which bases the selector must answer; the rows are re-judged with them below.
     provisional = {}
     for rid, plan in plans.items():
-        rows, _ = table_rows(frozen, plan["lane"], plan["check"], plan["present"], {})
+        declared = {}
+        rows, _ = table_rows(frozen, plan["lane"], plan["check"], plan["present"], {}, declared=declared)
+        # Bases of declared n/a parts are asked too: one stable request per freeze, whatever the rule.
+        for cls, indices in declared.items():
+            rows[cls] = sorted(set(rows.get(cls, ())) | indices)
         bases, _ = _bases(root, frozen, rows, floor, commits)
         provisional[rid] = bases
         for cls, _, _, base in bases:

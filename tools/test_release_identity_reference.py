@@ -101,7 +101,7 @@ class Repo:
         self.git("commit", "-q", "-m", message)
         return self.git("rev-parse", "HEAD")
 
-    def admit(self, record_commit, *, conflict=False, other_harness=False):
+    def admit(self, record_commit, *, conflict=False, other_harness=False, legacy=None, legacy_ref="n/a:legacy"):
         """Column records at ``record_commit`` and the table that admits them, committed together."""
         records, cells = [], {}
         for index, cls in enumerate(CLASSES):
@@ -120,6 +120,15 @@ class Repo:
                                      for p in PARTS}
         if conflict:
             cells["ols/base"]["infer"]["conflict"] = True
+        if legacy:
+            # An optional part only an older Apple record carries (0.8.65: the legacy rlpair n/a rows).
+            body = dict(commit=legacy, cells={"ols/base": dict(rlpair=[legacy_ref], rlpair_verdict=(
+                "N/A" if legacy_ref.startswith("n/a:") else "STABLE"))})
+            raw = json.dumps(body, sort_keys=True)
+            self.write("bench/results/identity_break/old/apple.identical.json", raw)
+            records.append(dict(**{"class": "apple"}, commit=legacy, dir="old", file="apple.identical.json",
+                                sha256=hashlib.sha256(raw.encode()).hexdigest(), vendor="apple"))
+            cells["ols/base"]["rlpair"] = dict(ref=legacy_ref, cols={"apple": len(records) - 1})
         harness = hashlib.sha256((self.root / "tools/identity_break.py").read_bytes()).hexdigest()
         table = dict(cells=cells, records=records, harness_sha256=harness, lane_revisions={},
                      lane_admission={lane: dict(harness_sha256="0" * 64 if other_harness else harness)
@@ -222,6 +231,17 @@ def test_version_only_diff_passes(repo, tmp_path):
     assert rows["identity-apple/ols"]["status"] == "untested"
     assert "python/mojolearn/_version.py" in rows["identity-apple/ols"]["reasons"][0]
     assert rows["identity-apple/ridge"]["status"] == "passed"
+
+
+@pytest.mark.parametrize("legacy_ref, status", [("n/a:legacy", "passed"), ("0123456789abcdef", "untested")])
+def test_declared_na_optional_part_is_not_a_closure_basis(repo, tmp_path, legacy_ref, status):
+    repo.write("core/ols.mojo", "fn ols(): return 4\n")
+    recorded = repo.commit("edit after the legacy record")
+    freeze = repo.admit(recorded, legacy=repo.record, legacy_ref=legacy_ref)
+    row = plan(repo, tmp_path, freeze)["identity-apple/ols"]
+    assert row["status"] == status, row["reasons"]
+    if status == "untested":
+        assert row["reasons"][0].startswith(f"closure changed since {repo.record[:12]}")
 
 
 def test_unattributed_path_never_passes(repo, tmp_path):
