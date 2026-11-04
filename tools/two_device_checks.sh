@@ -62,7 +62,7 @@ for b in main tokenizer_host kernel_methods gp x_neighbors ivf tsa forecast_host
     s=bindings/build_$b.sh; [ "$b" = main ] && s=bindings/build.sh
     [ -f "$s" ] || continue
     case "$b" in
-        *_host) phase "build-$b" env -u MOJOLEARN_TARGET_COLUMN sh "$s" ;;  # host bindings compile the CPU column only
+        *_host) phase "build-$b" env -u MOJOLEARN_TARGET_COLUMN -u MOJOLEARN_GPU_ARCHS sh "$s" ;;  # host bindings compile the CPU column only, no GPU arch
         *) phase "build-$b" sh "$s" ;;
     esac
 done
