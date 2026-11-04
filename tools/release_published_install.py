@@ -375,6 +375,21 @@ def judge_bytes(out, index_url=PYPI_INDEX):
     if not published:
         add("published-artifact-hashes", "resolved-files", False, why="nothing was resolved")
         add("wheel-integrity", "resolved-files", False, why="nothing was resolved")
+    packaged = set()
+    for name in published:
+        dist = next(r["distribution"] for r in resolved if r.get("file") == name)
+        try:
+            with zipfile.ZipFile(out / "wheels" / dist / name) as archive:
+                if "mojolearn/identity_columns/COMMIT" in archive.namelist():
+                    packaged.add(archive.read("mojolearn/identity_columns/COMMIT").decode().strip())
+        except (OSError, zipfile.BadZipFile):
+            pass
+    commit = request.get("source_commit")
+    if packaged:
+        # the source commit the published wheels carry is the one the release froze
+        add("wheel-integrity", "packaged-commit", len(packaged) == 1 and (commit is None or packaged == {commit}),
+            packaged=sorted(packaged), source_commit=commit)
+        commit = next(iter(packaged)) if len(packaged) == 1 else commit
     gate = request.get("gate") or {}
     add("gate-evidence", "gate-verdict", isinstance(gate.get("verdict"), str) and gate["verdict"].strip() != ""
         and not gate.get("refused"), verdict=gate.get("verdict"), refused=gate.get("refused"))
@@ -408,7 +423,7 @@ def judge_bytes(out, index_url=PYPI_INDEX):
         if ref not in evidence:
             evidence.append(ref)
     return dict(schema=REPORT_SCHEMA, tool="tools/release_published_install.py", vendor=vendor, version=version,
-                backend=BACKEND[vendor], index_url=request.get("index_url"), source_revision=request.get("source_commit"),
+                backend=BACKEND[vendor], index_url=request.get("index_url"), source_revision=commit,
                 published=published, mismatch=mismatch, gate_verdict=gate.get("verdict"), coverage=coverage,
                 checks=rows, status="passed" if passed else "failed", exit_code=0 if passed else 1, evidence=evidence)
 
