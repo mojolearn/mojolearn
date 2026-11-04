@@ -145,8 +145,9 @@ def build_argv(vendor, source_commit, tree, out, reuse_from=None):
 
 #: The installed-runtime qualifier (tools/release_runtime_installed.py run: the public runtime registry against
 #: the installed candidate wheels, runtime-<vendor> in the ledger) runs on the box after the smoke, bounded by
-#: this many minutes. Its outcome is recorded under out/runtime-<vendor>/ and fetched; it never changes the
-#: gate verdict (the smoke's), and the ledger admits runtime-<vendor> only from a passed run. 0 skips it.
+#: this many minutes. Its outcome is recorded under out/runtime-<vendor>/ and fetched; the job's verdict stays
+#: the smoke's, tools/release.py gate_ok fails the gate unless that report passed, and the ledger admits
+#: runtime-<vendor> only from a passed run. 0 skips it.
 #: The job script passes the qualifier a run budget 10 minutes under this bound (venv, install, report), so
 #: the qualifier stops itself and writes its report and partial junit. At 0.8.65 a 15-minute budget
 #: stopped it at 12% (NVIDIA) and 23% (AMD): about 7,500 s and 3,900 s for the full run.

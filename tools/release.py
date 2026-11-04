@@ -3761,10 +3761,37 @@ class Release:
             return False, "; ".join(errors)
         from release_gate_profiles import profile, LIGHT
         if profile(doc) == LIGHT:
-            return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases; "
+            runtime, cases = self.gate_runtime_error(vendor, output)
+            if runtime:
+                return False, runtime
+            return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases, "
+                          f"{cases} installed-runtime cases; "
                           f"elapsed {doc['budget']['elapsed_seconds']:.1f}s (no performance campaign)")
         m = doc["measure"]
         return True, f"PASS historical performance campaign: {m['expected']} measured lines"
+
+    #: gate_ok's reason prefix for a gate whose smoke passed and whose installed-runtime qualifier did not
+    RUNTIME_GATE_FAILED = "runtime qualifier "
+
+    @staticmethod
+    def gate_runtime_error(vendor, output):
+        """(error or None, cases): the gate job's installed-runtime qualifier report under OUTPUT.
+
+        0.8.65: the gate printed PASS while runtime-<vendor>/runtime-report.json said "failed" (the
+        qualifier had timed out at 12-23%). The box job keeps the smoke's verdict; the release judges both,
+        so a failed, stopped or missing qualifier fails the gate and names the report."""
+        path = Path(output) / f"runtime-{vendor}" / "runtime-report.json"
+        report = read_json(path)
+        if not report:
+            return f"{Release.RUNTIME_GATE_FAILED}left no report at {path}", None
+        if report.get("status") != "passed" or report.get("exit_code") != 0:
+            stop = report.get("timed_out") or {}
+            partial = report.get("partial_tests") or {}
+            detail = (f"stopped by its {stop.get('kind')} timeout after {stop.get('elapsed_s')} s "
+                      f"({partial.get('passed')}/{partial.get('total')} finished tests passed)" if stop
+                      else str(report.get("error") or report.get("qualifier_error") or "")[:300])
+            return f"{Release.RUNTIME_GATE_FAILED}status {report.get('status')} in {path}: {detail}", None
+        return None, report.get("cases")
 
     def run_gate(self, vendor):
         run_id = None
@@ -3776,6 +3803,10 @@ class Release:
             if not self.dry:
                 self.record_candidate_requirement(vendor, run_id)
             return why
+        if why.startswith(self.RUNTIME_GATE_FAILED):
+            # The smoke passed and the qualifier ran: relaunching would only rerun green work. A qualifier
+            # failure is fixed in code and qualified at the next freeze.
+            raise StepFailed(f"the {vendor} release gate did not pass: {why}")
         work = self.rel / "gates"
         output = self.gate_out(vendor)
         # plan item 4 (docs/plans/POST_0863_RELEASE_TOOLING.md): one persisted box job per vendor through the

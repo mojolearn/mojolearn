@@ -231,8 +231,10 @@ def recorded():
 class FakeBox:
     """The wrappers and R2 as one fake: uploads land in .files, the submit queues, fetch serves REPORT."""
 
-    def __init__(self, report, vendor, polls_before_final=1, job_exit="0"):
+    def __init__(self, report, vendor, polls_before_final=1, job_exit="0", runtime=None):
         self.report, self.vendor, self.files, self.calls = report, vendor, {}, []
+        # the installed-runtime qualifier's report the job fetches (out/runtime-<vendor>/runtime-report.json)
+        self.runtime = dict(status="passed", exit_code=0, cases=7300) if runtime is None else runtime
         self.lists, self.polls_before_final, self.job_exit = 0, polls_before_final, job_exit
         self.ptag = ("nvc-release-gate-20261101T000000Z-abc123" if vendor == "nvidia"
                      else "rel-0.8.57-gate-amd-20261101T000000Z-20261101T000001Z-def456")
@@ -262,6 +264,9 @@ class FakeBox:
             final = Path(argv[argv.index("--dest") + 1]) / "final"
             (final / "out").mkdir(parents=True)
             (final / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
+            if self.runtime:
+                (final / "out" / f"runtime-{self.vendor}").mkdir()
+                (final / "out" / f"runtime-{self.vendor}" / "runtime-report.json").write_text(json.dumps(self.runtime))
             (final / "job").mkdir()
             (final / "job" / "status.json").write_text(json.dumps(dict(phase="complete", exit=0)))
         return out
@@ -303,6 +308,7 @@ def test_a_recorded_gate_report_comes_home_and_release_judges_it_exactly_as_befo
     ok, why = r.gate_ok(vendor)
     assert ok, why
     assert why.startswith("PASS: 11 installed correctness records, 24 autograd entries, three adapter phases")
+    assert "7300 installed-runtime cases" in why
     # the same report, one record short, fails exactly as before
     broken = json.loads(home.read_text())
     broken["correctness"]["jobs"].pop()
@@ -484,3 +490,45 @@ def test_gate_ok_accepts_the_verified_overlay_and_refuses_other_bytes(tmp_path, 
     (a.out / "route-overlay.json").unlink()
     ok, why = r.gate_ok(vendor)
     assert not ok and "without its route-overlay.json" in why
+
+
+@pytest.mark.parametrize("runtime", [
+    dict(status="failed", exit_code=1, qualifier_exit=1, error="ValueError: no junit report; the tests did not run",
+         timed_out=dict(kind="run", budget_s=900, elapsed_s=900.4), partial_tests=dict(total=1700, passed=1700)),
+    dict(status="failed", exit_code=1, qualifier_exit=1, error="ValueError: no junit report; the tests did not run"),
+    {},  # no report: the qualifier was killed or never ran
+], ids=["timed-out", "failed", "missing"])
+def test_a_gate_whose_runtime_qualifier_did_not_pass_fails_and_names_the_report(tmp_path, monkeypatch, recorded,
+                                                                               runtime):
+    # 0.8.65: the gate printed PASS while runtime-<vendor>/runtime-report.json said "failed".
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
+    vendor = "amd"
+    report = dict(recorded.gate, vendor=vendor, candidate=dict(recorded.identity, vendor=vendor))
+    report["correctness"] = dict(report["correctness"], installed=dict(vendor="hip"))
+    import gate_autograd_artifacts as A
+    report["autograd_artifacts"] = dict(report["autograd_artifacts"], vendor=vendor, files=[
+        dict(file=name, source=source, exit_code=0, sha256="e" * 64, source_sha256="f" * 64)
+        for name, source in A.expected(vendor).items()])
+    identity = report["candidate"]
+    box = FakeBox(report, vendor, runtime=runtime)
+    a = args(tmp_path, vendor)
+    assert RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    r = object.__new__(FakeRelease)
+    r.version, r.dry = VERSION, False
+    r.candidate_gate_identity = lambda v: identity
+    r.gate_out = lambda v: a.out
+    ok, why = r.gate_ok(vendor)
+    path = a.out / f"runtime-{vendor}" / "runtime-report.json"
+    assert not ok and why.startswith(release.Release.RUNTIME_GATE_FAILED) and str(path) in why
+    if runtime.get("timed_out"):
+        assert "run timeout after 900.4 s" in why and "1700/1700" in why
+    # run_gate refuses at once: the smoke passed and the qualifier ran, so nothing is relaunched
+    r.readiness_status = lambda write=False: None
+    r.readiness = lambda: SimpleNamespace(begin=lambda name: "run-1")
+    launched = []
+    r.must = lambda *a, **k: launched.append(a)
+    with pytest.raises(release.StepFailed, match="runtime qualifier"):
+        r.run_gate(vendor)
+    assert launched == []

@@ -193,7 +193,8 @@ tail -n 5 "$J/gate.log"
 PHASE=runtime-qualify
 # runtime-<vendor> evidence for the ledger (tools/release_runtime_installed.py run: fresh venv, the exact
 # candidate wheels, the frozen source's own tests). Recorded and fetched (out/runtime-<vendor>/), bounded by
-# GATE_RUNTIME_MINUTES; its exit never changes the gate verdict above, which stays the smoke's.
+# GATE_RUNTIME_MINUTES; its exit never changes this job's verdict above (the smoke's), but tools/release.py
+# gate_ok fails the gate unless runtime-<vendor>/runtime-report.json says passed.
 if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
     wheel_args=(); for w in "${GATE_WHEELS[@]}"; do wheel_args+=(--wheel "$w"); done
     rt_min=$GATE_RUNTIME_MINUTES
