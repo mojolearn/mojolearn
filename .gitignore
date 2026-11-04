@@ -6,6 +6,8 @@
 # because precompile will not create its own output directory and fails with
 # "cannot open output file" on a clean clone otherwise.
 build/
+# the build documentation (docs/build/COMPILE_CLOSURES.md) is source
+!/docs/build/
 
 # Optional local native Mojo package prefix (packaging/native/README.md).
 /native-install/

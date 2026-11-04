@@ -225,6 +225,12 @@ def analyse(repo, old, new, since, release_keys=None):
     weights, n_commits = change_weights(repo, since, all_files)
     report["weights"] = dict(commits_with_mojo=n_commits,
                              top=sorted(((w, f) for f, w in weights.items() if w), reverse=True)[:40])
+    # The files that cost the most rebuilds: commits since SINCE x groups reached (Linux, 9 groups).
+    linux_reach = dict(report["platforms"]["linux"]["ranking"])
+    full = shared_ranking(groups(t_new, "linux", mc))
+    report["hot"] = sorted(((weights.get(f, 0) * c, weights.get(f, 0), c, f) for f, c in full.items()
+                            if weights.get(f, 0)), reverse=True)[:25]
+    del linux_reach
     report["scripts"] = script_closures(t_new)
     report["v1_merged"] = v1_merged_scope(t_new)
     report["member_files"] = {m: sum(1 for r in c if r.endswith(".mojo")) for m, c in mc.items()}
@@ -318,6 +324,113 @@ def group_plan(repo, old, new, plat):
     return lines
 
 
+def render_tables(report):
+    """The generated half of docs/build/COMPILE_CLOSURES.md, from a report JSON."""
+    out = []
+    w = out.append
+    old, new = report.get("old", "")[:10], report.get("new", "")[:10]
+    w("### Merged groups at %s: what each compile reads\n" % new)
+    w("Closure = distinct Mojo source files the group's members import (closure-v2 walk, `-I . -I bindings`), "
+      "generated sources counted as their generator. The v1 key hashed every one of the tree's "
+      "%d `.mojo` files for every merged group (its compile line names a generated root; no root was "
+      "readable, so the fallback fired)." % report["v1_merged"]["tree_files"])
+    w("")
+    w("| platform | set | group | flags | members | closure files | changed %s..%s |" % (old, new))
+    w("|---|---|---|---|---:|---:|---|")
+    for plat, pr in report["platforms"].items():
+        for g in pr["groups"]:
+            ch = g.get("changed_since_old")
+            chs = "-" if ch is None else ("%d: %s" % (len(ch), ", ".join("`%s`" % c for c in ch[:3])) +
+                                          (" ..." if len(ch) > 3 else "") if ch else "0 (unchanged)")
+            w("| %s | %s | `%s` | %s | %d | %d | %s |" % (plat, g["set"], g["stem"], g["flags"], len(g["members"]),
+                                                          g["files"], chs))
+    w("")
+    sc = report["scripts"]
+    sizes = sorted(v["files"] for v in sc.values() if v["files"])
+    bad = {k: v for k, v in sc.items() if not v["files"]}
+    w("### Per-binding build scripts\n")
+    w("%d per-binding scripts under `bindings/` (`build_defines.sh`, `build_host_family.sh` and `merged_build.sh` "
+      "are not one binding's compile). Closure sizes: min %d, median %d, max %d files. Unresolved imports: %s. "
+      "The only script whose compile line `script_plan` cannot read is `bindings/merged_build.sh` (the "
+      "generated root `$root`), which is why every merged key fell back to the whole tree under v1."
+      % (len(sc), sizes[0], sizes[len(sizes) // 2], sizes[-1],
+         "none" if not bad else ", ".join("%s (%s)" % (k, v["unresolved"] or v["note"]) for k, v in bad.items())))
+    w("")
+    for plat, pr in report["platforms"].items():
+        w("### Files every %s group reads (%d groups): %d\n" % (plat, pr["n_groups"], len(pr["shared_by_all"])))
+        w(", ".join("`%s`" % f for f in pr["shared_by_all"]) or "none")
+        w("")
+    w("### Files ranked by the groups they reach (Linux, 9 groups; top 30)\n")
+    w("| file | groups | commits since %s |" % report["since"])
+    w("|---|---:|---:|")
+    wt = {f: n for n, f in report["weights"]["top"]}
+    for f, c in report["platforms"]["linux"]["ranking"][:30]:
+        w("| `%s` | %d | %s |" % (f, c, wt.get(f, "")))
+    w("")
+    w("### Hot shared files: commits since %s x Linux groups reached (top 15)\n" % report["since"])
+    w("%d commits since %s touched a `.mojo` file. Each row is how many group rebuilds that file alone "
+      "caused on one Linux leg." % (report["weights"]["commits_with_mojo"], report["since"]))
+    w("")
+    w("| file | commits | groups | group rebuilds |")
+    w("|---|---:|---:|---:|")
+    for cost, n, c, f in report["hot"][:15]:
+        w("| `%s` | %d | %d | %d |" % (f, n, c, cost))
+    w("")
+    if report.get("release_keys"):
+        w("### Why every macOS key changed between the two releases (from their keys/<key>.json)\n")
+        w("| group (args) | v1 fields that differ | v1 scope (files) |")
+        w("|---|---|---|")
+        for args, r in report["release_keys"].items():
+            w("| `%s` | %s | %s (%s -> %s) |" % (args, ", ".join("`%s`" % c for c in r["changed"]),
+                                                r["new_scope"], r["old_files"], r["new_files"]))
+        w("")
+    w("### Regrouping by closure overlap (proposal)\n")
+    w("Start from one group per member and merge, each step, the pair that saves the most shared compile work "
+      "per unit of added incremental scope, until the whole set reads no more files than today; never above "
+      "the largest current group (the peak-memory proxy); macOS flags classes stay apart. `expected` is the "
+      "commit-weighted mean number of closure files recompiled per changed file since %s." % report["since"])
+    w("")
+    w("| platform/set | members | groups now -> proposed | full-build files now -> proposed | largest group | expected files per change now -> proposed |")
+    w("|---|---:|---|---|---|---|")
+    for k, r in report["regroup"].items():
+        c, q = r["current"], r["proposed"]
+        w("| %s | %d | %d -> %d | %d -> %d | %d -> %d | %.0f -> %.0f (%+.0f%%) |" % (
+            k, r["members"], c["groups"], q["groups"], c["full_files"], q["full_files"], c["max_files"],
+            q["max_files"], c["expected"], q["expected"], 100.0 * (q["expected"] - c["expected"]) / c["expected"]))
+    w("")
+    for k, r in report["regroup"].items():
+        if not k.startswith("linux/"):
+            continue
+        w("Proposed %s groups:\n" % k)
+        for g in r["proposed"]["groups_list"]:
+            w("- %d files: %s" % (g["files"], ", ".join("`%s`" % m for m in g["members"])))
+        w("")
+    if report.get("patterns"):
+        w("### Compile scope of single-file changes: groups (closure files) recompiled, now -> proposed\n")
+        keys = list(next(iter(report["patterns"].values())))
+        w("| change | " + " | ".join(keys) + " |")
+        w("|---|" + "---|" * len(keys))
+        for name, row in report["patterns"].items():
+            cells = []
+            for k in keys:
+                cur, prop, of = row[k]["current"], row[k]["proposed"], row[k]["of"]
+                cells.append("%d/%d (%d) -> %d/%d (%d)" % (cur[0], of[0], cur[1], prop[0], of[1], prop[1]))
+            w("| %s | %s |" % (name, " | ".join(cells)))
+        w("")
+    return "\n".join(out) + "\n"
+
+
+BEGIN, END = "<!-- generated by tools/compile_closures.py render: begin -->", \
+    "<!-- generated by tools/compile_closures.py render: end -->"
+
+
+def render_into(doc, report):
+    text = Path(doc).read_text() if Path(doc).is_file() else BEGIN + "\n" + END + "\n"
+    head, rest = text.split(BEGIN, 1)
+    _, tail = rest.split(END, 1)
+    Path(doc).write_text(head + BEGIN + "\n\n" + render_tables(report) + "\n" + END + tail)
+
+
 def strip_private(obj):
     if isinstance(obj, dict):
         return {k: strip_private(v) for k, v in obj.items() if not str(k).startswith("_")}
@@ -336,11 +449,18 @@ def main(argv=None):
     r.add_argument("--release-keys", nargs=2, metavar=("OLD_KEYS", "NEW_KEYS"))
     r.add_argument("--pattern", action="append", default=[], metavar="NAME=path[,path]")
     r.add_argument("--json", required=True)
+    rd = sub.add_parser("render", help="write the generated tables of a report JSON into the doc")
+    rd.add_argument("--json", required=True)
+    rd.add_argument("--doc", default=str(ROOT / "docs" / "build" / "COMPILE_CLOSURES.md"))
     pl = sub.add_parser("plan", help="per merged group: hit (unchanged since OLD) or compile: <reason>")
     pl.add_argument("--old", required=True)
     pl.add_argument("--new", default="HEAD")
     pl.add_argument("--platform", choices=PLATFORMS, action="append")
     args = ap.parse_args(argv)
+    if args.cmd == "render":
+        render_into(args.doc, json.loads(Path(args.json).read_text()))
+        print("compile_closures: tables written into %s" % args.doc)
+        return 0
     if args.cmd == "plan":
         for plat in args.platform or PLATFORMS:
             for line in group_plan(ROOT, args.old, args.new, plat):
