@@ -57,7 +57,8 @@ Adapters (``--adapter``):
   installed-runtime       runtime-<vendor> from tools/release_runtime_installed.py
                           (--producer report=DIR/runtime-report.json)
   published-install       published-<vendor> (post stage) from tools/release_published_install.py
-                          (--producer report=DIR/published-report.json)
+                          check: bytes resolved from PyPI equal to the gated candidates, the gate's
+                          receipts by reference (--producer report=DIR/published-report.json)
   macos-release-build     compile-apple from the macOS release build: its binary cache keys
                           recomputed at the frozen source, packaging replayed to the shipped
                           wheel bytes   (--producer wheel= log= cache=)

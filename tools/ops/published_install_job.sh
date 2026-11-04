@@ -1,6 +1,8 @@
 #!/bin/bash
-# tools/ops/published_install_job.sh -- ONE published-<vendor> producer on a GPU box (lane release-no-hands,
-# 2026-11-04): tools/release_published_install.py run against the PUBLISHED release, installed from PyPI,
+# tools/ops/published_install_job.sh -- ONE published-smoke-<vendor> job on a GPU box (lane release-no-hands,
+# 2026-11-04; since lane published-no-reverify ONLY for an explicit `release.py --published-smoke <vendor>`
+# with a recorded reason: published-<vendor> itself is a bytes check on the Mac and needs no box):
+# tools/release_published_install.py run against the PUBLISHED release, installed from PyPI,
 # compared with the qualified candidate wheels. tools/ops/published_install.py uploads this file verbatim
 # beside its published.env and the candidate wheels (sha256 checked on the box) and launches it through the
 # supported wrappers, which run it under tools/box_persist_run.sh (results to R2 from the box):
@@ -13,7 +15,7 @@
 # In order: tree (PUB_TREE at PUB_SOURCE_COMMIT, clean; AMD: fetched here from PUB_FETCH_URL, NVIDIA: the
 # lane tree tools/nvidia_central.sh sync placed there), runtime (AMD: the ROCm 7.2.3 runtime the adapter
 # smoke needs; python venv support), then the producer with its report in $MOJOLEARN_RESULTS_DIR/out
-# (published-report.json; release.py copies out/ to <commit12>/published-<vendor>/). The job's own record
+# (published-report.json; it comes home to <commit12>/published-smoke-<vendor>/). The job's own record
 # goes to $MOJOLEARN_RESULTS_DIR/job.
 set -euo pipefail
 
@@ -106,5 +108,5 @@ PHASE=published
 prc=0
 "$PY" tools/release_published_install.py run --vendor "$V" --version "$PUB_VERSION" "${wheel_args[@]}" \
     --python "$PY" --timeout "${PUB_TIMEOUT:-1800}" --out "$RES/out" > "$J/published.log" 2>&1 || prc=$?
-grep -m 2 '^PUBLISHED ' "$J/published.log" || tail -n 5 "$J/published.log"
+grep -m 2 '^PUBLISHED' "$J/published.log" || tail -n 5 "$J/published.log"
 exit "$prc"
