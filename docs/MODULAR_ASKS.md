@@ -258,3 +258,37 @@ which, since the module has a caller that passes 0.0.
 bits (the same answer as IEEE `!=` for every input). The pod build of that spelling matches the NVIDIA record on all
 180 gmm and gmm-sample parts. Evidence: `~/mojolearn-evidence/rel0863/pptrace/` (`gmm_card_linux3.tsv`,
 `pp_gmm4.json`) and `~/mojolearn-evidence/rel0863/gmm-trace/gmm_trace_linux_cpu.tsv`.
+
+## Compile time and memory of one `mojo build` grow far faster than its source closure; nothing is reused across builds (2026-11-04, small-compiles-everywhere)
+
+**Need.** Either a supported unit of separate compilation that a later `mojo build` can reuse (a
+precompiled package of shared, already-instantiated modules whose bytes are a pure function of
+their sources and flags), or a deterministic, content-addressed compile cache inside `mojo build`.
+And a per-module compile profile (time and peak memory per imported module, like
+`-ftime-trace`), so we can see which module of a group dominates.
+
+**Measured (no compile was run for this entry; the numbers are the retained 0.8.65 release
+records).** One merged compile per group on a 16 GiB GitHub runner, closure = distinct Mojo files
+the group imports (docs/build/COMPILE_CLOSURES.md):
+
+| group (Linux, host set, CPU column) | closure files | seconds sm_89 / sm_80 / gfx942 leg | recorded peak |
+|---|---:|---|---|
+| `_mojolearn_native_forest_host` (15 members) | 440 | 200 / 107 / 143 | 11 GiB |
+| `_mojolearn_native_neural_host` (9 members) | 421 | 547 / 415 / 459 | 10 GiB |
+| `_mojolearn_native_x_host` (9 members) | 555 | 369 / 454 / 463 | 10-11 GiB |
+| `_mojolearn_native_host` (7 members) | 702 | 1563 / 1164 / 1655 | 13-14 GiB |
+| `_mojolearn_native_tokenizer_host` (6 members) | 739 | 1530 / 1205 / 2107 | 14 GiB (stopped at 15 GiB on 2026-11-02) |
+
+The two slowest host groups read 1.3-1.7x the files of the fastest but take 6-15x as long and sit
+next to the runner's memory limit; a single whole-set host compile passed 40 GB in 0.8.59. Forty
+files (`core/device_plan.mojo`, the experiment guards, the shared kernels) are in every one of the
+9 Linux groups and are recompiled, and their generics re-instantiated, by each of the 9 compiles
+of every leg, because no compiled form of a module survives one `mojo build`.
+
+**Where.** Every release leg (9 groups x 3 Linux legs, 13 groups on the Mac), every
+`tools/box_merged_verify.sh` identity job, every development build.
+
+**Meanwhile.** Standard optimized builds only (no -O0, no hand-split modules). We cache whole
+group binaries by exact source closure (tools/bincache.py, key rule closure-v2), so a change
+recompiles only the groups whose closure it reaches, and we propose smaller groups by closure
+overlap (docs/build/COMPILE_CLOSURES.md). Neither removes the per-group cost of the shared files.
