@@ -127,6 +127,8 @@ id2=$($N submit lane-a /root/ev-lane-a/gate.sh)
 check "submit prints pod-qualified ids" "[ $id1 = $pa-0001 ] && [ $id2 = $pa-0002 ]"
 check "submit refuses a cap over 240" "! $N submit lane-a --cap 241 /root/ev-lane-a/gate.sh 2>/dev/null"
 check "submit refuses more GPUs than the pod has" "! $N submit lane-a --gpus 3 /root/ev-lane-a/gate.sh 2>/dev/null"
+check "submit refuses an --env value that would need quoting" "! $N submit lane-a --env 'SCOPE=a b' /root/ev-lane-a/gate.sh 2>/dev/null"
+check "submit refuses a lower-case --env key" "! $N submit lane-a --env scope=all /root/ev-lane-a/gate.sh 2>/dev/null"
 $N queue > "$W/queue.log" 2>&1
 check "queue lists both pods and the jobs" "grep -q '== nvc1' $W/queue.log && grep -q '== nvc2' $W/queue.log && grep -q 'lane-a' $W/queue.log"
 check "cancel by another lane is refused" "! $N cancel lane-b $id2 2>/dev/null"
