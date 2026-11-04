@@ -23,8 +23,12 @@ tool admitted and committed at F, by the comparison the recorder itself makes:
    of F (``release_requirement_dependencies._reference_closures``): the decision
    ``tools/record_identity_column.sh`` prints as REUSED / RECORD (``identity_columns.py changed-lanes``
    and ``reuse-check``). A record older than the release floor (the newest NVIDIA and AMD release tags
-   that are strict ancestors of F; ``identity_columns.release_floor``) is measured from the floor, as
-   the recorder measures it: that release's own identity check verified the row for its code.
+   that are strict ancestors of F) is measured from the floor ONLY when the floor holds an admitted
+   receipt for that lane and column (``floor_receipts``): the table committed at the floor carries the
+   lane's rows of that class with the same digests, every record they rest on has an unchanged closure
+   up to the floor (the floor's own selector, in a frozen view of the floor), and no waiver of that
+   release names the row. A release tag alone is not verification (0.8.64 and 0.8.65 shipped under
+   owner waivers); without a receipt the record is measured from its own execution revision.
 
 Passed rows cite the table, the record files and the admission READMEs that name them, all at F. Any
 other outcome is ``untested`` with its reason, e.g. "closure changed since <commit>: <n> file(s):
@@ -39,6 +43,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -58,6 +63,13 @@ CLASS_BACKEND = dict(apple="metal", nvidia="cuda", ptx="cuda", amd="hip", cpu=No
 GPU_CLASSES = ("apple", "nvidia", "amd")
 VENDORS = ("apple", "nvidia", "amd", "cpu")
 FLOOR_VENDORS = ("nvidia", "amd")
+#: The ledger row a device class's column is judged in (the PTX set is part of identity-nvidia/<lane>).
+ROW_VENDOR = dict(apple="apple", nvidia="nvidia", ptx="nvidia", amd="amd", cpu="cpu")
+#: Committed waivers: docs/release/<version>-*.json (owner and identity-reuse waivers).
+WAIVER_DIR = "docs/release"
+#: Release records (tools/release.py state.json per version); read when present, never required.
+RELEASE_RECORDS_ENV = "MOJOLEARN_RELEASE_RECORDS"
+TAG_VERSION = re.compile(r"alpha-api-([0-9][0-9.]*[0-9])-")
 REASON_FILES = 5
 HEX40 = re.compile(r"[0-9a-f]{40}")
 ID_RE = re.compile(r"identity-(apple|nvidia|amd|cpu)/([^/]+)")
@@ -153,6 +165,86 @@ def release_floor(root, revision):
     else:
         commit = _git(root, "merge-base", nv, amd).decode().strip() or None
     return dict(commit=commit, tags=dict(nvidia=nv_tag, amd=amd_tag)) if commit else None
+
+
+def floor_versions(floor):
+    """The release versions the floor rests on (one per vendor tag, usually the same)."""
+    out = []
+    for tag in sorted(((floor or {}).get("tags") or {}).values()):
+        match = TAG_VERSION.match(tag)
+        if match and match.group(1) not in out:
+            out.append(match.group(1))
+    return out
+
+
+def _release_records_dir():
+    raw = os.environ.get(RELEASE_RECORDS_ENV)
+    return Path(raw).expanduser() if raw else Path.home() / "mojolearn-evidence" / "release"
+
+
+def floor_waivers(root, revision, floor, *, records_dir=None):
+    """What the releases the floor rests on waived, instead of verifying (Andrew 2026-11-04: a release
+    tag is not verification; 0.8.64 and 0.8.65 shipped under owner waivers).
+
+    Read from (1) every committed ``docs/release/<version>-*.json`` at ``revision`` (owner waivers:
+    ``prefixes`` and ``waived``; identity-reuse waivers: ``records_sha256``), and (2) the release
+    record ``<records_dir>/<version>/state.json`` when it exists (``owner_waivers[].waived``, and the
+    ``prefixes`` of the waiver file it names). Returns dict(prefixes, names, records, sources)."""
+    out = dict(prefixes=set(), names=set(), records=set(), sources=[])
+
+    def take(doc, source):
+        if not isinstance(doc, dict):
+            return
+        out["prefixes"].update(x for x in doc.get("prefixes") or () if isinstance(x, str) and x)
+        out["names"].update(x for x in doc.get("waived") or () if isinstance(x, str) and x)
+        out["records"].update(x for x in doc.get("records_sha256") or () if isinstance(x, str) and x)
+        if source not in out["sources"]:
+            out["sources"].append(source)
+
+    versions = floor_versions(floor)
+    if not versions:
+        return out
+    try:
+        listing = _git(root, "ls-tree", "--name-only", revision, WAIVER_DIR + "/").decode().split()
+    except subprocess.CalledProcessError:
+        listing = []
+    for path in listing:
+        name = path.rsplit("/", 1)[-1]
+        if not name.endswith(".json") or not any(name.startswith(v + "-") for v in versions):
+            continue
+        raw = _blob(root, revision, path)
+        try:
+            doc = json.loads(raw) if raw is not None else None
+        except ValueError:
+            doc = None
+        take(doc, dict(path=path, revision=revision, sha256=hashlib.sha256(raw or b"").hexdigest()))
+    base = Path(records_dir) if records_dir else _release_records_dir()
+    for version in versions:
+        state = base / version / "state.json"
+        try:
+            raw = state.read_bytes()
+            doc = json.loads(raw)
+        except (OSError, ValueError):
+            continue
+        for entry in doc.get("owner_waivers") or ():
+            if not isinstance(entry, dict):
+                continue
+            take(dict(waived=entry.get("waived")), dict(path=str(state), sha256=hashlib.sha256(raw).hexdigest()))
+            named = entry.get("file")
+            if isinstance(named, str) and named:
+                try:
+                    wraw = Path(named).expanduser().read_bytes()
+                    take(json.loads(wraw), dict(path=named, sha256=hashlib.sha256(wraw).hexdigest()))
+                except (OSError, ValueError):
+                    pass
+    return out
+
+
+def waived(waivers, row):
+    """The waiver rule that names ledger row ``row``, else None."""
+    if row in waivers["names"]:
+        return row
+    return next((p for p in sorted(waivers["prefixes"]) if row.startswith(p)), None)
 
 
 # ------------------------------------------------------------------ the frozen table
@@ -278,10 +370,141 @@ def table_rows(frozen, lane, check, present, harness, *, declared=None):
     return {cls: sorted(found) for cls, found in rows.items()}, problems
 
 
+def lane_digests(table, lane, cls):
+    """{"fixture/part": agreed digest} of ``lane``'s parts that carry a ``cls`` column in ``table``.
+
+    A declared ``n/a:`` optional part carries no computed bits and is left out (see ``table_rows``)."""
+    out = {}
+    for key, cell in (table.get("cells") or {}).items():
+        if key.partition("/")[0] != lane:
+            continue
+        for part, ent in cell.items():
+            if not isinstance(ent, dict) or ent.get("conflict") or cls not in (ent.get("cols") or {}):
+                continue
+            ref = ent.get("ref")
+            if part in OPTIONAL_PARTS and isinstance(ref, str) and ref.startswith("n/a:"):
+                continue
+            out[f"{key.partition('/')[2]}/{part}"] = ref
+    return out
+
+
+def floor_receipts(root, revision, floor, wanted, *, log_dir=None, records_dir=None):
+    """RELEASE FLOOR RECEIPTS (lane ledger-floor-receipts, 2026-11-04). A release tag is not
+    verification: 0.8.64 and 0.8.65 shipped under owner waivers of ~450 identity rows. The floor may
+    stand in for an older record's execution revision only where the floor itself holds an admitted
+    identity receipt for that lane and column.
+
+    ``wanted``: {(lane, class): {"fixture/part": digest}}, the digests the caller's rows rest on (the
+    freeze's table for the ledger, the recorder's table for ``record_identity_column.sh``). For each,
+    a receipt holds when ALL of:
+
+    1. no waiver of a release the floor rests on names the row ``identity-<vendor>/<lane>``
+       (``floor_waivers``: committed ``docs/release/<version>-*.json`` and the release record);
+    2. the admitted table committed AT the floor carries the lane under the floor's harness, with an
+       agreeing column of that class for every part, no conflict, and each cited record committed at
+       the floor under its content address (``table_rows`` at the floor);
+    3. the floor's table carries the same digest for every part the caller's rows rest on;
+    4. no cited record is named by an identity-reuse waiver (admitted without a closure check), and
+       each record's lane closure is unchanged between its own commit and the floor, decided by the
+       floor's own ``tools/lane_select.py`` in a frozen view of the floor (the check its admission
+       owed, ``_reference_closures``).
+
+    Returns {(lane, class): dict(ok, reason, evidence)}. Any failure, including a floor whose view or
+    selector cannot run, is ``ok=False`` with its reason: the caller then measures the record from its
+    own execution revision, never from the tag."""
+    out = {}
+    if not floor or not wanted:
+        return out
+    floor_commit = floor["commit"]
+    waivers = floor_waivers(root, revision, floor, records_dir=records_dir)
+    todo = {}
+    for (lane, cls), expected in sorted(wanted.items()):
+        row = f"identity-{ROW_VENDOR[cls]}/{lane}"
+        rule = waived(waivers, row)
+        if rule is not None:
+            where = ", ".join(src["path"] for src in waivers["sources"][:3])
+            out[(lane, cls)] = dict(ok=False, evidence=[], reason=(
+                f"the floor {floor_commit[:12]} rests on a waived row: {row} (waiver {rule!r}; {where})"))
+        else:
+            todo[(lane, cls)] = expected
+    if not todo:
+        return out
+    try:
+        frozen = Frozen(root, floor_commit)
+    except NoReference as error:
+        for key in todo:
+            out[key] = dict(ok=False, evidence=[], reason=f"no admitted receipt at the floor: {error}")
+        return out
+    bases = {}
+    for (lane, cls) in todo:
+        rows, _ = table_rows(frozen, lane, [cls], [cls], {})
+        for index in rows.get(cls, ()):
+            commit = _commit(root, str(frozen.records[index].get("commit") or ""))
+            if commit and commit != floor_commit:
+                bases.setdefault((commit, CLASS_BACKEND[cls]), set()).add(lane)
+    try:
+        from release_requirement_dependencies import frozen_snapshot, reference_key
+        request = dict(reference_closures=dict(bases=[[c, b, sorted(lanes)] for (c, b), lanes
+                                                      in sorted(bases.items(), key=lambda kv: (kv[0][0], kv[0][1] or ""))]))
+        snapshot = frozen_snapshot(root, floor_commit, request, log_dir=log_dir)["reference_closures"]
+    except Exception as error:  # an old floor whose tools cannot answer vouches for nothing
+        for key in todo:
+            out[key] = dict(ok=False, evidence=[], reason=(
+                f"the receipt check could not run at the floor {floor_commit[:12]}: {str(error)[:200]}"))
+        return out
+    harness, selections = snapshot["harness"], snapshot["selections"]
+    for (lane, cls), expected in todo.items():
+        rows, problems = table_rows(frozen, lane, [cls], [cls], harness)
+        cells = lane_digests(frozen.table, lane, cls)
+        for part, digest_ in sorted(expected.items()):
+            if cells.get(part) != digest_:
+                problems.append(f"{lane}/{part}: the floor's admitted table carries {cells.get(part)}, "
+                                f"not {digest_}")
+                break
+        evidence = [dict(frozen.table_ref)]
+        for index in rows.get(cls, ()):
+            try:
+                ref, _ = frozen.record(index)
+            except (ValueError, json.JSONDecodeError) as error:
+                problems.append(str(error))
+                continue
+            if ref["sha256"] in waivers["records"]:
+                problems.append(f"{cls} record {ref['path']} was admitted under an identity-reuse waiver")
+                continue
+            commit = _commit(root, str(frozen.records[index].get("commit") or ""))
+            if commit is None:
+                problems.append(f"{cls} record {index} at the floor names a commit not in this repository")
+                continue
+            if commit != floor_commit:
+                sel = selections.get(reference_key(commit, CLASS_BACKEND[cls]))
+                if sel is None:
+                    problems.append(f"no floor selection for {commit[:12]}")
+                    continue
+                if lane in sel["selected"] or sel["unattributed"]:
+                    files = sel["lane_paths"].get(lane) or sel["unattributed"]
+                    problems.append(f"closure changed between its record {commit[:12]} and the floor "
+                                    f"{floor_commit[:12]}: {len(files)} file(s): {', '.join(files[:REASON_FILES])}")
+                    continue
+            evidence.append(ref)
+            evidence.extend(a for a in frozen.admissions(ref["sha256"]) if a not in evidence)
+        if not rows.get(cls) and not problems:
+            problems.append(f"the floor's admitted table has no {cls} row for {lane}")
+        if problems:
+            out[(lane, cls)] = dict(ok=False, evidence=[], reason="no admitted receipt at the floor "
+                                    f"{floor_commit[:12]}: {problems[0]}")
+        else:
+            out[(lane, cls)] = dict(ok=True, evidence=evidence, reason=(
+                f"admitted receipt at the floor {floor_commit[:12]} ({', '.join(sorted(floor['tags'].values()))})"))
+    return out
+
+
 # ------------------------------------------------------------------ verdicts
-def _bases(root, frozen, rows, floor, commits):
-    """[(class, index, record commit, base)] where base is the floor for a record older than it."""
+def _bases(root, frozen, rows, floor, commits, lane=None, receipts=None, older=None):
+    """[(class, index, record commit, base)]: base is the floor for a record older than it ONLY when
+    ``receipts`` holds an admitted receipt at the floor for (lane, class); otherwise the record's own
+    commit. ``older`` (a set) collects the (lane, class) pairs that rest on a record older than the floor."""
     out, problems = [], []
+    receipts = receipts or {}
     for cls, indices in sorted(rows.items()):
         for index in indices:
             raw = frozen.records[index].get("commit")
@@ -297,7 +520,10 @@ def _bases(root, frozen, rows, floor, commits):
                 if key not in commits:
                     commits[key] = _ancestor(root, commit, floor["commit"])
                 if commits[key]:
-                    base = floor["commit"]
+                    if older is not None:
+                        older.add((lane, cls))
+                    if (receipts.get((lane, cls)) or {}).get("ok"):
+                        base = floor["commit"]
             out.append((cls, index, commit, base))
     return out, problems
 
@@ -315,12 +541,13 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
     failures = failures or {}
     key = digest([str(root), revision, {k: [w.get("fingerprint"), w.get("dependency_provenance")]
                                         for k, w in sorted(units.items())},
-                  {k: sorted(v) for k, v in sorted(failures.items())}, str(log_dir)])
+                  {k: sorted(v) for k, v in sorted(failures.items())}, str(log_dir),
+                  os.environ.get(RELEASE_RECORDS_ENV)])
     if key in _MEMO:
         return copy.deepcopy(_MEMO[key])
     frozen = Frozen(root, revision)
     floor = release_floor(root, revision)
-    commits, plans, wanted_bases = {}, {}, {}
+    commits, plans, wanted_bases, older = {}, {}, {}, set()
     for rid, wanted in sorted(units.items()):
         shaped = unit_of(rid, wanted)
         if shaped is None:
@@ -342,11 +569,17 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
         # Bases of declared n/a parts are asked too: one stable request per freeze, whatever the rule.
         for cls, indices in declared.items():
             rows[cls] = sorted(set(rows.get(cls, ())) | indices)
-        bases, _ = _bases(root, frozen, rows, floor, commits)
-        provisional[rid] = bases
+        provisional[rid] = rows
+        _bases(root, frozen, rows, floor, commits, lane=plan["lane"], older=older)
+    # A record older than the floor is measured from the floor only with a receipt AT the floor.
+    receipts = floor_receipts(root, revision, floor, {
+        (lane, cls): lane_digests(frozen.table, lane, cls) for lane, cls in sorted(older)},
+        log_dir=log_dir) if floor and older else {}
+    for rid, rows in provisional.items():
+        bases, _ = _bases(root, frozen, rows, floor, commits, lane=plans[rid]["lane"], receipts=receipts)
         for cls, _, _, base in bases:
             if base != revision:
-                wanted_bases.setdefault((base, CLASS_BACKEND[cls]), set()).add(plan["lane"])
+                wanted_bases.setdefault((base, CLASS_BACKEND[cls]), set()).add(plans[rid]["lane"])
     from release_requirement_dependencies import frozen_snapshot, reference_key
     request = dict(reference_closures=dict(bases=[[base, backend, sorted(lanes)] for (base, backend), lanes
                                                   in sorted(wanted_bases.items(), key=lambda kv: (kv[0][0], kv[0][1] or ""))]))
@@ -361,13 +594,19 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
         verdict = dict(copy.deepcopy(common), lane=lane, vendor=vendor, compared_classes=plan["present"],
                        closure_classes=plan["check"], basis=[], evidence=[], reasons=[], failures=[])
         rows, problems = table_rows(frozen, lane, plan["check"], plan["present"], harness)
-        bases, more = _bases(root, frozen, rows, floor, commits)
+        bases, more = _bases(root, frozen, rows, floor, commits, lane=lane, receipts=receipts)
         problems += more
         changed = []
         for cls, index, commit, base in bases:
             ref, _ = frozen.record(index)
             item = dict(cls=cls, record=ref["path"], record_sha256=ref["sha256"], commit=commit, base=base,
                         backend=CLASS_BACKEND[cls], basis="release-floor" if base != commit else "record")
+            receipt = receipts.get((lane, cls))
+            if receipt is not None and base == commit:
+                # Older than the floor, but the floor holds no receipt: measured from its own revision.
+                item["floor_refused"] = receipt["reason"]
+            elif receipt is not None:
+                item["floor_receipt"] = [e["path"] for e in receipt["evidence"]]
             if base == revision:
                 item.update(changed_paths=0, unchanged=True)
             else:
@@ -386,6 +625,8 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
                                    f"{why}{len(files)} file(s){partial}: {', '.join(files[:REASON_FILES])}")
             verdict["basis"].append(item)
             verdict["evidence"].append(ref)
+            if base != commit:
+                verdict["evidence"].extend(e for e in receipt["evidence"] if e not in verdict["evidence"])
             for admission in frozen.admissions(ref["sha256"]):
                 if admission not in verdict["evidence"]:
                     verdict["evidence"].append(admission)
