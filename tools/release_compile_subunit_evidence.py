@@ -474,9 +474,21 @@ def _pack_groups(directory, admission, tree, archive):
                 and Path(fields.get("repo_path", "")).resolve() == Path(admission["source_root"]).resolve()
                 and local.get("host_toolchain") == admission["host_toolchain"] and len(outputs) == 1,
                 "packer compile key differs from the admitted source/toolchain: " + key)
+        if fields.get("key_rule") == bincache.KEY_RULE:
+            # closure-v2 (tools/bincache.py): the group's own import closure,
+            # executed inputs and membership, recomputed from the tested
+            # revision's committed bytes (a generated source is keyed by its
+            # generator, so there is no before/after-generation split).
+            env = {"MOJOLEARN_NUMERIC_MODE": fields.get("numeric_mode") or "identical",
+                   "MOJOLEARN_PACKAGE_BYTE_LM": (fields.get("build_env") or {}).get("MOJOLEARN_PACKAGE_BYTE_LM", "1")}
+            want = bincache.revision_closure(tree.root, tree.revision, script, fields.get("args") or [], env,
+                                             plat="darwin")
+            require(all(fields.get(k) == want[k] for k in ("source", "inputs"))
+                    and fields.get("merged") == want["merged"],
+                    "packer compiled source does not reproduce from the tested revision: " + key)
         # Keys taken before the first tokenizer host compile walked the tracked
         # tree alone; later ones also walked the generated unicode table.
-        if fields.get("source") != _tree_digest(tree, script):
+        elif fields.get("source") != _tree_digest(tree, script):
             if generated is None:
                 generated = _generated_shas(tree, admission["source_root"])
             require(fields.get("source") == _tree_digest(tree, script, generated),
