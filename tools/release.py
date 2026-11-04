@@ -2682,10 +2682,28 @@ class Release:
         found = sorted((self.rel / "macos").glob("mojolearn-*-macosx_*.whl"))
         return found[-1] if found else None
 
+    def stale_preflight(self, phase):
+        """THE STALE-ARTIFACT PRE-FLIGHT (tools/release_stale_artifacts.py): every untracked or ignored file in the
+        source checkout's python/mojolearn/ that the wheel's package-data globs would ship and this build does not
+        produce is moved (never deleted) to <commit12>/stale-artifacts/<timestamp>/, each path logged, before
+        PHASE runs (0.8.65: three stray extensions each cost a 75-minute build before build_release_wheel.sh
+        refused them). A dry run lists them and moves nothing."""
+        import release_stale_artifacts as stale
+        merged = os.environ.get("MOJOLEARN_MERGED_BINDINGS", "1") != "0"
+        moved, receipt = stale.preflight(self.src, self.rel / "stale-artifacts", self.release_modes, byte_lm=True,
+                                         merged=merged, phase=phase, dry=self.dry, log=lambda m: self.say("  " + m))
+        if receipt:
+            with self._lock:
+                self.state.setdefault("stale_artifacts", []).append(dict(phase=phase, receipt=str(receipt),
+                                                                         moved=len(moved), at=now()))
+                self.save()
+        return moved, receipt
+
     def step_macos_build(self):
         w = self.macos_wheel()
         if w and wheel_commit(w) == self.commit:
             return "have " + w.name
+        self.stale_preflight("build")
         # Four builds at once, as measured on the 10-core M4, never more than
         # this Mac's slot ceiling (tools/mac_slot.py slot_count), which
         # mac_slot.py would otherwise refuse.
@@ -2760,6 +2778,7 @@ class Release:
                 return "WHEEL-SELF-TEST PASSED (receipt exists)"
             if not w and not self.dry:
                 raise StepFailed("no macOS wheel; run macos-build")
+            self.stale_preflight("smoke")
             if out.exists() and not self.dry:
                 out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
             self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
@@ -2774,6 +2793,7 @@ class Release:
             return "PASSED (receipt exists)"
         if not w and not self.dry:
             raise StepFailed("no macOS wheel; run macos-build")
+        self.stale_preflight("smoke")
         if out.exists() and not self.dry:
             out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
         # the smoke is stdlib-only tooling (the Linux column ships the same file)
