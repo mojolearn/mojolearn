@@ -447,3 +447,208 @@ def test_boxes_down_never_takes_down_a_box_whose_job_results_are_not_home(tmp_pa
         r.step_boxes_down()
     assert not any(v.endswith(" down") for v in boxes.verbs())
     assert set(r.held_boxes()) == {"nvidia", "amd"}
+
+
+# ---------------------------------------------------------------- 4. the published-install producers as steps
+import hashlib  # noqa: E402
+import json  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+sys.path.insert(0, str(ROOT / "tools" / "ops"))
+import published_install as PI  # noqa: E402
+
+JOB = ROOT / "tools" / "ops" / "published_install_job.sh"
+
+
+def test_the_producers_follow_their_publish_steps_and_record_waits_for_them():
+    steps = [s for s, _, _, _ in release.STEP_TABLE]
+    for step, (vendor, publish) in release.PUBLISHED_STEPS.items():
+        assert steps.index(publish) < steps.index(step) < steps.index("boxes-down")
+        assert publish in release.NEEDS[step] and step in release.AFTER["record"]
+        if vendor != "apple":
+            assert "gate-boxes" in release.NEEDS[step] and step in release.AFTER["boxes-down"]
+    assert release.RESOURCE["published-apple"] == "mac" and "published-apple" not in release.BOX_CONSUMERS
+
+
+def finals(r):
+    """The split candidate wheels and the macOS wheel of this release, as linux-pack and macos-build leave them."""
+    out = {}
+    for package, (_, prefix) in release.SPLIT_PACKAGES.items():
+        out[package] = wheel(r.rel / "linux" / "final" / f"{prefix}-{VERSION}-py3-none-manylinux_2_35_x86_64.whl")
+    out["macos"] = wheel(r.rel / "macos" / f"mojolearn-{VERSION}-py3-none-macosx_26_0_arm64.whl")
+    return out
+
+
+def report(out, vendor, candidates, status="passed"):
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "request.json").write_text(json.dumps(dict(vendor=vendor, version=VERSION, candidates={
+        w.name: hashlib.sha256(w.read_bytes()).hexdigest() for w in candidates})))
+    (out / "published-report.json").write_text(json.dumps(dict(
+        schema=release.Release.PUBLISHED_SCHEMA, vendor=vendor, version=VERSION, status=status,
+        exit_code=0 if status == "passed" else 1, coverage=[dict(id="index-install", completed=3, expected=3)])))
+
+
+def test_published_steps_skip_without_pypi_and_take_a_passed_report_for_these_wheels(tmp_path, monkeypatch):
+    r = make(tmp_path)
+    assert r.step_published_nvidia() == "skipped (not published to PyPI)"
+    r = make(tmp_path, publish="pypi")
+    w = finals(r)
+    report(r.published_out("nvidia"), "nvidia", [w["linux"], w["nvidia"], w["nvidia-ptx"]])
+    assert r.published_ok("nvidia")[0] and r.step_published_nvidia().endswith("(report exists)")
+    record(r, "published-nvidia")
+    assert r.have("published-nvidia", r.recorded("published-nvidia")).startswith("PASSED index-install=3/3")
+    # another wheel's report is not this release's
+    report(r.published_out("amd"), "amd", [w["linux"], w["nvidia"]])
+    assert not r.published_ok("amd")[0]
+    needs = r.box_needs()
+    assert any(n.startswith("published-amd: ") for n in needs["amd"])      # owed: gate-boxes keeps the droplet
+    assert not any(n.startswith("published-nvidia") for n in needs.get("nvidia", []))
+
+
+def test_published_apple_runs_the_producer_locally_under_the_metal_lock(tmp_path, monkeypatch):
+    seen = []
+
+    def runner(cmd, env, log, detach=False):
+        cmd = [str(c) for c in cmd]
+        seen.append(cmd)
+        out = pathlib.Path(cmd[cmd.index("--out") + 1])
+        report(out, "apple", [w["macos"]])
+        return 0
+    r = make(tmp_path, runner=runner, publish="pypi")
+    w = finals(r)
+    monkeypatch.setattr(r, "smoke_python", lambda: "python3.12")
+    assert r.step_published_apple().startswith("PASSED")
+    cmd = seen[0]
+    assert cmd[2:6] == ["--wait-timeout", "3600", "metal", "--"] and cmd[1].endswith("tools/mac_slot.py")
+    assert cmd[cmd.index("--vendor") + 1] == "apple" and cmd[cmd.index("--candidate-wheel") + 1] == str(w["macos"])
+    assert cmd[cmd.index("--out") + 1] == str(r.rel / "published-apple")
+
+
+def test_published_box_step_dry_run_prints_the_wrapper_commands(tmp_path, monkeypatch):
+    r = make(tmp_path, publish="pypi", dry_run=True)
+    finals(r)
+    monkeypatch.setattr(r, "source_checkout", lambda create=True: tmp_path / "src")
+    assert r.step_published_amd() is None
+    text = "\n".join(r.lines)
+    assert "tools/ops/published_install.py amd" in text
+    assert "would: bash tools/do_amd_steward.sh run rel-0.8.66-published-amd-" in text
+    assert "published_install_job.sh" in text and "sha256sum" in text
+
+
+class FakeBox:
+    """The wrappers and R2 as one fake: uploads land in .files, the job's results come home without wheels."""
+
+    def __init__(self, vendor, candidates):
+        self.vendor, self.candidates, self.files, self.calls, self.lists = vendor, candidates, {}, [], 0
+        self.ptag = (f"nvc-release-gate-20261104T000000Z-abc123" if vendor == "nvidia"
+                     else f"rel-{VERSION}-published-amd-20261104T000000Z-def456")
+
+    def run(self, argv, cwd=None, stdin=None, timeout=None, capture_output=True, text=True):
+        self.calls.append(argv)
+        out = SimpleNamespace(returncode=0, stdout="", stderr="")
+        command = argv[-1]
+        if argv[2:3] == ["submit"]:
+            out.stdout = "nvc1-0009\n"
+            out.stderr = f"box_persist: job {self.ptag} persists to R2 measurements/box-jobs/x/\n"
+        elif argv[2] in ("sh", "ssh") and command.startswith("cat > "):
+            self.files[command[len("cat > "):]] = stdin.read()
+            out.stdout = b""
+        elif argv[2] in ("sh", "ssh") and "sha256sum" in command:
+            out.stdout = "".join(f"{hashlib.sha256(v).hexdigest()}  {k}\n" for k, v in self.files.items())
+        elif argv[2] in ("sh", "ssh") and "READY" in command:
+            out.stdout = "READY\n"
+        elif argv[2] == "status":
+            out.stdout = "job 0009: running\n"
+        elif "box_persist.py" in argv[1] and "--list" in argv:
+            self.lists += 1
+            out.stdout = "MANIFEST state=final exit=0 updated=x uploads=1\n"
+        elif "box_persist.py" in argv[1] and "--extract" in argv:
+            final = pathlib.Path(argv[argv.index("--dest") + 1]) / "final"
+            report(final / "out", self.vendor, self.candidates)
+            (final / "out" / "wheel-manifest.json").write_text(json.dumps(dict(files=[
+                dict(file=w.name, sha256=hashlib.sha256(w.read_bytes()).hexdigest()) for w in self.candidates])))
+            (final / "job").mkdir()
+            (final / "job" / "status.json").write_text(json.dumps(dict(phase="published", exit=0)))
+        elif "release_published_install.py" in argv[1] and argv[2] == "judge":
+            out.stdout = '{"status": "passed"}'
+        return out
+
+    def popen(self, argv, **kw):
+        self.calls.append(argv)
+        lines = [f"box_persist: job {self.ptag} persists to R2 measurements/box-jobs/x/\n", "published: running\n"]
+        return SimpleNamespace(stdout=iter(lines), wait=lambda: 0, kill=lambda: None)
+
+
+@pytest.mark.parametrize("vendor", ["nvidia", "amd"])
+def test_a_published_box_job_is_staged_launched_fetched_restored_and_rejudged(tmp_path, monkeypatch, vendor):
+    monkeypatch.setattr(PI, "job_script_committed", lambda: None)
+    monkeypatch.setattr(PI.rg, "on_origin_main", lambda commit: True)
+    r = make(tmp_path, publish="pypi")
+    w = finals(r)
+    candidates = r.published_wheels(vendor)
+    box = FakeBox(vendor, candidates)
+    out = r.published_out(vendor)
+    a = PI.parse([vendor, VERSION, "--source-commit", COMMIT, "--source-tree", str(tmp_path / "src"),
+                  "--out", str(out), "--state", str(r.rel / "published" / f"{vendor}.job.json"),
+                  *[x for c in candidates for x in ("--candidate-wheel", str(c))]])
+    assert PI.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    launches = [c for c in box.calls if c[2:3] in (["submit"], ["run"])]
+    assert len(launches) == 1 and launches[0][1] == PI.rg.VENDORS[vendor]["wrapper"]
+    staged = {pathlib.PurePosixPath(k).name: v for k, v in box.files.items()}
+    assert staged["published_install_job.sh"] == JOB.read_bytes()     # the committed job script, verbatim
+    assert {c.name for c in candidates} <= set(staged)
+    env = staged["published.env"].decode()
+    assert f"PUB_VENDOR={vendor}" in env and f"PUB_SOURCE_COMMIT={COMMIT}" in env
+    # the wheels the persisted results lack are restored from the equal candidates, then re-judged at home
+    assert all((out / "wheels" / c.name).read_bytes() == c.read_bytes() for c in candidates)
+    assert any(c[1] == "tools/release_published_install.py" and c[2] == "judge" for c in box.calls)
+    assert r.published_ok(vendor)[0]
+    assert (r.rel / "published" / f"fetch-{box.ptag}" / "final").is_dir()          # boxes-down sees it home
+    assert w["macos"].exists()
+
+
+def test_restore_wheels_never_restores_bytes_that_differ(tmp_path):
+    good, bad = wheel(tmp_path / "c" / "a-1.whl"), wheel(tmp_path / "c" / "b-1.whl")
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "wheel-manifest.json").write_text(json.dumps(dict(files=[
+        dict(file="a-1.whl", sha256=hashlib.sha256(good.read_bytes()).hexdigest()),
+        dict(file="b-1.whl", sha256="0" * 64)])))
+    assert PI.restore_wheels(out, [good, bad], log=lambda m: None) == ["a-1.whl"]
+    assert not (out / "wheels" / "b-1.whl").exists()
+
+
+def fake_bin(tmp_path, *names):
+    d = tmp_path / "bin"
+    d.mkdir(exist_ok=True)
+    for name in names:
+        (d / name).write_text("#!/bin/sh\nexit 0\n")
+        (d / name).chmod(0o755)
+    return d
+
+
+@pytest.mark.parametrize("tools,want", [(("nvidia-smi",), "nvidia"), (("rocm-smi",), "amd")])
+def test_the_job_takes_its_vendor_from_the_box(tmp_path, tools, want):
+    env = dict(os.environ, PATH=f"{fake_bin(tmp_path, *tools)}:/usr/bin:/bin")
+    got = subprocess.run(["bash", str(JOB), "--detect-vendor"], capture_output=True, text=True, env=env)
+    assert got.returncode == 0 and got.stdout.strip() == want
+
+
+def test_the_job_refuses_a_box_of_another_vendor_or_none(tmp_path):
+    env = dict(os.environ, PATH="/usr/bin:/bin")
+    if subprocess.run(["sh", "-c", "command -v nvidia-smi || command -v rocm-smi"], env=env).returncode == 0:
+        pytest.skip("this machine has a GPU vendor tool on /usr/bin")
+    assert subprocess.run(["bash", str(JOB), "--detect-vendor"], capture_output=True, env=env).returncode == 2
+    indir = tmp_path / "in"
+    indir.mkdir()
+    shutil.copy2(JOB, indir / JOB.name)
+    (indir / "published.env").write_text(f"PUB_VENDOR=amd\nPUB_VERSION={VERSION}\nPUB_SOURCE_COMMIT={COMMIT}\n"
+                                         "PUB_TREE=/root/x\nPUB_WHEELS=()\n")
+    env = dict(env, PATH=f"{fake_bin(tmp_path, 'nvidia-smi')}:/usr/bin:/bin",
+               MOJOLEARN_RESULTS_DIR=str(tmp_path / "res"))
+    got = subprocess.run(["bash", str(indir / JOB.name)], capture_output=True, text=True, env=env)
+    assert got.returncode == 3 and "this box is nvidia" in got.stderr
+    assert not (tmp_path / "res" / "out").exists()
+
+
+import shutil  # noqa: E402
