@@ -509,6 +509,44 @@ class TestFetch(Base):
         self.assertIn("NOTHING LANDED", r.stdout)
 
 
+class TestTlsContext(unittest.TestCase):
+    """The pixi Python reported "http 0" for every R2 GET until SSL_CERT_FILE was set by hand (0.8.65)."""
+
+    def setUp(self):
+        self.saved = os.environ.pop("SSL_CERT_FILE", None)
+
+    def tearDown(self):
+        os.environ.pop("SSL_CERT_FILE", None)
+        if self.saved is not None:
+            os.environ["SSL_CERT_FILE"] = self.saved
+
+    def test_a_named_bundle_wins(self):
+        import ssl
+        seen = []
+        real = ssl.create_default_context
+        try:
+            ssl.create_default_context = lambda cafile=None, **k: seen.append(cafile) or real()
+            with tempfile.NamedTemporaryFile(suffix=".pem") as f:
+                os.environ["SSL_CERT_FILE"] = f.name
+                box_persist.tls_context()
+                self.assertEqual(seen, [f.name])
+        finally:
+            ssl.create_default_context = real
+
+    def test_some_bundle_is_named_without_the_variable(self):
+        import ssl
+        seen = []
+        real = ssl.create_default_context
+        try:
+            ssl.create_default_context = lambda cafile=None, **k: seen.append(cafile) or real()
+            box_persist.tls_context()
+        finally:
+            ssl.create_default_context = real
+        self.assertEqual(len(seen), 1)
+        if any(os.path.isfile(p) for p in box_persist._SYSTEM_CA_BUNDLES):
+            self.assertIsNotNone(seen[0])
+
+
 class TestOptOut(Base):
     def test_opt_out(self):
         r = self.tool("opt-out", "--tool", "x", "--detail", "d1", check=False)

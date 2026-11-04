@@ -219,9 +219,33 @@ echo "BOX_PERSIST_STAGED $R/jobs/%(t)s/persist.json"
 
 
 # ---------------------------------------------------------------- fetch
+_SYSTEM_CA_BUNDLES = ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt")
+
+
+def tls_context():
+    """The CA bundle for R2 GETs. The pixi Python's OpenSSL has no usable default bundle on this Mac: every GET
+    failed with "http 0" (CERTIFICATE_VERIFY_FAILED) unless SSL_CERT_FILE was set by hand (0.8.65 fetches).
+    Order: SSL_CERT_FILE when set, else certifi when importable, else the first system bundle that exists, else
+    Python's default."""
+    import ssl
+    env = os.environ.get("SSL_CERT_FILE")
+    if env and os.path.isfile(env):
+        return ssl.create_default_context(cafile=env)
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+    for path in _SYSTEM_CA_BUNDLES:
+        if os.path.isfile(path):
+            return ssl.create_default_context(cafile=path)
+    return ssl.create_default_context()
+
+
 def http_get(url, dest=None, timeout=600):
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        ctx = tls_context() if url.startswith("https:") else None
+        with urllib.request.urlopen(url, timeout=timeout, context=ctx) as r:
             if dest is None:
                 return r.status, r.read()
             h = hashlib.sha256()
