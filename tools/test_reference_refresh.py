@@ -44,6 +44,20 @@ def write_record(d, name, commit=SHA, log="RECORDED %s rc=0 admissible=yes\n"):
     (d / "record.log").write_text(log % name if "%s" in log else log)
 
 
+def selection_column(cmd):
+    """The column a changed-lanes command plans: its --class, else its backend (table mode: nvidia, amd)."""
+    if "--class" in cmd:
+        return cmd[cmd.index("--class") + 1]
+    return dict(cuda="nvidia", hip="amd")[cmd[cmd.index("--backend") + 1]]
+
+
+def write_table(path, cols=rr.COLUMNS):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(cells={"lane-a/base": {"fit": {"cols": {c: 0 for c in cols}, "ref": "x"}}},
+                                    records=[])))
+
+
 class FakeShell:
     """Scripted stand-in for reference_refresh.Shell. `sel` maps column -> changed-lanes output; `manifest` maps
     a tag -> fetch --list output; `extract` maps a tag -> a function(dest) that lays out the fetched job dir."""
@@ -51,6 +65,9 @@ class FakeShell:
     def __init__(self, sel=None):
         self.cmds, self.spawned = [], []
         self.sel = sel or {}
+        self.scope_lanes = {}      # scope -> the lane list `identity_columns.py lanes --scope X` prints
+        self.history = []          # commits oldest first: merge-base --is-ancestor follows this order
+        self.resolve = {}          # rev-parse --verify <name> -> sha
         self.manifest, self.extract = {}, {}
         self.next_tag = 0
         self.admit_out = ADMIT_NEXT
@@ -66,6 +83,14 @@ class FakeShell:
         self.cmds.append(cmd)
         j = " ".join(cmd)
         if cmd[0] == "git" or (len(cmd) > 2 and cmd[0] == "git"):
+            if "--is-ancestor" in cmd:
+                a, b = cmd[-2], cmd[-1]
+                if a in self.history and b in self.history:
+                    return (0 if self.history.index(a) <= self.history.index(b) else 1), ""
+                return 0, ""
+            if "rev-parse" in cmd and "--verify" in cmd:
+                name = cmd[-1].replace("^{commit}", "")
+                return 0, self.resolve.get(name, SHA) + "\n"
             if "rev-parse" in cmd and "HEAD" in cmd and "--abbrev-ref" in cmd:
                 return 0, "ref/%s\n" % SHA[:12]
             if "rev-parse" in cmd and "HEAD" in cmd:
@@ -74,9 +99,16 @@ class FakeShell:
                 return 0, ""
             return 0, ""
         if "changed-lanes" in cmd:
-            backend = cmd[cmd.index("--backend") + 1]
-            col = dict(cuda="nvidia", hip="amd", cpu="cpu", metal="apple")[backend]
-            return 0, self.sel[col]
+            col = selection_column(cmd)
+            text = self.sel[col]
+            sel = rr.parse_selection(text)
+            if sel and "--summary-json" in cmd:
+                Path(cmd[cmd.index("--summary-json") + 1]).write_text(json.dumps(dict(
+                    record={"l%d" % i: "closure changed" for i in range(sel["record"])})))
+            return 0, text
+        if "identity_columns.py" in j and " lanes " in j:
+            scope = cmd[cmd.index("--scope") + 1]
+            return 0, ",".join(self.scope_lanes[scope]) + "\n"
         if "nvidia_central.sh" in j and " submit " in j:
             script = cmd[-1]
             tag = self._new_tag("nvc-identity")
@@ -118,20 +150,29 @@ class Base(unittest.TestCase):
         t = Path(self.tmp.name)
         for d in ("src", "admit"):
             (t / d / ".git").mkdir(parents=True)
+        write_table(t / "src" / rr.TABLE)
+        # an NVIDIA pod and the AMD droplet are up (the box tools' local state files)
+        for d in ("devpods/nvc1", "do"):
+            (t / d).mkdir(parents=True)
+            (t / d / "state.env").write_text("X=1\n")
         self.env = dict(REFRESH_HOME=str(t / "home"), REFRESH_PYTHON="python3", REFRESH_SRC_TREE=str(t / "src"),
-                        REFRESH_ADMIT_TREE=str(t / "admit"), REFRESH_POLL_SEC="0", REFRESH_WAIT_MIN="0")
+                        REFRESH_ADMIT_TREE=str(t / "admit"), REFRESH_POLL_SEC="0", REFRESH_WAIT_MIN="0",
+                        MOJOLEARN_DEVPOD_STATE=str(t / "devpods"), MOJOLEARN_STEWARD_DO_STATE=str(t / "do"))
         self.t = t
         self.lines = []
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def refresh(self, sh, columns=rr.COLUMNS, **env):
+    def refresh(self, sh, columns=None, sha=SHA, lane_scope=None, reason=None, **env):
         e = dict(self.env, **env)
-        return rr.Refresh(SHA, columns, env=e, sh=sh, out=self.lines.append)
+        narrow = (columns and list(columns) != list(rr.COLUMNS)) or lane_scope
+        if reason is None:
+            reason = "test: one column" if narrow else ""
+        return rr.Refresh(sha, columns, env=e, sh=sh, out=self.lines.append, lane_scope=lane_scope, reason=reason)
 
-    def state(self):
-        return json.loads((self.t / "home" / SHA[:12] / "state.json").read_text())
+    def state(self, sha=SHA):
+        return json.loads((self.t / "home" / sha[:12] / "state.json").read_text())
 
 
 class TestParsing(unittest.TestCase):
@@ -181,28 +222,52 @@ class TestParsing(unittest.TestCase):
 
     def test_columns(self):
         self.assertEqual(rr.parse_columns("amd,nvidia"), ["nvidia", "amd"])
-        self.assertEqual(rr.parse_columns(""), list(rr.COLUMNS))
+        self.assertEqual(rr.parse_columns("ptx,cpu"), ["cpu", "ptx"])
+        self.assertIsNone(rr.parse_columns(""))          # the default: the table's columns
         with self.assertRaises(SystemExit):
-            rr.parse_columns("ptx")
+            rr.parse_columns("gpu")
+
+    def test_table_columns(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_table(Path(d) / "t.json", ("ptx", "nvidia", "cpu"))
+            self.assertEqual(rr.table_columns(Path(d) / "t.json"), ["cpu", "nvidia", "ptx"])
+
+    def test_find_records_splits_a_cpu_job_into_cpu_and_ptx(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_record(Path(d) / "final" / "cpu-ptx" / "cpu", "cpu.lanes-1")
+            write_record(Path(d) / "final" / "cpu-ptx" / "ptx", "nvidia-ptx-rtx-sm80.lanes-2")
+            (Path(d) / "final" / "cpu-ptx" / "cpu-record.log").write_text("NOTHING-CHANGED cpu: x\n")
+            recs, outs, _ = rr.find_records(d, SHA, part="cpu")
+            self.assertEqual([p.name for p in recs], ["cpu.lanes-1.identical.json"])
+            self.assertEqual(sorted(o for _, o in outs), ["nothing", "recorded"])
+            recs, outs, _ = rr.find_records(d, SHA, part="ptx")
+            self.assertEqual([p.name for p in recs], ["nvidia-ptx-rtx-sm80.lanes-2.identical.json"])
+            self.assertEqual([o for _, o in outs], ["recorded"])
 
 
 class TestPlan(Base):
     def test_plan_prints_counts_and_saves_nothing(self):
-        sh = FakeShell(dict(nvidia=table_sel(9), amd=table_sel(0), cpu=class_sel(416, 12), apple=class_sel(428, 0)))
-        self.refresh(sh).plan(dry=True)
+        sh = FakeShell(dict(nvidia=table_sel(9), amd=table_sel(0), cpu=class_sel(416, 12), ptx=class_sel(428, 0),
+                            apple=class_sel(428, 0)))
+        self.refresh(sh, REFRESH_APPLE_TREE=str(self.t)).plan(dry=True)
         self.assertIn("PLAN nvidia REUSED 419 / RECORD 9 of 428", self.lines)
         self.assertIn("PLAN amd    NOTHING-CHANGED (REUSED 428 of 428)", self.lines)
+        self.assertIn("GAPS none", self.lines)
         self.assertFalse((self.t / "home" / SHA[:12] / "state.json").exists())
         self.assertEqual(sh.count(" submit "), 0)
 
     def test_plan_uses_each_jobs_selection(self):
-        sh = FakeShell(dict(nvidia=table_sel(1), amd=table_sel(1), cpu=class_sel(1, 1), apple=class_sel(1, 1)))
+        sh = FakeShell(dict(nvidia=table_sel(1), amd=table_sel(1), cpu=class_sel(1, 1), ptx=class_sel(1, 1),
+                            apple=class_sel(1, 1)))
         self.refresh(sh).plan(dry=True)
-        sel = {c[c.index("--backend") + 1]: c for c in sh.cmds if "changed-lanes" in c}
-        self.assertNotIn("--class", sel["cuda"])          # box_merged_verify: ONLY_CHANGED=table
-        self.assertNotIn("--class", sel["hip"])
-        self.assertEqual(sel["cpu"][sel["cpu"].index("--class") + 1], "cpu")      # auto reuse
-        self.assertEqual(sel["metal"][sel["metal"].index("--class") + 1], "apple")
+        sel = {selection_column(c): c for c in sh.cmds if "changed-lanes" in c}
+        self.assertEqual(sorted(sel), sorted(rr.COLUMNS))
+        be = lambda c: sel[c][sel[c].index("--backend") + 1]  # noqa: E731
+        self.assertNotIn("--class", sel["nvidia"])          # box_merged_verify: ONLY_CHANGED=table
+        self.assertNotIn("--class", sel["amd"])
+        self.assertEqual((be("nvidia"), be("amd"), be("cpu"), be("ptx"), be("apple")), ("cuda", "hip", "cpu", "cuda", "metal"))
+        # every column is planned over the supported surface, never a recorder default
+        self.assertEqual({c[c.index("--scope") + 1] for c in sel.values()}, {"all"})
 
     def test_failed_selection_refuses(self):
         sh = FakeShell(dict(nvidia="Traceback\n"))
@@ -212,7 +277,8 @@ class TestPlan(Base):
 
 class TestIdempotency(Base):
     def test_nothing_changed_submits_nothing(self):
-        sh = FakeShell(dict(nvidia=table_sel(0), amd=table_sel(0), cpu=class_sel(428, 0), apple=class_sel(428, 0)))
+        sh = FakeShell(dict(nvidia=table_sel(0), amd=table_sel(0), cpu=class_sel(428, 0), ptx=class_sel(428, 0),
+                            apple=class_sel(428, 0)))
         self.assertEqual(self.refresh(sh).run(wait=False), 0)
         self.assertEqual(sh.count(" submit "), 0)
         self.assertEqual(sh.spawned, [])
@@ -230,7 +296,8 @@ class TestIdempotency(Base):
         self.assertEqual(sh.count("identity_box_job_cpu_ptx.sh"), 0)
 
     def test_crash_and_rerun_fetches_instead_of_resubmitting(self):
-        sel = dict(nvidia=table_sel(3), amd=table_sel(3), cpu=class_sel(420, 8), apple=class_sel(425, 3))
+        sel = dict(nvidia=table_sel(3), amd=table_sel(3), cpu=class_sel(420, 8), ptx=class_sel(428, 0),
+                   apple=class_sel(425, 3))
         sh = FakeShell(sel)
         apple_tree = self.t / "apple-tree"
         (apple_tree / ".git").mkdir(parents=True)
@@ -290,12 +357,14 @@ class TestIdempotency(Base):
         self.assertNotEqual(st["tag"], tag)
         self.assertEqual(st["history"][0]["tag"], tag)
 
-    def test_apple_without_a_built_tree_is_blocked_not_admitted(self):
+    def test_apple_without_a_built_tree_is_a_gap_not_admitted(self):
         sh = FakeShell(dict(apple=class_sel(420, 8)))
-        self.assertEqual(self.refresh(sh, ["apple"]).run(wait=False), 1)
-        self.assertEqual(self.state()["columns"]["apple"]["phase"], "blocked")
+        self.assertEqual(self.refresh(sh, ["apple"]).run(wait=False), 4)
+        self.assertEqual(self.state()["columns"]["apple"]["phase"], "gap")
+        self.assertIn("REFRESH_APPLE_TREE", self.state()["columns"]["apple"]["why"])
         self.assertEqual(sh.spawned, [])
         self.assertEqual(sh.count("admit_identity_columns"), 0)
+        self.assertTrue(any(x.startswith("GAPS apple=8") for x in self.lines))
 
 
 class TestAdmit(Base):
