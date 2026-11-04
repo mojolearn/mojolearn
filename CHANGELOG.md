@@ -4,6 +4,12 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.65 (published 2026-11-04)
+
+- **ARIMA on the CPU.** Parameter extraction after a fit keeps its native input buffers alive, so it no longer crashes.
+- **Byte-level language models.** Ragged token copies keep their source buffers alive through the padded copy.
+- **Multi-GPU training.** Every estimator reads its device plan once at the entry and passes it down; shard code lives in per-family multi-GPU modules. Single-device results are unchanged on Apple, NVIDIA and AMD. Depthwise GBDT level histograms shard across devices again.
+
 ## 0.8.64 (published 2026-11-01)
 
 - **RandomForest notices.** Fit notices (n_bins clamped to the sample count, max_samples ignored without bootstrap, partial out-of-bag scores) are raised as `UserWarning`s instead of being printed to standard output.
