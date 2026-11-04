@@ -1,0 +1,9 @@
+commit=ccc8c26dfc8b652aa73f95fe92b204cbfaff8fe3
+label=nvidia-rtx-sm_89
+backend=cuda
+scope=routine shard= lanes_override=yes lane_selection=only-changed-table
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-138-generic x86_64 0348e24c7cfa
+date=2026-11-04T04:01:04Z
+dirty_tracked=none
+record_sha256=3b2eb1ad616e7c5e6748eab6425fbd8365be22a558f1f2b02bb1f1ae707bd194
