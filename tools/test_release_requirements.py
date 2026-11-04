@@ -25,7 +25,7 @@ def synthetic_producer_only(monkeypatch):
 def tampered(ledger):
     """Rewrite a historical record on disk, as an outside edit would: RequirementsLedger.edit refuses it."""
     import release_requirements_storage as S
-    doc = ledger.read()
+    doc = copy.deepcopy(ledger.read())
     yield doc
     S.save(ledger.path, doc)
 
@@ -292,7 +292,7 @@ def test_prepublication_does_not_require_future_postpublication_checks(ledger, t
 
 def test_producer_evidence_is_revalidated_when_reusing_a_pass(ledger, tmp_path):
     path = record(ledger, tmp_path)
-    doc = ledger.read()
+    doc = copy.deepcopy(ledger.read())
     doc["attempts"][0]["receipt"]["producer"]["report_type"] = "execution"
     ledger.path.write_text(json.dumps(doc))
     assert ledger.plan()["identity"]["status"] == "untested"

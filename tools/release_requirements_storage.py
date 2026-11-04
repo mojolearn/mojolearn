@@ -43,8 +43,13 @@ FIELDS = frozenset({"inputs", "provenance_sources", "dependency_limitations"})
 SHARED = FIELDS | frozenset({"receipt", "equivalence_proof", "failure_equivalence_proof", "evidence",
                              "invalidation_evidence", "reference"})
 RECORDS = ("attempts", "runs", "interruptions")
-# A node whose canonical JSON is shorter stays inline in its parent (fewer, larger object files).
-INLINE = 1024
+# A node whose canonical JSON is shorter stays inline in its parent. 0.8.65 measurement: 1 KB gave 31,443
+# files (18,931 of them 1-3 KB source-map buckets) and a 16.6 s read dominated by opens; 8 KB keeps each
+# distinct source closure and producer provenance map one file (FIELD_CENSUS.md, MEASUREMENTS.md).
+INLINE = 8192
+# A value at a SHARED key of a shell (index row or record) is a reference from this size on, so the index
+# stays one small row per requirement and a receipt is one object shared by its attempt and status row.
+ROOT_INLINE = 512
 SHA = re.compile(r"[0-9a-f]{64}")
 
 
@@ -78,6 +83,32 @@ class FrozenList(list):
 
     def __deepcopy__(self, memo):
         return self
+
+
+class RecordMap(dict):
+    """An immutable decoded record or shared subtree. deepcopy gives a mutable copy (shared leaves stay
+    shared), so ``copy.deepcopy(attempt["manifest"])`` then editing the copy works; editing in place raises."""
+
+    def _refuse(self, *args, **kwargs):
+        raise TypeError("historical ledger records are immutable; copy.deepcopy the value to change a copy")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _refuse
+
+    def __deepcopy__(self, memo):
+        return _thaw(self)
+
+
+class RecordList(list):
+    def _refuse(self, *args, **kwargs):
+        raise TypeError("historical ledger records are immutable; copy.deepcopy the value to change a copy")
+
+    __setitem__ = __delitem__ = append = extend = insert = pop = remove = clear = reverse = sort = __iadd__ = __imul__ = _refuse
+
+    def __deepcopy__(self, memo):
+        return _thaw(self)
+
+
+IMMUTABLE = (FrozenMap, FrozenList, RecordMap, RecordList)
 
 
 def _leaf(value):
@@ -260,54 +291,107 @@ class Encoder:
     """Logical values -> index/record JSON, storing shared nodes in ``store``.
 
     ``memo`` ({id: (frozen object, sha)}) comes from the read: an unchanged frozen leaf is referenced
-    without re-serializing it. Encoding is deterministic, so an unchanged record gets its old SHA."""
+    without re-serializing it. Encoding is deterministic, so an unchanged record gets its old SHA.
+    Canonical text is assembled bottom-up (each value serialized once, whatever its depth)."""
 
     def __init__(self, store, memo=None):
         self.store = store
         self.memo = dict(memo or {})
 
-    def node(self, value, partition=True, force=False):
+    def node(self, value, inline=INLINE):
+        """(stored form, its canonical JSON text): a scalar, an inline node or a reference."""
         if not isinstance(value, (dict, list)):
-            return value
+            text = canonical(value)
+            return value, text
         hit = self.memo.get(id(value))
         if hit is not None and hit[0] is value:
-            return {REF: hit[1]}
-        if isinstance(value, dict):
-            if partition and len(value) >= 64 and _leaf(value):
-                # Stable hash buckets share the common parts of overlapping closures (v1 rule).
-                buckets = {}
-                for key, item in value.items():
-                    buckets.setdefault(bucket_name(key), {})[key] = item
-                node = dict(kind="map", value={key: self.node(part, False, True) for key, part in sorted(buckets.items())})
-            else:
-                node = dict(kind="dict", value={key: self.node(item) for key, item in value.items()})
-        elif len(value) >= 128 and _leaf(value):
-            node = dict(kind="sequence", value=[self.node(value[start:start + 64], force=True)
-                                                for start in range(0, len(value), 64)])
+            return {REF: hit[1]}, '{"' + REF + '":"' + hit[1] + '"}'
+        if _scalars(value):
+            # One C serialization for an all-scalar container (most of the ledger's structure).
+            body = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+            kind = "dict" if isinstance(value, dict) else "list"
+            node = dict(kind=kind, value=value)
+            data = '{"kind":"' + kind + '","value":' + body + "}"
+        elif isinstance(value, dict):
+            _string_keys(value)
+            parts, payload = [], {}
+            for key in sorted(value):
+                stored, text = self.node(value[key])
+                payload[key] = stored
+                parts.append(canonical(key) + ":" + text)
+            node = dict(kind="dict", value=payload)
+            data = '{"kind":"dict","value":{' + ",".join(parts) + "}}"
         else:
-            node = dict(kind="list", value=[self.node(item) for item in value])
-        data = canonical(node)
-        if not force and len(data) < INLINE:
-            return node
+            parts, payload = [], []
+            for item in value:
+                stored, text = self.node(item)
+                payload.append(stored)
+                parts.append(text)
+            node = dict(kind="list", value=payload)
+            data = '{"kind":"list","value":[' + ",".join(parts) + "]}"
+        if len(data) < inline:
+            return node, data
         sha = self.store.put(data.encode())
-        if isinstance(value, (FrozenMap, FrozenList)):
+        if isinstance(value, IMMUTABLE):
             # Only immutable values may be recognized by identity later; holding mutable ones would
             # also keep every encoded value alive (a migration would hold the whole document).
             self.memo[id(value)] = (value, sha)
-        return {REF: sha}
+        return {REF: sha}, '{"' + REF + '":"' + sha + '"}'
+
+    def text(self, value):
+        """Canonical JSON text of a shell (index member or record), storing its SHARED values."""
+        if isinstance(value, dict):
+            _string_keys(value)
+            return "{" + ",".join(canonical(key) + ":" + (self.node(value[key], ROOT_INLINE)[1] if key in SHARED and isinstance(value[key], (dict, list))
+                                                          else self.text(value[key])) for key in sorted(value)) + "}"
+        if isinstance(value, list):
+            return "[" + ",".join(self.text(item) for item in value) + "]"
+        return canonical(value)
 
     def walk(self, value):
-        if isinstance(value, dict):
-            return {key: (self.node(item) if key in SHARED and isinstance(item, (dict, list)) else self.walk(item))
-                    for key, item in value.items()}
-        if isinstance(value, list):
-            return [self.walk(item) for item in value]
-        return value
+        return json.loads(self.text(value))
 
     def record(self, value):
         if not isinstance(value, dict):
             raise ValueError("ledger records are JSON objects")
-        return self.store.put(canonical(self.walk(value)).encode())
+        hit = self.memo.get(id(value))
+        if hit is not None and hit[0] is value:
+            return hit[1]   # an unchanged (immutable) record read from this store
+        return self.store.put(self.text(value).encode())
+
+
+_SCALARS = (str, int, float, bool, type(None))
+
+
+def _scalars(value):
+    items = value.values() if isinstance(value, dict) else value
+    if isinstance(value, dict) and not all(type(key) is str for key in value):
+        return False
+    return all(type(item) in _SCALARS for item in items)
+
+
+def _string_keys(value):
+    if not all(isinstance(key, str) for key in value):
+        raise TypeError("ledger JSON object keys must be strings")
+
+
+def _thaw(value):
+    """Mutable copy of decoded containers; frozen shared leaves stay shared (the v1 deepcopy contract)."""
+    kind = type(value)
+    if kind is dict or kind is RecordMap:
+        return {key: _thaw(item) for key, item in value.items()}
+    if kind is list or kind is RecordList:
+        return [_thaw(item) for item in value]
+    return value
+
+
+def _freeze(value):
+    kind = type(value)
+    if kind is dict:
+        return RecordMap((key, _freeze(item)) for key, item in value.items())
+    if kind is list:
+        return RecordList(_freeze(item) for item in value)
+    return value
 
 
 class Decoder:
@@ -328,7 +412,10 @@ class Decoder:
         result = self.build(node)
         if _leaf(result):
             result = FrozenMap(result) if isinstance(result, dict) else FrozenList(result)
-            self.memo[id(result)] = (result, sha)
+        else:
+            result = RecordMap(result) if isinstance(result, dict) else RecordList(result)
+        # Decoded objects are immutable and shared; an unchanged one is re-referenced by identity.
+        self.memo[id(result)] = (result, sha)
         self.cache[sha] = result
         self.active.discard(sha)
         return result
@@ -341,7 +428,10 @@ class Decoder:
         if set(value) == {REF} and isinstance(value[REF], str):
             return self.resolve(value[REF])
         if set(value) == {"kind", "value"}:
-            return self.build(value)
+            result = self.build(value)
+            if _leaf(result):
+                return FrozenMap(result) if isinstance(result, dict) else FrozenList(result)
+            return RecordMap(result) if isinstance(result, dict) else RecordList(result)
         raise ValueError("malformed ledger node reference")
 
     def build(self, node):
@@ -352,10 +442,12 @@ class Decoder:
             result = {name: self.child(item) for name, item in payload.items()}
             if kind == "map":
                 merged = {}
-                for bucket, part in result.items():
-                    if not isinstance(part, dict) or any(bucket_name(name) != bucket for name in part):
+                for part in result.values():
+                    if not isinstance(part, dict):
                         raise ValueError("invalid shared source-map bucket")
                     merged.update(part)
+                if len(merged) != sum(len(part) for part in result.values()):
+                    raise ValueError("invalid shared source-map bucket")
                 result = merged
         elif kind in ("list", "sequence") and isinstance(payload, list):
             result = [self.child(item) for item in payload]
@@ -373,7 +465,7 @@ class Decoder:
             for key, item in value.items():
                 if key in SHARED and isinstance(item, (dict, list)):
                     # Mutable containers, shared immutable leaves (the v1 decode contract).
-                    out[key] = copy.deepcopy(self.child(item))
+                    out[key] = _thaw(self.child(item))
                 else:
                     out[key] = self.shell(item)
             return out
@@ -381,12 +473,25 @@ class Decoder:
             return [self.shell(item) for item in value]
         return value
 
+    def frozen(self, value):
+        """A record's own fields: immutable, SHARED values the shared decoded nodes themselves."""
+        if isinstance(value, dict):
+            out = {}
+            for key, item in value.items():
+                out[key] = self.child(item) if key in SHARED and isinstance(item, (dict, list)) else self.frozen(item)
+            return RecordMap(out)
+        if isinstance(value, list):
+            return RecordList(self.frozen(item) for item in value)
+        return value
+
     def record(self, sha):
         payload = json.loads(self.store.get(sha))
         self.loaded.add(sha)
         if not isinstance(payload, dict):
             raise ValueError("ledger record is not a JSON object: " + sha)
-        return self.shell(payload)
+        result = self.frozen(payload)
+        self.memo[id(result)] = (result, sha)
+        return result
 
 
 class State:

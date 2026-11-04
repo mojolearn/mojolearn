@@ -191,7 +191,9 @@ def test_historical_records_are_append_only(tmp_path, change):
     with pytest.raises(ValueError, match="immutable and append-only"):
         with ledger.edit() as doc:
             if change == "rewrite":
-                doc["attempts"][3]["status"] = "failed"
+                with pytest.raises(TypeError, match="immutable"):
+                    doc["attempts"][3]["status"] = "failed"   # in place: refused at once
+                doc["attempts"][3] = dict(copy.deepcopy(doc["attempts"][3]), status="failed")
             elif change == "drop":
                 del doc["attempts"][3]
             elif change == "reorder":
@@ -248,7 +250,7 @@ def test_migrate_preserves_every_attempt_and_keeps_the_original(tmp_path, form):
     # The migrated ledger is append-only from here on.
     with pytest.raises(ValueError, match="append-only"):
         with R.RequirementsLedger(path).edit() as doc:
-            doc["attempts"][0]["status"] = "failed"
+            doc["attempts"][0] = dict(copy.deepcopy(doc["attempts"][0]), status="failed")
 
 
 def test_migrate_refuses_to_switch_when_verification_fails(tmp_path, monkeypatch):
@@ -257,7 +259,7 @@ def test_migrate_refuses_to_switch_when_verification_fails(tmp_path, monkeypatch
     real = S.Decoder.record
 
     def lossy(self, sha):
-        value = real(self, sha)
+        value = copy.deepcopy(real(self, sha))
         value.pop("receipt", None)
         return value
     monkeypatch.setattr(S.Decoder, "record", lossy)

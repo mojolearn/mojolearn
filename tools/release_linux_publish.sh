@@ -94,9 +94,13 @@ WSHA=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
 # ledger/evidence is attached to the public GitHub release.
 BUNDLE="$WORK/requirements-admission.tar.gz"
 ADMISSION="$WORK/requirements-admission.json"
+# Every package of one release shares the frozen dependency analyses (keyed by analyzer, revision and
+# request): the first bundle runs them in parallel (MOJOLEARN_ADMISSION_JOBS, default all cores; or on
+# MOJOLEARN_ADMISSION_WORKER=<ssh target>), the others reuse them. 0.8.65 reran all ten, serially, per package.
+DEPENDENCY_CACHE="${MOJOLEARN_DEPENDENCY_CACHE:-$(dirname "$WORK")/dependency-logs}"
 python3 tools/release_publish_admission.py bundle --ledger "$MOJOLEARN_REQUIREMENTS_LEDGER" \
   --root "$REPO" --source "$ARTIFACT_SOURCE_COMMIT" --wheel "$ART/$(basename "$WHL")" \
-  --output "$BUNDLE" --upload > "$ADMISSION"
+  --output "$BUNDLE" --dependency-cache "$DEPENDENCY_CACHE" --upload > "$ADMISSION"
 VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$ADMISSION")
 BUNDLE_SHA=$(shasum -a 256 "$BUNDLE" | cut -d' ' -f1)
 

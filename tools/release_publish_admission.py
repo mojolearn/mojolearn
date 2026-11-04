@@ -166,12 +166,21 @@ def _tar_bytes(archive, name, data):
     archive.addfile(info, io.BytesIO(data))
 
 
-def create_bundle(ledger_path, root, source, wheels, output):
+def create_bundle(ledger_path, root, source, wheels, output, *, dependency_cache=None):
+    """Admit the ledger at the freeze and pack it with its evidence.
+
+    The frozen dependency analyses it needs run first, all at once (release_requirement_dependencies.prefetch:
+    every core, or the box named by MOJOLEARN_ADMISSION_WORKER), into ``dependency_cache``: a directory keyed
+    by analyzer, revision and request, so the packages of one release share every analysis (default: this
+    bundle's own ``dependency-logs``). The admission itself then runs once, sequentially, from that cache."""
+    import release_requirement_dependencies as dependencies
     ledger_path, root, output = Path(ledger_path), Path(root), Path(output)
+    logs = Path(dependency_cache) if dependency_cache else output.parent / "dependency-logs"
     before = ledger_path.read_bytes()
+    dependencies.prefetch(lambda: verify_ledger(ledger_path, root, source, log_dir=logs))
     reads = {}
     with evidence.evidence_context(collect=reads):
-        doc, manifest = verify_ledger(ledger_path, root, source, log_dir=output.parent / "dependency-logs")
+        doc, manifest = verify_ledger(ledger_path, root, source, log_dir=logs)
     if ledger_path.read_bytes() != before:
         raise ValueError("canonical ledger changed during admission; retry metadata admission only")
     artifacts = [wheel_identity(path, doc["version"], source, manifest["configuration"]) for path in wheels]
@@ -340,12 +349,15 @@ def main(argv=None):
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--bundle-sha256")
     parser.add_argument("--upload", action="store_true")
+    parser.add_argument("--dependency-cache", type=Path,
+                        help="shared frozen dependency analysis cache (default: <output dir>/dependency-logs)")
     args = parser.parse_args(argv)
     wheels = args.wheel + (sorted(args.wheel_dir.glob("*.whl")) if args.wheel_dir else [])
     if args.command == "bundle":
         if args.ledger is None or args.output is None:
             parser.error("bundle requires --ledger and --output")
-        result = create_bundle(args.ledger, args.root, args.source, wheels, args.output)
+        result = create_bundle(args.ledger, args.root, args.source, wheels, args.output,
+                               dependency_cache=args.dependency_cache)
         if args.upload:
             upload_bundle(args.output, result["key"])
         print(json.dumps(result, sort_keys=True))
