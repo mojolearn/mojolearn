@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""tools/ops/published_install.py -- the published-nvidia / published-amd producer as ONE persisted box job,
-through the supported job wrappers (lane release-no-hands, 2026-11-04; RUNBOOK 0.8.65 section 18).
+"""tools/ops/published_install.py -- the published-smoke-nvidia / published-smoke-amd job as ONE persisted box
+job, through the supported job wrappers (lane release-no-hands, 2026-11-04; RUNBOOK 0.8.65 section 18).
+
+Since lane published-no-reverify (2026-11-04) this runs ONLY for an explicit `tools/release.py
+--published-smoke <vendor> --published-smoke-reason TEXT`: published-<vendor> is a bytes check on the Mac
+(tools/release_published_install.py check; Andrew 2026-11-02, nothing reinstalls the gated bytes from PyPI
+to verify again), so no published row needs a box.
 
     python3 tools/ops/published_install.py nvidia|amd VERSION --source-commit SHA --source-tree DIR \\
         --out DIR --state FILE --candidate-wheel W [--candidate-wheel W ...] [--dry-run]
 
-tools/release.py step_published_<vendor> calls it after publish-<vendor>; --out is
-<commit12>/published-<vendor>/, where retained_producers finds published-report.json. Nothing here rents,
+tools/release.py step_published_smoke_<vendor> calls it after published-<vendor>; --out is
+<commit12>/published-smoke-<vendor>/ (never the published-<vendor> ledger evidence). Nothing here rents,
 releases or extends a box (gate-boxes brought the box up). In order, as tools/ops/release_gate.py stages its
 gate job (its Runner does the staging, the R2 wait and the fetch):
 
