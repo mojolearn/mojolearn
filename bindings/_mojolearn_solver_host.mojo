@@ -48,6 +48,7 @@ cell hashes it (the train column is `labels_`), and `_hierarchy_impl.py`
 publishes what it reads. `info[1]`, `n_connected_components`, is 1, the
 literal `single_linkage.mojo` returns on the pairwise arm.
 """
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
@@ -289,6 +290,7 @@ def linkage_fit_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_solver_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_solver_host")
         module.def_function[solver_host_numeric_mode_binding]("solver_host_numeric_mode")

@@ -4,6 +4,7 @@
 GPU binding's export names and contract, over `x_cluster.host.host_ops.HostOps`
 (the same `x_cluster/bodies.mojo` bodies in plain loops). The sabotage arm is
 `X_CLUSTER_HOST_SABOTAGE` (`-D MOJOLEARN_HOST_SABOTAGE=1`)."""
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -76,6 +77,7 @@ def vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_cluster_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_cluster_host")
         m.def_function[x_cluster_host_numeric_mode_binding]("x_cluster_host_numeric_mode")

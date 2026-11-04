@@ -26,6 +26,7 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
@@ -293,6 +294,7 @@ def gmm_score_bic_aic_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_mixture() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_mixture")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.

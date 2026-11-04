@@ -46,6 +46,7 @@ rows. `n_iter_` is written from the oracle's inner iteration count
 (`OracleResult.n_iter`), which `svc_check` compares per outer iteration
 with the device's trace, but no identity_break cell hashes it.
 """
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.math import isnan
 from std.os import abort
 from std.python import Python, PythonObject
@@ -544,6 +545,7 @@ def svm_native_api_binding() raises -> PythonObject:
 
 
 def build__mojolearn_svm_host() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_svm_host")
         module.def_function[svm_host_numeric_mode_binding]("svm_host_numeric_mode")

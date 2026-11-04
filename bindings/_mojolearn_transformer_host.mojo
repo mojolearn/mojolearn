@@ -27,6 +27,7 @@ The sabotage arm (`transformer_host_sabotage`) is
 `gemm/host/gemm_oracle.mojo::GEMM_ORACLE_HOST_SABOTAGE`
 (`-D MOJOLEARN_HOST_SABOTAGE=1`): every GEMM leaf walked descending.
 """
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from transformer.host.native_block_dispatch import NATIVE_TRANSFORMER_HOST_BLOCK_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -444,6 +445,7 @@ def transformer_native_session_handle_binding(session: PythonObject) raises -> P
 
 
 def build__mojolearn_transformer_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_transformer_host")
         module.def_function[transformer_block_api_binding]("transformer_block_api_v1")

@@ -6,6 +6,7 @@ One call, `x_cluster_call(which, x_addr, x_len, a_addr, a_len, ip, fp)`, runs
 `x_cluster/entries.mojo::run_entry` on `x_cluster.device_ops.DeviceOps`. The
 CPU host binding `_mojolearn_x_cluster_host` exports the same names with the
 same contract over `HostOps`."""
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import Python, PythonObject
@@ -146,6 +147,7 @@ def vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_cluster() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_cluster")
         m.def_function[call_binding]("x_cluster_call")

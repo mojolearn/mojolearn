@@ -58,6 +58,7 @@ The sabotage arm (`rf_host_sabotage`) is
 is drawn from the next Philox subsequence, so every forest this binary fits
 differs.
 """
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from ensemble.host.importance import rf_host_importance
 from ensemble.host.oob import rf_host_oob
 from std.ffi import _Global
@@ -1033,6 +1034,7 @@ def resident_release_binding(handle: PythonObject) raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_rf_host() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_rf_host")
         module.def_function[rf_host_numeric_mode_binding]("rf_host_numeric_mode")

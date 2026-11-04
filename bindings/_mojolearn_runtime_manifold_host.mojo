@@ -2,6 +2,7 @@
 # Logical host owner for manifold. Release builds merge this builder
 # with the other host builders; development builds give it an independent
 # source/cache boundary. Private matrix/device types own native lifetimes.
+from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -37,6 +38,7 @@ def runtime_manifold_host_sabotage_binding() raises -> PythonObject:
 
 
 def build__mojolearn_runtime_manifold_host() -> PythonObject:
+    comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_manifold_host")
         _ = module.add_type[ManifoldMatrix]("_ManifoldMatrix")

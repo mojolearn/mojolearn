@@ -1,6 +1,7 @@
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -317,6 +318,7 @@ def idn_fam2_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_prep() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Quality-only bindings to actual decomp GEMM and PCA covariance entrances."""
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -118,6 +119,7 @@ def covariance_py(xx: PythonObject, cc: PythonObject, mm: PythonObject, after: P
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_scoped_gemm_probe() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_scoped_gemm_probe")
         m.def_function[abi_py]("abi_version")

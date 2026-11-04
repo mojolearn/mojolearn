@@ -9,6 +9,7 @@ inputs into owned Lists, computes, and only then writes the caller's output.
 The loss comes back as its IEEE-754 bit pattern, an int, so the gate compares
 bytes and nothing on the Python side rounds it.
 """
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import bitcast, memcpy
 from std.os import abort
 from std.python import Python, PythonObject
@@ -320,6 +321,7 @@ def byte_lm_host_arithmetic_suffix_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_byte_lm_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm_host")
         register(module)

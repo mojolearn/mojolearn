@@ -45,6 +45,7 @@ squared distance walks the feature axis descending, and the gemm oracle's
 leaf walks descending with it, so every fit and predict this binary serves
 differs.
 """
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -580,6 +581,7 @@ def cholesky_solve_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_gp_host() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_gp_host")
         module.def_function[gp_host_numeric_mode_binding]("gp_host_numeric_mode")

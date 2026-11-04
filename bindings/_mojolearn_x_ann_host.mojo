@@ -5,6 +5,7 @@ IVF quantization arms. Every entry takes (addrs, params) lists; the orders
 are written in providers/python/x_ann_abi_pyapi.mojo's callers below and in
 python/mojolearn/_expansion_ann.py. `bindings/_mojolearn_x_ann_host.mojo`
 exports the same names with the same contract on the CPU."""
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -346,6 +347,7 @@ def host_sabotage_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_ann_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_ann_host")
         m.def_function[ivf_pq_build_binding]("x_ann_ivf_pq_build")

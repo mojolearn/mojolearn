@@ -65,6 +65,7 @@ walked descending; the same define walks every `gemm_oracle` leaf descending
 operations and the RMSNorm weight gradient.
 """
 
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
 from bindings.residual_dropout_boundary_host import residual_dropout_binding, residual_dropout_backward_binding
 from bindings.neural_gemm_boundary_host import neural_gemm_binding
@@ -673,6 +674,7 @@ def neural_primitives_api_binding() raises -> PythonObject:
 
 
 def build__mojolearn_training_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_training_host")
         module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")

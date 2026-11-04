@@ -20,6 +20,7 @@ The sabotage arm (`gp_infer_host_sabotage`) is the reference binding's:
 `gaussian_process/host/gpr_oracle.mojo::GPR_ORACLE_HOST_SABOTAGE`
 (`-D MOJOLEARN_HOST_SABOTAGE=1`).
 """
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -69,6 +70,7 @@ def gp_numeric_mode_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_gp_infer_host() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_gp_infer_host")
         module.def_function[gp_infer_host_numeric_mode_binding]("gp_infer_host_numeric_mode")

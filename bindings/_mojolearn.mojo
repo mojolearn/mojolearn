@@ -79,6 +79,7 @@ hr-small-passes (2026-10-02): LinearRegression and Ridge center on the
 device through the estimators binding (glm/impl/center_device.mojo).
 """
 
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.mojolearn_shell_impl import (
@@ -2049,6 +2050,7 @@ def prepare_targets_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")

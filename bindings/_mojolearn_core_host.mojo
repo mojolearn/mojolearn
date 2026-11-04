@@ -78,6 +78,7 @@ comparison and one narrowing per kept value, no fold to sabotage.
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_host.mojo).
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.msel_host import (
     msel_put_binding,
     msel_alloc_binding,
@@ -1186,6 +1187,7 @@ def prepare_targets_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_core_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_core_host")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")

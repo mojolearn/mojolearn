@@ -46,6 +46,7 @@ released around the device work: nothing inside touches a Python object and
 the wrapper holds the caller's arrays for the length of the call.
 """
 
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.device_plan import DevicePlan, device_plan_current
 from bindings.py_lists import py_list_int
@@ -887,6 +888,7 @@ def ordered_doc_count_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_gbdt() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         m.def_function[ordered_doc_count_binding]("gbdt_ordered_doc_count")

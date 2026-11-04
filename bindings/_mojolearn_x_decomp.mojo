@@ -4,6 +4,7 @@
 points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
+from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import PythonObject
@@ -95,6 +96,7 @@ from providers.python.x_decomp_s_linalg_fast_pyapi import (
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_decomp() -> PythonObject:
+    comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         # F02 audit belongs to the independent LU route as well as MCD.

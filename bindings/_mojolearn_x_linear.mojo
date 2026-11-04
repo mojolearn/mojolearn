@@ -8,6 +8,7 @@ x_linear_decision(x_addr, wb_addr, dims, out_addr)
     dims = [n, d, k, link]; wb is k rows of (w_0..w_{d-1}, b)
 The host binding (_mojolearn_x_linear_host.mojo) exports the same names with
 the same address contract and runs the same x_linear/ source on the CPU."""
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import Python, PythonObject
@@ -190,6 +191,7 @@ def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_linear() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")

@@ -26,6 +26,7 @@ array/archive gates and a large-data export-only A/B on Metal. Retained List
 entrypoints are comparison arms; they do not run on the default fit path.
 """
 
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from ensemble.device_finite import FOREST_DEVICE_FINITE
@@ -636,6 +637,7 @@ def et_regressor_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: Python
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_trees() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
         # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.

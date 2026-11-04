@@ -82,6 +82,7 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
@@ -1319,6 +1320,7 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_gp() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
         m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")

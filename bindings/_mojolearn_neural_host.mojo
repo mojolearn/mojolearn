@@ -64,6 +64,7 @@ moves both MLP projections and every Transformer projection.
 `neural_host_sabotage()` reads it back.
 """
 
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
 
 from std.math import isfinite
@@ -674,6 +675,7 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_neural_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_neural_host")
         module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")

@@ -1,5 +1,6 @@
 """CPU binding for `_mojolearn_x_neighbors`: the GPU binding's export names and
 address contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -1182,6 +1183,7 @@ def x_neighbors_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_neighbors_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors_host")
         m.def_function[x_neighbors_host_numeric_mode_binding]("x_neighbors_host_numeric_mode")

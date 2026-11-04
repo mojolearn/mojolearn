@@ -39,6 +39,7 @@ The sabotage arm (`arima_host_sabotage`) is
 finite-difference step doubles, so every fitted model this binary returns
 differs.
 """
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -246,6 +247,7 @@ def arima_fit_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_arima_host() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_arima_host")
         module.def_function[arima_host_numeric_mode_binding]("arima_host_numeric_mode")
