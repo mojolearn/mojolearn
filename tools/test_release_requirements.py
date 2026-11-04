@@ -2,6 +2,7 @@
 import copy
 import json
 import subprocess
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -18,6 +19,15 @@ def synthetic_producer_only(monkeypatch):
     import release_requirement_receipts as P
     monkeypatch.setattr(P, "validate_producer_receipt", lambda *args, **kwargs: [], raising=False)
     monkeypatch.setattr(R, "producer_admission_available", lambda wanted: True)
+
+
+@contextmanager
+def tampered(ledger):
+    """Rewrite a historical record on disk, as an outside edit would: RequirementsLedger.edit refuses it."""
+    import release_requirements_storage as S
+    doc = ledger.read()
+    yield doc
+    S.save(ledger.path, doc)
 
 
 def manifest(revision="a", arithmetic="one", compiler="1", flags="identical"):
@@ -413,7 +423,7 @@ def test_equivalence_reuses_actual_pass_without_fabricating_new_execution(native
 def test_legacy_run_manifest_reconstructs_inputs_for_proof(native_ledger, tmp_path):
     led, _, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         for entry in (doc['runs'][0], doc['attempts'][0]):
             entry['manifest'] = {k: entry['manifest'][k] for k in
                                  ('source_revision', 'fingerprint', 'coverage', 'kind', 'stage')}
@@ -590,7 +600,7 @@ def test_later_failure_with_unresolved_equivalence_blocks_reuse(native_ledger, t
 def test_invalid_original_receipt_cannot_acquire_an_equivalence_pass(native_ledger, tmp_path):
     led, calls, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         doc['attempts'][0]['receipt']['source_revision'] = 'b' * 40
     led.sync(native_manifest(tmp_path, 'b' * 40, 'edited'))
     row = led.plan()['identity']
@@ -662,7 +672,7 @@ def test_old_late_finish_cannot_replace_newer_run_result(ledger, tmp_path):
 def test_original_attempt_outcome_tampering_cannot_reuse(native_ledger, tmp_path):
     led, calls, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         doc['attempts'][0]['coverage']['skipped'] = 1
     led.sync(native_manifest(tmp_path, 'b' * 40, 'edited'))
     assert led.plan()['identity']['action'] == 'complete-provenance'
@@ -672,7 +682,7 @@ def test_original_attempt_outcome_tampering_cannot_reuse(native_ledger, tmp_path
 def test_original_contract_metadata_tampering_cannot_reuse(native_ledger, tmp_path):
     led, calls, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         doc['attempts'][0]['manifest']['coverage'] = ['invented easier coverage']
     led.sync(native_manifest(tmp_path, 'b' * 40, 'edited'))
     assert led.plan()['identity']['action'] == 'complete-provenance'

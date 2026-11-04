@@ -226,32 +226,42 @@ class RequirementsLedger:
         self.explain = explain
 
     def read(self):
+        return self._load()[0]
+
+    def _load(self):
+        """(document, storage state). The index and its immutable objects (release_requirements_storage);
+        v1 and plain JSON ledgers remain readable."""
+        import release_requirements_storage as storage
         if not self.path.exists():
-            return dict(schema=SCHEMA, requirements={}, attempts=[], runs=[])
-        from release_requirements_storage import decode
-        doc = decode(json.loads(self.path.read_text()))
+            return dict(schema=SCHEMA, requirements={}, attempts=[], runs=[]), storage.State()
+        doc, state = storage.load(self.path)
         if doc.get("schema") != SCHEMA:
             raise ValueError("unsupported release requirements ledger schema")
-        return doc
+        return doc, state
 
     @contextmanager
     def edit(self):
+        """Lock, read, yield the document, then write only the new objects and the index.
+
+        Historical attempts, runs and interruptions are immutable: an edit that rewrites or drops
+        one is refused and nothing is written. A v1/plain ledger is converted on its first edit and its
+        original bytes are kept (``migrate`` does the same for large ledgers, streaming)."""
         import fcntl
+        import release_requirements_storage as storage
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.with_suffix(".lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            doc = self.read()
+            doc, state = self._load()
             yield doc
-            fd, name = tempfile.mkstemp(prefix=self.path.name + ".", dir=self.path.parent)
-            try:
-                with os.fdopen(fd, "w") as out:
-                    from release_requirements_storage import encode
-                    json.dump(encode(doc), out, separators=(",", ":"), sort_keys=True)
-                    out.write("\n")
-                os.replace(name, self.path)
-            finally:
-                if os.path.exists(name):
-                    os.unlink(name)
+            storage.save(self.path, doc, state)
+
+    def migrate(self, *, say=print):
+        """One-shot conversion of a v1/plain ledger to the index + object layout, under the ledger lock."""
+        import fcntl
+        import release_requirements_storage as storage
+        with self.path.with_suffix(".lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            return storage.migrate(self.path, say=say)
 
     def sync(self, manifest):
         with self.edit() as doc:
@@ -855,7 +865,7 @@ def gate_rows(rows, stage=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("command", choices=("sync", "plan", "check", "begin", "record", "interrupt"))
+    ap.add_argument("command", choices=("sync", "plan", "check", "begin", "record", "interrupt", "migrate"))
     ap.add_argument("--ledger", required=True)
     ap.add_argument("--root", type=Path, default=ROOT)
     ap.add_argument("--revision", default="HEAD")
@@ -887,6 +897,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
     ledger = RequirementsLedger(args.ledger, source_root=args.root, evidence_log_dir=args.dependency_log_dir,
                                 explain=args.explain)
+    if args.command == "migrate":
+        # One-shot: v1/plain -> index + immutable objects; every record verified, original bytes kept.
+        ledger.migrate()
+        return 0
     if args.command == "interrupt":
         if bool(args.run_id) == bool(args.run_ids_file):
             ap.error("interrupt requires exactly one of --run-id or --run-ids-file")

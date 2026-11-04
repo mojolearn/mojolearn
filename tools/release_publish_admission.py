@@ -17,9 +17,13 @@ import zipfile
 
 import release_evidence as evidence
 import release_requirements as requirements
+import release_requirements_storage as storage
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "mojolearn.release-ledger-admission.v1"
+# The v2 ledger is a small index plus immutable objects (release_requirements_storage); the bundle carries
+# every object the index reaches, by content address, beside ``ledger.json``.
+LEDGER_OBJECT = re.compile(r"ledger\.objects/([0-9a-f]{2})/([0-9a-f]{64})\.json")
 PREFIX = "release-readiness/v1/"
 POLICY_FILES = ("tools/release_publish_admission.py", "tools/release_evidence.py", "tools/release_requirements.py",
                 "tools/release_requirements.json", "tools/release_requirement_receipts.py",
@@ -175,13 +179,21 @@ def create_bundle(ledger_path, root, source, wheels, output):
         raise ValueError("admission needs distinct actual wheel files")
     if not reads:
         raise ValueError("canonical pre gate retained no actual producer evidence")
+    ledger_objects = storage.object_files(ledger_path)
     admission = dict(schema=SCHEMA, source_revision=source, version=doc["version"], artifacts=artifacts,
                      ledger_sha256=hashlib.sha256(before).hexdigest(), evidence=reads, policy=policy(root),
                      manifest_requirements_digest=digest(manifest["requirements"]))
+    if ledger_objects:
+        admission["ledger_objects"] = [sha for sha, _ in ledger_objects]
     output.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(output, "w:gz") as archive:
         _tar_bytes(archive, "admission.json", json.dumps(admission, sort_keys=True).encode())
         _tar_bytes(archive, "ledger.json", before)
+        for sha, path in ledger_objects:
+            data = path.read_bytes()
+            if hashlib.sha256(data).hexdigest() != sha:
+                raise ValueError("ledger object changed during admission: " + sha)
+            _tar_bytes(archive, f"ledger.objects/{sha[:2]}/{sha}.json", data)
         stored = set()
         for original, expected in sorted(reads.items()):
             if sha256(original) != expected:
@@ -206,7 +218,8 @@ def open_bundle(path, expected_sha):
             seen = set()
             for member in archive:
                 name = member.name
-                valid = name in ("admission.json", "ledger.json") or re.fullmatch(r"objects/[0-9a-f]{64}", name)
+                valid = (name in ("admission.json", "ledger.json") or re.fullmatch(r"objects/[0-9a-f]{64}", name)
+                         or LEDGER_OBJECT.fullmatch(name))
                 if not valid or name in seen or not member.isfile() or member.issym() or member.islnk():
                     raise ValueError("unsafe, duplicate or unsupported admission archive member")
                 seen.add(name)
@@ -229,7 +242,16 @@ def open_bundle(path, expected_sha):
                 raise ValueError("invalid original evidence path/object identity")
             if not (root / "objects" / value).is_file() or sha256(root / "objects" / value) != value:
                 raise ValueError("admission evidence object is missing or corrupt")
-        if seen != {"admission.json", "ledger.json", *("objects/" + value for value in mapping.values())}:
+        ledger_objects = admission.get("ledger_objects", [])
+        if not isinstance(ledger_objects, list) or any(not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)
+                                                       for sha in ledger_objects):
+            raise ValueError("invalid ledger object identities")
+        for sha in ledger_objects:
+            stored = root / "ledger.objects" / sha[:2] / (sha + ".json")
+            if not stored.is_file() or sha256(stored) != sha:
+                raise ValueError("admission ledger object is missing or corrupt")
+        if seen != {"admission.json", "ledger.json", *("objects/" + value for value in mapping.values()),
+                    *(f"ledger.objects/{sha[:2]}/{sha}.json" for sha in ledger_objects)}:
             raise ValueError("unreferenced admission archive members")
         yield root, admission
 

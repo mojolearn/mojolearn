@@ -107,6 +107,30 @@ def test_unsafe_or_incomplete_evidence_archives_are_refused(admitted, tmp_path, 
             pass
 
 
+def test_bundle_carries_every_v2_ledger_object_by_content_address(admitted):
+    # The index alone is not the ledger: every object it reaches travels with it, named by its SHA-256.
+    import release_requirements_storage as S
+    reached = [sha for sha, _ in S.object_files(admitted["ledger"].path)]
+    assert reached
+    with A.open_bundle(admitted["bundle"], admitted["result"]["bundle_sha256"]) as (root, manifest):
+        assert manifest["ledger_objects"] == reached
+        replay = L.RequirementsLedger(root / "ledger.json").read()
+        assert replay == admitted["ledger"].read()
+
+
+@pytest.mark.parametrize("damage", ["missing", "corrupt", "extra"])
+def test_damaged_ledger_objects_are_refused(admitted, tmp_path, damage):
+    def mutate(rows):
+        name, data, kind = next(row for row in rows if row[0].startswith("ledger.objects/"))
+        if damage == "missing": return [row for row in rows if row[0] != name]
+        if damage == "corrupt": return [(n, data + b" " if n == name else d, k) for n, d, k in rows]
+        return rows + [(f"ledger.objects/ff/{'f' * 64}.json", b"{}", tarfile.REGTYPE)]
+    target = rewrite_archive(admitted, tmp_path, mutate)
+    with pytest.raises(ValueError):
+        with A.open_bundle(target, A.sha256(target)):
+            pass
+
+
 def test_bundle_hash_and_duplicate_json_keys_are_refused(admitted, tmp_path):
     with pytest.raises(ValueError, match="SHA256"):
         with A.open_bundle(admitted["bundle"], "0" * 64):
