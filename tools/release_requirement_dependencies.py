@@ -213,6 +213,8 @@ def _worker_snapshot(root, request):
                 source_revision=result["revision"], changed_paths=paths,
                 selector_sources={p: _file_hash(root, p) for p in
                     ("tools/lane_select.py", "tools/bincache.py", "tools/identity_break.py")})
+    if request.get("reference_closures"):
+        result["reference_closures"] = _reference_closures(root, ls, request["reference_closures"])
     # Exact recipe/harness bytes are collected in the frozen tree as well.
     extra = request.get("extra_paths", [])
     result["extra_sources"] = {p: _file_hash(root, p) for p in extra}
@@ -231,12 +233,86 @@ def _worker_snapshot(root, request):
     return result
 
 
-def _tracked_state(root, revision):
-    """Verify actual tracked bytes, including assume-unchanged/skip-worktree files."""
+REFERENCE_SCHEMA = "mojolearn.release-identity-reference-closures.v1"
+
+
+def reference_key(base, backend):
+    """The key of one (base revision, column backend) selection in a snapshot's ``reference_closures``."""
+    return base + "|" + (backend or "any")
+
+
+def _reference_closures(root, ls, spec):
+    """THE RECORDER'S CLOSURE COMPARISON, AT THE FREEZE (lane ledger-trusts-reference, 2026-11-04).
+
+    For each requested (base revision, backend, lanes): the lanes among ``lanes`` whose source closure
+    changed between the base and this frozen tree, decided by the frozen ``tools/lane_select.py`` exactly
+    as ``tools/identity_columns.py changed-lanes`` / ``reuse-check`` decide REUSED vs RECORD
+    (``changed_paths(base)``, ``select(..., backend, stop_when=lanes)``). A lane absent from
+    ``selected`` with no ``unattributed`` path has an unchanged closure. Precision limitations are not
+    a separate verdict: they only ever describe a lane the selection already holds.
+
+    Also returns the frozen harness facts the admitted table is judged against (its sha256, fixtures,
+    lane revisions and registry), read from the same frozen tree."""
+    h = ls.identity_break()
+    harness = dict(sha256=_file_hash(root, "tools/identity_break.py"), fixtures=sorted(h.FIXTURES),
+                   lane_revisions=dict(getattr(h, "LANE_REVISIONS", {}) or {}), lanes=sorted(h.LANES))
+    selections = {}
+    sources = None
+    for base, backend, lanes in spec.get("bases", []):
+        if sources is None:
+            sources, _ = ls.lane_sources()
+        base = _revision(root, base)
+        wanted = set(lanes)
+        paths = list(ls.changed_paths(base))
+        sel = ls.select(paths, ref=base, sources=sources, backend=backend, stop_when=wanted)
+        selected = sorted(wanted & set(sel["lanes"]))
+        by_path = sel.get("by_path", {})
+        selections[reference_key(base, backend)] = dict(
+            base_revision=base, backend=backend, changed_paths=len(paths), selected=selected,
+            lane_paths={lane: sorted(p for p, hit in by_path.items() if lane in hit) for lane in selected},
+            unattributed=sorted(sel.get("unattributed", [])), stopped_early=bool(sel.get("stopped_early")))
+    return dict(schema=REFERENCE_SCHEMA, harness=harness, selections=selections,
+                selector_sources={p: _file_hash(root, p) for p in
+                                  ("tools/lane_select.py", "tools/bincache.py", "tools/identity_break.py",
+                                   "tools/identity_columns.py")})
+
+
+#: TOOLING AFTER A FREEZE (lane ledger-trusts-reference, 2026-11-04). Tracked paths whose bytes cannot
+#: change a computed bit, a built binary or a retained record: release tooling, prose and CI. A source
+#: checkout at the frozen commit may carry a later tooling fix in these paths (0.8.65: the assemble patch
+#: in tools/release.py); the frozen view then takes their bytes from the frozen commit's Git objects, so
+#: the analysis is still exactly the frozen tree, and the source checkout is not refused for them.
+#: Everything else (bindings/, core/ and every kernel tree, python/mojolearn, packaging/, bench/ evidence,
+#: pixi and build files) is still byte-checked against the frozen commit. The identity harness inside
+#: tools/ decides fixtures and so evidence: it stays checked.
+TOOLING_PREFIXES = ("tools/", "docs/", "docs-site/", ".github/", "experiments/")
+TOOLING_FILES = frozenset(("CHANGELOG.md", "AGENTS.md", "CLAUDE.md", "README.md"))
+EVIDENCE_TOOLING = ("tools/identity_break.py", "tools/identity_lanes/")
+
+
+def tooling_only(path):
+    """True for a tracked path whose bytes cannot determine bits or evidence (TOOLING_PREFIXES)."""
+    if path.startswith(EVIDENCE_TOOLING):
+        return False
+    return path in TOOLING_FILES or path.startswith(TOOLING_PREFIXES)
+
+
+def _tracked_state(root, revision, *, tooling_from_revision=False):
+    """Verify actual tracked bytes, including assume-unchanged/skip-worktree files.
+
+    ``{path: (mode, blob, stamp)}``. With ``tooling_from_revision`` (the source checkout a frozen view is
+    cloned from), a tooling-only path (``tooling_only``) whose bytes, mode or presence differ from the
+    frozen commit is not refused: it is recorded with stamp None and ``_clone_tracked_tree`` writes the
+    frozen commit's own blob into the view. HEAD must still be the frozen commit, and every other tracked
+    path (and every staged change outside tooling) must be exactly the frozen commit's."""
     if _revision(root, "HEAD") != revision:
         raise ValueError("dependency source HEAD changed from the requested revision")
-    if subprocess.run(["git", "-C", str(root), "diff", "--cached", "--quiet", revision, "--"],
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+    staged = subprocess.run(["git", "-C", str(root), "diff", "--cached", "--name-only", "-z", revision, "--"],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if staged.returncode:
+        raise ValueError("dependency source staged state is unreadable")
+    if any(not (tooling_from_revision and tooling_only(os.fsdecode(name)))
+           for name in staged.stdout.split(b"\0") if name):
         raise ValueError("dependency source has staged changes")
     algorithm = _git(root, "rev-parse", "--show-object-format")
     entries = subprocess.check_output(["git", "-C", str(root), "ls-tree", "-rz", "--full-tree", revision])
@@ -249,45 +325,79 @@ def _tracked_state(root, revision):
         path = os.fsdecode(raw_path)
         if kind != "blob" or mode not in ("100644", "100755", "120000"):
             raise ValueError("unsupported tracked dependency source kind: " + path)
-        source = root / path
         try:
-            before = source.lstat()
-            if mode == "120000":
-                if not stat.S_ISLNK(before.st_mode):
-                    raise ValueError("tracked dependency symlink changed: " + path)
-                data = os.fsencode(os.readlink(source))
-                actual = hashlib.new(algorithm, b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
-            else:
-                if not stat.S_ISREG(before.st_mode) or bool(before.st_mode & stat.S_IXUSR) != (mode == "100755"):
-                    raise ValueError("tracked dependency file mode changed: " + path)
-                value = hashlib.new(algorithm, b"blob " + str(before.st_size).encode() + b"\0")
-                with source.open("rb") as stream:
-                    for block in iter(lambda: stream.read(1048576), b""):
-                        value.update(block)
-                actual = value.hexdigest()
-            after = source.lstat()
-        except OSError as error:
-            raise ValueError("tracked dependency source unavailable: " + path) from error
-        # ctime/inode catch an edit followed by restoration of the original
-        # bytes or mtime. Access time is intentionally not part of the guard.
-        def stamp(info):
-            return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
-                    info.st_mtime_ns, info.st_ctime_ns)
-        if stamp(before) != stamp(after):
-            raise ValueError("dependency source changed while being checked: " + path)
-        if actual != expected:
-            raise ValueError("tracked dependency source differs from requested revision: " + path)
-        state[path] = (mode, actual, stamp(after))
+            state[path] = (mode, expected, _tracked_stamp(root, path, mode, expected, algorithm))
+        except ValueError:
+            if not (tooling_from_revision and tooling_only(path)):
+                raise
+            state[path] = (mode, expected, None)
     return state
+
+
+def _tracked_stamp(root, path, mode, expected, algorithm):
+    """The stat stamp of one tracked file whose bytes and mode are the frozen commit's, else ValueError."""
+    source = root / path
+    try:
+        before = source.lstat()
+        if mode == "120000":
+            if not stat.S_ISLNK(before.st_mode):
+                raise ValueError("tracked dependency symlink changed: " + path)
+            data = os.fsencode(os.readlink(source))
+            actual = hashlib.new(algorithm, b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+        else:
+            if not stat.S_ISREG(before.st_mode) or bool(before.st_mode & stat.S_IXUSR) != (mode == "100755"):
+                raise ValueError("tracked dependency file mode changed: " + path)
+            value = hashlib.new(algorithm, b"blob " + str(before.st_size).encode() + b"\0")
+            with source.open("rb") as stream:
+                for block in iter(lambda: stream.read(1048576), b""):
+                    value.update(block)
+            actual = value.hexdigest()
+        after = source.lstat()
+    except OSError as error:
+        raise ValueError("tracked dependency source unavailable: " + path) from error
+    # ctime/inode catch an edit followed by restoration of the original
+    # bytes or mtime. Access time is intentionally not part of the guard.
+    def stamp(info):
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                info.st_mtime_ns, info.st_ctime_ns)
+    if stamp(before) != stamp(after):
+        raise ValueError("dependency source changed while being checked: " + path)
+    if actual != expected:
+        raise ValueError("tracked dependency source differs from requested revision: " + path)
+    return stamp(after)
+
+
+def tooling_overlay(state):
+    """Tooling paths a frozen view takes from the frozen commit's Git objects (stamp None)."""
+    return sorted(path for path, (_, _, stamp) in state.items() if stamp is None)
+
+
+def _tooling_commit():
+    """The commit of the checkout running this analyzer (release tooling), recorded beside the source."""
+    tools = Path(__file__).resolve().parent
+    try:
+        commit = _git(tools, "rev-parse", "HEAD")
+        dirty = bool(_git(tools, "status", "--porcelain", "--untracked-files=no", "--", "."))
+    except (OSError, subprocess.CalledProcessError):
+        return dict(commit=None, tools_dirty=None)
+    return dict(commit=commit, tools_dirty=dirty)
 
 
 def _clone_tracked_tree(root, tree, state, log):
     """Make a tracked-only CoW view; never hardlink mutable source files."""
     parents = {}
-    for name, (mode, _, _) in state.items():
+    for name, (mode, blob, stamp) in state.items():
         destination = tree / name
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if mode == "120000":
+        if stamp is None:
+            # A tooling path that differs in the source checkout: the frozen commit's own bytes.
+            data = subprocess.check_output(["git", "-C", str(root), "cat-file", "blob", blob])
+            if mode == "120000":
+                destination.symlink_to(os.fsdecode(data))
+            else:
+                destination.write_bytes(data)
+                destination.chmod(0o755 if mode == "100755" else 0o644)
+        elif mode == "120000":
             destination.symlink_to(os.readlink(root / name))
         else:
             parents.setdefault(destination.parent, []).append(root / name)
@@ -346,9 +456,12 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
             # clean Git status alone would admit generated Mojo and pyc files
             # that do not exist in the requested revision's source tree.
             clone_current = sys.platform == "darwin" and _revision(root, "HEAD") == revision
-            before = _tracked_state(root, revision) if clone_current else None
+            before = _tracked_state(root, revision, tooling_from_revision=True) if clone_current else None
+            # The source commit and the release tooling are two commits (tools/release.py): name both.
             source_view = dict(method="tracked-cow" if clone_current else "git-checkout",
-                               source_checkout=str(root), tracked_files_checked=len(before or {}))
+                               source_checkout=str(root), tracked_files_checked=len(before or {}),
+                               tooling_from_revision=tooling_overlay(before or {}),
+                               tooling=_tooling_commit())
             log.write("source view: " + json.dumps(source_view, sort_keys=True) + "\n")
             log.flush()
             command = ["git", "-C", str(root), "worktree", "add", "--detach"]

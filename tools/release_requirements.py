@@ -218,10 +218,12 @@ def evidence_errors(evidence):
 
 
 class RequirementsLedger:
-    def __init__(self, path, *, source_root=None, evidence_log_dir=None):
+    def __init__(self, path, *, source_root=None, evidence_log_dir=None, explain=False):
         self.path = Path(path)
         self.source_root = source_root
         self.evidence_log_dir = evidence_log_dir
+        # --explain: also run the cross-commit selector on identity rows, as a diagnostic only.
+        self.explain = explain
 
     def read(self):
         if not self.path.exists():
@@ -427,8 +429,113 @@ class RequirementsLedger:
         return False
 
     @staticmethod
-    def evaluate(doc, *, root=None, log_dir=None):
+    def _reference_row(doc, name, wanted, attempts, row, batch, *, root=None, log_dir=None, explain=False):
+        """IDENTITY ROWS ARE JUDGED BY THE REFERENCE ADMISSION (lane ledger-trusts-reference, 2026-11-04).
+
+        An attempt on these exact inputs decides first: a failure is repaired; a pass is reused unless a
+        failed attempt on the same closure contradicts it. Otherwise the admitted reference at the freeze
+        decides (tools/release_identity_reference.py): passed when the lane's closure is unchanged since
+        the records its admitted rows rest on, by the comparison the recorder makes; untested with the
+        reason otherwise. The cross-commit selector (``_equivalence``) never gates these rows; with
+        ``explain`` it runs as a diagnostic (``selector_diagnostic``)."""
+        exact = [a for a in attempts if a["fingerprint"] == wanted["fingerprint"]]
+        failed = [a for a in attempts if a["status"] == "failed" and a["fingerprint"] != wanted["fingerprint"]]
+        candidate = exact[-1] if exact else None
+        if candidate is not None and candidate["status"] != "passed":
+            if RequirementsLedger._retained_attempt(name, candidate, row) is not None:
+                row.update(status=candidate["status"], action="repair",
+                           reasons=["previous attempt failed: " + candidate["summary"]])
+            return
+        if explain:
+            older = [a for a in attempts if a["status"] == "passed" and a["fingerprint"] != wanted["fingerprint"]]
+            if older:
+                scratch = dict(reasons=[], attempt=older[-1]["id"])
+                try:
+                    old = RequirementsLedger._attempt_requirement(older[-1])
+                    RequirementsLedger._equivalence({}, name, old, wanted, scratch, root=root, log_dir=log_dir)
+                except (ValueError, TypeError, KeyError) as problem:
+                    scratch["reasons"] = [str(problem)]
+                row["selector_diagnostic"] = {k: scratch.get(k) for k in
+                                              ("status", "dependency_decision", "dependency_reason", "reasons")}
+        if candidate is not None:
+            later = {a["source_revision"] for a in attempts[attempts.index(candidate) + 1:]
+                     if a["status"] == "failed" and a["fingerprint"] != wanted["fingerprint"]}
+            verdict, error = batch(name) if later else (None, None)
+            if later and verdict is None:
+                row.update(action="complete-provenance", reasons=["cannot scope later failed run: " + error])
+                return
+            contradicted = sorted(later & set((verdict or {}).get("failures", [])))
+            if contradicted:
+                row.update(action="repair", reasons=["later failure on an unchanged closure prevents reuse: "
+                                                     + ", ".join(r[:12] for r in contradicted)])
+                return
+            if RequirementsLedger._retained_attempt(name, candidate, row) is not None:
+                row.update(status="passed", action="reuse", reasons=["same declared inputs and verified retained evidence"])
+            return
+        verdict, error = batch(name)
+        if verdict is None:
+            row.update(action="complete-provenance", reasons=["reference admission unavailable: " + error])
+            return
+        row["reference"] = {k: copy.deepcopy(verdict[k]) for k in
+                            ("schema", "closure_definition", "source_revision", "table", "harness_sha256",
+                             "release_floor", "basis", "compared_classes", "closure_classes", "decision", "digest")}
+        if verdict["failures"] and failed:
+            row.update(action="repair", reasons=[
+                "failed attempt on an unchanged closure contradicts the admitted reference: "
+                + ", ".join(r[:12] for r in verdict["failures"])] + verdict["reasons"])
+            return
+        if verdict["decision"] == "passed":
+            own = sorted(item["commit"] for item in verdict["basis"] if item["cls"] == verdict["vendor"])
+            row.update(status="passed", action="reuse", evidence=copy.deepcopy(verdict["evidence"]),
+                       tested_revision=own[-1] if own else None,
+                       tested_revisions=sorted({item["commit"] for item in verdict["basis"]}),
+                       dependency_decision="reference-closure-unchanged", reasons=list(verdict["reasons"]))
+        else:
+            row.update(action="run", dependency_decision="reference-closure-" + verdict["decision"],
+                       reasons=list(verdict["reasons"]))
+
+    @staticmethod
+    def _reference_batch(doc, root, log_dir):
+        """A lazy {row id: (verdict, error)} lookup: the frozen reference is read once, on first use."""
+        from release_identity_reference import unit_of
+        units = {}
+        for name, wanted in doc["requirements"].items():
+            if (unit_of(name, wanted) is not None and not wanted.get("missing_inputs")
+                    and wanted.get("fingerprint") == digest(wanted.get("inputs"))):
+                units.setdefault(wanted["source_revision"], {})[name] = wanted
+        failures = {}
+        for attempt in doc.get("attempts", []):
+            if attempt.get("status") == "failed" and isinstance(attempt.get("source_revision"), str):
+                failures.setdefault(attempt["requirement"], set()).add(attempt["source_revision"])
+        found = {}
+
+        def lookup(name):
+            wanted = doc["requirements"][name]
+            revision = wanted["source_revision"]
+            if revision not in found:
+                if not root:
+                    found[revision] = (None, "the frozen source root is unavailable")
+                else:
+                    from release_identity_reference import verdicts
+                    group = units.get(revision, {})
+                    try:
+                        found[revision] = (verdicts(root, revision, group, log_dir=log_dir,
+                                                    failures={k: sorted(failures.get(k, ())) for k in group}), None)
+                    except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
+                        found[revision] = (None, str(error) or type(error).__name__)
+            verdicts_, error = found[revision]
+            if verdicts_ is None:
+                return None, error
+            if name not in verdicts_:
+                return None, "requirement inputs are unresolved"
+            return verdicts_[name], None
+        return lookup
+
+    @staticmethod
+    def evaluate(doc, *, root=None, log_dir=None, explain=False):
         rows = {}
+        from release_identity_reference import unit_of
+        batch = RequirementsLedger._reference_batch(doc, root, log_dir)
         positions = {run["id"]: index for index, run in enumerate(doc.get("runs", []))}
         finished = {a["run_id"] for a in doc.get("attempts", [])}
         interruptions = {item["run_id"]: item for item in doc.get("interruptions", [])}
@@ -470,6 +577,9 @@ class RequirementsLedger:
                 # There is no algorithm verdict or fabricated coverage here.
                 if errors:
                     row.update(action="restore-evidence", reasons=errors)
+            elif unit_of(name, wanted) is not None:
+                RequirementsLedger._reference_row(doc, name, wanted, attempts, row, batch,
+                                                  root=root, log_dir=log_dir, explain=explain)
             elif candidate is not None:
                 later_failures = [a for a in attempts[attempts.index(candidate) + 1:] if a["status"] == "failed"]
                 conflicting = (candidate["status"] == "passed" and RequirementsLedger._conflicting_failure(
@@ -499,7 +609,8 @@ class RequirementsLedger:
 
     def _evaluate(self, doc):
         return self.evaluate(doc, root=self.source_root or doc.get("source_root"),
-                             log_dir=self.evidence_log_dir or doc.get("dependency_log_dir"))
+                             log_dir=self.evidence_log_dir or doc.get("dependency_log_dir"),
+                             explain=self.explain)
 
     def plan(self, manifest=None):
         doc = self.read()
@@ -747,8 +858,12 @@ def main(argv=None):
     ap.add_argument("--skipped", type=int, default=0)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--stage", choices=("pre", "post"))
+    ap.add_argument("--explain", action="store_true",
+                    help="also run the cross-commit dependency selector on identity rows; a diagnostic "
+                         "(selector_diagnostic), never the gate: identity rows are judged by the reference admission")
     args = ap.parse_args(argv)
-    ledger = RequirementsLedger(args.ledger, source_root=args.root, evidence_log_dir=args.dependency_log_dir)
+    ledger = RequirementsLedger(args.ledger, source_root=args.root, evidence_log_dir=args.dependency_log_dir,
+                                explain=args.explain)
     if args.command == "interrupt":
         if bool(args.run_id) == bool(args.run_ids_file):
             ap.error("interrupt requires exactly one of --run-id or --run-ids-file")
