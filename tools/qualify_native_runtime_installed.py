@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import tempfile
 import sys
+import time
 import types
 import xml.etree.ElementTree as ET
 import zipfile
@@ -866,7 +867,8 @@ def worker(request_path):
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in (nodes or request["test_files"])],
-                              plugins=[InstalledGuard(), exact_guard or whole_guard]))
+                              plugins=[InstalledGuard(), exact_guard or whole_guard,
+                                       ProgressLog(out / PROGRESS)]))
     except Exception as error:
         worker_error = type(error).__name__ + ": " + str(error)
     finally:
@@ -883,6 +885,120 @@ def worker(request_path):
             exact_node_collection=exact_node_summary(nodes, exact_guard.collected)
             if exact_guard else None), indent=2) + "\n")
     return code if code is not None and not inventory_errors and worker_error is None else 1
+
+
+#: Per-test progress, one JSON line per pytest event, flushed as it happens. A run that is stopped
+#: (a test that exceeds --test-timeout, or the whole run exceeding --timeout) never reaches pytest's
+#: own --junitxml write; this file is what still records the tests that finished (tests.partial.xml).
+PROGRESS = "tests.progress.jsonl"
+PARTIAL_JUNIT = "tests.partial.xml"
+#: The 0.8.65 gates ran one 900 s budget over the whole worker and were stopped at 23% (AMD MI300X)
+#: and 12% (NVIDIA L40S) of the 73-file selection: about 3,900 s and 7,500 s for the full run. The
+#: run budget is about twice the slower vendor; a hung test is caught by the per-test bound instead.
+RUN_TIMEOUT_S = 14400
+TEST_TIMEOUT_S = 900
+
+
+class ProgressLog:
+    """Append every test start and phase report to PROGRESS (worker side)."""
+    def __init__(self, path):
+        self.stream = open(path, "a", buffering=1)
+
+    def _write(self, **row):
+        self.stream.write(json.dumps(row) + "\n")
+        self.stream.flush()
+
+    def pytest_collectreport(self, report):
+        # A heartbeat while the 73 files import, so collection is not mistaken for a hung test.
+        self._write(event="collect", nodeid=report.nodeid, outcome=report.outcome, time=time.time())
+
+    def pytest_runtest_logstart(self, nodeid, location):
+        self._write(event="start", nodeid=nodeid, time=time.time())
+
+    def pytest_runtest_logreport(self, report):
+        message = ""
+        if report.outcome == "skipped" and isinstance(report.longrepr, tuple) and len(report.longrepr) == 3:
+            message = str(report.longrepr[2])
+        elif report.outcome == "failed":
+            message = str(report.longrepr)[-2000:]
+        self._write(event="report", nodeid=report.nodeid, when=report.when, outcome=report.outcome,
+                    message=message, time=time.time())
+
+
+def _junit_names(nodeid):
+    path, _, rest = nodeid.partition("::")
+    parts = rest.split("::") if rest else [""]
+    module = path[:-3] if path.endswith(".py") else path
+    return ".".join([module.replace("/", ".")] + parts[:-1]), parts[-1]
+
+
+def partial_junit(progress, destination, stopped=None):
+    """Fold PROGRESS into a junit file junit_summary reads. A test that started and has no
+    final report when the run was stopped is an error naming the stop. Returns the summary."""
+    order, cases = [], {}
+    lines = Path(progress).read_text().splitlines() if Path(progress).is_file() else []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue  # the last line can be torn by the kill
+        if row.get("event") not in ("start", "report"):
+            continue
+        node = row.get("nodeid", "")
+        if node not in cases:
+            order.append(node)
+            cases[node] = dict(outcome=None, message="", done=False)
+        case = cases[node]
+        if row.get("event") != "report":
+            continue
+        when, outcome = row.get("when"), row.get("outcome")
+        if outcome == "failed":
+            case.update(outcome="failed", message=row.get("message", ""))
+        elif outcome == "skipped" and case["outcome"] != "failed":
+            case.update(outcome="skipped", message=row.get("message", ""))
+        elif when == "call" and outcome == "passed" and case["outcome"] is None:
+            case["outcome"] = "passed"
+        if when == "teardown":
+            case["done"] = True
+    suite = ET.Element("testsuite", name="pytest-partial", stopped=str(stopped or ""))
+    for node in order:
+        case = cases[node]
+        classname, name = _junit_names(node)
+        element = ET.SubElement(suite, "testcase", classname=classname, name=name)
+        if not case["done"] and case["outcome"] != "failed":
+            ET.SubElement(element, "error", message="stopped: " + str(stopped or "worker ended")).text = ""
+        elif case["outcome"] == "failed":
+            ET.SubElement(element, "failure", message="failed").text = case["message"]
+        elif case["outcome"] == "skipped":
+            ET.SubElement(element, "skipped", message=case["message"])
+    ET.ElementTree(suite).write(destination)
+    return junit_summary(destination)
+
+
+def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, poll=5.0):
+    """Run the worker; stop it when the whole run exceeds run_timeout or no test event has been
+    written for test_timeout seconds (one test running too long). Returns (exit, stop, elapsed)."""
+    started = time.monotonic()
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
+    last, size, stop = started, -1, None
+    while process.poll() is None:
+        time.sleep(poll)
+        now = time.monotonic()
+        current = Path(progress).stat().st_size if Path(progress).exists() else 0
+        if current != size:
+            size, last = current, now
+        if now - started > run_timeout:
+            stop = dict(kind="run", budget_s=run_timeout)
+        elif now - last > test_timeout:
+            stop = dict(kind="test", budget_s=test_timeout)
+        if stop:
+            process.kill()
+            process.wait()
+            break
+    elapsed = round(time.monotonic() - started, 1)
+    if stop:
+        stop["elapsed_s"] = elapsed
+    return process.returncode, stop, elapsed
 
 
 def run_command(name, command, out, *, cwd, env=None, timeout=900):
@@ -972,7 +1088,9 @@ def main():
     parser.add_argument("--dependency", action="append", default=[])
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--timeout", type=int, default=RUN_TIMEOUT_S, help="whole test run budget, seconds")
+    parser.add_argument("--test-timeout", type=int, default=TEST_TIMEOUT_S,
+                        help="longest one test may run (no test event for this long stops the run), seconds")
     args = parser.parse_args()
     selected = selected_files(args.test_file, args.test_node)
     source, out = args.source_root.resolve(), args.out.resolve()
@@ -1051,10 +1169,21 @@ def main():
         (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
         (out / "work").mkdir()
         with (out / "tests.log").open("wb") as log:
-            result = subprocess.run([str(python), str(out / "controller.py"), "--worker", str(out / "request.json")],
-                                    cwd=out / "work", env=env, stdout=log, stderr=subprocess.STDOUT,
-                                    timeout=args.timeout)
-        report["worker_exit"] = result.returncode
+            worker_exit, stop, elapsed = run_bounded(
+                [str(python), str(out / "controller.py"), "--worker", str(out / "request.json")],
+                cwd=out / "work", env=env, log=log, progress=out / PROGRESS,
+                run_timeout=args.timeout, test_timeout=args.test_timeout)
+        report.update(worker_exit=worker_exit, tests_elapsed_s=elapsed,
+                      budgets=dict(run_timeout_s=args.timeout, test_timeout_s=args.test_timeout))
+        if stop is not None or not (out / "tests.xml").exists():
+            # Stopped (or crashed) before pytest wrote its junit: keep what finished.
+            partial = partial_junit(out / PROGRESS, out / PARTIAL_JUNIT, stop and stop["kind"] + " timeout")
+            report["partial_tests"] = dict(path=PARTIAL_JUNIT, total=partial["total"], passed=partial["passed"],
+                                           failed=len(partial["failures"]), skipped=len(partial["skipped"]))
+        if stop is not None:
+            report["timed_out"] = stop
+            raise TimeoutError("%s timeout after %.0f s (budget %d s); %d tests finished, see %s" % (
+                stop["kind"], stop["elapsed_s"], stop["budget_s"], report["partial_tests"]["passed"], PARTIAL_JUNIT))
         receipt_path = out / "installed-modules.json"
         receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
         report["pytest_exit"] = receipt.get("pytest_exit")
@@ -1077,7 +1206,7 @@ def main():
                     [c.get("exact_node", "") for c in tests_summary.get("cases", [])])["complete"]
                     and receipt.get("whole_file_collection"), "executed JUnit differs from whole-file collection")
         scope = report["test_scope_summary"]
-        report["status"] = selected_test_status(result.returncode, tests_summary, scope,
+        report["status"] = selected_test_status(worker_exit, tests_summary, scope,
                                                (out / "installed-modules.json").is_file())
     except Exception as error:
         report["status"] = "failed-or-incomplete"

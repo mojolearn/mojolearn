@@ -138,7 +138,8 @@ def run(args):
     command = [sys.executable, str(HERE / "qualify_native_runtime_installed.py"),
                "--source-root", str(source), "--source-commit", args.source_commit,
                "--vendor", BACKEND[args.vendor], "--numeric-mode", "identical",
-               "--python", args.python, "--out", str(out / QUALIFY_DIR), "--timeout", str(args.timeout)]
+               "--python", args.python, "--out", str(out / QUALIFY_DIR), "--timeout", str(args.timeout),
+               "--test-timeout", str(args.test_timeout)]
     if args.git_root:
         command += ["--git-root", str(args.git_root.resolve())]
     if getattr(args, 'test_source_commit', None):
@@ -163,7 +164,22 @@ def run(args):
         report = dict(schema=REPORT_SCHEMA, tool="tools/release_runtime_installed.py", vendor=args.vendor,
                       status="failed", exit_code=1, qualifier_exit=code,
                       error=type(error).__name__ + ": " + str(error))
+        # A stopped run still records what finished (qualify/tests.partial.xml) and why it stopped.
+        try:
+            receipt = json.loads((out / QUALIFY_DIR / "receipt.json").read_text())
+        except (OSError, ValueError):
+            receipt = {}
+        for key in ("timed_out", "partial_tests", "tests_elapsed_s", "budgets"):
+            if key in receipt:
+                report[key] = receipt[key]
+        if receipt.get("error"):
+            report["qualifier_error"] = str(receipt["error"])[:500]
     (out / REPORT).write_text(json.dumps(report, indent=2) + "\n")
+    if report.get("timed_out"):
+        partial = report.get("partial_tests") or {}
+        print("RUNTIME stopped: %s timeout after %s s; %s/%s tests finished passed (qualify/%s)" % (
+            report["timed_out"].get("kind"), report["timed_out"].get("elapsed_s"), partial.get("passed"),
+            partial.get("total"), partial.get("path")))
     print("RUNTIME vendor=%s status=%s cases=%s %s" % (args.vendor, report["status"], report.get("cases"),
           " ".join("%s=%d/%d" % (row["id"].replace(" ", "_"), row["completed"], row["expected"])
                    for row in report.get("coverage", []))))
@@ -184,7 +200,9 @@ def main(argv=None):
     go.add_argument("--git-root", type=Path)
     go.add_argument("--wheel", action="append", required=True)
     go.add_argument("--python", default=sys.executable)
-    go.add_argument("--timeout", type=int, default=900)
+    import qualify_native_runtime_installed as qualifier
+    go.add_argument("--timeout", type=int, default=qualifier.RUN_TIMEOUT_S, help="whole test run budget, seconds")
+    go.add_argument("--test-timeout", type=int, default=qualifier.TEST_TIMEOUT_S, help="longest one test may run, seconds")
     go.add_argument("--out", type=Path, required=True)
     again = sub.add_parser("summarize")
     again.add_argument("--out", type=Path, required=True)

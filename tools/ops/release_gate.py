@@ -20,7 +20,7 @@ Nothing here rents, releases or extends a box: the orchestrator brings the box u
    sha256 checked there: the candidate wheels, the committed job script tools/ops/release_gate_job.sh
    (verbatim; refused when it is not committed and clean), gate.env (the exact build and gate argv
    below) and, when given, a retained autograd artifact set to reuse (--autograd-prior).
-3. The job runs persisted to R2 from the box: `nvidia_central.sh submit release-gate --cap 180
+3. The job runs persisted to R2 from the box: `nvidia_central.sh submit release-gate --cap 240
    --results <res> <in>/release_gate_job.sh` (queued; this tool polls the R2 manifest) or
    `do_amd_steward.sh run <tag> <res> bash <in>/release_gate_job.sh` (in the foreground).
    On the box the job checks the GPU target, makes the source tree's locked pixi env, BUILDS the
@@ -71,8 +71,10 @@ VENDORS = {
     "amd": dict(wrapper="tools/do_amd_steward.sh", target="gfx942", compile_jobs=8),
 }
 #: nvidia_central.sh submit --cap (minutes; the wrapper's maximum is 240): pixi env + eight compiles
-#: (bounded by BUILD_MINUTES) + the gate's own 30-minute ceiling
-NV_CAP_MIN = 180
+#: (bounded by BUILD_MINUTES) + the gate + the installed-runtime qualifier. At 0.8.65 build and gate took
+#: ~20 minutes and the full qualifier needs ~125 more on the L40S, so the wrapper's maximum is used; the job
+#: script clips the qualifier to the minutes this cap leaves (GATE_JOB_CAP_MINUTES).
+NV_CAP_MIN = 240
 BUILD_MINUTES = 120
 #: what the job copies from the gate's out root into <res>/out (reports only; the venv and caches stay
 #: on the box). The same list the lq transport fetched, plus the whole built autograd set.
@@ -145,7 +147,10 @@ def build_argv(vendor, source_commit, tree, out, reuse_from=None):
 #: the installed candidate wheels, runtime-<vendor> in the ledger) runs on the box after the smoke, bounded by
 #: this many minutes. Its outcome is recorded under out/runtime-<vendor>/ and fetched; it never changes the
 #: gate verdict (the smoke's), and the ledger admits runtime-<vendor> only from a passed run. 0 skips it.
-RUNTIME_MINUTES = int(os.environ.get("MOJOLEARN_GATE_RUNTIME_MINUTES", "30"))
+#: The job script passes the qualifier a run budget 10 minutes under this bound (venv, install, report), so
+#: the qualifier stops itself and writes its report and partial junit. At 0.8.65 a 15-minute budget
+#: stopped it at 12% (NVIDIA) and 23% (AMD): about 7,500 s and 3,900 s for the full run.
+RUNTIME_MINUTES = int(os.environ.get("MOJOLEARN_GATE_RUNTIME_MINUTES", "200"))
 
 
 def bash_array(name, items):
@@ -204,6 +209,7 @@ class Plan:
                  f"GATE_WORK={self.work}", f"GATE_BUILD_MINUTES={BUILD_MINUTES}",
                  f"GATE_ADAPTERS={1 if self.adapters else 0}", f"GATE_PROFILE={self.profile}",
                  f"GATE_REUSE={1 if self.prior else 0}", f"GATE_RUNTIME_MINUTES={RUNTIME_MINUTES}",
+                 f"GATE_JOB_CAP_MINUTES={NV_CAP_MIN if self.vendor == 'nvidia' else 0}",
                  bash_array("GATE_WHEELS", [f"{self.indir}/{w.name}" for w in self.wheels]),
                  f"GATE_OVERLAY_SHA256={self.overlay_sha256 or ''}", bash_array("GATE_OVERLAY", GATE_OVERLAY),
                  bash_array("BUILD_ARGV", self.build), bash_array("BUILD_FRESH_ARGV", self.build_fresh),

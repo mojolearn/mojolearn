@@ -52,7 +52,7 @@ def test_nvidia_job_goes_through_nvidia_central_submit_persisted(tmp_path):
     indir = "/root/release-gate/0.8.57/nvidia/stamp-release-light-v1/in"
     res = f"/root/results-release-gate/0.8.57/nvidia/stamp-release-light-v1/{tag}/results"
     assert plan.sync() == ["bash", "tools/nvidia_central.sh", "sync", "release-gate", str(tmp_path / "source")]
-    assert plan.launch() == ["bash", "tools/nvidia_central.sh", "submit", "release-gate", "--cap", "180",
+    assert plan.launch() == ["bash", "tools/nvidia_central.sh", "submit", "release-gate", "--cap", "240",
                              "--note", tag, "--results", res, f"{indir}/release_gate_job.sh"]
     assert plan.upload(f"{indir}/gate.env") == ["bash", "tools/nvidia_central.sh", "sh", "release-gate",
                                                 f"cat > {indir}/gate.env"]
@@ -99,6 +99,17 @@ def test_gate_env_is_bash_that_carries_the_exact_argv(tmp_path):
     build_line = next(l for l in env.splitlines() if l.startswith("BUILD_ARGV=("))
     assert shlex.split(build_line[len("BUILD_ARGV=("):-1]) == plan.build
     assert "GATE_TARGET=sm_89" in env and f"GATE_SOURCE_COMMIT={COMMIT}" in env and "GATE_REUSE=0" in env
+    # the job script clips the runtime qualifier to the minutes the NVIDIA submit cap leaves
+    assert f"GATE_JOB_CAP_MINUTES={RG.NV_CAP_MIN}" in env and f"GATE_RUNTIME_MINUTES={RG.RUNTIME_MINUTES}" in env
+    amd = RG.Runner(args(tmp_path, "amd")).make_plan()[0].env_text()
+    assert "GATE_JOB_CAP_MINUTES=0" in amd
+
+
+def test_the_runtime_qualifier_budget_fits_the_job_and_stops_itself():
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    # the qualifier's own run budget sits inside the outer timeout, so it writes its report on a stop
+    assert '--timeout $(( (rt_min - 10) * 60 ))' in text and 'timeout "${rt_min}m"' in text
+    assert RG.NV_CAP_MIN <= 240 and RG.RUNTIME_MINUTES >= 150  # 0.8.65: ~125 min of tests on the L40S
 
 
 def test_the_job_script_takes_its_argv_from_gate_env_and_keeps_the_gate_unchanged():
