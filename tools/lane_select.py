@@ -9636,10 +9636,16 @@ def _merged_root_is_location_free():
     tree = _parse(os.path.join("tools", "merged_bindings.py"))
     funcs = {n.name: n for n in (tree.body if tree else ()) if isinstance(n, ast.FunctionDef)}
     rt, cr = funcs.get("root_text"), funcs.get("cmd_root")
-    if rt is None or cr is None or [a.arg for a in rt.args.args] != ["stem", "names"]:
+    # root_text may take a trailing defaulted `repo` (bincache closure-v2, f573b8d285): it only picks
+    # the tree whose binding names validate the members, never the text. cmd_root must then call it
+    # with the stem and members alone (two positional arguments, no keywords), so the default holds.
+    params = [a.arg for a in rt.args.args] if rt is not None else None
+    if cr is None or params not in (["stem", "names"], ["stem", "names", "repo"]) or (
+            len(params) == 3 and len(rt.args.defaults) != 1):
         return "tools/merged_bindings.py has no root_text(stem, names) or cmd_root"
     calls = [n for n in ast.walk(cr) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "root_text"]
-    if len(calls) != 1 or any("out" in ast.dump(a) for a in calls[0].args):
+    if (len(calls) != 1 or len(calls[0].args) != 2 or calls[0].keywords
+            or any("out" in ast.dump(a) for a in calls[0].args)):
         return "cmd_root does not write root_text of the stem and members alone"
     return None
 
