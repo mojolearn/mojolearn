@@ -162,6 +162,14 @@ THE STEPS
                      pip download of the Linux file, sha256 compared (Linux), and
                      the package set pip resolves for `mojolearn`,
                      `mojolearn-nvidia` and `mojolearn-amd` (Linux)
+  gate-boxes         ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1; it rents): the boxes the selected box
+                     steps (gate-*, published-nvidia/amd) still need: the shared NVIDIA pod
+                     (tools/nvidia_central.sh up 1, out of stock retried there; lane release-gate synced to
+                     the frozen source) and the DigitalOcean AMD droplet (tools/do_amd_steward.sh up 240), or
+                     the live ones adopted; recorded in the state. While a box step is pending the release
+                     holds the pod busy (one `nvidia_central.sh sh release-gate` hold, renewed) and renews
+                     the droplet's lease (do_amd_steward.sh extend 120 every 85 minutes). --dry-run prints
+                     what it would rent and for how long. Never an Apple machine
   gate-nvidia        } THE RELEASE GATE, after linux-pack and before any publish: tools/release_lq_smoke.py
   gate-amd           }   --gate runs tools/gate_smoke_box.py <vendor> <version> ... all ON the held lq box
                          (never the Mac, nothing rented): release-light-v1 completes eleven installed
@@ -170,6 +178,10 @@ THE STEPS
                          No opponent/performance campaign or native compilation is part of publication.
                          Validated unchanged autograd artifact inputs reuse their original binaries.
                          Reports come home to <version>/<commit12>/gate-<vendor>/<artifact-id>/.
+  boxes-down         once every box step has settled: every box job's results home first
+                     (tools/box_persist.py fetch --tag; none missing, or nothing is taken down), then what
+                     gate-boxes rented taken down (nvidia_central.sh down, do_amd_steward.sh down); an
+                     adopted box is released, left up
   record             bench/results/release_verification/<date>_pypi_<v>/, committed; waits for both
                      gates and preserves their candidate artifact provenance
 
@@ -1080,6 +1092,21 @@ STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish-line")
 STEP_TABLE = [(name, pipeline, needs + (["gate-"+v for v in GATE_VENDORS] if name.startswith('publish-') else []), resource)
               for name, pipeline, needs, resource in STEP_TABLE]
 AFTER["record"] = ["gate-" + v for v in GATE_VENDORS]
+# THE GATE BOXES AS STEPS (lane release-no-hands, 2026-11-04; ORCHESTRATOR ONLY, MOJOLEARN_ORCHESTRATOR=1):
+# gate-boxes brings up what the box steps need (the shared NVIDIA pod, tools/nvidia_central.sh up 1, and the
+# DigitalOcean AMD droplet, tools/do_amd_steward.sh up), records both in the state, holds the pod busy and
+# renews the droplet's lease while a box step is pending (Release.BoxKeeper); boxes-down pulls every box job's
+# results home (tools/box_persist.py fetch --tag) and takes down what gate-boxes rented once every box step
+# has settled. Never an Apple machine.
+#: box step -> the vendor box it runs on
+BOX_CONSUMERS = {"gate-" + v: v for v in GATE_VENDORS}
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gate-nvidia")),
+                  ("gate-boxes", "finish", ["linux-pack"], "boxes"))
+STEP_TABLE = [(name, pipeline, needs + (["gate-boxes"] if name in BOX_CONSUMERS else []), resource)
+              for name, pipeline, needs, resource in STEP_TABLE]
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "record")),
+                  ("boxes-down", "finish", [], "boxes"))
+AFTER["boxes-down"] = ["gate-boxes", *BOX_CONSUMERS]
 
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
@@ -1143,6 +1170,94 @@ def wheel_marker(wheel):
     with zipfile.ZipFile(wheel) as archive:
         name = next(n for n in archive.namelist() if n.endswith(".dist-info/gpu_plugin.json"))
         return json.loads(archive.read(name))
+
+class BoxKeeper:
+    """KEEPS THE RELEASE'S BOXES while a box step is pending (lane release-no-hands, 2026-11-04): a thread of
+    the release process (an active controller, never a background service; it ends with the run).
+
+    NVIDIA: the shared pod deletes itself 60 idle minutes after it was last busy, and a pod is busy while an
+    `nvidia_central.sh sh` command runs, so one hold runs there (`sh <lane> <wait for the release file>`, at
+    most Release.HOLD_MAX_S, started again while still needed), never a hand `sleep` on the Mac. It ends when
+    nothing is pending: the release file is touched through the same wrapper and the hold exits.
+    AMD: the droplet's lease is renewed (`do_amd_steward.sh extend AMD_RENEW_MIN`) every AMD_RENEW_EVERY_S."""
+
+    def __init__(self, release):
+        self.r = release
+        self.hold = None
+        self._stop = threading.Event()
+        self.thread = None
+        self.release_file = f"/root/release-hold/{release.version}-{release.commit[:12]}.release"
+
+    def hold_command(self):
+        f = self.release_file
+        return (f"mkdir -p {shlex.quote(str(Path(f).parent))}; rm -f {shlex.quote(f)}; "
+                f"end=$(( $(date +%s) + {self.r.HOLD_MAX_S} )); "
+                f"while [ ! -e {shlex.quote(f)} ] && [ $(date +%s) -lt $end ]; do sleep 30; done; echo RELEASE-HOLD-END")
+
+    def start_hold(self):
+        log = self.r.rel / "boxes" / "nvidia-hold.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        cmd = ["bash", self.r.nvc(), "sh", self.r.BOX_LANE, self.hold_command()]
+        self.r.say(f"  box keeper: holding the NVIDIA pod busy: {' '.join(shlex.quote(c) for c in cmd[:4])} <hold>")
+        with open(log, "a") as fh:
+            self.hold = self.r.box_popen(cmd, cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=fh,
+                                         stderr=subprocess.STDOUT)
+
+    def end_hold(self):
+        if self.hold is None:
+            return
+        if self.hold.poll() is None:
+            self.r.run(["bash", self.r.nvc(), "sh", self.r.BOX_LANE, f"mkdir -p /root/release-hold && touch "
+                        f"{shlex.quote(self.release_file)}"], log=self.r.rel / "boxes" / "nvidia-hold-release.log")
+            try:
+                self.hold.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                self.hold.terminate()
+        self.hold = None
+
+    def renew_amd(self, rec):
+        if self.r.clock() - float(rec.get("lease_extended_at") or 0) < self.r.AMD_RENEW_EVERY_S:
+            return
+        rc = self.r.run(["bash", self.r.do_amd(), "extend", str(self.r.AMD_RENEW_MIN)],
+                        log=self.r.rel / "boxes" / "amd-extend.log")
+        with self.r._lock:
+            # a failed renewal is retried five minutes later, before the lease can run out
+            rec["lease_extended_at"] = self.r.clock() - (0 if rc == 0 else self.r.AMD_RENEW_EVERY_S - 300)
+            self.r.save()
+
+    def tick(self):
+        """One pass; the vendors still needed."""
+        need = self.r.boxes_pending()
+        held = self.r.held_boxes()
+        if "nvidia" in need and "nvidia" in held:
+            if self.hold is None or self.hold.poll() is not None:
+                self.start_hold()
+        else:
+            self.end_hold()
+        if "amd" in need and "amd" in held:
+            self.renew_amd(held["amd"])
+        return need & set(held)
+
+    def loop(self):
+        try:
+            while not self._stop.is_set() and self.tick():
+                self._stop.wait(self.r.KEEPER_TICK_S)
+        finally:
+            self.end_hold()
+
+    def start(self):
+        self.thread = threading.Thread(target=self.loop, name="release-box-keeper", daemon=True)
+        self.thread.start()
+
+    def alive(self):
+        return self.thread is not None and self.thread.is_alive()
+
+    def stop(self):
+        self._stop.set()
+        if self.thread is not None and self.thread is not threading.current_thread():
+            self.thread.join(timeout=300)
+        self.end_hold()
+
 
 class Release:
     STEPS = [s for s, _, _, _ in STEP_TABLE]
@@ -3951,6 +4066,308 @@ class Release:
     def step_gate_amd(self):
         return self.step_gate("amd")
 
+    # ------------------------------------------------------------ the gate boxes (ORCHESTRATOR ONLY)
+    #: the gate lane whose tree the NVIDIA box jobs run in (tools/ops/release_gate.py LANE)
+    BOX_LANE = "release-gate"
+    #: the AMD droplet's first lease (minutes; RUNBOOK 0.8.65 section 11) and its renewal while a box step is pending
+    AMD_LEASE_MIN = 240
+    AMD_RENEW_MIN = 120
+    AMD_RENEW_EVERY_S = 85 * 60   # renewed with margin before the 120-minute extension runs out
+    #: one NVIDIA hold's on-box ceiling (nvidia_central.sh `sh` gives a command 4 h); the keeper renews it
+    HOLD_MAX_S = 3 * 3600 + 1800
+    KEEPER_TICK_S = 60
+    clock = staticmethod(time.time)
+    box_popen = staticmethod(subprocess.Popen)
+
+    @staticmethod
+    def nvc():
+        return os.environ.get("MOJOLEARN_RELEASE_NVC", "tools/nvidia_central.sh")
+
+    @staticmethod
+    def do_amd():
+        return os.environ.get("MOJOLEARN_RELEASE_DO_AMD", "tools/do_amd_steward.sh")
+
+    @staticmethod
+    def box_persist():
+        return os.environ.get("MOJOLEARN_RELEASE_BOX_PERSIST", "tools/box_persist.py")
+
+    @staticmethod
+    def nvc_state_root():
+        return Path(os.environ.get("MOJOLEARN_DEVPOD_STATE") or os.path.expanduser("~/mojolearn-evidence/devpods"))
+
+    @staticmethod
+    def do_state():
+        return Path(os.environ.get("MOJOLEARN_STEWARD_DO_STATE")
+                    or os.path.expanduser("~/mojolearn-evidence/do-amd-steward"))
+
+    @staticmethod
+    def orchestrator():
+        return os.environ.get("MOJOLEARN_ORCHESTRATOR") == "1"
+
+    def nvc_live(self):
+        """The shared NVIDIA pods up now (tools/nvidia_central.sh live_pods: a state.env per pod key)."""
+        return [k for k in ("nvc1", "nvc2", "nvc3") if (self.nvc_state_root() / k / "state.env").is_file()]
+
+    def do_droplet(self):
+        """The DigitalOcean droplet id of the live AMD steward, or None."""
+        env = self.do_state() / "state.env"
+        try:
+            m = re.search(r"^DROPLET_ID=['\"]?([0-9]+)", env.read_text(), re.M)
+        except OSError:
+            return None
+        return m.group(1) if m else "unknown"
+
+    def selected_steps(self):
+        return getattr(self, "selected", None) or self.STEPS
+
+    def waiver_covers(self, row):
+        """True when the owner's --owner-waiver names ROW by prefix (read only; nothing is logged)."""
+        path = getattr(self.args, "owner_waiver", None)
+        if not path:
+            return False
+        try:
+            prefixes = json.loads(Path(path).read_text()).get("prefixes", [])
+        except (OSError, ValueError):
+            return False
+        return any(row.startswith(p) for p in prefixes)
+
+    def box_step_owed(self, step):
+        """Why box step STEP still has work to do on its box, or None."""
+        if step.startswith("gate-"):
+            vendor = step[len("gate-"):]
+            if self.waiver_covers("candidate-" + vendor):
+                return None
+            ok, why = self.gate_ok(vendor)
+            return None if ok else why
+        owed = getattr(self, "box_step_owed_" + step.replace("-", "_"), None)
+        return owed() if owed else None
+
+    def box_needs(self):
+        """{vendor: [step: why]} of the selected box steps with work to do on a box."""
+        needs = {}
+        selected = self.selected_steps()
+        for step, vendor in BOX_CONSUMERS.items():
+            if step in selected:
+                why = self.box_step_owed(step)
+                if why:
+                    needs.setdefault(vendor, []).append(f"{step}: {why[:160]}")
+        return needs
+
+    def held_boxes(self):
+        """{vendor: record} of the boxes this release holds (not taken down, not released)."""
+        return {v: b for v, b in (self.state.get("boxes") or {}).items()
+                if not b.get("down") and not b.get("released")}
+
+    def box_alive(self, vendor, rec):
+        if vendor == "nvidia":
+            return bool(rec.get("pod")) and (self.nvc_state_root() / rec["pod"] / "state.env").is_file()
+        return self.do_droplet() is not None and self.do_droplet() == rec.get("droplet")
+
+    def boxes_pending(self):
+        """The vendors with a selected box step still to run (the schedule's view when one runs)."""
+        status = getattr(self, "_status", None)
+        out = set()
+        for step, vendor in BOX_CONSUMERS.items():
+            if step not in self.selected_steps():
+                continue
+            if status is not None:
+                if status.get(step) in ("pending", "running"):
+                    out.add(vendor)
+            elif not self.recorded(step):
+                out.add(vendor)
+        return out
+
+    def box_plan(self, needs):
+        """What gate-boxes rents (or adopts) and for how long, one line per box."""
+        c12 = self.commit[:12]
+        lines = []
+        if "nvidia" in needs:
+            live = self.nvc_live()
+            what = (f"adopt the live shared NVIDIA pod {live[0]} (nothing rented)" if live else
+                    f"rent the shared NVIDIA pod: bash {self.nvc()} up 1 (one pod, 1x sm_89 GPU: RTX 4090, L40S, "
+                    "RTX 6000 Ada or L4, out of stock retried by nvidia_central.sh; it deletes itself 60 idle "
+                    "minutes after its last job)")
+            lines.append(f"would {what}, sync lane {self.BOX_LANE} to {c12}, and hold it busy (nvidia_central.sh "
+                         f"sh {self.BOX_LANE}, at most {self.HOLD_MAX_S // 60} minutes a hold, renewed) while "
+                         + ", ".join(n.split(':')[0] for n in needs['nvidia']) + " are pending")
+        if "amd" in needs:
+            what = ("adopt the live AMD droplet " + str(self.do_droplet()) + " (nothing rented; its lease extended to "
+                    f"{self.AMD_LEASE_MIN} minutes)" if self.do_droplet() else
+                    f"rent the AMD droplet: bash {self.do_amd()} up {self.AMD_LEASE_MIN} (gpu-mi300x1-192gb, else "
+                    f"gpu-mi325x1-256gb; gfx942) for a {self.AMD_LEASE_MIN}-minute lease")
+            lines.append(f"would {what}, renewed by {self.AMD_RENEW_MIN} minutes every {self.AMD_RENEW_EVERY_S // 60} "
+                         "minutes while " + ", ".join(n.split(':')[0] for n in needs['amd']) + " are pending")
+        lines.append("then boxes-down takes down what this release rented once every box step has settled")
+        return lines
+
+    def nvidia_box_up(self):
+        boxes = self.state.setdefault("boxes", {})
+        prev = boxes.get("nvidia") or {}
+        logs = self.rel / "boxes"
+        orch = dict(MOJOLEARN_ORCHESTRATOR="1")
+        if prev and not prev.get("down") and not prev.get("released") and self.box_alive("nvidia", prev):
+            rec = prev
+        elif self.nvc_live():
+            # a shared pod is already up (another release run's or a lane's): adopted, nothing rented
+            rec = dict(pod=self.nvc_live()[0], rented=False, adopted=True, at=now(), lane=self.BOX_LANE)
+            with self._lock:
+                boxes["nvidia"] = rec
+                self.save()
+        else:
+            before = self.nvc_live()
+            self.must(["bash", self.nvc(), "up", "1"], env=orch, log=logs / "nvidia-up.log",
+                      what="nvidia_central.sh up 1")
+            after = self.nvc_live()
+            if not after:
+                raise StepFailed(f"nvidia_central.sh up 1 left no shared pod up ({logs / 'nvidia-up.log'})")
+            new = [k for k in after if k not in before]
+            rec = dict(pod=(new or after)[0], rented=bool(new), adopted=not new, at=now(), lane=self.BOX_LANE)
+            with self._lock:
+                boxes["nvidia"] = rec
+                self.save()
+        # the hold and the box jobs run in the gate lane's tree: the lane needs a pod and the frozen source
+        self.must(["bash", self.nvc(), "sync", self.BOX_LANE, str(self.source_checkout())],
+                  log=logs / "nvidia-sync.log", what=f"nvidia_central.sh sync {self.BOX_LANE}")
+        return f"NVIDIA {rec['pod']} " + ("rented" if rec.get("rented") else "adopted (already up)")
+
+    def amd_box_up(self):
+        boxes = self.state.setdefault("boxes", {})
+        prev = boxes.get("amd") or {}
+        logs = self.rel / "boxes"
+        if self.do_droplet():
+            # already up: this release's own droplet, or adopted; its lease is extended to the first lease
+            ours = bool(prev.get("rented") and not prev.get("down") and prev.get("droplet") == self.do_droplet())
+            self.must(["bash", self.do_amd(), "extend", str(self.AMD_LEASE_MIN)], log=logs / "amd-extend.log",
+                      what="do_amd_steward.sh extend")
+            rec = dict(droplet=self.do_droplet(), rented=ours, adopted=not ours, at=prev.get("at") if ours else now())
+        else:
+            self.must(["bash", self.do_amd(), "up", str(self.AMD_LEASE_MIN)], log=logs / "amd-up.log",
+                      what=f"do_amd_steward.sh up {self.AMD_LEASE_MIN}")
+            if not self.do_droplet():
+                raise StepFailed(f"do_amd_steward.sh up left no droplet state ({logs / 'amd-up.log'})")
+            rec = dict(droplet=self.do_droplet(), rented=True, adopted=False, at=now())
+        rec["lease_extended_at"] = self.clock()
+        with self._lock:
+            boxes["amd"] = rec
+            self.save()
+        return f"AMD droplet {rec['droplet']} " + ("rented" if rec["rented"] else "adopted (already up)")
+
+    def step_gate_boxes(self):
+        """GATE-BOXES (ORCHESTRATOR ONLY): the boxes the selected box steps need, up and recorded; held while
+        they are pending (BoxKeeper). Never an Apple machine: only the NVIDIA pod and the AMD droplet."""
+        needs = self.box_needs()
+        if not needs:
+            return "not needed: no selected box step has work to do on a box"
+        for line in self.box_plan(needs):
+            self.say("  " + line)
+        if self.dry:
+            if not self.orchestrator():
+                self.say("  a real run refuses this step without MOJOLEARN_ORCHESTRATOR=1 (only the orchestrator rents)")
+            return "would bring up: " + ", ".join(sorted(needs))
+        if not self.orchestrator():
+            raise StepFailed("gate-boxes rents or holds the " + " and ".join(sorted(needs)) + " box(es) for "
+                             + "; ".join(n for v in sorted(needs) for n in needs[v])
+                             + ": ORCHESTRATOR ONLY, rerun with MOJOLEARN_ORCHESTRATOR=1")
+        done = []
+        if "nvidia" in needs:
+            done.append(self.nvidia_box_up())
+        if "amd" in needs:
+            done.append(self.amd_box_up())
+        self.keep_boxes()
+        return "; ".join(done), dict(boxes={v: dict(b) for v, b in self.held_boxes().items()})
+
+    def have_gate_boxes(self, rec):
+        needs = self.box_needs()
+        if not needs:
+            return "not needed: no selected box step has work to do on a box"
+        held = self.held_boxes()
+        if all(v in held and self.box_alive(v, held[v]) for v in needs):
+            return "have " + ", ".join(f"{v} {held[v].get('pod') or held[v].get('droplet')}" for v in sorted(needs))
+        return None
+
+    # the keeper: a thread of the release process, never a background service; it ends with the run
+    def keep_boxes(self):
+        """Start the BoxKeeper unless it runs, when this release holds a box (a real run only)."""
+        if self.dry or self.readonly or not self.held_boxes():
+            return None
+        with self._lock:
+            keeper = getattr(self, "_keeper", None)
+            if keeper is None or not keeper.alive():
+                keeper = self._keeper = BoxKeeper(self)
+                keeper.start()
+        return keeper
+
+    def stop_keeper(self):
+        keeper = getattr(self, "_keeper", None)
+        if keeper is not None:
+            keeper.stop()
+
+    BOX_TAG_RE = re.compile(r"box_persist: job (\S+) persists to R2|persisted as (\S+)|resuming (\S+) \(launched")
+
+    def box_job_tags(self):
+        """The R2 tags of every box job this freeze launched (the gate and producer logs name them)."""
+        tags = []
+        for log in sorted(self.rel.glob("gates/*.log")) + sorted(self.rel.glob("published/*.log")):
+            try:
+                text = log.read_text(errors="replace")
+            except OSError:
+                continue
+            for m in self.BOX_TAG_RE.finditer(text):
+                tag = next(g for g in m.groups() if g).rstrip(".,;)")
+                if tag not in tags:
+                    tags.append(tag)
+        return tags
+
+    def box_job_home(self, tag):
+        return any((d / "final").is_dir() for d in (self.rel / "gates" / f"fetch-{tag}",
+                                                    self.rel / "published" / f"fetch-{tag}",
+                                                    self.rel / "box-fetch" / tag))
+
+    def step_boxes_down(self):
+        """BOXES-DOWN: every box job's results home first (tools/box_persist.py fetch --tag), then what
+        gate-boxes rented taken down; an adopted box is released, never taken down."""
+        held = self.held_boxes()
+        self.stop_keeper()
+        if not held:
+            return "nothing to take down: this release holds no box"
+        tags = self.box_job_tags()
+        missing = [t for t in tags if not self.box_job_home(t)]
+        failed = []
+        for tag in missing:
+            rc = self.run([PY, self.box_persist(), "fetch", "--tag", tag, "--dest", self.rel / "box-fetch" / tag,
+                           "--extract"], log=self.rel / "boxes" / f"fetch-{tag}.log")
+            if rc != 0 and not self.dry:
+                failed.append(tag)
+        if failed:
+            raise StepFailed("the results of " + ", ".join(failed) + " are not home; nothing is taken down (the pod "
+                             "deletes itself idle, the droplet at its lease); rerun boxes-down")
+        rented = {v: b for v, b in held.items() if b.get("rented")}
+        if self.dry:
+            for v, b in sorted(held.items()):
+                self.say(f"  would {'take down' if v in rented else 'release (adopted, left up)'} {v} "
+                         f"{b.get('pod') or b.get('droplet')}")
+            return f"would pull {len(missing)} job result(s) home and take down {', '.join(sorted(rented)) or 'nothing'}"
+        if rented and not self.orchestrator():
+            raise StepFailed("boxes-down deletes rented boxes: ORCHESTRATOR ONLY, rerun with MOJOLEARN_ORCHESTRATOR=1")
+        done = []
+        for vendor, rec in sorted(held.items()):
+            if vendor in rented:
+                if vendor == "nvidia":
+                    self.must(["bash", self.nvc(), "down", rec["pod"]], env=dict(MOJOLEARN_ORCHESTRATOR="1"),
+                              log=self.rel / "boxes" / "nvidia-down.log", what="nvidia_central.sh down")
+                else:
+                    self.must(["bash", self.do_amd(), "down"], log=self.rel / "boxes" / "amd-down.log",
+                              what="do_amd_steward.sh down")
+            with self._lock:
+                rec["down" if vendor in rented else "released"] = now()
+                self.save()
+            done.append(f"{vendor} {rec.get('pod') or rec.get('droplet')} "
+                        + ("taken down" if vendor in rented else "released (adopted, left up)"))
+        return f"{len(tags)} box job(s) home ({len(missing)} fetched now); " + "; ".join(done)
+
+    def have_boxes_down(self, rec):
+        return None if self.held_boxes() else "have: this release holds no box"
+
     def step_record(self):
         if self.args.publish != "pypi":
             return "skipped (not published to PyPI)"
@@ -4176,7 +4593,11 @@ class Release:
         have = self.have(step, rec)
         if have:
             self.say(f"-- {step}: done {rec['at']}: {have}")
+            if step == "gate-boxes":
+                self.keep_boxes()
             return "done"
+        if step in BOX_CONSUMERS:
+            self.keep_boxes()   # a later run's box steps keep the boxes an earlier run brought up
         self.say(f"-- {step}")
         shown = self.commands_shown
         try:
@@ -4214,6 +4635,7 @@ class Release:
         done (and its resource is free); a failed, held or blocked need blocks
         it, and nothing else. Returns {step: done|failed|held|blocked|skipped}."""
         status = {s: ("pending" if s in selected else "skipped") for s in self.STEPS}
+        self._status = status   # the box keeper reads which box steps are still pending
         busy = set()
         events = queue.Queue()
 
@@ -4289,7 +4711,7 @@ class Release:
                     line = f"{name}: not published ({pub} {status[pub]})"
             lines.append(line)
             self.say("   " + line)
-        for s in ("finish-line", *("gate-" + v for v in GATE_VENDORS), "record"):
+        for s in [s for s in self.STEPS if self.PIPELINE_OF[s] == "finish"]:
             if status[s] in ("done",) and self.recorded(s):
                 self.say(f"   {s}: {self.recorded(s).get('result', '')}")
             elif status[s] not in ("skipped",):
@@ -4319,6 +4741,7 @@ class Release:
             if unknown:
                 raise SystemExit("release: unknown step(s) " + ", ".join(unknown) + "; steps: " + ", ".join(steps))
             steps = [s for s in steps if s in wanted]
+        self.selected = list(steps)
         for redo in (self.args.redo.split(",") if self.args.redo else []):
             if redo not in self.STEPS:
                 raise SystemExit("release: unknown --redo step " + redo)
@@ -4337,7 +4760,10 @@ class Release:
             self.say("== end of plan (the " + " and ".join(self.PIPELINES)
                      + " pipelines run at once in a real run; see --status)")
             return 0
-        status = self.schedule(steps)
+        try:
+            status = self.schedule(steps)
+        finally:
+            self.stop_keeper()
         ok = self.report(status)
         self.say("== done" if ok else "== stopped")
         return 0 if ok else 1

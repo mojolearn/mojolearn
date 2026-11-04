@@ -263,3 +263,187 @@ def test_macos_smoke_runs_the_same_preflight_and_a_dry_run_moves_nothing(tmp_pat
         r.step_macos_smoke()
     assert not any((src / stale.PKG / rel).exists() for rel in STALE)
     assert r.state["stale_artifacts"][-1]["phase"] == "smoke" and w.exists()
+
+
+# ---------------------------------------------------------------- 3. the gate boxes as steps
+class FakeHold:
+    """A held `nvidia_central.sh sh` (its process never runs here)."""
+    def __init__(self, cmd):
+        self.cmd, self.rc = cmd, None
+
+    def poll(self):
+        return self.rc
+
+    def wait(self, timeout=None):
+        self.rc = 0
+        return 0
+
+    def terminate(self):
+        self.rc = -15
+
+
+class Boxes:
+    """Fake box wrappers behind the release's runner: `up` writes the state file the real one writes."""
+    def __init__(self, tmp_path, monkeypatch, fetch_rc=0):
+        self.nvc_state = tmp_path / "devpods"
+        self.do_state = tmp_path / "do-amd-steward"
+        monkeypatch.setenv("MOJOLEARN_DEVPOD_STATE", str(self.nvc_state))
+        monkeypatch.setenv("MOJOLEARN_STEWARD_DO_STATE", str(self.do_state))
+        monkeypatch.setenv("MOJOLEARN_RELEASE_NVC", "fake/nvidia_central.sh")
+        monkeypatch.setenv("MOJOLEARN_RELEASE_DO_AMD", "fake/do_amd_steward.sh")
+        self.calls, self.holds, self.fetch_rc = [], [], fetch_rc
+
+    def nvidia_up(self, key="nvc1"):
+        (self.nvc_state / key).mkdir(parents=True, exist_ok=True)
+        (self.nvc_state / key / "state.env").write_text(f"POD_ID=pod-{key}\n")
+
+    def amd_up(self, droplet="555"):
+        self.do_state.mkdir(parents=True, exist_ok=True)
+        (self.do_state / "state.env").write_text(f"DROPLET_ID={droplet}\nIP=10.0.0.1\n")
+
+    def runner(self, cmd, env, log, detach=False):
+        cmd = [str(c) for c in cmd]
+        self.calls.append((cmd, dict(env or {})))
+        if cmd[:2] == ["bash", "fake/nvidia_central.sh"] and cmd[2] == "up":
+            self.nvidia_up()
+        if cmd[:2] == ["bash", "fake/do_amd_steward.sh"] and cmd[2] == "up":
+            self.amd_up()
+        if cmd[:2] == ["bash", "fake/nvidia_central.sh"] and cmd[2] == "down":
+            (self.nvc_state / cmd[3] / "state.env").unlink()
+        if cmd[:2] == ["bash", "fake/do_amd_steward.sh"] and cmd[2] == "down":
+            (self.do_state / "state.env").unlink()
+        if "fetch" in cmd and "--tag" in cmd:
+            return self.fetch_rc
+        return 0
+
+    def popen(self, cmd, **kw):
+        self.holds.append(FakeHold(cmd))
+        return self.holds[-1]
+
+    def verbs(self):
+        return [" ".join(c[1:3]) for c, _ in self.calls]
+
+
+def box_release(tmp_path, monkeypatch, gates_ok=False, **kw):
+    boxes = Boxes(tmp_path, monkeypatch, fetch_rc=kw.pop("fetch_rc", 0))
+    r = make(tmp_path, runner=boxes.runner, **kw)
+    r.box_popen = boxes.popen
+    monkeypatch.setattr(r, "gate_ok", lambda vendor: (True, "PASS") if gates_ok else (False, "no gate report"))
+    monkeypatch.setattr(r, "source_checkout", lambda create=True: tmp_path / "src")
+    return r, boxes
+
+
+def test_the_step_table_brings_the_boxes_up_before_the_gates_and_down_after_every_box_step():
+    steps = [s for s, _, _, _ in release.STEP_TABLE]
+    assert steps.index("gate-boxes") < steps.index("gate-nvidia") < steps.index("boxes-down")
+    assert all("gate-boxes" in release.NEEDS[s] for s in release.BOX_CONSUMERS)
+    assert set(release.BOX_CONSUMERS) <= set(release.AFTER["boxes-down"])
+    assert release.RESOURCE["gate-boxes"] == release.RESOURCE["boxes-down"] == "boxes"
+
+
+def test_gate_boxes_dry_run_prints_what_it_would_rent_and_for_how_long(tmp_path, monkeypatch):
+    monkeypatch.delenv("MOJOLEARN_ORCHESTRATOR", raising=False)
+    r, boxes = box_release(tmp_path, monkeypatch, dry_run=True)
+    result = r.step_gate_boxes()
+    text = "\n".join(r.lines)
+    assert result == "would bring up: amd, nvidia" and boxes.calls == [] and boxes.holds == []
+    assert "fake/nvidia_central.sh up 1" in text and "60 idle minutes" in text
+    assert f"fake/do_amd_steward.sh up {r.AMD_LEASE_MIN}" in text and f"{r.AMD_LEASE_MIN}-minute lease" in text
+    assert f"renewed by {r.AMD_RENEW_MIN} minutes every 85 minutes" in text
+    assert "refuses this step without MOJOLEARN_ORCHESTRATOR=1" in text
+    assert "mac" not in text.lower().replace("machine", "")   # never an Apple machine
+
+
+def test_gate_boxes_is_orchestrator_only_and_rents_nothing_otherwise(tmp_path, monkeypatch):
+    monkeypatch.delenv("MOJOLEARN_ORCHESTRATOR", raising=False)
+    r, boxes = box_release(tmp_path, monkeypatch)
+    with pytest.raises(release.StepFailed, match="ORCHESTRATOR ONLY"):
+        r.step_gate_boxes()
+    assert boxes.calls == []
+
+
+def test_gate_boxes_is_not_needed_when_every_box_step_is_done(tmp_path, monkeypatch):
+    r, boxes = box_release(tmp_path, monkeypatch, gates_ok=True)
+    assert r.step_gate_boxes().startswith("not needed") and boxes.calls == []
+
+
+def test_gate_boxes_rents_records_and_holds_then_boxes_down_pulls_results_and_takes_down(tmp_path, monkeypatch):
+    monkeypatch.setenv("MOJOLEARN_ORCHESTRATOR", "1")
+    r, boxes = box_release(tmp_path, monkeypatch)
+    r.selected = ["gate-boxes", "gate-nvidia", "gate-amd", "boxes-down"]
+    r._status = {"gate-nvidia": "pending", "gate-amd": "pending"}
+    monkeypatch.setattr(r, "keep_boxes", lambda: None)       # the keeper is driven by hand below
+    result, data = r.step_gate_boxes()
+    assert boxes.verbs() == ["fake/nvidia_central.sh up", "fake/nvidia_central.sh sync",
+                             "fake/do_amd_steward.sh up"]
+    assert boxes.calls[0][1].get("MOJOLEARN_ORCHESTRATOR") == "1"
+    held = r.state["boxes"]
+    assert held["nvidia"]["pod"] == "nvc1" and held["nvidia"]["rented"] is True
+    assert held["amd"]["droplet"] == "555" and held["amd"]["rented"] is True
+    assert "NVIDIA nvc1 rented" in result and "AMD droplet 555 rented" in result
+    record(r, "gate-boxes")
+    assert r.have("gate-boxes", r.recorded("gate-boxes")).startswith("have ")
+
+    keeper = release.BoxKeeper(r)
+    clock = [r.clock()]
+    r.clock = lambda: clock[0]
+    assert keeper.tick() == {"nvidia", "amd"}
+    assert len(boxes.holds) == 1 and boxes.holds[0].cmd[2:4] == ["sh", "release-gate"]
+    assert "RELEASE-HOLD-END" in boxes.holds[0].cmd[4]
+    keeper.tick()
+    assert len(boxes.holds) == 1                              # one hold while it runs
+    boxes.holds[0].rc = 0
+    keeper.tick()
+    assert len(boxes.holds) == 2                              # an ended hold is started again while needed
+    assert "fake/do_amd_steward.sh extend" not in boxes.verbs()
+    clock[0] += r.AMD_RENEW_EVERY_S + 1
+    keeper.tick()
+    assert boxes.verbs().count("fake/do_amd_steward.sh extend") == 1
+    r._status = {"gate-nvidia": "done", "gate-amd": "done"}
+    assert keeper.tick() == set()                             # nothing pending: the hold is released
+    assert any(c[2] == "sh" and "touch /root/release-hold/" in c[4] for c, _ in boxes.calls)
+    assert keeper.hold is None
+
+    # boxes-down: the job results that are not home are fetched first, then both rented boxes go down
+    (r.rel / "gates").mkdir(parents=True)
+    (r.rel / "gates" / "gate-nvidia.log").write_text("queued nvc1-0007, persisted as nvc-release-gate-1-ab\n")
+    (r.rel / "gates" / "gate-amd.log").write_text("box_persist: job rel-gate-amd-2-cd persists to R2 ...\n")
+    (r.rel / "gates" / "fetch-nvc-release-gate-1-ab" / "final").mkdir(parents=True)
+    out = r.step_boxes_down()
+    fetches = [c for c, _ in boxes.calls if "fetch" in c]
+    assert [c[c.index("--tag") + 1] for c in fetches] == ["rel-gate-amd-2-cd"]
+    assert "fake/nvidia_central.sh down" in boxes.verbs() and "fake/do_amd_steward.sh down" in boxes.verbs()
+    assert r.held_boxes() == {} and "taken down" in out
+    record(r, "boxes-down")
+    assert r.have("boxes-down", r.recorded("boxes-down"))
+
+
+def test_adopted_boxes_are_used_renewed_and_released_never_taken_down(tmp_path, monkeypatch):
+    monkeypatch.setenv("MOJOLEARN_ORCHESTRATOR", "1")
+    r, boxes = box_release(tmp_path, monkeypatch)
+    boxes.nvidia_up("nvc2")
+    boxes.amd_up("777")
+    monkeypatch.setattr(r, "keep_boxes", lambda: None)
+    r.step_gate_boxes()
+    assert "fake/do_amd_steward.sh up" not in boxes.verbs()
+    assert "fake/do_amd_steward.sh extend" in boxes.verbs()  # an adopted droplet's lease covers the gates
+    held = r.state["boxes"]
+    assert held["nvidia"] == dict(held["nvidia"], pod="nvc2", rented=False)
+    assert held["amd"]["droplet"] == "777" and held["amd"]["rented"] is False
+    r.step_boxes_down()
+    assert not any(v.endswith(" down") for v in boxes.verbs())
+    assert (boxes.nvc_state / "nvc2" / "state.env").is_file() and (boxes.do_state / "state.env").is_file()
+    assert r.held_boxes() == {}
+
+
+def test_boxes_down_never_takes_down_a_box_whose_job_results_are_not_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("MOJOLEARN_ORCHESTRATOR", "1")
+    r, boxes = box_release(tmp_path, monkeypatch, fetch_rc=1)
+    monkeypatch.setattr(r, "keep_boxes", lambda: None)
+    r.step_gate_boxes()
+    (r.rel / "gates").mkdir(parents=True)
+    (r.rel / "gates" / "gate-nvidia.log").write_text("persisted as nvc-release-gate-9-ff\n")
+    with pytest.raises(release.StepFailed, match="not home; nothing is taken down"):
+        r.step_boxes_down()
+    assert not any(v.endswith(" down") for v in boxes.verbs())
+    assert set(r.held_boxes()) == {"nvidia", "amd"}
