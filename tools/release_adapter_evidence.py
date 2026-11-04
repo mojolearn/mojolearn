@@ -2,8 +2,10 @@
 
 Used by tools/release_ledger_admission.py; never installs or runs anything. The
 actual producer is tools/adapter_wheel_smoke.py, launched by the release gate
-(tools/gate_smoke_box.py on NVIDIA/AMD, release.py gate-apple on the Mac). Each
-declared coverage ID needs its own complete checker record:
+(tools/gate_smoke_box.py on NVIDIA/AMD, release.py gate-apple on the Mac). The
+coverage IDs a requirement owes come from tools/release_requirements.json (the
+adapters-* rows); each needs its own complete checker record. The IDs this
+module can count:
 
   torch-inference    torch-compile phase:  torch-compile/adapter-results.json
   torch-training     torch-training phase: torch-training/training-results.json
@@ -21,7 +23,23 @@ import zipfile
 from release_ledger_admission import require, load, reference, checked
 
 TOOL = "tools/release_adapter_evidence.py"
-COVERAGE = ("torch-inference", "torch-training", "max-train", "max-train-resume")
+CATALOG = Path(__file__).resolve().with_name("release_requirements.json")
+
+
+def catalog_coverage(catalog=CATALOG):
+    """The adapters-<vendor> coverage IDs, read from the requirement catalog (the one source of truth).
+
+    A copy here drifted at 0.8.65 (four IDs against the catalog's three), so supports_requirement was
+    always False and every adapters-* row was refused. Every vendor row must declare the same list.
+    """
+    import json
+    rows = json.loads(Path(catalog).read_text())["requirements"]
+    lists = {tuple(row["coverage"]) for row in rows if str(row.get("id", "")).startswith("adapters-")}
+    require(len(lists) == 1, "adapters-* requirements declare different coverage lists")
+    return lists.pop()
+
+
+COVERAGE = catalog_coverage()
 RESULTS = {"torch-compile": "torch-compile/adapter-results.json",
            "torch-training": "torch-training/training-results.json",
            "max-training": "max-training/max-training-results.json"}
