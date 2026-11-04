@@ -167,6 +167,36 @@ Closure = distinct Mojo source files the group's members import (closure-v2 walk
 
 81 per-binding scripts under `bindings/` (`build_defines.sh`, `build_host_family.sh` and `merged_build.sh` are not one binding's compile). Closure sizes: min 15, median 90, max 657 files. Unresolved imports: none. The only script whose compile line `script_plan` cannot read is `bindings/merged_build.sh` (the generated root `$root`), which is why every merged key fell back to the whole tree under v1.
 
+| script | closure files | script | closure files | script | closure files |
+|---|---:|---|---:|---|---:|
+| `build.sh` | 166 | `build_linalg_host.sh` | 101 | `build_training_host.sh` | 96 |
+| `build_arima.sh` | 72 | `build_mamba.sh` | 195 | `build_transformer.sh` | 213 |
+| `build_arima_host.sh` | 23 | `build_mamba_host.sh` | 88 | `build_transformer_host.sh` | 63 |
+| `build_byte_lm.sh` | 241 | `build_metrics.sh` | 298 | `build_trees.sh` | 81 |
+| `build_byte_lm_host.sh` | 90 | `build_metrics_host.sh` | 107 | `build_trees_host.sh` | 112 |
+| `build_core_host.sh` | 75 | `build_mixture.sh` | 104 | `build_tsa.sh` | 56 |
+| `build_embedding.sh` | 139 | `build_mixture_host.sh` | 48 | `build_tsa_host.sh` | 58 |
+| `build_embedding_host.sh` | 16 | `build_mixture_infer_host.sh` | 48 | `build_x_ann.sh` | 141 |
+| `build_embedding_infer_host.sh` | 15 | `build_neural_host.sh` | 82 | `build_x_ann_host.sh` | 64 |
+| `build_estimators.sh` | 265 | `build_preprocessing.sh` | 26 | `build_x_cluster.sh` | 145 |
+| `build_estimators_host.sh` | 192 | `build_preprocessing_host.sh` | 16 | `build_x_cluster_host.sh` | 75 |
+| `build_forecast_host.sh` | 54 | `build_resample.sh` | 38 | `build_x_cnn.sh` | 141 |
+| `build_forest_host.sh` | 45 | `build_resample_host.sh` | 28 | `build_x_cnn_host.sh` | 35 |
+| `build_gbdt.sh` | 230 | `build_rf.sh` | 116 | `build_x_decomp.sh` | 218 |
+| `build_gbdt_host.sh` | 84 | `build_rf_host.sh` | 71 | `build_x_decomp_host.sh` | 133 |
+| `build_gp.sh` | 106 | `build_runtime_classical_host.sh` | 443 | `build_x_linear.sh` | 78 |
+| `build_gp_host.sh` | 51 | `build_runtime_manifold_host.sh` | 141 | `build_x_linear_host.sh` | 69 |
+| `build_gp_infer_host.sh` | 37 | `build_runtime_model_selection_host.sh` | 148 | `build_x_metrics.sh` | 39 |
+| `build_hdbscan.sh` | 150 | `build_runtime_sequential_host.sh` | 208 | `build_x_metrics_host.sh` | 40 |
+| `build_hdbscan_host.sh` | 96 | `build_scoped_gemm_probe.sh` | 116 | `build_x_neighbors.sh` | 82 |
+| `build_hdbscan_infer_host.sh` | 96 | `build_solver.sh` | 128 | `build_x_neighbors_host.sh` | 65 |
+| `build_ivf.sh` | 114 | `build_solver_host.sh` | 86 | `build_x_prep.sh` | 91 |
+| `build_ivf_host.sh` | 40 | `build_svm.sh` | 124 | `build_x_prep_host.sh` | 65 |
+| `build_ivf_search_host.sh` | 40 | `build_svm_host.sh` | 131 | `build_x_sequence.sh` | 308 |
+| `build_kernel_methods.sh` | 144 | `build_tokenizer_fast.sh` | 27 | `build_x_sequence_host.sh` | 284 |
+| `build_kernel_methods_host.sh` | 84 | `build_tokenizer_host.sh` | 657 | `build_x_trees.sh` | 50 |
+| `build_linalg.sh` | 143 | `build_training.sh` | 275 | `build_x_trees_host.sh` | 49 |
+
 ### Files every darwin group reads (13 groups): 11
 
 `checks/__init__.mojo`, `checks/identity_trace_read.mojo`, `checks/kernel_matrix.mojo`, `checks/numerics.mojo`, `core/__init__.mojo`, `core/hostptr.mojo`, `core/identity_trace.mojo`, `core/package_profile.mojo`, `core/six_lane_experiment_guards.mojo`, `core/step_phase.mojo`, `experiments/__init__.mojo`

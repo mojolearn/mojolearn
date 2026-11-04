@@ -356,6 +356,21 @@ def render_tables(report):
       % (len(sc), sizes[0], sizes[len(sizes) // 2], sizes[-1],
          "none" if not bad else ", ".join("%s (%s)" % (k, v["unresolved"] or v["note"]) for k, v in bad.items())))
     w("")
+    w("| script | closure files | script | closure files | script | closure files |")
+    w("|---|---:|---|---:|---|---:|")
+    names = sorted(sc)
+    third = (len(names) + 2) // 3
+    for i in range(third):
+        cells = []
+        for col in range(3):
+            j = i + col * third
+            if j < len(names):
+                v = sc[names[j]]
+                cells += ["`%s`" % names[j], str(v["files"]) if v["files"] else (v["unresolved"] or v["note"])]
+            else:
+                cells += ["", ""]
+        w("| " + " | ".join(cells) + " |")
+    w("")
     for plat, pr in report["platforms"].items():
         w("### Files every %s group reads (%d groups): %d\n" % (plat, pr["n_groups"], len(pr["shared_by_all"])))
         w(", ".join("`%s`" % f for f in pr["shared_by_all"]) or "none")
