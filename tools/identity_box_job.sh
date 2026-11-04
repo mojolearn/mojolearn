@@ -6,6 +6,10 @@
 # Results go under $MOJOLEARN_RESULTS_DIR (box_persist_run sets it; persists to
 # R2 from the box), in a new merged-<vendor> directory that
 # tools/box_merged_verify.sh requires.
+# The build is incremental (tools/box_merged_verify.sh "SMALL COMPILES"): only
+# groups whose closure-v2 cache key is new on this box compile. BOX_PLAN=1
+# prints the per-group plan (hit / compile: <reason>) and builds nothing.
+# tools/identity_box_job_cpu_ptx.sh compiles nothing (it reuses this tree).
 set -u
 V=${1:?nvidia|amd}
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
@@ -22,7 +26,7 @@ git rev-parse HEAD > "$RES/commit.txt"
 mirror() { rsync -a --delete "$BOX_OUT_DIR/" "$RES/merged-$V/" 2>/dev/null || cp -r "$BOX_OUT_DIR/." "$RES/merged-$V/"; }
 ( while true; do sleep 120; mkdir -p "$RES/merged-$V"; mirror; done ) &
 MIRROR=$!
-bash tools/box_merged_verify.sh "$V" "$(git rev-parse HEAD)"
+bash tools/box_merged_verify.sh $([ "${BOX_PLAN:-0}" = 1 ] && echo --plan) "$V" "$(git rev-parse HEAD)"
 rc=$?
 kill "$MIRROR" 2>/dev/null
 mkdir -p "$RES/merged-$V"; mirror

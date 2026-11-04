@@ -12,6 +12,20 @@
 # host 2. BOX_GPU_COMPILE_JOBS / BOX_HOST_COMPILE_JOBS override individual sets.
 # Old installed sets are preserved under previous/ before new sets activate.
 #
+# SMALL COMPILES (2026-11-04). Each set builds ONE GROUP AT A TIME through
+# tools/bincache.py (key rule closure-v2: the group's own import closure, the
+# variables its inputs read, the toolchain, the box OS): a group whose key is
+# in the box's hot directory (BOX_BINCACHE_HOT_DIR, default
+# /root/.mojolearn_bincache/hot, kept across jobs on the box) or in a staged R2
+# URL map (BOX_BINCACHE_MAP, default /root/.mojolearn_bincache/urls.tsv; the
+# Mac stages it with tools/bincache_leg.sh) is placed, not compiled, so a box
+# job after a change compiles only the groups whose closure the change
+# reaches. Every group is staged under build/box-verify/<set>/ (gitignored),
+# then moved into the run's artifacts/ with an index written from the plan;
+# verification, VERIFIED-before-record and activation are unchanged.
+# BOX_BINCACHE=0 compiles every group. `--plan` prints, per group, `hit (...)`
+# or `compile: <reason>` (tools/bincache.py explain) and builds nothing.
+#
 # Then the owed GPU evidence (2026-10-21, docs/plans/BOX_JOBS_20261021.md), each
 # a function guarded by what the box has, each step `st`-logged, none aborting
 # the chain. BOX_JOBS (empty by default) explicitly picks them:
@@ -23,7 +37,9 @@
 # for dist, gbm-bench/higgs/higgs_speed.npz for stage64.
 set -uo pipefail
 CONTROLLER=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
-[ $# = 2 ] || { echo "usage: box_merged_verify.sh nvidia|amd <sha>" >&2; exit 2; }
+PLAN=0
+[ "${1:-}" != --plan ] || { PLAN=1; shift; }
+[ $# = 2 ] || { echo "usage: box_merged_verify.sh [--plan] nvidia|amd <sha>" >&2; exit 2; }
 V=$1; SHA=$2
 case $V in nvidia|amd) ;; *) echo "unknown vendor: $V" >&2; exit 2;; esac
 [[ $SHA =~ ^[0-9a-fA-F]{7,40}$ ]] || { echo "expected a commit SHA" >&2; exit 2; }
@@ -34,6 +50,7 @@ case $O in /*) ;; *) echo "BOX_OUT_DIR must be absolute" >&2; exit 2;; esac
 mkdir "$O" || { echo "BOX_OUT_DIR must be a new directory: $O" >&2; exit 2; }
 O=$(cd "$O" && pwd -P)
 echo "box_merged_verify: outputs $O"
+exec 3>&1
 exec >> "$O/job.log" 2>&1
 st() { echo "$(date -u +%H:%M:%SZ) $*" | tee -a "$O/status.txt"; }
 finish() { local rc=$?; printf '%s\n' "$rc" > "$O/exit-code"; st "DONE rc=$rc"; }
@@ -118,6 +135,45 @@ done
 st "label $LABEL gpus=$NGPU; concurrent sets=1; compiler workers gpu=$GPU_COMPILE_JOBS host=$HOST_COMPILE_JOBS"
 printf 'commit\t%s\nvendor\t%s\narch\t%s\nbuilds\t%s\njobs\t1\ngpu_compile_jobs\t%s\nhost_compile_jobs\t%s\n' \
   "$SHA" "$V" "$ARCH" "$BOX_BUILDS" "$GPU_COMPILE_JOBS" "$HOST_COMPILE_JOBS" > "$O/run.tsv"
+case ${BOX_BINCACHE:-1} in 0|1) ;; *) die "BOX_BINCACHE must be 0 or 1";; esac
+STAGE=build/box-verify
+HOT=${BOX_BINCACHE_HOT_DIR:-/root/.mojolearn_bincache/hot}
+MAP=${BOX_BINCACHE_MAP:-/root/.mojolearn_bincache/urls.tsv}
+# The cache partition: this box class; the OS, toolchain and target are key fields.
+IMAGE=box-verify:$V
+# group_env <set>: the variables one group of the set compiles under, exactly
+# the per-set environment the whole-set build used.
+group_env() {
+  local common=(MOJOLEARN_PACKAGE_BYTE_LM=1 MOJOLEARN_COMMIT="$SHA" MOJOLEARN_BINCACHE="${BOX_BINCACHE:-1}"
+    MOJOLEARN_BINCACHE_SHELL=sh MOJOLEARN_BINCACHE_OUT="$O/bincache" MOJOLEARN_BINCACHE_HOT_DIR="$HOT"
+    MOJOLEARN_BINCACHE_MAP="$MAP" MOJOLEARN_BINCACHE_IMAGE="$IMAGE")
+  case $1 in
+    identical) GENV=(MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_TARGET_COLUMN="$V"
+      MOJOLEARN_COMPILE_JOBS="$GPU_COMPILE_JOBS" "${common[@]}");;
+    host) GENV=(MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_GPU_ARCHS= MOJOLEARN_COMPILE_JOBS="$HOST_COMPILE_JOBS"
+      "${common[@]}");;
+  esac
+}
+# group_args <kind> <stem> <set>: merged_build.sh's arguments for one group. The
+# root path is fixed (packaging/linux/build_sets.sh: the compiler embeds it).
+group_args() { GARGS=("$1" --group "$2" --outdir "$STAGE/$3" --rootdir "/tmp/mojolearn-merged-roots/$3"); }
+if [ "$PLAN" = 1 ]; then
+  PPY=${BOX_PLAN_PYTHON:-python3}
+  : > "$O/plan.txt"
+  for b in $BOX_BUILDS; do
+    case $b in gpu-identical) d=identical k=gpu;; host) d=host k=host;; esac
+    group_env "$d"
+    while read -r stem _cls _members; do
+      [ -n "$stem" ] || continue
+      group_args "$k" "$stem" "$d"
+      line=$(env "${GENV[@]}" MOJOLEARN_BINCACHE_OUTPUTS="$STAGE/$d/$stem.so" \
+        "$PPY" tools/bincache.py explain bindings/merged_build.sh "${GARGS[@]}" 2>&1 | tail -n 1)
+      printf '%s/%s: %s\n' "$d" "$stem" "$line" | tee -a "$O/plan.txt" >&3
+    done < <("$PPY" tools/merged_bindings.py plan --dir "$d" --platform linux --byte-lm 1)
+  done
+  st "PLAN $(grep -c ': hit ' "$O/plan.txt") hit(s), $(grep -c ': compile' "$O/plan.txt") compile(s); see plan.txt"
+  exit 0
+fi
 pixi install --locked > "$O/pixi.log" 2>&1; rc=$?; st "pixi rc=$rc"
 [ "$rc" = 0 ] || die "pixi install failed; no build or verification"
 PY=$(pixi run -q python -c 'import sys; print(sys.executable)') || die "cannot locate Python"
@@ -139,23 +195,39 @@ TIMEV=()
 /usr/bin/time --version >/dev/null 2>&1 && TIMEV=(/usr/bin/time -v)
 printf 'build\texit_code\n' > "$O/build-status.tsv"
 mb() {
-  local tag=$1 dir=$2; shift 2
-  printf '%q ' env "$@" MOJOLEARN_PACKAGE_BYTE_LM=1 pixi run -q sh bindings/merged_build.sh "${tag%%-*}" \
-    --outdir "$O/artifacts/$dir" > "$O/build-$tag.command"
-  printf '\n' >> "$O/build-$tag.command"
-  "${TIMEV[@]}" env "$@" MOJOLEARN_PACKAGE_BYTE_LM=1 pixi run -q sh bindings/merged_build.sh "${tag%%-*}" \
-    --outdir "$O/artifacts/$dir" > "$O/build-$tag.log" 2> "$O/build-$tag.time"
-  local rc=$?
+  local tag=$1 dir=$2 kind=${1%%-*} rc=0 stem cls members n=0
+  rm -rf "$STAGE/$dir" "$O/artifacts/$dir"
+  mkdir -p "$STAGE/$dir" "$O/artifacts/$dir" || return 2
+  : > "$O/build-$tag.command"; : > "$O/build-$tag.log"; : > "$O/build-$tag.time"
+  group_env "$dir"
+  local plan
+  plan=$("$PY" tools/merged_bindings.py plan --dir "$dir" --platform linux --byte-lm 1) && [ -n "$plan" ] || rc=2
+  while [ "$rc" = 0 ] && read -r stem cls members; do
+    group_args "$kind" "$stem" "$dir"
+    local cmd=(env "${GENV[@]}" MOJOLEARN_BINCACHE_OUTPUTS="$STAGE/$dir/$stem.so" pixi run -q python3 tools/bincache.py
+      build bindings/merged_build.sh "${GARGS[@]}")
+    printf '%q ' "${cmd[@]}" >> "$O/build-$tag.command"; printf '\n' >> "$O/build-$tag.command"
+    "${TIMEV[@]}" "${cmd[@]}" >> "$O/build-$tag.log" 2>> "$O/build-$tag.time" || rc=$?
+    n=$((n + 1))
+  done <<< "$plan"
+  if [ "$rc" = 0 ]; then
+    # Place the staged files and write the set's index from the plan (a cache
+    # hit places the binary only; merged_build.sh indexes what it compiled).
+    while read -r stem cls members; do
+      if [ -f "$STAGE/$dir/$stem.so" ]; then mv "$STAGE/$dir/$stem.so" "$O/artifacts/$dir/$stem.so" || rc=2; fi
+      "$PY" tools/merged_bindings.py index --outdir "$O/artifacts/$dir" --stem "$stem" --members "$members" \
+        < /dev/null >> "$O/build-$tag.log" 2>&1 || rc=2
+    done <<< "$plan"
+  fi
+  rm -rf "$STAGE/$dir"
   printf '%s\t%s\n' "$tag" "$rc" >> "$O/build-status.tsv"
-  st "BUILD $tag rc=$rc peak_rss_gb=$(awk '/Maximum resident/ {printf "%.1f", $6/1048576}' "$O/build-$tag.time")"
+  st "BUILD $tag rc=$rc groups=$n hits=$(grep -c '^BINCACHE [a-z-]*hit ' "$O/build-$tag.log") compiled=$(grep -c '^BINCACHE .*+built' "$O/build-$tag.log") peak_rss_gb=$(awk '/Maximum resident/ {if ($6>m) m=$6} END {printf "%.1f", m/1048576}' "$O/build-$tag.time")"
   return "$rc"
 }
 failed=0
 for b in $BOX_BUILDS; do case $b in
-  gpu-identical) mb "$b" identical MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_TARGET_COLUMN="$V" \
-    MOJOLEARN_COMPILE_JOBS="$GPU_COMPILE_JOBS" || failed=1;;
-  host) mb "$b" host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_GPU_ARCHS= \
-    MOJOLEARN_COMPILE_JOBS="$HOST_COMPILE_JOBS" || failed=1;;
+  gpu-identical) mb "$b" identical || failed=1;;
+  host) mb "$b" host || failed=1;;
 esac; done
 [ "$failed" = 0 ] || die "required build failed; previous artifacts untouched; no verification"
 for d in identical host; do
