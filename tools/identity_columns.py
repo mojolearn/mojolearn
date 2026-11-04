@@ -400,24 +400,66 @@ def is_ancestor(a, b):
     return _git("merge-base", "--is-ancestor", a, b).returncode == 0
 
 
-def release_floor():
-    """The commit both GPU vendors' newest release rests on: the earlier of the
-    newest alpha-api-*-nvidia-* and -amd-* tags that are ancestors of HEAD (their
-    merge base if neither contains the other). None when either is missing, so
-    every row keeps its own record commit."""
-    tags = {}
-    for vendor in ("nvidia", "amd"):
-        out = _git("for-each-ref", "--sort=-creatordate", "--format=%(refname:short)",
-                   f"refs/tags/alpha-api-*-{vendor}-*").stdout.split()
-        tags[vendor] = next((t for t in out if is_ancestor(t, "HEAD")), None)
-    if not all(tags.values()):
+def release_floor_info():
+    """The release floor at HEAD, by the ledger's own rule (release_identity_reference.release_floor):
+    the earlier of the newest alpha-api-*-nvidia-* and -amd-* tags that are STRICT ancestors of HEAD
+    (their merge base if neither contains the other), as dict(commit, tags). None when either is
+    missing. A tag at HEAD itself never vouches for HEAD. The floor is only a candidate: a row moves
+    to it only with an admitted receipt at the floor (floor_receipts_for)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import release_identity_reference as rir
+    head = _git("rev-parse", "HEAD").stdout.strip()
+    if not head:
         return None
-    nv, amd = (_git("rev-parse", tags[v] + "^{commit}").stdout.strip() for v in ("nvidia", "amd"))
-    if is_ancestor(nv, amd):
-        return nv
-    if is_ancestor(amd, nv):
-        return amd
-    return _git("merge-base", nv, amd).stdout.strip() or None
+    return rir.release_floor(ROOT, head)
+
+
+def release_floor():
+    """The floor commit (release_floor_info), or None."""
+    return (release_floor_info() or {}).get("commit")
+
+
+def floor_receipts_for(table, floor_info, lanes, cls, points, log_dir=None):
+    """{lane: dict(ok, reason)}: may ``lane``'s REUSED decision be measured from the release floor?
+
+    THE LEDGER'S RULE (release_identity_reference.floor_receipts, lane ledger-floor-receipts): only
+    when the floor holds an admitted identity receipt for the lane and column, i.e. the table
+    committed at the floor carries the lane's rows with the digests this table rests on, their records'
+    closures are unchanged up to the floor (the floor's own selector), and no waiver of that release
+    names the row. A published release is not verification (0.8.64 and 0.8.65 shipped under owner
+    waivers). With ``cls`` (the record_identity_column.sh default) the receipt is that class's; without
+    it every class the lane's table rows carry needs one, as this mode measures from the oldest of them.
+    A lane whose newest evidence is a column record rather than the admitted table has no floor."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import release_identity_reference as rir
+    out, wanted, classes = {}, {}, {}
+    for lane in lanes:
+        source = (points.get(lane) or {}).get("source", "table")
+        if source != "table":
+            out[lane] = dict(ok=False, reason=f"its newest evidence is a column record ({source}), not the admitted table")
+            continue
+        if cls:
+            want = [cls]
+        else:
+            want = sorted({c for key, cell in (table.get("cells") or {}).items() if key.partition("/")[0] == lane
+                           for ent in cell.values() if isinstance(ent, dict) for c in (ent.get("cols") or {})})
+        if not want:
+            out[lane] = dict(ok=False, reason="no admitted row of any class")
+            continue
+        classes[lane] = want
+        for c in want:
+            wanted[(lane, c)] = rir.lane_digests(table, lane, c)
+    if wanted:
+        head = _git("rev-parse", "HEAD").stdout.strip()
+        try:
+            got = rir.floor_receipts(ROOT, head, floor_info, wanted, log_dir=log_dir)
+        except Exception as exc:  # a receipt that cannot be checked is no receipt
+            got = {key: dict(ok=False, reason=f"the receipt check failed: {str(exc)[:200]}") for key in wanted}
+        for lane, want in classes.items():
+            bad = [got.get((lane, c)) or dict(ok=False, reason=f"no receipt answer for {c}") for c in want]
+            bad = [r for r in bad if not r.get("ok")]
+            out[lane] = bad[0] if bad else dict(ok=True, reason=got[(lane, want[0])]["reason"])
+    return out
 
 
 #: Device class of a column label, as record_identity_column.sh names them.
@@ -735,17 +777,33 @@ def cmd_changed_lanes(args):
     # older than the last release rests on that release, not on the record:
     # only changes after the release can have moved it. Without the floor a
     # row recorded weeks ago re-selected every lane on each release.
-    floor = None if args.since or args.no_release_floor else release_floor()
+    #
+    # FLOOR RECEIPTS (lane ledger-floor-receipts, 2026-11-04): a release tag
+    # is not verification (0.8.64 and 0.8.65 shipped under owner waivers). A
+    # row moves to the floor only when the floor holds an admitted receipt for
+    # it (floor_receipts_for, the ledger's own rule); otherwise it is measured
+    # from its own record commit, so the recorder and the ledger agree.
+    floor_info = None if args.since or args.no_release_floor else release_floor_info()
+    floor = (floor_info or {}).get("commit")
     if floor:
         # One `git merge-base --is-ancestor` per distinct record commit, not
         # per lane: hundreds of lanes rest on a handful of commits.
         ancestor = {c: is_ancestor(c, floor) for c in sorted({c for c, _t in since.values()})}
-        for lane, (c, _t) in list(since.items()):
-            # An uncommitted reuse source was never part of a release's table.
-            if ancestor[c] and lane not in uncommitted:
+        # An uncommitted reuse source was never part of a release's table.
+        older = [lane for lane, (c, _t) in since.items() if ancestor[c] and c != floor and lane not in uncommitted]
+        summary = getattr(args, "summary_json", "") or ""
+        receipts = floor_receipts_for(table, floor_info, older, cls, points,
+                                      log_dir=(Path(summary).parent / "floor-receipts") if summary else None) \
+            if older else {}
+        refused = [lane for lane in older if not (receipts.get(lane) or {}).get("ok")]
+        for lane in older:
+            if lane not in refused:
                 since[lane] = (floor, 0)
-        print(f"# release floor {floor[:12]} ({args.floor_desc or 'last NVIDIA/AMD release tags'}): rows recorded "
-              "before it are measured from it", file=sys.stderr)
+        print(f"# release floor {floor[:12]} ({args.floor_desc or 'last NVIDIA/AMD release tags'}): "
+              f"{len(older) - len(refused)} of {len(older)} row(s) recorded before it are measured from it "
+              f"(admitted receipt at the floor); {len(refused)} from their own record commit", file=sys.stderr)
+        for lane in refused[:10]:
+            print(f"#   no floor for {lane}: {(receipts.get(lane) or {}).get('reason', 'no receipt')}", file=sys.stderr)
     # --class: reuse_points already refused table rows at an old fixture revision.
     stale = set() if cls else set(vref().stale_reference_lanes(table, h))
     sources, _ = lane_select.lane_sources()
