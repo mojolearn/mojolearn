@@ -21,7 +21,33 @@ Per group, before anything compiles:
 
 ## Summary
 
-<!-- summary: hand-written from the generated tables below -->
+- **Closure sizes (6519a54c65).** v1 keyed every merged group on the whole tree: 3,938 tracked
+  `.mojo` files (3,943 / 3,949 in the 0.8.64 / 0.8.65 macOS keys). Under closure-v2 a group reads
+  92 to 564 files on macOS (identical set), 421 to 739 (host set) and 486 to 660 on Linux
+  (identical set). Per-binding scripts: 81, none unresolved; the fallback fired only for
+  `bindings/merged_build.sh`, whose compile line names a generated root.
+- **Shared by every group:** 11 files on macOS (13 groups; `core/six_lane_experiment_guards.mojo`,
+  `checks/*`, `core/identity_trace.mojo`, ...) and 40 on Linux (9 groups; also `core/device_plan.mojo`,
+  `gemm/checks/gemm_identical.mojo`, `experiments/apple_fast/gemm/scoped_dispatch.mojo` and the
+  Apple-fast GEMM files `gemm/afn_apple_fast*.mojo`).
+- **0.8.64 -> 0.8.65.** All 13 macOS v1 keys differed in `MOJOLEARN_SLOT_TOKEN`, `repo_path` and
+  the whole-tree `source`; the two 0.8.65 runs of one commit differed in the slot token alone. The
+  exact closures show that every one of the 13 groups also really changed (the multi-GPU
+  encapsulation's `core/device_plan.mojo` reaches 12 of 13), so that particular pair recompiles
+  everything under any correct key. A tooling-only range (`0814836ffb..6519a54c65`, 13 commits)
+  is 22 of 22 hits under closure-v2.
+- **The costliest file:** `core/six_lane_experiment_guards.mojo`, in all 9 Linux groups and changed
+  in 203 commits since 2026-10-04: 1,827 group rebuilds per Linux leg, about as many as the next 14
+  files together (2,068). No regrouping can help it; giving each family its own guards module (and taking
+  `gemm/checks/` and `experiments/` files out of production closures) is the largest available
+  saving after the key fix.
+- **Regrouping by closure overlap** (proposal, same full-build size): mean closure files recompiled
+  per changed file falls 24% (Linux identical, 4 -> 8 groups), 25% (macOS identical, 8 -> 13) and
+  35% (host, 5 -> 19). Not implemented: group names are hard-coded outside the manifest (list below).
+- **Compiler-limited groups:** the host groups `_mojolearn_native_host` (702 files) and
+  `_mojolearn_native_tokenizer_host` (739) take 1,164 to 2,107 s and 13 to 14 GiB on the 0.8.65
+  GitHub shards, against 107 to 200 s for the 440-file forest group; recorded as an ask in
+  docs/MODULAR_ASKS.md.
 
 ## Why the releases compiled everything
 
@@ -285,7 +311,49 @@ Proposed linux/identical groups:
 
 ## Target workflow: three common changes, before and after
 
-<!-- workflow: hand-written from the generated tables -->
+Counts are merged groups compiled (closure files in parentheses where it matters). "Before" is what
+the 0.8.65 tools did; "after" is this lane's tools with the current 13/9 groups; "regrouped" is the
+proposal above. A box or leg compiles "after" numbers when the unchanged groups' archives exist
+for its partition: on the verifier box from its previous job (hot directory) or a staged R2 map,
+on a Linux leg from the R2 partition the previous release's legs filled, on the Mac from any
+earlier release's `macos-bincache` built at the same repository path. The first build under
+closure-v2 compiles everything once.
+
+| change | where | before | after | regrouped | identity record re-records |
+|---|---|---|---|---|---|
+| one family's kernel (`cluster/impl/detail/kmeans.mojo`) | Mac release | 13 of 13 | 4 of 13 (1,482 files) | 4 of 32 (1,164) | 94 of 513 lanes |
+| | each verifier box (NVIDIA, AMD) | 9 of 9 | 2 of 9 | 2 of 27 | (same lanes, per column) |
+| | Linux legs (3) | 27 | 6 (2 per leg; host 0) | 6 | |
+| same, `x_decomp/device.mojo` | Mac / box / legs | 13 / 9 / 27 | 3 / 2 / 6 | 2 / 1 / 3 | 427 of 513 lanes |
+| same, `gbdt/methods/doc_parallel_boosting.mojo` | Mac / box / legs | 13 / 9 / 27 | 1 / 1 / 3 | 1 / 1 / 3 (229 files instead of 564-609) | 418 of 513 lanes |
+| `core/device_plan.mojo` | Mac release | 13 of 13 | 12 of 13 | 20 of 32 | 513 of 513 lanes |
+| | each verifier box | 9 of 9 | 9 of 9 | 16 of 27 | |
+| | Linux legs (3) | 27 | 17 (4 per leg, the 5 host groups once) | 21 + 9 host once = 30 compiles of smaller groups | |
+| a Python route (`python/mojolearn/_expansion_decomp.py`) | Mac release | 13 of 13 | 0 of 13 | 0 | 427 of 513 lanes (418 of them only through unresolved native dispatch, a lane_select precision limit) |
+| | each verifier box | 9 of 9 | 0 of 9 | 0 | |
+| | Linux legs (3) | 0 when R2 held the archives (a v1 Linux key never read Python), else 27 | 0 | 0 | |
+
+Why "before" is 13 of 13 on the Mac for every change, including none: the slot token is random
+per run, the cache directory is new per release, and the source key was the whole tree. Why the
+verifier box was 9 of 9: it compiled both sets from source on every job with no cache.
+
+What still dominates after this lane:
+
+- **Shared files.** `core/device_plan.mojo` and `core/six_lane_experiment_guards.mojo` reach (nearly)
+  every group, so an edit to either is a full rebuild everywhere and a full identity re-record
+  (513 lanes). Per-family modules for the guards and the device plan's per-family parts are the
+  next saving; regrouping reduces the files per rebuilt group but not the number of rebuilds.
+- **Identity records.** `tools/record_identity_column.sh` already re-records only lanes whose
+  closure changed (`tools/lane_select.py`); this lane does not change that. Its selection is now
+  the largest remaining cost of a family-local change: a GBDT kernel or a decomposition route
+  selects 418 to 427 of 513 lanes, most of them only through "unresolved native dispatch" (the
+  selector cannot see which native entry a Python route calls), while the compile scope of the
+  same change is one or two groups. Making the selector read the native dispatch (as the
+  compile closure does) is the next lever for records. The ledger's separate
+  re-derivation over the freeze range is another lane's.
+- **The fixed path.** The Mac release must build in one checkout path release after release
+  (`repo_path` is keyed because absolute paths are embedded); a release built from a new worktree
+  path compiles everything.
 
 ## Regrouping: why it is a proposal, and who consumes group names
 
