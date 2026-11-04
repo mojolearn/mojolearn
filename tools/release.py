@@ -2975,12 +2975,6 @@ class Release:
 
     def step_linux_assemble(self):
         composition = self.host_composition()
-        if composition and self.assembly_needed():
-            # release_host_composition.validate_assembly binds each packed set to
-            # its original manifest and proof; a reuse assembly replaces both.
-            raise StepFailed("the host bindings are composed from " + composition["owner"]
-                             + " and the plan reuses Linux bytes from a published wheel or an earlier freeze; "
-                             "a retained host composition packs only this freeze's own legs")
         if not self.assembly_needed():
             if composition:
                 return ("not needed: every Linux binding is built by the legs; the host set of every leg is "
@@ -3001,13 +2995,34 @@ class Release:
         if owner_doc and owner_doc.get("kind") != "compile-requirements" and built and not self.dry:
             # The host owner is taken whole; the legs built here ship its host/.
             host_owner = self.host_owner_origin()
+        if composition:
+            # A RETAINED HOST COMPOSITION IN A REUSE ASSEMBLY (0.8.65): linux-wait
+            # found the legs' host bytes differ (build-machine-dependent host
+            # codegen) and selected the owner leg's. The assembly ships that
+            # owner's host/ in every set it assembles, through the same path as
+            # a host owner taken whole, and reuse.json names every host file with
+            # its source leg; the packer validates the assembled sets through
+            # reuse.json. The composition receipt stays the witness of why and
+            # is named in the assembled marker; linux-pack does not pass it
+            # again, because release_host_composition.validate_assembly binds
+            # each set to its original manifest and proof, which a reuse
+            # assembly replaces.
+            if composition["owner"] != host_owner_leg():
+                raise StepFailed("the host bindings are composed from " + composition["owner"]
+                                 + ", not the host owner leg " + host_owner_leg())
+            if host_owner is None and not self.dry:
+                host_owner = self.host_owner_origin()
+            self.say("  the retained host composition's owner " + composition["owner"]
+                     + " ships its host bindings in every assembled set (receipt " + composition["receipt"] + ")")
         plan = self.plan()
         if self.dry:
             n = len(release_reuse.plan_rows(plan, release_reuse.LINUX, "REUSE"))
             return (f"would take {n} binding(s) and the runtime closure from the published "
                     f"{(plan['previous'] or {}).get('version')} Linux wheel into {self.rel / 'reuse' / 'sets'}"
                     + (f", over the sets of {', '.join(legs)}" if legs else " (no leg ran)")
-                    + (f", and the sets of {', '.join(taken)} from an earlier freeze" if taken else ""))
+                    + (f", and the sets of {', '.join(taken)} from an earlier freeze" if taken else "")
+                    + (f", with the host bindings of {composition['owner']} (retained host composition)"
+                       if composition else ""))
         whl = self.previous_wheel("linux") if self.needs_published_linux() else None
         for name, d in legs.items():
             if not d.is_dir():
@@ -3021,10 +3036,14 @@ class Release:
         write_json(self.assembled_marker(), dict(
             commit=self.commit, plan_sha256=sha256(self.plan_path), wheel=str(whl) if whl else None,
             wheel_sha256=sha256(whl) if whl else None, legs=sorted(legs), taken=sorted(taken),
-            taken_from={n: d["built_from"] for n, d in taken.items()}, at=now()))
+            taken_from={n: d["built_from"] for n, d in taken.items()}, at=now(),
+            host_composition=(dict(owner=composition["owner"], receipt=composition["receipt"],
+                                   receipt_sha256=composition["receipt_sha256"]) if composition else None)))
         return (f"{dest}: sets assembled" + (f" from {whl.name}" if whl else "")
                 + (f" and legs {', '.join(sorted(legs))}" if legs else "")
-                + (f"; taken from an earlier freeze: {', '.join(sorted(taken))}" if taken else ""))
+                + (f"; taken from an earlier freeze: {', '.join(sorted(taken))}" if taken else "")
+                + (f"; host bindings of {composition['owner']} in every set (retained host composition)"
+                   if composition else ""))
 
     def pack_inputs(self):
         """(set directories, proofs, manifests) for pack_wheel.py and audit.sh:
@@ -3076,6 +3095,12 @@ class Release:
             args += ["--build-proof", p_]
         composition = None if self.dry else self.host_composition()
         pack_cwd = src
+        if composition and self.assembly_needed():
+            # the assembled sets already carry the owner's host bindings, named in
+            # each set's reuse.json (linux-assemble); the receipt is not re-validated
+            self.say("  the assembled sets carry the host bindings of " + composition["owner"]
+                     + " (retained host composition; receipt " + composition["receipt"] + ")")
+            composition = None
         if composition:
             # The receipt is validated by this tooling's release_host_composition.py
             # (the frozen source's copy may predate the receipt it reads), so the

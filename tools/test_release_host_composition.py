@@ -424,3 +424,39 @@ def test_linux_wait_refuses_a_non_host_or_missing_file(tmp_path):
     short = dict(mismatch, **{first: {k: v for k, v in mismatch[first].items() if k != 'cuda-sm_80'}})
     with pytest.raises(release.StepFailed, match='missing on a leg'):
         release.compose_host_mismatch(legs, short, source, tmp_path / 'c2')
+
+
+# ---------------------------------------------------------------- release.py's linux-assemble with a composition
+def _assembly_release(tmp_path, monkeypatch, owner):
+    release = _release()
+    class Assembly(release.Release):
+        rel = dry = None   # plain attributes in place of the release-state properties
+    r = object.__new__(Assembly)
+    r.dry, r.rel, r.said = True, tmp_path / 'rel', []
+    r.say = r.said.append
+    r.host_composition = lambda: dict(owner=owner, receipt=str(tmp_path / 'host-composition.json'),
+                                      receipt_sha256='a' * 64, sets=str(tmp_path / 'comp/sets'))
+    r.assembly_needed = lambda: True
+    r.assembled_ok = lambda: False
+    r.admitted_legs = lambda: {}
+    r.plan = lambda: dict(previous=dict(version='0.8.64'), legs=[])
+    monkeypatch.setattr(release, 'linux_legs', lambda ctx: [])
+    monkeypatch.setattr(release.release_reuse, 'plan_rows', lambda plan, platform, action: ['b'] * 3)
+    return release, r
+
+
+def test_a_reuse_assembly_ships_the_retained_host_composition_owners_host_bindings(tmp_path, monkeypatch):
+    # 0.8.65: linux-assemble refused a retained host composition in a reuse assembly; it now ships the
+    # owner's host bindings in every assembled set and names the composition (dry run: nothing is copied).
+    owner = _release().host_owner_leg()
+    release, r = _assembly_release(tmp_path, monkeypatch, owner)
+    result = r.step_linux_assemble()
+    assert result.startswith('would take 3 binding(s)')
+    assert f'with the host bindings of {owner} (retained host composition)' in result
+    assert any(owner + ' ships its host bindings in every assembled set' in line for line in r.said)
+
+
+def test_a_reuse_assembly_refuses_a_composition_from_another_leg(tmp_path, monkeypatch):
+    release, r = _assembly_release(tmp_path, monkeypatch, 'hip-gfx90a')
+    with pytest.raises(release.StepFailed, match='not the host owner leg'):
+        r.step_linux_assemble()
