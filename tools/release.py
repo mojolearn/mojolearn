@@ -2974,14 +2974,15 @@ class Release:
                 and sorted(d.get("taken") or []) == sorted(self.admitted_legs()))
 
     def step_linux_assemble(self):
+        # the assembled sets of this plan first: a done assembly is never refused again (0.8.65)
+        if self.assembly_needed() and self.assembled_ok():
+            return "have " + str(self.assembled_marker().parent)
         composition = self.host_composition()
         if not self.assembly_needed():
             if composition:
                 return ("not needed: every Linux binding is built by the legs; the host set of every leg is "
                         + composition["owner"] + "'s, composed in " + composition["sets"])
             return "not needed: every Linux binding is built by the legs"
-        if self.assembled_ok():
-            return "have " + str(self.assembled_marker().parent)
         taken = self.admitted_legs()
         built = [l for l in linux_legs(self) if l.name not in taken]
         legs = {l.name: l.release_build / "build" / "sets" / l.vendor / l.arch for l in built}
@@ -3416,25 +3417,12 @@ class Release:
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
-        if not self.dry:
-            ready, reasons = self.release_gate(stage="pre")
-            if not ready:
-                raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
-                                  else "release requirements ledger blocks publication: ") + "; ".join(reasons))
-        else:
-            try:  # a dry run reports the verdict; it never writes the ledger
-                ready, reasons = self.release_gate(stage="pre")
-                self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
-                         f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
-            except (ValueError, OSError, KeyError, subprocess.CalledProcessError, StepFailed) as error:
-                self.say(f"  pre-publication gate ({platform}): not evaluated ({error})")
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
-        if not self.dry and self.gpu_smoke() and platform in PLUGIN_PACKAGES \
-                and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
-            raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
+        # A FILE ALREADY ON PYPI IS DONE (lane release-no-hands): checked before the pre-publication gate,
+        # which only decides whether to upload; it never refuses what the index already serves.
         if not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
         if not self.dry and wheel and platform in SPLIT_PACKAGES and platform != "linux":
@@ -3448,6 +3436,21 @@ class Release:
                     raise StepFailed(f"PyPI already has {wheel.name} with a different gpu_plugin.json; "
                                      "a new version is needed")
                 return "already on PyPI (published from an earlier freeze; gpu_plugin.json equal)"
+        if not self.dry:
+            ready, reasons = self.release_gate(stage="pre")
+            if not ready:
+                raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
+                                  else "release requirements ledger blocks publication: ") + "; ".join(reasons))
+        else:
+            try:  # a dry run reports the verdict; it never writes the ledger
+                ready, reasons = self.release_gate(stage="pre")
+                self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
+                         f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
+            except (ValueError, OSError, KeyError, subprocess.CalledProcessError, StepFailed) as error:
+                self.say(f"  pre-publication gate ({platform}): not evaluated ({error})")
+        if not self.dry and self.gpu_smoke() and platform in PLUGIN_PACKAGES \
+                and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
+            raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         day = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
         tag = f"alpha-api-{self.version}-{platform}-{day}"
         work = self.rel / f"publish-{platform}"
@@ -4043,12 +4046,116 @@ class Release:
             "Provenance of every leg and column (built, or taken and why): release-provenance.json.", ""])
 
     # ------------------------------------------------------------ the run
+    # ------------------------------------------------------------ done steps short-circuit
+    # DONE STEPS SHORT-CIRCUIT (lane release-no-hands, 2026-11-04). A step recorded done at this
+    # commit whose output still checks out returns its "have ..." result BEFORE its method runs, so no
+    # refusal or recomputation at the top of a step can stop a resumed release (0.8.65: the publish
+    # run re-executed a done linux-assemble, hit the refusal at the top of the method, and `--only`
+    # juggling was the workaround). run_step asks have_<step>(rec): a string means "have it", None or a
+    # raised error means "run the step", whose own checks then decide. A step with no have_<step> and
+    # not in SKIP_IF_RECORDED (the freeze steps, which check the frozen source) runs as before.
+    HAVE_ERRORS = (StepFailed, OSError, ValueError, KeyError, TypeError, AttributeError, zipfile.BadZipFile,
+                   subprocess.SubprocessError)
+
+    def have(self, step, rec):
+        """The "have ..." result of STEP recorded done (REC) at this commit, or None to run it."""
+        check = getattr(self, "have_" + step.replace("-", "_"), None)
+        if rec is None or check is None:
+            return None
+        try:
+            got = check(rec)
+        except self.HAVE_ERRORS:
+            return None
+        return str(got) if got else None
+
+    def linux_packed(self):
+        """Every final split wheel of this commit is there (linux-pack's output)."""
+        finals = self.split_finals()
+        return bool(finals) and all(finals.values()) and wheel_commit(finals["linux"]) == self.commit
+
+    def have_reuse_plan(self, rec):
+        doc = read_json(self.plan_path)
+        if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
+                and release_reuse.record_modes(doc) == self.release_modes
+                and (doc.get("builders_override") or {}) == self.builders_override()):
+            return "have " + str(self.plan_path)
+        return None
+
+    def have_linux_builds(self, rec):
+        if self.linux_packed():
+            return "have the packed Linux wheels of this commit (the legs' output is packed)"
+        if self.recorded("linux-wait") and self.have_linux_wait(self.recorded("linux-wait")):
+            return "have every leg built and verified (linux-wait done " + self.recorded("linux-wait")["at"] + ")"
+        return None
+
+    def have_linux_wait(self, rec):
+        if self.linux_packed():
+            return "have the packed Linux wheels of this commit (the legs' output is packed)"
+        self.host_composition()  # a changed composition receipt raises: the step itself decides
+        legs = [l for l in linux_legs(self) if not self.admitted_leg(l.name)]
+        if all(l.done(self.commit) for l in legs):
+            return "have every leg done at this commit: " + (", ".join(l.name for l in legs) or "none to build")
+        return None
+
+    def have_linux_assemble(self, rec):
+        if self.linux_packed():
+            return "have the packed Linux wheels of this commit (the assembled sets are packed)"
+        if not self.assembly_needed():
+            return "not needed: every Linux binding is built by the legs"
+        return ("have " + str(self.assembled_marker().parent)) if self.assembled_ok() else None
+
+    def have_linux_pack(self, rec):
+        return ("have " + ", ".join(w.name for w in self.split_finals().values())) if self.linux_packed() else None
+
+    def have_macos_build(self, rec):
+        w = self.macos_wheel()
+        return ("have " + w.name) if w and wheel_commit(w) == self.commit else None
+
+    def have_macos_smoke(self, rec):
+        if not self.gpu_smoke():
+            return "WHEEL-SELF-TEST PASSED (receipt exists)" if self.macos_self_test_passed() else None
+        w = self.macos_wheel()
+        return "PASSED (receipt exists)" if w and smoke_passed(self.rel / "smoke-macos" / "results.json", w) else None
+
+    def have_gate_apple(self, rec):
+        if not adapter_gate_module().enabled():
+            return "skipped (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)"
+        ok, why = self.apple_adapters_ok()
+        return (why + " (receipt exists)") if ok else None
+
+    def have_column(self, name):
+        if not self.gpu_smoke():
+            return self.NO_GPU_SKIP
+        ok = next(ok for n, _, ok, _ in self.column_specs() if n == name)
+        return f"have the {name} column PASSED for this wheel" if ok() else None
+
+    def have_gpu_column_nvidia(self, rec):
+        return self.have_column("nvidia")
+
+    def have_gpu_column_nvidia_hopper(self, rec):
+        return self.have_column("nvidia-hopper") if self.hopper_required() or not self.gpu_smoke() else rec.get("result")
+
+    def have_gpu_column_amd(self, rec):
+        return self.have_column("amd")
+
+    def have_gate_nvidia(self, rec):
+        ok, why = self.gate_ok("nvidia")
+        return why if ok else None
+
+    def have_gate_amd(self, rec):
+        ok, why = self.gate_ok("amd")
+        return why if ok else None
+
     def run_step(self, step):
         """Run one step; 'done', 'failed' or 'held'. Never raises in a real run:
         a crash is a failed step, reported, so the other pipeline goes on."""
         rec = self.recorded(step)
         if rec and self.skip_recorded(step, rec):
             self.say(f"-- {step}: done {rec['at']} ({rec.get('result', '')})")
+            return "done"
+        have = self.have(step, rec)
+        if have:
+            self.say(f"-- {step}: done {rec['at']}: {have}")
             return "done"
         self.say(f"-- {step}")
         shown = self.commands_shown
