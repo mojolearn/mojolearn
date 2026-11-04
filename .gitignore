@@ -167,3 +167,6 @@ EXPERIMENTS.md
 # tools/kernel_closure_check.py output: the generated import-everything program and its results
 checks/kernel_closure_main.mojo
 kernel-closure-results/
+
+# box job results (tools/box_persist_run.sh default DIR; persisted to R2 from the box)
+box-out/
