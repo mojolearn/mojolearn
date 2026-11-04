@@ -88,7 +88,7 @@ PLAN_SCHEMA = "mojolearn.prebuild-plan.v1"
 PROFILES = ROOT / "tools" / "prebuild_profiles.json"
 TIERS = ("fast", "identical")
 #: Parts of a key's fields that come from the commit, not the box.
-COMMIT_FIELDS = ("script", "args", "source", "toolchain")
+COMMIT_FIELDS = ("script", "args", "source", "toolchain", "key_rule", "inputs", "merged")
 #: The cheapest box first; a RunPod "no stock" walks to the next.
 GPU_WALK = {
     "sm_89": ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation"],
@@ -172,30 +172,33 @@ def kind_of(tier, script):
 
 
 class CommitFacts:
-    """The commit-side half of every key, cached per script."""
+    """The commit-side half of every key: the tree and its Linux toolchain."""
 
     def __init__(self, tree):
         self.tree = Path(tree).resolve()
         self.toolchain = linux_toolchain(self.tree)
-        self._src = {}
-
-    def source(self, script):
-        if script not in self._src:
-            path = self.tree / "bindings" / script
-            src, _ = bincache.source_digest(self.tree, str(path), [])
-            self._src[script] = (src, bincache.local_inputs(self.tree, str(path)))
-        return self._src[script]
 
 
 def predict(facts, template, tier, script):
-    """(key, fields) the release box will compute for this build."""
-    src, inputs = facts.source(script)
-    fields = json.loads(json.dumps(template))
-    fields["script"] = "bindings/" + script
-    fields["args"] = []
-    fields["source"] = src
+    """(key, fields) the release box will compute for this build: tools/bincache.py
+    build_fields (key rule closure-v2) over the commit's tree, with the box half
+    from the template. The template's build_env is the union of what the leg
+    exported (capture); the key keeps only what this script reads, exactly as the
+    box's keyed_env does."""
+    environ = dict(template.get("build_env", {}))
+    environ["MOJOLEARN_NUMERIC_MODE"] = template["numeric_mode"]
+    for name, field in (("MOJOLEARN_GPU_ARCHS", "gpu_archs"), ("MOJOLEARN_TARGET_COLUMN", "target_column")):
+        if template.get(field):
+            environ[name] = template[field]
+    declared = template.get("declared", {})
+    fields, _ = bincache.build_fields(facts.tree, str(facts.tree / "bindings" / script), [], environ,
+                                      template["image"], declared=[declared_output(tier, script)],
+                                      shell=declared.get("shell", "bash"),
+                                      dev_arch=template.get("device_arch", "none"), os_info=template["os"],
+                                      plat="linux")
     fields["toolchain"] = facts.toolchain
-    fields["declared"] = dict(fields.get("declared", {}), inputs=inputs, outputs=[declared_output(tier, script)])
+    for k in ("numeric_mode", "gpu_archs", "target_column", "repo_path"):
+        fields[k] = template[k]
     return bincache.key_of(fields), fields
 
 
@@ -224,11 +227,19 @@ def capture(keys_dir):
         if "declared" not in f or f.get("variant"):
             continue
         script = f["script"].split("/")[-1]
-        t = {k: v for k, v in f.items() if k not in COMMIT_FIELDS}
+        t = {k: v for k, v in f.items() if k not in COMMIT_FIELDS and k != "build_env"}
         t["declared"] = {k: v for k, v in f["declared"].items() if k not in ("inputs", "outputs")}
         kind = kind_of(f["numeric_mode"], script)
-        if kind in templates and templates[kind] != t:
-            raise SystemExit("prebuild: two %s builds in %s carry different box fields" % (kind, keys_dir))
+        # closure-v2 keys keep only the variables each script reads, so the
+        # leg's environment is the union of its builds' (one value per name).
+        env = dict(f.get("build_env", {}))
+        if kind in templates:
+            prev = templates[kind]
+            clash = [n for n in set(env) & set(prev["build_env"]) if env[n] != prev["build_env"][n]]
+            if {k: v for k, v in prev.items() if k != "build_env"} != t or clash:
+                raise SystemExit("prebuild: two %s builds in %s carry different box fields" % (kind, keys_dir))
+            env = dict(prev["build_env"], **env)
+        t["build_env"] = env
         templates[kind] = t
     if not templates:
         raise SystemExit("prebuild: no declared (release) build keys in %s" % keys_dir)

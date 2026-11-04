@@ -1719,6 +1719,45 @@ class Release:
     def macos_bincache(self):
         return self.rel / "macos-bincache"
 
+    def macos_bincache_seeds(self):
+        """Every earlier release's macOS cache, newest first (read only; archives are copied)."""
+        mine = self.macos_bincache().resolve()
+        found = [d for d in self.base.parent.glob("*/*/macos-bincache")
+                 if d.is_dir() and d.resolve() != mine and any(d.glob("*.tar.gz"))]
+        return sorted(found, key=lambda d: d.stat().st_mtime, reverse=True)
+
+    def macos_cache_plan(self, env):
+        """One line per merged macOS group, before anything compiles: `hit (<cache>)`
+        or `compile: <reason>` (tools/bincache.py explain in the frozen tree, under
+        the build's environment). Empty when that tree's bincache has no explain."""
+        src = self.src
+        tool = src / "tools" / "bincache.py"
+        if not tool.is_file() or "def cmd_explain" not in tool.read_text(errors="replace"):
+            return []
+        base = dict(os.environ, **env)
+        out = []
+        modes = [m for m in self.release_modes] + (["host"] if env.get("MOJOLEARN_PACKAGE_BYTE_LM") == "1" else [])
+        for mode in modes:
+            plan = subprocess.run([PY, str(src / "tools" / "merged_bindings.py"), "plan", "--dir", mode,
+                                   "--platform", "darwin", "--byte-lm", env.get("MOJOLEARN_PACKAGE_BYTE_LM", "1")],
+                                  cwd=src, capture_output=True, text=True)
+            for row in plan.stdout.splitlines():
+                stem = row.split()[0]
+                if mode == "host":
+                    output, kind = f"python/mojolearn/host/{stem}.so", "host"
+                    genv = dict(base, MOJOLEARN_NUMERIC_MODE="identical", MOJOLEARN_TARGET_COLUMN="cpu")
+                    genv.pop("MOJOLEARN_GPU_ARCHS", None)
+                    genv.pop("MOJOLEARN_HOST_OUTDIR", None)
+                else:
+                    output = f"python/mojolearn/{stem}.so" if mode == "fast" else f"python/mojolearn/{mode}/{stem}.so"
+                    kind, genv = "gpu", dict(base, MOJOLEARN_NUMERIC_MODE=mode)
+                genv.update(MOJOLEARN_BINCACHE_OUTPUTS=output, MOJOLEARN_BINCACHE_SHELL="sh")
+                r = subprocess.run([PY, str(tool), "explain", "./bindings/merged_build.sh", kind, "--group", stem],
+                                   cwd=src, env=genv, capture_output=True, text=True)
+                line = (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
+                out.append(f"macos {mode}/{stem}: {line}")
+        return out
+
     def retained_producers(self):
         """(adapter, producer paths) of this freeze's retained outputs that never wrote the
         ledger: the macOS release build (its binary cache and log; the cache of a build
@@ -2749,8 +2788,24 @@ class Release:
             out.append(Leg(name, vendor, arch, [], {}, doc["release_build"], self.rel / "legs", doc["release_build"]))
         return out
 
+    def linux_group_plan(self):
+        """Per Linux merged group, before any leg compiles: `hit (closure unchanged
+        since <previous release>)` or `compile: <reason>` (tools/compile_closures.py
+        group_plan: two `git archive` trees, closure-v2 rule, nothing built)."""
+        previous = (self.plan().get("previous") or {}).get("source_commit")
+        if not previous:
+            return ["linux groups: no previous release commit; every group compiles"]
+        try:
+            sys.path.insert(0, str(ROOT / "tools"))
+            import compile_closures
+            return compile_closures.group_plan(self.src, previous, self.commit, "linux")
+        except Exception as exc:  # a plan line is advice; never fail the step over it
+            return [f"linux groups: no plan ({type(exc).__name__}: {exc})"]
+
     def step_linux_builds(self):
         legs = linux_legs(self)
+        for line in self.linux_group_plan():
+            self.say("  " + line)
         prev = (self.plan().get("previous") or {}).get("version")
         if not legs:
             return f"no build leg: every Linux binding is taken from {prev} (nothing rented for builds)"
@@ -2850,6 +2905,16 @@ class Release:
         env = dict(MOJOLEARN_BINCACHE_DIR=str(self.macos_bincache()),
                    MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
                    MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
+        # CROSS-RELEASE HITS (2026-11-04). The cache stays release-scoped, but
+        # an archive whose closure-v2 key an earlier release already built is
+        # copied in from that release's cache (verified, tools/bincache.py
+        # seed_archive) instead of compiled: a group compiles only when its
+        # import closure, flags or toolchain changed since some earlier release.
+        seeds = self.macos_bincache_seeds()
+        if seeds:
+            env["MOJOLEARN_BINCACHE_SEED_DIRS"] = os.pathsep.join(str(d) for d in seeds)
+        for line in self.macos_cache_plan(env):
+            self.say("  " + line)
         plan = self.plan()
         src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")

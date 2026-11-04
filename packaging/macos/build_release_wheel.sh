@@ -360,9 +360,9 @@ if [ "$MERGED" = 1 ]; then
         # this covers a file placed from the compile cache.
         for _n in $_expect; do rm -f "$(merged_pkgdir "$_d")/$_n.so"; done
     done
-    # THE COMPILE CACHE KEY. tools/bincache.py keys every MOJOLEARN_* variable,
-    # and its walk keys the .mojo tree and merged_build.sh, but not the root
-    # generator or the manifest; this digest puts them in the key. The members
+    # THE COMPILE CACHE KEY. tools/bincache.py (closure-v2) keys each group's
+    # own import closure, its members and its exact root text; this digest is
+    # kept for the v1 rule (MOJOLEARN_BINCACHE_SOURCE=tree) only. The members
     # each merged file reads back after the build are checked against the plan
     # as well (PYMERGED below), so a cached file can never serve another plan.
     MOJOLEARN_MERGED_KEY=$(cat bindings/merged_groups.json tools/merged_bindings.py | shasum -a 256 | cut -d' ' -f1)

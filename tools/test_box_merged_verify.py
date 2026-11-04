@@ -59,20 +59,9 @@ elif tool == "pixi":
                 output = pathlib.Path(args[3]); output.parent.mkdir(parents=True, exist_ok=True)
                 output.write_bytes(b"fresh math")
             sys.exit(rc)
-    elif args[:2] == ["sh", "bindings/merged_build.sh"]:
-        kind = args[2]; directory = "host" if kind == "host" else "identical"
-        rc = int(os.environ.get("FAKE_BUILD_" + directory.upper() + "_RC", "0"))
-        if rc: sys.exit(rc)
-        sys.path.insert(0, str(root / "tools"))
-        import merged_bindings
-        out = pathlib.Path(args[args.index("--outdir") + 1]); out.mkdir(parents=True)
-        files = {}
-        for stem, _, members in merged_bindings.plan(directory, "linux", True):
-            (out / (stem + ".so")).write_bytes(b"fresh " + directory.encode())
-            files[stem + ".so"] = members
-        if os.environ.get("FAKE_INCOMPLETE") == directory:
-            (out / next(iter(files))).unlink()
-        (out / "_mojolearn_merged.json").write_text(json.dumps({"format": 1, "files": files}))
+    elif args[:2] == ["python3", "tools/bincache.py"]:
+        # The real cache front end; it runs the fixture's bindings/merged_build.sh.
+        sys.exit(subprocess.call([os.environ["REAL_PYTHON"], *args[1:]]))
     else: sys.exit("unexpected pixi call: " + repr(args))
 elif tool == "fake-python":
     if args[:3] == ["-m", "mojolearn", "verify"]:
@@ -85,6 +74,29 @@ else: sys.exit("unexpected tool: " + tool)
 '''
 
 
+MERGED_BUILD = r"""#!/bin/sh
+kind=$1; shift; stem=""; outdir=""
+while [ $# -gt 0 ]; do case $1 in --group) stem=$2; shift;; --outdir) outdir=$2; shift;; --rootdir) shift;; esac; shift; done
+d=identical; [ "$kind" = host ] && d=host
+printf '["merged_build", "%s", "%s"]\n' "$d" "$stem" >> "$FAKE_EVENTS"
+case $d in identical) rc=${FAKE_BUILD_IDENTICAL_RC:-0};; host) rc=${FAKE_BUILD_HOST_RC:-0};; esac
+[ "$rc" = 0 ] || exit "$rc"
+mkdir -p "$outdir"
+if [ "${FAKE_INCOMPLETE:-}" = "$d" ] && [ ! -e "$outdir/.skipped" ]; then : > "$outdir/.skipped"; exit 0; fi
+printf 'fresh %s %s\n' "$d" "$stem" > "$outdir/$stem.so"
+"""
+
+sys.path.insert(0, str(ROOT / "tools"))
+import merged_bindings  # noqa: E402
+
+MEMBERS = sorted({m for d in ("identical", "host") for _, _, mem in merged_bindings.plan(d, "linux", True)
+                  for m in mem})
+
+
+def member_source(name, body="pass"):
+    return "from std.python import PythonObject\n\n\ndef build_%s() -> PythonObject:\n    %s\n" % (name, body)
+
+
 @pytest.fixture
 def box(tmp_path):
     repo = tmp_path / "repo"
@@ -93,8 +105,14 @@ def box(tmp_path):
     (repo / "python/mojolearn/.libs").mkdir(parents=True)
     shutil.copyfile(ROOT / "tools/merged_bindings.py", repo / "tools/merged_bindings.py")
     shutil.copyfile(ROOT / "bindings/merged_groups.json", repo / "bindings/merged_groups.json")
-    for name in ("pixi.toml", "pixi.lock", "bindings/merged_build.sh"):
+    shutil.copyfile(ROOT / "tools/bincache.py", repo / "tools/bincache.py")
+    for name in ("pixi.toml", "pixi.lock"):
         (repo / name).write_text("inert test fixture\n")
+    # An inert merged builder: one group per call, its file in --outdir (the
+    # controller stages every group, then indexes the set from the plan).
+    (repo / "bindings/merged_build.sh").write_text(MERGED_BUILD)
+    for name in MEMBERS:
+        (repo / "bindings" / (name + ".mojo")).write_text(member_source(name))
     (repo / ".gitignore").write_text("__pycache__/\npython/mojolearn/identical/\npython/mojolearn/host/\n")
     (repo / "tracked.txt").write_text("frozen source\n")
     (repo / "tools/record_identity_column.sh").write_text(
@@ -125,17 +143,18 @@ def box(tmp_path):
     # BOX_TOOL_PATH: on a GPU pod a real /root/.pixi/bin/pixi would otherwise
     # shadow the shim (L4 runs: "pixi rc=1 ... REFUSED pixi install failed")
     env.update(BOX_REPO_DIR=str(repo), BOX_OUT_DIR=str(tmp_path / "run"), BOX_RECORD="0",
+               BOX_BINCACHE_HOT_DIR=str(tmp_path / "hot"), BOX_BINCACHE_MAP=str(tmp_path / "no-map.tsv"),
                BOX_TOOL_PATH=str(bindir),
                PATH=str(bindir) + os.pathsep + env["PATH"], FAKE_EVENTS=str(tmp_path / "events"),
                FAKE_PYTHON=str(bindir / "fake-python"), REAL_PYTHON=sys.executable)
     return repo, sha, env
 
 
-def run(box, vendor="nvidia", **overrides):
+def run(box, vendor="nvidia", plan=False, **overrides):
     repo, sha, env = box
     env = dict(env, **overrides)
-    result = subprocess.run(["bash", str(CONTROLLER), vendor, sha], env=env,
-                            text=True, capture_output=True, timeout=20)
+    result = subprocess.run(["bash", str(CONTROLLER), *(["--plan"] if plan else []), vendor, sha], env=env,
+                            text=True, capture_output=True, timeout=120)
     output = Path(env["BOX_OUT_DIR"])
     log = (output / "job.log").read_text() if (output / "job.log").exists() else result.stderr
     events = Path(env["FAKE_EVENTS"])
@@ -253,7 +272,8 @@ def test_per_set_compiler_workers_follow_release_policy(box, vendor, gpu_workers
     builds = [json.loads(line) for line in events.splitlines() if line.startswith("[")]
     builds = [row for row in builds if row[0] == "pixi" and "bindings/merged_build.sh" in row[1]]
     host_workers = overrides.get("BOX_HOST_COMPILE_JOBS", "2")
-    assert [row[3] for row in builds] == [gpu_workers, host_workers]
+    # one cached compile per group: 4 identical groups, then 5 host groups
+    assert [row[3] for row in builds] == [gpu_workers] * 4 + [host_workers] * 5
     for tag, workers in (("gpu-identical", gpu_workers), ("host", host_workers)):
         assert f"MOJOLEARN_COMPILE_JOBS={workers}" in (out / f"build-{tag}.command").read_text()
     assert f"gpu_compile_jobs\t{gpu_workers}\n" in (out / "run.tsv").read_text()
@@ -265,3 +285,53 @@ def test_invalid_per_set_worker_count_refuses_before_install(box, setting, value
     rc, log, events, _ = run(box, **{setting: value})
     assert rc != 0, log
     assert '"install"' not in events
+
+
+def commit_all(repo, message):
+    git(repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        "-c", "core.hooksPath=/dev/null", "commit", "-qam", message)
+    return git(repo, "rev-parse", "HEAD")
+
+
+def test_second_job_compiles_nothing_unchanged(box):
+    """The box's hot directory serves every group whose closure-v2 key did not
+    change: the second job places all 9 groups and runs no compile."""
+    repo, sha, env = box
+    rc, log, events, out = run(box)
+    assert rc == 0, log
+    assert events.count('"merged_build"') == 9
+    first = sorted(l.split()[0] for l in (out / "artifact-sha256.txt").read_text().splitlines()
+                   if l.endswith(".so") and "/.libs/" not in l)
+    second = dict(env, BOX_OUT_DIR=str(Path(env["BOX_OUT_DIR"]).with_name("run2")))
+    Path(env["FAKE_EVENTS"]).write_text("")
+    rc, log, events, out2 = run((repo, sha, second))
+    assert rc == 0, log
+    assert '"merged_build"' not in events
+    assert "groups=4 hits=4 compiled=0" in log and "groups=5 hits=5 compiled=0" in log
+    again = sorted(l.split()[0] for l in (out2 / "artifact-sha256.txt").read_text().splitlines()
+                   if l.endswith(".so") and "/.libs/" not in l)
+    assert again == first
+
+
+def test_an_edit_recompiles_only_the_groups_it_reaches(box):
+    repo, sha, env = box
+    rc, log, _, _ = run(box)
+    assert rc == 0, log
+    stem, _, members = merged_bindings.plan("identical", "linux", True)[0]
+    (repo / "bindings" / (members[0] + ".mojo")).write_text(member_source(members[0], "return 1"))
+    new = commit_all(repo, "edit one member")
+    Path(env["FAKE_EVENTS"]).write_text("")
+    plan_env = dict(env, BOX_OUT_DIR=str(Path(env["BOX_OUT_DIR"]).with_name("plan")),
+                    BOX_PLAN_PYTHON=sys.executable)
+    rc, log, events, out = run((repo, new, plan_env), plan=True)
+    assert rc == 0, log
+    text = (out / "plan.txt").read_text()
+    lines = text.splitlines()
+    assert len(lines) == 9, text
+    assert [l for l in lines if ": compile" in l] == [l for l in lines if l.startswith("identical/%s:" % stem)]
+    assert "closure changed: bindings/%s.mojo" % members[0] in text
+    assert '"merged_build"' not in events and '"install"' not in events, "a plan builds and installs nothing"
+    second = dict(env, BOX_OUT_DIR=str(Path(env["BOX_OUT_DIR"]).with_name("run2")))
+    rc, log, events, _ = run((repo, new, second))
+    assert rc == 0, log
+    assert [json.loads(l)[1:] for l in events.splitlines() if l.startswith('["merged_build"')] == [["identical", stem]]

@@ -39,7 +39,7 @@ def real_tier_scripts():
 
 def build_script(name, src):
     return ("#!/bin/bash\nset -eu\n"
-            "pixi run mojo build --emit shared-lib -I . bindings/%s -o python/mojolearn/x.so\n" % src)
+            "pixi run mojo build -j ${MOJOLEARN_COMPILE_JOBS:-2} --emit shared-lib -I . bindings/%s -o python/mojolearn/x.so\n" % src)
 
 
 def make_tree(root, gbdt_body="fn f():\n    pass\n"):
@@ -101,9 +101,8 @@ def box_key(tree, tier, script, arch="sm_90a", env_extra=None):
     env = dict(box_env(tier, script, arch), **(env_extra or {}))
     path = str(Path(tree) / "bindings" / script)
     with mock.patch.object(bincache, "toolchain", lambda repo: pc.linux_toolchain(repo)):
-        fields = bincache.key_fields(tree, path, [], env, IMAGE, dev_arch=arch, os_info=dict(OS))
-    fields["declared"] = dict(inputs=bincache.local_inputs(tree, path),
-                              outputs=[pc.declared_output(tier, script)], shell="bash")
+        fields, _ = bincache.build_fields(tree, path, [], env, IMAGE, declared=[pc.declared_output(tier, script)],
+                                          shell="bash", dev_arch=arch, os_info=dict(OS), plat="linux")
     fields["repo_path"] = "/root/mojolearn"       # the box's checkout, whatever tree the test used
     return bincache.key_of(fields), fields
 
@@ -189,8 +188,10 @@ class Capture(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             tree = make_tree(Path(td) / "t")
             write_keys(tree, Path(td) / "keys", [("fast", "build_gbdt.sh")])
+            # closure-v2 keys only what a script reads: a conflicting value of a
+            # read variable (the compiler workers) is two different boxes.
             write_keys(tree, Path(td) / "keys", [("fast", "build_estimators.sh")],
-                       env_extra={"MOJOLEARN_NEW_FLAG": "1"})
+                       env_extra={"MOJOLEARN_COMPILE_JOBS": "8"})
             with self.assertRaises(SystemExit):
                 pc.capture(Path(td) / "keys")
 
@@ -212,17 +213,20 @@ class Capture(unittest.TestCase):
 
 class CheckKeys(unittest.TestCase):
     def test_a_stale_profile_is_named_not_passed(self):
-        """A leg that exported a new variable computes keys the planner does
-        not: check-keys lists them as box-only (the rent path fails on it)."""
+        """A leg that exported a different value of a variable a script reads
+        computes keys the planner does not: check-keys lists them as box-only
+        (the rent path fails on it). Under closure-v2 an exported variable no
+        script reads moves no key, so only the gbdt build (which reads
+        MOJOLEARN_COMPILE_JOBS) is stale; the host family's key still matches."""
         with tempfile.TemporaryDirectory() as td:
             tree = make_tree(Path(td) / "t")
             builds = [("fast", "build_gbdt.sh"), ("identical", "build_alpha_host.sh")]
             write_keys(tree, Path(td) / "old", builds)
             tmpl = pc.capture(Path(td) / "old")
-            write_keys(tree, Path(td) / "new", builds, env_extra={"MOJOLEARN_NEW_FLAG": "1"})
+            write_keys(tree, Path(td) / "new", builds, env_extra={"MOJOLEARN_COMPILE_JOBS": "8"})
             ok, box_only, pred_only = pc.check_keys(pc.CommitFacts(tree), tmpl, Path(td) / "new", builds)
             ok2, box_only2, _ = pc.check_keys(pc.CommitFacts(tree), tmpl, Path(td) / "old", builds)
-        self.assertEqual((len(ok), len(box_only), len(pred_only)), (0, 2, 2))
+        self.assertEqual((len(ok), len(box_only), len(pred_only)), (1, 1, 1))
         self.assertEqual((len(ok2), box_only2), (2, []))
 
 
