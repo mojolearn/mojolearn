@@ -576,6 +576,19 @@ class TestGaps(Base):
         self.assertIn("GAPS (owed, not recorded): ptx 85", msg[-1])
         self.assertTrue(any(x.startswith("GAPS ptx=85") for x in self.lines))
 
+    def test_a_gap_clears_when_its_box_comes_up_before_admission(self):
+        (self.t / "do" / "state.env").unlink()                          # no AMD droplet yet
+        sh = FakeShell(dict(nvidia=table_sel(2), amd=table_sel(3)))
+        self.refresh(sh, ["nvidia", "amd"]).run(wait=False)
+        self.assertEqual(self.state()["columns"]["amd"]["phase"], "gap")
+        self.assertEqual(sh.spawned, [])
+        (self.t / "do" / "state.env").write_text("X=1\n")              # the orchestrator brought it up
+        self.refresh(sh, ["nvidia", "amd"]).run(wait=False)
+        st = self.state()["columns"]["amd"]
+        self.assertEqual(st["phase"], "launching")
+        self.assertEqual(st["history"][0]["phase"], "gap")
+        self.assertIn("GAP CLEARED amd: its box or runner is up; recording its 3 owed lane(s)", self.lines)
+
 
 class TestPtx(Base):
     PTX = dict(REFRESH_PTX_SET_TGZ="/root/sets/cuda-sm_80.tar.gz", REFRESH_PTX_SET_SHA256="ab" * 32,

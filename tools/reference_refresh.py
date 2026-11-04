@@ -930,6 +930,16 @@ class Refresh:
     # -------------------------------------------------------------- the driver
     def step(self):
         """One pass: start what is owed, poll what runs. Returns the columns still in flight."""
+        for c in self.columns:
+            col = self.state.col(c)
+            if col["phase"] == "gap" and not self.state.d["admit"].get("phase") and self.available(c)[0]:
+                # the box or runner came up before admission: the owed lanes are recorded after all
+                col.setdefault("history", []).append(dict(phase="gap", why=col.pop("why", ""), cleared=utc()))
+                col["plan"].pop("gap", None)
+                col["phase"] = "planned"
+                self.state.save()
+                self.say("GAP CLEARED %s: its box or runner is up; recording its %d owed lane(s)"
+                         % (c, col["plan"]["record"]))
         need_nv, nv_for_cpu = self.nvidia_needed()
         flight = []
         for c in self.columns:
