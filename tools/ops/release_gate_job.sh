@@ -38,6 +38,7 @@ RES="${MOJOLEARN_RESULTS_DIR:?release_gate_job.sh runs under tools/box_persist_r
     || { echo "release-gate-job: GATE_TREE / GATE_WORK must be plain /root paths (/root/results* for the work)" >&2; exit 2; }
 [[ "${GATE_OVERLAY_SHA256:-}" =~ ^([0-9a-f]{64})?$ ]] || { echo "release-gate-job: bad GATE_OVERLAY_SHA256" >&2; exit 2; }
 [[ "$GATE_BUILD_MINUTES" =~ ^[1-9][0-9]*$ ]] || { echo "release-gate-job: bad GATE_BUILD_MINUTES" >&2; exit 2; }
+[[ "${GATE_JOB_CAP_MINUTES:-0}" =~ ^[0-9]+$ ]] || { echo "release-gate-job: bad GATE_JOB_CAP_MINUTES" >&2; exit 2; }
 case "$GATE_VENDOR:$GATE_TARGET" in nvidia:sm_89|amd:gfx942) ;; *) echo "release-gate-job: unsupported vendor/target" >&2; exit 2 ;; esac
 J="$RES/job"
 mkdir -p "$J" "$RES/out"
@@ -192,15 +193,29 @@ tail -n 5 "$J/gate.log"
 PHASE=runtime-qualify
 # runtime-<vendor> evidence for the ledger (tools/release_runtime_installed.py run: fresh venv, the exact
 # candidate wheels, the frozen source's own tests). Recorded and fetched (out/runtime-<vendor>/), bounded by
-# GATE_RUNTIME_MINUTES; its exit never changes the gate verdict above, which stays the smoke's.
+# GATE_RUNTIME_MINUTES; its exit never changes this job's verdict above (the smoke's), but tools/release.py
+# gate_ok fails the gate unless runtime-<vendor>/runtime-report.json says passed.
 if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
     wheel_args=(); for w in "${GATE_WHEELS[@]}"; do wheel_args+=(--wheel "$w"); done
-    rrc=0
-    timeout "${GATE_RUNTIME_MINUTES}m" python3 tools/release_runtime_installed.py run --vendor "$GATE_VENDOR" \
-        --source-root "$GATE_TREE" --source-commit "$GATE_SOURCE_COMMIT" "${wheel_args[@]}" \
-        --out "$GATE_WORK/out/runtime-$GATE_VENDOR" > "$J/runtime-qualify.log" 2>&1 || rrc=$?
-    say "runtime qualifier exited $rrc (recorded under out/runtime-$GATE_VENDOR; the gate verdict is the smoke's)"
-    tail -n 3 "$J/runtime-qualify.log"
+    rt_min=$GATE_RUNTIME_MINUTES
+    # A capped job (NVIDIA submit --cap) keeps 10 minutes after the qualifier to copy and persist reports.
+    if [ "${GATE_JOB_CAP_MINUTES:-0}" != 0 ]; then
+        left=$(( GATE_JOB_CAP_MINUTES - SECONDS / 60 - 10 ))
+        [ "$left" -ge "$rt_min" ] || rt_min=$left
+    fi
+    if [ "$rt_min" -le 20 ]; then
+        say "runtime qualifier skipped: only $rt_min minutes left under the job cap"
+    else
+        # The qualifier's own run budget sits 10 minutes inside the outer bound (venv, install, report), so
+        # it stops itself and writes runtime-report.json and qualify/tests.partial.xml instead of being killed.
+        rrc=0
+        timeout "${rt_min}m" python3 tools/release_runtime_installed.py run --vendor "$GATE_VENDOR" \
+            --source-root "$GATE_TREE" --source-commit "$GATE_SOURCE_COMMIT" "${wheel_args[@]}" \
+            --timeout $(( (rt_min - 10) * 60 )) \
+            --out "$GATE_WORK/out/runtime-$GATE_VENDOR" > "$J/runtime-qualify.log" 2>&1 || rrc=$?
+        say "runtime qualifier exited $rrc in ${rt_min}m bound (recorded under out/runtime-$GATE_VENDOR)"
+        tail -n 3 "$J/runtime-qualify.log"
+    fi
 fi
 PHASE=complete
 exit "$grc"

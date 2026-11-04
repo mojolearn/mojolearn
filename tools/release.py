@@ -2975,12 +2975,6 @@ class Release:
 
     def step_linux_assemble(self):
         composition = self.host_composition()
-        if composition and self.assembly_needed():
-            # release_host_composition.validate_assembly binds each packed set to
-            # its original manifest and proof; a reuse assembly replaces both.
-            raise StepFailed("the host bindings are composed from " + composition["owner"]
-                             + " and the plan reuses Linux bytes from a published wheel or an earlier freeze; "
-                             "a retained host composition packs only this freeze's own legs")
         if not self.assembly_needed():
             if composition:
                 return ("not needed: every Linux binding is built by the legs; the host set of every leg is "
@@ -3001,13 +2995,34 @@ class Release:
         if owner_doc and owner_doc.get("kind") != "compile-requirements" and built and not self.dry:
             # The host owner is taken whole; the legs built here ship its host/.
             host_owner = self.host_owner_origin()
+        if composition:
+            # A RETAINED HOST COMPOSITION IN A REUSE ASSEMBLY (0.8.65): linux-wait
+            # found the legs' host bytes differ (build-machine-dependent host
+            # codegen) and selected the owner leg's. The assembly ships that
+            # owner's host/ in every set it assembles, through the same path as
+            # a host owner taken whole, and reuse.json names every host file with
+            # its source leg; the packer validates the assembled sets through
+            # reuse.json. The composition receipt stays the witness of why and
+            # is named in the assembled marker; linux-pack does not pass it
+            # again, because release_host_composition.validate_assembly binds
+            # each set to its original manifest and proof, which a reuse
+            # assembly replaces.
+            if composition["owner"] != host_owner_leg():
+                raise StepFailed("the host bindings are composed from " + composition["owner"]
+                                 + ", not the host owner leg " + host_owner_leg())
+            if host_owner is None and not self.dry:
+                host_owner = self.host_owner_origin()
+            self.say("  the retained host composition's owner " + composition["owner"]
+                     + " ships its host bindings in every assembled set (receipt " + composition["receipt"] + ")")
         plan = self.plan()
         if self.dry:
             n = len(release_reuse.plan_rows(plan, release_reuse.LINUX, "REUSE"))
             return (f"would take {n} binding(s) and the runtime closure from the published "
                     f"{(plan['previous'] or {}).get('version')} Linux wheel into {self.rel / 'reuse' / 'sets'}"
                     + (f", over the sets of {', '.join(legs)}" if legs else " (no leg ran)")
-                    + (f", and the sets of {', '.join(taken)} from an earlier freeze" if taken else ""))
+                    + (f", and the sets of {', '.join(taken)} from an earlier freeze" if taken else "")
+                    + (f", with the host bindings of {composition['owner']} (retained host composition)"
+                       if composition else ""))
         whl = self.previous_wheel("linux") if self.needs_published_linux() else None
         for name, d in legs.items():
             if not d.is_dir():
@@ -3021,10 +3036,14 @@ class Release:
         write_json(self.assembled_marker(), dict(
             commit=self.commit, plan_sha256=sha256(self.plan_path), wheel=str(whl) if whl else None,
             wheel_sha256=sha256(whl) if whl else None, legs=sorted(legs), taken=sorted(taken),
-            taken_from={n: d["built_from"] for n, d in taken.items()}, at=now()))
+            taken_from={n: d["built_from"] for n, d in taken.items()}, at=now(),
+            host_composition=(dict(owner=composition["owner"], receipt=composition["receipt"],
+                                   receipt_sha256=composition["receipt_sha256"]) if composition else None)))
         return (f"{dest}: sets assembled" + (f" from {whl.name}" if whl else "")
                 + (f" and legs {', '.join(sorted(legs))}" if legs else "")
-                + (f"; taken from an earlier freeze: {', '.join(sorted(taken))}" if taken else ""))
+                + (f"; taken from an earlier freeze: {', '.join(sorted(taken))}" if taken else "")
+                + (f"; host bindings of {composition['owner']} in every set (retained host composition)"
+                   if composition else ""))
 
     def pack_inputs(self):
         """(set directories, proofs, manifests) for pack_wheel.py and audit.sh:
@@ -3076,6 +3095,12 @@ class Release:
             args += ["--build-proof", p_]
         composition = None if self.dry else self.host_composition()
         pack_cwd = src
+        if composition and self.assembly_needed():
+            # the assembled sets already carry the owner's host bindings, named in
+            # each set's reuse.json (linux-assemble); the receipt is not re-validated
+            self.say("  the assembled sets carry the host bindings of " + composition["owner"]
+                     + " (retained host composition; receipt " + composition["receipt"] + ")")
+            composition = None
         if composition:
             # The receipt is validated by this tooling's release_host_composition.py
             # (the frozen source's copy may predate the receipt it reads), so the
@@ -3761,10 +3786,37 @@ class Release:
             return False, "; ".join(errors)
         from release_gate_profiles import profile, LIGHT
         if profile(doc) == LIGHT:
-            return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases; "
+            runtime, cases = self.gate_runtime_error(vendor, output)
+            if runtime:
+                return False, runtime
+            return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases, "
+                          f"{cases} installed-runtime cases; "
                           f"elapsed {doc['budget']['elapsed_seconds']:.1f}s (no performance campaign)")
         m = doc["measure"]
         return True, f"PASS historical performance campaign: {m['expected']} measured lines"
+
+    #: gate_ok's reason prefix for a gate whose smoke passed and whose installed-runtime qualifier did not
+    RUNTIME_GATE_FAILED = "runtime qualifier "
+
+    @staticmethod
+    def gate_runtime_error(vendor, output):
+        """(error or None, cases): the gate job's installed-runtime qualifier report under OUTPUT.
+
+        0.8.65: the gate printed PASS while runtime-<vendor>/runtime-report.json said "failed" (the
+        qualifier had timed out at 12-23%). The box job keeps the smoke's verdict; the release judges both,
+        so a failed, stopped or missing qualifier fails the gate and names the report."""
+        path = Path(output) / f"runtime-{vendor}" / "runtime-report.json"
+        report = read_json(path)
+        if not report:
+            return f"{Release.RUNTIME_GATE_FAILED}left no report at {path}", None
+        if report.get("status") != "passed" or report.get("exit_code") != 0:
+            stop = report.get("timed_out") or {}
+            partial = report.get("partial_tests") or {}
+            detail = (f"stopped by its {stop.get('kind')} timeout after {stop.get('elapsed_s')} s "
+                      f"({partial.get('passed')}/{partial.get('total')} finished tests passed)" if stop
+                      else str(report.get("error") or report.get("qualifier_error") or "")[:300])
+            return f"{Release.RUNTIME_GATE_FAILED}status {report.get('status')} in {path}: {detail}", None
+        return None, report.get("cases")
 
     def run_gate(self, vendor):
         run_id = None
@@ -3776,6 +3828,10 @@ class Release:
             if not self.dry:
                 self.record_candidate_requirement(vendor, run_id)
             return why
+        if why.startswith(self.RUNTIME_GATE_FAILED):
+            # The smoke passed and the qualifier ran: relaunching would only rerun green work. A qualifier
+            # failure is fixed in code and qualified at the next freeze.
+            raise StepFailed(f"the {vendor} release gate did not pass: {why}")
         work = self.rel / "gates"
         output = self.gate_out(vendor)
         # plan item 4 (docs/plans/POST_0863_RELEASE_TOOLING.md): one persisted box job per vendor through the
