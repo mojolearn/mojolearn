@@ -614,8 +614,8 @@ class Refresh:
                 raise Refused(a["why"])
             self.must(["git", "add", "--", *paths], "staging the admission", cwd=tree)
             cols = ",".join(c for c in self.columns if self.state.col(c).get("records"))
-            msg = ("Admit identity columns at %s (%s) via tools/reference_refresh.sh\n\nRecords: %s.\n\n"
-                   "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n" % (self.sha12, cols, ", ".join(dirs)))
+            msg = ("Admit identity columns at %s (%s) via tools/reference_refresh.sh\n\nRecords: %s.\n"
+                   % (self.sha12, cols, ", ".join(dirs)))
             self.must(["git", "commit", "-q", "-m", msg], "committing the admission", cwd=tree)
             rc, head = self.git("rev-parse", "HEAD", cwd=tree)
             a.update(phase="committed", commit=head.strip(), branch=branch)
@@ -679,9 +679,12 @@ class Refresh:
                 flight.append(c)
                 continue
             if ph == "launching":
-                if not self.amd_tag() and self.state.col(c)["phase"] == "launching":
+                self.amd_tag()
+                ph = self.state.col(c)["phase"]
+                if ph == "launching":
                     flight.append(c)
-                continue
+                if ph != "submitted":
+                    continue
             if ph == "submitted":
                 if c == "amd" and self.extend_amd:
                     self.sh.run(self.amd("extend", str(self.extend_amd)), log=self.log("amd-extend.log"))
