@@ -246,6 +246,13 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
+
+
+def release_plan_module():
+    """tools/release_plan.py of THIS tooling tree (the decision table is tooling, not the frozen source)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import release_plan
+    return release_plan
 PUBLISH_CHOICES = ("none", "testpypi", "pypi")
 sys.path.insert(0, str(ROOT / "tools"))
 import release_ledger  # noqa: E402
@@ -3672,6 +3679,9 @@ class Release:
                                      "a new version is needed")
                 return "already on PyPI (published from an earlier freeze; gpu_plugin.json equal)"
         if not self.dry:
+            held = self.plan_blocks_publication()
+            if held:
+                raise StepFailed("the release plan names evidence that is still missing: " + "; ".join(held[:8]))
             ready, reasons = self.release_gate(stage="pre")
             if not ready:
                 raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
@@ -4358,6 +4368,13 @@ class Release:
         needs = self.box_needs()
         if not needs:
             return "not needed: no selected box step has work to do on a box"
+        planned = self.saved_plan()
+        if planned and (planned.get("boxes") or {}).get("action") == "none":
+            # THE PLAN OWES NO DEVICE WORK (tools/release_plan.py): rent nothing. A box step that still
+            # reports work points at evidence to restore or a stale plan, never at a rental.
+            raise StepFailed("the release plan (" + str(self.plan_json_path()) + ") owes no device work, yet "
+                             + "; ".join(n for v in sorted(needs) for n in needs[v])
+                             + ": restore the evidence it names or rerun --plan; gate-boxes rents nothing")
         for line in self.box_plan(needs):
             self.say("  " + line)
         if self.dry:
@@ -4968,6 +4985,7 @@ class Release:
             self.keep_boxes()   # a later run's box steps keep the boxes an earlier run brought up
         self.say(f"-- {step}")
         shown = self.commands_shown
+        started = time.monotonic()   # waste.json: per-step seconds (tools/release_plan.py)
         try:
             out = getattr(self, "step_" + step.replace("-", "_"))()
             result, data = out if isinstance(out, tuple) else (out, {})
@@ -4995,6 +5013,8 @@ class Release:
             return "failed"
         self.say(f"   {result}")
         if not self.dry:
+            data = dict(data)
+            data.setdefault("seconds", round(time.monotonic() - started, 1))
             self.mark(step, result=result, **data)
         return "done"
 
@@ -5099,9 +5119,166 @@ class Release:
             self.say(f"   tooling: this checkout {ROOT} at {head[:12]}; the source is read from "
                      f"{self.source_checkout(create=False)}")
 
+    # ------------------------------------------------------------ --plan (tools/release_plan.py)
+    #: release step -> (gate kind in the decision table, device it runs on)
+    PLAN_STEP_KINDS = {
+        "freeze-version": ("metadata", None), "freeze-changelog": ("metadata", None),
+        "freeze-docs-facts": ("metadata", None), "freeze-commit": ("metadata", None),
+        "reuse-plan": ("metadata", None), "finish-line": ("metadata", None), "record": ("metadata", None),
+        "rehearsal": ("package", None), "linux-wait": ("package", None), "linux-assemble": ("package", None),
+        "linux-pack": ("package", None),
+        "cross-compile": ("artifact", None), "linux-builds": ("artifact", None), "macos-build": ("artifact", None),
+        "macos-smoke": ("loading", None),
+        "gate-apple": ("numerical", None), "gate-nvidia": ("numerical", "nvidia"), "gate-amd": ("numerical", "amd"),
+        "gpu-column-nvidia": ("numerical", "nvidia"), "gpu-column-nvidia-hopper": ("numerical", "nvidia"),
+        "gpu-column-amd": ("numerical", "amd"),
+        "published-apple": ("package", None), "published-nvidia": ("package", None),
+        "published-amd": ("package", None), "published-smoke-apple": ("numerical", None),
+        "published-smoke-nvidia": ("numerical", "nvidia"), "published-smoke-amd": ("numerical", "amd"),
+    }
+    #: identity column -> the box its record runs on (Apple records on this Mac: never rented)
+    PLAN_COLUMN_DEVICE = {"nvidia": "nvidia", "amd": "amd", "cpu": "nvidia", "ptx": "nvidia", "apple": None}
+
+    def plan_json_path(self):
+        return Path(getattr(self.args, "plan_json", "") or (self.rel / "plan.json"))
+
+    def saved_plan(self):
+        doc = read_json(self.plan_json_path())
+        return doc if doc and doc.get("schema") == release_plan_module().SCHEMA and doc.get("commit") == self.commit \
+            else None
+
+    def plan_blocks_publication(self):
+        """Rows of this commit's saved plan that still hold publication NOW: an unresolved failure whose step
+        is not recorded since, and evidence to restore that is still not on this machine. Owed work is
+        enforced by the step graph itself. No saved plan: nothing extra (the ledger gate still applies)."""
+        plan = self.saved_plan()
+        if not plan:
+            return []
+        held = []
+        restore = {r["id"]: r for r in plan.get("restore") or []}
+        for row in (plan.get("publish") or {}).get("blocked") or []:
+            if row["reason"].startswith("unresolved failure") and not self.recorded(row["id"]):
+                held.append(f"{row['id']}: {row['reason']}")
+            elif row["id"] in restore and not Path(restore[row["id"]].get("local_path") or "/nonexistent").exists():
+                held.append(f"{row['id']}: {row['reason']}")
+        return held
+
+    def plan_lane_facts(self, previous, columns):
+        """{column: {lane: facts}} from tools/identity_columns.py changed-lanes, the selection each column's
+        recorder makes (reference_refresh.SELECTION), over the supported surface; static, no box."""
+        import reference_refresh as rr
+        rp = release_plan_module()
+        out, notes = {}, []
+        work = self.rel / "plan"
+        work.mkdir(parents=True, exist_ok=True)
+
+        def is_ancestor(a, b):
+            return subprocess.run(["git", "-C", str(self.src), "merge-base", "--is-ancestor", a, b],
+                                  capture_output=True).returncode == 0
+        for col in columns:
+            if col not in rr.SELECTION:
+                notes.append(f"identity column {col}: unknown (columns: {', '.join(rr.SELECTION)})")
+                continue
+            mode, backend = rr.SELECTION[col]
+            summary = work / f"identity-{col}.json"
+            cmd = [PY, "tools/identity_columns.py", "changed-lanes", "--scope", rr.SURFACE_SCOPE, "--backend", backend]
+            if mode == "class":
+                cmd += ["--class", col, "--records", str(Path(self.src) / "bench/results/identity_break")]
+            cmd += ["--summary-json", str(summary)]
+            with open(work / f"identity-{col}.log", "w") as log:
+                rc = subprocess.run(cmd, cwd=str(self.src), stdout=subprocess.DEVNULL, stderr=log).returncode
+            doc = read_json(summary)
+            if rc != 0 or not doc:
+                notes.append(f"identity column {col}: selection failed (rc={rc}; {work / f'identity-{col}.log'})")
+                continue
+            out[col] = rp.lane_facts(doc, previous, col, self.PLAN_COLUMN_DEVICE.get(col), is_ancestor)
+        return out, notes
+
+    def plan_facts(self):
+        rp = release_plan_module()
+        prev = (self.plan().get("previous") or {})
+        previous = prev.get("source_commit")
+        facts = dict(version=self.version, commit=self.commit, previous=previous, notes=[])
+        facts["changes"] = rp.changed_paths(previous, self.commit, repo=self.src) if previous else []
+        try:
+            facts["groups"] = rp.group_facts(self.src, previous, self.commit)
+        except Exception as exc:  # the plan says so; a group with no facts is never a hit
+            facts["groups"] = {}
+            facts["notes"].append(f"compile groups: no closure facts ({type(exc).__name__}: {exc})")
+        columns = [c for c in (getattr(self.args, "plan_columns", "") or "").split(",") if c]
+        facts["lanes"], notes = self.plan_lane_facts(previous, columns)
+        facts["notes"] += notes
+        prev_rel = (self.base.parent / str(prev.get("version")) / previous[:12]) if previous and prev.get("version") \
+            else None
+        gates = {}
+        for step in self.selected_steps():
+            if step not in self.PLAN_STEP_KINDS:
+                continue
+            k, device = self.PLAN_STEP_KINDS[step]
+            st, detail = self.step_state(step)
+            row = dict(kind=k, device=device, state="done" if st == "done" else ("failed" if st in ("failed", "held")
+                                                                               else "owed"), reason=detail)
+            if st != "done" and step in BOX_CONSUMERS:
+                row["self_checked"] = True
+                why = self.box_step_owed(step)
+                row["reason"] = why or "nothing owed on its box"
+                if not why:
+                    row.update(state="done", device=None)
+            if prev_rel is not None:
+                evid = prev_rel / step
+                row["previous_evidence"] = dict(local=evid.exists(), local_path=str(evid),
+                                                retained=f"release ledger R2 receipts of {prev.get('version')}")
+            gates[step] = row
+        facts["gates"] = gates
+        facts["failures"] = [dict(id=step, reason=f.get("error", ""), resolved=bool(self.recorded(step)))
+                             for step, f in (self.state.get("failures") or {}).items()
+                             if f.get("commit") == self.state.get("commit")]
+        facts["leases"] = {"nvidia": self.HOLD_MAX_S // 60, "amd": self.AMD_LEASE_MIN}
+        facts["step_seconds"] = {s: r.get("seconds") for s, r in (self.state.get("steps") or {}).items()
+                                 if isinstance(r, dict) and r.get("commit") == self.state.get("commit")
+                                 and isinstance(r.get("seconds"), (int, float))}
+        facts["previous_waste"] = rp.previous_waste(self.base.parent, self.version)
+        return facts
+
+    def release_plan(self):
+        """--plan: gather the facts, apply the decision table (tools/release_plan.py), print one line per
+        decision, write plan.json and plan-facts.json. Runs, rents and publishes nothing."""
+        rp = release_plan_module()
+        self.say(f"== mojolearn release {self.version} --plan (nothing runs, nothing is rented)")
+        facts = self.plan_facts()
+        plan = rp.decide(facts)
+        plan["notes"] = facts.get("notes", [])
+        out = self.plan_json_path()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        (out.parent / "plan-facts.json").write_text(json.dumps(facts, indent=1, sort_keys=True, default=str) + "\n")
+        out.write_text(json.dumps(plan, indent=1, sort_keys=True) + "\n")
+        for line in rp.lines(plan) + ["note: " + n for n in plan["notes"]]:
+            self.say(line)
+        self.say(f"== plan.json: {out}")
+        return 0 if plan["publish"]["status"] == "ready" else 3
+
+    def write_waste(self):
+        """waste.json beside the state after a real run (minimal: the saved plan's numbers + step seconds)."""
+        if self.dry or getattr(self, "readonly", False):
+            return None
+        rp = release_plan_module()
+        plan = self.saved_plan() or {}
+        steps = {s: r.get("seconds") for s, r in (self.state.get("steps") or {}).items()
+                 if isinstance(r, dict) and r.get("commit") == self.state.get("commit")
+                 and isinstance(r.get("seconds"), (int, float))}
+        waste = dict(plan.get("waste") or dict(schema=rp.WASTE_SCHEMA, version=self.version, commit=self.commit))
+        waste.update(steps=steps, box_wait_seconds=steps.get("gate-boxes"), admission_seconds=steps.get("record"))
+        try:
+            return rp.write_waste(self.rel / "waste.json", waste)
+        except OSError as exc:
+            self.say(f"  waste.json not written: {exc}")
+            return None
+
     def go(self):
         if getattr(self.args, "status", False):
             return self.status()
+        if getattr(self.args, "plan", False):
+            return self.release_plan()
         steps = self.STEPS
         if self.args.only:
             wanted = self.args.only.split(",")
@@ -5136,6 +5313,7 @@ class Release:
             status = self.schedule(steps)
         finally:
             self.stop_keeper()
+            self.write_waste()
         ok = self.report(status)
         self.say("== done" if ok else "== stopped")
         return 0 if ok else 1
@@ -5316,6 +5494,12 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("version")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and each step's status; run nothing")
+    ap.add_argument("--plan", action="store_true",
+                    help="THE RELEASE PLAN (tools/release_plan.py): one decision with a reason per compile group, "
+                         "identity lane x column, gate/producer, box and publish row; writes plan.json; runs nothing")
+    ap.add_argument("--plan-json", default="", help="where --plan writes plan.json (default <release>/<commit12>/plan.json)")
+    ap.add_argument("--plan-columns", default="nvidia,amd,cpu,ptx,apple",
+                    help="identity columns --plan selects (tools/identity_columns.py changed-lanes per column)")
     ap.add_argument("--status", action="store_true",
                     help="per pipeline, leg and column: done / failed (with its log) / owed, and what a rerun "
                          "would do; runs nothing, writes nothing")
@@ -5376,6 +5560,10 @@ def main(argv=None):
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    if args.plan:
+        if args.status or args.only or args.redo or args.refreeze:
+            ap.error("--plan runs nothing; it takes no --status, --only, --redo or --refreeze")
+        args.dry_run = True
     # Current releases focus on identical. Explicit legacy selections remain
     # available for reproducing older layouts, and are recorded in every plan.
     try:
