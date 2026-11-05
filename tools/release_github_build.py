@@ -111,6 +111,18 @@ IMAGE_DECL = "runpod-cpu:" + IMAGE
 #: same route; release061_remote_build.sh gives it the ptx code format
 #: (Andrew 2026-10-10: PTX is a normal target; no flag).
 ARCHS = {"sm_90a": "cuda", "sm_89": "cuda", "sm_80": "cuda", "gfx942": "hip"}
+#: THE ONE LEG WHOSE VENDOR-NEUTRAL HOST GROUPS GO TO THE BINDING CACHE
+#: (2026-11-05, finding 3 of docs/release/0.8.66-release-state.md). Every leg
+#: compiles the host groups under ONE key (no GPU input is keyed), and the hip
+#: leg's _mojolearn_native_series_host.so came out with other bytes than the
+#: cuda legs': one key, two contents, the last promote winning. Only this
+#: leg's host-group archives are promoted (promote); the other legs read them
+#: from the cache when it has them (a hit: the same bytes) and otherwise
+#: compile their own copy for their own tree, which is never offered to the
+#: cache. bincache.py promote refuses any key that already holds other bytes,
+#: so a stray upload can never replace the owner's. sm_89 is the leg host
+#: composition already takes the host bytes from.
+HOST_GROUPS_OWNER = "sm_89"
 #: Upload slots each job (a shard, or the assemble job) may PUT into.
 SLOTS_PER_JOB = 80
 MAP_HOURS = 8
@@ -610,6 +622,10 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups
                 compile_groups=compile_groups, compile_only=bool(compile_groups),
                 assemble_swap_gib=max([r["swap_gib"] for r in include] or [0]),
                 host_swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB) if host else 0,
+                # Who offers the vendor-neutral host groups to the binding cache
+                # (HOST_GROUPS_OWNER): the owner leg; every other set reads them
+                # from the cache or compiles a copy for its own tree only.
+                host_groups=dict(owner=HOST_GROUPS_OWNER, roles={s: host_groups_role(s) for s in sets}),
                 estimate=dict(per_set=per_set, total=total))
 
 
@@ -635,6 +651,10 @@ def cmd_plan(a):
     for row in doc["matrix"]["include"]:
         print(f"{row['vendor']}-{row['arch']} shard {row['shard']} [{row['unit']}]: {row['n']} builds, "
               f"weight {row['weight']}, planning peak {row['peak_gib']} GiB, swap {row['swap_gib']} GiB")
+    for s, role in doc["host_groups"]["roles"].items():
+        print(f"host groups {s}: " + ("owner (its archives go to the binding cache)" if role == "owner" else
+                                      f"fetch from the cache, else compile for this tree only "
+                                      f"(owner {doc['host_groups']['owner']})"))
     if doc["host"]:
         print("host producer: tools/release_host_build.py build, donor "
               + ("host_donor_url" if a.host_donor else f"this run's {doc['sets'][0]} set"))
@@ -905,8 +925,32 @@ def verify_tree(release_build, vendor, arch, commit):
                   f" + {len(staged)} runtime libraries, all as proved")
 
 
-def promote(out, creds):
-    """Promote the run's inbox uploads whose R2 object is the archive a job recorded."""
+def host_groups_role(arch):
+    """"owner" when this leg's vendor-neutral host-group archives go to the
+    binding cache, "fetch" when the leg takes them from the cache (a hit) and
+    never offers its own (HOST_GROUPS_OWNER)."""
+    return "owner" if arch == HOST_GROUPS_OWNER else "fetch"
+
+
+def owner_skip(keys_dir, key, arch):
+    """True when KEY is a vendor-neutral build this (non-owner) leg must not
+    promote. An unreadable key record is not skipped here: bincache promote
+    refuses it on its own (check_upload_row)."""
+    import bincache
+    if not arch or host_groups_role(arch) == "owner":
+        return False
+    try:
+        fields = json.loads((Path(keys_dir) / (key + ".json")).read_text())
+    except (OSError, ValueError):
+        return False
+    return bincache.vendor_neutral(fields)
+
+
+def promote(out, creds, arch=""):
+    """Promote the run's inbox uploads whose R2 object is the archive a job
+    recorded. A leg that does not own the host groups (HOST_GROUPS_OWNER)
+    promotes none of its vendor-neutral archives, so the cache only ever
+    receives the owner leg's bytes for them."""
     import bincache
     gha = Path(out) / "GHA" / "bincache"
     up = gha / "uploads.tsv"
@@ -916,12 +960,15 @@ def promote(out, creds):
     for line in (gha / "hot_sha256.tsv").read_text().splitlines() if (gha / "hot_sha256.tsv").is_file() else []:
         k, _, h = line.partition("\t")
         want[k] = h
-    good, refused = [], []
+    good, refused, not_owner = [], [], []
     for row in up.read_text().splitlines():
         parts = row.split("\t")
         if len(parts) != 5:
             continue
         leg, slot, _, key = parts[:4]
+        if owner_skip(gha / "keys", key, arch):
+            not_owner.append(row)
+            continue
         with tempfile.NamedTemporaryFile() as tmp:
             code = bincache.http_get(bincache.presign("GET", f"{bincache.INBOX_PREFIX}/{leg}/{slot}.tar.gz", 600, creds),
                                      tmp.name)
@@ -937,9 +984,16 @@ def promote(out, creds):
     env = dict(os.environ, **creds)
     r = subprocess.run([sys.executable, str(ROOT / "tools/bincache.py"), "promote", str(stage)],
                        capture_output=True, text=True, env=env)
-    (Path(out) / "GHA" / "promote.log").write_text(r.stdout + r.stderr
-                                                    + "".join(f"  refused (not the job's archive): {x}\n" for x in refused))
-    return (r.stdout.strip().splitlines() or ["?"])[-1] + (f"; {len(refused)} refused (bytes not the job's)" if refused else "")
+    (Path(out) / "GHA" / "promote.log").write_text(
+        r.stdout + r.stderr
+        + "".join(f"  refused (not the job's archive): {x}\n" for x in refused)
+        + "".join(f"  not promoted (host groups belong to the {HOST_GROUPS_OWNER} leg): {x}\n" for x in not_owner))
+    lines = r.stdout.strip().splitlines()
+    summary = next((x for x in reversed(lines) if x.startswith("BINCACHE PROMOTED")), lines[-1] if lines else "?")
+    conflicts = [x.strip() for x in lines if x.strip().startswith("BINCACHE CONFLICT")]
+    return (summary + (f"; {len(refused)} refused (bytes not the job's)" if refused else "")
+            + (f"; {len(not_owner)} host-group uploads left to the {HOST_GROUPS_OWNER} leg" if not_owner else "")
+            + "".join(f"\n  {x}" for x in conflicts))
 
 
 def verify_host(out, commit):
@@ -1181,7 +1235,7 @@ def cmd_run(a):
     if failed:
         lines.append("FAILED JOBS: " + "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed))
     if ok and creds and a.arch and not a.no_bincache:
-        lines.append("binding cache: " + promote(out, creds))
+        lines.append("binding cache: " + promote(out, creds, a.arch))
     if ok:
         lines += next_steps(out, name, a)
     (out / "wall.txt").write_text(f"wall_seconds={wall} run={a.run_id} conclusion={view.get('conclusion')}\n")
