@@ -27,9 +27,11 @@ def fixture():
         method=next(n for n in node.body if isinstance(n,ast.FunctionDef) and n.name=='__init__')
         exec(compile(ast.Module(body=[method],type_ignores=[]),'<constructor oracle>','exec'),namespace)
         original=namespace['__init__']
+        # Each vetted constructor declares numeric_mode itself and assigns it
+        # in its body (no mode wrapper appends it); the oracle signature is the
+        # declared one, and numeric_mode must be part of it.
         signature=inspect.signature(original)
-        signature=signature.replace(parameters=[*signature.parameters.values(),inspect.Parameter('numeric_mode',inspect.Parameter.KEYWORD_ONLY,default=None)])
-        original.__signature__=signature
+        assert 'numeric_mode' in signature.parameters
         cls=type(node.name,(),{'__init__':original});classes.append(cls);signatures[cls]=signature
     order=selected();classes.sort(key=lambda cls:order.index(cls.__name__))
     body=[n for n in ast.parse(CONNECTOR.read_text()).body if isinstance(n,ast.FunctionDef)]
@@ -126,4 +128,5 @@ def test_field_order_matches_each_original_constructor_body():
     originals={node.name:node for node in tree.body if isinstance(node,ast.ClassDef)}
     for cls,plan in ns['_CONTEXT']['plans'].items():
         function=next(n for n in originals[cls.__name__].body if isinstance(n,ast.FunctionDef) and n.name=='__init__')
-        assert plan['order']==tuple(fields(function))+('numeric_mode',)
+        assert plan['order']==tuple(fields(function))
+        assert plan['order'][-1]=='numeric_mode'
