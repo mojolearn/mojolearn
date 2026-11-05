@@ -170,6 +170,60 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "wheel/source Python mismatch"):
             q.source_match(frozen, commit, [artifact], payload, repo)
 
+    def generated_fixture(self):
+        repo = self.root / "repo";repo.mkdir()
+        files = {"python/mojolearn/__init__.py": "source\n", "tools/identity_break.py": "harness\n",
+                 "tools/identity_lanes/neighbors.py": "lane\n"}
+        for rel, text in files.items():
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True);(repo / rel).write_text(text)
+        for args in (["init", "-q"], ["add", "."],
+                     ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"]):
+            subprocess.run(["git", "-C", str(repo)] + list(args), check=True, capture_output=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        frozen = self.root / "frozen";shutil.copytree(repo / "python", frozen / "python")
+        artifact = self.root / "witness.whl";witness = "mojolearn/identity_columns/COMMIT"
+        with zipfile.ZipFile(artifact, "w") as archive:archive.writestr(witness, commit + "\n")
+        payload = {witness:dict(wheel=str(artifact)),
+                   "mojolearn/__init__.py":dict(sha256=q.digest(repo / "python/mojolearn/__init__.py")),
+                   "mojolearn/_identity_break.py":dict(sha256=q.digest(repo / "tools/identity_break.py")),
+                   "mojolearn/_identity_lane_neighbors.py":dict(
+                       sha256=q.digest(repo / "tools/identity_lanes/neighbors.py"))}
+        return repo, commit, frozen, artifact, payload
+
+    def test_generated_member_verifies_against_its_source_with_copy_present_or_absent(self):
+        repo, commit, frozen, artifact, payload = self.generated_fixture()
+        expected = {name: row["sha256"] for name, row in payload.items() if name.endswith(".py")}
+        # (b) a clean source tree: the build's copies are absent.
+        self.assertEqual(q.source_match(frozen, commit, [artifact], payload, repo), expected)
+        # (a) the build left untracked (and even stale) copies under python/.
+        (frozen / "python/mojolearn/_identity_break.py").write_text("harness\n")
+        (frozen / "python/mojolearn/_identity_lane_neighbors.py").write_text("stale copy\n")
+        self.assertEqual(q.source_match(frozen, commit, [artifact], payload, repo), expected)
+
+    def test_generated_member_differing_from_its_source_refuses(self):
+        repo, commit, frozen, artifact, payload = self.generated_fixture()
+        payload["mojolearn/_identity_break.py"] = dict(sha256="0" * 64)
+        with self.assertRaisesRegex(ValueError, "generated wheel member differs from its source at the commit: "
+                                    "mojolearn/_identity_break.py \\(tools/identity_break.py\\)"):
+            q.source_match(frozen, commit, [artifact], payload, repo)
+        payload["mojolearn/_identity_break.py"] = dict(sha256=q.digest(repo / "tools/identity_break.py"))
+        payload["mojolearn/_identity_lane_absent.py"] = dict(sha256="0" * 64)
+        with self.assertRaisesRegex(ValueError, "generated wheel member mojolearn/_identity_lane_absent.py "
+                                    "has no source tools/identity_lanes/absent.py"):
+            q.source_match(frozen, commit, [artifact], payload, repo)
+
+    def test_unknown_untracked_member_refuses_by_name(self):
+        repo, commit, frozen, artifact, payload = self.generated_fixture()
+        stray = frozen / "python/mojolearn/_stray.py";stray.write_text("stray\n")
+        for on_disk in (True, False):
+            with self.subTest(on_disk=on_disk):
+                if not on_disk:
+                    stray.unlink()
+                payload["mojolearn/_stray.py"] = dict(sha256=q.digest(repo / "tools/identity_break.py"))
+                with self.assertRaisesRegex(ValueError, "wheel Python member mojolearn/_stray.py is neither tracked "
+                                            "under python/ at " + commit + " nor a generated member"):
+                    q.source_match(frozen, commit, [artifact], payload, repo)
+
     def test_original_failure_and_skip_are_kept_distinct(self):
         path = self.root / "tests.xml"
         path.write_text('<testsuites><testsuite><testcase name="ok"/><testcase name="bad"><failure>original numerical mismatch</failure></testcase><testcase name="missing"><skipped message="no physical GPU"/></testcase></testsuite></testsuites>')
