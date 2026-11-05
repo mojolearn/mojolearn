@@ -299,7 +299,7 @@ def catalog_document():
         e['source_binding_reach_policy']='Conservative import closure, not observed runtime reach or template instantiation proof.'
         for arm in e['arms']:
             if arm['id'] in alias_map:arm['equivalence']=alias_map[arm['id']]
-            arm['define_sources']={d.split('=')[0]:[p for p,t in texts.items() if d.split('=')[0] in t and p!='core/six_lane_experiment_guards.mojo'] for d in arm['A']['defines']}
+            arm['define_sources']={d.split('=')[0]:[p for p,t in texts.items() if d.split('=')[0] in t and not (p=='core/six_lane_experiment_guards.mojo' or (p.startswith('core/experiment_guards_') and p.count('/')==1))] for d in arm['A']['defines']}
             missing=[d for d,ps in arm['define_sources'].items() if not ps]
             arm['source_gaps'] += ['Define not referenced in retained Mojo source: '+d for d in missing]
     return dict(schema='mojolearn.six-lane-catalog/1',base_main=read('experiments/six_lane_integration/inputs.json')['base_main'],entries=entries,interactions=interactions,aliases=aliases,qualification=dict(QUALIFICATION))
