@@ -143,6 +143,19 @@ def test_vendor_host_bindings_have_one_real_leg_owner(tmp_path):
     assert compile_evidence.belongs_to_leg(wanted, "hip", "gfx942")
 
 
+def test_requirement_captured_by_the_orchestrator_is_supported(tmp_path):
+    # 0.8.66: a release launched with MOJOLEARN_ORCHESTRATOR=1 (gate-boxes needs it)
+    # declared unit.build_flags {"MOJOLEARN_ORCHESTRATOR": "1"} and no leg owned any
+    # linux-64 compile requirement.
+    _, wanted, _, _ = fixture(tmp_path)
+    flags = requirements.build_flags({"MOJOLEARN_ORCHESTRATOR": "1"})
+    assert flags == {}
+    wanted["inputs"]["unit"]["build_flags"] = flags
+    assert compile_evidence.supports_requirement(wanted)
+    assert compile_evidence.belongs_to_leg(wanted, "cuda", "sm_89")
+    assert compile_evidence.safe_build_flags({"MOJOLEARN_ORCHESTRATOR": "1"}) == {}
+
+
 @pytest.mark.parametrize("damage", ["development", "missing-capture", "wrong-source", "wrong-flags", "compiler", "compiler-bytes",
     "source-inventory", "binding-identity", "missing-member", "duplicate-owner", "failed", "wrong-launch", "manifest"])
 def test_stale_incomplete_or_unbound_producers_refuse(tmp_path, damage):

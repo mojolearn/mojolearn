@@ -246,6 +246,16 @@ class KeyTests(unittest.TestCase):
         self.assertIn("bindings/build_host_family.sh", rels)
 
 
+    def test_release_provisioning_switches_are_not_build_inputs(self):
+        # MOJOLEARN_ORCHESTRATOR=1 is required by release.py gate-boxes and
+        # boxes-down; it chooses who may rent, never what the compiler emits.
+        env = dict(MOJOLEARN_ORCHESTRATOR="1", MOJOLEARN_AMD_PROVIDER="do",
+                   MOJOLEARN_RELEASE_NV_BOX="nv", MOJOLEARN_NUMERIC_MODE="identical")
+        self.assertEqual(bc.build_env(env), {"MOJOLEARN_NUMERIC_MODE": "identical"})
+        self.assertNotIn("MOJOLEARN_ORCHESTRATOR",
+                         bc.keyed_env(env, ({"MOJOLEARN_ORCHESTRATOR"}, [])))
+
+
 class PresignTests(unittest.TestCase):
     def test_aws_documented_vector(self):
         # docs.aws.amazon.com AmazonS3 sigv4-query-string-auth example

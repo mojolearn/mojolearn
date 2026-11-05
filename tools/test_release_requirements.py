@@ -248,6 +248,12 @@ def test_flags_use_existing_cache_policy_and_include_linker_options():
     assert flags == {"MOJOLEARN_COMPILE_JOBS": "2", "CXXFLAGS": "-DNEW=1"}
 
 
+def test_orchestrator_switch_never_enters_build_flags():
+    flags = R.build_flags({"MOJOLEARN_ORCHESTRATOR": "1", "MOJOLEARN_GPU_ARCHS": "sm_89",
+                           "MOJOLEARN_RELEASE_AMD_BOX": "amd"})
+    assert flags == {"MOJOLEARN_GPU_ARCHS": "sm_89"}
+
+
 def test_provisioning_credentials_never_enter_build_fingerprints():
     secret_names = ["MOJOLEARN_RUNPOD_KEY_FILE", "MOJOLEARN_API_TOKEN", "MOJOLEARN_PASSWORD",
                     "MOJOLEARN_SECRET", "MOJOLEARN_ACCESS_KEY", "MOJOLEARN_PRIVATE_KEY",
