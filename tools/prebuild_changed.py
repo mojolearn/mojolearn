@@ -89,11 +89,39 @@ PROFILES = ROOT / "tools" / "prebuild_profiles.json"
 TIERS = ("fast", "identical")
 #: Parts of a key's fields that come from the commit, not the box.
 COMMIT_FIELDS = ("script", "args", "source", "toolchain", "key_rule", "inputs", "merged")
-#: The cheapest box first; a RunPod "no stock" walks to the next.
+#: The ordered sm_89 RunPod walk shared with tools/nvidia_central.sh (one constant, never copied).
+SM89_WALK_FILE = ROOT / "tools" / "runpod_nvidia_sm89.env"
+#: GPU counts tools/gemm_remote_leg.sh accepts (MOJOLEARN_GEMM_LEG_GPU_COUNT).
+LEG_GPU_COUNTS = (1, 2, 4)
+
+
+def shared_walk(path=SM89_WALK_FILE):
+    """(gpu types, gpu counts) from tools/runpod_nvidia_sm89.env: plain KEY="value" lines."""
+    values = {}
+    for line in Path(path).read_text().splitlines():
+        m = re.match(r'^([A-Z0-9_]+)="([^"]*)"\s*$', line.strip())
+        if m:
+            values[m.group(1)] = m.group(2)
+    gpus = [g.strip() for g in values["NVIDIA_SM89_GPUS"].split(",") if g.strip()]
+    counts = [int(c) for c in values["NVIDIA_SM89_GPU_COUNTS"].split()]
+    if not gpus or not counts or any(c not in LEG_GPU_COUNTS for c in counts):
+        raise SystemExit("prebuild: %s must name GPU types and counts among %s" % (path, LEG_GPU_COUNTS))
+    return gpus, counts
+
+
+_SM89_GPUS, _SM89_COUNTS = shared_walk()
+#: The cheapest box first; a RunPod "no stock" walks to the next type, then to the next count. More GPUs
+#: is also more vCPUs: the box sizes its build from its own cores (tools/build_sizing.py), never a job
+#: count passed from here.
 GPU_WALK = {
-    "sm_89": ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation"],
+    "sm_89": _SM89_GPUS,
     "sm_90a": ["NVIDIA H100 PCIe", "NVIDIA H100 80GB HBM3", "NVIDIA H100 NVL", "NVIDIA H200"],
 }
+#: GPUs per pod, tried in order per target; sm_90a stays one GPU (a multi-GPU H100 pod is a price decision
+#: of its own).
+GPU_COUNT_WALK = {"sm_89": _SM89_COUNTS, "sm_90a": [1]}
+#: Dollar cap per GPU of the leg's segment lease (MOJOLEARN_PREBUILD_DOLLAR_CAP overrides the total).
+DOLLAR_CAP_PER_GPU = 6
 NO_STOCK = "no instances currently available"
 EVIDENCE = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", str(Path.home() / "mojolearn-evidence")))
 
@@ -379,17 +407,22 @@ def check_keys(facts, templates, keys_dir, builds):
 
 
 # ---------------------------------------------------------------- rent
-def leg_command(target, prof, commit, out, gpu):
+def leg_command(target, prof, commit, out, gpu, count=1):
     route = prof["route"]
     if route == "gemm-campaign7":
         arch = target.split("-", 1)[1]
+        if int(count) not in LEG_GPU_COUNTS:
+            raise SystemExit("prebuild: %r GPUs per pod is not one of %s" % (count, LEG_GPU_COUNTS))
+        # No MOJOLEARN_BUILD_JOBS: the box sizes its build from its own cores (tools/build_sizing.py).
         env = dict(MOJOLEARN_NVIDIA_CAMPAIGN="7", MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out),
+                   MOJOLEARN_GEMM_LEG_GPU_COUNT=str(int(count)),
                    MOJOLEARN_RUNPOD_KEY_FILE=os.path.expanduser(
                        os.environ.get("MOJOLEARN_RUNPOD_KEY_FILE", "~/.mojolearn_runpod_key")))
         cmd = ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba", "--source-ref", commit,
                "--gpu", gpu, "--allow-concurrent", "--rent",
                "--segment-lease", os.environ.get("MOJOLEARN_PREBUILD_LEASE", "90"),
-               "--dollar-cap", os.environ.get("MOJOLEARN_PREBUILD_DOLLAR_CAP", "6")]
+               "--dollar-cap", os.environ.get("MOJOLEARN_PREBUILD_DOLLAR_CAP",
+                                              str(DOLLAR_CAP_PER_GPU * int(count)))]
         return cmd, env, out / "remote" / "release-build" / "build" / "bincache" / "keys"
     if route == "cpu-pod":
         cmd = ["bash", "tools/release_linux_build.sh", commit, "--archs", target.split("-", 1)[1],
@@ -452,6 +485,15 @@ def no_stock(out):
     return False
 
 
+def rent_walk(name, prof):
+    """[(gpu type, gpus per pod)] in the order a no-stock walk tries them: every type at the first count,
+    then every type at the next (the order tools/nvidia_central.sh walks). A CPU-pod route: [(None, 1)]."""
+    if prof["route"] != "gemm-campaign7":
+        return [(None, 1)]
+    arch = name.split("-", 1)[1]
+    return [(gpu, count) for count in GPU_COUNT_WALK.get(arch, [1]) for gpu in GPU_WALK.get(arch, [None])]
+
+
 def rent(plan, commit, profiles, facts, builds, say=print):
     """One leg per target with missing keys; then re-plan and check keys."""
     results = {}
@@ -461,12 +503,13 @@ def rent(plan, commit, profiles, facts, builds, say=print):
             say("%s: nothing missing, no rental" % name)
             continue
         prof = profiles[name]
-        walk = GPU_WALK.get(name.split("-", 1)[1], [None]) if prof["route"] == "gemm-campaign7" else [None]
-        for gpu in walk:
-            out = EVIDENCE / "prebuild" / commit[:12] / ("%s-%s%s" % (name, stamp, "-" + re.sub(r"\W+", "", gpu) if gpu else ""))
+        for gpu, count in rent_walk(name, prof):
+            tag = ("-%dx" % count if count > 1 else "") + ("-" + re.sub(r"\W+", "", gpu) if gpu else "")
+            out = EVIDENCE / "prebuild" / commit[:12] / ("%s-%s%s" % (name, stamp, tag))
             out.parent.mkdir(parents=True, exist_ok=True)
-            cmd, env, keys_dir = leg_command(name, prof, commit, out, gpu)
-            say("%s: %d missing; renting %s -> %s" % (name, t["counts"]["missing"], gpu or "a CPU pod", out))
+            cmd, env, keys_dir = leg_command(name, prof, commit, out, gpu, count)
+            say("%s: %d missing; renting %s -> %s" % (name, t["counts"]["missing"],
+                                                       ("%dx %s" % (count, gpu)) if gpu else "a CPU pod", out))
             t0 = time.time()
             with open(str(out) + ".log", "w") as log:
                 if prof["route"] == "gemm-campaign7":
@@ -480,7 +523,8 @@ def rent(plan, commit, profiles, facts, builds, say=print):
             if rc != 0 and gpu and no_stock(out):
                 say("  %s: no stock, walking on" % gpu)
                 continue
-            results[name] = dict(rc=rc, wall_seconds=round(wall), out=str(out), gpu=gpu, keys_dir=str(keys_dir))
+            results[name] = dict(rc=rc, wall_seconds=round(wall), out=str(out), gpu=gpu, gpu_count=count,
+                                 keys_dir=str(keys_dir))
             if keys_dir.is_dir():
                 ok, box_only, pred_only = check_keys(facts, prof["templates"], keys_dir, builds)
                 results[name].update(keys_matched=len(ok), box_only=box_only, predicted_only=pred_only)
