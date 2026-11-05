@@ -5,6 +5,8 @@
 
     pixi run release 0.8.15 --dry-run          the plan and what is already done
     pixi run release 0.8.15 --status           per pipeline, leg and column: done, failed, owed
+    pixi run release 0.8.15 --report           one row per requirement and step: passed, reused, failed,
+                                               missing-execution, blocked-provenance, not-applicable, waived
     pixi run release 0.8.15                    everything up to publication
     pixi run release 0.8.15 --publish pypi     ... and publish, finish line, record
 
@@ -259,6 +261,13 @@ def ignore_hangup():
     except (ValueError, OSError, AttributeError):   # not the main thread, or no SIGHUP on this platform
         return False
     return True
+
+
+def release_report_module():
+    """tools/release_report.py of THIS tooling tree (docs/release/STATUS_REPORT.md)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import release_report
+    return release_report
 
 
 def release_plan_module():
@@ -1348,7 +1357,7 @@ class Release:
         if getattr(args, "build_backend", None) is None:
             args.build_backend = default_build_backend(self.commit)
         self.dry = args.dry_run
-        self.readonly = bool(getattr(args, "status", False))
+        self.readonly = bool(getattr(args, "status", False) or getattr(args, "report", False))
         self.commands_shown = 0
         self.evidence = ev
         self._plan = None
@@ -5276,11 +5285,75 @@ class Release:
         out = self.plan_json_path()
         out.parent.mkdir(parents=True, exist_ok=True)
         (out.parent / "plan-facts.json").write_text(json.dumps(facts, indent=1, sort_keys=True, default=str) + "\n")
+        # THE STATUS REPORT's totals line (tools/release_report.py), from the same inputs --report reads
+        try:
+            report = self.status_report(plan=plan)
+            plan["report_totals"] = report["totals_line"]
+        except Exception as exc:  # the plan still stands; the report says why it is missing
+            plan["report_totals"] = None
+            plan["notes"].append(f"status report unavailable ({type(exc).__name__}: {exc})")
         out.write_text(json.dumps(plan, indent=1, sort_keys=True) + "\n")
         for line in rp.lines(plan) + ["note: " + n for n in plan["notes"]]:
             self.say(line)
+        if plan.get("report_totals"):
+            self.say(plan["report_totals"])
         self.say(f"== plan.json: {out}")
         return 0 if plan["publish"]["status"] == "ready" else 3
+
+    # ------------------------------------------------------------ --report (tools/release_report.py)
+    def report_json_path(self):
+        return Path(getattr(self.args, "report_json", "") or (self.rel / "report.json"))
+
+    def report_waiver_paths(self):
+        """--owner-waiver and the waivers committed at the frozen source (docs/release/<version>-*waiver*.json)."""
+        paths = [getattr(self.args, "owner_waiver", None)]
+        src = Path(getattr(self, "src", None) or ROOT)
+        paths += sorted(str(p) for p in (src / "docs" / "release").glob(f"{self.version}-*waiver*.json"))
+        return [p for p in paths if p]
+
+    def report_inputs(self):
+        """THE ONE LOADER of the status report (--report, and the totals line --plan embeds): the evaluated
+        ledger rows (read-only, the rows --status and the gate read), every release step's state, the
+        waivers and the saved plan. Writes nothing."""
+        notes = []
+        try:
+            rows = self.readiness_status() if self.state.get("commit") else self.readiness().plan()
+        except Exception as exc:   # an unreadable ledger is a provenance problem, never a silent pass
+            rows = {"requirements-ledger": dict(status="untested", action="complete-provenance", stage="pre",
+                                                required=True, evidence=[], reasons=[
+                                                    f"ledger unreadable: {type(exc).__name__}: {exc}"])}
+            notes.append(f"ledger unreadable ({type(exc).__name__}: {exc})")
+        smoke = set(getattr(self.args, "published_smoke", None) or ())
+        steps = {}
+        for step in self.selected_steps():
+            if step in PUBLISHED_SMOKE_STEPS and PUBLISHED_SMOKE_STEPS[step][0] not in smoke:
+                continue
+            st, detail = self.step_state(step)
+            steps[step] = (st, detail, st == "held")
+        waivers = release_report_module().waivers_from(self.report_waiver_paths(), self.state)
+        return dict(rows=rows, steps=steps, waivers=waivers, plan=self.saved_plan(), notes=notes)
+
+    def status_report(self, plan=None):
+        rr = release_report_module()
+        inputs = self.report_inputs()
+        report = rr.build(self.version, self.commit, inputs["rows"], inputs["steps"], inputs["waivers"],
+                          plan if plan is not None else inputs["plan"],
+                          ledger_path=str(self.readiness().path))
+        report["notes"] = inputs["notes"]
+        return report
+
+    def release_report(self):
+        """--report: one row per ledger requirement and release step, each in exactly one of the seven states
+        (docs/release/STATUS_REPORT.md), with its evidence, producing step and next action; writes
+        report.json and report.md. Runs, rents and publishes nothing. Exit 0 when ready, 3 otherwise."""
+        rr = release_report_module()
+        self.say(f"== mojolearn release {self.version} --report (nothing runs, nothing is rented)")
+        report = self.status_report()
+        js, md = rr.write(report, self.report_json_path())
+        for line in rr.lines(report) + ["note: " + n for n in report["notes"]]:
+            self.say(line)
+        self.say(f"== report.json: {js}; report.md: {md}")
+        return 0 if report["ready"] else 3
 
     def write_waste(self):
         """waste.json beside the state after a real run (minimal: the saved plan's numbers + step seconds)."""
@@ -5304,6 +5377,8 @@ class Release:
             return self.status()
         if getattr(self.args, "plan", False):
             return self.release_plan()
+        if getattr(self.args, "report", False):
+            return self.release_report()
         steps = self.STEPS
         if self.args.only:
             wanted = self.args.only.split(",")
@@ -5526,6 +5601,12 @@ def main(argv=None):
     ap.add_argument("--plan-json", default="", help="where --plan writes plan.json (default <release>/<commit12>/plan.json)")
     ap.add_argument("--plan-columns", default="nvidia,amd,cpu,ptx,apple",
                     help="identity columns --plan selects (tools/identity_columns.py changed-lanes per column)")
+    ap.add_argument("--report", action="store_true",
+                    help="THE STATUS REPORT (tools/release_report.py): one row per ledger requirement and release "
+                         "step, each passed / reused / failed / missing-execution / blocked-provenance / "
+                         "not-applicable / waived, with evidence and the next action; writes report.json and "
+                         "report.md; runs nothing")
+    ap.add_argument("--report-json", default="", help="where --report writes report.json (default <release>/<commit12>/report.json)")
     ap.add_argument("--status", action="store_true",
                     help="per pipeline, leg and column: done / failed (with its log) / owed, and what a rerun "
                          "would do; runs nothing, writes nothing")
@@ -5586,6 +5667,8 @@ def main(argv=None):
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    if args.report and (args.plan or args.status or args.dry_run or args.only or args.redo or args.refreeze):
+        ap.error("--report runs nothing; it takes no --plan, --status, --dry-run, --only, --redo or --refreeze")
     if args.plan:
         if args.status or args.only or args.redo or args.refreeze:
             ap.error("--plan runs nothing; it takes no --status, --only, --redo or --refreeze")
