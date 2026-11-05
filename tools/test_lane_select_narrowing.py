@@ -920,6 +920,9 @@ _AFTER = _d("""
         fields["names"] = names
     """)
 _GATE_PATH = "ns_gate/lifecycle.mojo"
+#: `_AFTER` also calling the helper (bodies are dedented to 4 spaces).
+_CALLING_AFTER = _AFTER.replace("    fields[", "    _ = gate_helper(source)\n    fields[")
+assert _CALLING_AFTER != _AFTER and "gate_helper" in _CALLING_AFTER, "fixture edit did not apply"
 
 
 def _gate_file(*defs):
@@ -985,8 +988,9 @@ def test_a_post_gate_edit_selects_no_lane_and_its_new_helper_neither():
     adds is named only there. The kept lane is dropped too: the proof is over
     every caller."""
     old = _gate_file(_GATED, _AFTER)
-    new_gated = _GATED.replace("        var columns = source.columns\n",
-                               "        var columns = gate_helper(source)\n")
+    new_gated = _GATED.replace("    var columns = source.columns\n",
+                               "    var columns = gate_helper(source)\n")
+    assert new_gated != _GATED, "fixture edit did not apply"
     helper = "def gate_helper(source: PythonObject) raises -> PythonObject:\n    return source.columns\n"
     got = _gated_lanes(old, _gate_file(helper, new_gated, _AFTER))
     assert got is not None and got[1] == set() and got[3] == set(), got
@@ -1006,7 +1010,7 @@ def test_a_pandas_gate_selects_as_before_when_any_half_of_the_proof_fails():
         ("an ungated def that calls the new helper changed too", _gate_file(
             "def gate_helper(source: PythonObject) raises -> PythonObject:\n    return source.columns\n",
             _GATED.replace("var columns = source.columns", "var columns = gate_helper(source)"),
-            _AFTER.replace("        fields[", "        _ = gate_helper(source)\n        fields[")), True),
+            _CALLING_AFTER), True),
         ("_pd_class defined locally", _gate_file(
             "def _pd_class(m: String, n: String) raises -> PythonObject:\n    return PythonObject(None)\n",
             post, _AFTER), True),
@@ -1020,7 +1024,7 @@ def test_a_pandas_gate_selects_as_before_when_any_half_of_the_proof_fails():
     helper_v1 = "def gate_helper(source: PythonObject) raises -> PythonObject:\n    return source.columns\n"
     helper_v2 = helper_v1.replace("source.columns", "source.columns.copy()")
     gated = _GATED.replace("var columns = source.columns", "var columns = gate_helper(source)")
-    after = _AFTER.replace("        fields[", "        _ = gate_helper(source)\n        fields[")
+    after = _CALLING_AFTER
     old = _gate_file(helper_v1, gated, after)
     new = _gate_file(helper_v2, gated.replace("return columns", "return columns.copy()"), after)
     got = _gated_lanes(old, new)
