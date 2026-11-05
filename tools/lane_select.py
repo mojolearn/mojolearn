@@ -4154,6 +4154,12 @@ def pandas_gated_units(path, old_text, new_text, changed):
         for local, binding in _PANDAS_GATE_IMPORTS.items():
             if local in units["top"] or units["imports"].get(local) != {binding}:
                 return set(), f"`{local}` is not imported from {binding[0]} alone"
+    # A name the gate prefix spells that now means something else (a changed
+    # import, a changed or new top-level name of this file) changes the prefix
+    # even when its text is the same.
+    moved = {n for n in set(old_u["imports"]) | set(new_u["imports"])
+             if old_u["imports"].get(n) != new_u["imports"].get(n)}
+    moved |= {u[1] for u in changed if u[0] == "t"}
     gates = {}
     for unit in changed:
         if unit[0] != "t":
@@ -4162,7 +4168,8 @@ def pandas_gated_units(path, old_text, new_text, changed):
         if not o or not n or o[0] != "def" or n[0] != "def" or len(o[1]) != 1 or len(n[1]) != 1:
             continue
         before, after = _pandas_gate(o[1][0]), _pandas_gate(n[1][0])
-        if before is not None and after is not None and before[0] == after[0]:
+        if before is not None and after is not None and before[0] == after[0] \
+                and not (after[1] & (moved - {unit[1]})):
             gates[unit[1]] = after[1]
     if not gates:
         return set(), "no changed definition opens with an unchanged pandas type gate"
