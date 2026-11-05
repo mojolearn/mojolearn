@@ -484,15 +484,50 @@ def source_match(source, commit, wheels, payload, git_root=None):
     require(witness in payload, "wheel source witness missing")
     with zipfile.ZipFile(payload[witness]["wheel"]) as archive:
         require(archive.read(witness).decode().strip() == commit, "wheel source witness differs")
+    # Every wheel Python member under mojolearn/ is either tracked under
+    # python/ at the commit or a generated copy of a tracked source
+    # (tools/generated_wheel_members.py); anything else refuses by name.
+    tracked = set(filter(None, subprocess.check_output(
+        ["git", "-C", str(git_root), "ls-tree", "-r", "-z", "--full-tree", "--name-only",
+         commit, "--", "python/mojolearn"]).decode().split("\0")))
+    generated = _generated_wheel_members()
     matched = {}
     for member, row in payload.items():
-        path = source / "python" / member
-        if member.startswith("mojolearn/") and member.endswith(".py") and path.is_file():
-            require(digest(path) == row["sha256"], "wheel/source Python mismatch: " + member)
-            blob = subprocess.check_output(["git", "-C", str(git_root), "show", commit + ":python/" + member])
-            require(hashlib.sha256(blob).hexdigest() == row["sha256"], "uncommitted package source: " + member)
+        if not (member.startswith("mojolearn/") and member.endswith(".py")):
+            continue
+        origin = generated.source_path(member)
+        if origin is not None:
+            # A generated member is checked against its source at the commit,
+            # never against python/<member>: the build's copy there is
+            # untracked and may be absent or stale.
+            shown = subprocess.run(["git", "-C", str(git_root), "show", commit + ":" + origin],
+                                   capture_output=True)
+            require(shown.returncode == 0,
+                    "generated wheel member " + member + " has no source " + origin + " at " + commit)
+            require(hashlib.sha256(shown.stdout).hexdigest() == row["sha256"],
+                    "generated wheel member differs from its source at the commit: "
+                    + member + " (" + origin + ")")
             matched[member] = row["sha256"]
+            continue
+        require("python/" + member in tracked,
+                "wheel Python member " + member + " is neither tracked under python/ at " + commit
+                + " nor a generated member in tools/generated_wheel_members.py")
+        path = source / "python" / member
+        if path.is_file():
+            require(digest(path) == row["sha256"], "wheel/source Python mismatch: " + member)
+        blob = subprocess.check_output(["git", "-C", str(git_root), "show", commit + ":python/" + member])
+        require(hashlib.sha256(blob).hexdigest() == row["sha256"], "uncommitted package source: " + member)
+        matched[member] = row["sha256"]
     return matched
+
+
+def _generated_wheel_members():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "generated_wheel_members", Path(__file__).with_name("generated_wheel_members.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _export_ignore_attributes(git_root, commit, paths):

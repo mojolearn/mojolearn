@@ -33,7 +33,15 @@ ENV_LIB="$here/.pixi/envs/default/lib"
 PKG="$here/python/mojolearn"
 DYLIBS="$PKG/.dylibs"
 STAMP=$(mktemp "${TMPDIR:-/tmp}/mojolearn-release-stamp.XXXXXX")
-trap 'rm -f "$STAMP"' EXIT INT TERM
+# The identity payload copied into $PKG below (tools/generated_wheel_members.py
+# lists the Python ones) exists only to be packed: remove it on every exit, so
+# a build never leaves generated members in the source checkout for a later
+# source/wheel check to mistake for package source.
+remove_generated_members() {
+    rm -f "$PKG/_identity_trace_diff.py" "$PKG/_identity_break.py" "$PKG"/_identity_lane_*.py
+    rm -rf "$PKG/identity_columns"
+}
+trap 'rm -f "$STAMP"; remove_generated_members' EXIT INT TERM
 
 # Refreshed every build. These are COPIES of the repository root's files, and
 # a stale copy in a published wheel is a wrong LICENSE or a wrong README on
