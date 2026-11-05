@@ -53,6 +53,9 @@ runner pipes them INSIDE a script over ssh stdin into a 0600 file,
 directory. The box can GET the objects that already exist and PUT only into
 per-leg inbox slots; the Mac copies an inbox object to its content address
 after the leg (`promote`), server side. No URL is ever printed or logged.
+A key holds ONE content: promote, the hot directory and the local cache never
+write a key that already holds other files (a loud BINCACHE CONFLICT line with
+both sha256; promote then exits 4); equal files are a no-op.
 
   ON THE BOX (inside a body; a pass-through when the URL map is absent or
   MOJOLEARN_BINCACHE=0):

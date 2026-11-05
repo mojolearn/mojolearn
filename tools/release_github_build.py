@@ -79,7 +79,10 @@ file, masks it, fetches the map into a 0600 file outside every artifact, and
 keeps only its own PUT slots. After the run the Mac deletes the map object and
 promotes an inbox upload only when the object in R2 hashes to the archive the
 job itself recorded (GHA/bincache/hot_sha256.tsv), so a leaked slot URL cannot
-plant bytes under a key. gfx942 codegen is not reproducible from a cold cache,
+plant bytes under a key. A key holds one content: bincache promote refuses an
+upload whose key already holds other files (BINCACHE CONFLICT, both sha256),
+and only the HOST_GROUPS_OWNER leg promotes the vendor-neutral host groups
+that every leg compiles under one key. gfx942 codegen is not reproducible from a cold cache,
 so the AMD set refuses to build without the cache unless --allow-cold-amd.
 """
 import argparse
