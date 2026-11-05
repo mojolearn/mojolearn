@@ -5143,7 +5143,10 @@ class Release:
         return Path(getattr(self.args, "plan_json", "") or (self.rel / "plan.json"))
 
     def saved_plan(self):
-        doc = read_json(self.plan_json_path())
+        try:
+            doc = read_json(self.plan_json_path())
+        except AttributeError:   # a partial Release (tests, a publisher called directly): no release dir
+            return None
         return doc if doc and doc.get("schema") == release_plan_module().SCHEMA and doc.get("commit") == self.commit \
             else None
 
