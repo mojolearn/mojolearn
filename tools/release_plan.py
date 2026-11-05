@@ -357,6 +357,9 @@ def lines(plan):
         d = plan["waste_delta"]
         out.append("waste vs %s: %s" % (d.get("against"), ", ".join("%s %+g" % (k, v) for k, v in sorted(d.items())
                                                                    if k != "against")))
+    if plan.get("report_totals"):
+        # the status report's totals line (tools/release_report.py, docs/release/STATUS_REPORT.md)
+        out.append(plan["report_totals"])
     out.append("the plan launches nothing; publication gates on the rows above")
     return out
 

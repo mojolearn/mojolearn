@@ -1,0 +1,457 @@
+# from ~/mojolearn-evidence/release/0.8.65/requirements.json updated 2026-11-04T11:53:27.309596+00:00
+# stage	row	tested_revision	reason
+pre	adapters-amd		no qualification evidence recorded for this requirement
+pre	adapters-apple		no qualification evidence recorded for this requirement
+pre	adapters-nvidia		no qualification evidence recorded for this requirement
+pre	candidate-nvidia		no qualification evidence recorded for this requirement
+pre	coverage-source		no qualification evidence recorded for this requirement
+pre	identity-amd/byte-lm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/byte-lm-resident	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/cross-entropy-arms	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/embedding	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/embedding-sort	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/grad-accumulation	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/hf-causal-lm	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-amd/hf-causal-lm-stream	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-amd/hf-causal-lm-text	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-amd/hf-model-surface	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-amd/hf-tokenizer	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-amd/mamba1	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba1-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba1-decode-session	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba1-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba2	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba2-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba2-dtlimit	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba2-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba3	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba3-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mamba3-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mlp	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mlp-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/mlp-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/neural-trainer-unfused	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/optim-adam-clip	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/optim-io-capability	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/optim-maximize	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/optim-owner-lifecycle	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/optim-sgd	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/ordered-gradient-sum	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/public-cnn-classifier-predict	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/public-cnn-layer-fit	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/public-numeric-metadata	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/public-residual-dropout	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/public-theta-variants	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/samba	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/samba-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/samba-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/samba-optimizer-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/samba-untied-dropout-accum	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-adafactor	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-adafactor-device	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-adagrad	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-adamax	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-device-tensor	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-export-roundtrip	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-gru	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-lamb	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-lamb-device	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-layernorm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-layernorm-backward	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-lion	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-lr-schedulers	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-lstm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-mlp	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-moe	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-moe-backward	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-nadam	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-onnx-import	4f7cdf9c2f	dependency equivalence affected: source changes reach this unit
+pre	identity-amd/sequence-optimizer-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-program-save-load	4f7cdf9c2f	dependency equivalence affected: source changes reach this unit
+pre	identity-amd/sequence-rmsprop	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/sequence-rnn	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/training-chunked-lm-head	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/training-primitives	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/transformer	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/transformer-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/transformer-decode-load-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/transformer-decode-session	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/transformer-forward-tape	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/transformer-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/transformer-window	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-batchnorm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-bn-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-conv-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-conv1d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-conv2d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-dropout2d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-gcn	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-globalpool	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-gnn-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-pool	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-pool-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-resnet-block	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-sage	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-trainer	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-amd/x-cnn-trainer-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/agglomerative	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/byte-lm	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/byte-lm-resident	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/cross-entropy-arms	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/embedding	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/embedding-sort	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/grad-accumulation	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/hf-causal-lm	ba151faf37	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/hf-causal-lm-stream	ba151faf37	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/hf-causal-lm-text	ba151faf37	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/hf-model-surface	ba151faf37	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/hf-tokenizer	ba151faf37	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/holtwinters	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/holtwinters-multiplicative	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/knn	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-chebyshev	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-clf	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-clf-distance	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-cosine	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-manhattan	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-minkowski-p3	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-rbc	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-reg	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-reg-distance	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/knn-sqeuclidean	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/kpss	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba1	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba1-bf16w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba1-decode-session	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba1-int8w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba2	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba2-bf16w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba2-dtlimit	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba2-int8w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba3	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba3-bf16w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mamba3-int8w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/metrics-fowlkes-mallows	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/metrics-homogeneity-completeness	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/minmax-scaler	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/minmax-scaler-clip	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mlp	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mlp-bf16w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/mlp-int8w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/neural-trainer-unfused	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/optim-adam-clip	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/optim-io-capability	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/optim-maximize	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/optim-owner-lifecycle	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/optim-sgd	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/ordered-gradient-sum	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/public-cnn-classifier-predict	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/public-cnn-layer-fit	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/public-numeric-metadata	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/public-residual-dropout	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/public-theta-variants	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/radius	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/radius-chebyshev	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/radius-manhattan	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/radius-minkowski-p3	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/resample-utils	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/samba	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/samba-bf16w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/samba-int8w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/samba-optimizer-state	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/samba-untied-dropout-accum	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/scaler-fit-transform	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/select-d	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-adafactor	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-adafactor-device	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-adagrad	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-adamax	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-device-tensor	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-export-roundtrip	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-gru	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-lamb	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-lamb-device	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-layernorm	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-layernorm-backward	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-lion	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-lr-schedulers	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-lstm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-mlp	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-moe	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-moe-backward	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-nadam	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-onnx-import	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/sequence-optimizer-state	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-program-save-load	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/sequence-rmsprop	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/sequence-rnn	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/standard-scaler	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/standard-scaler-no-mean	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/standard-scaler-no-std	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/training-chunked-lm-head	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/training-primitives	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/transformer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/transformer-bf16w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/transformer-decode-load-state	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/transformer-decode-session	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/transformer-forward-tape	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/transformer-int8w	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/transformer-window	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-ann-refine	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-ann-refine-euclidean	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cluster-agglo-connectivity	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/x-cluster-agglo-linkages	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/x-cnn-batchnorm	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-bn-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-conv-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-conv1d	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-conv2d	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-dropout2d	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-gcn	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-globalpool	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-gnn-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-pool	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-pool-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-resnet-block	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-sage	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-trainer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-cnn-trainer-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-metrics-classification	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-metrics-classification-report	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-metrics-cluster	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-metrics-ranking	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-metrics-regression	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-neighbors-metrics	0412c8ee2f	dependency equivalence affected: source changes reach this unit
+pre	identity-apple/x-prep-bernoulli-nb	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-binarizer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-categorical-nb	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-complement-nb	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-da-solvers	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-encoder-categories	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-encoder-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-gaussian-nb	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-infrequent	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-inverse-transforms	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-iterative-imputer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-kbins	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-kbins-methods	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-kbins-weights	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-label-binarizer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-label-binarizer-multilabel	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-label-encoder	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-lda	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-maxabs-scaler	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-mi-discrete	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-multilabel-binarizer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-multinomial-nb	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-mutual-info	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-nb-partial	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-nb-weights	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-normalizer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-onehot-encoder	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-ordinal-encoder	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-polynomial-features	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-power-transformer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-priors	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-qda	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-quantile-transformer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-rfe	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-robust-scaler	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-robust-scaler-unit-variance	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-scaler-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-score-edges	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-select-kbest	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-simple-imputer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-simple-imputer-indicator	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-spline-options	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-spline-transformer	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-target-encoder	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-user-objects	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-apple/x-prep-variance-threshold	0412c8ee2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/byte-lm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/byte-lm-host-train	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/byte-lm-resident	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/cross-entropy-arms	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/embedding	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/embedding-sort	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/grad-accumulation	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/hf-causal-lm	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-cpu/hf-causal-lm-stream	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-cpu/hf-causal-lm-text	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-cpu/hf-model-surface	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-cpu/hf-tokenizer	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-cpu/mamba1	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba1-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba1-decode-session	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba1-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba2	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba2-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba2-dtlimit	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba2-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba3	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba3-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mamba3-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mlp	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mlp-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/mlp-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/neural-trainer-unfused	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/optim-adam-clip	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/optim-io-capability	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/optim-maximize	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/optim-owner-lifecycle	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/optim-sgd	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/ordered-gradient-sum	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/public-cnn-classifier-predict	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/public-cnn-layer-fit	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/public-numeric-metadata	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/public-residual-dropout	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/public-theta-variants	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/samba	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/samba-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/samba-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/samba-optimizer-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/samba-untied-dropout-accum	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-adafactor	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-adafactor-device	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-adagrad	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-adamax	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-device-tensor	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-export-roundtrip	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-gru	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-lamb	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-lamb-device	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-layernorm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-layernorm-backward	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-lion	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-lr-schedulers	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-lstm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-mlp	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-moe	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-moe-backward	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-nadam	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-onnx-import	4f7cdf9c2f	dependency equivalence affected: source changes reach this unit
+pre	identity-cpu/sequence-optimizer-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-program-save-load	4f7cdf9c2f	dependency equivalence affected: source changes reach this unit
+pre	identity-cpu/sequence-rmsprop	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/sequence-rnn	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/training-chunked-lm-head	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/training-primitives	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/transformer	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/transformer-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/transformer-decode-load-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/transformer-decode-session	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/transformer-forward-tape	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/transformer-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/transformer-window	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-batchnorm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-bn-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-conv-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-conv1d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-conv2d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-dropout2d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-gcn	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-globalpool	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-gnn-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-pool	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-pool-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-resnet-block	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-sage	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-trainer	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-cpu/x-cnn-trainer-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/byte-lm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/byte-lm-resident	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/cross-entropy-arms	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/embedding	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/embedding-sort	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/grad-accumulation	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/hf-causal-lm	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-nvidia/hf-causal-lm-stream	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-nvidia/hf-causal-lm-text	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-nvidia/hf-model-surface	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-nvidia/hf-tokenizer	ccc8c26dfc	dependency equivalence affected: source changes reach this unit
+pre	identity-nvidia/mamba1	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba1-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba1-decode-session	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba1-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba2	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba2-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba2-dtlimit	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba2-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba3	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba3-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mamba3-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mlp	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mlp-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/mlp-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/neural-trainer-unfused	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/optim-adam-clip	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/optim-io-capability	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/optim-maximize	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/optim-owner-lifecycle	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/optim-sgd	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/ordered-gradient-sum	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/public-cnn-classifier-predict	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/public-cnn-layer-fit	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/public-numeric-metadata	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/public-residual-dropout	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/public-theta-variants	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/samba	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/samba-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/samba-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/samba-optimizer-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/samba-untied-dropout-accum	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-adafactor	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-adafactor-device	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-adagrad	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-adamax	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-device-tensor	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-export-roundtrip	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-gru	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-lamb	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-lamb-device	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-layernorm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-layernorm-backward	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-lion	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-lr-schedulers	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-lstm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-mlp	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-moe	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-moe-backward	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-nadam	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-onnx-import	4f7cdf9c2f	dependency equivalence affected: source changes reach this unit
+pre	identity-nvidia/sequence-optimizer-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-program-save-load	4f7cdf9c2f	dependency equivalence affected: source changes reach this unit
+pre	identity-nvidia/sequence-rmsprop	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/sequence-rnn	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/training-chunked-lm-head	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/training-primitives	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/transformer	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/transformer-bf16w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/transformer-decode-load-state	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/transformer-decode-session	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/transformer-forward-tape	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/transformer-int8w	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/transformer-window	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-batchnorm	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-bn-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-conv-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-conv1d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-conv2d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-dropout2d	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-gcn	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-globalpool	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-gnn-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-pool	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-pool-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-resnet-block	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-sage	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-trainer	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+pre	identity-nvidia/x-cnn-trainer-options	4f7cdf9c2f	dependency equivalence blocked: selector provenance unresolved
+post	published-amd		no qualification evidence recorded for this requirement
+post	published-apple		no qualification evidence recorded for this requirement
+post	published-nvidia		no qualification evidence recorded for this requirement
+pre	runtime-amd		no qualification evidence recorded for this requirement
+pre	runtime-apple		no qualification evidence recorded for this requirement
+pre	runtime-cpu		no qualification evidence recorded for this requirement
+pre	runtime-nvidia		no qualification evidence recorded for this requirement
+pre	runtime-source		no qualification evidence recorded for this requirement
