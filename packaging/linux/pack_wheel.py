@@ -356,10 +356,16 @@ SPLIT_PLAT = "manylinux_2_35_x86_64"
 # submodule runs the package's __init__, which selects a backend and refuses
 # on a box with no built binary (the release inventory test, Wheel CI).
 # host_surface.py itself imports nothing from the package.
+# NOT registered in sys.modules: a source-tree module under a mojolearn* name
+# left there by this import (tools/release.py -> release_reuse -> pack_wheel)
+# is seen by every later reader of sys.modules in the same process; the
+# installed-runtime qualifier's inventory (tools/qualify_native_runtime_installed.py
+# installed_module_inventory) correctly refuses it as product imported outside
+# the installed environment. Nothing looks the alias up; the module object is
+# held here as `host_surface`.
 import importlib.util  # noqa: E402
 _hs_spec = importlib.util.spec_from_file_location("mojolearn_host_surface", PY_DIR / "mojolearn" / "host_surface.py")
 host_surface = importlib.util.module_from_spec(_hs_spec)
-sys.modules[_hs_spec.name] = host_surface
 _hs_spec.loader.exec_module(host_surface)
 # THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), from the
 # per-lane fragments the manifest merges; empty until a lane declares one.
