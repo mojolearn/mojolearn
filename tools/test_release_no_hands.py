@@ -451,8 +451,8 @@ def test_boxes_down_never_takes_down_a_box_whose_job_results_are_not_home(tmp_pa
 
 
 # ---------------------------------------------------------------- 4. the published producers as steps
-# (lane published-no-reverify: published-<vendor> is a local bytes check; the installed smoke from PyPI runs
-# only as published-smoke-<vendor> for an explicit --published-smoke <vendor> with a recorded reason)
+# (lane published-no-reverify: published-<vendor> is a local bytes check; the installed smoke from PyPI that
+# published-smoke-<vendor> ran on the device after publish is removed, lane identity-once-on-frozen-source)
 import hashlib  # noqa: E402
 import json  # noqa: E402
 import subprocess  # noqa: E402
@@ -473,11 +473,9 @@ def test_the_producers_follow_their_publish_steps_need_no_box_and_record_waits_f
         assert release.NEEDS[step] == [publish] and step in release.AFTER["record"]
         assert step not in release.BOX_CONSUMERS and step not in release.AFTER["boxes-down"]
         assert release.RESOURCE[step] is None                      # no Metal lock, no box: a pip download
-    for step, (vendor, after) in release.PUBLISHED_SMOKE_STEPS.items():
-        assert after in release.NEEDS[step] and step in release.AFTER["record"]
-        if vendor != "apple":
-            assert "gate-boxes" in release.NEEDS[step] and release.BOX_CONSUMERS[step] == vendor
-    assert release.RESOURCE["published-smoke-apple"] == "mac"
+    # no installed smoke after publish (Andrew 2026-11-05): the published-smoke-<vendor> steps are gone
+    assert release.PUBLISHED_SMOKE_STEPS == {}
+    assert not any(s.startswith("published-smoke-") for s in steps)
 
 
 def finals(r):
@@ -586,71 +584,26 @@ def test_published_step_end_to_end_against_a_fake_index(tmp_path, monkeypatch):
     assert list(r.rel.glob("published-amd.failed-*"))
 
 
-def test_unrequested_smoke_steps_are_not_selected_and_boxes_down_waits_only_for_the_gates(tmp_path, monkeypatch):
-    r = make(tmp_path, publish="pypi", only="gate-boxes,gate-nvidia,gate-amd,published-nvidia,"
-                                            "published-smoke-nvidia,published-smoke-amd,boxes-down")
+def test_boxes_down_waits_only_for_the_gates(tmp_path, monkeypatch):
+    r = make(tmp_path, publish="pypi", only="gate-boxes,gate-nvidia,gate-amd,published-nvidia,boxes-down")
     monkeypatch.setattr(r, "schedule", lambda steps: {s: "skipped" for s in r.STEPS})
     monkeypatch.setattr(r, "report", lambda status: True)
     assert r.go() == 0
-    assert "published-smoke-nvidia" not in r.selected and "published-smoke-amd" not in r.selected
     waits = [s for s in release.AFTER["boxes-down"] if s in r.selected]
     assert waits == ["gate-boxes", "gate-nvidia", "gate-amd"]
     assert "published_smoke_requests" not in r.state
 
 
-def test_published_smoke_needs_a_reason_and_records_it(tmp_path, monkeypatch):
-    r = make(tmp_path, publish="pypi", published_smoke=["amd"], published_smoke_reason="")
-    with pytest.raises(SystemExit, match="--published-smoke-reason"):
+@pytest.mark.parametrize("reason", ["", "driver update on the AMD box after the gate"])
+def test_published_smoke_is_refused_with_or_without_a_reason(tmp_path, monkeypatch, reason):
+    # Andrew 2026-11-05: identity runs once, before publish, never after. The installed smoke from PyPI ran the
+    # verifier (identity lanes) on the device after publication; a request now refuses and records nothing.
+    r = make(tmp_path, publish="pypi", published_smoke=["amd"], published_smoke_reason=reason)
+    monkeypatch.setattr(r, "schedule", lambda steps: pytest.fail("nothing may be scheduled"))
+    with pytest.raises(SystemExit, match="--published-smoke is removed"):
         r.go()
-    r = make(tmp_path / "b", publish="pypi", published_smoke=["amd"],
-             published_smoke_reason="driver update on the AMD box after the gate")
-    monkeypatch.setattr(r, "schedule", lambda steps: {s: "skipped" for s in r.STEPS})
-    monkeypatch.setattr(r, "report", lambda status: True)
-    assert r.go() == 0
-    assert "published-smoke-amd" in r.selected and "published-smoke-nvidia" not in r.selected
-    (req,) = r.state["published_smoke_requests"]
-    assert req["vendor"] == "amd" and req["reason"].startswith("driver update") and req["commit"] == COMMIT
-    finals(r)
-    assert any(n.startswith("published-smoke-amd: ") for n in r.box_needs()["amd"])   # gate-boxes keeps the droplet
-
-
-def test_published_smoke_step_skips_unless_asked(tmp_path):
-    r = make(tmp_path, publish="pypi")
-    assert r.step_published_smoke_nvidia().startswith("skipped (no --published-smoke nvidia")
-    assert r.calls == []
-
-
-def test_published_smoke_apple_runs_the_installed_smoke_under_the_metal_lock(tmp_path, monkeypatch):
-    seen = []
-
-    def runner(cmd, env, log, detach=False):
-        cmd = [str(c) for c in cmd]
-        seen.append(cmd)
-        report(pathlib.Path(cmd[cmd.index("--out") + 1]), "apple", [w["macos"]],
-               schema=release.Release.PUBLISHED_SMOKE_SCHEMA)
-        return 0
-    r = make(tmp_path, runner=runner, publish="pypi", published_smoke=["apple"], published_smoke_reason="why")
-    w = finals(r)
-    monkeypatch.setattr(r, "smoke_python", lambda: "python3.12")
-    result, data = r.step_published_smoke_apple()
-    assert result.startswith("PASSED") and data == dict(reason="why")
-    cmd = seen[0]
-    assert cmd[2:6] == ["--wait-timeout", "3600", "metal", "--"] and cmd[1].endswith("tools/mac_slot.py")
-    assert cmd[cmd.index("run") - 1].endswith("release_published_install.py")
-    assert cmd[cmd.index("--out") + 1] == str(r.rel / "published-smoke-apple")
-    # the smoke report is never the published-apple ledger producer
-    assert not any(a == "published-install" for a, _ in r.retained_producers())
-
-
-def test_published_smoke_box_step_dry_run_prints_the_wrapper_commands(tmp_path, monkeypatch):
-    r = make(tmp_path, publish="pypi", dry_run=True, published_smoke=["amd"], published_smoke_reason="why")
-    finals(r)
-    monkeypatch.setattr(r, "source_checkout", lambda create=True: tmp_path / "src")
-    assert r.step_published_smoke_amd() is None
-    text = "\n".join(r.lines)
-    assert "tools/ops/published_install.py amd" in text
-    assert "would: bash tools/do_amd_steward.sh run rel-0.8.66-published-amd-" in text
-    assert "published_install_job.sh" in text and "sha256sum" in text
+    assert "published_smoke_requests" not in r.state and r.calls == []
+    assert not hasattr(r, "step_published_smoke_amd")
 
 
 class FakeBox:
@@ -720,7 +673,7 @@ def test_a_published_smoke_box_job_is_staged_launched_fetched_restored_and_rejud
     # the wheels the persisted results lack are restored from the equal candidates, then re-judged at home
     assert all((out / "wheels" / c.name).read_bytes() == c.read_bytes() for c in candidates)
     assert any(c[1] == "tools/release_published_install.py" and c[2] == "judge" for c in box.calls)
-    assert r.published_smoke_ok(vendor)[0]
+    assert json.loads((out / "published-report.json").read_text())["status"] == "passed"
     assert (r.rel / "published" / f"fetch-{box.ptag}" / "final").is_dir()          # boxes-down sees it home
     assert w["macos"].exists()
 

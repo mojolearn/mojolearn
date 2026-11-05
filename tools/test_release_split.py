@@ -67,7 +67,9 @@ class Switch(SplitBase):
         # e1f7f8e24: every publish also needs both candidate gates (before any publication)
         gates = {"gate-nvidia", "gate-amd"}
         self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-pack"} | gates)
-        self.assertEqual(set(r.AFTER["publish-core-linux"]), {"gpu-column-nvidia", "gpu-column-amd"})
+        # Andrew 2026-11-05: every publish also waits for every identity-lane step (release.DEVICE_LANE_STEPS)
+        self.assertEqual(set(r.AFTER["publish-core-linux"]), {"gpu-column-nvidia", "gpu-column-amd"}
+                         | set(release.DEVICE_LANE_STEPS))
         self.assertEqual(set(r.NEEDS["publish-nvidia-ptx"]), {"gpu-column-nvidia", "publish-core-linux"} | gates)
         self.assertEqual(set(r.NEEDS["publish-nvidia"]),
                          {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "publish-nvidia-ptx"} | gates)
