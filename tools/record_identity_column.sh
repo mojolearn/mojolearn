@@ -237,7 +237,9 @@ elif [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; t
     reused=$(sed -n 's/.* REUSED \([0-9]*\) .*/\1/p' <<< "$summary")
     record=$(sed -n 's/.* RECORD \([0-9]*\) .*/\1/p' <<< "$summary")
     bad=$(sed -n 's/.* KNOWN-BAD \([0-9]*\) .*/\1/p' <<< "$summary")
-    echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad; decisions $OUT/$LABEL.reuse.json; FULL=1 records every lane)"
+    # n/a: lanes the harness declares have no route on this class (GPU_ONLY_LANES on cpu), not known-bad.
+    na=$(sed -n 's|.* N/A \([0-9]*\).*|\1|p' <<< "$summary")
+    echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad, n/a ${na:-0}; decisions $OUT/$LABEL.reuse.json; FULL=1 records every lane)"
     # RELEASE FLOOR = THE LEDGER'S RULE (lane ledger-floor-receipts): changed-lanes measures a row
     # from the release floor only with an admitted receipt at the floor (identity_columns.py
     # floor_receipts_for -> release_identity_reference.floor_receipts); a tag alone is no floor.

@@ -493,7 +493,12 @@ def record_lane_results(path, h, v, cls, want_fix, want_held):
     A lane counts only when the record is admissible (the same admit() the
     table builder applies), hashed this harness's fixture and held-out bytes,
     carries the harness's revision of the lane and holds a cell for every
-    fixture. `good` is False when any part of any fixture is not STABLE/N/A."""
+    fixture. `good` is False when any part of any fixture is not STABLE/N/A.
+
+    Returns ((commit, {lane: good}, refused), None): `refused` holds the lanes
+    that are not good only because the harness REFUSED them (every bad verdict
+    is REFUSED, none DIVERGENT/MOVED), which cmd_changed_lanes needs to tell a
+    declared not-applicable lane from a broken one."""
     try:
         j = json.loads(Path(path).read_text())
     except (OSError, ValueError) as exc:
@@ -516,24 +521,27 @@ def record_lane_results(path, h, v, cls, want_fix, want_held):
     for key, cell in cells.items():
         lane, _, fixture = key.partition("/")
         per_lane.setdefault(lane, {})[fixture] = cell
-    out = {}
+    out, refused = {}, set()
     for lane, by_fix in per_lane.items():
         if lane in revs and have_revs.get(lane) != revs[lane]:
             continue
         if set(h.FIXTURES) - set(by_fix):
             continue
-        good = True
+        good, only_refused = True, True
         for fixture in h.FIXTURES:
             cell = by_fix[fixture]
             if not isinstance(cell, dict):
-                good = False
+                good = only_refused = False
                 break
             verdicts = [val for k, val in cell.items() if k == "verdict" or k.endswith("_verdict")]
-            if not verdicts or any(val not in GOOD_VERDICTS for val in verdicts):
+            bad = [val for val in verdicts if val not in GOOD_VERDICTS]
+            if not verdicts or bad:
                 good = False
-                break
+                only_refused = only_refused and bool(bad) and all(val == "REFUSED" for val in bad)
         out[lane] = good
-    return (j.get("commit"), out), None
+        if not good and only_refused:
+            refused.add(lane)
+    return (j.get("commit"), out, refused), None
 
 
 def record_sources(dirs):
@@ -657,7 +665,7 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
             table_times[r["commit"]] = int(r["commit_time"])
     shallow = is_shallow()
 
-    def offer(lane, commit, good, source, committed):
+    def offer(lane, commit, good, source, committed, refused=False):
         t = _commit_time(commit, cache) if commit else None
         if t is None and shallow:
             t = table_times.get(commit)
@@ -666,7 +674,8 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
         cur = best.get(lane)
         # Newest commit wins; at the same commit a good result beats a bad one.
         if cur is None or (t, good) > (cur["time"], cur["good"]):
-            best[lane] = dict(commit=commit, time=t, good=good, source=source, committed=committed)
+            best[lane] = dict(commit=commit, time=t, good=good, source=source, committed=committed,
+                              refused=bool(refused and not good))
         return True
 
     wanted = set(lanes)
@@ -718,9 +727,9 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
             if not (why or "").startswith("class "):
                 log(f"# reuse: skip {path}: {why}")
             continue
-        commit, results = got
+        commit, results, refused = got
         committed = str(path.resolve()).startswith(str(committed_root) + os.sep)
-        n = sum(offer(lane, commit, good, str(path), committed)
+        n = sum(offer(lane, commit, good, str(path), committed, lane in refused)
                 for lane, good in results.items() if lane in wanted)
         if n:
             used += 1
@@ -892,24 +901,47 @@ def cmd_changed_lanes(args):
                 why[lane] = f"closure changed since {ref[:12]}"
         if lane in why:
             out.append(lane)
-    known_bad = [lane for lane in lanes if lane in bad_at and lane not in why]
-    reused = [lane for lane in lanes if lane not in why and lane not in bad_at]
+    # NOT APPLICABLE (lane planner-na-parts, 2026-11-05): the harness DECLARES the
+    # lanes with no CPU route (identity_break.GPU_ONLY_LANES, extended by its
+    # fragments; a full-column CPU run drops them by name). On the cpu class
+    # such a lane whose newest result was REFUSED (every bad verdict REFUSED,
+    # never DIVERGENT/MOVED), or that has no cpu evidence at all, is n/a for
+    # the class: not broken (a rerun of unchanged code cannot help, but there
+    # is nothing to fix either) and not owed (a record would refuse again).
+    # Nothing else is n/a: an undeclared refusal (e.g. Apple's TypeError lanes)
+    # stays KNOWN-BAD, and a declared lane that ran and diverged stays known-bad.
+    declared = dict(getattr(h, "GPU_ONLY_LANES", None) or {}) if cls == "cpu" else {}
+    not_applicable = {}
+    for lane in lanes:
+        p = points.get(lane)
+        if lane in declared and (p is None or (not p["good"] and p.get("refused"))):
+            not_applicable[lane] = dict(reason=f"no cpu route (harness GPU_ONLY_LANES: {declared[lane]})",
+                                        **({k: p[k] for k in ("commit", "source", "committed")} if p else {}))
+    out = [lane for lane in out if lane not in not_applicable]
+    known_bad = [lane for lane in lanes if lane in bad_at and lane not in why and lane not in not_applicable]
+    reused = [lane for lane in lanes if lane not in why and lane not in bad_at and lane not in not_applicable]
     for lane in out[:40]:
         print(f"# re-record {lane}: {why[lane]}", file=sys.stderr)
     for lane in known_bad[:20]:
         p = points[lane]
         print(f"# known-bad {lane}: its newest {cls} result ({p['commit'][:12]}, {p['source']}) is not good and "
               "its closure has not changed since; fix the code, a rerun cannot", file=sys.stderr)
+    for lane, row in list(not_applicable.items())[:20]:
+        print(f"# n/a {lane}: {row['reason']}; its newest {cls} result "
+              f"({(row.get('commit') or 'none')[:12]}) refused by design", file=sys.stderr)
     if cls:
+        # N/A goes after the scope so `REUSED a RECORD b KNOWN-BAD k of N` keeps parsing
+        # (reference_refresh.parse_selection, record_identity_column.sh).
         print(f"# REUSE-SUMMARY class={cls} REUSED {len(reused)} RECORD {len(out)} KNOWN-BAD {len(known_bad)} "
-              f"of {len(lanes)} ({args.scope})", file=sys.stderr)
+              f"of {len(lanes)} ({args.scope}) N/A {len(not_applicable)}", file=sys.stderr)
     if getattr(args, "summary_json", ""):
         doc = dict(schema="mojolearn.identity-reuse.v1", device_class=cls or None, scope=args.scope,
                    record={lane: why[lane] for lane in out},
                    reused={lane: dict(points[lane], time=None) if lane in points else
                            dict(commit=(since.get(lane) or (None,))[0], source="table")
                            for lane in reused},
-                   known_bad={lane: points[lane] for lane in known_bad})
+                   known_bad={lane: points[lane] for lane in known_bad},
+                   not_applicable=not_applicable)
         for row in doc["reused"].values():
             row.pop("time", None)
         Path(args.summary_json).write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")

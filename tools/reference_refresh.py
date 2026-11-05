@@ -113,12 +113,16 @@ class Refused(Exception):
 def parse_selection(text):
     """REUSED / RECORD counts from tools/identity_columns.py changed-lanes stderr.
 
-    --class mode prints `# REUSE-SUMMARY class=c REUSED a RECORD b KNOWN-BAD k of N (scope)`; table mode prints
+    --class mode prints `# REUSE-SUMMARY class=c REUSED a RECORD b KNOWN-BAD k of N (scope) N/A n`; table mode prints
     `# CHANGED-LANES n of N (scope)`. Returns dict(record, reused, known_bad, total) or None."""
-    m = re.search(r"REUSE-SUMMARY class=\S+ REUSED (\d+) RECORD (\d+) KNOWN-BAD (\d+) of (\d+)", text)
+    m = re.search(r"REUSE-SUMMARY class=\S+ REUSED (\d+) RECORD (\d+) KNOWN-BAD (\d+) of (\d+)(?: \(\S+\))?"
+                  r"(?: N/A (\d+))?", text)
     if m:
-        reused, record, bad, total = map(int, m.groups())
-        return dict(record=record, reused=reused, known_bad=bad, total=total)
+        reused, record, bad, total = map(int, m.groups()[:4])
+        out = dict(record=record, reused=reused, known_bad=bad, total=total)
+        if m.group(5) is not None:
+            out["not_applicable"] = int(m.group(5))   # declared no-route lanes (GPU_ONLY_LANES on cpu)
+        return out
     m = re.search(r"CHANGED-LANES (\d+) of (\d+)", text)
     if m:
         record, total = map(int, m.groups())
@@ -593,6 +597,7 @@ class Refresh:
         for c in self.columns:
             p = plans[c]
             extra = "".join((" (known-bad %d)" % p["known_bad"] if p.get("known_bad") else "",
+                             " (n/a %d)" % p["not_applicable"] if p.get("not_applicable") else "",
                              " NARROWED %d owed lane(s) out of scope" % p["narrowed"] if p.get("narrowed") else ""))
             if p.get("gap"):
                 gaps.append("%s=%d" % (c, p["record"]))
