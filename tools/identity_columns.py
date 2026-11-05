@@ -674,8 +674,9 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
         cur = best.get(lane)
         # Newest commit wins; at the same commit a good result beats a bad one.
         if cur is None or (t, good) > (cur["time"], cur["good"]):
-            best[lane] = dict(commit=commit, time=t, good=good, source=source, committed=committed,
-                              refused=bool(refused and not good))
+            best[lane] = dict(commit=commit, time=t, good=good, source=source, committed=committed)
+            if refused and not good:
+                best[lane]["refused"] = True   # only on bad evidence: reused entries keep their exact keys
         return True
 
     wanted = set(lanes)
