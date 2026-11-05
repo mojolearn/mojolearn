@@ -719,6 +719,26 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertEqual(receipt["bindings"], [])
         self.assertIn("no loaded native binding witnesses", receipt["inventory_errors"][0]["error"])
 
+    def test_worker_qualifies_after_release_tooling_is_imported_in_the_same_process(self):
+        # Regression: importing tools/release.py (as the release tests do in
+        # the same pytest run) loaded packaging/linux/pack_wheel.py, which
+        # registered the source-tree host_surface.py as sys.modules
+        # ["mojolearn_host_surface"]; the worker's inventory then refused it
+        # as product imported outside the installed environment.
+        tools = str(Path(__file__).resolve().parent)
+        with patch.object(q.sys, "path", [tools] + q.sys.path):
+            importlib.import_module("release")
+        source = Path(__file__).resolve().parent.parent / "python"
+        leaked = [name for name, module in list(q.sys.modules.items())
+                  if isinstance(module, types.ModuleType)
+                  and not (name == "mojolearn" or name.startswith("mojolearn."))
+                  and str(vars(module).get("__name__", name)).startswith(("mojolearn", "_mojolearn"))
+                  and Path(vars(module).get("__file__") or "/").resolve().is_relative_to(source)]
+        self.assertEqual(leaked, [])
+        code, receipt, _ = self.worker_fixture()
+        self.assertEqual(receipt["inventory_errors"], [])
+        self.assertEqual((code, receipt["pytest_exit"]), (0, 0))
+
     def archive_fixture(self, *, exclude_product=False):
         repo = self.root / "archive-repo"; repo.mkdir()
         files = {
