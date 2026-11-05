@@ -4,6 +4,13 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.66 (published 2026-11-05)
+
+- **Sequence programs on Apple.** Tape programs, program save/load and ONNX import connect their native executor once per process. On a Mac with both numeric tiers installed the second tier used to refuse with "captured program connection is already registered".
+- **Public attributes.** `estimators_` of bagging estimators reads through the compiled tree owner.
+- **Constructors.** Native-public constructors reset `numeric_mode` the same way on a repeated `__init__`.
+- **Verification.** The reference table is recorded once per column and reused for unchanged lanes on every platform; nothing is re-verified after it is green.
+
 ## 0.8.65 (published 2026-11-04)
 
 - **ARIMA on the CPU.** Parameter extraction after a fit keeps its native input buffers alive, so it no longer crashes.
