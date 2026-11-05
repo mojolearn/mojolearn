@@ -761,16 +761,43 @@ def cmd_changed_lanes(args):
     else:
         # The commit each lane's references rest on: the OLDEST record any of its
         # agreeing columns points at (a change after it can have moved that row).
+        #
+        # PER-CLASS SINCE (lane planner-per-class-since, 2026-11-05): with a GPU
+        # --backend (the NVIDIA and AMD columns' ONLY_CHANGED=table record and the
+        # release plan's selection for them) only THIS column's class counts. A
+        # cell's other classes were recorded on their own schedule: at 874dc2043b
+        # the never re-recorded ptx record dated every nvidia and amd lane at its
+        # old commit although their own records sat at HEAD, so the plan owed
+        # 513/513 on both. The oldest of the lane's own-class rows still decides
+        # (as reuse_points does for --class), and a lane missing a row of its
+        # class in a non-optional part has no reference and stays owed.
+        tcls = TABLE_CLASS.get(args.backend or "", "")
+        optional = set(getattr(vref(), "OPTIONAL_PARTS", _OPTIONAL_PARTS)) if tcls else set()
+        uncovered = set()
         for key, cell in (table.get("cells") or {}).items():
             lane = key.partition("/")[0]
-            for ent in cell.values():
-                for col in (ent.get("cols") or {}).values():
+            for part, ent in cell.items():
+                cols = ent.get("cols") or {}
+                if tcls:
+                    if tcls not in cols:
+                        if part not in optional:
+                            uncovered.add(lane)
+                        continue
+                    cols = {tcls: cols[tcls]}
+                for col in cols.values():
                     idx = col if isinstance(col, int) else (col[0] if isinstance(col, list) and col else None)
                     if not isinstance(idx, int) or not 0 <= idx < len(records):
+                        if tcls:
+                            uncovered.add(lane)
                         continue
                     c, t = records[idx].get("commit"), records[idx].get("commit_time") or 0
                     if c and (lane not in since or t < since[lane][1]):
                         since[lane] = (c, t)
+        for lane in uncovered:
+            since.pop(lane, None)
+        if tcls:
+            print(f"# table since: class {tcls} (backend {args.backend}): {len(since)} lane(s) rest on their own "
+                  f"{tcls} rows; {len(uncovered)} lack one", file=sys.stderr)
     # RELEASE FLOOR (Andrew 2026-10-12: "we should only need to verify a few
     # things"). A shipped release admitted every row of its table for its own
     # code (the release's one identity check), so a row whose record commit is
@@ -792,7 +819,7 @@ def cmd_changed_lanes(args):
         # An uncommitted reuse source was never part of a release's table.
         older = [lane for lane, (c, _t) in since.items() if ancestor[c] and c != floor and lane not in uncommitted]
         summary = getattr(args, "summary_json", "") or ""
-        receipts = floor_receipts_for(table, floor_info, older, cls, points,
+        receipts = floor_receipts_for(table, floor_info, older, cls or TABLE_CLASS.get(args.backend or "", ""), points,
                                       log_dir=(Path(summary).parent / "floor-receipts") if summary else None) \
             if older else {}
         refused = [lane for lane in older if not (receipts.get(lane) or {}).get("ok")]
@@ -886,6 +913,11 @@ def cmd_changed_lanes(args):
 #: column may be recorded on Linux or on this Mac, so it is judged with no
 #: backend (every platform's inputs count).
 CLASS_BACKEND = dict(nvidia="cuda", ptx="cuda", amd="hip", apple="metal")
+#: The class a table-mode changed-lanes (no --class) dates each lane from, by
+#: its --backend: the GPU columns that record ONLY_CHANGED=table
+#: (reference_refresh.SELECTION nvidia/amd, box_merged_verify.sh). ptx and
+#: apple always plan with --class; no backend keeps the oldest of every class.
+TABLE_CLASS = dict(cuda="nvidia", hip="amd")
 
 
 def cmd_reuse_check(args):
