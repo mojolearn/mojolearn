@@ -282,3 +282,14 @@ def test_a_real_run_ignores_sighup(monkeypatch):
     seen = {}
     monkeypatch.setattr(signal, "signal", lambda sig, handler: seen.setdefault(sig, handler))
     assert release.ignore_hangup() is True and seen == {signal.SIGHUP: signal.SIG_IGN}
+
+
+def test_a_moved_macos_build_path_misses_every_darwin_group_and_says_why():
+    g = dict(groups(), **{"darwin/identical/_mojolearn_native": dict(closure=["linalg/qr.mojo"])})
+    plan = rp.decide(facts(["CHANGELOG.md"], groups=g, macos_paths=dict(previous="/a/mojolearn", this="/b/wt")))
+    c = by_id(plan["compile"])
+    assert c["darwin/identical/_mojolearn_native"]["action"] == "compile"
+    assert "the previous release built at /a/mojolearn, this one at /b/wt" in c["darwin/identical/_mojolearn_native"]["reason"]
+    assert c["linux/identical/_mojolearn_native"]["action"] == "hit"
+    plan = rp.decide(facts(["CHANGELOG.md"], groups=g, macos_paths=dict(previous="/a/mojolearn", this="/a/mojolearn")))
+    assert {r["action"] for r in plan["compile"]} == {"hit"}

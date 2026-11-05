@@ -111,12 +111,14 @@ def invalidation(changes, groups):
     return out
 
 
-def compile_rows(cls, changes, groups):
+def compile_rows(cls, changes, groups, macos_paths=None):
     """groups: {gid: dict(closure, new, inputs_changed, evidence)}. inputs_changed is the closure-v2
     comparison of the executed build inputs (None when not computed: then a toolchain path compiles)."""
     rows = []
     product = {p for p in changes if kind(p) in PRODUCT}
     pins = sorted(p for p in changes if p in ("pixi.toml", "pixi.lock"))
+    paths = macos_paths or {}
+    moved = paths.get("previous") and paths.get("this") and paths["previous"] != paths["this"]
     recipe = sorted(p for p in changes if kind(p) == "toolchain" and p not in pins)
     for gid, row in sorted(groups.items()):
         reach = sorted(product & set(row.get("closure") or ()))
@@ -131,6 +133,11 @@ def compile_rows(cls, changes, groups):
         elif reach:
             action, why = "compile", "closure changed: " + ", ".join(reach[:6]) + (
                 " (+%d)" % (len(reach) - 6) if len(reach) > 6 else "")
+        elif moved and gid.startswith("darwin/"):
+            # repo_path is a closure-v2 key field (absolute paths are embedded in the binaries): the macOS
+            # release must build from one stable checkout path (docs/release/RELEASE_PLAN.md)
+            action, why = "compile", "the macOS build path moved: the previous release built at %s, this one at %s" % (
+                paths["previous"], paths["this"])
         else:
             action, why = "hit", "closure unchanged since the previous release"
         r = dict(id=gid, section="compile", action=action, reason=why)
@@ -231,7 +238,7 @@ def decide(facts):
     changes = sorted(facts.get("changes") or [])
     groups = facts.get("groups") or {}
     cls, why = classify(changes, groups)
-    comp = compile_rows(cls, changes, groups)
+    comp = compile_rows(cls, changes, groups, facts.get("macos_paths"))
     ident = identity_rows(cls, facts.get("lanes") or {}, facts.get("previous"))
     gates = gate_rows(cls, facts.get("gates") or {}, any(r["action"] == "compile" for r in comp))
     restore = restore_rows(comp + ident + gates)

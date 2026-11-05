@@ -5255,6 +5255,10 @@ class Release:
                              for step, f in (self.state.get("failures") or {}).items()
                              if f.get("commit") == self.state.get("commit")]
         facts["leases"] = {"nvidia": self.HOLD_MAX_S // 60, "amd": self.AMD_LEASE_MIN}
+        # the macOS build path, a key field: the previous release's (from its retained bincache keys) and ours
+        prev_keys = sorted((prev_rel / "macos-bincache" / "provenance" / "keys").glob("*.json")) if prev_rel else []
+        facts["macos_paths"] = dict(this=str(Path(self.src).resolve()),
+                                    previous=(read_json(prev_keys[0]) or {}).get("repo_path") if prev_keys else None)
         facts["step_seconds"] = {s: r.get("seconds") for s, r in (self.state.get("steps") or {}).items()
                                  if isinstance(r, dict) and r.get("commit") == self.state.get("commit")
                                  and isinstance(r.get("seconds"), (int, float))}
