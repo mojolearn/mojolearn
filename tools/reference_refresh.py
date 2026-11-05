@@ -1015,7 +1015,9 @@ class Refresh:
         if self.state.d.get("superseded_by"):
             raise Refused("the refresh of %s was superseded by %s (%s): run that one"
                           % (self.sha12, self.state.d["superseded_by"][:12], self.state.d.get("superseded")))
+        t_plan = time.monotonic()
         self.plan()
+        t_wait = time.monotonic()
         deadline = time.monotonic() + self.wait_min * 60
         while True:
             flight = self.step()
@@ -1036,7 +1038,9 @@ class Refresh:
         if bad:
             self.say("NOT ADMITTED: every requested column must finish first (fix it, or drop the column)")
             return 1
+        t_admit = time.monotonic()
         self.admit()
+        self.write_waste(plan_s=t_wait - t_plan, wait_s=t_admit - t_wait, admit_s=time.monotonic() - t_admit)
         gaps = self.gaps()
         for c, owed, why in gaps:
             self.say("GAP %s: %s owed lane(s) not recorded: %s" % (c, "?" if owed is None else owed, why))
@@ -1046,6 +1050,29 @@ class Refresh:
                                          self.sha12))
             return 4
         return 0
+
+    def write_waste(self, plan_s, wait_s, admit_s):
+        """waste.json beside the state (docs/release/RELEASE_PLAN.md): lanes reused vs recorded per column,
+        and this invocation's seconds planning, waiting on boxes and admitting. Minimal by design."""
+        cols = {}
+        for c in self.columns:
+            p = self.state.col(c).get("plan") or {}
+            cols[c] = dict(reused=p.get("reused"), recorded=p.get("record"))
+        waste = dict(schema="mojolearn.refresh-waste.v1", sha=self.sha, columns=cols,
+                     lanes_reused=sum(v["reused"] or 0 for v in cols.values()),
+                     lanes_recorded=sum(v["recorded"] or 0 for v in cols.values()),
+                     box_wait_seconds=round(wait_s, 1), admission_seconds=round(admit_s, 1),
+                     steps=dict(plan=round(plan_s, 1), wait=round(wait_s, 1), admit=round(admit_s, 1)))
+        try:
+            path = self.state.path.parent / "waste.json"
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(waste, indent=1, sort_keys=True) + "\n")
+            os.replace(tmp, path)
+            self.say("WASTE lanes reused %d / recorded %d; box wait %.0f s, admission %.0f s (%s)"
+                     % (waste["lanes_reused"], waste["lanes_recorded"], wait_s, admit_s, path))
+        except OSError as exc:
+            self.say("waste.json not written: %s" % exc)
+        return waste
 
     def status(self):
         sc = self.state.d.get("scope") or {}
