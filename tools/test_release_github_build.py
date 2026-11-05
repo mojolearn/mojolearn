@@ -688,5 +688,93 @@ class StatusReadRecovery(unittest.TestCase):
             self.assertEqual(gh.call_count, count)
 
 
+
+class HostGroupsOneOwner(unittest.TestCase):
+    """Finding 3 of the 0.8.66 release state: every leg compiled the
+    vendor-neutral host groups under ONE key and the last promote won. Only
+    HOST_GROUPS_OWNER's host-group archives reach the binding cache."""
+
+    HOST = dict(schema=bincache.SCHEMA, script="bindings/merged_build.sh",
+                args=["host", "--group", "_mojolearn_native_series_host"], build_env={},
+                merged=[dict(dir="host", stem="_mojolearn_native_series_host")])
+    GPU = dict(schema=bincache.SCHEMA, script="bindings/merged_build.sh",
+               args=["gpu", "--group", "_mojolearn_native_identical"], build_env={},
+               merged=[dict(dir="identical", stem="_mojolearn_native_identical")])
+
+    def leg_out(self, td):
+        gha = Path(td) / "GHA" / "bincache"
+        (gha / "keys").mkdir(parents=True)
+        rows, hot = [], []
+        for slot, fields in (("000", self.HOST), ("001", self.GPU)):
+            key = bincache.key_of(fields)
+            (gha / "keys" / (key + ".json")).write_text(json.dumps(fields))
+            rows.append("leg1\t%s\t%s/none/img/%s.tar.gz\t%s\tsabotage=0" % (slot, bincache.OBJECT_PREFIX, key, key))
+            hot.append("%s\t%s" % (key, hashlib.sha256(b"x").hexdigest()))
+        (gha / "uploads.tsv").write_text("\n".join(rows) + "\n")
+        (gha / "hot_sha256.tsv").write_text("\n".join(hot) + "\n")
+        return bincache.key_of(self.HOST), bincache.key_of(self.GPU)
+
+    def promote(self, arch):
+        staged = {}
+
+        def fake_get(url, dest, tries=4):
+            Path(dest).write_bytes(b"x")
+            return 200
+
+        def fake_run(cmd, **kw):
+            staged["rows"] = (Path(cmd[-1]) / "uploads.tsv").read_text()
+            return subprocess.CompletedProcess(cmd, 0, "  promoted x\nBINCACHE PROMOTED 1 refused_or_failed=0 "
+                                               "already_same=0 conflicts=0\n", "")
+
+        with tempfile.TemporaryDirectory() as td:
+            host_key, gpu_key = self.leg_out(td)
+            with unittest.mock.patch.object(bincache, "http_get", fake_get), \
+                    unittest.mock.patch.object(bincache, "presign", lambda *a, **k: "https://example.invalid/x"), \
+                    unittest.mock.patch.object(rgb.subprocess, "run", fake_run):
+                line = rgb.promote(td, {"R2_BUCKET": "b"}, arch)
+            log = (Path(td) / "GHA" / "promote.log").read_text()
+        return line, staged["rows"], log, host_key, gpu_key
+
+    def test_the_owner_is_sm_89(self):
+        self.assertEqual(rgb.HOST_GROUPS_OWNER, "sm_89")
+        self.assertEqual(rgb.host_groups_role("sm_89"), "owner")
+        for arch in ("sm_80", "gfx942", "sm_90a"):
+            self.assertEqual(rgb.host_groups_role(arch), "fetch")
+
+    def test_a_non_owner_leg_promotes_its_device_archives_but_not_the_host_groups(self):
+        line, rows, log, host_key, gpu_key = self.promote("gfx942")
+        self.assertIn(gpu_key, rows)
+        self.assertNotIn(host_key, rows)
+        self.assertIn("1 host-group uploads left to the sm_89 leg", line)
+        self.assertIn("not promoted (host groups belong to the sm_89 leg)", log)
+
+    def test_the_owner_leg_promotes_both(self):
+        line, rows, log, host_key, gpu_key = self.promote("sm_89")
+        self.assertIn(gpu_key, rows)
+        self.assertIn(host_key, rows)
+        self.assertNotIn("left to the", line)
+        self.assertTrue(line.startswith("BINCACHE PROMOTED 1"), line)
+
+    def test_a_conflict_line_reaches_the_leg_summary(self):
+        def fake_run(cmd, **kw):
+            return subprocess.CompletedProcess(cmd, 4, "  BINCACHE CONFLICT key=abc at d holds different bytes\n"
+                                               "BINCACHE PROMOTED 0 refused_or_failed=0 already_same=0 conflicts=1\n", "")
+        with tempfile.TemporaryDirectory() as td:
+            self.leg_out(td)
+            with unittest.mock.patch.object(bincache, "http_get", lambda u, d, tries=4: Path(d).write_bytes(b"x") and 200), \
+                    unittest.mock.patch.object(bincache, "presign", lambda *a, **k: "https://example.invalid/x"), \
+                    unittest.mock.patch.object(rgb.subprocess, "run", fake_run):
+                line = rgb.promote(td, {"R2_BUCKET": "b"}, "sm_89")
+        self.assertTrue(line.startswith("BINCACHE PROMOTED 0"), line)
+        self.assertIn("BINCACHE CONFLICT key=abc", line)
+
+    def test_the_plan_names_each_sets_role(self):
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
+            doc = rgb.build_plan(merged_source(), ["sm_80"], 6)
+        self.assertEqual(doc["host_groups"], dict(owner="sm_89", roles={"sm_80": "fetch"}))
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
+            doc = rgb.build_plan(merged_source(), ["sm_89", "host"], 6)
+        self.assertEqual(doc["host_groups"]["roles"], {"sm_89": "owner"})
+
 if __name__ == "__main__":
     unittest.main()

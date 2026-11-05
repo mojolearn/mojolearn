@@ -1037,3 +1037,202 @@ class ExplainSeedHotTests(unittest.TestCase):
         rc, line = self.explain(self.env(MOJOLEARN_BINCACHE_DIR=str(self.base / "c")))
         self.assertEqual(rc, 3)
         self.assertIn("nowhere.at_all", line)
+
+
+# ---------------------------------------------------------------------------
+# one key, one byte content (2026-11-05, finding 3 of the 0.8.66 release state)
+# ---------------------------------------------------------------------------
+
+#: The fake build's bytes follow FAKE_BYTES, which no key reads: two builds of
+#: one key can then write different bytes, as the hip and cuda legs did.
+VARYING_SCRIPT = SCRIPT.replace(
+    "printf 'fake-binding %s\\n' \"${MOJOLEARN_NUMERIC_MODE:-identical}\"",
+    "printf 'fake-binding %s%s\\n' \"${MOJOLEARN_NUMERIC_MODE:-identical}\" \"${FAKE_BYTES:-}\"")
+
+
+class DirStore:
+    """bincache.R2Store over a directory (the promote transport in tests)."""
+
+    def __init__(self, root):
+        self.root = Path(root)
+        self.copies = []
+
+    def fetch(self, name, dest):
+        p = self.root / name
+        if not p.is_file():
+            return False
+        shutil.copyfile(p, dest)
+        return True
+
+    def copy(self, src, dest):
+        (self.root / dest).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.root / src, self.root / dest)
+        self.copies.append(dest)
+
+    def delete(self, name):
+        (self.root / name).unlink()
+
+
+class OneKeyOneContentTests(unittest.TestCase):
+    OUT = "python/mojolearn/host/_mojolearn_native_series_host.so"
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.base = Path(self.td.name).resolve()
+        self.repo = make_repo(self.base / "repo")
+        self.store = self.base / "r2"
+        self.fields = dict(schema=bc.SCHEMA, script="bindings/merged_build.sh",
+                           args=["host", "--group", "_mojolearn_native_series_host"], build_env={},
+                           merged=[dict(dir="host", stem="_mojolearn_native_series_host")])
+        self.key = bc.key_of(self.fields)
+
+    def archive(self, name, payload, builder="a"):
+        so = self.repo / self.OUT
+        so.parent.mkdir(parents=True, exist_ok=True)
+        so.write_bytes(payload)
+        arc = self.base / name
+        bc.pack(arc, self.key, self.fields, self.repo, [self.OUT], dict(builder=dict(leg=builder)))
+        return arc
+
+    def upload(self, leg, slot, arc):
+        """An inbox upload plus the box's record of it (uploads.tsv, keys/)."""
+        d = self.base / ("out-" + leg)
+        (d / "keys").mkdir(parents=True, exist_ok=True)
+        (d / "keys" / (self.key + ".json")).write_text(json.dumps(self.fields))
+        dest = "%s/none/img/%s.tar.gz" % (bc.OBJECT_PREFIX, self.key)
+        inbox = self.store / bc.INBOX_PREFIX / leg / (slot + ".tar.gz")
+        inbox.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(arc, inbox)
+        with open(d / "uploads.tsv", "a") as fh:
+            fh.write("%s\t%s\t%s\t%s\tsabotage=0\n" % (leg, slot, dest, self.key))
+        return d, dest, inbox
+
+    def promote(self, d, store):
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            rc = bc.cmd_promote([str(d)], store=store)
+        finally:
+            sys.stdout = old
+        return rc, buf.getvalue()
+
+    def test_content_conflict_compares_files_not_archive_bytes(self):
+        a = self.archive("a.tar.gz", b"cuda bytes", builder="sm_89")
+        b = self.archive("b.tar.gz", b"cuda bytes", builder="gfx942")   # other manifest extras
+        c = self.archive("c.tar.gz", b"hip bytes")
+        self.assertNotEqual(bc.sha256_file(a), bc.sha256_file(b))
+        self.assertEqual(bc.content_conflict(bc.archive_files(a), bc.archive_files(b)), [])
+        diffs = bc.content_conflict(bc.archive_files(a), bc.archive_files(c))
+        self.assertEqual(diffs, [(self.OUT, bc.sha256_bytes(b"cuda bytes"), bc.sha256_bytes(b"hip bytes"))])
+        self.assertEqual(bc.keep_or_refuse(self.base / "absent.tar.gz", a, self.key)[0], "write")
+        self.assertEqual(bc.keep_or_refuse(a, b, self.key)[0], "same")
+        verdict, line = bc.keep_or_refuse(a, c, self.key, "here")
+        self.assertEqual(verdict, "conflict")
+        for part in (self.key, bc.sha256_bytes(b"cuda bytes"), bc.sha256_bytes(b"hip bytes"), self.OUT):
+            self.assertIn(part, line)
+        junk = self.base / "junk.tar.gz"
+        junk.write_bytes(b"not a tarball")
+        self.assertEqual(bc.keep_or_refuse(junk, a, self.key)[0], "write")
+
+    def test_promote_first_writes_same_is_a_no_op_and_other_bytes_are_refused(self):
+        store = DirStore(self.store)
+        d1, dest, inbox1 = self.upload("sm89", "000", self.archive("a.tar.gz", b"cuda bytes", "sm_89"))
+        rc, log = self.promote(d1, store)
+        self.assertEqual(rc, 0, log)
+        self.assertIn("BINCACHE PROMOTED 1 refused_or_failed=0 already_same=0 conflicts=0", log)
+        kept = (self.store / dest).read_bytes()
+        self.assertFalse(inbox1.exists())
+
+        # a second leg with the SAME files: nothing is written, the inbox object goes
+        d2, _, inbox2 = self.upload("sm80", "000", self.archive("b.tar.gz", b"cuda bytes", "sm_80"))
+        rc, log = self.promote(d2, store)
+        self.assertEqual(rc, 0, log)
+        self.assertIn("already_same=1 conflicts=0", log)
+        self.assertEqual((self.store / dest).read_bytes(), kept)
+        self.assertFalse(inbox2.exists())
+
+        # a third leg with OTHER bytes under the same key: refused loudly, existing kept
+        d3, _, inbox3 = self.upload("gfx942", "000", self.archive("c.tar.gz", b"hip bytes", "gfx942"))
+        rc, log = self.promote(d3, store)
+        self.assertEqual(rc, 4, log)
+        self.assertIn("conflicts=1", log)
+        self.assertTrue(log.strip().splitlines()[-1].startswith("BINCACHE PROMOTED 0"), log)
+        self.assertIn("BINCACHE CONFLICT key=" + self.key, log)
+        self.assertIn("existing sha256=" + bc.sha256_bytes(b"cuda bytes"), log)
+        self.assertIn("upload sha256=" + bc.sha256_bytes(b"hip bytes"), log)
+        self.assertEqual((self.store / dest).read_bytes(), kept)
+        self.assertTrue(inbox3.exists(), "the refused upload stays in the inbox for inspection")
+        self.assertEqual(store.copies, [dest])
+
+    def test_promote_repairs_an_unreadable_object(self):
+        store = DirStore(self.store)
+        d, dest, _ = self.upload("sm89", "000", self.archive("a.tar.gz", b"cuda bytes"))
+        (self.store / dest).parent.mkdir(parents=True, exist_ok=True)
+        (self.store / dest).write_bytes(b"truncated")
+        rc, log = self.promote(d, store)
+        self.assertEqual(rc, 0, log)
+        self.assertEqual(bc.archive_files(self.store / dest), {self.OUT: bc.sha256_bytes(b"cuda bytes")})
+
+    def test_vendor_neutral_names_the_host_builds_only(self):
+        self.assertTrue(bc.vendor_neutral(self.fields))
+        self.assertTrue(bc.vendor_neutral(dict(script="bindings/build_core_host.sh", args=[])))
+        self.assertTrue(bc.vendor_neutral(dict(script="bindings/merged_build.sh", args=["host", "--group", "g"])))
+        self.assertFalse(bc.vendor_neutral(dict(script="bindings/merged_build.sh", args=["gpu", "--group", "g"],
+                                                merged=[dict(dir="identical", stem="g")])))
+        self.assertFalse(bc.vendor_neutral(dict(script="bindings/merged_build.sh", args=["host"],
+                                                merged=[dict(dir="host"), dict(dir="identical")])))
+        self.assertFalse(bc.vendor_neutral(dict(script="bindings/build_rf.sh", args=[])))
+
+
+# The hot directory and the local cache never take other bytes under a key.
+# Attached to the existing classes (their fixtures) so no parent test runs twice.
+def _test_hot_directory_keeps_the_first_bytes_of_a_key(self):
+    self.assertNotEqual(VARYING_SCRIPT, SCRIPT)
+    hot = self.base / "hot"
+    a = self.tree("a")
+    (a / "bindings/build_fake.sh").write_text(VARYING_SCRIPT)
+    out = self.base / "out"
+    self.assertEqual(self.rbuild(a, self.write_map("a"), out, hot=hot), 0)
+    key = self.provenance(out)[0][3]
+    first = (hot / (key + ".tar.gz")).read_bytes()
+    uploads = (out / "uploads.tsv").read_text()
+    # the destination exists, so the hot archive is bypassed and the build runs,
+    # writing other bytes under the same key
+    self.assertEqual(self.rbuild(a, self.write_map("a2", leg="leg2"), out, hot=hot,
+                                 extra={"FAKE_BYTES": "-hip"}), 0)
+    row = self.provenance(out)[1]
+    self.assertEqual(row[3], key)
+    self.assertEqual(row[2], "bypass-destination-exists+built-not-uploaded:conflict")
+    self.assertEqual((hot / (key + ".tar.gz")).read_bytes(), first)
+    self.assertEqual((out / "uploads.tsv").read_text(), uploads, "a conflicting archive is never uploaded")
+
+
+ReleaseDeclaredTests.test_hot_directory_keeps_the_first_bytes_of_a_key = \
+    _test_hot_directory_keeps_the_first_bytes_of_a_key
+
+
+def _test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones(self):
+    a = self.tree(VARYING_SCRIPT)
+    self.assertEqual(self.build(a), 0)
+    key = self.rows()[-1][3]
+    arc = self.cache / (key + ".tar.gz")
+    first = bc.archive_files(arc)
+    c = self.tree(VARYING_SCRIPT)
+    (c / self.OUT).parent.mkdir(parents=True, exist_ok=True)
+    (c / self.OUT).write_bytes(b"old")
+    self.assertEqual(self.build(c, extra={"FAKE_BYTES": "-other"}), 0)
+    self.assertEqual(self.rows()[-1][3], key)
+    self.assertEqual(self.rows()[-1][2], "bypass-destination-exists+built-not-cached:conflict")
+    self.assertEqual(bc.archive_files(arc), first)
+    d = self.tree(VARYING_SCRIPT)
+    (d / self.OUT).parent.mkdir(parents=True, exist_ok=True)
+    (d / self.OUT).write_bytes(b"old")
+    self.assertEqual(self.build(d), 0)
+    self.assertEqual(self.rows()[-1][2], "bypass-destination-exists+built-cached")
+    self.assertEqual(bc.archive_files(arc), first)
+
+
+LocalCacheTests.test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones = \
+    _test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones

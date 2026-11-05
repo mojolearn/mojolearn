@@ -53,6 +53,9 @@ runner pipes them INSIDE a script over ssh stdin into a 0600 file,
 directory. The box can GET the objects that already exist and PUT only into
 per-leg inbox slots; the Mac copies an inbox object to its content address
 after the leg (`promote`), server side. No URL is ever printed or logged.
+A key holds ONE content: promote, the hot directory and the local cache never
+write a key that already holds other files (a loud BINCACHE CONFLICT line with
+both sha256; promote then exits 4); equal files are a no-op.
 
   ON THE BOX (inside a body; a pass-through when the URL map is absent or
   MOJOLEARN_BINCACHE=0):
@@ -1196,6 +1199,87 @@ def verify_archive(path, key, fields):
 
 
 # ---------------------------------------------------------------------------
+# ONE KEY, ONE BYTE CONTENT (2026-11-05, finding 3 of the 0.8.66 release
+# state). Each GitHub release leg recompiled the vendor-neutral host groups
+# and uploaded them under the SAME key; the hip leg's
+# _mojolearn_native_series_host.so came out with other bytes, and the last
+# promote silently replaced the first. A key now holds exactly one content:
+# a write to a key that already holds an archive compares the archives' FILES
+# (path -> sha256 from each manifest; the archive bytes themselves differ by
+# build time and builder) and is a no-op when they are equal and a loud
+# refusal, naming the key and both sha256 of every differing file, when they
+# are not. The existing archive is kept.
+# ---------------------------------------------------------------------------
+def archive_files(path):
+    """{path: sha256} of an archive's manifest, or raise Reject. Reads only the
+    manifest (the content claim); verify_archive checks the bytes on placement."""
+    try:
+        with tarfile.open(path, "r:gz") as tf:
+            try:
+                m = tf.getmember("manifest.json")
+            except KeyError:
+                raise Reject("no manifest")
+            manifest = json.loads(tf.extractfile(m).read())
+    except Reject:
+        raise
+    except Exception as exc:
+        raise Reject("unreadable archive: %s" % type(exc).__name__)
+    files = manifest.get("files") if isinstance(manifest, dict) else None
+    if not files or not all(isinstance(f, dict) and f.get("path") and f.get("sha256") for f in files):
+        raise Reject("manifest lists no files")
+    return {f["path"]: f["sha256"] for f in files}
+
+
+def content_conflict(existing, new):
+    """[(path, existing sha256, new sha256)] for every file the two {path:
+    sha256} maps disagree on ("-" for a file one side lacks); [] when equal."""
+    return [(p, existing.get(p, "-"), new.get(p, "-"))
+            for p in sorted(set(existing) | set(new)) if existing.get(p) != new.get(p)]
+
+
+def conflict_text(key, diffs, where=""):
+    """The loud refusal line: the key and both sha256 of each differing file."""
+    return ("BINCACHE CONFLICT key=%s%s holds different bytes; upload refused, existing kept: %s"
+            % (key, (" at " + where) if where else "",
+               "; ".join("%s existing sha256=%s upload sha256=%s" % d for d in diffs)))
+
+
+def keep_or_refuse(existing_path, new_path, key, where=""):
+    """Before writing NEW_PATH's archive over EXISTING_PATH (same key):
+    ("write", "") when nothing usable is there (absent, or unreadable: it held
+    no content a hit could place), ("same", "") when it holds the same files
+    (the caller may skip the write or refresh the manifest), ("conflict",
+    line) when it holds other bytes: the caller must not write."""
+    if not os.path.isfile(existing_path):
+        return "write", ""
+    try:
+        old = archive_files(existing_path)
+    except Reject as exc:
+        print("BINCACHE replacing unreadable archive for key %s (%s)" % (key, exc), file=sys.stderr)
+        return "write", ""
+    diffs = content_conflict(old, archive_files(new_path))
+    if not diffs:
+        return "same", ""
+    line = conflict_text(key, diffs, where)
+    print(line, file=sys.stderr)
+    return "conflict", line
+
+
+def vendor_neutral(fields):
+    """True for a build keyed without any GPU input: a merged host group
+    (bindings/merged_build.sh host --group G; every merged row in dir host) or
+    a per-binding *_host.sh script. Every Linux release leg compiles these
+    under one key (tools/release_github_build.py HOST_GROUPS_OWNER)."""
+    merged = fields.get("merged")
+    if merged:
+        return all(isinstance(r, dict) and r.get("dir") == "host" for r in merged)
+    script = os.path.basename(str(fields.get("script", "")))
+    if script == "merged_build.sh":
+        return list(fields.get("args") or [])[:1] == ["host"]
+    return script.endswith("_host.sh")
+
+
+# ---------------------------------------------------------------------------
 # transport (https presigned URLs on a box; file:// in the tests)
 # ---------------------------------------------------------------------------
 
@@ -1817,6 +1901,16 @@ def cmd_build_local(script, args, environ, cache_dir):
             **({"closure": closure} if closure is not None else {})))
         # The archive must read back as a hit would read it, or it is not kept.
         verify_archive(tmp, key, fields)
+        # ONE KEY, ONE CONTENT: never replace an archive of this key that holds
+        # other files (its hit was refused, e.g. installed toolchain differs or
+        # the destination existed). Equal files are rewritten as before: the
+        # bytes are the same, and the fresh manifest (installed toolchain)
+        # lets the next lookup hit where the old one was refused.
+        verdict, _line = keep_or_refuse(arc, tmp, key, "local cache")
+        if verdict == "conflict":
+            os.unlink(tmp)
+            rec.row(rel_script, miss + "+built-not-cached:conflict", key, time.time() - t0, files_meta)
+            return 0
         os.replace(tmp, arc)
         _prune(cache_dir, int(environ.get("MOJOLEARN_BINCACHE_KEEP", LOCAL_KEEP)))
     except (Reject, OSError, ValueError) as exc:
@@ -2032,9 +2126,19 @@ def cmd_build(argv, environ=None):
             try:
                 verify_archive(arc, key, fields)
                 hot.mkdir(parents=True, exist_ok=True)
-                tmp_hot = hot / (".tmp-%d-%s.tar.gz" % (os.getpid(), key))
-                shutil.copyfile(arc, tmp_hot)
-                os.replace(tmp_hot, hot / (key + ".tar.gz"))
+                # ONE KEY, ONE CONTENT: an archive already in the hot directory
+                # under this key (a shard's, or an earlier set's) is never
+                # replaced by other bytes; equal files are rewritten as before.
+                verdict, _line = keep_or_refuse(hot / (key + ".tar.gz"), arc, key, "hot directory")
+                if verdict != "conflict":
+                    tmp_hot = hot / (".tmp-%d-%s.tar.gz" % (os.getpid(), key))
+                    shutil.copyfile(arc, tmp_hot)
+                    os.replace(tmp_hot, hot / (key + ".tar.gz"))
+                elif verdict == "conflict":
+                    # The R2 upload of the same bytes is refused too: the key
+                    # already names another content on this box.
+                    rec.row(rel_script, miss + "+built-not-uploaded:conflict", key, time.time() - t0, files_meta)
+                    return 0
             except (Reject, OSError):
                 pass
         slot, put_url = claim_slot(map_path, urls["put"]) if urls["put"] else (None, None)
@@ -2233,7 +2337,59 @@ def check_upload_row(row, keys_dir):
     return leg, slot, dest, key
 
 
-def cmd_promote(argv):
+class R2Store:
+    """The promote transport: R2 through this Mac's credentials. The tests
+    pass a directory-backed object with the same three methods."""
+
+    def __init__(self, creds):
+        self.creds = creds
+
+    def fetch(self, name, dest):
+        """True when NAME exists and its bytes are now at DEST, False on 404."""
+        code = http_get(presign("GET", name, 600, self.creds), dest)
+        if code == 404:
+            return False
+        if code != 200:
+            raise OSError("GET %s: HTTP %s" % (name, code))
+        return True
+
+    def copy(self, src, dest):
+        r2_request(self.creds, "PUT", dest, headers={
+            "x-amz-copy-source": "/%s/%s" % (self.creds["R2_BUCKET"], urllib.parse.quote(src, safe="/"))})
+
+    def delete(self, name):
+        r2_request(self.creds, "DELETE", name)
+
+
+def promote_row(store, leg, slot, dest, key):
+    """Copy one inbox upload to its content address unless the address already
+    holds an archive: then ("same", "") when its files equal the upload's (the
+    inbox object is deleted, nothing is written) and ("conflict", line) when
+    they differ (nothing is written, the inbox object stays for inspection).
+    ("promoted", "") after a copy. Raises on a transport failure."""
+    src = "%s/%s/%s.tar.gz" % (INBOX_PREFIX, leg, slot)
+    with tempfile.TemporaryDirectory(prefix="bincache-promote-") as td:
+        old, new = os.path.join(td, "old.tar.gz"), os.path.join(td, "new.tar.gz")
+        if store.fetch(dest, old):
+            if not store.fetch(src, new):
+                raise OSError("inbox object %s is missing" % src)
+            try:
+                verdict, line = keep_or_refuse(old, new, key, dest)
+            except Reject as exc:
+                return "conflict", "BINCACHE CONFLICT key=%s at %s: the upload is unreadable (%s); existing kept" % (
+                    key, dest, exc)
+            if verdict == "same":
+                store.delete(src)
+                return "same", ""
+            if verdict == "conflict":
+                return "conflict", line
+            # "write": the existing object was unreadable; the upload repairs it
+    store.copy(src, dest)
+    store.delete(src)
+    return "promoted", ""
+
+
+def cmd_promote(argv, store=None):
     if len(argv) != 1:
         raise SystemExit("usage: bincache.py promote <leg out>/remote/bincache")
     d = Path(argv[0])
@@ -2241,8 +2397,8 @@ def cmd_promote(argv):
     if not up.is_file():
         print("BINCACHE PROMOTED 0 (no uploads.tsv)")
         return 0
-    creds = creds_from_env()
-    ok = bad = 0
+    store = store or R2Store(creds_from_env())
+    ok = bad = same = conflicts = 0
     for row in up.read_text().splitlines():
         if not row.strip():
             continue
@@ -2252,18 +2408,27 @@ def cmd_promote(argv):
             print("  refused row: %s" % exc)
             bad += 1
             continue
-        src = "%s/%s/%s.tar.gz" % (INBOX_PREFIX, leg, slot)
         try:
-            r2_request(creds, "PUT", dest, headers={
-                "x-amz-copy-source": "/%s/%s" % (creds["R2_BUCKET"], urllib.parse.quote(src, safe="/"))})
-            r2_request(creds, "DELETE", src)
-            ok += 1
-            print("  promoted %s" % dest)
+            verdict, line = promote_row(store, leg, slot, dest, key)
         except Exception as exc:
             print("  promote failed %s: %s" % (dest, type(exc).__name__))
             bad += 1
-    print("BINCACHE PROMOTED %d refused_or_failed=%d" % (ok, bad))
-    return 0
+            continue
+        if verdict == "promoted":
+            ok += 1
+            print("  promoted %s" % dest)
+        elif verdict == "same":
+            same += 1
+            print("  already holds these bytes %s" % dest)
+        else:
+            conflicts += 1
+            print("  " + line)
+    # The summary stays the last line (tools/release_github_build.py promote reads it).
+    print("BINCACHE PROMOTED %d refused_or_failed=%d already_same=%d conflicts=%d" % (ok, bad, same, conflicts))
+    # A key that would hold two byte contents is a loud failure of this command;
+    # every current caller (the leg scripts' `|| true`, release_github_build's
+    # promote) keeps going and reports the summary line.
+    return 4 if conflicts else 0
 
 
 def cmd_selftest_r2(argv):
