@@ -91,6 +91,8 @@ import merged_bindings  # noqa: E402
 
 MEMBERS = sorted({m for d in ("identical", "host") for _, _, mem in merged_bindings.plan(d, "linux", True)
                   for m in mem})
+#: Merged groups per set on Linux (bindings/merged_groups.json; 4 + 7 since the 2026-11-04 host split).
+N_IDENTICAL, N_HOST = (len(merged_bindings.plan(d, "linux", True)) for d in ("identical", "host"))
 
 
 def member_source(name, body="pass"):
@@ -272,8 +274,8 @@ def test_per_set_compiler_workers_follow_release_policy(box, vendor, gpu_workers
     builds = [json.loads(line) for line in events.splitlines() if line.startswith("[")]
     builds = [row for row in builds if row[0] == "pixi" and "bindings/merged_build.sh" in row[1]]
     host_workers = overrides.get("BOX_HOST_COMPILE_JOBS", "2")
-    # one cached compile per group: 4 identical groups, then 5 host groups
-    assert [row[3] for row in builds] == [gpu_workers] * 4 + [host_workers] * 5
+    # one cached compile per group: the identical groups, then the host groups (bindings/merged_groups.json)
+    assert [row[3] for row in builds] == [gpu_workers] * N_IDENTICAL + [host_workers] * N_HOST
     for tag, workers in (("gpu-identical", gpu_workers), ("host", host_workers)):
         assert f"MOJOLEARN_COMPILE_JOBS={workers}" in (out / f"build-{tag}.command").read_text()
     assert f"gpu_compile_jobs\t{gpu_workers}\n" in (out / "run.tsv").read_text()
@@ -295,11 +297,11 @@ def commit_all(repo, message):
 
 def test_second_job_compiles_nothing_unchanged(box):
     """The box's hot directory serves every group whose closure-v2 key did not
-    change: the second job places all 9 groups and runs no compile."""
+    change: the second job places every group and runs no compile."""
     repo, sha, env = box
     rc, log, events, out = run(box)
     assert rc == 0, log
-    assert events.count('"merged_build"') == 9
+    assert events.count('"merged_build"') == N_IDENTICAL + N_HOST
     first = sorted(l.split()[0] for l in (out / "artifact-sha256.txt").read_text().splitlines()
                    if l.endswith(".so") and "/.libs/" not in l)
     second = dict(env, BOX_OUT_DIR=str(Path(env["BOX_OUT_DIR"]).with_name("run2")))
@@ -307,7 +309,8 @@ def test_second_job_compiles_nothing_unchanged(box):
     rc, log, events, out2 = run((repo, sha, second))
     assert rc == 0, log
     assert '"merged_build"' not in events
-    assert "groups=4 hits=4 compiled=0" in log and "groups=5 hits=5 compiled=0" in log
+    assert ("groups=%d hits=%d compiled=0" % (N_IDENTICAL, N_IDENTICAL) in log
+            and "groups=%d hits=%d compiled=0" % (N_HOST, N_HOST) in log)
     again = sorted(l.split()[0] for l in (out2 / "artifact-sha256.txt").read_text().splitlines()
                    if l.endswith(".so") and "/.libs/" not in l)
     assert again == first
@@ -327,7 +330,7 @@ def test_an_edit_recompiles_only_the_groups_it_reaches(box):
     assert rc == 0, log
     text = (out / "plan.txt").read_text()
     lines = text.splitlines()
-    assert len(lines) == 9, text
+    assert len(lines) == N_IDENTICAL + N_HOST, text
     assert [l for l in lines if ": compile" in l] == [l for l in lines if l.startswith("identical/%s:" % stem)]
     assert "closure changed: bindings/%s.mojo" % members[0] in text
     assert '"merged_build"' not in events and '"install"' not in events, "a plan builds and installs nothing"

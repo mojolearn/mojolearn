@@ -85,6 +85,7 @@ the RMSE arm, which runs no walker, the searcher's leaf regularizer
 ordered arm's Newton Hessian regularizer and the FeatureFreq leaf value's l2
 are one larger.
 """
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from std.math import isfinite
 from std.memory import bitcast
 from std.os import abort
@@ -1996,6 +1997,7 @@ def gbdt_binary_classes_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_gbdt_host() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_gbdt_host")
         module.def_function[gbdt_host_numeric_mode_binding]("gbdt_host_numeric_mode")

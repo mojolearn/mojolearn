@@ -59,6 +59,7 @@ DEVIATIONS 1590 through 1599 are this surface's. 1590 is
 `training/estimator.mojo` and this file; 1591 through 1599 are unassigned.
 """
 
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
 from bindings.residual_dropout_boundary import residual_dropout_binding, residual_dropout_backward_binding
 from bindings.neural_gemm_boundary import neural_gemm_binding
@@ -1401,6 +1402,7 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_training() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
     # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those

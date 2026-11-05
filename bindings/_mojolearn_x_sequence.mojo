@@ -4,6 +4,7 @@
 expansion lane 6). Every entry is `providers/python/sequence_pyapi.mojo`'s, run on a `DeviceExec`; the
 CPU host binding `bindings/_mojolearn_x_sequence_host.mojo` exports the same
 names over a `HostExec`, the same element bodies (`sequence/ops.mojo`)."""
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -784,6 +785,7 @@ def onnx_import_file_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_sequence() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
         m.def_function[numeric_mode_binding]("x_sequence_numeric_mode")

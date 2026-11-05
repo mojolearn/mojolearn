@@ -121,6 +121,7 @@ MOJOLEARN_NUMERIC_MODE); gate:
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from core.hostptr import f32_ptr, read_f32, copy_f32, i8_ptr, i32_ptr
 # lane/lowbit-blocks (2026-09-29): the block under numeric_profile="fixed15_v1".
 from transformer.impl.llama.int15_block import (
@@ -1566,6 +1567,7 @@ def transformer_session_backward_tape_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_transformer() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
     # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those

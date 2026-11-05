@@ -37,6 +37,7 @@ CPU-only install `python/mojolearn/_cholesky_impl.py` binds
 through the trailing update's `gemm_oracle` leaf walk (chol_oracle's
 header, THE SABOTAGE).
 """
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from gemm.host.linalg_dispatch import LINALG_NATIVE_TABLE
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
@@ -684,6 +685,7 @@ def linalg_native_api_v1_binding() raises -> PythonObject:
 
 
 def build__mojolearn_linalg_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_linalg_host")
         module.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")

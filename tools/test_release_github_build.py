@@ -306,9 +306,13 @@ class MergedPlan(unittest.TestCase):
                           (("host", "hip"), 16.0)):
             self.assertGreaterEqual(rgb.WHOLE_DIR_PEAK_GIB[key], peak)
             self.assertLessEqual(rgb.swap_gib(rgb.WHOLE_DIR_PEAK_GIB[key]), rgb.SWAP_MAX_GIB)
-            # an unlisted group plans at its directory's whole-set peak
+            # an unlisted group (a stem a split added) plans at the largest measured row of its tier and
+            # vendor; a tier with no measured row at its directory's whole-set peak
+            measured = [v for (t, _g, vv), v in rgb.UNIT_PEAK_GIB.items() if (t, vv) == key]
             self.assertEqual(rgb.unit_peak_gib(key[0] + ":merged_build.sh:_mojolearn_unlisted", key[1], True),
-                             rgb.WHOLE_DIR_PEAK_GIB[key])
+                             max(measured) if measured else rgb.WHOLE_DIR_PEAK_GIB[key])
+        self.assertEqual(rgb.unit_peak_gib("adapters:merged_build.sh:_mojolearn_unlisted", "cuda", True),
+                         max(rgb.WHOLE_DIR_PEAK_GIB.values()))
 
     def test_every_real_group_has_a_planning_peak_that_fits_a_runner(self):
         # the per-group rows name exactly this checkout's groups, and none needs more than light swap
@@ -316,10 +320,13 @@ class MergedPlan(unittest.TestCase):
         import merged_bindings as mb
         for tier in ("identical", "fast", "host"):
             stems = {stem for stem, _cls, _m in mb.plan(tier, "linux", True)}
-            self.assertEqual({g for t, g, _v in rgb.UNIT_PEAK_GIB if t == tier}, stems)
+            # every row names a group of this checkout (no stale rows); a group a split added has no row
+            # until its first build and plans at its tier's largest measured row (unit_peak_gib)
+            self.assertLessEqual({g for t, g, _v in rgb.UNIT_PEAK_GIB if t == tier}, stems)
             for vendor in ("cuda", "hip"):
                 for stem in stems:
-                    self.assertLessEqual(rgb.swap_gib(rgb.UNIT_PEAK_GIB[(tier, stem, vendor)]), 2)
+                    peak = rgb.unit_peak_gib(tier + ":merged_build.sh:" + stem, vendor, True)
+                    self.assertLessEqual(rgb.swap_gib(peak), 2)
         # The 216d04c7c host run peaked at 13.24 GiB. Its rounded planning
         # peak plus headroom now reserves the same two GiB of light swap.
         self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[("host", "_mojolearn_native_host", "cuda")], 13.24)

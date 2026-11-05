@@ -8,6 +8,7 @@ plus `x_trees_numeric_mode` (1) and `x_trees_vendor` ("cpu"), and the four
 host read-backs `x_trees_host_{numeric_mode,vendor,column,sabotage}`, so
 `_expansion_trees.py` runs unchanged on a CPU-only install through
 `_backend._HOST_MODULES`."""
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -219,6 +220,7 @@ def tree_shap_cache_release_binding(handle: PythonObject) raises -> PythonObject
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_trees_host() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees_host")
         m.def_function[x_trees_host_numeric_mode_binding]("x_trees_host_numeric_mode")

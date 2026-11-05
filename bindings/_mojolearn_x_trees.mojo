@@ -4,6 +4,7 @@
 lane 7): the ensemble glue of `xtrees/ops.mojo`, registered by
 `providers/python/xtrees_api_pyapi.mojo::register`. The trees themselves are fitted through the
 existing `_mojolearn_rf` / `_mojolearn_gbdt` entry points."""
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -213,6 +214,7 @@ def tree_shap_cache_release_binding(handle: PythonObject) raises -> PythonObject
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_trees() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees")
         register(m)

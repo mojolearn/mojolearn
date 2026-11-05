@@ -22,6 +22,7 @@ points here ARE the plain path; two or more devices refuse by name before
 reaching this module.
 """
 
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from core.resample_impl import resample_store_indices
@@ -526,6 +527,7 @@ def monte_carlo_integrate_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_resample_host() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_resample_host")
         m.def_function[resample_host_numeric_mode_binding]("resample_host_numeric_mode")

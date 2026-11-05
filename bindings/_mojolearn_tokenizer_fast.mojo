@@ -27,6 +27,7 @@ THE ADDRESS CONTRACT is the host binding's, so the Python door passes the same b
         allow_endoftext must be False (the door sends True to the host binding) and out_cap
         at least n_bytes; ids back to back as int32, counts as int64; returns the total.
 """
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
@@ -190,6 +191,7 @@ def bpe_encode_batch_binding(
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_fast.mojo
 # (the per-binding build, tools/merged_bindings.py entries).
 def build__mojolearn_tokenizer_fast() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_fast")
         module.def_function[tokenizer_fast_numeric_mode_binding]("tokenizer_fast_numeric_mode")

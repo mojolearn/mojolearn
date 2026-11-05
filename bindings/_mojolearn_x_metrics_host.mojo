@@ -3,6 +3,7 @@
 """CPU binding for `_mojolearn_x_metrics`. HOST ONLY: the same units as the
 device, run in a loop on the caller's arena (x_metrics/host/program.mojo), with
 the GPU binding's export names and address contract."""
+from core.experiment_guards_base import BASE_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -94,6 +95,7 @@ def x_metrics_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_metrics_host() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_metrics_host")
         m.def_function[x_metrics_host_numeric_mode_binding]("x_metrics_host_numeric_mode")

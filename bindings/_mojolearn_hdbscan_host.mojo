@@ -26,6 +26,7 @@ The sabotage arm (`hdbscan_host_sabotage`) is
 (`-D MOJOLEARN_HOST_SABOTAGE=1`): every core distance is read one neighbor
 early.
 """
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -201,6 +202,7 @@ def hdbscan_generate_prediction_data_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_hdbscan_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_hdbscan_host")
         module.def_function[hdbscan_host_numeric_mode_binding]("hdbscan_host_numeric_mode")

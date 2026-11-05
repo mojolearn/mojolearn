@@ -2,6 +2,7 @@
 # Logical host owner for classical. Release builds merge this builder
 # with the other host builders; development builds give it an independent
 # source/cache boundary. TreesResident is registered, allocated and finalized only in this owner.
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -67,6 +68,7 @@ def runtime_classical_host_sabotage_binding() raises -> PythonObject:
 
 
 def build__mojolearn_runtime_classical_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_classical_host")
         module.def_py_c_function(classical_c, "classical_native_call")

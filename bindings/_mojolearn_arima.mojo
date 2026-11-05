@@ -77,6 +77,7 @@ THE GIL is released around every device call, and nothing inside a
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
@@ -603,6 +604,7 @@ def arima_product_df_count_binding(stage: PythonObject) raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_arima() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_arima")
         comptime if ARIMA_K3_DF_ON:

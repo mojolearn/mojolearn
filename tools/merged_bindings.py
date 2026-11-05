@@ -155,6 +155,22 @@ def plan(dir_name, plat, byte_lm, layout="release", repo=None):
     return rows
 
 
+def member_file(dir_name, member, repo=None, index=None):
+    """The merged file (`<stem>.so`) that holds MEMBER in directory set DIR_NAME: from INDEX (a directory's
+    `_mojolearn_merged.json`, what a build actually wrote) when given, else from the manifest. Tools that
+    need one member's native file name it through this, never by a hard-coded group stem."""
+    if index is not None:
+        hits = [f for f, names in index.get("files", {}).items() if member in names]
+    else:
+        d = manifest(repo)["dirs"][dir_name]
+        hits = [stem + ".so" for stem, names in d["groups"].items() if member in names]
+        hits += [optional_rule(dir_name, d, name, rule)[0] + ".so"
+                 for name, rule in d.get("optional", {}).items() if name == member]
+    if len(hits) != 1:
+        raise ValueError(f"{member}: in {len(hits)} merged files of {dir_name} ({hits}); exactly one expected")
+    return hits[0]
+
+
 def binding_names(repo=None):
     """Every binding source with a module body builder, sorted."""
     out = []

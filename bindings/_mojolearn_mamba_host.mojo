@@ -34,6 +34,7 @@ CPU-only install through `_backend._HOST_MODULES`:
 The sabotage arm is `gemm_oracle`'s (`-D MOJOLEARN_HOST_SABOTAGE=1` walks
 every GEMM leaf descending), which every block's projections reach.
 """
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import memcpy
 from std.sys.compile import is_defined
 from std.os import abort
@@ -363,6 +364,7 @@ def mamba_native_session_handle_binding(session: PythonObject) raises -> PythonO
 
 
 def build__mojolearn_mamba_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba_host")
         native_identity_type(m)

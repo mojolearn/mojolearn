@@ -56,6 +56,7 @@ wrapper reads it once.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
 from std.os import abort, getenv
@@ -667,6 +668,7 @@ def linalg_native_api_v1_binding() raises -> PythonObject:
 
 
 def build__mojolearn_linalg() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_linalg")
         m.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")

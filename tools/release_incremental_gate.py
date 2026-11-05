@@ -14,11 +14,14 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
+import merged_bindings
 import release_evidence as evidence
 import release_gate_reuse as reuse
 
 SCHEMA = 'mojolearn.release.incremental-gate.v1'
-HOST = 'mojolearn/host/_mojolearn_native_tokenizer_host.so'
+#: The host file the boundary qualifies: the merged file holding the tokenizer host binding, which carries the
+#: forest input-admission path (bindings/merged_groups.json; _mojolearn_native_tokenizer_host.so at 0.8.65).
+HOST = 'mojolearn/host/' + merged_bindings.member_file('host', '_mojolearn_tokenizer_host')
 VERIFIER = 'mojolearn/_verify_distributed.py'
 FIXTURE_FILES = {
     'mojolearn/_identity_break.py': 'tools/identity_break.py',

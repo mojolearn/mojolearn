@@ -387,6 +387,11 @@ What still dominates after this lane:
 
 ## Regrouping: why it is a proposal, and who consumes group names
 
+Update 2026-11-04 (docs/build/HOT_GROUPS.md): the guards file is split per family and the two compiler-limited
+host groups are split along their closure clusters; the consumers below that named those groups now resolve a
+member's file through the manifest (`tools/merged_bindings.py member_file`) or plan unmeasured stems from the
+measured rows. The full regroup proposal below remains a proposal.
+
 Changing `bindings/merged_groups.json` changes the `.so` names shipped in the wheel. These
 consumers are driven from the manifest: the loader index `_mojolearn_merged.json` (written from the
 plan by `tools/merged_bindings.py index`, read by `python/mojolearn/_merged.py`),

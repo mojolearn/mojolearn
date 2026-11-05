@@ -20,6 +20,7 @@ The sabotage arm (`mixture_infer_host_sabotage`) is the reference binding's:
 (`-D MOJOLEARN_HOST_SABOTAGE=1`), every GEMM leaf walked descending, which
 the scoring E step reaches through the whitened distance.
 """
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -75,6 +76,7 @@ def mixture_numeric_mode_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_mixture_infer_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_mixture_infer_host")
         module.def_function[mixture_infer_host_numeric_mode_binding]("mixture_infer_host_numeric_mode")

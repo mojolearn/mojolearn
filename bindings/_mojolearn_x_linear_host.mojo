@@ -3,6 +3,7 @@
 """CPU binding for `_mojolearn_x_linear` (lane/algos-linear, 2026-09-27).
 HOST ONLY: the GPU binding's export names and address contract, running the
 same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -159,6 +160,7 @@ def x_linear_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_linear_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear_host")
         m.def_function[x_linear_host_numeric_mode_binding]("x_linear_host_numeric_mode")

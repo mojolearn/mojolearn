@@ -4,6 +4,7 @@
 model_selection helpers the expansion added). One entry runs a program of
 units on the device (x_metrics/common.mojo); the host binding runs the same
 units on the CPU."""
+from core.experiment_guards_base import BASE_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -97,6 +98,7 @@ def vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_metrics() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_metrics")
         m.def_function[run_binding]("x_metrics_run")

@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Borrowed Float32 arrays; GPU arithmetic; no context or pointer retained."""
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_base import BASE_GUARDS_OK
 from core.hostptr import f32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
@@ -273,6 +274,7 @@ def vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_preprocessing() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing")
         m.def_function[standard_fit_binding]("standard_fit")

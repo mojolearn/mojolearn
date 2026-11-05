@@ -2,6 +2,7 @@
 # Logical host owner for sequential. Release builds merge this builder
 # with the other host builders; development builds give it an independent
 # source/cache boundary. Native admission snapshots are registered here.
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -39,6 +40,7 @@ def runtime_sequential_host_sabotage_binding() raises -> PythonObject:
 
 
 def build__mojolearn_runtime_sequential_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_sequential_host")
         native_identity_type(module)

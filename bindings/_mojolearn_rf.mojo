@@ -27,6 +27,7 @@ with the with-replacement `RowSampler` wired. This extension is that
 sampler's first Python caller.
 """
 
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.memory import memcpy
 from core.hostptr import copy_f32, list_f32, list_i32
@@ -1662,6 +1663,7 @@ def rf_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_rf() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")

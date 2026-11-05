@@ -61,6 +61,7 @@ snapshot. The three hold the GIL, as the GPU binding's resident entries do,
 so a handle is never released under a running prediction.
 `forest_host_groves_sabotage` reads back DEVIATION 2961's define.
 """
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
@@ -525,6 +526,7 @@ def forest_host_gbdt_sigmoid_pair_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_forest_host() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_forest_host")
         module.def_function[forest_host_numeric_mode_binding]("forest_host_numeric_mode")

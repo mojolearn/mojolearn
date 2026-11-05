@@ -5,6 +5,8 @@ Why (Andrew 2026-10-17, 0.8.52): one refusal line a lane added to core/six_lane_
 "changed" against the last release instead of 7, so the box compile, the release's macOS build and the identity
 re-record (449 lanes instead of the few the code touched) all ran over everything. The cost of a change is the number
 of bindings that import it, transitively; a change to one area belongs in that area's own module.
+Since 2026-11-04 each family has its own guard module, core/experiment_guards_<family>.mojo (tools/experiment_guards.py):
+a refusal or tombstone for one family's define goes there and rebuilds that family only.
 
 For every changed .mojo file (the push's commits over its merge-base with origin/main), count the build scripts whose
 binding reaches it through the import graph of tools/hooks/no_host_routes.py. A file reached by more than
@@ -78,6 +80,8 @@ def main():
         return 0
     print("\n".join([head.replace("rebuild-fence:", "rebuild-fence: REFUSED."), *lines,
                      "  Put an area's change (a refusal, a constant, a helper) in that area's own module.",
+                     "  An experiment refusal or tombstone belongs in core/experiment_guards_<family>.mojo, not",
+                     "  core/six_lane_experiment_guards.mojo (shared guards only; tools/experiment_guards.py).",
                      "  A change that genuinely belongs in the shared module: push with MOJOLEARN_WIDE_REBUILD_OK=1."]),
           file=sys.stderr)
     return 5
