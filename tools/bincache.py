@@ -119,7 +119,28 @@ NON_BUILD_ENV = ("MOJOLEARN_COMMIT", "MOJOLEARN_CPU_THREADS", "MOJOLEARN_SKIP_BU
                  # boxes and 16 on the CPU box gave the same sha256 for every
                  # shipped binary. The other two are the release runner's
                  # interpreter path and the AMD leg's core-host witness.
-                 "MOJOLEARN_BUILD_JOBS", "MOJOLEARN_QUALIFY_PYTHON", "MOJOLEARN_EXPECT_CORE_HOST_SHA256")
+                 "MOJOLEARN_BUILD_JOBS", "MOJOLEARN_QUALIFY_PYTHON", "MOJOLEARN_EXPECT_CORE_HOST_SHA256",
+                 # THE RELEASE RUNNER'S OWN PROVISIONING SWITCHES (2026-11-05,
+                 # lane/orchestrator-flag-not-a-build-input). tools/release.py
+                 # reads these from its own environment to choose boxes,
+                 # providers, workflow refs, state dirs, an index URL and a
+                 # runtime budget; MOJOLEARN_ORCHESTRATOR=1 is REQUIRED by its
+                 # gate-boxes/boxes-down steps (release.py:4359). Nothing under
+                 # bindings/ or packaging/ reads any of them (checked with rg),
+                 # so none reaches `mojo build`. Before this, the v1 build_env
+                 # (and so release_requirements.build_flags) swept them in, and
+                 # release_compile_evidence.supports_requirement refused every
+                 # linux-64 compile requirement captured under
+                 # MOJOLEARN_ORCHESTRATOR=1 (0.8.66 core-linux stop). KEYS: this
+                 # changes a v1 key only for an environment that carried one of
+                 # these; closure-v2 keys (KEY_RULE) never held them, because v2
+                 # keys a MOJOLEARN_* variable only when a keyed input reads it.
+                 # No rule bump.
+                 "MOJOLEARN_ORCHESTRATOR", "MOJOLEARN_AMD_PROVIDER",
+                 "MOJOLEARN_RELEASE_NV_BOX", "MOJOLEARN_RELEASE_AMD_BOX", "MOJOLEARN_RELEASE_NVC",
+                 "MOJOLEARN_RELEASE_DO_AMD", "MOJOLEARN_RELEASE_BOX_PERSIST",
+                 "MOJOLEARN_XCC_WORKFLOW_REF", "MOJOLEARN_APPLE_RUNTIME_SECONDS",
+                 "MOJOLEARN_DEVPOD_STATE", "MOJOLEARN_STEWARD_DO_STATE", "MOJOLEARN_PUBLISHED_INDEX_URL")
 NON_BUILD_PREFIXES = ("MOJOLEARN_BINCACHE", "MOJOLEARN_IDENTITY_", "MOJOLEARN_STAGE_",
                       "MOJOLEARN_GEMM_LEG_", "MOJOLEARN_HOTAISLE_", "MOJOLEARN_DO_",
                       # MOJOLEARN_GAP_ IS WHICH LANES THE LEG WILL RUN AFTERWARDS
