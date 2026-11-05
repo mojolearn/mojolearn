@@ -43,7 +43,7 @@ wrappers without a leg to point at.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from core.experiment_guards_base import BASE_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from std.os import abort
@@ -1396,7 +1396,7 @@ def metrics_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_metrics() -> PythonObject:
-    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.

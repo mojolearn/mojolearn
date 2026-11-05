@@ -57,7 +57,7 @@ The GPU binding's OTHER entries (`graph_parallel_available`) are deliberately AB
 reaches them keeps refusing BY NAME through `_HostBinding` until a lane
 lands them.
 """
-from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from core.experiment_guards_base import BASE_GUARDS_OK
 from std.math import isfinite
 from std.memory import memcpy
 from std.os import abort
@@ -1303,7 +1303,7 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_metrics_host() -> PythonObject:
-    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_metrics_host")
         module.def_function[metrics_host_numeric_mode_binding]("metrics_host_numeric_mode")

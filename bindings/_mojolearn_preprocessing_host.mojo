@@ -21,7 +21,7 @@ address contract and `params` list, plus the read-backs
 through `_backend._HOST_MODULES` (`"_mojolearn_preprocessing":
 "_mojolearn_preprocessing_host"`). The GPU binding exports nothing else.
 """
-from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from core.experiment_guards_base import BASE_GUARDS_OK
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
@@ -187,7 +187,7 @@ def standard_transform_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_preprocessing_host() -> PythonObject:
-    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing_host")
         m.def_function[preprocessing_host_numeric_mode_binding]("preprocessing_host_numeric_mode")
