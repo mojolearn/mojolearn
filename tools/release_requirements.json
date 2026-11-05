@@ -93,7 +93,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [
@@ -177,7 +178,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [
@@ -261,7 +263,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [
@@ -345,7 +348,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [

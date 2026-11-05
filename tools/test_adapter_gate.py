@@ -222,6 +222,9 @@ def apple_runner(tmp_path, status):
         if launch([str(c) for c in cmd], kw.get("log")) != 0:
             raise release.StepFailed("exited 1")
     r.must = must
+    # runtime-apple (the installed-runtime qualifier gate-apple also runs) has its own tests in
+    # tools/test_runtime_qualifier_units.py; these cover the adapter smoke alone
+    r.apple_runtime_gate = lambda: None
     return r
 
 
@@ -247,7 +250,7 @@ def test_gate_apple_fails_on_anything_but_passed(tmp_path, monkeypatch, status):
 def test_gate_apple_is_skipped_when_no_adapters_ship(tmp_path, monkeypatch):
     monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "0")
     r = apple_runner(tmp_path, "PASSED")
-    assert r.step_gate_apple().startswith("skipped") and r.calls == []
+    assert r.step_gate_apple().startswith("adapters skipped") and r.calls == []
 
 
 def test_publish_macos_needs_a_passed_apple_adapter_smoke(tmp_path, monkeypatch):

@@ -23,7 +23,9 @@
 #            file's sha256 before and after in out/route-overlay.txt; the files are restored on exit;
 #   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged;
 #   runtime-qualify  tools/release_runtime_installed.py run against GATE_WHEELS (runtime-<vendor> ledger
-#            evidence), bounded by GATE_RUNTIME_MINUTES, recorded under out/runtime-<vendor>/, never the verdict.
+#            evidence, per unit: runtime-units-<class>/ receipts, earlier receipts from runtime-units-prior.tgz),
+#            bounded by GATE_RUNTIME_MINUTES, recorded under out/runtime-<vendor>/, never the verdict; with
+#            GATE_RUNTIME_CPU=1 (NVIDIA) also runtime-cpu (out/runtime-cpu/).
 # On any exit the reports (GATE_FETCH) and the built autograd set are copied into
 # $MOJOLEARN_RESULTS_DIR/out and the job's own record into $MOJOLEARN_RESULTS_DIR/job.
 set -euo pipefail
@@ -37,6 +39,8 @@ RES="${MOJOLEARN_RESULTS_DIR:?release_gate_job.sh runs under tools/box_persist_r
 [[ "$GATE_TREE" =~ ^/root/[A-Za-z0-9/_.-]+$ && "$GATE_WORK" =~ ^/root/results[A-Za-z0-9/_.-]+$ ]] \
     || { echo "release-gate-job: GATE_TREE / GATE_WORK must be plain /root paths (/root/results* for the work)" >&2; exit 2; }
 [[ "${GATE_OVERLAY_SHA256:-}" =~ ^([0-9a-f]{64})?$ ]] || { echo "release-gate-job: bad GATE_OVERLAY_SHA256" >&2; exit 2; }
+[[ "${GATE_RUNTIME_PRIOR_SHA256:-}" =~ ^([0-9a-f]{64})?$ ]] || { echo "release-gate-job: bad GATE_RUNTIME_PRIOR_SHA256" >&2; exit 2; }
+[[ "${GATE_RUNTIME_CPU:-0}" =~ ^[01]$ ]] || { echo "release-gate-job: bad GATE_RUNTIME_CPU" >&2; exit 2; }
 [[ "$GATE_BUILD_MINUTES" =~ ^[1-9][0-9]*$ ]] || { echo "release-gate-job: bad GATE_BUILD_MINUTES" >&2; exit 2; }
 [[ "${GATE_JOB_CAP_MINUTES:-0}" =~ ^[0-9]+$ ]] || { echo "release-gate-job: bad GATE_JOB_CAP_MINUTES" >&2; exit 2; }
 case "$GATE_VENDOR:$GATE_TARGET" in nvidia:sm_89|amd:gfx942) ;; *) echo "release-gate-job: unsupported vendor/target" >&2; exit 2 ;; esac
@@ -195,26 +199,61 @@ PHASE=runtime-qualify
 # candidate wheels, the frozen source's own tests). Recorded and fetched (out/runtime-<vendor>/), bounded by
 # GATE_RUNTIME_MINUTES; its exit never changes this job's verdict above (the smoke's), but tools/release.py
 # gate_ok fails the gate unless runtime-<vendor>/runtime-report.json says passed.
-if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
-    wheel_args=(); for w in "${GATE_WHEELS[@]}"; do wheel_args+=(--wheel "$w"); done
-    rt_min=$GATE_RUNTIME_MINUTES
+# PER UNIT (docs/release/RUNTIME_QUALIFICATION.md): every test file is one unit with its own budget and receipt.
+# The receipts are appended to $RES/out/runtime-units-<class>/ as each unit ends (tools/box_persist_run.sh
+# uploads $RES every few minutes, so an interrupted job keeps them), and the newest passing receipts of earlier
+# gates come in as runtime-units-prior.tgz (GATE_RUNTIME_PRIOR_SHA256): a unit whose wheel bytes or source
+# closure are unchanged on this device class is reused, not run. A source commit whose producer predates the
+# unit flags runs it without them.
+# GATE_RUNTIME_CPU=1 (the NVIDIA job): runtime-cpu as well, the same producer with --vendor cpu
+# (MOJOLEARN_VENDOR=cpu for the qualifier only; never timed), after runtime-<vendor>, in what the cap leaves.
+UNIT_FLAGS=0
+grep -q -- '--unit-store' tools/release_runtime_installed.py 2>/dev/null && UNIT_FLAGS=1
+# A prior set that is not the recorded bytes, or holds a link, is dropped (every unit then runs); it never
+# changes the job's verdict, which is the smoke's.
+rp="$GATE_WORK/runtime-units-prior"
+if [ -n "${GATE_RUNTIME_PRIOR_SHA256:-}" ] && [ "$UNIT_FLAGS" = 1 ]; then
+    if [ -f "$IN/runtime-units-prior.tgz" ] \
+            && [ "$(sha256sum "$IN/runtime-units-prior.tgz" | cut -d' ' -f1)" = "$GATE_RUNTIME_PRIOR_SHA256" ]; then
+        rm -rf "$rp" && mkdir -p "$rp" && tar -xzf "$IN/runtime-units-prior.tgz" -C "$rp" || rm -rf "$rp"
+        if [ -d "$rp" ] && [ -n "$(cd "$rp" && find . ! -type f ! -type d)" ]; then
+            say "refusing a link or special file in runtime-units-prior; every unit runs"; rm -rf "$rp"
+        fi
+    else
+        say "runtime-units-prior.tgz is not the recorded bytes $GATE_RUNTIME_PRIOR_SHA256; every unit runs"
+    fi
+fi
+# run_runtime VENDOR CLASS: one runtime producer run in the minutes the job cap still leaves
+run_runtime() {
+    local vendor=$1 class=$2 rt_min=$GATE_RUNTIME_MINUTES left rrc=0
     # A capped job (NVIDIA submit --cap) keeps 10 minutes after the qualifier to copy and persist reports.
     if [ "${GATE_JOB_CAP_MINUTES:-0}" != 0 ]; then
         left=$(( GATE_JOB_CAP_MINUTES - SECONDS / 60 - 10 ))
         [ "$left" -ge "$rt_min" ] || rt_min=$left
     fi
     if [ "$rt_min" -le 20 ]; then
-        say "runtime qualifier skipped: only $rt_min minutes left under the job cap"
-    else
-        # The qualifier's own run budget sits 10 minutes inside the outer bound (venv, install, report), so
-        # it stops itself and writes runtime-report.json and qualify/tests.partial.xml instead of being killed.
-        rrc=0
-        timeout "${rt_min}m" python3 tools/release_runtime_installed.py run --vendor "$GATE_VENDOR" \
-            --source-root "$GATE_TREE" --source-commit "$GATE_SOURCE_COMMIT" "${wheel_args[@]}" \
-            --timeout $(( (rt_min - 10) * 60 )) \
-            --out "$GATE_WORK/out/runtime-$GATE_VENDOR" > "$J/runtime-qualify.log" 2>&1 || rrc=$?
-        say "runtime qualifier exited $rrc in ${rt_min}m bound (recorded under out/runtime-$GATE_VENDOR)"
-        tail -n 3 "$J/runtime-qualify.log"
+        say "runtime qualifier ($vendor) skipped: only $rt_min minutes left under the job cap"
+        return 0
+    fi
+    local extra=()
+    if [ "$UNIT_FLAGS" = 1 ]; then
+        extra=(--device-class "$class" --unit-store "$RES/out/runtime-units-$class")
+        if [ -d "$rp/$class" ]; then extra+=(--prior-units "$rp/$class"); fi
+    fi
+    # The qualifier's own outer cap sits 10 minutes inside the outer bound (venv, install, report), so it stops
+    # itself and writes runtime-report.json and the unit receipts instead of being killed.
+    timeout "${rt_min}m" python3 tools/release_runtime_installed.py run --vendor "$vendor" \
+        --source-root "$GATE_TREE" --source-commit "$GATE_SOURCE_COMMIT" "${wheel_args[@]}" \
+        --timeout $(( (rt_min - 10) * 60 )) ${extra[@]+"${extra[@]}"} \
+        --out "$GATE_WORK/out/runtime-$vendor" > "$J/runtime-qualify-$vendor.log" 2>&1 || rrc=$?
+    say "runtime qualifier ($vendor, $class) exited $rrc in ${rt_min}m bound (recorded under out/runtime-$vendor)"
+    grep -m 3 -E '^RUNTIME (units|vendor)' "$J/runtime-qualify-$vendor.log" || tail -n 3 "$J/runtime-qualify-$vendor.log"
+}
+if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
+    wheel_args=(); for w in "${GATE_WHEELS[@]}"; do wheel_args+=(--wheel "$w"); done
+    run_runtime "$GATE_VENDOR" "$GATE_VENDOR-$GATE_TARGET"
+    if [ "${GATE_RUNTIME_CPU:-0}" = 1 ]; then
+        run_runtime cpu "cpu-linux-$(uname -m)"
     fi
 fi
 PHASE=complete
