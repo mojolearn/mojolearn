@@ -450,7 +450,9 @@
   "runtime-apple",
   "runtime-cpu",
   "runtime-nvidia",
-  "runtime-source"
+  "runtime-source",
+  "published-nvidia",
+  "published-amd"
  ],
  "approved_by": "Andrew Hendel",
  "reason": "0.8.65 one-time ledger waiver (approved 2026-11-04 12:45Z: \"do what you think is best\" after the blocked-row report; same shape as the 0.8.64 one-time waiver). Identity: all four columns admitted into table.json with 0 conflicts and verify VERIFIED on NVIDIA and AMD at 0814836ffb; the ledger's dependency selector cannot carry the reused (closure-unchanged) 0.8.64-era records forward across the 153-commit range (16,121 unresolved-native-dispatch limitations), a tooling gap. adapters-*: release_adapter_evidence.py COVERAGE (4 ids) disagrees with release_requirements.json (3 ids), so no adapters row can pass at this freeze (tooling bug). runtime-nvidia/amd: the installed-runtime qualifier timed out at 900 s (release_runtime_installed.py default) at ~23% of its tests; runtime-apple/cpu: no producer in the gate job. runtime-source / coverage-source: approved backlog (Andrew 02:50Z)."
