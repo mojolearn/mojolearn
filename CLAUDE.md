@@ -149,6 +149,15 @@ protocol-correctness checks and the no-callback requirement.
   waiver never triggers a rerun. A verdict is reused automatically for the same bytes (gate adoption, build reuse);
   only a changed input reruns, and only the units it reaches.
 
+## Verification is pre-release only (Andrew, 2026-11-05)
+
+- The identity reference tables are run and checked BEFORE the release, once: freeze the source first, run identity
+  once, see the columns match across the GPUs and the CPU, publish. Nothing verifies after a release by default: no
+  step after the first publish runs a lane on any device.
+- Never plan a second identity run for one release. If a plan would run identity twice, say so up front and fix the
+  order or the tool instead.
+- Good old runs are reused (next section); only lanes whose bits can have changed run.
+
 ## Reuse good old runs, automatically (Andrew, 2026-10-31)
 
 - Reuse is the default in code. `tools/record_identity_column.sh` with no lane
