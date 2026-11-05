@@ -5674,7 +5674,7 @@
   "algos:nmf": {
    "all_on": null,
    "binding_reasons": {
-    "AFCL_L10": "card binding x_decomp imports x_decomp/device.mojo and is the one of x_decomp, linalg, metrics, x_neighbors the lane's Python module loads (LANE_PY_BINDINGS)"
+    "AFCL_L10": "card binding x_decomp imports x_decomp/device.mojo and is the one of x_decomp, linalg, metrics the lane's Python module loads (LANE_PY_BINDINGS)"
    },
    "bindings": {
     "AFCL_L10": "x_decomp"
@@ -7969,7 +7969,7 @@
   "algos:tree-shap": {
    "all_on": "G.algos:tree-shap.all_on",
    "binding_reasons": {
-    "AFCL_T11": "card binding x_trees imports xtrees/shap_device.mojo and is the one of trees, x_trees the lane's Python module loads (LANE_PY_BINDINGS)",
+    "AFCL_T11": "card binding x_trees imports xtrees/shap_device.mojo",
     "AFT_P07": "card binding x_trees imports core/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
     "AFT_P08": "card binding x_trees imports core/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
     "AFT_P09": "card binding x_trees imports core/apple_fast_tree_experiments.mojo, xtrees/shap_device.mojo",
