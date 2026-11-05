@@ -53,11 +53,16 @@ def _connect_owned_programs(connections):
     from . import _partitioned_program
     from types import SimpleNamespace
     records = tuple(vars(value) for value in connections.values() if type(value) is SimpleNamespace)  # glue: installed native mode connections
-    for destination in records:  # glue: connect every native image during import
-        connect = destination["native_module"].ops_owned_program_connect  # glue: import-time provider and storage-layout registration
-        for source in records:  # glue: retain every available native registry provider
+    # The owned-program registry is one process-wide native global
+    # (_Global name "MojolearnOwnedProgramPublicV1" in
+    # providers/python/autograd_owned_program_public_pyapi.mojo), shared by
+    # every loaded image, so each mode's provider is connected exactly once.
+    # Connecting it again through a second image (identical + fast, as on
+    # Apple) re-registers the same binding and the registry refuses it.
+    if records:
+        connect = records[0]["native_module"].ops_owned_program_connect  # glue: import-time provider and storage-layout registration
+        for source in records:  # glue: connect every available native mode provider once
             connect(DistributedProgram, _partitioned_program.PartitionedProgram,
                     source["distributed"], source["native_module"])
-    if records:
         _OWNED_PROGRAM_CALL = records[0]["native_module"].ops_owned_program_call
         _partitioned_program._OWNED_PROGRAM_CALL = _OWNED_PROGRAM_CALL
