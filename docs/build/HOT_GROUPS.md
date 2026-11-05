@@ -107,6 +107,11 @@ closure through `checks/numerics.mojo` and changed in 204 commits since 2026-10-
   `tools/test_experiment_guards.py`): the 360 code lines appear exactly once (sorted-line sha256 b090fc25...ceb
   before and after), all 116 comment lines appear (sorted unique sha256 0f05de92...876 before and after), every
   module keeps the old relative order, 348 asserts before and after.
+- **Old references.** `docs/TOMBSTONES.md` entries cite `core/six_lane_experiment_guards.mojo:<line>`; those entries are
+  permanent and are not rewritten. docs/build/guard_split.json maps every line of the pre-split file (9ee5208756)
+  to its module. The procedure texts that name the old file (CLAUDE.md step 4 of "Deleting an experiment",
+  docs/TOMBSTONES.md lines 17 and 28) are the owner's to update: a refusal now goes in the family module
+  (`python3 tools/experiment_guards.py files` lists them), a cross-family one in the shared file.
 - **New refusals** go in the family module of the code they guard; the rebuild fence
   (`tools/hooks/rebuild_fence.py`) says so when the shared file is touched. No family module is reached by more
   than 20 build scripts (the fence's line), so a family-local refusal needs no `MOJOLEARN_WIDE_REBUILD_OK`.
