@@ -29,7 +29,7 @@ sizing=$(python3 tools/build_sizing.py --jobs "${MOJOLEARN_BUILD_JOBS:-auto}" --
 BUILD_JOBS= BUILD_RSS_GIB= BOX_CORES= BOX_MEM_GIB= BUILD_SIZING=
 eval "$sizing"
 JOBS=$BUILD_JOBS
-[[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..16' >&2; exit 2; }
+[[ "$JOBS" =~ ^[1-9][0-9]{0,2}$ && "$JOBS" -le 128 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..128' >&2; exit 2; }
 # The core host probe is advisory (pack_wheel.py compares every host binding
 # across legs): `skip` lets this leg start before the NVIDIA legs finish.
 [[ ${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-} =~ ^([0-9a-f]{64}|skip)$ ]] || { echo 'MOJOLEARN_EXPECT_CORE_HOST_SHA256 must be the STAGED NVIDIA set copy digest or skip' >&2; exit 2; }
