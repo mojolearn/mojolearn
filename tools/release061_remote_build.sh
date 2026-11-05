@@ -4,7 +4,7 @@
 # bash tools/release061_remote_build.sh cuda sm_89 /absolute/NEW_OUT
 # Required: MOJOLEARN_COMMIT(full SHA), MOJOLEARN_PYTHON(existing absolute Python),
 # MOJOLEARN_RELEASE_BUILD_SECONDS(120..6000, already excludes lease fetch reserve).
-# Optional: MOJOLEARN_BUILD_JOBS (auto, the default, or 1..16; tools/build_sizing.py).
+# Optional: MOJOLEARN_BUILD_JOBS (auto, the default, or 1..128; tools/build_sizing.py).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -74,8 +74,8 @@ export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 # campaign's affinity is 2 x jobs cores and only the build step's guard is
 # widened to it. Every other step keeps the serial two-core, 12 GiB cap.
 # THE BOX SIZES THE BUILD (tools/build_sizing.py, 2026-09-25): unset or
-# `auto`, jobs = min(16, usable cores / 2, 0.6 x available GiB / per-job GiB)
-# and the build step's RSS cap is per-job GiB x jobs + 2; a box too small for
+# `auto`, jobs = min(ceil(usable cores / 2), (available GiB - 4) / per-job GiB)
+# (every core works; two compiler workers per job; Andrew 2026-11-05) and the build step's RSS cap is per-job GiB x jobs + 2; a box too small for
 # one job is refused here, before anything compiles. MOJOLEARN_BUILD_JOBS=N
 # stays an explicit override (the cap still follows N). The CPU build box
 # (NO_DEVICE=1) keeps its 16 GiB per job.
@@ -84,7 +84,7 @@ sizing=$("$PY" "$ROOT/tools/build_sizing.py" --jobs "${MOJOLEARN_BUILD_JOBS:-aut
 }
 BUILD_JOBS= BUILD_RSS_GIB= BOX_CORES= BOX_MEM_GIB= BUILD_PER_JOB_GIB= BUILD_SIZING=
 eval "$sizing"
-[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 && "$BUILD_RSS_GIB" =~ ^[1-9][0-9]*$ ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..16' >&2; exit 2; }
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]{0,2}$ && "$BUILD_JOBS" -le 128 && "$BUILD_RSS_GIB" =~ ^[1-9][0-9]*$ ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..128' >&2; exit 2; }
 # A leg that sized the build before a container narrowed the box says so.
 [[ -n "${RELEASE_BUILD_SIZED_BY:-}" ]] && BUILD_SIZING="$BUILD_SIZING ($RELEASE_BUILD_SIZED_BY)"
 BUILD_CORES=$((2 * BUILD_JOBS))
