@@ -302,6 +302,77 @@ class Wiring(unittest.TestCase):
         self.assertIn('"$OUT/remote/release-build/build/bincache"', text)
         self.assertRegex(text, r'NVIDIA_CAMPAIGN" = 7 \] && _bc_slots="\$\{MOJOLEARN_BINCACHE_SLOTS:-192\}"')
 
+    def test_sm89_walk_is_the_shared_nvidia_central_constant(self):
+        # One constant: nvidia_central.sh sources it and holds no list of its own.
+        gpus, counts = pc.shared_walk()
+        self.assertEqual(pc.GPU_WALK["sm_89"], gpus)
+        self.assertEqual(pc.GPU_COUNT_WALK["sm_89"], counts)
+        central = (TOOLS / "nvidia_central.sh").read_text()
+        self.assertIn('. "$ROOT/tools/runpod_nvidia_sm89.env"', central)
+        self.assertIn("NVC_GPUS=${NVC_GPUS:-$NVIDIA_SM89_GPUS}", central)
+        self.assertIn("NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_SM89_GPU_COUNTS}", central)
+        for gpu in gpus:
+            self.assertNotIn('"' + gpu, central)
+        self.assertGreater(len(gpus), 1)
+        self.assertGreater(max(counts), 1)
+        for name in gpus:
+            self.assertNotRegex(name.lower(), r"apple|mac|m\d")
+
+    def test_rent_walks_every_type_at_each_count_in_order(self):
+        gpus, counts = pc.shared_walk()
+        walk = pc.rent_walk("cuda-sm_89", {"route": "gemm-campaign7"})
+        self.assertEqual(walk, [(g, c) for c in counts for g in gpus])
+        self.assertEqual(pc.rent_walk("hip-gfx942", {"route": "cpu-pod"}), [(None, 1)])
+        self.assertTrue(all(c == 1 for _g, c in pc.rent_walk("cuda-sm_90a", {"route": "gemm-campaign7"})))
+
+    def test_leg_command_asks_for_the_count_and_never_a_job_count(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("MOJOLEARN_PREBUILD_DOLLAR_CAP", None)
+            cmd, env, _ = pc.leg_command("cuda-sm_89", {"route": "gemm-campaign7"}, "c" * 40, Path("/x"),
+                                         "NVIDIA GeForce RTX 4090", 4)
+        self.assertEqual(env["MOJOLEARN_GEMM_LEG_GPU_COUNT"], "4")
+        self.assertEqual(cmd[cmd.index("--dollar-cap") + 1], str(pc.DOLLAR_CAP_PER_GPU * 4))
+        self.assertFalse([k for k in env if "JOBS" in k or "CORES" in k])
+        with self.assertRaises(SystemExit):
+            pc.leg_command("cuda-sm_89", {"route": "gemm-campaign7"}, "c" * 40, Path("/x"), "g", 8)
+        leg = (TOOLS / "gemm_remote_leg.sh").read_text()
+        self.assertIn('in 1|2|4) ;;', leg)
+
+    def test_rent_walks_on_through_counts_after_no_stock(self):
+        calls = []
+
+        def fake_call(cmd, cwd, env, stdout, stderr):
+            calls.append((cmd[cmd.index("--gpu") + 1], env["MOJOLEARN_GEMM_LEG_GPU_COUNT"]))
+            out = Path(env["MOJOLEARN_GEMM_LEG_OUT"])
+            out.mkdir(parents=True, exist_ok=True)
+            if len(calls) < 3:
+                (out / "create_response.json").write_text(
+                    '{"error":"create pod: There are no instances currently available","status":500}')
+                return 1
+            return 0
+
+        class NoWorktree:
+            def __init__(self, commit):
+                pass
+
+            def __enter__(self):
+                return ROOT
+
+            def __exit__(self, *exc):
+                return False
+
+        plan = {"targets": {"cuda-sm_89": {"counts": {"missing": 3}}}}
+        profiles = {"cuda-sm_89": {"route": "gemm-campaign7", "templates": {}}}
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(pc, "EVIDENCE", Path(d)), \
+                mock.patch.object(pc, "GPU_WALK", dict(pc.GPU_WALK, sm_89=["A", "B"])), \
+                mock.patch.object(pc, "GPU_COUNT_WALK", dict(pc.GPU_COUNT_WALK, sm_89=[4, 1])), \
+                mock.patch.object(pc, "CommitWorktree", NoWorktree), \
+                mock.patch.object(pc.subprocess, "call", side_effect=fake_call):
+            results = pc.rent(plan, "c" * 40, profiles, {}, [], say=lambda *_: None)
+        self.assertEqual(calls, [("A", "4"), ("B", "4"), ("A", "1")])
+        self.assertEqual(results["cuda-sm_89"]["gpu_count"], 1)
+        self.assertEqual(results["cuda-sm_89"]["rc"], 0)
+
     def test_workflow_is_manual_only_and_never_rents_by_default(self):
         # Only light-checks starts by itself (light-checks.yml refuses any
         # other workflow with a push or schedule trigger).

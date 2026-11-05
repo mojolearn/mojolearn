@@ -448,15 +448,26 @@ _FAILED = {}
 _WORKTREES = threading.Lock()
 
 # TEMPORARY DEPENDENCY WORKTREES ARE REGISTERED AND REMOVED ON EXIT (2026-11-05). 0.8.65 left seven
-# <tmp>/mojolearn-dependencies-*/tree worktrees registered in the release checkout: the `finally` above
-# never runs when the process is killed (a step timeout, a closed terminal). Every tree is recorded in
-# WORKTREE_REGISTRY (one JSON per tree: pid, root, tree, created) the moment `worktree add` succeeds; an
-# atexit hook and a SIGTERM/SIGHUP handler remove this process's live trees; `--gc-worktrees` removes
-# registered or listed dependency trees whose process is gone and that are older than a day. It never
-# touches a worktree outside a `mojolearn-dependencies-*` temporary directory (never ~/mojolearn-wt/*).
+# <tmp>/mojolearn-dependencies-*/tree worktrees registered in the release checkout: the `finally` in
+# frozen_snapshot never runs when the process is killed (a step timeout, a closed terminal). Every tree is recorded in
+# WORKTREE_REGISTRY (one JSON per tree: pid, start, root, tree, created) the moment `worktree add` succeeds,
+# and its temporary directory carries WORKTREE_OWNER (pid, start, created) from before the add; an atexit hook
+# and a SIGTERM/SIGHUP/SIGINT handler remove this process's live trees; `--gc-worktrees` removes registered or
+# listed dependency trees whose owner is gone. It never touches a worktree outside a `mojolearn-dependencies-*`
+# temporary directory (never ~/mojolearn-wt/*).
+#
+# OWNER-AWARE GC, RUN BEFORE EVERY ANALYSIS (2026-11-05, 94 GB leaked on the build Mac). The signal handlers
+# were installed only from the main thread, and prefetch runs every frozen_snapshot on pool threads, so a
+# SIGTERM during a parallel analysis left every tree; and the 24 h gc age kept a whole day of leaks. Now the
+# handlers are installed from prefetch (main thread) too; gc removes a tree whose recorded owner process is
+# dead (or whose pid now belongs to a later process, by its start time) at any age, keeps a tree whose owner
+# is alive, and applies the age rule (WORKTREE_GC_AGE_S, 2 h) only to trees with no recorded owner; and every
+# process runs that gc once per checkout before its first analysis.
 WORKTREE_PREFIX = "mojolearn-dependencies-"
-WORKTREE_GC_AGE_S = 24 * 3600
+WORKTREE_OWNER = "owner.json"
+WORKTREE_GC_AGE_S = 2 * 3600
 _LIVE_WORKTREES = {}
+_OWN_START = []
 
 
 def worktree_registry():
@@ -468,14 +479,41 @@ def _registry_file(tree):
     return worktree_registry() / (hashlib.sha256(str(tree).encode()).hexdigest()[:16] + ".json")
 
 
-def _register_worktree(root, tree):
+def _process_start(pid):
+    """The start time of process PID as `ps` prints it, or None when unknown. A pid reused by a later
+    process has a different start, so a recorded (pid, start) pair names one process, not one pid."""
+    try:
+        out = subprocess.run(["ps", "-o", "lstart=", "-p", str(int(pid))], capture_output=True, text=True,
+                             timeout=10)
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        return None
+    return " ".join((out.stdout or "").split()) or None
+
+
+def _owner_row():
     import time
+    if not _OWN_START:
+        _OWN_START.append(_process_start(os.getpid()))
+    return dict(pid=os.getpid(), start=_OWN_START[0], created=time.time())
+
+
+def _write_owner(temporary):
+    """Record this process as the owner of a dependency temporary directory, before any worktree is added."""
+    try:
+        (Path(temporary) / WORKTREE_OWNER).write_text(json.dumps(_owner_row(), sort_keys=True) + "\n")
+    except OSError:
+        pass  # without it the tree is an unknown-owner tree: the age rule still removes it
+
+
+def _register_worktree(root, tree):
     _install_worktree_cleanup()
     _LIVE_WORKTREES[str(tree)] = str(root)
+    if Path(tree).parent.name.startswith(WORKTREE_PREFIX) and not (Path(tree).parent / WORKTREE_OWNER).exists():
+        _write_owner(Path(tree).parent)
     try:
         worktree_registry().mkdir(parents=True, exist_ok=True)
-        _registry_file(tree).write_text(json.dumps(dict(pid=os.getpid(), root=str(root), tree=str(tree),
-                                                        created=time.time()), sort_keys=True) + "\n")
+        _registry_file(tree).write_text(json.dumps(dict(_owner_row(), root=str(root), tree=str(tree)),
+                                                   sort_keys=True) + "\n")
     except OSError:
         pass  # the in-process hook still removes it; --gc-worktrees finds it in `git worktree list`
 
@@ -499,39 +537,77 @@ def _remove_live_worktrees():
         _unregister_worktree(tree)
 
 
-_CLEANUP_INSTALLED = []
+_ATEXIT_INSTALLED = []
+_SIGNALS_INSTALLED = []
 
 
 def _install_worktree_cleanup():
-    if _CLEANUP_INSTALLED:
-        return
-    _CLEANUP_INSTALLED.append(True)
+    """atexit once; the signal handlers once, from the main thread (Python only installs them there, so a
+    first call from a pool thread installs atexit now and the handlers at the next main-thread call)."""
     import atexit
     import signal
-    atexit.register(_remove_live_worktrees)
-    if threading.current_thread() is not threading.main_thread():
+    if not _ATEXIT_INSTALLED:
+        _ATEXIT_INSTALLED.append(True)
+        atexit.register(_remove_live_worktrees)
+    if _SIGNALS_INSTALLED or threading.current_thread() is not threading.main_thread():
         return
-    for sig in (signal.SIGTERM, signal.SIGHUP):
+    _SIGNALS_INSTALLED.append(True)
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         try:
             previous = signal.getsignal(sig)
         except (ValueError, OSError):
             continue
-        if previous not in (signal.SIG_DFL, None):
-            continue  # someone else owns it; atexit still runs on a normal exit
+        if sig == signal.SIGINT:
+            if previous is not signal.default_int_handler:
+                continue  # someone else owns Ctrl-C; atexit still runs after the KeyboardInterrupt
 
-        def handler(signum, _frame, _sig=sig):
-            _remove_live_worktrees()
-            signal.signal(_sig, signal.SIG_DFL)
-            os.kill(os.getpid(), signum)
-        signal.signal(sig, handler)
+            def handler(_signum, _frame):
+                # Ctrl-C keeps Python's behavior (KeyboardInterrupt, `finally` blocks, atexit); the trees go first.
+                _remove_live_worktrees()
+                raise KeyboardInterrupt
+        else:
+            if previous not in (signal.SIG_DFL, None):
+                continue  # someone else owns it; atexit still runs on a normal exit
+
+            def handler(signum, _frame, _sig=sig):
+                _remove_live_worktrees()
+                signal.signal(_sig, signal.SIG_DFL)
+                os.kill(os.getpid(), signum)
+        try:
+            signal.signal(sig, handler)
+        except (ValueError, OSError):
+            continue
 
 
 def _pid_alive(pid):
     try:
         os.kill(int(pid), 0)
+    except PermissionError:
+        return True  # it exists, owned by another user
     except (OSError, ValueError, TypeError):
         return False
     return True
+
+
+def _owner_state(row):
+    """'self', 'alive', 'dead' or 'unknown' for an owner record {pid, start}."""
+    pid = row.get("pid")
+    if not pid:
+        return "unknown"
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return "unknown"
+    if pid == os.getpid():
+        return "self"  # this process: its own trees go through _remove_live_worktrees, never through gc
+    if not _pid_alive(pid):
+        return "dead"
+    recorded = row.get("start")
+    if recorded:
+        current = _process_start(pid)
+        if current and current != recorded:
+            return "dead"  # the pid now belongs to a later process
+    return "alive"
 
 
 def _listed_worktrees(root, runner=subprocess.run):
@@ -549,10 +625,12 @@ def _is_dependency_tree(path, protect):
 def gc_worktrees(root, max_age_s=WORKTREE_GC_AGE_S, now=None, dry=False, runner=subprocess.run,
                  protect=(Path.home() / "mojolearn-wt",)):
     """Remove stale temporary dependency worktrees of ROOT: listed by `git worktree list` or registered,
-    under a `mojolearn-dependencies-*` directory, older than MAX_AGE_S, their registering process gone.
-    A tree whose directory is already gone loses its registration (`.git/worktrees/<id>`, matched by its
-    gitdir file: the targeted equivalent of `git worktree prune`, which would also prune other sessions'
-    missing trees). Returns dict(removed, kept, pruned)."""
+    under a `mojolearn-dependencies-*` directory. The owner comes from the registry, else from the
+    directory's WORKTREE_OWNER file: a dead owner's tree is removed at any age, a live owner's tree (or this
+    process's) is kept, and a tree with no recorded owner is removed only when older than MAX_AGE_S.
+    A removed or missing tree also loses its registration (`.git/worktrees/<id>`, matched by its gitdir
+    file: the targeted equivalent of `git worktree prune`, which would also prune other sessions' missing
+    trees). Returns dict(removed, kept, pruned)."""
     import shutil
     import time
     now = time.time() if now is None else now
@@ -567,18 +645,29 @@ def gc_worktrees(root, max_age_s=WORKTREE_GC_AGE_S, now=None, dry=False, runner=
     candidates |= {t for t, row in registered.items() if row.get("root") == str(root) and _is_dependency_tree(t, protect)}
     removed, kept, pruned = [], [], []
     for tree in sorted(candidates):
-        row = registered.get(tree) or {}
-        if row.get("pid") and _pid_alive(row["pid"]) and row["pid"] != os.getpid():
+        p = Path(tree)
+        row = dict(registered.get(tree) or {})
+        if not row.get("pid"):
+            try:
+                row.update({k: v for k, v in json.loads((p.parent / WORKTREE_OWNER).read_text()).items()
+                            if k in ("pid", "start", "created")})
+            except (OSError, ValueError, AttributeError):
+                pass
+        state = _owner_state(row)
+        if state == "self":
+            kept.append((tree, "owned by this process"))
+            continue
+        if state == "alive":
             kept.append((tree, "its process %s is alive" % row["pid"]))
             continue
-        p = Path(tree)
-        try:
-            born = row.get("created") or p.parent.stat().st_mtime
-        except OSError:
-            born = row.get("created") or 0
-        if now - born < max_age_s:
-            kept.append((tree, "younger than %d hours" % (max_age_s // 3600)))
-            continue
+        if state == "unknown":
+            try:
+                born = row.get("created") or p.parent.stat().st_mtime
+            except OSError:
+                born = row.get("created") or 0
+            if now - born < max_age_s:
+                kept.append((tree, "no recorded owner and younger than %g hours" % (max_age_s / 3600)))
+                continue
         if dry:
             removed.append(tree)
             continue
@@ -598,6 +687,29 @@ def gc_worktrees(root, max_age_s=WORKTREE_GC_AGE_S, now=None, dry=False, runner=
             Path(row["file"]).unlink(missing_ok=True)
     return dict(removed=removed, kept=kept, pruned=pruned)
 
+
+_GC_DONE = set()
+_GC_LOCK = threading.Lock()
+
+
+def gc_before_analysis(root, say=None):
+    """Once per process and checkout, before the first frozen analysis: gc_worktrees with the default rules.
+    A gc failure never blocks the analysis (it only leaves disk)."""
+    say = say or (lambda line: print(line, file=sys.stderr))
+    with _GC_LOCK:
+        if str(root) in _GC_DONE:
+            return None
+        _GC_DONE.add(str(root))
+        try:
+            with _WORKTREES:
+                result = gc_worktrees(Path(root))
+        except Exception as error:  # noqa: BLE001 - cleanup is best effort, the analysis is not
+            say("dependency worktree gc skipped: " + (str(error) or type(error).__name__))
+            return None
+    if result["removed"] or result["pruned"]:
+        say("dependency worktree gc: removed %d, pruned %d registration(s), kept %d"
+            % (len(result["removed"]), len(result["pruned"]), len(result["kept"])))
+    return result
 
 class SnapshotPending(ValueError):
     """Discovery only: a frozen snapshot this computation needs is not cached yet."""
@@ -622,6 +734,8 @@ def prefetch(compute, *, jobs=None, worker=None, rounds=8, say=None, ran=None):
     worker = worker or os.environ.get("MOJOLEARN_ADMISSION_WORKER") or "local"
     say = say or (lambda line: print(line, file=sys.stderr))
     ran = [] if ran is None else ran
+    # The snapshots run on pool threads, where no signal handler can be installed: install them here.
+    _install_worktree_cleanup()
     for round_ in range(rounds):
         pending, value, error = {}, None, None
         context = _DISCOVERY.set(pending)
@@ -796,8 +910,11 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
     if pending is not None:
         pending.setdefault(token, (str(root), revision, copy.deepcopy(request), str(logs)))
         raise SnapshotPending(token)
-    with tempfile.TemporaryDirectory(prefix="mojolearn-dependencies-") as temporary:
+    _install_worktree_cleanup()
+    gc_before_analysis(root)
+    with tempfile.TemporaryDirectory(prefix=WORKTREE_PREFIX) as temporary:
         temporary = Path(temporary)
+        _write_owner(temporary)
         tree = temporary / "tree"
         with log_path.open("w") as log:
             # A fresh physical checkout can exhaust disk on the build Mac.
@@ -845,8 +962,12 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                 # only this unique temporary tree; never prune other sessions.
                 if added or (tree / ".git").exists():
                     with _WORKTREES:
-                        subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
-                                       stdout=log, stderr=subprocess.STDOUT, check=True)
+                        removal = subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
+                                                 stdout=log, stderr=subprocess.STDOUT)
+                    # A SIGINT handler may already have removed it (_remove_live_worktrees): only a tree that is
+                    # still there is a failed removal.
+                    if removal.returncode and (tree / ".git").exists():
+                        raise subprocess.CalledProcessError(removal.returncode, removal.args)
                 _unregister_worktree(tree)
     _write_report(report, dict(analyzer=analyzer, revision=revision, request=request,
                                source_view=source_view, snapshot=snapshot))

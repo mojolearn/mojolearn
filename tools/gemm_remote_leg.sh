@@ -2701,9 +2701,12 @@ leg_preflight() {
 leg_write_create_request() {
     # MOJOLEARN_GEMM_LEG_GPU_COUNT (default 1): GPUs on the pod. 2 is the
     # two-device leg of the multi-GPU drivers (2026-09-14, par-* lanes with
-    # MOJOLEARN_PAR_DEVICES=0,1); anything but 1 or 2 is refused so a typo
+    # MOJOLEARN_PAR_DEVICES=0,1); 4 is the stock fallback of a prebuild
+    # (tools/prebuild_changed.py --rent walks tools/runpod_nvidia_sm89.env,
+    # the counts tools/nvidia_central.sh walks: 4x sm_89 had stock when 1x
+    # had none for 2 h, 2026-11-05). Anything else is refused so a typo
     # cannot rent eight.
-    case "${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}" in 1|2) ;; *) leg_die "MOJOLEARN_GEMM_LEG_GPU_COUNT must be 1 or 2 (got '${MOJOLEARN_GEMM_LEG_GPU_COUNT}')" ;; esac
+    case "${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}" in 1|2|4) ;; *) leg_die "MOJOLEARN_GEMM_LEG_GPU_COUNT must be 1, 2 or 4 (got '${MOJOLEARN_GEMM_LEG_GPU_COUNT}')" ;; esac
     python3 - "$1" "$POD_NAME" "$IMAGE" "$GPU_ID" "$CUDA_VERSIONS" \
         "$VENDOR" "$REPO/tools/runpod_ssh_bootstrap.sh" "${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}" <<'PY_CREATE_REQUEST'
 import json

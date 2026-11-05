@@ -75,11 +75,14 @@ CONF="${MOJOLEARN_NVC_CONF:-$HOME/mojolearn-evidence/nvidia_central.env}"
 [ ! -f "$CONF" ] || . "$CONF"
 NVC_MAX_PODS=3                                        # the account cap (tools/dev_pod.sh MAX_RUNPOD_PODS)
 NVC_PODS=${NVC_PODS:-2}                               # `up` with no N brings the set to this many
-NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-"4 2 1"}             # GPUs per pod, tried in order (1 = the plain dev_pod fallback)
+# The ordered GPU types and counts are shared with tools/prebuild_changed.py --rent: one constant.
+# shellcheck disable=SC1091
+. "$ROOT/tools/runpod_nvidia_sm89.env"
+NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_SM89_GPU_COUNTS}  # GPUs per pod, tried in order (1 = the plain dev_pod fallback)
 # Only sm_89 / sm_90 GPUs: every mojolearn release carries cuda sm_89 and sm_90a
 # only, so an sm_86 pod (RTX A6000, A40) runs our arm on NOTHING (2026-09-29: an
 # A40 pod refused our arm in every board race, "compiled=identical/cpu").
-NVC_GPUS=${NVC_GPUS:-"NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Generation,NVIDIA L4"}
+NVC_GPUS=${NVC_GPUS:-$NVIDIA_SM89_GPUS}
 NVC_STOCK_WAIT=${NVC_STOCK_WAIT:-5}                   # minutes of out-of-stock retry per multi-GPU count
 NVC_STOCK_WAIT_1=${NVC_STOCK_WAIT_1:-30}              # ... and for the 1-GPU fallback
 NVC_MIN_BALANCE=${NVC_MIN_BALANCE:-10}                # `up` refuses below this RunPod balance (USD)
