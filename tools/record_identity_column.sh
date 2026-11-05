@@ -78,6 +78,15 @@
 #                           guarded release launches refuse this override
 #   MOJOLEARN_IDENTITY_LAUNCH  optional guarded release launch from
 #                           release_identity_run.py; validated when supplied
+#   RECORD_FROM_INSTALLED=1 THE RECORD IS THE GATE (Andrew 2026-11-05: one execution of the identity
+#                           lanes per device class, on the built release wheels). Default off. The lanes
+#                           run against the mojolearn INSTALLED in PYTHON's environment (the exact release
+#                           wheel bytes), never against $ROOT/python: PYTHONPATH is not extended, the
+#                           preflight refuses a package under $ROOT or outside site-packages, and the
+#                           installed identity_columns/COMMIT must equal HEAD (the harness in tools/ is the
+#                           same source). Needs PYTHON (the venv interpreter) and INSTALLED_WHEELS (a file of
+#                           "<wheel file name> <sha256>" lines the installer verified); the digests land in the
+#                           provenance as installed_wheels=. Lane reuse (the default selection) is unchanged.
 #
 # Start ledger-managed release columns through release_identity_run.py after
 # reconciling retained evidence. Legacy per-run controllers remain supported.
@@ -140,7 +149,19 @@ for v in $(env | sed -n 's/^\(MOJOLEARN_[A-Z0-9_]*SABOTAGE[A-Z0-9_]*\)=.*/\1/p')
     [ -z "${!v:-}" ] || [ "${!v}" = 0 ] || die "$v is set; a sabotage run is never a record"
 done
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONUNBUFFERED=1
-export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+INSTALLED=${RECORD_FROM_INSTALLED:-0}
+case $INSTALLED in 0|1) ;; *) die "RECORD_FROM_INSTALLED is 0 or 1, not $INSTALLED";; esac
+INSTALLED_LINE=
+if [ "$INSTALLED" = 1 ]; then
+    [ -n "${PYTHON:-}" ] || die "RECORD_FROM_INSTALLED=1 needs PYTHON=<the venv interpreter the wheels are installed in>"
+    [ -n "${INSTALLED_WHEELS:-}" ] && [ -f "$INSTALLED_WHEELS" ] \
+        || die "RECORD_FROM_INSTALLED=1 needs INSTALLED_WHEELS=<file of '<wheel> <sha256>' lines>"
+    INSTALLED_LINE=$(awk 'NF == 2 && $2 ~ /^[0-9a-f]{64}$/ {printf "%s%s:%s", (n++ ? "," : ""), $1, $2} END {if (!n) exit 1}' \
+        "$INSTALLED_WHEELS") || die "INSTALLED_WHEELS $INSTALLED_WHEELS holds no '<wheel> <sha256>' line"
+    unset PYTHONPATH   # the installed package, never the source tree's python/
+else
+    export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+fi
 T=${CPU_THREADS:-3}
 for v in MOJOLEARN_CPU_THREADS OMP_NUM_THREADS OMP_THREAD_LIMIT OPENBLAS_NUM_THREADS MKL_NUM_THREADS \
          VECLIB_MAXIMUM_THREADS NUMEXPR_NUM_THREADS NUMEXPR_MAX_THREADS BLIS_NUM_THREADS; do
@@ -166,6 +187,22 @@ if [ -n "${SRC_DIRTY// /}" ] && [ "${ALLOW_DIRTY:-0}" != 1 ]; then
 fi
 
 # --- preflight: the loaded backend and tier, before any fit ----------------
+if [ "$INSTALLED" = 1 ]; then
+    where=$("${PY[@]}" - "$ROOT" "$COMMIT" <<'PYEOF' 2>&1 | tail -1
+import pathlib, sys
+import mojolearn
+root, commit = pathlib.Path(sys.argv[1]).resolve(), sys.argv[2]
+pkg = pathlib.Path(mojolearn.__file__).resolve().parent
+assert not pkg.is_relative_to(root), "imported %s from the source tree" % pkg
+assert "site-packages" in pkg.parts, "%s is not an installed package" % pkg
+got = (pkg / "identity_columns" / "COMMIT").read_text().strip()
+assert got == commit, "installed wheel source %s, harness tree %s" % (got[:12], commit[:12])
+print("INSTALLED", pkg)
+PYEOF
+)
+    case $where in "INSTALLED "*) echo "record_identity_column: lanes run against the $where" ;;
+        *) die "preflight (RECORD_FROM_INSTALLED=1): $where" ;; esac
+fi
 got=$("${PY[@]}" -c 'import mojolearn as m, mojolearn._backend as b; print(m.vendor(), b.numeric_mode())' 2>&1 | tail -1)
 [ "$got" = "$BACKEND identical" ] || die "preflight: expected '$BACKEND identical', loaded '$got' (are the bindings built in $ROOT?)"
 if [ "$BACKEND" = cuda ]; then
@@ -350,6 +387,7 @@ rc=${rc:-0}
     echo "host=$(uname -srm) $(hostname 2>/dev/null)"
     echo "date=$(date -u +%FT%TZ)"
     echo "dirty_tracked=${DIRTY:-none}"
+    [ "$INSTALLED" = 1 ] && echo "installed_wheels=$INSTALLED_LINE"
     [ -f "$JSON" ] && echo "record_sha256=$(shasum -a 256 "$JSON" | cut -d' ' -f1)"
 } > "$OUT/$NAME.provenance.txt"
 
