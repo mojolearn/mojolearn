@@ -154,6 +154,31 @@ def build_argv(vendor, source_commit, tree, out, reuse_from=None):
 RUNTIME_MINUTES = int(os.environ.get("MOJOLEARN_GATE_RUNTIME_MINUTES", "200"))
 
 
+#: the earlier unit receipts the job's qualifier may reuse, one tarball (one upload, not one per receipt)
+RUNTIME_PRIOR_TGZ = "runtime-units-prior.tgz"
+
+
+def write_runtime_prior(source, staged):
+    """(path, sha256): SOURCE's regular files as a deterministic gzip tarball in STAGED (sorted members,
+    zero mtimes and owners), so the same receipts give the same bytes and gate.env can name them."""
+    import gzip
+    import io
+    import tarfile
+    source, staged = Path(source), Path(staged)
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        for path in sorted(p for p in source.rglob("*") if p.is_file() and not p.is_symlink()):
+            info = tarfile.TarInfo(path.relative_to(source).as_posix())
+            data = path.read_bytes()
+            info.size, info.mtime, info.mode = len(data), 0, 0o644
+            archive.addfile(info, io.BytesIO(data))
+    target = staged / RUNTIME_PRIOR_TGZ
+    staged.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as stream:
+        stream.write(buffer.getvalue())
+    return target, sha256(target)
+
+
 def bash_array(name, items):
     return f"{name}=(" + " ".join(shlex.quote(str(i)) for i in items) + ")"
 
@@ -162,7 +187,8 @@ class Plan:
     """Every path, file and wrapper command of one gate job; pure (reads no file, runs nothing)."""
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
-                 profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None):
+                 profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None,
+                 runtime_prior=None):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
@@ -192,6 +218,13 @@ class Plan:
         self.overlay = overlay if overlay and overlay.get("files") else None
         #: the overlay tarball's sha256, set once Runner writes it (gate.env carries it)
         self.overlay_sha256 = None
+        #: earlier gates' unit receipts the installed-runtime qualifier may reuse (tools/release.py
+        #: gate_runtime_prior: <class>/<unit>/<receipt>.json + junit); shipped as runtime-units-prior.tgz
+        self.runtime_prior = Path(runtime_prior) if runtime_prior and any(Path(runtime_prior).rglob("*.json")) else None
+        #: that tarball's sha256, set once Runner writes it (gate.env carries it)
+        self.runtime_prior_sha256 = None
+        #: runtime-cpu (the same producer, --vendor cpu) runs on the NVIDIA job after runtime-nvidia
+        self.runtime_cpu = vendor == "nvidia"
         gate_out = f"{self.work}/out"
         manifest = f"{gate_out}/autograd-bin/build-manifest.json"
         box_wheels = [f"{self.indir}/{w.name}" for w in self.wheels]
@@ -211,6 +244,8 @@ class Plan:
                  f"GATE_ADAPTERS={1 if self.adapters else 0}", f"GATE_PROFILE={self.profile}",
                  f"GATE_REUSE={1 if self.prior else 0}", f"GATE_RUNTIME_MINUTES={RUNTIME_MINUTES}",
                  f"GATE_JOB_CAP_MINUTES={NV_CAP_MIN if self.vendor == 'nvidia' else 0}",
+                 f"GATE_RUNTIME_CPU={1 if self.runtime_cpu else 0}",
+                 f"GATE_RUNTIME_PRIOR_SHA256={self.runtime_prior_sha256 or ''}",
                  bash_array("GATE_WHEELS", [f"{self.indir}/{w.name}" for w in self.wheels]),
                  f"GATE_OVERLAY_SHA256={self.overlay_sha256 or ''}", bash_array("GATE_OVERLAY", GATE_OVERLAY),
                  bash_array("BUILD_ARGV", self.build), bash_array("BUILD_FRESH_ARGV", self.build_fresh),
@@ -226,6 +261,8 @@ class Plan:
                 out.append((self.staged / name, f"{self.indir}/{name}", False))
         for name in self.prior_files:
             out.append((self.prior / name, f"{self.indir}/autograd-prior/{name}", name != "build-manifest.json"))
+        if self.runtime_prior:
+            out.append((self.staged / RUNTIME_PRIOR_TGZ, f"{self.indir}/{RUNTIME_PRIOR_TGZ}", False))
         out.append((self.staged / "gate.env", f"{self.indir}/gate.env", False))
         names = [r for _, r, _ in out]
         if len(set(names)) != len(names):
@@ -558,7 +595,7 @@ class Runner:
                     adapters=not a.no_adapters, profile=a.profile,
                     prior=a.autograd_prior if prior else None, prior_files=prior,
                     staged=(state_path.parent if state_path else a.out.parent) / f"inputs-{tag}",
-                    overlay=overlay)
+                    overlay=overlay, runtime_prior=getattr(a, "runtime_prior", None))
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -597,6 +634,10 @@ class Runner:
                 except release_tooling.OverlayRefused as exc:
                     raise SystemExit(f"release-gate: {exc}")
                 say("gate runner overlay: " + ", ".join(sorted(plan.overlay["files"])))
+            if plan.runtime_prior:
+                _, plan.runtime_prior_sha256 = write_runtime_prior(plan.runtime_prior, plan.staged)
+                say(f"runtime unit receipts to reuse: {sum(1 for _ in plan.runtime_prior.rglob('*.json'))} "
+                    f"from {plan.runtime_prior}")
             (plan.staged / "gate.env").write_text(plan.env_text())
             self.stage(plan)
             record = dict(key=key, plan_tag=tag, vendor=a.vendor, launched_at=dt.datetime.now(
@@ -666,6 +707,8 @@ def parse(argv):
                     help="a complete retained autograd set (build-manifest.json + binaries) the build may reuse")
     ap.add_argument("--profile", choices=("release-light-v1", "performance-campaign-v1"), default="release-light-v1")
     ap.add_argument("--no-adapters", action="store_true")
+    ap.add_argument("--runtime-prior", default=None,
+                    help="earlier gates' runtime unit receipts (<class>/<unit>/...) the job's qualifier may reuse")
     ap.add_argument("--poll-seconds", type=int, default=60)
     ap.add_argument("--max-wait-hours", type=float, default=72.0)
     ap.add_argument("--dry-run", action="store_true", help="print the wrapper commands; run nothing")
