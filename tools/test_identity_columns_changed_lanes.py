@@ -236,7 +236,7 @@ def test_floor_moves_only_receipted_rows(tmp_path, monkeypatch, capsys):
     assert ic.cmd_changed_lanes(args) == 0
     out, err = capsys.readouterr()
     assert out.strip() == "lane_no"
-    assert seen["older"] == ["lane_no", "lane_ok"] and seen["info"] is floor and seen["cls"] == ""
+    assert seen["older"] == ["lane_no", "lane_ok"] and seen["info"] is floor and seen["cls"] == "nvidia"
     assert seen["digest"] == "0" * 16
     assert "1 of 2 row(s) recorded before it are measured from it" in err
     assert "no floor for lane_no: the floor rests on a waived row" in err
@@ -261,3 +261,87 @@ def test_floor_receipts_for_needs_the_table_and_every_class(monkeypatch):
     calls.clear()
     got = ic.floor_receipts_for(table, {"commit": "c" * 40, "tags": {}}, ["lane_b"], "nvidia", {})
     assert calls == [[("lane_b", "nvidia")]] and got["lane_b"]["ok"]
+
+
+# ------------------------------------ per-class since (lane planner-per-class-since, 2026-11-05)
+# At 874dc2043b the plan owed 513/513 nvidia and amd lanes: table mode dated each
+# lane from the OLDEST record of ANY class in its cell, so the never re-recorded
+# ptx record (old commit) outvoted the fresh nvidia/amd records at HEAD.
+
+N, O, P = "e" * 40, "a" * 40, "b" * 40      # new nvidia record, old ptx record, an old nvidia record
+
+
+def _per_class_run(tmp_path, monkeypatch, backend, cells, changed_since):
+    lanes = sorted({key.partition("/")[0] for key in cells})
+    records = [{"commit": N, "commit_time": 30}, {"commit": O, "commit_time": 10},
+               {"commit": P, "commit_time": 20}]
+    table = tmp_path / "table.json"
+    table.write_text(json.dumps({"cells": cells, "records": records}))
+    monkeypatch.setattr(ic, "harness", lambda: types.SimpleNamespace(LANES=lanes))
+    monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
+    monkeypatch.setattr(ic, "vref", lambda: types.SimpleNamespace(stale_reference_lanes=lambda t, h: []))
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
+    monkeypatch.setattr(lane_select, "changed_paths", lambda ref: [ref])
+    # Commit c's diff reaches the lanes in changed_since[c]; HEAD is N, so nothing changed since N.
+    monkeypatch.setattr(lane_select, "select", lambda paths, ref=None, sources=None, backend=None, stop_when=None:
+                        {"lanes": sorted(changed_since.get(ref, ())), "unattributed": [], "stopped_early": False})
+    args = types.SimpleNamespace(table=str(table), since="", scope="all", no_release_floor=True,
+                                 backend=backend, floor_desc="", cls="", records=[], summary_json="")
+    assert ic.cmd_changed_lanes(args) == 0
+    return args
+
+
+def _owed(capsys):
+    out, err = capsys.readouterr()
+    return [l for l in out.strip().split(",") if l], err
+
+
+def test_table_mode_dates_each_lane_from_its_own_class(tmp_path, monkeypatch, capsys):
+    """A cell at a NEW nvidia record and an OLD ptx record (agreeing digests): planning nvidia at HEAD = N
+    reuses the lane; measured from the ptx record the lane's closure changed, so the old rule owed it."""
+    cells = {"lane_a/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0, "amd": 0, "ptx": 1}}}}
+    changed = {O: {"lane_a"}, P: {"lane_a"}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == [] and "class nvidia (backend cuda): 1 lane(s)" in err
+    _per_class_run(tmp_path, monkeypatch, "hip", cells, changed)
+    assert _owed(capsys)[0] == []
+    # No backend: the oldest record of any class (the ptx one) still decides, as before.
+    _per_class_run(tmp_path, monkeypatch, "", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == ["lane_a"] and "table since" not in err
+
+
+def test_ptx_class_still_owes_a_lane_resting_on_the_old_ptx_record(tmp_path, monkeypatch, capsys):
+    """The ptx column plans with --class (reuse_points): its own record is the old one, so it stays owed."""
+    cells = {"lane_a/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0, "ptx": 1}}}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, {O: {"lane_a"}})
+    assert _owed(capsys)[0] == []
+    monkeypatch.setattr(ic, "is_shallow", lambda: False)
+    monkeypatch.setattr(ic, "_commit_time", lambda c, cache: {N: 30, O: 10, P: 20}.get(c))
+    monkeypatch.setattr(ic, "harness_sha256", lambda h: "H")
+    monkeypatch.setattr(ic, "deepen_for_reuse", lambda points, log=None: None)
+    h = types.SimpleNamespace(FIXTURES=["base"], LANES=["lane_a"], fixture=lambda f: (0, 0, 0),
+                              heldout=lambda f: 0, _h=lambda x: "h")
+    table = json.loads((tmp_path / "table.json").read_text())
+    table["harness_sha256"] = "H"
+    pts = ic.reuse_points(h, ["lane_a"], table, "ptx", [])
+    assert pts["lane_a"]["commit"] == O          # ptx rests on its own old record -> its closure changed -> owed
+    pts = ic.reuse_points(h, ["lane_a"], table, "nvidia", [])
+    assert pts["lane_a"]["commit"] == N
+
+
+def test_table_mode_own_class_older_than_a_change_stays_owed(tmp_path, monkeypatch, capsys):
+    """No widening: a lane whose own nvidia row is old and changed since stays owed, and a lane with no
+    nvidia row in a required part has no reference and stays owed."""
+    cells = {"lane_old/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 2, "ptx": 1}}},
+             "lane_mix/base": {"train": {"ref": "2" * 16, "cols": {"nvidia": 0}},
+                               "predict": {"ref": "3" * 16, "cols": {"nvidia": 2}}},
+             "lane_none/base": {"train": {"ref": "4" * 16, "cols": {"amd": 0, "ptx": 1}}},
+             "lane_opt/base": {"train": {"ref": "5" * 16, "cols": {"nvidia": 0}},
+                               "rlpair": {"ref": "6" * 16, "cols": {"apple": 1}}}}
+    changed = {P: {"lane_old", "lane_mix"}, O: {"lane_old", "lane_mix", "lane_none", "lane_opt"}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == ["lane_mix", "lane_none", "lane_old"]
+    assert "1 lack one" in err
