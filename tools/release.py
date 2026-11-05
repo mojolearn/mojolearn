@@ -232,6 +232,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import queue
 import re
 import shlex
@@ -1823,6 +1824,12 @@ class Release:
         for vendor in GATE_VENDORS:
             for report in sorted((self.rel / f"gate-{vendor}").glob(f"*/runtime-{vendor}/runtime-report.json")):
                 out.append(("installed-runtime", dict(report=str(report))))
+        # runtime-cpu: the same producer with --vendor cpu, run by the NVIDIA gate job after runtime-nvidia
+        # (GATE_RUNTIME_CPU); runtime-apple: the Mac's gate-apple step (step_gate_apple).
+        for report in sorted((self.rel / "gate-nvidia").glob("*/runtime-cpu/runtime-report.json")):
+            out.append(("installed-runtime", dict(report=str(report))))
+        if (self.apple_runtime_out() / "runtime-report.json").is_file():
+            out.append(("installed-runtime", dict(report=str(self.apple_runtime_out() / "runtime-report.json"))))
         # published-<vendor> (post stage): tools/release_published_install.py reports under published-<vendor>/.
         # Only published-<vendor>/: an explicit --published-smoke report (published-smoke-<vendor>/) is not this
         # row's evidence.
@@ -3806,10 +3813,85 @@ class Release:
         _, ok, why = AG.judge(out / AG.RECEIPT)
         return ok, why
 
+    #: the Apple installed-runtime qualifier's outer cap (seconds); each unit has its own budget inside it
+    APPLE_RUNTIME_SECONDS = int(os.environ.get("MOJOLEARN_APPLE_RUNTIME_SECONDS", "14400"))
+
+    def apple_runtime_out(self):
+        return self.rel / "gate-apple" / "runtime-apple"
+
+    def apple_runtime_store(self):
+        """The Apple unit store: appended as each unit ends, so a rerun of gate-apple resumes."""
+        return self.rel / "gate-apple" / "runtime-units-apple"
+
+    @staticmethod
+    def apple_device_class():
+        """apple-<chip> (e.g. apple-m2-pro): unit receipts are reused on the same chip only."""
+        try:
+            brand = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True,
+                                   text=True, timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            brand = ""
+        chip = re.sub(r"[^a-z0-9]+", "-", brand.lower().removeprefix("apple ")).strip("-")
+        return "apple-" + (chip or platform.machine())
+
+    def apple_runtime_ok(self):
+        """(ok, why): runtime-apple passed for these macOS wheel bytes."""
+        w = self.macos_wheel()
+        error, cases = self.gate_runtime_error("apple", self.rel / "gate-apple")
+        if error:
+            return False, error
+        report = read_json(self.apple_runtime_out() / "runtime-report.json") or {}
+        if not w or (report.get("wheels") or {}).get(Path(w).name) != sha256(w):
+            return False, f"runtime-apple ran other wheel bytes ({self.apple_runtime_out()})"
+        units = report.get("units") or {}
+        return True, (f"runtime-apple PASSED: {cases} installed-runtime cases "
+                      f"(units reused={units.get('reused')} run={units.get('run')})")
+
+    def apple_runtime_gate(self):
+        """runtime-apple (tools/release_runtime_installed.py run --vendor apple): the public runtime registry
+        against the installed macOS wheel, per unit, reusing unchanged units' receipts on this chip."""
+        ok, why = self.apple_runtime_ok()
+        if ok:
+            return why + " (receipt exists)"
+        w = self.macos_wheel()
+        if not w and not self.dry:
+            raise StepFailed("no macOS wheel; run macos-build")
+        out = self.apple_runtime_out()
+        if out.exists() and not self.dry:
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        cmd = [PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+               PY, str(ROOT / "tools" / "release_runtime_installed.py"), "run", "--vendor", "apple",
+               "--source-root", str(self.source_checkout(create=not self.dry)), "--source-commit", self.commit,
+               "--wheel", str(w or "<macos wheel>"),
+               "--python", self.smoke_python() if not self.dry else "python3.12",
+               "--device-class", self.apple_device_class(), "--unit-store", str(self.apple_runtime_store()),
+               "--timeout", str(self.APPLE_RUNTIME_SECONDS), "--out", str(out)]
+        for directory in self.runtime_unit_sources("gate-apple"):
+            if directory != self.apple_runtime_store():
+                cmd += ["--prior-units", str(directory)]
+        if not self.dry:
+            out.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.must(cmd, log=self.rel / "gate-apple-runtime.log", what="the Apple installed-runtime qualifier")
+        except StepFailed:
+            pass  # the report under runtime-apple/ names the failed units; apple_runtime_ok reads it below
+        if self.dry:
+            return None
+        ok, why = self.apple_runtime_ok()
+        if not ok:
+            raise StepFailed(f"the Apple installed-runtime qualifier did not pass: {why}")
+        return why
+
     def step_gate_apple(self):
+        """The Apple adapter smoke (when adapters ship) and runtime-apple, the installed-runtime qualifier."""
+        adapters = self.apple_adapter_gate()
+        runtime = self.apple_runtime_gate()
+        return "; ".join(str(part) for part in (adapters, runtime) if part) or None
+
+    def apple_adapter_gate(self):
         AG = adapter_gate_module()
         if not AG.enabled():
-            return "skipped (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)"
+            return "adapters skipped (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)"
         ok, why = self.apple_adapters_ok()
         if ok:
             return why + " (receipt exists)"
@@ -4112,6 +4194,9 @@ class Release:
         prior = self.gate_autograd_prior(vendor)
         if prior:
             cmd += ["--autograd-prior", str(prior)]  # the build reuses each proven-unchanged binary
+        runtime_prior = self.gate_runtime_prior(vendor) if not self.dry else None
+        if runtime_prior:
+            cmd += ["--runtime-prior", str(runtime_prior)]  # unit receipts the qualifier may reuse
         if not adapter_gate_module().enabled():
             cmd.append("--no-adapters")  # no adapters ship: the gate records its adapter stage as disabled
         if not self.dry:
@@ -4136,6 +4221,29 @@ class Release:
             raise StepFailed(f"the {vendor} release gate did not pass: {why}")
         self.record_candidate_requirement(vendor, run_id, executed=True)
         return why
+
+    def runtime_unit_sources(self, gate):
+        """Every retained directory of installed-runtime unit receipts under GATE (gate-nvidia, gate-amd,
+        gate-apple) of every version and freeze in the release state root: the unit stores the jobs append
+        to (runtime-units-<class>/) and the per-run receipts (runtime-*/qualify/units/)."""
+        root = self.base.parent
+        found = sorted(root.glob(f"*/*/{gate}/*/runtime-units-*")) + sorted(root.glob(f"*/*/{gate}/runtime-units-*"))
+        found += sorted(root.glob(f"*/*/{gate}/*/runtime-*/qualify/units"))
+        found += sorted(root.glob(f"*/*/{gate}/runtime-*/qualify/units"))
+        return [p for p in found if p.is_dir()]
+
+    def gate_runtime_prior(self, vendor):
+        """A staged directory of the newest passing unit receipt per (device class, unit) for this gate's
+        qualifier runs (VENDOR, and cpu on the NVIDIA job), or None when there is none
+        (docs/release/RUNTIME_QUALIFICATION.md). Staged anew per launch; the originals stay where they are."""
+        import runtime_qualifier_units as units
+        vendors = (vendor, "cpu") if vendor == "nvidia" else (vendor,)
+        destination = self.rel / "gates" / ("runtime-prior-%s-%s" % (vendor, dt.datetime.now(
+            dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")))
+        staged = units.stage_prior(self.runtime_unit_sources(f"gate-{vendor}"), destination, vendors)
+        if staged:
+            self.say(f"  {staged} runtime unit receipt(s) staged for reuse: {destination}")
+        return destination if staged else None
 
     def gate_autograd_prior(self, vendor):
         """A complete retained autograd set the gate job's build may reuse: --gate-autograd-root/<vendor>

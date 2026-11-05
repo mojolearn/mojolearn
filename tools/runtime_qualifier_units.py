@@ -316,6 +316,32 @@ def collect(directories):
     return found
 
 
+def stage_prior(sources, destination, vendors):
+    """Copy the newest PASSING receipt per (device class, unit) of VENDORS found under SOURCES into
+    DESTINATION/<device class>/<stem>/ (receipt + junit), plus the newest receipt of any status when it is
+    newer (its seconds set the unit's budget). Returns the number of receipts staged. The originals stay
+    where they are; this is the reuse input a gate job takes to the box."""
+    staged = 0
+    chosen = {}
+    for unit, rows in collect(sources).items():
+        for receipt, junit in rows:
+            if receipt.get("vendor") not in vendors or not receipt.get("device_class"):
+                continue
+            key = (receipt["device_class"], unit)
+            picks = chosen.setdefault(key, [])
+            if not picks or (receipt.get("status") in PASSING
+                             and not any(r.get("status") in PASSING for r, _ in picks)):
+                picks.append((receipt, junit))
+    for (device, unit), picks in sorted(chosen.items()):
+        if "/" in device or device.startswith("."):
+            continue
+        for receipt, junit in picks:
+            body = {k: v for k, v in receipt.items() if k != "origin"}
+            store_receipt(Path(destination) / device, body, junit)
+            staged += 1
+    return staged
+
+
 def last_seconds(rows):
     """The newest measured seconds of a unit that ran to an end (passed or failed tests, not stopped)."""
     for receipt, _ in rows:
