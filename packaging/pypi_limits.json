@@ -1,0 +1,36 @@
+{
+  "schema": "mojolearn.pypi-limits.v1",
+  "_doc": [
+    "PyPI upload limits per Mojolearn project, the values PyPI has actually granted.",
+    "file_bytes is the largest single upload (one wheel); project_bytes is the total of every file of every release.",
+    "A project not listed takes the defaults. A pending request never raises a limit: change the value only when",
+    "PyPI closes the request with a grant, and record the date and issue here.",
+    "Read by packaging/pypi_limits.py (the Linux packer, the macOS shrink step, tools/one_layout.py and the release plan)."
+  ],
+  "defaults": {"file_bytes": 104857600, "project_bytes": 10737418240,
+               "source": "PyPI defaults: 100 MiB per file, 10 GiB per project"},
+  "projects": {
+    "mojolearn": {
+      "file_bytes": 104857600,
+      "project_bytes": 10737418240,
+      "covers": ["macOS wheel", "Linux meta wheel"],
+      "pending": [
+        {"issue": "pypi/support#12773", "asks": "file_bytes 262144000 (250 MiB)", "opened": "2026-11-04"},
+        {"issue": "pypi/support#12774", "asks": "project_bytes increase", "opened": "2026-11-04"},
+        {"issue": "pypi/support#12775", "asks": "project_bytes increase", "opened": "2026-11-04"}
+      ]
+    },
+    "mojolearn-nvidia": {
+      "file_bytes": 262144000,
+      "granted": "2026-11-04",
+      "issues": ["pypi/support#12539", "pypi/support#12675"]
+    },
+    "mojolearn-amd": {
+      "file_bytes": 262144000,
+      "granted": "2026-11-04",
+      "issues": ["pypi/support#12539", "pypi/support#12675"]
+    },
+    "mojolearn-core": {},
+    "mojolearn-nvidia-ptx": {}
+  }
+}

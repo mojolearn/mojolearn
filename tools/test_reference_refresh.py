@@ -256,6 +256,18 @@ class TestPlan(Base):
         self.assertFalse((self.t / "home" / SHA[:12] / "state.json").exists())
         self.assertEqual(sh.count(" submit "), 0)
 
+    def test_waste_json_counts_lanes_per_column_and_the_seconds(self):
+        sh = FakeShell(dict(nvidia=table_sel(9), amd=table_sel(0)))
+        r = self.refresh(sh, ["nvidia", "amd"])
+        r.plan()
+        waste = r.write_waste(plan_s=1.0, wait_s=30.0, admit_s=4.0)
+        saved = json.loads((self.t / "home" / SHA[:12] / "waste.json").read_text())
+        self.assertEqual(saved, waste)
+        self.assertEqual(saved["columns"]["nvidia"]["recorded"], 9)
+        self.assertEqual(saved["lanes_recorded"], 9)
+        self.assertEqual((saved["box_wait_seconds"], saved["admission_seconds"]), (30.0, 4.0))
+        self.assertTrue(any(l.startswith("WASTE lanes reused") for l in self.lines))
+
     def test_plan_uses_each_jobs_selection(self):
         sh = FakeShell(dict(nvidia=table_sel(1), amd=table_sel(1), cpu=class_sel(1, 1), ptx=class_sel(1, 1),
                             apple=class_sel(1, 1)))

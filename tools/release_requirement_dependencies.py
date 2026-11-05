@@ -447,6 +447,157 @@ _DISCOVERY = ContextVar("release_dependency_discovery", default=None)
 _FAILED = {}
 _WORKTREES = threading.Lock()
 
+# TEMPORARY DEPENDENCY WORKTREES ARE REGISTERED AND REMOVED ON EXIT (2026-11-05). 0.8.65 left seven
+# <tmp>/mojolearn-dependencies-*/tree worktrees registered in the release checkout: the `finally` above
+# never runs when the process is killed (a step timeout, a closed terminal). Every tree is recorded in
+# WORKTREE_REGISTRY (one JSON per tree: pid, root, tree, created) the moment `worktree add` succeeds; an
+# atexit hook and a SIGTERM/SIGHUP handler remove this process's live trees; `--gc-worktrees` removes
+# registered or listed dependency trees whose process is gone and that are older than a day. It never
+# touches a worktree outside a `mojolearn-dependencies-*` temporary directory (never ~/mojolearn-wt/*).
+WORKTREE_PREFIX = "mojolearn-dependencies-"
+WORKTREE_GC_AGE_S = 24 * 3600
+_LIVE_WORKTREES = {}
+
+
+def worktree_registry():
+    return Path(os.environ.get("MOJOLEARN_DEPENDENCY_WORKTREES")
+                or Path.home() / "mojolearn-evidence/release-dependencies/worktrees")
+
+
+def _registry_file(tree):
+    return worktree_registry() / (hashlib.sha256(str(tree).encode()).hexdigest()[:16] + ".json")
+
+
+def _register_worktree(root, tree):
+    import time
+    _install_worktree_cleanup()
+    _LIVE_WORKTREES[str(tree)] = str(root)
+    try:
+        worktree_registry().mkdir(parents=True, exist_ok=True)
+        _registry_file(tree).write_text(json.dumps(dict(pid=os.getpid(), root=str(root), tree=str(tree),
+                                                        created=time.time()), sort_keys=True) + "\n")
+    except OSError:
+        pass  # the in-process hook still removes it; --gc-worktrees finds it in `git worktree list`
+
+
+def _unregister_worktree(tree):
+    _LIVE_WORKTREES.pop(str(tree), None)
+    try:
+        _registry_file(tree).unlink()
+    except OSError:
+        pass
+
+
+def _remove_live_worktrees():
+    """This process's registered trees: `git worktree remove --force`, then the temporary directory."""
+    import shutil
+    for tree, root in list(_LIVE_WORKTREES.items()):
+        subprocess.run(["git", "-C", root, "worktree", "remove", "--force", tree],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if Path(tree).parent.name.startswith(WORKTREE_PREFIX):
+            shutil.rmtree(Path(tree).parent, ignore_errors=True)
+        _unregister_worktree(tree)
+
+
+_CLEANUP_INSTALLED = []
+
+
+def _install_worktree_cleanup():
+    if _CLEANUP_INSTALLED:
+        return
+    _CLEANUP_INSTALLED.append(True)
+    import atexit
+    import signal
+    atexit.register(_remove_live_worktrees)
+    if threading.current_thread() is not threading.main_thread():
+        return
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            previous = signal.getsignal(sig)
+        except (ValueError, OSError):
+            continue
+        if previous not in (signal.SIG_DFL, None):
+            continue  # someone else owns it; atexit still runs on a normal exit
+
+        def handler(signum, _frame, _sig=sig):
+            _remove_live_worktrees()
+            signal.signal(_sig, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+        signal.signal(sig, handler)
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+    except (OSError, ValueError, TypeError):
+        return False
+    return True
+
+
+def _listed_worktrees(root, runner=subprocess.run):
+    out = runner(["git", "-C", str(root), "worktree", "list", "--porcelain"], capture_output=True, text=True)
+    return [line[len("worktree "):] for line in (out.stdout or "").splitlines() if line.startswith("worktree ")]
+
+
+def _is_dependency_tree(path, protect):
+    p = Path(path)
+    if any(str(p).startswith(str(x).rstrip("/") + "/") for x in protect):
+        return False
+    return p.name == "tree" and p.parent.name.startswith(WORKTREE_PREFIX)
+
+
+def gc_worktrees(root, max_age_s=WORKTREE_GC_AGE_S, now=None, dry=False, runner=subprocess.run,
+                 protect=(Path.home() / "mojolearn-wt",)):
+    """Remove stale temporary dependency worktrees of ROOT: listed by `git worktree list` or registered,
+    under a `mojolearn-dependencies-*` directory, older than MAX_AGE_S, their registering process gone.
+    A tree whose directory is already gone loses its registration (`.git/worktrees/<id>`, matched by its
+    gitdir file: the targeted equivalent of `git worktree prune`, which would also prune other sessions'
+    missing trees). Returns dict(removed, kept, pruned)."""
+    import shutil
+    import time
+    now = time.time() if now is None else now
+    registered = {}
+    for f in sorted(worktree_registry().glob("*.json")) if worktree_registry().is_dir() else []:
+        try:
+            row = json.loads(f.read_text())
+            registered[row["tree"]] = dict(row, file=str(f))
+        except (OSError, ValueError, KeyError):
+            continue
+    candidates = {t for t in _listed_worktrees(root, runner) if _is_dependency_tree(t, protect)}
+    candidates |= {t for t, row in registered.items() if row.get("root") == str(root) and _is_dependency_tree(t, protect)}
+    removed, kept, pruned = [], [], []
+    for tree in sorted(candidates):
+        row = registered.get(tree) or {}
+        if row.get("pid") and _pid_alive(row["pid"]) and row["pid"] != os.getpid():
+            kept.append((tree, "its process %s is alive" % row["pid"]))
+            continue
+        p = Path(tree)
+        try:
+            born = row.get("created") or p.parent.stat().st_mtime
+        except OSError:
+            born = row.get("created") or 0
+        if now - born < max_age_s:
+            kept.append((tree, "younger than %d hours" % (max_age_s // 3600)))
+            continue
+        if dry:
+            removed.append(tree)
+            continue
+        if p.exists():
+            runner(["git", "-C", str(root), "worktree", "remove", "--force", tree], capture_output=True, text=True)
+            shutil.rmtree(p.parent, ignore_errors=True)
+            removed.append(tree)
+        admin = Path(root) / ".git" / "worktrees"
+        for gitdir in admin.glob("*/gitdir") if admin.is_dir() else []:
+            try:
+                if Path(gitdir.read_text().strip()).parent.resolve() in (p, p.resolve()):
+                    shutil.rmtree(gitdir.parent, ignore_errors=True)
+                    pruned.append(tree)
+            except OSError:
+                continue
+        if row.get("file"):
+            Path(row["file"]).unlink(missing_ok=True)
+    return dict(removed=removed, kept=kept, pruned=pruned)
+
 
 class SnapshotPending(ValueError):
     """Discovery only: a frozen snapshot this computation needs is not cached yet."""
@@ -673,6 +824,7 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                 with _WORKTREES:
                     subprocess.run(command + [str(tree), revision], stdout=log, stderr=subprocess.STDOUT, check=True)
                 added = True
+                _register_worktree(root, tree)
                 if clone_current:
                     _clone_tracked_tree(root, tree, before, log)
                 view_before = _tracked_state(tree, revision)
@@ -695,6 +847,7 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                     with _WORKTREES:
                         subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
                                        stdout=log, stderr=subprocess.STDOUT, check=True)
+                _unregister_worktree(tree)
     _write_report(report, dict(analyzer=analyzer, revision=revision, request=request,
                                source_view=source_view, snapshot=snapshot))
     return snapshot
@@ -1378,6 +1531,22 @@ def decision_proof(proof):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 2 and sys.argv[1] == "--gc-worktrees":
+        import argparse
+        ap = argparse.ArgumentParser(prog="release_requirement_dependencies.py --gc-worktrees")
+        ap.add_argument("--gc-worktrees", action="store_true")
+        ap.add_argument("--root", default=str(Path(__file__).resolve().parents[1]))
+        ap.add_argument("--max-age-hours", type=float, default=WORKTREE_GC_AGE_S / 3600)
+        ap.add_argument("--dry-run", action="store_true")
+        a = ap.parse_args()
+        result = gc_worktrees(Path(a.root), max_age_s=a.max_age_hours * 3600, dry=a.dry_run)
+        for tree in result["removed"]:
+            print(("would remove " if a.dry_run else "removed ") + tree)
+        for tree in result["pruned"]:
+            print("pruned the registration of " + tree)
+        for tree, why in result["kept"]:
+            print("kept %s: %s" % (tree, why))
+        raise SystemExit(0)
     if len(sys.argv) == 5 and sys.argv[1] == "--remote-batch":
         raise SystemExit(_remote_batch(*sys.argv[2:5]))
     if len(sys.argv) != 5 or sys.argv[1] != "--worker":

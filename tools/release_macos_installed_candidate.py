@@ -25,6 +25,8 @@ PACKAGING_REFRESH_FILES = frozenset({
     "tools/release_macos_installed_candidate.py", "tools/test_release_macos_installed_candidate.py",
     "packaging/portable_math/wheel.py", "packaging/portable_math/test_wheel.py",
     "packaging/macos/shrink_wheel.py", "tools/test_macos_recompression.py",
+    # The per-project upload limits shrink_wheel.py checks (no native input).
+    "packaging/pypi_limits.py", "packaging/pypi_limits.json",
 })
 
 

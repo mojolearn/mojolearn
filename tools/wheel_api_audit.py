@@ -11,10 +11,14 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import sys
 import tempfile
 import zipfile
 
 import verification_matrix as matrix
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'packaging'))
+import pypi_limits  # noqa: E402  per-project PyPI upload limits (packaging/pypi_limits.json)
 
 
 def source_payload(root):
@@ -193,8 +197,9 @@ def split_audit(wheels):
         row = dict(wheel=wheel.name, path=str(wheel), distribution=name, version=version,
                    tags=sorted(tags), members=len(payload),
                    binaries=sum(m.endswith('.so') for m in payload))
-        if wheel.stat().st_size > plugins.wheel_size_limit(name):
-            problems.append(f'{wheel.name}: exceeds the configured project upload budget')
+        if wheel.stat().st_size > pypi_limits.file_limit(name):
+            problems.append(f'{wheel.name}: exceeds the configured project upload budget '
+                            f'({pypi_limits.file_limit(name) // 2**20} MiB, packaging/pypi_limits.json)')
         if name == plugins.CORE_DISTRIBUTION:
             row['role'] = plugins.CORE_PROFILE
             stray = [m for m in payload if plugins.member_vendor(m)]
