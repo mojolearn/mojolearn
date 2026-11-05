@@ -285,9 +285,11 @@ def test_cache_id_of_real_concurrent_publication_cleanup(prefix, change):
     cache, binding = _real_cache(prefix, Cache)
     original_free = getattr(binding, prefix + "_dev_free")
     # The retired x_metrics store is not a second live upload provider. Use
-    # the already registered byte-store route only as changed metadata; it is
-    # never invoked. The in-flight x_prep allocation must be freed through its
-    # captured original provider before publication refuses the changed route.
+    # the byte-store msel entries only as changed metadata; they are never
+    # invoked. They are not a connected resident-store route (only x_prep is),
+    # so publication's route re-check refuses them with the same TypeError as
+    # any unconnected route. The in-flight x_prep allocation must be freed
+    # through its captured original provider before that refusal.
     other = _cache()
     # 16MiB gives the ready controller a useful upload window without changing
     # any product threshold, route, benchmark dimension or numerical setting.
@@ -350,8 +352,11 @@ def test_cache_id_of_real_concurrent_publication_cleanup(prefix, change):
             assert finalized == [worker.ident], "native upload retained stale cache owners across GIL release"
             assert cache.live() == base + 1
         else:
-            expected = AttributeError if change == "delete_counter_slot" else TypeError if change == "foreign_dictionary" else RuntimeError
+            expected = (AttributeError if change == "delete_counter_slot"
+                        else TypeError if change in ("foreign_dictionary", "change_route") else RuntimeError)
             assert type(error) is expected, repr(error)
+            if change == "change_route":
+                assert "connected native x_prep" in str(error)
             assert cache.live() == base, "fresh unpublished native slot leaked or a competing slot was freed"
             if change == "publish_competitor":
                 assert cache._entries[key] == (competitor, source)

@@ -265,9 +265,10 @@ def test_application_subclass_keeps_constructor_fit_and_score_guards(name):
             return self
         def score(self, X, y=None):
             return 123
-    model = Custom(numeric_mode="identical") if name == "KMeans" else Custom()
-    if name == "KMeans":
-        assert vars(model)["numeric_mode"] == "identical"
+    # KMeans, like ElasticNet and Lasso, is a native-public estimator: its own
+    # constructor takes numeric_mode, so no mode keyword is injected into an
+    # application __init__ that does not declare one (ordinary Python).
+    model = Custom()
     with pytest.raises(ValueError, match="not fitted"):
         model.score([[1., 2.]])
     with pytest.raises(ValueError):
