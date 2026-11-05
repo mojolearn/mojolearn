@@ -8,6 +8,10 @@ checks, reuse everything else, and see exactly why.
     python3 tools/release_plan.py show --json <release>/<commit12>/plan.json
     python3 tools/release_plan.py decide --facts plan-facts.json --json plan.json   # the table alone
 
+`--plan` also carries the status report's totals line (`report_totals`, docs/release/STATUS_REPORT.md):
+`REPORT <v> passed=.. reused=.. failed=.. missing=.. blocked=.. n/a=.. waived=..  ready=YES|NO`;
+`pixi run release <v> --report` writes the full report (one row per ledger requirement and step).
+
 `--plan` runs, rents and publishes nothing. It gathers the facts, applies the decision table
 (`tools/release_plan.py decide`, pure) and writes `plan.json` and `plan-facts.json` beside the
 release state (`<release root>/<version>/<commit12>/`). It exits 0 when publication is ready, 3
