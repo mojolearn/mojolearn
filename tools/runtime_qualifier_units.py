@@ -276,7 +276,7 @@ def store_receipt(store, receipt, junit_bytes):
     name = receipt["finished_at"].replace(":", "") + "-" + sha256_bytes(body)[:12]
     directory = Path(store) / stem(receipt["unit"])
     write_atomic(directory / (name + ".tests.xml"), junit_bytes)
-    stored = dict(receipt, junit=name + ".tests.xml")
+    stored = dict(receipt, junit=name + ".tests.xml", junit_sha256=sha256_bytes(junit_bytes))
     write_atomic(directory / (name + ".json"), (json.dumps(stored, indent=2) + "\n").encode())
     return directory / (name + ".json")
 
