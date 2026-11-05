@@ -14,7 +14,8 @@ How to restore a deleted experiment:
    deletion; when a section says the patch conflicts, check the files out of the recoverable sha and merge by hand). When a
    section names an `_shared-<sha>.patch`, apply that first: it carries the deletion commit's hunks that name none of the
    defines it deleted.
-2. Delete the define's refusal in `core/six_lane_experiment_guards.mojo` and move its entry from `removed` back to
+2. Delete the define's refusal in its family module `core/experiment_guards_<family>.mojo` (or
+   `core/six_lane_experiment_guards.mojo` for a guard shared across families) and move its entry from `removed` back to
    `controls` in `experiments/six_lane_integration/grid_controls/<lane>.json`.
 3. Compile through the orchestrator (lanes never compile) and A/B it again: the old numbers are from the base they were
    measured on.
@@ -25,7 +26,8 @@ others keep only the hunks that name the define. Patches generated 2026-10-09 ag
 owed-deletions-D1 (base `b639a2bd2`) are each the whole reversed deletion commit (code files only), and later D1 deletions in the
 same file mean `git apply -3` where the section says so (apply in reverse deletion order to restore several).
 
-Sources: the `removed` refusals in `core/six_lane_experiment_guards.mojo`, the `removed` lists in
+Sources: the `removed` refusals in `core/experiment_guards_<family>.mojo` and `core/six_lane_experiment_guards.mojo`
+(shared guards; split 2026-11-04, entries moved verbatim), the `removed` lists in
 `experiments/six_lane_integration/grid_controls/*.json`, and the DROPPED / DELETED rows of `docs/apple-fast/EXPERIMENTS.md`.
 Renamed or merged defines (code kept under a new name), promoted defines and DROP rows whose code is still on main are listed
 in the tables after the sections.
