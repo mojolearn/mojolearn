@@ -528,6 +528,24 @@ def _bases(root, frozen, rows, floor, commits, lane=None, receipts=None, older=N
     return out, problems
 
 
+def source_equal_to(root, revision):
+    """A memoized predicate: is commit BASE the frozen REVISION's source (equal, or differing only in record
+    outputs, tools/identity_at_freeze.py)? A Git error answers False, so the selector decides as before."""
+    import identity_at_freeze
+    memo = {}
+
+    def equal(base):
+        if base == revision:
+            return True
+        if base not in memo:
+            try:
+                memo[base] = identity_at_freeze.source_equal(root, base, revision)
+            except identity_at_freeze.GitError:
+                memo[base] = False
+        return memo[base]
+    return equal
+
+
 def verdicts(root, revision, units, *, failures=None, log_dir=None):
     """{row id: verdict} for ``units`` ({row id: wanted requirement}) at the frozen ``revision``.
 
@@ -548,6 +566,7 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
     frozen = Frozen(root, revision)
     floor = release_floor(root, revision)
     commits, plans, wanted_bases, older = {}, {}, {}, set()
+    equal = source_equal_to(root, revision)
     for rid, wanted in sorted(units.items()):
         shaped = unit_of(rid, wanted)
         if shaped is None:
@@ -578,7 +597,7 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
     for rid, rows in provisional.items():
         bases, _ = _bases(root, frozen, rows, floor, commits, lane=plans[rid]["lane"], receipts=receipts)
         for cls, _, _, base in bases:
-            if base != revision:
+            if not equal(base):
                 wanted_bases.setdefault((base, CLASS_BACKEND[cls]), set()).add(plans[rid]["lane"])
     from release_requirement_dependencies import frozen_snapshot, reference_key
     request = dict(reference_closures=dict(bases=[[base, backend, sorted(lanes)] for (base, backend), lanes
@@ -607,8 +626,11 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
                 item["floor_refused"] = receipt["reason"]
             elif receipt is not None:
                 item["floor_receipt"] = [e["path"] for e in receipt["evidence"]]
-            if base == revision:
-                item.update(changed_paths=0, unchanged=True)
+            if equal(base):
+                # ADOPTED BY COMMIT EQUALITY (Andrew 2026-11-05): a record made at the frozen source, or at a
+                # commit that differs from it only in record outputs (the admitted table, the column records,
+                # the admission READMEs: tools/identity_at_freeze.py RECORD_OUTPUTS), needs no selector.
+                item.update(changed_paths=0, unchanged=True, source_equal=base != revision)
             else:
                 sel = selections.get(reference_key(base, CLASS_BACKEND[cls]))
                 if sel is None:
@@ -638,7 +660,7 @@ def verdicts(root, revision, units, *, failures=None, log_dir=None):
             if commit is None:
                 continue
             sel = selections.get(reference_key(commit, backend))
-            same = commit == revision or (sel is not None and lane not in sel["selected"] and not sel["unattributed"])
+            same = equal(commit) or (sel is not None and lane not in sel["selected"] and not sel["unattributed"])
             if same:
                 verdict["failures"].append(commit)
         verdict["evidence"].insert(0, dict(frozen.table_ref))
