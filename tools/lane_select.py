@@ -10726,6 +10726,251 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                 by_path={p: sorted(v, key=every.index) for p, v in by_path.items()})
 
 
+# ------------------------------------------------- the on-disk selection cache
+# ONE SELECTION PER (COMMIT, COLUMN), ON DISK (2026-11-05, finding 2 of
+# docs/release/0.8.66-release-state.md). `tools/release.py <v> --plan`,
+# `tools/reference_refresh.py --plan` and the refresh run each ran
+# `tools/identity_columns.py changed-lanes` per column, and each spent ~20 min
+# per column in `lane_sources()` + `select()` for the same commit: three times
+# ~1.5 h on the Mac. All three (and record_identity_column.sh) reach the
+# closure through `select_cached` below, so the second and third callers read
+# the first one's answer.
+#
+# THE KEY is everything the answer depends on: HEAD and its tree id, the
+# resolved ref, the changed-path list, backend, stop_when, the content of every
+# tools/*.py beside this file (the tool's own hash), the environment this
+# module reads (RELEASE_BUILD_ONLY_ENV), Python major.minor (the AST), the
+# platform and machine, and the path + content digest of every git-IGNORED
+# file the checkout holds outside .git/.pixi/__pycache__ (a generated Mojo
+# file or a staged harness copy is read by the walk without being in the tree;
+# `_ls_tree_state` prunes the same three names).
+#
+# NEVER STALE. Bypassed (computed, not stored, not served) when: the checkout
+# has a tracked edit, a staged change or an untracked file (`git status`), the
+# ref does not resolve to a commit, the checkout changed while the selection
+# ran, any function of this module or its helper modules is not the one it
+# was imported as (a test's monkeypatch), or the process runs under pytest
+# without MOJOLEARN_LANE_SELECT_CACHE set. Only the fields the callers read are
+# stored (SELECT_CACHE_FIELDS); a hit returns those and `cache="hit"`.
+# Atomic write (mkstemp in the cache dir + os.replace), so two pipelines
+# (macOS and Linux) racing on one key both leave a complete file and a reader
+# never sees a partial one; an unreadable or mismatching file is a miss.
+SELECT_CACHE_ENV = "MOJOLEARN_LANE_SELECT_CACHE"      # a directory, or off/0/no to disable
+SELECT_CACHE_SCHEMA = 1
+SELECT_CACHE_FIELDS = ("lanes", "unattributed", "stopped_early", "total")
+_SELECT_CACHE_ENV_INPUTS = (RELEASE_BUILD_ONLY_ENV,)
+_SELECT_CACHE_PRUNE = (".git", ".pixi", "__pycache__")
+_SELECT_TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+_SELECT_TOOL_DIGEST = {}            # tool dir -> digest, once per process
+_SELECT_FILE_DIGESTS = {}           # (path, size, mtime_ns, ino) -> sha256, once per process
+_SELECT_CACHE_GENUINE = None        # name -> object at import end (set at the bottom of this module)
+_SELECT_CACHE_HELPERS = ("bincache", "import_metadata_effects", "mojo_registrations", "lane_map_import_graph")
+
+
+def select_cache_dir():
+    """The cache directory, or None when the cache is off."""
+    raw = os.environ.get(SELECT_CACHE_ENV, "").strip()
+    if raw.lower() in ("0", "off", "no", "none", "false"):
+        return None
+    if not raw and os.environ.get("PYTEST_CURRENT_TEST"):
+        return None     # a test's mocked selection never reaches the real cache
+    return raw or os.path.join(os.path.expanduser("~"), "mojolearn-evidence", "lane-select-cache")
+
+
+def _select_cache_callables():
+    out = {name: value for name, value in globals().items()
+           if callable(value) and not name.startswith("__")}
+    for module_name in _SELECT_CACHE_HELPERS:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            out.update({f"{module_name}.{name}": value for name, value in vars(module).items()
+                        if callable(value) and not name.startswith("__")})
+    return out
+
+
+def _select_cache_genuine():
+    """Every function this selection can call is the one imported (no monkeypatch)."""
+    if _SELECT_CACHE_GENUINE is None:
+        return False
+    now = _select_cache_callables()
+    return all(now.get(name) is value for name, value in _SELECT_CACHE_GENUINE.items())
+
+
+def _sha256_file(full):
+    st = os.lstat(full)
+    memo = (full, st.st_size, st.st_mtime_ns, st.st_ino)
+    if memo not in _SELECT_FILE_DIGESTS:
+        import hashlib
+        h = hashlib.sha256()
+        if os.path.islink(full):
+            h.update(b"link:" + os.readlink(full).encode("utf-8", "surrogateescape"))
+        else:
+            with open(full, "rb") as fh:
+                for block in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(block)
+        _SELECT_FILE_DIGESTS[memo] = h.hexdigest()
+    return _SELECT_FILE_DIGESTS[memo]
+
+
+def _select_tool_digest():
+    """sha256 over every tools/*.py beside this module (name + bytes)."""
+    tool_dir = _SELECT_TOOL_DIR
+    if tool_dir not in _SELECT_TOOL_DIGEST:
+        import hashlib
+        h = hashlib.sha256()
+        for name in sorted(os.listdir(tool_dir)):
+            full = os.path.join(tool_dir, name)
+            if name.endswith(".py") and os.path.isfile(full):
+                h.update(name.encode() + b"\0" + _sha256_file(full).encode() + b"\n")
+        _SELECT_TOOL_DIGEST[tool_dir] = h.hexdigest()
+    return _SELECT_TOOL_DIGEST[tool_dir]
+
+
+def _select_git(*args):
+    res = subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True, text=True)
+    return res.stdout if res.returncode == 0 else None
+
+
+def _select_tree_state():
+    """(state dict, None) for a clean checkout, or (None, why) to bypass the cache."""
+    status = _select_git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none")
+    if status is None:
+        return None, "git status failed"
+    if status.strip("\0").strip():
+        return None, "the checkout has tracked edits, staged changes or untracked files"
+    head = (_select_git("rev-parse", "--verify", "--quiet", "HEAD^{commit}") or "").strip()
+    tree = (_select_git("rev-parse", "--verify", "--quiet", "HEAD^{tree}") or "").strip()
+    if not head or not tree:
+        return None, "HEAD does not resolve"
+    listing = _select_git("ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
+    if listing is None:
+        return None, "listing the ignored files failed"
+    import hashlib
+    ignored = hashlib.sha256()
+    count = 0
+    for entry in sorted(e for e in listing.split("\0") if e):
+        rel = entry.rstrip("/")
+        if any(part in _SELECT_CACHE_PRUNE for part in rel.split("/")):
+            continue
+        full = os.path.join(ROOT, rel)
+        files = []
+        if os.path.isdir(full) and not os.path.islink(full):
+            for dirpath, dirnames, filenames in os.walk(full):
+                dirnames[:] = sorted(d for d in dirnames if d not in _SELECT_CACHE_PRUNE)
+                files += [os.path.join(dirpath, f) for f in filenames]
+                # os.walk does not descend into a linked directory: key the link itself
+                files += [os.path.join(dirpath, d) for d in dirnames if os.path.islink(os.path.join(dirpath, d))]
+        elif os.path.lexists(full):
+            files.append(full)
+        for f in sorted(files):
+            try:
+                digest = _sha256_file(f)
+            except OSError:
+                return None, "an ignored file could not be read: " + os.path.relpath(f, ROOT)
+            ignored.update(os.path.relpath(f, ROOT).encode("utf-8", "surrogateescape") + b"\0"
+                           + digest.encode() + b"\n")
+            count += 1
+    return dict(head=head, tree=tree, ignored=ignored.hexdigest(), ignored_files=count), None
+
+
+def _select_cache_write(path, body):
+    """Atomic: a reader or a racing writer never sees a partial file. Best effort."""
+    import tempfile
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=os.path.dirname(path))
+    except OSError:
+        return False
+    try:
+        with os.fdopen(fd, "w") as out:
+            out.write(json.dumps(body, sort_keys=True) + "\n")
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, path)
+        return True
+    except OSError:
+        return False
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def select_cache_key(paths, ref, backend=None, stop_when=None):
+    """(key, None), or (None, why the cache is bypassed)."""
+    if select_cache_dir() is None:
+        return None, "cache off"
+    if not ref:
+        return None, "no ref"
+    if not _select_cache_genuine():
+        return None, "a selection function is not the imported one"
+    commit = (_select_git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}") or "").strip()
+    if not commit:
+        return None, f"ref {ref} does not resolve to a commit"
+    state, why = _select_tree_state()
+    if state is None:
+        return None, why
+    import hashlib
+    import platform
+    listed = "\n".join(sorted({p.strip() for p in paths if p.strip()}))
+    key = dict(schema=SELECT_CACHE_SCHEMA, ref=commit, backend=backend or None,
+               stop_when=sorted(stop_when) if stop_when is not None else None,
+               paths=hashlib.sha256(listed.encode("utf-8", "surrogateescape")).hexdigest(),
+               tool=_select_tool_digest(),
+               env={k: os.environ.get(k) for k in _SELECT_CACHE_ENV_INPUTS},
+               python="%s-%d.%d" % (sys.implementation.name, sys.version_info[0], sys.version_info[1]),
+               platform=sys.platform, machine=platform.machine(), **state)
+    return key, None
+
+
+class LaneMapFailed(RuntimeError):
+    """Deriving the lane map failed. Not a diff that could not be taken: a
+    caller that treats a failed diff as "re-record every lane" re-raises this
+    (before select_cached the map was derived outside that handler)."""
+
+
+def _derive_lane_map():
+    try:
+        lane_sources()
+    except BaseException as exc:  # noqa: BLE001 - re-raised, named
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        raise LaneMapFailed(f"deriving the lane map failed: {type(exc).__name__}: {exc}") from exc
+
+
+def select_cached(paths, ref=None, backend=None, stop_when=None):
+    """`select(paths, ref=ref, backend=backend, stop_when=stop_when)` with the
+    default lane map, through the on-disk cache above. Returns at least
+    SELECT_CACHE_FIELDS plus `cache` ("hit", "miss" or "bypass: <why>"). The
+    lane map is derived only on a miss."""
+    key, why = select_cache_key(paths, ref, backend, stop_when)
+    if key is None:
+        _derive_lane_map()
+        out = select(paths, ref=ref, backend=backend, stop_when=stop_when)
+        return dict(out, cache="bypass: " + why)
+    import hashlib
+    token = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:32]
+    path = os.path.join(select_cache_dir(), token + ".json")
+    try:
+        with open(path) as fh:
+            body = json.load(fh)
+        if body.get("key") == key and all(f in body.get("result", {}) for f in SELECT_CACHE_FIELDS):
+            return dict({f: body["result"][f] for f in SELECT_CACHE_FIELDS}, cache="hit")
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass            # absent, partial or foreign: a miss
+    _derive_lane_map()
+    out = select(paths, ref=ref, backend=backend, stop_when=stop_when)
+    # Store only an answer the key still describes: the checkout must not have
+    # moved while the selection read it.
+    after, _ = select_cache_key(paths, ref, backend, stop_when)
+    if after == key:
+        import datetime
+        _select_cache_write(path, dict(key=key, result={f: out.get(f) for f in SELECT_CACHE_FIELDS},
+                                       written=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                       pid=os.getpid()))
+        return dict(out, cache="miss")
+    return dict(out, cache="bypass: the checkout changed during the selection")
+
+
 # --------------------------------------------------------------- sharding
 
 def shard(lanes, shards):
@@ -10885,6 +11130,11 @@ def main(argv=None):
             print(f"# shard {k} weight {load[k]} s: {','.join(group)}")
     print(",".join(sel["lanes"]))
     return 0
+
+
+# What `select_cached` compares against: every function as imported (see the
+# on-disk selection cache above). Keep this the last definition of the module.
+_SELECT_CACHE_GENUINE = _select_cache_callables()
 
 
 if __name__ == "__main__":

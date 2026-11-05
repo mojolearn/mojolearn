@@ -855,7 +855,9 @@ def cmd_changed_lanes(args):
             print(f"#   no floor for {lane}: {(receipts.get(lane) or {}).get('reason', 'no receipt')}", file=sys.stderr)
     # --class: reuse_points already refused table rows at an old fixture revision.
     stale = set() if cls else set(vref().stale_reference_lanes(table, h))
-    sources, _ = lane_select.lane_sources()
+    # The lane map is derived by select_cached on its first cache miss only
+    # (lane_select's on-disk selection cache: release.py --plan, reference_refresh
+    # --plan and the refresh run ask the same questions of one commit).
     picked_by = {}                       # commit -> set of lanes its diff reaches
     # The lanes whose answer each commit's diff decides: once its selection
     # holds all of them (or a path is unattributed, which re-records all of
@@ -881,8 +883,9 @@ def cmd_changed_lanes(args):
                     paths = lane_select.changed_paths(ref)
                     print(f"# diffing {len(paths)} path(s) since {ref[:12]} for {len(resting[ref])} lane(s)",
                           file=sys.stderr, flush=True)
-                    sel = lane_select.select(paths, ref=ref, sources=sources, backend=args.backend or None,
-                                             stop_when=resting[ref])
+                    sel = lane_select.select_cached(paths, ref=ref, backend=args.backend or None,
+                                                    stop_when=resting[ref])
+                    print(f"# lane-select cache {sel.get('cache', 'n/a')} for {ref[:12]}", file=sys.stderr, flush=True)
                     if sel.get("stopped_early") and not sel.get("unattributed"):
                         print(f"# every lane resting on {ref[:12]} has a changed closure; "
                               "the remaining paths were not read", file=sys.stderr)
@@ -894,6 +897,8 @@ def cmd_changed_lanes(args):
                         picked_by[ref] = set(lanes)
                     else:
                         picked_by[ref] = set(sel["lanes"])
+                except lane_select.LaneMapFailed:
+                    raise                        # the map itself failed: never "re-record all"
                 except (SystemExit, Exception) as exc:  # an unknown commit is not "unchanged"
                     print(f"# cannot diff against {ref[:12]} ({exc}); every lane resting on it is re-recorded",
                           file=sys.stderr)
@@ -1007,14 +1012,14 @@ def cmd_reuse_check(args):
     if not owed:
         print(f"REUSE-CHECK ok=yes: every older incoming row is superseded by a newer record of its class")
         return 0
-    sources, _ = lane_select.lane_sources()
     problems, checked = [], 0
     for (commit, cls), lanes in sorted(owed.items()):
         checked += len(lanes)
         try:
             paths = lane_select.changed_paths(commit)
-            sel = lane_select.select(paths, ref=commit, sources=sources, backend=CLASS_BACKEND.get(cls),
-                                     stop_when=lanes)
+            sel = lane_select.select_cached(paths, ref=commit, backend=CLASS_BACKEND.get(cls), stop_when=lanes)
+        except lane_select.LaneMapFailed:
+            raise
         except (SystemExit, Exception) as exc:  # a diff that cannot be taken is not "unchanged"
             problems.append(f"{cls}@{commit[:12]}: cannot diff ({exc})")
             continue
