@@ -1,6 +1,0 @@
-{
- "detail": "every selected lane has a stale reference (gmm, gmm-sample): each one's fixture moved past the hash this table carries, so no cell would be comparable; regenerate with --emit-reference from a current record",
- "exit": 4,
- "format": "mojolearn.verify-all-report.v1",
- "verdict": "CANNOT RUN"
-}
