@@ -241,10 +241,18 @@ def _record(source, compiler):
         normalized[f] = copy.deepcopy(one)
         formats.add(normalized[f]['build_env'].pop('MOJOLEARN_CUDA_CODE_FORMAT', None))
         caches[f] = cache
-    require(len(formats) == 1 and formats <= {'native', 'ptx'}, 'Unknown inherited CUDA code format')
-    code_format = formats.pop()
-    # This project-only flag is consumed by GPU format staging, not the host
-    # command in merged_build.sh. No compiler/source/target flag is dropped.
+    # MOJOLEARN_CUDA_CODE_FORMAT is a leg-level packaging switch consumed by GPU
+    # format staging, never by the host command in merged_build.sh (proved below
+    # by the host_format_scope witness of validate_document). Since the
+    # closure-v2 keys (tools/bincache.py NON_BUILD_ENV_V2, 0.8.66) a host cache
+    # witness no longer carries it at all, so the host contract must not depend
+    # on it: it is popped from the normalized inputs and recorded only on the
+    # variant. Witnesses that do carry it (pre-closure-v2 keys, a hot hit from
+    # an older leg) must still agree on one known value; absent is no claim.
+    # No compiler/source/target flag is dropped.
+    carried = formats - {None}
+    require(len(carried) <= 1 and carried <= {'native', 'ptx'}, 'Unknown or mixed inherited CUDA code format')
+    code_format = next(iter(carried), None)
     contract = dict(source_commit=commit, source_inventory=inventory, compiler_sha256=compiler,
         host_identities=identities, host_cache_inputs=normalized,
         group_compilation_sources={f:c['compiled_from_commit'] for f,c in caches.items()},
