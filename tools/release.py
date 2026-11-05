@@ -1500,7 +1500,15 @@ class Release:
     def source_checkout(self, create=True):
         """Where the steps that read the SOURCE run: this checkout when its HEAD
         is the source commit, else --source-checkout, else a detached worktree
-        of the source commit under <version>/source/<commit12>/ (made once)."""
+        of the source commit under <version>/source/<commit12>/ (made once).
+
+        Made atomically and single-flight: the pipelines run concurrently and
+        two of them once asked for it in the same second, one reading the half
+        checked-out tree (0.8.66). The worktree is added at a temporary sibling
+        `<commit12>.tmp-<pid>`, verified, then moved to its final path, under a
+        thread lock (this process) and an fcntl lock beside the path (other
+        processes). A final path made earlier is verified (HEAD at the commit,
+        no tracked change) before it is used; a wrong one is refused."""
         c = self.commit
         if getattr(self.args, "source_checkout", ""):
             p = Path(self.args.source_checkout).expanduser().resolve()
@@ -1510,21 +1518,91 @@ class Release:
         if self.head_of(ROOT) == c:
             return ROOT
         p = self.base / "source" / c[:12]
-        if (p / ".git").exists():
-            if git_at(p, "rev-parse", "HEAD") != c and not self.readonly:
+        if self.dry or self.readonly or not create:
+            if (p / ".git").exists() and not self.readonly and git_at(p, "rev-parse", "HEAD") != c:
                 raise StepFailed(f"the source checkout {p} is not at {c}; remove it (git worktree remove) and rerun")
             return p
-        if self.dry or self.readonly or not create:
-            return p
-        with self._lock:
-            if not (p / ".git").exists():
-                self.say(f"  source checkout: a detached worktree of {c[:12]} at {p} (the tooling runs from {ROOT})")
-                p.parent.mkdir(parents=True, exist_ok=True)
-                rc = subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "--detach", str(p), c],
-                                    capture_output=True, text=True)
-                if rc.returncode != 0:
-                    raise StepFailed(f"could not add a worktree of {c} at {p}: {rc.stderr.strip()}")
+        lock = self.__dict__.setdefault("_source_lock", threading.Lock())
+        with lock:
+            if self.__dict__.get("_source_ready") == (p, c):
+                return p
+            p.parent.mkdir(parents=True, exist_ok=True)
+            import fcntl
+            with open(p.parent / f".{p.name}.lock", "a+") as fh:
+                fcntl.flock(fh, fcntl.LOCK_EX)
+                try:
+                    self._sweep_source_tmp(p)
+                    if p.exists():
+                        self._verify_source(p, c)
+                    else:
+                        self._add_source(p, c)
+                finally:
+                    fcntl.flock(fh, fcntl.LOCK_UN)
+            self._source_ready = (p, c)
         return p
+
+    @staticmethod
+    def _source_problem(p, c):
+        """Why the tree at P is not a complete checkout of C, or None."""
+        if not (Path(p) / ".git").exists():
+            return "it is not a git worktree"
+        head = git_at(p, "rev-parse", "HEAD")
+        if head != c:
+            return f"its HEAD is {head or '(unreadable)'}"
+        dirty = git_at(p, "status", "--porcelain", "--untracked-files=no")
+        if dirty is None:
+            return "git status failed in it"
+        if dirty:
+            return "it has tracked changes (a partial or edited checkout): " + dirty.splitlines()[0]
+        return None
+
+    def _verify_source(self, p, c):
+        why = self._source_problem(p, c)
+        if why:
+            raise StepFailed(f"the source checkout {p} is not a clean checkout of {c}: {why}; "
+                             f"remove it (git worktree remove --force {p}) and rerun")
+
+    def _add_source(self, p, c):
+        tmp = p.parent / f"{p.name}.tmp-{os.getpid()}"
+        self.say(f"  source checkout: a detached worktree of {c[:12]} at {p} (the tooling runs from {ROOT})")
+        rc = subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "--detach", str(tmp), c],
+                            capture_output=True, text=True)
+        if rc.returncode != 0:
+            self._drop_worktree(tmp)
+            raise StepFailed(f"could not add a worktree of {c} at {tmp}: {rc.stderr.strip()}")
+        why = self._source_problem(tmp, c)
+        if why:
+            self._drop_worktree(tmp)
+            raise StepFailed(f"the new worktree of {c} at {tmp} is incomplete: {why}")
+        rc = subprocess.run(["git", "-C", str(ROOT), "worktree", "move", str(tmp), str(p)],
+                            capture_output=True, text=True)
+        if rc.returncode != 0:
+            self._drop_worktree(tmp)
+            raise StepFailed(f"could not move the worktree {tmp} to {p}: {rc.stderr.strip()}")
+
+    @staticmethod
+    def _drop_worktree(tree):
+        """Remove a worktree of ROOT and its registration (targeted, so other
+        sessions' missing worktrees are not pruned)."""
+        tree = Path(tree)
+        subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(tree)],
+                       capture_output=True, text=True)
+        shutil.rmtree(tree, ignore_errors=True)
+        common = git_at(ROOT, "rev-parse", "--git-common-dir")
+        admin = (ROOT / common if common else ROOT / ".git") / "worktrees"
+        for gitdir in admin.glob("*/gitdir") if admin.is_dir() else []:
+            try:
+                if Path(gitdir.read_text().strip()).parent in (tree, tree.resolve()):
+                    shutil.rmtree(gitdir.parent, ignore_errors=True)
+            except OSError:
+                continue
+
+    def _sweep_source_tmp(self, p):
+        """Remove leftover `<commit12>.tmp-<pid>` trees beside P. Called under
+        the file lock, so no live process is making one."""
+        for tmp in sorted(p.parent.glob(f"{p.name}.tmp-*")):
+            self.say(f"  source checkout: removing the leftover {tmp}")
+            self._drop_worktree(tmp)
 
     @property
     def src(self):
