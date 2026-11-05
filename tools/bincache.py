@@ -373,9 +373,18 @@ def script_plan(repo, script, args):
     return roots, sorted(incs), shells
 
 
+#: Why the legacy (v1) source key of a build last widened to the whole tree, per (repo, script, args):
+#: `bincache.py explain` prints it. Kept outside the key fields so v1 keys stay byte-identical.
+WIDENED = {}
+
+
 def source_digest(repo, script, args, force_tree=False):
     repo = Path(repo).resolve()
     plan = None if force_tree else script_plan(repo, script, args)
+    widened_key = (str(repo), str(Path(script).resolve()), tuple(args))
+    WIDENED.pop(widened_key, None)
+    if plan is None and not force_tree:
+        WIDENED[widened_key] = "the compile line names no readable root; the legacy key widened to the whole tree"
     scope = "closure"
     files = set()
     if plan is not None:
@@ -389,6 +398,8 @@ def source_digest(repo, script, args, force_tree=False):
             for module, names in parse_imports(f.read_text(errors="replace")):
                 got = resolve(module, names, f, incs)
                 if got is None:
+                    WIDENED[widened_key] = "unresolved import %r in %s widened the closure" % (
+                        module, os.path.relpath(f, repo))
                     plan = None
                     break
                 todo.extend(g.resolve() for g in got if g.resolve() not in files)
@@ -1558,19 +1569,69 @@ def compile_reason(fields, closure, candidates):
     return "changed: " + ", ".join(diffs[:8]) if diffs else "archive absent"
 
 
+def invalidations(repo, changed, platforms=("darwin", "linux")):
+    """{changed file: ["<platform>/<set>/<stem>", ...]}: the merged groups whose closure-v2 closure holds
+    each file, read from REPO's working tree (tools/compile_closures.py walk). A file in no closure maps
+    to []."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import compile_closures as cc
+    tree = Path(repo).resolve()
+    out = {f: [] for f in changed}
+    for plat in platforms:
+        for d, stem, _cls, mem in cc.group_rows(tree, plat):
+            closure = set()
+            for m in mem:
+                closure |= set(cc.closure_of(tree, [tree / "bindings" / (m + ".mojo")]))
+            for f in changed:
+                if f in closure:
+                    out[f].append("%s/%s/%s" % (plat, d, stem))
+    return out
+
+
+def invalidation_lines(inv):
+    return ["%s invalidates these %d groups: %s" % (f, len(g), ", ".join(g)) if g else
+            "%s invalidates no merged group" % f for f, g in sorted(inv.items())]
+
+
 def cmd_explain(argv, environ=None):
-    """explain <script> [args...]: one line, `hit (<where>) key=K` or
+    """explain [--since REV] <script> [args...]: one line, `hit (<where>) key=K` or
     `compile: <reason> key=K`, for the build cmd_build would run with this
     environment (MOJOLEARN_BINCACHE_DIR/_SEED_DIRS, _HOT_DIR, _MAP, _OUTPUTS,
     _SHELL, _IMAGE). Compiles nothing, writes nothing. Exit 0, or 3 when the
-    build cannot be keyed (the reason names the import)."""
+    build cannot be keyed (the reason names the import).
+
+    --since REV first prints, per file changed since REV (git diff REV, the working tree), "<file>
+    invalidates these N groups: ...". With MOJOLEARN_BINCACHE_KEY_RULE=v1 it also prints the legacy key's
+    scope and, when it widened to the whole tree, why ("unresolved import <x> in <file> widened the
+    closure"); closure-v2 keys never widen, they fail on the import (exit 3)."""
     environ = dict(os.environ if environ is None else environ)
+    since = None
+    if argv[:1] == ["--since"] and len(argv) >= 2:
+        since, argv = argv[1], argv[2:]
     if not argv:
-        print("usage: bincache.py explain <script> [args...]", file=sys.stderr)
+        print("usage: bincache.py explain [--since REV] <script> [args...]", file=sys.stderr)
         return 2
     script, args = argv[0], argv[1:]
     repo = Path(script).resolve().parent.parent
     label = "%s %s" % (os.path.relpath(Path(script).resolve(), repo), " ".join(args))
+    if since:
+        diff = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", since], capture_output=True, text=True)
+        if diff.returncode != 0:
+            print("explain: git diff %s failed: %s" % (since, diff.stderr.strip()[:200]), file=sys.stderr)
+            return 2
+        changed = sorted(x for x in diff.stdout.splitlines() if x.endswith(".mojo"))
+        try:
+            for line in invalidation_lines(invalidations(repo, changed)):
+                print(line)
+        except UnkeyableBuild as exc:
+            print("invalidations: unkeyable: %s" % exc)
+    if environ.get("MOJOLEARN_BINCACHE_KEY_RULE") == "v1":
+        # The legacy key (still recomputed by the retained-compile verifiers): say what it read and,
+        # when it widened to the whole tree, why. Closure-v2 never widens; it fails on the import.
+        src, _rels = source_digest(repo, script, args)
+        widened = WIDENED.get((str(repo.resolve()), str(Path(script).resolve()), tuple(args)))
+        print("legacy key: scope=%s files=%d%s  [%s]" % (src["scope"], src["files"],
+                                                          ("; " + widened) if widened else "", label))
     outputs = sorted(o for o in environ.get("MOJOLEARN_BINCACHE_OUTPUTS", "").split() if o) or None
     local_dir = environ.get("MOJOLEARN_BINCACHE_DIR") if environ.get("MOJOLEARN_BINCACHE", "") != "0" else None
     map_path = environ.get("MOJOLEARN_BINCACHE_MAP", DEFAULT_MAP)
