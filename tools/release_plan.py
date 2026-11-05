@@ -162,8 +162,11 @@ def identity_rows(cls, lanes, previous):
     return rows
 
 
-def gate_rows(cls, gates):
-    """gates: {name: dict(kind, state: done|owed|failed|held, reason, device, evidence)}."""
+def gate_rows(cls, gates, compiles_owed=True):
+    """gates: {name: dict(kind, state: done|owed|failed|held, reason, device, evidence, previous_evidence,
+    self_checked)}. A check the class does not run is reused from the previous release's evidence; an
+    `artifact` (build) step with every compile group a hit takes the previous binaries; with no previous
+    evidence the check runs (never a reuse without evidence)."""
     rows = []
     for name, g in sorted(gates.items()):
         k = g.get("kind", "numerical")
@@ -176,6 +179,10 @@ def gate_rows(cls, gates):
             # verdict for the same bytes itself); the plan never claims a reuse that step would refuse.
             rows.append(dict(id=name, section="gates", action="run", reason="its own check owes work: "
                              + (g.get("reason") or "not recorded"), device=g.get("device")))
+        elif not runs and k == "artifact" and not compiles_owed:
+            rows.append(dict(id=name, section="gates", action="reuse", reason="decision table %s: every compile "
+                             "group hits; the previous release's binaries are taken" % cls,
+                             evidence=g.get("previous_evidence") or {"local": True}))
         elif not runs and g.get("previous_evidence"):
             rows.append(dict(id=name, section="gates", action="reuse", reason="decision table %s: a %s check does not run; the "
                              "previous release's evidence covers the same bytes" % (cls, k),
@@ -226,7 +233,7 @@ def decide(facts):
     cls, why = classify(changes, groups)
     comp = compile_rows(cls, changes, groups)
     ident = identity_rows(cls, facts.get("lanes") or {}, facts.get("previous"))
-    gates = gate_rows(cls, facts.get("gates") or {})
+    gates = gate_rows(cls, facts.get("gates") or {}, any(r["action"] == "compile" for r in comp))
     restore = restore_rows(comp + ident + gates)
     work = [r for r in comp + ident + gates if r["action"] in ("compile", "record", "run")]
     boxes = box_rows(work, facts.get("leases") or {})
