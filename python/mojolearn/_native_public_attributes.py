@@ -220,8 +220,16 @@ def connect_classes(package):
         context['stl_connected'] = True
     boost_module = sys.modules.get(package.__name__ + '._expansion_trees')
     if type(boost_module) is ModuleType:
+        # glue: the native estimators_ read is the tree owner's own
+        # trees_bagging_members operation (the property's call), connected as
+        # a fixed recipe so the public attribute owner imports no tree module.
         bagging = vars(boost_module).get('_BaggingBase')
-        if type(bagging) is type:
+        trees_entry = vars(boost_module).get('_TREES')
+        if type(bagging) is type and type(trees_entry) is BuiltinFunctionType:
+            recipes = context.setdefault('native_property_recipes', {})
+            recipes.setdefault('bagging_estimators', dict(
+                entry=trees_entry, operation='trees_bagging_members', arguments=(),
+                context=vars(boost_module)['_TREES_CONTEXT']))
             context['property_schemas'][vars(bagging)['estimators_']] = 'bagging_estimators'
     candidates = set()
     for name, module in tuple(sys.modules.items()):  # glue: loaded product declarations only; no optional module imports

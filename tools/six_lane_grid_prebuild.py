@@ -51,6 +51,12 @@ SCHEMA = 'mojolearn.six-lane-grid-prebuilt/1'
 MODE = 'identical'
 ARCH = {'nvidia': 'sm_89', 'amd': 'gfx942'}
 GUARDS = 'core/six_lane_experiment_guards.mojo'  # names every define for conflict checks; never a bits input
+#: The guard modules (the shared file + core/experiment_guards_<family>.mojo since 2026-11-04): none is a bits input.
+GUARD_PREFIX = 'core/experiment_guards_'
+
+
+def is_guard(p):
+    return p == GUARDS or (p.startswith(GUARD_PREFIX) and p.endswith('.mojo') and p.count('/') == 1)
 DEFINES_ENV = 'MOJOLEARN_BUILD_DEFINES'
 SECONDS_PER_BINDING = 60.0  # the brief's planning figure for one cross compile
 INSTALL_SCRIPT = 'tools/six_lane_grid_install_prebuilt.sh'
@@ -162,12 +168,12 @@ def import_closures(root, bindings):
 
 
 def reach_map(root, bindings, names, closures=None):
-    """{define NAME: sorted bindings whose import closure references it} (textual, GUARDS excluded)."""
+    """{define NAME: sorted bindings whose import closure references it} (textual, guard modules excluded)."""
     closures = closures or import_closures(root, bindings)
     texts = {}
     for paths in closures.values():
         for p in paths:
-            if p not in texts and p != GUARDS:
+            if p not in texts and not is_guard(p):
                 f = Path(root) / p
                 texts[p] = f.read_text(errors='replace') if f.is_file() else ''
     pats = {n: re.compile(r'\b%s\b' % re.escape(n)) for n in names}

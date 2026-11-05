@@ -5,6 +5,8 @@
 
     pixi run release 0.8.15 --dry-run          the plan and what is already done
     pixi run release 0.8.15 --status           per pipeline, leg and column: done, failed, owed
+    pixi run release 0.8.15 --report           one row per requirement and step: passed, reused, failed,
+                                               missing-execution, blocked-provenance, not-applicable, waived
     pixi run release 0.8.15                    everything up to publication
     pixi run release 0.8.15 --publish pypi     ... and publish, finish line, record
 
@@ -162,6 +164,14 @@ THE STEPS
                      pip download of the Linux file, sha256 compared (Linux), and
                      the package set pip resolves for `mojolearn`,
                      `mojolearn-nvidia` and `mojolearn-amd` (Linux)
+  gate-boxes         ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1; it rents): the boxes the selected box
+                     steps (gate-*; published-smoke-* only when asked) still need: the shared NVIDIA pod
+                     (tools/nvidia_central.sh up 1, out of stock retried there; lane release-gate synced to
+                     the frozen source) and the DigitalOcean AMD droplet (tools/do_amd_steward.sh up 240), or
+                     the live ones adopted; recorded in the state. While a box step is pending the release
+                     holds the pod busy (one `nvidia_central.sh sh release-gate` hold, renewed) and renews
+                     the droplet's lease (do_amd_steward.sh extend 120 every 85 minutes). --dry-run prints
+                     what it would rent and for how long. Never an Apple machine
   gate-nvidia        } THE RELEASE GATE, after linux-pack and before any publish: tools/release_lq_smoke.py
   gate-amd           }   --gate runs tools/gate_smoke_box.py <vendor> <version> ... all ON the held lq box
                          (never the Mac, nothing rented): release-light-v1 completes eleven installed
@@ -170,8 +180,22 @@ THE STEPS
                          No opponent/performance campaign or native compilation is part of publication.
                          Validated unchanged autograd artifact inputs reuse their original binaries.
                          Reports come home to <version>/<commit12>/gate-<vendor>/<artifact-id>/.
+  published-apple    } after publish-<platform>, with --publish pypi: tools/release_published_install.py
+  published-nvidia   }   check, on this Mac, no device, no box, nothing installed: pip resolves each
+  published-amd      }   published package for the candidate's platform tags and downloads it; its
+                         sha256 must equal the gated candidate wheel's (different bytes FAIL with both
+                         hashes; nothing reruns), its RECORD must hold, and the gate's receipts are the
+                         evidence by reference. Report at <commit12>/published-<vendor>/published-report.json,
+                         where the ledger reads it (Andrew 2026-11-02: no re-verification of green work)
+  published-smoke-*  ONLY with --published-smoke <vendor> --published-smoke-reason TEXT (recorded in the
+                     state): the old installed smoke from PyPI on the vendor device (Apple under the
+                     Metal lock, NVIDIA/AMD as persisted box jobs on the gate boxes); not selected otherwise
+  boxes-down         right after the gates (no published-* step needs a box): every box job's results home first
+                     (tools/box_persist.py fetch --tag; none missing, or nothing is taken down), then what
+                     gate-boxes rented taken down (nvidia_central.sh down, do_amd_steward.sh down); an
+                     adopted box is released, left up
   record             bench/results/release_verification/<date>_pypi_<v>/, committed; waits for both
-                     gates and preserves their candidate artifact provenance
+                     gates and the published-* producers and preserves their candidate artifact provenance
 
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
@@ -210,6 +234,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import queue
 import re
 import shlex
@@ -224,6 +249,33 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
+
+
+def ignore_hangup():
+    """A real run survives its terminal closing (2026-11-05, interruption recovery): SIGHUP is ignored by
+    the controller and, inherited, by the compiles and uploads it runs in the foreground, whose output it
+    keeps teeing into their logs (say() drops what it cannot print). A kill or a reboot still stops it;
+    every step then resumes from the state (docs/release/RELEASE_PLAN.md, interruption recovery)."""
+    import signal
+    try:
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    except (ValueError, OSError, AttributeError):   # not the main thread, or no SIGHUP on this platform
+        return False
+    return True
+
+
+def release_report_module():
+    """tools/release_report.py of THIS tooling tree (docs/release/STATUS_REPORT.md)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import release_report
+    return release_report
+
+
+def release_plan_module():
+    """tools/release_plan.py of THIS tooling tree (the decision table is tooling, not the frozen source)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import release_plan
+    return release_plan
 PUBLISH_CHOICES = ("none", "testpypi", "pypi")
 sys.path.insert(0, str(ROOT / "tools"))
 import release_ledger  # noqa: E402
@@ -1080,6 +1132,42 @@ STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish-line")
 STEP_TABLE = [(name, pipeline, needs + (["gate-"+v for v in GATE_VENDORS] if name.startswith('publish-') else []), resource)
               for name, pipeline, needs, resource in STEP_TABLE]
 AFTER["record"] = ["gate-" + v for v in GATE_VENDORS]
+# THE GATE BOXES AS STEPS (lane release-no-hands, 2026-11-04; ORCHESTRATOR ONLY, MOJOLEARN_ORCHESTRATOR=1):
+# gate-boxes brings up what the box steps need (the shared NVIDIA pod, tools/nvidia_central.sh up 1, and the
+# DigitalOcean AMD droplet, tools/do_amd_steward.sh up), records both in the state, holds the pod busy and
+# renews the droplet's lease while a box step is pending (Release.BoxKeeper); boxes-down pulls every box job's
+# results home (tools/box_persist.py fetch --tag) and takes down what gate-boxes rented once every box step
+# has settled. Never an Apple machine.
+#: box step -> the vendor box it runs on
+BOX_CONSUMERS = {"gate-" + v: v for v in GATE_VENDORS}
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gate-nvidia")),
+                  ("gate-boxes", "finish", ["linux-pack"], "boxes"))
+STEP_TABLE = [(name, pipeline, needs + (["gate-boxes"] if name in BOX_CONSUMERS else []), resource)
+              for name, pipeline, needs, resource in STEP_TABLE]
+# THE PUBLISHED PRODUCERS (lane published-no-reverify, 2026-11-04; Andrew 2026-11-02: the gates verified the
+# exact wheel bytes, nothing reinstalls them from PyPI to verify again). After each platform's publish,
+# published-<vendor> runs tools/release_published_install.py check HERE, on no device and no box: pip resolves
+# each published package for the candidate's platform tags, the downloaded file's sha256 must equal the gated
+# candidate's and its RECORD must hold, and the gate's own receipts are its evidence by reference. The report
+# lands at <commit12>/published-<vendor>/published-report.json (retained_producers admits it into the ledger).
+# No published-<vendor> step needs gate-boxes, so boxes-down follows the gates.
+PUBLISHED_STEPS = {"published-apple": ("apple", "publish-macos"), "published-nvidia": ("nvidia", "publish-nvidia"),
+                   "published-amd": ("amd", "publish-amd")}
+# The old installed smoke (a PyPI install, the eleven correctness jobs and the adapter phases on the vendor
+# device) runs only for an explicit `--published-smoke <vendor>` with `--published-smoke-reason` (recorded in
+# the state): published-smoke-apple on this Mac under the Metal lock, published-smoke-nvidia/amd as persisted
+# box jobs (tools/ops/published_install.py), each at <commit12>/published-smoke-<vendor>/. Unrequested, these
+# steps are not selected at all, so they never hold a box or delay boxes-down.
+PUBLISHED_SMOKE_STEPS = {"published-smoke-" + v: (v, "published-" + v) for v, _ in PUBLISHED_STEPS.values()}
+BOX_CONSUMERS.update({s: v for s, (v, _) in PUBLISHED_SMOKE_STEPS.items() if v in GATE_VENDORS})
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "record")),
+                  ("boxes-down", "finish", [], "boxes"))
+STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "boxes-down")):0] = [
+    (step, "finish", [publish], None) for step, (_, publish) in PUBLISHED_STEPS.items()] + [
+    (step, "finish", [after] + (["gate-boxes"] if step in BOX_CONSUMERS else []),
+     None if step in BOX_CONSUMERS else "mac") for step, (_, after) in PUBLISHED_SMOKE_STEPS.items()]
+AFTER["boxes-down"] = ["gate-boxes", *BOX_CONSUMERS]
+AFTER["record"] = AFTER["record"] + list(PUBLISHED_STEPS) + list(PUBLISHED_SMOKE_STEPS)
 
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
@@ -1144,6 +1232,94 @@ def wheel_marker(wheel):
         name = next(n for n in archive.namelist() if n.endswith(".dist-info/gpu_plugin.json"))
         return json.loads(archive.read(name))
 
+class BoxKeeper:
+    """KEEPS THE RELEASE'S BOXES while a box step is pending (lane release-no-hands, 2026-11-04): a thread of
+    the release process (an active controller, never a background service; it ends with the run).
+
+    NVIDIA: the shared pod deletes itself 60 idle minutes after it was last busy, and a pod is busy while an
+    `nvidia_central.sh sh` command runs, so one hold runs there (`sh <lane> <wait for the release file>`, at
+    most Release.HOLD_MAX_S, started again while still needed), never a hand `sleep` on the Mac. It ends when
+    nothing is pending: the release file is touched through the same wrapper and the hold exits.
+    AMD: the droplet's lease is renewed (`do_amd_steward.sh extend AMD_RENEW_MIN`) every AMD_RENEW_EVERY_S."""
+
+    def __init__(self, release):
+        self.r = release
+        self.hold = None
+        self._stop = threading.Event()
+        self.thread = None
+        self.release_file = f"/root/release-hold/{release.version}-{release.commit[:12]}.release"
+
+    def hold_command(self):
+        f = self.release_file
+        return (f"mkdir -p {shlex.quote(str(Path(f).parent))}; rm -f {shlex.quote(f)}; "
+                f"end=$(( $(date +%s) + {self.r.HOLD_MAX_S} )); "
+                f"while [ ! -e {shlex.quote(f)} ] && [ $(date +%s) -lt $end ]; do sleep 30; done; echo RELEASE-HOLD-END")
+
+    def start_hold(self):
+        log = self.r.rel / "boxes" / "nvidia-hold.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        cmd = ["bash", self.r.nvc(), "sh", self.r.BOX_LANE, self.hold_command()]
+        self.r.say(f"  box keeper: holding the NVIDIA pod busy: {' '.join(shlex.quote(c) for c in cmd[:4])} <hold>")
+        with open(log, "a") as fh:
+            self.hold = self.r.box_popen(cmd, cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=fh,
+                                         stderr=subprocess.STDOUT)
+
+    def end_hold(self):
+        if self.hold is None:
+            return
+        if self.hold.poll() is None:
+            self.r.run(["bash", self.r.nvc(), "sh", self.r.BOX_LANE, f"mkdir -p /root/release-hold && touch "
+                        f"{shlex.quote(self.release_file)}"], log=self.r.rel / "boxes" / "nvidia-hold-release.log")
+            try:
+                self.hold.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                self.hold.terminate()
+        self.hold = None
+
+    def renew_amd(self, rec):
+        if self.r.clock() - float(rec.get("lease_extended_at") or 0) < self.r.AMD_RENEW_EVERY_S:
+            return
+        rc = self.r.run(["bash", self.r.do_amd(), "extend", str(self.r.AMD_RENEW_MIN)],
+                        log=self.r.rel / "boxes" / "amd-extend.log")
+        with self.r._lock:
+            # a failed renewal is retried five minutes later, before the lease can run out
+            rec["lease_extended_at"] = self.r.clock() - (0 if rc == 0 else self.r.AMD_RENEW_EVERY_S - 300)
+            self.r.save()
+
+    def tick(self):
+        """One pass; the vendors still needed."""
+        need = self.r.boxes_pending()
+        held = self.r.held_boxes()
+        if "nvidia" in need and "nvidia" in held:
+            if self.hold is None or self.hold.poll() is not None:
+                self.start_hold()
+        else:
+            self.end_hold()
+        if "amd" in need and "amd" in held:
+            self.renew_amd(held["amd"])
+        return need & set(held)
+
+    def loop(self):
+        try:
+            while not self._stop.is_set() and self.tick():
+                self._stop.wait(self.r.KEEPER_TICK_S)
+        finally:
+            self.end_hold()
+
+    def start(self):
+        self.thread = threading.Thread(target=self.loop, name="release-box-keeper", daemon=True)
+        self.thread.start()
+
+    def alive(self):
+        return self.thread is not None and self.thread.is_alive()
+
+    def stop(self):
+        self._stop.set()
+        if self.thread is not None and self.thread is not threading.current_thread():
+            self.thread.join(timeout=300)
+        self.end_hold()
+
+
 class Release:
     STEPS = [s for s, _, _, _ in STEP_TABLE]
     #: Every other step checks its own OUTPUT each time and returns at once when
@@ -1182,7 +1358,7 @@ class Release:
         if getattr(args, "build_backend", None) is None:
             args.build_backend = default_build_backend(self.commit)
         self.dry = args.dry_run
-        self.readonly = bool(getattr(args, "status", False))
+        self.readonly = bool(getattr(args, "status", False) or getattr(args, "report", False))
         self.commands_shown = 0
         self.evidence = ev
         self._plan = None
@@ -1271,7 +1447,12 @@ class Release:
         with self._out:
             if tag:
                 msg = "\n".join(f"[{tag}] {line}" for line in (str(msg).splitlines() or [""]))
-            print(msg, flush=True)
+            try:
+                print(msg, flush=True)
+            except (OSError, ValueError):
+                # A disconnected controller terminal (EIO, a closed pipe): the step logs and the state carry
+                # everything, so the run goes on instead of crashing the step that printed (2026-11-05).
+                pass
 
     def sleep(self, seconds):
         if not self.dry:
@@ -1482,7 +1663,14 @@ class Release:
         """One persistent readiness ledger across freezes of this version."""
         return release_requirements.RequirementsLedger(self.base / "requirements.json")
 
+    DRY_READINESS = "not evaluated in a dry run: the readiness analysis runs dependency workers"
+
     def readiness_manifest(self):
+        # A dry run is read-only and prints the plan: the frozen dependency analysis (release_requirements ->
+        # release_requirement_dependencies.expand_catalog) clones the tracked tree and runs snapshot workers,
+        # which took the two dry-run tests in tools/test_release.py past their 600 s timeout. Never run it here.
+        if self.dry:
+            raise StepFailed(self.DRY_READINESS)
         configuration = dict(self.readiness().read().get("configuration", {}))
         configuration_path = getattr(self.args, "requirements_configuration", None)
         if configuration_path:
@@ -1586,6 +1774,45 @@ class Release:
     def macos_bincache(self):
         return self.rel / "macos-bincache"
 
+    def macos_bincache_seeds(self):
+        """Every earlier release's macOS cache, newest first (read only; archives are copied)."""
+        mine = self.macos_bincache().resolve()
+        found = [d for d in self.base.parent.glob("*/*/macos-bincache")
+                 if d.is_dir() and d.resolve() != mine and any(d.glob("*.tar.gz"))]
+        return sorted(found, key=lambda d: d.stat().st_mtime, reverse=True)
+
+    def macos_cache_plan(self, env):
+        """One line per merged macOS group, before anything compiles: `hit (<cache>)`
+        or `compile: <reason>` (tools/bincache.py explain in the frozen tree, under
+        the build's environment). Empty when that tree's bincache has no explain."""
+        src = self.src
+        tool = src / "tools" / "bincache.py"
+        if not tool.is_file() or "def cmd_explain" not in tool.read_text(errors="replace"):
+            return []
+        base = dict(os.environ, **env)
+        out = []
+        modes = [m for m in self.release_modes] + (["host"] if env.get("MOJOLEARN_PACKAGE_BYTE_LM") == "1" else [])
+        for mode in modes:
+            plan = subprocess.run([PY, str(src / "tools" / "merged_bindings.py"), "plan", "--dir", mode,
+                                   "--platform", "darwin", "--byte-lm", env.get("MOJOLEARN_PACKAGE_BYTE_LM", "1")],
+                                  cwd=src, capture_output=True, text=True)
+            for row in plan.stdout.splitlines():
+                stem = row.split()[0]
+                if mode == "host":
+                    output, kind = f"python/mojolearn/host/{stem}.so", "host"
+                    genv = dict(base, MOJOLEARN_NUMERIC_MODE="identical", MOJOLEARN_TARGET_COLUMN="cpu")
+                    genv.pop("MOJOLEARN_GPU_ARCHS", None)
+                    genv.pop("MOJOLEARN_HOST_OUTDIR", None)
+                else:
+                    output = f"python/mojolearn/{stem}.so" if mode == "fast" else f"python/mojolearn/{mode}/{stem}.so"
+                    kind, genv = "gpu", dict(base, MOJOLEARN_NUMERIC_MODE=mode)
+                genv.update(MOJOLEARN_BINCACHE_OUTPUTS=output, MOJOLEARN_BINCACHE_SHELL="sh")
+                r = subprocess.run([PY, str(tool), "explain", "./bindings/merged_build.sh", kind, "--group", stem],
+                                   cwd=src, env=genv, capture_output=True, text=True)
+                line = (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
+                out.append(f"macos {mode}/{stem}: {line}")
+        return out
+
     def retained_producers(self):
         """(adapter, producer paths) of this freeze's retained outputs that never wrote the
         ledger: the macOS release build (its binary cache and log; the cache of a build
@@ -1613,9 +1840,19 @@ class Release:
         for vendor in GATE_VENDORS:
             for report in sorted((self.rel / f"gate-{vendor}").glob(f"*/runtime-{vendor}/runtime-report.json")):
                 out.append(("installed-runtime", dict(report=str(report))))
+        # runtime-cpu: the same producer with --vendor cpu, run by the NVIDIA gate job after runtime-nvidia
+        # (GATE_RUNTIME_CPU); runtime-apple: the Mac's gate-apple step (step_gate_apple).
+        for report in sorted((self.rel / "gate-nvidia").glob("*/runtime-cpu/runtime-report.json")):
+            out.append(("installed-runtime", dict(report=str(report))))
+        if (self.apple_runtime_out() / "runtime-report.json").is_file():
+            out.append(("installed-runtime", dict(report=str(self.apple_runtime_out() / "runtime-report.json"))))
         # published-<vendor> (post stage): tools/release_published_install.py reports under published-<vendor>/.
-        for report in sorted(self.rel.glob("published-*/published-report.json")):
-            out.append(("published-install", dict(report=str(report))))
+        # Only published-<vendor>/: an explicit --published-smoke report (published-smoke-<vendor>/) is not this
+        # row's evidence.
+        for vendor, _ in PUBLISHED_STEPS.values():
+            report = self.published_out(vendor) / "published-report.json"
+            if report.is_file():
+                out.append(("published-install", dict(report=str(report))))
         # The Linux release legs (compile-<vendor>/runtime, compile-<vendor>/adapters/<arch>, compile-cpu/runtime
         # on the host leg): a leg built in this freeze, or the earlier freeze's leg a <leg>.reused.json names.
         for directory in self.retained_leg_dirs():
@@ -2441,6 +2678,8 @@ class Release:
         try:
             wanted, rows, attempts = self.requirement_units(vendor, arch)
         except (Exception, SystemExit) as exc:  # glue: an unreadable ledger is not "retained"
+            if self.dry:
+                return None, self.DRY_READINESS, False
             return None, f"the readiness ledger cannot be read ({exc})", False
         if not wanted:
             return None, "it owns no declared compile requirement", False
@@ -2616,8 +2855,24 @@ class Release:
             out.append(Leg(name, vendor, arch, [], {}, doc["release_build"], self.rel / "legs", doc["release_build"]))
         return out
 
+    def linux_group_plan(self):
+        """Per Linux merged group, before any leg compiles: `hit (closure unchanged
+        since <previous release>)` or `compile: <reason>` (tools/compile_closures.py
+        group_plan: two `git archive` trees, closure-v2 rule, nothing built)."""
+        previous = (self.plan().get("previous") or {}).get("source_commit")
+        if not previous:
+            return ["linux groups: no previous release commit; every group compiles"]
+        try:
+            sys.path.insert(0, str(ROOT / "tools"))
+            import compile_closures
+            return compile_closures.group_plan(self.src, previous, self.commit, "linux")
+        except Exception as exc:  # a plan line is advice; never fail the step over it
+            return [f"linux groups: no plan ({type(exc).__name__}: {exc})"]
+
     def step_linux_builds(self):
         legs = linux_legs(self)
+        for line in self.linux_group_plan():
+            self.say("  " + line)
         prev = (self.plan().get("previous") or {}).get("version")
         if not legs:
             return f"no build leg: every Linux binding is taken from {prev} (nothing rented for builds)"
@@ -2682,10 +2937,28 @@ class Release:
         found = sorted((self.rel / "macos").glob("mojolearn-*-macosx_*.whl"))
         return found[-1] if found else None
 
+    def stale_preflight(self, phase):
+        """THE STALE-ARTIFACT PRE-FLIGHT (tools/release_stale_artifacts.py): every untracked or ignored file in the
+        source checkout's python/mojolearn/ that the wheel's package-data globs would ship and this build does not
+        produce is moved (never deleted) to <commit12>/stale-artifacts/<timestamp>/, each path logged, before
+        PHASE runs (0.8.65: three stray extensions each cost a 75-minute build before build_release_wheel.sh
+        refused them). A dry run lists them and moves nothing."""
+        import release_stale_artifacts as stale
+        merged = os.environ.get("MOJOLEARN_MERGED_BINDINGS", "1") != "0"
+        moved, receipt = stale.preflight(self.src, self.rel / "stale-artifacts", self.release_modes, byte_lm=True,
+                                         merged=merged, phase=phase, dry=self.dry, log=lambda m: self.say("  " + m))
+        if receipt:
+            with self._lock:
+                self.state.setdefault("stale_artifacts", []).append(dict(phase=phase, receipt=str(receipt),
+                                                                         moved=len(moved), at=now()))
+                self.save()
+        return moved, receipt
+
     def step_macos_build(self):
         w = self.macos_wheel()
         if w and wheel_commit(w) == self.commit:
             return "have " + w.name
+        self.stale_preflight("build")
         # Four builds at once, as measured on the 10-core M4, never more than
         # this Mac's slot ceiling (tools/mac_slot.py slot_count), which
         # mac_slot.py would otherwise refuse.
@@ -2699,6 +2972,16 @@ class Release:
         env = dict(MOJOLEARN_BINCACHE_DIR=str(self.macos_bincache()),
                    MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
                    MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
+        # CROSS-RELEASE HITS (2026-11-04). The cache stays release-scoped, but
+        # an archive whose closure-v2 key an earlier release already built is
+        # copied in from that release's cache (verified, tools/bincache.py
+        # seed_archive) instead of compiled: a group compiles only when its
+        # import closure, flags or toolchain changed since some earlier release.
+        seeds = self.macos_bincache_seeds()
+        if seeds:
+            env["MOJOLEARN_BINCACHE_SEED_DIRS"] = os.pathsep.join(str(d) for d in seeds)
+        for line in self.macos_cache_plan(env):
+            self.say("  " + line)
         plan = self.plan()
         src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
@@ -2760,6 +3043,7 @@ class Release:
                 return "WHEEL-SELF-TEST PASSED (receipt exists)"
             if not w and not self.dry:
                 raise StepFailed("no macOS wheel; run macos-build")
+            self.stale_preflight("smoke")
             if out.exists() and not self.dry:
                 out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
             self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
@@ -2774,6 +3058,7 @@ class Release:
             return "PASSED (receipt exists)"
         if not w and not self.dry:
             raise StepFailed("no macOS wheel; run macos-build")
+        self.stale_preflight("smoke")
         if out.exists() and not self.dry:
             out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
         # the smoke is stdlib-only tooling (the Linux column ships the same file)
@@ -2974,20 +3259,15 @@ class Release:
                 and sorted(d.get("taken") or []) == sorted(self.admitted_legs()))
 
     def step_linux_assemble(self):
+        # the assembled sets of this plan first: a done assembly is never refused again (0.8.65)
+        if self.assembly_needed() and self.assembled_ok():
+            return "have " + str(self.assembled_marker().parent)
         composition = self.host_composition()
-        if composition and self.assembly_needed():
-            # release_host_composition.validate_assembly binds each packed set to
-            # its original manifest and proof; a reuse assembly replaces both.
-            raise StepFailed("the host bindings are composed from " + composition["owner"]
-                             + " and the plan reuses Linux bytes from a published wheel or an earlier freeze; "
-                             "a retained host composition packs only this freeze's own legs")
         if not self.assembly_needed():
             if composition:
                 return ("not needed: every Linux binding is built by the legs; the host set of every leg is "
                         + composition["owner"] + "'s, composed in " + composition["sets"])
             return "not needed: every Linux binding is built by the legs"
-        if self.assembled_ok():
-            return "have " + str(self.assembled_marker().parent)
         taken = self.admitted_legs()
         built = [l for l in linux_legs(self) if l.name not in taken]
         legs = {l.name: l.release_build / "build" / "sets" / l.vendor / l.arch for l in built}
@@ -3001,13 +3281,34 @@ class Release:
         if owner_doc and owner_doc.get("kind") != "compile-requirements" and built and not self.dry:
             # The host owner is taken whole; the legs built here ship its host/.
             host_owner = self.host_owner_origin()
+        if composition:
+            # A RETAINED HOST COMPOSITION IN A REUSE ASSEMBLY (0.8.65): linux-wait
+            # found the legs' host bytes differ (build-machine-dependent host
+            # codegen) and selected the owner leg's. The assembly ships that
+            # owner's host/ in every set it assembles, through the same path as
+            # a host owner taken whole, and reuse.json names every host file with
+            # its source leg; the packer validates the assembled sets through
+            # reuse.json. The composition receipt stays the witness of why and
+            # is named in the assembled marker; linux-pack does not pass it
+            # again, because release_host_composition.validate_assembly binds
+            # each set to its original manifest and proof, which a reuse
+            # assembly replaces.
+            if composition["owner"] != host_owner_leg():
+                raise StepFailed("the host bindings are composed from " + composition["owner"]
+                                 + ", not the host owner leg " + host_owner_leg())
+            if host_owner is None and not self.dry:
+                host_owner = self.host_owner_origin()
+            self.say("  the retained host composition's owner " + composition["owner"]
+                     + " ships its host bindings in every assembled set (receipt " + composition["receipt"] + ")")
         plan = self.plan()
         if self.dry:
             n = len(release_reuse.plan_rows(plan, release_reuse.LINUX, "REUSE"))
             return (f"would take {n} binding(s) and the runtime closure from the published "
                     f"{(plan['previous'] or {}).get('version')} Linux wheel into {self.rel / 'reuse' / 'sets'}"
                     + (f", over the sets of {', '.join(legs)}" if legs else " (no leg ran)")
-                    + (f", and the sets of {', '.join(taken)} from an earlier freeze" if taken else ""))
+                    + (f", and the sets of {', '.join(taken)} from an earlier freeze" if taken else "")
+                    + (f", with the host bindings of {composition['owner']} (retained host composition)"
+                       if composition else ""))
         whl = self.previous_wheel("linux") if self.needs_published_linux() else None
         for name, d in legs.items():
             if not d.is_dir():
@@ -3021,10 +3322,14 @@ class Release:
         write_json(self.assembled_marker(), dict(
             commit=self.commit, plan_sha256=sha256(self.plan_path), wheel=str(whl) if whl else None,
             wheel_sha256=sha256(whl) if whl else None, legs=sorted(legs), taken=sorted(taken),
-            taken_from={n: d["built_from"] for n, d in taken.items()}, at=now()))
+            taken_from={n: d["built_from"] for n, d in taken.items()}, at=now(),
+            host_composition=(dict(owner=composition["owner"], receipt=composition["receipt"],
+                                   receipt_sha256=composition["receipt_sha256"]) if composition else None)))
         return (f"{dest}: sets assembled" + (f" from {whl.name}" if whl else "")
                 + (f" and legs {', '.join(sorted(legs))}" if legs else "")
-                + (f"; taken from an earlier freeze: {', '.join(sorted(taken))}" if taken else ""))
+                + (f"; taken from an earlier freeze: {', '.join(sorted(taken))}" if taken else "")
+                + (f"; host bindings of {composition['owner']} in every set (retained host composition)"
+                   if composition else ""))
 
     def pack_inputs(self):
         """(set directories, proofs, manifests) for pack_wheel.py and audit.sh:
@@ -3076,6 +3381,12 @@ class Release:
             args += ["--build-proof", p_]
         composition = None if self.dry else self.host_composition()
         pack_cwd = src
+        if composition and self.assembly_needed():
+            # the assembled sets already carry the owner's host bindings, named in
+            # each set's reuse.json (linux-assemble); the receipt is not re-validated
+            self.say("  the assembled sets carry the host bindings of " + composition["owner"]
+                     + " (retained host composition; receipt " + composition["receipt"] + ")")
+            composition = None
         if composition:
             # The receipt is validated by this tooling's release_host_composition.py
             # (the frozen source's copy may predate the receipt it reads), so the
@@ -3391,25 +3702,12 @@ class Release:
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
-        if not self.dry:
-            ready, reasons = self.release_gate(stage="pre")
-            if not ready:
-                raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
-                                  else "release requirements ledger blocks publication: ") + "; ".join(reasons))
-        else:
-            try:  # a dry run reports the verdict; it never writes the ledger
-                ready, reasons = self.release_gate(stage="pre")
-                self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
-                         f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
-            except (ValueError, OSError, KeyError, subprocess.CalledProcessError, StepFailed) as error:
-                self.say(f"  pre-publication gate ({platform}): not evaluated ({error})")
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
-        if not self.dry and self.gpu_smoke() and platform in PLUGIN_PACKAGES \
-                and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
-            raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
+        # A FILE ALREADY ON PYPI IS DONE (lane release-no-hands): checked before the pre-publication gate,
+        # which only decides whether to upload; it never refuses what the index already serves.
         if not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
         if not self.dry and wheel and platform in SPLIT_PACKAGES and platform != "linux":
@@ -3423,6 +3721,24 @@ class Release:
                     raise StepFailed(f"PyPI already has {wheel.name} with a different gpu_plugin.json; "
                                      "a new version is needed")
                 return "already on PyPI (published from an earlier freeze; gpu_plugin.json equal)"
+        if not self.dry:
+            held = self.plan_blocks_publication()
+            if held:
+                raise StepFailed("the release plan names evidence that is still missing: " + "; ".join(held[:8]))
+            ready, reasons = self.release_gate(stage="pre")
+            if not ready:
+                raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
+                                  else "release requirements ledger blocks publication: ") + "; ".join(reasons))
+        else:
+            try:  # a dry run reports the verdict; it never writes the ledger
+                ready, reasons = self.release_gate(stage="pre")
+                self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
+                         f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
+            except (ValueError, OSError, KeyError, subprocess.CalledProcessError, StepFailed) as error:
+                self.say(f"  pre-publication gate ({platform}): not evaluated ({error})")
+        if not self.dry and self.gpu_smoke() and platform in PLUGIN_PACKAGES \
+                and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
+            raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         day = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
         tag = f"alpha-api-{self.version}-{platform}-{day}"
         work = self.rel / f"publish-{platform}"
@@ -3515,10 +3831,85 @@ class Release:
         _, ok, why = AG.judge(out / AG.RECEIPT)
         return ok, why
 
+    #: the Apple installed-runtime qualifier's outer cap (seconds); each unit has its own budget inside it
+    APPLE_RUNTIME_SECONDS = int(os.environ.get("MOJOLEARN_APPLE_RUNTIME_SECONDS", "14400"))
+
+    def apple_runtime_out(self):
+        return self.rel / "gate-apple" / "runtime-apple"
+
+    def apple_runtime_store(self):
+        """The Apple unit store: appended as each unit ends, so a rerun of gate-apple resumes."""
+        return self.rel / "gate-apple" / "runtime-units-apple"
+
+    @staticmethod
+    def apple_device_class():
+        """apple-<chip> (e.g. apple-m2-pro): unit receipts are reused on the same chip only."""
+        try:
+            brand = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True,
+                                   text=True, timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            brand = ""
+        chip = re.sub(r"[^a-z0-9]+", "-", brand.lower().removeprefix("apple ")).strip("-")
+        return "apple-" + (chip or platform.machine())
+
+    def apple_runtime_ok(self):
+        """(ok, why): runtime-apple passed for these macOS wheel bytes."""
+        w = self.macos_wheel()
+        error, cases = self.gate_runtime_error("apple", self.rel / "gate-apple")
+        if error:
+            return False, error
+        report = read_json(self.apple_runtime_out() / "runtime-report.json") or {}
+        if not w or (report.get("wheels") or {}).get(Path(w).name) != sha256(w):
+            return False, f"runtime-apple ran other wheel bytes ({self.apple_runtime_out()})"
+        units = report.get("units") or {}
+        return True, (f"runtime-apple PASSED: {cases} installed-runtime cases "
+                      f"(units reused={units.get('reused')} run={units.get('run')})")
+
+    def apple_runtime_gate(self):
+        """runtime-apple (tools/release_runtime_installed.py run --vendor apple): the public runtime registry
+        against the installed macOS wheel, per unit, reusing unchanged units' receipts on this chip."""
+        ok, why = self.apple_runtime_ok()
+        if ok:
+            return why + " (receipt exists)"
+        w = self.macos_wheel()
+        if not w and not self.dry:
+            raise StepFailed("no macOS wheel; run macos-build")
+        out = self.apple_runtime_out()
+        if out.exists() and not self.dry:
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        cmd = [PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+               PY, str(ROOT / "tools" / "release_runtime_installed.py"), "run", "--vendor", "apple",
+               "--source-root", str(self.source_checkout(create=not self.dry)), "--source-commit", self.commit,
+               "--wheel", str(w or "<macos wheel>"),
+               "--python", self.smoke_python() if not self.dry else "python3.12",
+               "--device-class", self.apple_device_class(), "--unit-store", str(self.apple_runtime_store()),
+               "--timeout", str(self.APPLE_RUNTIME_SECONDS), "--out", str(out)]
+        for directory in self.runtime_unit_sources("gate-apple"):
+            if directory != self.apple_runtime_store():
+                cmd += ["--prior-units", str(directory)]
+        if not self.dry:
+            out.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.must(cmd, log=self.rel / "gate-apple-runtime.log", what="the Apple installed-runtime qualifier")
+        except StepFailed:
+            pass  # the report under runtime-apple/ names the failed units; apple_runtime_ok reads it below
+        if self.dry:
+            return None
+        ok, why = self.apple_runtime_ok()
+        if not ok:
+            raise StepFailed(f"the Apple installed-runtime qualifier did not pass: {why}")
+        return why
+
     def step_gate_apple(self):
+        """The Apple adapter smoke (when adapters ship) and runtime-apple, the installed-runtime qualifier."""
+        adapters = self.apple_adapter_gate()
+        runtime = self.apple_runtime_gate()
+        return "; ".join(str(part) for part in (adapters, runtime) if part) or None
+
+    def apple_adapter_gate(self):
         AG = adapter_gate_module()
         if not AG.enabled():
-            return "skipped (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)"
+            return "adapters skipped (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)"
         ok, why = self.apple_adapters_ok()
         if ok:
             return why + " (receipt exists)"
@@ -3761,10 +4152,37 @@ class Release:
             return False, "; ".join(errors)
         from release_gate_profiles import profile, LIGHT
         if profile(doc) == LIGHT:
-            return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases; "
+            runtime, cases = self.gate_runtime_error(vendor, output)
+            if runtime:
+                return False, runtime
+            return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases, "
+                          f"{cases} installed-runtime cases; "
                           f"elapsed {doc['budget']['elapsed_seconds']:.1f}s (no performance campaign)")
         m = doc["measure"]
         return True, f"PASS historical performance campaign: {m['expected']} measured lines"
+
+    #: gate_ok's reason prefix for a gate whose smoke passed and whose installed-runtime qualifier did not
+    RUNTIME_GATE_FAILED = "runtime qualifier "
+
+    @staticmethod
+    def gate_runtime_error(vendor, output):
+        """(error or None, cases): the gate job's installed-runtime qualifier report under OUTPUT.
+
+        0.8.65: the gate printed PASS while runtime-<vendor>/runtime-report.json said "failed" (the
+        qualifier had timed out at 12-23%). The box job keeps the smoke's verdict; the release judges both,
+        so a failed, stopped or missing qualifier fails the gate and names the report."""
+        path = Path(output) / f"runtime-{vendor}" / "runtime-report.json"
+        report = read_json(path)
+        if not report:
+            return f"{Release.RUNTIME_GATE_FAILED}left no report at {path}", None
+        if report.get("status") != "passed" or report.get("exit_code") != 0:
+            stop = report.get("timed_out") or {}
+            partial = report.get("partial_tests") or {}
+            detail = (f"stopped by its {stop.get('kind')} timeout after {stop.get('elapsed_s')} s "
+                      f"({partial.get('passed')}/{partial.get('total')} finished tests passed)" if stop
+                      else str(report.get("error") or report.get("qualifier_error") or "")[:300])
+            return f"{Release.RUNTIME_GATE_FAILED}status {report.get('status')} in {path}: {detail}", None
+        return None, report.get("cases")
 
     def run_gate(self, vendor):
         run_id = None
@@ -3776,6 +4194,10 @@ class Release:
             if not self.dry:
                 self.record_candidate_requirement(vendor, run_id)
             return why
+        if why.startswith(self.RUNTIME_GATE_FAILED):
+            # The smoke passed and the qualifier ran: relaunching would only rerun green work. A qualifier
+            # failure is fixed in code and qualified at the next freeze.
+            raise StepFailed(f"the {vendor} release gate did not pass: {why}")
         work = self.rel / "gates"
         output = self.gate_out(vendor)
         # plan item 4 (docs/plans/POST_0863_RELEASE_TOOLING.md): one persisted box job per vendor through the
@@ -3790,6 +4212,9 @@ class Release:
         prior = self.gate_autograd_prior(vendor)
         if prior:
             cmd += ["--autograd-prior", str(prior)]  # the build reuses each proven-unchanged binary
+        runtime_prior = self.gate_runtime_prior(vendor) if not self.dry else None
+        if runtime_prior:
+            cmd += ["--runtime-prior", str(runtime_prior)]  # unit receipts the qualifier may reuse
         if not adapter_gate_module().enabled():
             cmd.append("--no-adapters")  # no adapters ship: the gate records its adapter stage as disabled
         if not self.dry:
@@ -3814,6 +4239,29 @@ class Release:
             raise StepFailed(f"the {vendor} release gate did not pass: {why}")
         self.record_candidate_requirement(vendor, run_id, executed=True)
         return why
+
+    def runtime_unit_sources(self, gate):
+        """Every retained directory of installed-runtime unit receipts under GATE (gate-nvidia, gate-amd,
+        gate-apple) of every version and freeze in the release state root: the unit stores the jobs append
+        to (runtime-units-<class>/) and the per-run receipts (runtime-*/qualify/units/)."""
+        root = self.base.parent
+        found = sorted(root.glob(f"*/*/{gate}/*/runtime-units-*")) + sorted(root.glob(f"*/*/{gate}/runtime-units-*"))
+        found += sorted(root.glob(f"*/*/{gate}/*/runtime-*/qualify/units"))
+        found += sorted(root.glob(f"*/*/{gate}/runtime-*/qualify/units"))
+        return [p for p in found if p.is_dir()]
+
+    def gate_runtime_prior(self, vendor):
+        """A staged directory of the newest passing unit receipt per (device class, unit) for this gate's
+        qualifier runs (VENDOR, and cpu on the NVIDIA job), or None when there is none
+        (docs/release/RUNTIME_QUALIFICATION.md). Staged anew per launch; the originals stay where they are."""
+        import runtime_qualifier_units as units
+        vendors = (vendor, "cpu") if vendor == "nvidia" else (vendor,)
+        destination = self.rel / "gates" / ("runtime-prior-%s-%s" % (vendor, dt.datetime.now(
+            dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")))
+        staged = units.stage_prior(self.runtime_unit_sources(f"gate-{vendor}"), destination, vendors)
+        if staged:
+            self.say(f"  {staged} runtime unit receipt(s) staged for reuse: {destination}")
+        return destination if staged else None
 
     def gate_autograd_prior(self, vendor):
         """A complete retained autograd set the gate job's build may reuse: --gate-autograd-root/<vendor>
@@ -3871,6 +4319,583 @@ class Release:
 
     def step_gate_amd(self):
         return self.step_gate("amd")
+
+    # ------------------------------------------------------------ the gate boxes (ORCHESTRATOR ONLY)
+    #: the gate lane whose tree the NVIDIA box jobs run in (tools/ops/release_gate.py LANE)
+    BOX_LANE = "release-gate"
+    #: the AMD droplet's first lease (minutes; RUNBOOK 0.8.65 section 11) and its renewal while a box step is pending
+    AMD_LEASE_MIN = 240
+    AMD_RENEW_MIN = 120
+    AMD_RENEW_EVERY_S = 85 * 60   # renewed with margin before the 120-minute extension runs out
+    #: one NVIDIA hold's on-box ceiling (nvidia_central.sh `sh` gives a command 4 h); the keeper renews it
+    HOLD_MAX_S = 3 * 3600 + 1800
+    KEEPER_TICK_S = 60
+    clock = staticmethod(time.time)
+    box_popen = staticmethod(subprocess.Popen)
+
+    @staticmethod
+    def nvc():
+        return os.environ.get("MOJOLEARN_RELEASE_NVC", "tools/nvidia_central.sh")
+
+    @staticmethod
+    def do_amd():
+        return os.environ.get("MOJOLEARN_RELEASE_DO_AMD", "tools/do_amd_steward.sh")
+
+    @staticmethod
+    def box_persist():
+        return os.environ.get("MOJOLEARN_RELEASE_BOX_PERSIST", "tools/box_persist.py")
+
+    @staticmethod
+    def nvc_state_root():
+        return Path(os.environ.get("MOJOLEARN_DEVPOD_STATE") or os.path.expanduser("~/mojolearn-evidence/devpods"))
+
+    @staticmethod
+    def do_state():
+        return Path(os.environ.get("MOJOLEARN_STEWARD_DO_STATE")
+                    or os.path.expanduser("~/mojolearn-evidence/do-amd-steward"))
+
+    @staticmethod
+    def orchestrator():
+        return os.environ.get("MOJOLEARN_ORCHESTRATOR") == "1"
+
+    def nvc_live(self):
+        """The shared NVIDIA pods up now (tools/nvidia_central.sh live_pods: a state.env per pod key)."""
+        return [k for k in ("nvc1", "nvc2", "nvc3") if (self.nvc_state_root() / k / "state.env").is_file()]
+
+    def do_droplet(self):
+        """The DigitalOcean droplet id of the live AMD steward, or None."""
+        env = self.do_state() / "state.env"
+        try:
+            m = re.search(r"^DROPLET_ID=['\"]?([0-9]+)", env.read_text(), re.M)
+        except OSError:
+            return None
+        return m.group(1) if m else "unknown"
+
+    def selected_steps(self):
+        return getattr(self, "selected", None) or self.STEPS
+
+    def waiver_covers(self, row):
+        """True when the owner's --owner-waiver names ROW by prefix (read only; nothing is logged)."""
+        path = getattr(self.args, "owner_waiver", None)
+        if not path:
+            return False
+        try:
+            prefixes = json.loads(Path(path).read_text()).get("prefixes", [])
+        except (OSError, ValueError):
+            return False
+        return any(row.startswith(p) for p in prefixes)
+
+    def box_step_owed(self, step):
+        """Why box step STEP still has work to do on its box, or None."""
+        if step.startswith("gate-"):
+            vendor = step[len("gate-"):]
+            if self.waiver_covers("candidate-" + vendor):
+                return None
+            ok, why = self.gate_ok(vendor)
+            return None if ok else why
+        owed = getattr(self, "box_step_owed_" + step.replace("-", "_"), None)
+        return owed() if owed else None
+
+    def box_needs(self):
+        """{vendor: [step: why]} of the selected box steps with work to do on a box."""
+        needs = {}
+        selected = self.selected_steps()
+        for step, vendor in BOX_CONSUMERS.items():
+            if step in selected:
+                why = self.box_step_owed(step)
+                if why:
+                    needs.setdefault(vendor, []).append(f"{step}: {why[:160]}")
+        return needs
+
+    def held_boxes(self):
+        """{vendor: record} of the boxes this release holds (not taken down, not released)."""
+        return {v: b for v, b in (self.state.get("boxes") or {}).items()
+                if not b.get("down") and not b.get("released")}
+
+    def box_alive(self, vendor, rec):
+        if vendor == "nvidia":
+            return bool(rec.get("pod")) and (self.nvc_state_root() / rec["pod"] / "state.env").is_file()
+        return self.do_droplet() is not None and self.do_droplet() == rec.get("droplet")
+
+    def boxes_pending(self):
+        """The vendors with a selected box step still to run (the schedule's view when one runs)."""
+        status = getattr(self, "_status", None)
+        out = set()
+        for step, vendor in BOX_CONSUMERS.items():
+            if step not in self.selected_steps():
+                continue
+            if status is not None:
+                if status.get(step) in ("pending", "running"):
+                    out.add(vendor)
+            elif not self.recorded(step):
+                out.add(vendor)
+        return out
+
+    def box_plan(self, needs):
+        """What gate-boxes rents (or adopts) and for how long, one line per box."""
+        c12 = self.commit[:12]
+        lines = []
+        if "nvidia" in needs:
+            live = self.nvc_live()
+            what = (f"adopt the live shared NVIDIA pod {live[0]} (nothing rented)" if live else
+                    f"rent the shared NVIDIA pod: bash {self.nvc()} up 1 (one pod, 1x sm_89 GPU: RTX 4090, L40S, "
+                    "RTX 6000 Ada or L4, out of stock retried by nvidia_central.sh; it deletes itself 60 idle "
+                    "minutes after its last job)")
+            lines.append(f"would {what}, sync lane {self.BOX_LANE} to {c12}, and hold it busy (nvidia_central.sh "
+                         f"sh {self.BOX_LANE}, at most {self.HOLD_MAX_S // 60} minutes a hold, renewed) while "
+                         + ", ".join(n.split(':')[0] for n in needs['nvidia']) + " are pending")
+        if "amd" in needs:
+            what = ("adopt the live AMD droplet " + str(self.do_droplet()) + " (nothing rented; its lease extended to "
+                    f"{self.AMD_LEASE_MIN} minutes)" if self.do_droplet() else
+                    f"rent the AMD droplet: bash {self.do_amd()} up {self.AMD_LEASE_MIN} (gpu-mi300x1-192gb, else "
+                    f"gpu-mi325x1-256gb; gfx942) for a {self.AMD_LEASE_MIN}-minute lease")
+            lines.append(f"would {what}, renewed by {self.AMD_RENEW_MIN} minutes every {self.AMD_RENEW_EVERY_S // 60} "
+                         "minutes while " + ", ".join(n.split(':')[0] for n in needs['amd']) + " are pending")
+        lines.append("then boxes-down takes down what this release rented once every box step has settled")
+        return lines
+
+    def nvidia_box_up(self):
+        boxes = self.state.setdefault("boxes", {})
+        prev = boxes.get("nvidia") or {}
+        logs = self.rel / "boxes"
+        orch = dict(MOJOLEARN_ORCHESTRATOR="1")
+        if prev and not prev.get("down") and not prev.get("released") and self.box_alive("nvidia", prev):
+            rec = prev
+        elif self.nvc_live():
+            # a shared pod is already up (another release run's or a lane's): adopted, nothing rented
+            rec = dict(pod=self.nvc_live()[0], rented=False, adopted=True, at=now(), lane=self.BOX_LANE)
+            with self._lock:
+                boxes["nvidia"] = rec
+                self.save()
+        else:
+            before = self.nvc_live()
+            self.must(["bash", self.nvc(), "up", "1"], env=orch, log=logs / "nvidia-up.log",
+                      what="nvidia_central.sh up 1")
+            after = self.nvc_live()
+            if not after:
+                raise StepFailed(f"nvidia_central.sh up 1 left no shared pod up ({logs / 'nvidia-up.log'})")
+            new = [k for k in after if k not in before]
+            rec = dict(pod=(new or after)[0], rented=bool(new), adopted=not new, at=now(), lane=self.BOX_LANE)
+            with self._lock:
+                boxes["nvidia"] = rec
+                self.save()
+        # the hold and the box jobs run in the gate lane's tree: the lane needs a pod and the frozen source
+        self.must(["bash", self.nvc(), "sync", self.BOX_LANE, str(self.source_checkout())],
+                  log=logs / "nvidia-sync.log", what=f"nvidia_central.sh sync {self.BOX_LANE}")
+        return f"NVIDIA {rec['pod']} " + ("rented" if rec.get("rented") else "adopted (already up)")
+
+    def amd_box_up(self):
+        boxes = self.state.setdefault("boxes", {})
+        prev = boxes.get("amd") or {}
+        logs = self.rel / "boxes"
+        if self.do_droplet():
+            # already up: this release's own droplet, or adopted; its lease is extended to the first lease
+            ours = bool(prev.get("rented") and not prev.get("down") and prev.get("droplet") == self.do_droplet())
+            self.must(["bash", self.do_amd(), "extend", str(self.AMD_LEASE_MIN)], log=logs / "amd-extend.log",
+                      what="do_amd_steward.sh extend")
+            rec = dict(droplet=self.do_droplet(), rented=ours, adopted=not ours, at=prev.get("at") if ours else now())
+        else:
+            self.must(["bash", self.do_amd(), "up", str(self.AMD_LEASE_MIN)], log=logs / "amd-up.log",
+                      what=f"do_amd_steward.sh up {self.AMD_LEASE_MIN}")
+            if not self.do_droplet():
+                raise StepFailed(f"do_amd_steward.sh up left no droplet state ({logs / 'amd-up.log'})")
+            rec = dict(droplet=self.do_droplet(), rented=True, adopted=False, at=now())
+        rec["lease_extended_at"] = self.clock()
+        with self._lock:
+            boxes["amd"] = rec
+            self.save()
+        return f"AMD droplet {rec['droplet']} " + ("rented" if rec["rented"] else "adopted (already up)")
+
+    def step_gate_boxes(self):
+        """GATE-BOXES (ORCHESTRATOR ONLY): the boxes the selected box steps need, up and recorded; held while
+        they are pending (BoxKeeper). Never an Apple machine: only the NVIDIA pod and the AMD droplet."""
+        needs = self.box_needs()
+        if not needs:
+            return "not needed: no selected box step has work to do on a box"
+        planned = self.saved_plan()
+        if planned and (planned.get("boxes") or {}).get("action") == "none":
+            # THE PLAN OWES NO DEVICE WORK (tools/release_plan.py): rent nothing. A box step that still
+            # reports work points at evidence to restore or a stale plan, never at a rental.
+            raise StepFailed("the release plan (" + str(self.plan_json_path()) + ") owes no device work, yet "
+                             + "; ".join(n for v in sorted(needs) for n in needs[v])
+                             + ": restore the evidence it names or rerun --plan; gate-boxes rents nothing")
+        for line in self.box_plan(needs):
+            self.say("  " + line)
+        if self.dry:
+            if not self.orchestrator():
+                self.say("  a real run refuses this step without MOJOLEARN_ORCHESTRATOR=1 (only the orchestrator rents)")
+            return "would bring up: " + ", ".join(sorted(needs))
+        if not self.orchestrator():
+            raise StepFailed("gate-boxes rents or holds the " + " and ".join(sorted(needs)) + " box(es) for "
+                             + "; ".join(n for v in sorted(needs) for n in needs[v])
+                             + ": ORCHESTRATOR ONLY, rerun with MOJOLEARN_ORCHESTRATOR=1")
+        done = []
+        if "nvidia" in needs:
+            done.append(self.nvidia_box_up())
+        if "amd" in needs:
+            done.append(self.amd_box_up())
+        self.keep_boxes()
+        return "; ".join(done), dict(boxes={v: dict(b) for v, b in self.held_boxes().items()})
+
+    def have_gate_boxes(self, rec):
+        needs = self.box_needs()
+        if not needs:
+            return "not needed: no selected box step has work to do on a box"
+        held = self.held_boxes()
+        if all(v in held and self.box_alive(v, held[v]) for v in needs):
+            return "have " + ", ".join(f"{v} {held[v].get('pod') or held[v].get('droplet')}" for v in sorted(needs))
+        return None
+
+    # the keeper: a thread of the release process, never a background service; it ends with the run
+    def keep_boxes(self):
+        """Start the BoxKeeper unless it runs, when this release holds a box (a real run only)."""
+        if self.dry or self.readonly or not self.held_boxes():
+            return None
+        with self._lock:
+            keeper = getattr(self, "_keeper", None)
+            if keeper is None or not keeper.alive():
+                keeper = self._keeper = BoxKeeper(self)
+                keeper.start()
+        return keeper
+
+    def stop_keeper(self):
+        keeper = getattr(self, "_keeper", None)
+        if keeper is not None:
+            keeper.stop()
+
+    BOX_TAG_RE = re.compile(r"box_persist: job (\S+) persists to R2|persisted as (\S+)|resuming (\S+) \(launched")
+
+    def box_job_tags(self):
+        """The R2 tags of every box job this freeze launched (the gate and producer logs name them)."""
+        tags = []
+        for log in sorted(self.rel.glob("gates/*.log")) + sorted(self.rel.glob("published/*.log")):
+            try:
+                text = log.read_text(errors="replace")
+            except OSError:
+                continue
+            for m in self.BOX_TAG_RE.finditer(text):
+                tag = next(g for g in m.groups() if g).rstrip(".,;)")
+                if tag not in tags:
+                    tags.append(tag)
+        return tags
+
+    def box_job_home(self, tag):
+        return any((d / "final").is_dir() for d in (self.rel / "gates" / f"fetch-{tag}",
+                                                    self.rel / "published" / f"fetch-{tag}",
+                                                    self.rel / "box-fetch" / tag))
+
+    def step_boxes_down(self):
+        """BOXES-DOWN: every box job's results home first (tools/box_persist.py fetch --tag), then what
+        gate-boxes rented taken down; an adopted box is released, never taken down."""
+        held = self.held_boxes()
+        self.stop_keeper()
+        if not held:
+            return "nothing to take down: this release holds no box"
+        tags = self.box_job_tags()
+        missing = [t for t in tags if not self.box_job_home(t)]
+        failed = []
+        for tag in missing:
+            rc = self.run([PY, self.box_persist(), "fetch", "--tag", tag, "--dest", self.rel / "box-fetch" / tag,
+                           "--extract"], log=self.rel / "boxes" / f"fetch-{tag}.log")
+            if rc != 0 and not self.dry:
+                failed.append(tag)
+        if failed:
+            raise StepFailed("the results of " + ", ".join(failed) + " are not home; nothing is taken down (the pod "
+                             "deletes itself idle, the droplet at its lease); rerun boxes-down")
+        rented = {v: b for v, b in held.items() if b.get("rented")}
+        if self.dry:
+            for v, b in sorted(held.items()):
+                self.say(f"  would {'take down' if v in rented else 'release (adopted, left up)'} {v} "
+                         f"{b.get('pod') or b.get('droplet')}")
+            return f"would pull {len(missing)} job result(s) home and take down {', '.join(sorted(rented)) or 'nothing'}"
+        if rented and not self.orchestrator():
+            raise StepFailed("boxes-down deletes rented boxes: ORCHESTRATOR ONLY, rerun with MOJOLEARN_ORCHESTRATOR=1")
+        done = []
+        for vendor, rec in sorted(held.items()):
+            if vendor in rented:
+                if vendor == "nvidia":
+                    self.must(["bash", self.nvc(), "down", rec["pod"]], env=dict(MOJOLEARN_ORCHESTRATOR="1"),
+                              log=self.rel / "boxes" / "nvidia-down.log", what="nvidia_central.sh down")
+                else:
+                    self.must(["bash", self.do_amd(), "down"], log=self.rel / "boxes" / "amd-down.log",
+                              what="do_amd_steward.sh down")
+            with self._lock:
+                rec["down" if vendor in rented else "released"] = now()
+                self.save()
+            done.append(f"{vendor} {rec.get('pod') or rec.get('droplet')} "
+                        + ("taken down" if vendor in rented else "released (adopted, left up)"))
+        return f"{len(tags)} box job(s) home ({len(missing)} fetched now); " + "; ".join(done)
+
+    def have_boxes_down(self, rec):
+        return None if self.held_boxes() else "have: this release holds no box"
+
+    # ------------------------------------------------------------ published-<vendor> (post stage)
+    PUBLISHED_SCHEMA = "mojolearn.release-published-install.v2"
+    PUBLISHED_SMOKE_SCHEMA = "mojolearn.release-published-install.v1"
+
+    def published_out(self, vendor):
+        """Where retained_producers looks: <commit12>/published-<vendor>/published-report.json."""
+        return self.rel / f"published-{vendor}"
+
+    def published_smoke_out(self, vendor):
+        """The explicit --published-smoke report: <commit12>/published-smoke-<vendor>/ (never ledger evidence)."""
+        return self.rel / f"published-smoke-{vendor}"
+
+    def published_wheels(self, vendor):
+        """The qualified candidate wheels the published files must equal."""
+        if vendor == "apple":
+            return [self.macos_wheel()]
+        return [self.split_final("linux")] + ([self.split_final("nvidia"), self.split_final("nvidia-ptx")]
+                                              if vendor == "nvidia" else [self.split_final("amd")])
+
+    def published_index_url(self):
+        """PyPI. MOJOLEARN_PUBLISHED_INDEX_URL names a mirror or a test index; a report made against any
+        index but PyPI re-derives differently in the ledger and is refused there, so it is never evidence."""
+        return os.environ.get("MOJOLEARN_PUBLISHED_INDEX_URL") or "https://pypi.org/simple"
+
+    def published_gate(self, vendor):
+        """(receipt paths, verdict): the gate that passed these candidate bytes, whose receipts are the
+        published row's evidence by reference. StepFailed when that gate has not passed: the published
+        bytes are then not verified work, and nothing here runs a device to make up for it."""
+        if vendor == "apple":
+            w = self.macos_wheel()
+            if not w:
+                raise StepFailed("published-apple: no macOS candidate wheel; run macos-build")
+            receipts, why = [], []
+            if self.macos_self_test_passed():
+                receipts.append(self.macos_self_test())
+                why.append("macOS wheel self-test PASSED")
+            elif smoke_passed(self.rel / "smoke-macos" / "results.json", w):
+                receipts.append(self.rel / "smoke-macos" / "results.json")
+                why.append("macOS smoke PASSED")
+            else:
+                raise StepFailed("published-apple: the macOS wheel's smoke has not passed for these bytes "
+                                 "(macos-smoke); the published bytes are judged against a passed gate only")
+            if adapter_gate_module().enabled():
+                ok, adapters = self.apple_adapters_ok()
+                if not ok:
+                    raise StepFailed("published-apple: the Apple adapter gate has not passed: " + adapters)
+                out = self.apple_adapters_out()
+                receipts += [p for p in (out / "wheel.json", out / adapter_gate_module().RECEIPT, out / "reuse.json")
+                             if p.is_file()]
+                why.append("adapters " + adapters)
+            return receipts, "; ".join(why)
+        ok, why = self.gate_ok(vendor)
+        if not ok:
+            raise StepFailed(f"published-{vendor}: gate-{vendor} has not passed for these candidate bytes: {why}")
+        out = self.gate_out(vendor)
+        receipts = [p for p in (out / "gate-smoke.json", out / "adapter-smoke" / adapter_gate_module().RECEIPT,
+                                out / f"runtime-{vendor}" / "runtime-report.json") if p.is_file()]
+        return receipts, f"gate-{vendor} " + why
+
+    def published_ok(self, vendor):
+        """(ok, why): a passed published-<vendor> bytes report for this version, vendor and these candidates."""
+        out = self.published_out(vendor)
+        doc, req = read_json(out / "published-report.json"), read_json(out / "request.json") or {}
+        if not doc:
+            return False, f"no published report at {out}"
+        if (doc.get("schema") != self.PUBLISHED_SCHEMA or doc.get("vendor") != vendor
+                or doc.get("version") != self.version):
+            return False, (f"the report at {out} is a {doc.get('schema')} report for {doc.get('vendor')} "
+                           f"{doc.get('version')}")
+        if doc.get("status") != "passed" or doc.get("exit_code") != 0:
+            differs = "; ".join("%s published %s, candidate %s" % (m.get("file"), m.get("published_sha256"),
+                                                                  m.get("candidate_sha256"))
+                                for m in doc.get("mismatch") or [])
+            return False, (f"published-{vendor} status {doc.get('status')}: "
+                           + (differs or str(doc.get("error") or "")[:200]
+                              or ", ".join(r["id"] for r in doc.get("coverage", []) if r.get("status") != "passed")))
+        wheels = self.published_wheels(vendor)
+        if not all(wheels) or req.get("candidates") != {Path(w).name: sha256(w) for w in wheels}:
+            return False, f"the published-{vendor} report compared other candidate wheels than this release's"
+        return True, "PASSED " + " ".join("%s=%s/%s" % (r.get("id"), r.get("completed"), r.get("expected"))
+                                          for r in doc.get("coverage", []))
+
+    def step_published(self, vendor):
+        """published-<vendor>: the published files resolved from PyPI for the candidates' platform tags, their
+        bytes equal to the gated candidates', their RECORD intact, the gate's receipts as the evidence. No
+        device, no box, no install. Different bytes FAIL with both hashes; nothing is rerun."""
+        if self.args.publish != "pypi":
+            return "skipped (not published to PyPI)"
+        ok, why = self.published_ok(vendor)
+        if ok:
+            return why + " (report exists)"
+        wheels = self.published_wheels(vendor)
+        if not all(wheels) and not self.dry:
+            raise StepFailed(f"published-{vendor}: a candidate wheel is missing; run linux-pack / macos-build")
+        if self.dry:
+            receipts, verdict = [], "<the gate's verdict>"
+        else:
+            receipts, verdict = self.published_gate(vendor)
+        out, work = self.published_out(vendor), self.rel / "published"
+        if out.exists() and not self.dry:
+            # the producer refuses an existing output; a failed attempt is kept beside it, never deleted
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        names = [str(w) if w else "<candidate wheel>" for w in wheels]
+        cmd = [PY, str(ROOT / "tools" / "release_published_install.py"), "check", "--vendor", vendor,
+               "--version", self.version, "--source-commit", self.commit,
+               *[a for n in names for a in ("--candidate-wheel", n)],
+               *[a for r in receipts for a in ("--gate-evidence", str(r))], "--gate-verdict", verdict,
+               "--index-url", self.published_index_url(),
+               "--python", self.smoke_python() if not self.dry else "python3.12", "--out", str(out)]
+        if not self.dry:
+            work.mkdir(parents=True, exist_ok=True)
+        rc = self.run(cmd, log=work / f"published-{vendor}.log")
+        if self.dry:
+            return None
+        # the report names what failed (both hashes when the bytes differ); it is judged, never rerun
+        ok, why = self.published_ok(vendor)
+        if not ok or rc != 0:
+            raise StepFailed(f"published-{vendor} did not pass (exit {rc}): {why} "
+                             f"({work / f'published-{vendor}.log'})")
+        return why
+
+    def step_published_apple(self):
+        return self.step_published("apple")
+
+    def step_published_nvidia(self):
+        return self.step_published("nvidia")
+
+    def step_published_amd(self):
+        return self.step_published("amd")
+
+    def have_published(self, vendor):
+        if self.args.publish != "pypi":
+            return None
+        ok, why = self.published_ok(vendor)
+        return (why + " (report exists)") if ok else None
+
+    def have_published_apple(self, rec):
+        return self.have_published("apple")
+
+    def have_published_nvidia(self, rec):
+        return self.have_published("nvidia")
+
+    def have_published_amd(self, rec):
+        return self.have_published("amd")
+
+    # ------------------------------------------------------------ --published-smoke <vendor> (explicit only)
+    def published_smoke_vendors(self):
+        """{vendor: reason} of the explicit --published-smoke requests of this invocation."""
+        vendors = list(getattr(self.args, "published_smoke", None) or [])
+        reason = (getattr(self.args, "published_smoke_reason", None) or "").strip()
+        return {v: reason for v in vendors}
+
+    def record_published_smoke_requests(self):
+        """Refuse a --published-smoke without a stated reason; record each request in the state."""
+        wanted = self.published_smoke_vendors()
+        if not wanted:
+            return {}
+        if not next(iter(wanted.values())):
+            raise SystemExit("release: --published-smoke runs the installed smoke on a vendor device after the gates "
+                             "already verified these bytes; state why with --published-smoke-reason")
+        unknown = [v for v in wanted if v not in [x for x, _ in PUBLISHED_STEPS.values()]]
+        if unknown:
+            raise SystemExit("release: --published-smoke takes apple, nvidia or amd, not " + ", ".join(unknown))
+        if not self.dry and not self.readonly:
+            for vendor, reason in wanted.items():
+                self.state.setdefault("published_smoke_requests", []).append(
+                    dict(vendor=vendor, reason=reason, commit=self.commit, at=now()))
+            self.save()
+        return wanted
+
+    def published_smoke_ok(self, vendor):
+        """(ok, why): a passed installed-smoke report for this version, vendor and these candidate wheels."""
+        out = self.published_smoke_out(vendor)
+        doc, req = read_json(out / "published-report.json"), read_json(out / "request.json") or {}
+        if not doc:
+            return False, f"no published smoke report at {out}"
+        if (doc.get("schema") != self.PUBLISHED_SMOKE_SCHEMA or doc.get("vendor") != vendor
+                or doc.get("version") != self.version):
+            return False, f"the smoke report at {out} is for {doc.get('vendor')} {doc.get('version')}"
+        if doc.get("status") != "passed" or doc.get("exit_code") != 0:
+            return False, f"published-smoke-{vendor} status {doc.get('status')}: {str(doc.get('error') or '')[:200]}"
+        wheels = self.published_wheels(vendor)
+        if not all(wheels) or req.get("candidates") != {Path(w).name: sha256(w) for w in wheels}:
+            return False, f"the published-smoke-{vendor} report compared other candidate wheels than this release's"
+        return True, "PASSED " + " ".join("%s=%s/%s" % (r.get("id"), r.get("completed"), r.get("expected"))
+                                          for r in doc.get("coverage", []))
+
+    def published_smoke_owed(self, vendor):
+        if self.args.publish != "pypi" or vendor not in self.published_smoke_vendors():
+            return None
+        ok, why = self.published_smoke_ok(vendor)
+        return None if ok else why
+
+    def box_step_owed_published_smoke_nvidia(self):
+        return self.published_smoke_owed("nvidia")
+
+    def box_step_owed_published_smoke_amd(self):
+        return self.published_smoke_owed("amd")
+
+    def step_published_smoke(self, vendor):
+        """published-smoke-<vendor>: the PyPI install and installed smoke, ONLY on an explicit request."""
+        wanted = self.published_smoke_vendors()
+        if vendor not in wanted:
+            return f"skipped (no --published-smoke {vendor}: the gates verified these bytes)"
+        if self.args.publish != "pypi":
+            return "skipped (not published to PyPI)"
+        ok, why = self.published_smoke_ok(vendor)
+        if ok:
+            return why + " (report exists)"
+        self.say(f"  --published-smoke {vendor}: {wanted[vendor]}")
+        wheels = self.published_wheels(vendor)
+        if not all(wheels) and not self.dry:
+            raise StepFailed(f"published-smoke-{vendor}: a candidate wheel is missing; run linux-pack / macos-build")
+        names = [str(w) if w else "<candidate wheel>" for w in wheels]
+        out, work = self.published_smoke_out(vendor), self.rel / "published"
+        state = work / f"smoke-{vendor}.job.json"
+        if out.exists() and not self.dry and not state.is_file():
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        if vendor == "apple":
+            cmd = [PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+                   PY, str(ROOT / "tools" / "release_published_install.py"), "run", "--vendor", "apple",
+                   "--version", self.version, *[a for n in names for a in ("--candidate-wheel", n)],
+                   "--python", self.smoke_python() if not self.dry else "python3.12", "--out", str(out)]
+        else:
+            cmd = [PY, "tools/ops/published_install.py", vendor, self.version, "--source-commit", self.commit,
+                   "--source-tree", str(self.source_checkout(create=not self.dry)), "--out", str(out),
+                   "--state", str(state), *[a for n in names for a in ("--candidate-wheel", n)],
+                   "--max-wait-hours", "6"]
+        if not self.dry:
+            work.mkdir(parents=True, exist_ok=True)
+        self.must(cmd, log=work / f"published-smoke-{vendor}.log", what=f"the published-smoke-{vendor} producer")
+        if self.dry:
+            if vendor != "apple":
+                sys.path.insert(0, str(ROOT / "tools" / "ops"))
+                import published_install
+                for line in published_install.Runner(published_install.parse(cmd[2:])).dry_lines():
+                    self.say("    would: " + line)
+            return None
+        ok, why = self.published_smoke_ok(vendor)
+        if not ok:
+            raise StepFailed(f"published-smoke-{vendor} did not pass: {why} "
+                             f"({work / f'published-smoke-{vendor}.log'})")
+        return why, dict(reason=wanted[vendor])
+
+    def step_published_smoke_apple(self):
+        return self.step_published_smoke("apple")
+
+    def step_published_smoke_nvidia(self):
+        return self.step_published_smoke("nvidia")
+
+    def step_published_smoke_amd(self):
+        return self.step_published_smoke("amd")
+
+    def have_published_smoke(self, vendor):
+        if self.args.publish != "pypi" or vendor not in self.published_smoke_vendors():
+            return None
+        ok, why = self.published_smoke_ok(vendor)
+        return (why + " (report exists)") if ok else None
+
+    def have_published_smoke_apple(self, rec):
+        return self.have_published_smoke("apple")
+
+    def have_published_smoke_nvidia(self, rec):
+        return self.have_published_smoke("nvidia")
+
+    def have_published_smoke_amd(self, rec):
+        return self.have_published_smoke("amd")
 
     def step_record(self):
         if self.args.publish != "pypi":
@@ -3987,6 +5012,106 @@ class Release:
             "Provenance of every leg and column (built, or taken and why): release-provenance.json.", ""])
 
     # ------------------------------------------------------------ the run
+    # ------------------------------------------------------------ done steps short-circuit
+    # DONE STEPS SHORT-CIRCUIT (lane release-no-hands, 2026-11-04). A step recorded done at this
+    # commit whose output still checks out returns its "have ..." result BEFORE its method runs, so no
+    # refusal or recomputation at the top of a step can stop a resumed release (0.8.65: the publish
+    # run re-executed a done linux-assemble, hit the refusal at the top of the method, and `--only`
+    # juggling was the workaround). run_step asks have_<step>(rec): a string means "have it", None or a
+    # raised error means "run the step", whose own checks then decide. A step with no have_<step> and
+    # not in SKIP_IF_RECORDED (the freeze steps, which check the frozen source) runs as before.
+    HAVE_ERRORS = (StepFailed, OSError, ValueError, KeyError, TypeError, AttributeError, zipfile.BadZipFile,
+                   subprocess.SubprocessError)
+
+    def have(self, step, rec):
+        """The "have ..." result of STEP recorded done (REC) at this commit, or None to run it."""
+        check = getattr(self, "have_" + step.replace("-", "_"), None)
+        if rec is None or check is None:
+            return None
+        try:
+            got = check(rec)
+        except self.HAVE_ERRORS:
+            return None
+        return str(got) if got else None
+
+    def linux_packed(self):
+        """Every final split wheel of this commit is there (linux-pack's output)."""
+        finals = self.split_finals()
+        return bool(finals) and all(finals.values()) and wheel_commit(finals["linux"]) == self.commit
+
+    def have_reuse_plan(self, rec):
+        doc = read_json(self.plan_path)
+        if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
+                and release_reuse.record_modes(doc) == self.release_modes
+                and (doc.get("builders_override") or {}) == self.builders_override()):
+            return "have " + str(self.plan_path)
+        return None
+
+    def have_linux_builds(self, rec):
+        if self.linux_packed():
+            return "have the packed Linux wheels of this commit (the legs' output is packed)"
+        if self.recorded("linux-wait") and self.have_linux_wait(self.recorded("linux-wait")):
+            return "have every leg built and verified (linux-wait done " + self.recorded("linux-wait")["at"] + ")"
+        return None
+
+    def have_linux_wait(self, rec):
+        if self.linux_packed():
+            return "have the packed Linux wheels of this commit (the legs' output is packed)"
+        self.host_composition()  # a changed composition receipt raises: the step itself decides
+        legs = [l for l in linux_legs(self) if not self.admitted_leg(l.name)]
+        if all(l.done(self.commit) for l in legs):
+            return "have every leg done at this commit: " + (", ".join(l.name for l in legs) or "none to build")
+        return None
+
+    def have_linux_assemble(self, rec):
+        if self.linux_packed():
+            return "have the packed Linux wheels of this commit (the assembled sets are packed)"
+        if not self.assembly_needed():
+            return "not needed: every Linux binding is built by the legs"
+        return ("have " + str(self.assembled_marker().parent)) if self.assembled_ok() else None
+
+    def have_linux_pack(self, rec):
+        return ("have " + ", ".join(w.name for w in self.split_finals().values())) if self.linux_packed() else None
+
+    def have_macos_build(self, rec):
+        w = self.macos_wheel()
+        return ("have " + w.name) if w and wheel_commit(w) == self.commit else None
+
+    def have_macos_smoke(self, rec):
+        if not self.gpu_smoke():
+            return "WHEEL-SELF-TEST PASSED (receipt exists)" if self.macos_self_test_passed() else None
+        w = self.macos_wheel()
+        return "PASSED (receipt exists)" if w and smoke_passed(self.rel / "smoke-macos" / "results.json", w) else None
+
+    def have_gate_apple(self, rec):
+        if not adapter_gate_module().enabled():
+            return "skipped (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)"
+        ok, why = self.apple_adapters_ok()
+        return (why + " (receipt exists)") if ok else None
+
+    def have_column(self, name):
+        if not self.gpu_smoke():
+            return self.NO_GPU_SKIP
+        ok = next(ok for n, _, ok, _ in self.column_specs() if n == name)
+        return f"have the {name} column PASSED for this wheel" if ok() else None
+
+    def have_gpu_column_nvidia(self, rec):
+        return self.have_column("nvidia")
+
+    def have_gpu_column_nvidia_hopper(self, rec):
+        return self.have_column("nvidia-hopper") if self.hopper_required() or not self.gpu_smoke() else rec.get("result")
+
+    def have_gpu_column_amd(self, rec):
+        return self.have_column("amd")
+
+    def have_gate_nvidia(self, rec):
+        ok, why = self.gate_ok("nvidia")
+        return why if ok else None
+
+    def have_gate_amd(self, rec):
+        ok, why = self.gate_ok("amd")
+        return why if ok else None
+
     def run_step(self, step):
         """Run one step; 'done', 'failed' or 'held'. Never raises in a real run:
         a crash is a failed step, reported, so the other pipeline goes on."""
@@ -3994,8 +5119,17 @@ class Release:
         if rec and self.skip_recorded(step, rec):
             self.say(f"-- {step}: done {rec['at']} ({rec.get('result', '')})")
             return "done"
+        have = self.have(step, rec)
+        if have:
+            self.say(f"-- {step}: done {rec['at']}: {have}")
+            if step == "gate-boxes":
+                self.keep_boxes()
+            return "done"
+        if step in BOX_CONSUMERS:
+            self.keep_boxes()   # a later run's box steps keep the boxes an earlier run brought up
         self.say(f"-- {step}")
         shown = self.commands_shown
+        started = time.monotonic()   # waste.json: per-step seconds (tools/release_plan.py)
         try:
             out = getattr(self, "step_" + step.replace("-", "_"))()
             result, data = out if isinstance(out, tuple) else (out, {})
@@ -4023,6 +5157,8 @@ class Release:
             return "failed"
         self.say(f"   {result}")
         if not self.dry:
+            data = dict(data)
+            data.setdefault("seconds", round(time.monotonic() - started, 1))
             self.mark(step, result=result, **data)
         return "done"
 
@@ -4031,6 +5167,7 @@ class Release:
         done (and its resource is free); a failed, held or blocked need blocks
         it, and nothing else. Returns {step: done|failed|held|blocked|skipped}."""
         status = {s: ("pending" if s in selected else "skipped") for s in self.STEPS}
+        self._status = status   # the box keeper reads which box steps are still pending
         busy = set()
         events = queue.Queue()
 
@@ -4106,7 +5243,7 @@ class Release:
                     line = f"{name}: not published ({pub} {status[pub]})"
             lines.append(line)
             self.say("   " + line)
-        for s in ("finish-line", *("gate-" + v for v in GATE_VENDORS), "record"):
+        for s in [s for s in self.STEPS if self.PIPELINE_OF[s] == "finish"]:
             if status[s] in ("done",) and self.recorded(s):
                 self.say(f"   {s}: {self.recorded(s).get('result', '')}")
             elif status[s] not in ("skipped",):
@@ -4126,9 +5263,237 @@ class Release:
             self.say(f"   tooling: this checkout {ROOT} at {head[:12]}; the source is read from "
                      f"{self.source_checkout(create=False)}")
 
+    # ------------------------------------------------------------ --plan (tools/release_plan.py)
+    #: release step -> (gate kind in the decision table, device it runs on)
+    PLAN_STEP_KINDS = {
+        "freeze-version": ("metadata", None), "freeze-changelog": ("metadata", None),
+        "freeze-docs-facts": ("metadata", None), "freeze-commit": ("metadata", None),
+        "reuse-plan": ("metadata", None), "finish-line": ("metadata", None), "record": ("metadata", None),
+        "rehearsal": ("package", None), "linux-wait": ("package", None), "linux-assemble": ("package", None),
+        "linux-pack": ("package", None),
+        "cross-compile": ("artifact", None), "linux-builds": ("artifact", None), "macos-build": ("artifact", None),
+        "macos-smoke": ("loading", None),
+        "gate-apple": ("numerical", None), "gate-nvidia": ("numerical", "nvidia"), "gate-amd": ("numerical", "amd"),
+        "gpu-column-nvidia": ("numerical", "nvidia"), "gpu-column-nvidia-hopper": ("numerical", "nvidia"),
+        "gpu-column-amd": ("numerical", "amd"),
+        "published-apple": ("package", None), "published-nvidia": ("package", None),
+        "published-amd": ("package", None), "published-smoke-apple": ("numerical", None),
+        "published-smoke-nvidia": ("numerical", "nvidia"), "published-smoke-amd": ("numerical", "amd"),
+    }
+    #: identity column -> the box its record runs on (Apple records on this Mac: never rented)
+    PLAN_COLUMN_DEVICE = {"nvidia": "nvidia", "amd": "amd", "cpu": "nvidia", "ptx": "nvidia", "apple": None}
+
+    def plan_json_path(self):
+        return Path(getattr(self.args, "plan_json", "") or (self.rel / "plan.json"))
+
+    def saved_plan(self):
+        try:
+            doc = read_json(self.plan_json_path())
+        except AttributeError:   # a partial Release (tests, a publisher called directly): no release dir
+            return None
+        return doc if doc and doc.get("schema") == release_plan_module().SCHEMA and doc.get("commit") == self.commit \
+            else None
+
+    def plan_blocks_publication(self):
+        """Rows of this commit's saved plan that still hold publication NOW: an unresolved failure whose step
+        is not recorded since, and evidence to restore that is still not on this machine. Owed work is
+        enforced by the step graph itself. No saved plan: nothing extra (the ledger gate still applies)."""
+        plan = self.saved_plan()
+        if not plan:
+            return []
+        held = []
+        restore = {r["id"]: r for r in plan.get("restore") or []}
+        for row in (plan.get("publish") or {}).get("blocked") or []:
+            if row["reason"].startswith("unresolved failure") and not self.recorded(row["id"]):
+                held.append(f"{row['id']}: {row['reason']}")
+            elif row["id"] in restore and not Path(restore[row["id"]].get("local_path") or "/nonexistent").exists():
+                held.append(f"{row['id']}: {row['reason']}")
+        return held
+
+    def plan_lane_facts(self, previous, columns):
+        """{column: {lane: facts}} from tools/identity_columns.py changed-lanes, the selection each column's
+        recorder makes (reference_refresh.SELECTION), over the supported surface; static, no box."""
+        import reference_refresh as rr
+        rp = release_plan_module()
+        out, notes = {}, []
+        work = self.rel / "plan"
+        work.mkdir(parents=True, exist_ok=True)
+
+        def is_ancestor(a, b):
+            return subprocess.run(["git", "-C", str(self.src), "merge-base", "--is-ancestor", a, b],
+                                  capture_output=True).returncode == 0
+        for col in columns:
+            if col not in rr.SELECTION:
+                notes.append(f"identity column {col}: unknown (columns: {', '.join(rr.SELECTION)})")
+                continue
+            mode, backend = rr.SELECTION[col]
+            summary = work / f"identity-{col}.json"
+            cmd = [PY, "tools/identity_columns.py", "changed-lanes", "--scope", rr.SURFACE_SCOPE, "--backend", backend]
+            if mode == "class":
+                cmd += ["--class", col, "--records", str(Path(self.src) / "bench/results/identity_break")]
+            cmd += ["--summary-json", str(summary)]
+            with open(work / f"identity-{col}.log", "w") as log:
+                rc = subprocess.run(cmd, cwd=str(self.src), stdout=subprocess.DEVNULL, stderr=log).returncode
+            doc = read_json(summary)
+            if rc != 0 or not doc:
+                notes.append(f"identity column {col}: selection failed (rc={rc}; {work / f'identity-{col}.log'})")
+                continue
+            out[col] = rp.lane_facts(doc, previous, col, self.PLAN_COLUMN_DEVICE.get(col), is_ancestor)
+        return out, notes
+
+    def plan_facts(self):
+        rp = release_plan_module()
+        prev = (self.plan().get("previous") or {})
+        previous = prev.get("source_commit")
+        facts = dict(version=self.version, commit=self.commit, previous=previous, notes=[])
+        facts["changes"] = rp.changed_paths(previous, self.commit, repo=self.src) if previous else []
+        try:
+            facts["groups"] = rp.group_facts(self.src, previous, self.commit)
+        except Exception as exc:  # the plan says so; a group with no facts is never a hit
+            facts["groups"] = {}
+            facts["notes"].append(f"compile groups: no closure facts ({type(exc).__name__}: {exc})")
+        columns = [c for c in (getattr(self.args, "plan_columns", "") or "").split(",") if c]
+        facts["lanes"], notes = self.plan_lane_facts(previous, columns)
+        facts["notes"] += notes
+        prev_rel = (self.base.parent / str(prev.get("version")) / previous[:12]) if previous and prev.get("version") \
+            else None
+        gates = {}
+        for step in self.selected_steps():
+            if step not in self.PLAN_STEP_KINDS:
+                continue
+            k, device = self.PLAN_STEP_KINDS[step]
+            st, detail = self.step_state(step)
+            row = dict(kind=k, device=device, state="done" if st == "done" else ("failed" if st in ("failed", "held")
+                                                                               else "owed"), reason=detail)
+            if st != "done" and step in BOX_CONSUMERS:
+                row["self_checked"] = True
+                why = self.box_step_owed(step)
+                row["reason"] = why or "nothing owed on its box"
+                if not why:
+                    row.update(state="done", device=None)
+            if prev_rel is not None:
+                evid = prev_rel / step
+                row["previous_evidence"] = dict(local=evid.exists(), local_path=str(evid),
+                                                retained=f"release ledger R2 receipts of {prev.get('version')}")
+            gates[step] = row
+        facts["gates"] = gates
+        facts["failures"] = [dict(id=step, reason=f.get("error", ""), resolved=bool(self.recorded(step)))
+                             for step, f in (self.state.get("failures") or {}).items()
+                             if f.get("commit") == self.state.get("commit")]
+        facts["leases"] = {"nvidia": self.HOLD_MAX_S // 60, "amd": self.AMD_LEASE_MIN}
+        # the macOS build path, a key field: the previous release's (from its retained bincache keys) and ours
+        prev_keys = sorted((prev_rel / "macos-bincache" / "provenance" / "keys").glob("*.json")) if prev_rel else []
+        facts["macos_paths"] = dict(this=str(Path(self.src).resolve()),
+                                    previous=(read_json(prev_keys[0]) or {}).get("repo_path") if prev_keys else None)
+        facts["step_seconds"] = {s: r.get("seconds") for s, r in (self.state.get("steps") or {}).items()
+                                 if isinstance(r, dict) and r.get("commit") == self.state.get("commit")
+                                 and isinstance(r.get("seconds"), (int, float))}
+        facts["previous_waste"] = rp.previous_waste(self.base.parent, self.version)
+        return facts
+
+    def release_plan(self):
+        """--plan: gather the facts, apply the decision table (tools/release_plan.py), print one line per
+        decision, write plan.json and plan-facts.json. Runs, rents and publishes nothing."""
+        rp = release_plan_module()
+        self.say(f"== mojolearn release {self.version} --plan (nothing runs, nothing is rented)")
+        facts = self.plan_facts()
+        plan = rp.decide(facts)
+        plan["notes"] = facts.get("notes", [])
+        out = self.plan_json_path()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        (out.parent / "plan-facts.json").write_text(json.dumps(facts, indent=1, sort_keys=True, default=str) + "\n")
+        # THE STATUS REPORT's totals line (tools/release_report.py), from the same inputs --report reads
+        try:
+            report = self.status_report(plan=plan)
+            plan["report_totals"] = report["totals_line"]
+        except Exception as exc:  # the plan still stands; the report says why it is missing
+            plan["report_totals"] = None
+            plan["notes"].append(f"status report unavailable ({type(exc).__name__}: {exc})")
+        out.write_text(json.dumps(plan, indent=1, sort_keys=True) + "\n")
+        for line in rp.lines(plan) + ["note: " + n for n in plan["notes"]]:
+            self.say(line)
+        self.say(f"== plan.json: {out}")
+        return 0 if plan["publish"]["status"] == "ready" else 3
+
+    # ------------------------------------------------------------ --report (tools/release_report.py)
+    def report_json_path(self):
+        return Path(getattr(self.args, "report_json", "") or (self.rel / "report.json"))
+
+    def report_waiver_paths(self):
+        """--owner-waiver and the waivers committed at the frozen source (docs/release/<version>-*waiver*.json)."""
+        paths = [getattr(self.args, "owner_waiver", None)]
+        src = Path(getattr(self, "src", None) or ROOT)
+        paths += sorted(str(p) for p in (src / "docs" / "release").glob(f"{self.version}-*waiver*.json"))
+        return [p for p in paths if p]
+
+    def report_inputs(self):
+        """THE ONE LOADER of the status report (--report, and the totals line --plan embeds): the evaluated
+        ledger rows (read-only, the rows --status and the gate read), every release step's state, the
+        waivers and the saved plan. Writes nothing."""
+        notes = []
+        try:
+            rows = self.readiness_status() if self.state.get("commit") else self.readiness().plan()
+        except Exception as exc:   # an unreadable ledger is a provenance problem, never a silent pass
+            rows = {"requirements-ledger": dict(status="untested", action="complete-provenance", stage="pre",
+                                                required=True, evidence=[], reasons=[
+                                                    f"ledger unreadable: {type(exc).__name__}: {exc}"])}
+            notes.append(f"ledger unreadable ({type(exc).__name__}: {exc})")
+        smoke = set(getattr(self.args, "published_smoke", None) or ())
+        steps = {}
+        for step in self.selected_steps():
+            if step in PUBLISHED_SMOKE_STEPS and PUBLISHED_SMOKE_STEPS[step][0] not in smoke:
+                continue
+            st, detail = self.step_state(step)
+            steps[step] = (st, detail, st == "held")
+        waivers = release_report_module().waivers_from(self.report_waiver_paths(), self.state)
+        return dict(rows=rows, steps=steps, waivers=waivers, plan=self.saved_plan(), notes=notes)
+
+    def status_report(self, plan=None):
+        rr = release_report_module()
+        inputs = self.report_inputs()
+        report = rr.build(self.version, self.commit, inputs["rows"], inputs["steps"], inputs["waivers"],
+                          plan if plan is not None else inputs["plan"],
+                          ledger_path=str(self.readiness().path))
+        report["notes"] = inputs["notes"]
+        return report
+
+    def release_report(self):
+        """--report: one row per ledger requirement and release step, each in exactly one of the seven states
+        (docs/release/STATUS_REPORT.md), with its evidence, producing step and next action; writes
+        report.json and report.md. Runs, rents and publishes nothing. Exit 0 when ready, 3 otherwise."""
+        rr = release_report_module()
+        self.say(f"== mojolearn release {self.version} --report (nothing runs, nothing is rented)")
+        report = self.status_report()
+        js, md = rr.write(report, self.report_json_path())
+        for line in rr.lines(report) + ["note: " + n for n in report["notes"]]:
+            self.say(line)
+        self.say(f"== report.json: {js}; report.md: {md}")
+        return 0 if report["ready"] else 3
+
+    def write_waste(self):
+        """waste.json beside the state after a real run (minimal: the saved plan's numbers + step seconds)."""
+        if self.dry or getattr(self, "readonly", False):
+            return None
+        rp = release_plan_module()
+        plan = self.saved_plan() or {}
+        steps = {s: r.get("seconds") for s, r in (self.state.get("steps") or {}).items()
+                 if isinstance(r, dict) and r.get("commit") == self.state.get("commit")
+                 and isinstance(r.get("seconds"), (int, float))}
+        waste = dict(plan.get("waste") or dict(schema=rp.WASTE_SCHEMA, version=self.version, commit=self.commit))
+        waste.update(steps=steps, box_wait_seconds=steps.get("gate-boxes"), admission_seconds=steps.get("record"))
+        try:
+            return rp.write_waste(self.rel / "waste.json", waste)
+        except OSError as exc:
+            self.say(f"  waste.json not written: {exc}")
+            return None
+
     def go(self):
         if getattr(self.args, "status", False):
             return self.status()
+        if getattr(self.args, "plan", False):
+            return self.release_plan()
+        if getattr(self.args, "report", False):
+            return self.release_report()
         steps = self.STEPS
         if self.args.only:
             wanted = self.args.only.split(",")
@@ -4136,6 +5501,11 @@ class Release:
             if unknown:
                 raise SystemExit("release: unknown step(s) " + ", ".join(unknown) + "; steps: " + ", ".join(steps))
             steps = [s for s in steps if s in wanted]
+        # published-smoke-<vendor> only for an explicit --published-smoke <vendor> (with its reason, recorded):
+        # unrequested, the step is not selected, so it holds no box and boxes-down never waits for it
+        smoke = self.record_published_smoke_requests()
+        steps = [s for s in steps if s not in PUBLISHED_SMOKE_STEPS or PUBLISHED_SMOKE_STEPS[s][0] in smoke]
+        self.selected = list(steps)
         for redo in (self.args.redo.split(",") if self.args.redo else []):
             if redo not in self.STEPS:
                 raise SystemExit("release: unknown --redo step " + redo)
@@ -4154,7 +5524,12 @@ class Release:
             self.say("== end of plan (the " + " and ".join(self.PIPELINES)
                      + " pipelines run at once in a real run; see --status)")
             return 0
-        status = self.schedule(steps)
+        ignore_hangup()
+        try:
+            status = self.schedule(steps)
+        finally:
+            self.stop_keeper()
+            self.write_waste()
         ok = self.report(status)
         self.say("== done" if ok else "== stopped")
         return 0 if ok else 1
@@ -4335,6 +5710,18 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("version")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and each step's status; run nothing")
+    ap.add_argument("--plan", action="store_true",
+                    help="THE RELEASE PLAN (tools/release_plan.py): one decision with a reason per compile group, "
+                         "identity lane x column, gate/producer, box and publish row; writes plan.json; runs nothing")
+    ap.add_argument("--plan-json", default="", help="where --plan writes plan.json (default <release>/<commit12>/plan.json)")
+    ap.add_argument("--plan-columns", default="nvidia,amd,cpu,ptx,apple",
+                    help="identity columns --plan selects (tools/identity_columns.py changed-lanes per column)")
+    ap.add_argument("--report", action="store_true",
+                    help="THE STATUS REPORT (tools/release_report.py): one row per ledger requirement and release "
+                         "step, each passed / reused / failed / missing-execution / blocked-provenance / "
+                         "not-applicable / waived, with evidence and the next action; writes report.json and "
+                         "report.md; runs nothing")
+    ap.add_argument("--report-json", default="", help="where --report writes report.json (default <release>/<commit12>/report.json)")
     ap.add_argument("--status", action="store_true",
                     help="per pipeline, leg and column: done / failed (with its log) / owed, and what a rerun "
                          "would do; runs nothing, writes nothing")
@@ -4365,6 +5752,12 @@ def main(argv=None):
     # Inert since 2026-10-10 (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun): the
     # Apple cross-diff and release-check they steered are deleted; kept so
     # existing invocations still parse.
+    ap.add_argument("--published-smoke", action="append", default=[], choices=["apple", "nvidia", "amd"],
+                    metavar="VENDOR",
+                    help="also run the installed smoke from PyPI on VENDOR's device after publish (repeatable; "
+                         "needs --published-smoke-reason). Never the default: the gates verified the bytes")
+    ap.add_argument("--published-smoke-reason", default="",
+                    help="why the published smoke must run again (recorded in the release state)")
     ap.add_argument("--accept-moved", action="store_true", help="inert since 2026-10-10")
     ap.add_argument("--cpu-column", action="store_true", help="inert since 2026-10-10")
     ap.add_argument("--amd-expect-from", default="",
@@ -4389,6 +5782,12 @@ def main(argv=None):
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    if args.report and (args.plan or args.status or args.dry_run or args.only or args.redo or args.refreeze):
+        ap.error("--report runs nothing; it takes no --plan, --status, --dry-run, --only, --redo or --refreeze")
+    if args.plan:
+        if args.status or args.only or args.redo or args.refreeze:
+            ap.error("--plan runs nothing; it takes no --status, --only, --redo or --refreeze")
+        args.dry_run = True
     # Current releases focus on identical. Explicit legacy selections remain
     # available for reproducing older layouts, and are recorded in every plan.
     try:

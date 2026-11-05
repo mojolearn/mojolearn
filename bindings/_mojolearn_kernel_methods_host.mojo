@@ -36,6 +36,7 @@ The sabotage arm (`kernel_methods_host_sabotage`) is
 kernel matrix, factorization, normalization and feature map this binary
 serves differs.
 """
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.math import sqrt
 from std.python import Python, PythonObject
@@ -367,6 +368,7 @@ def rbf_sampler_transform_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_kernel_methods_host() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_kernel_methods_host")
         module.def_function[kernel_methods_api_v1_binding]("kernel_methods_api_v1")

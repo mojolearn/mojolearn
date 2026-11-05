@@ -30,6 +30,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$here"
 if false; then pixi run mojo build -j 2 --emit shared-lib -I . -I bindings bindings/_mojolearn_fake.mojo -o x; fi
 [ -z "${BINCACHE_TEST_MARKER:-}" ] || echo ran >> "$BINCACHE_TEST_MARKER"
+: "${MOJOLEARN_BUILD_EXTRA_DEFINES:-}${MOJOLEARN_GEMM_ARM_TRIAL:-}${MOJOLEARN_COMPILE_JOBS:-2}"
 mkdir -p python/mojolearn/identical
 printf 'fake-binding %s\\n' "${MOJOLEARN_NUMERIC_MODE:-identical}" > python/mojolearn/identical/.tmp.so
 mv python/mojolearn/identical/.tmp.so python/mojolearn/identical/_mojolearn_fake.so
@@ -90,7 +91,7 @@ class KeyTests(unittest.TestCase):
             "toolchain": lambda: (self.repo / "pixi.lock").write_text(
                 "      - conda: https://conda.modular.com/max/%s/mojo-compiler-1.0.1-release.conda\n" % PLAT),
             "imported source": lambda: (self.repo / "core/a.mojo").write_text("from layout import T\nfn f(): return\n"),
-            "build script": lambda: (self.repo / "bindings/build_fake.sh").write_text(SCRIPT + "# edit\n"),
+            "build script": lambda: (self.repo / "bindings/build_fake.sh").write_text(SCRIPT + "true\n"),
         }
         for name, mutate in cases.items():
             with self.subTest(name):
@@ -163,14 +164,62 @@ class KeyTests(unittest.TestCase):
         toml.write_text('[workspace]\nname = "m"\n[dependencies]\nmojo = ">=1.0.1,<2"\n[tasks]\nprobe = "mojo run x"\n')
         self.assertNotEqual(bc.key_of(fields(self.repo)), k)
 
-    def test_unresolvable_import_widens_to_the_whole_tree(self):
+    def test_unresolvable_import_widens_the_v1_key_and_fails_the_closure_key(self):
         (self.repo / "core/a.mojo").write_text("from nowhere.at_all import thing\n")
+        # v1 (kept verifiable): the whole tree.
         src, rels = bc.source_digest(self.repo, self.repo / "bindings/build_fake.sh", [])
         self.assertEqual(src["scope"], "tree")
         self.assertIn("core/unrelated.mojo", rels)
-        k = bc.key_of(fields(self.repo))
+        k = bc.key_of(bc.key_fields(self.repo, self.repo / "bindings/build_fake.sh", [], {}, "i",
+                                    dev_arch="x", os_info=dict(OS), rule="v1"))
         (self.repo / "core/unrelated.mojo").write_text("fn u(): return 2\n")
+        self.assertNotEqual(bc.key_of(bc.key_fields(self.repo, self.repo / "bindings/build_fake.sh", [], {}, "i",
+                                                    dev_arch="x", os_info=dict(OS), rule="v1")), k)
+        # closure-v2: no fallback, a loud error naming the import and its file.
+        with self.assertRaises(bc.UnresolvedImport) as caught:
+            fields(self.repo)
+        self.assertEqual(caught.exception.module, "nowhere.at_all")
+        self.assertEqual(caught.exception.importer, "core/a.mojo")
+        self.assertIn("nowhere.at_all", str(caught.exception))
+
+    def test_unread_and_per_run_variables_do_not_move_the_key(self):
+        for env in ({"MOJOLEARN_SLOT_TOKEN": "681867bcbd7740c6"},
+                    {"MOJOLEARN_MERGED_KEY": "a4675865"},
+                    {"MOJOLEARN_RUNPOD_KEY_FILE": "/Users/x/.key"},
+                    {"MOJOLEARN_CUDA_CODE_FORMAT": "ptx", "MOJOLEARN_BUILD_TIERS": "identical"},
+                    {"MOJOLEARN_SOMETHING_NO_SCRIPT_READS": "1"}):
+            with self.subTest(env):
+                self.assertEqual(bc.key_of(fields(self.repo, env)), self.base)
+        # The toolchain's own variables stay keyed, read or not.
+        self.assertNotEqual(bc.key_of(fields(self.repo, {"MODULAR_HOME": "/x"})), self.base)
+        self.assertNotEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_BUILD_PIXI_ENV": "cuda"})), self.base)
+
+    def test_a_dynamic_variable_name_is_read_by_pattern(self):
+        (self.repo / "bindings/build_fake.sh").write_text(
+            SCRIPT + 'd=$(eval "printf %s \\"\\${MOJOLEARN_${FAMILY}_HOST_OUTDIR:-}\\"")\n')
+        base = bc.key_of(fields(self.repo))
+        self.assertNotEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_FAKE_HOST_OUTDIR": "o"})), base)
+        self.assertEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_FAKE_OUTDIR": "o"})), base)
+
+    def test_comment_edits_of_shell_inputs_do_not_move_the_key(self):
+        (self.repo / "bindings/build_fake.sh").write_text(SCRIPT + "# a note\n\n")
+        self.assertEqual(bc.key_of(fields(self.repo)), self.base)
+
+    def test_a_sourced_helper_beside_the_script_is_an_input(self):
+        (self.repo / "bindings/build_defines.sh").write_text("X=1\n")
+        (self.repo / "bindings/build_fake.sh").write_text(
+            '. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"\n' + SCRIPT)
+        f = fields(self.repo)
+        self.assertIn("bindings/build_defines.sh", f["inputs"]["files"])
+        k = bc.key_of(f)
+        (self.repo / "bindings/build_defines.sh").write_text("X=2\n")
         self.assertNotEqual(bc.key_of(fields(self.repo)), k)
+
+    def test_unread_sabotage_variable_still_makes_a_negative_control(self):
+        env = {"MOJOLEARN_UNREAD_SABOTAGE_X": "1"}
+        f = fields(self.repo, env)
+        self.assertEqual(f.get("variant"), "sabotage")
+        self.assertTrue(bc.refusal(f, env).startswith("sabotage:"))
 
     def test_sabotage_is_refused(self):
         for env in ({"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_HOST_SABOTAGE=1"},
@@ -531,7 +580,8 @@ class ReleaseDeclaredTests(BuildFlowTests):
         self.assertNotIn("_mojolearn_other.so", row[5])
         fields_a = json.loads((out_a / "keys" / (row[3] + ".json")).read_text())
         self.assertEqual(fields_a["declared"]["outputs"], [self.OUT])
-        self.assertIn("bindings/build_fake.sh", fields_a["declared"]["inputs"]["files"])
+        self.assertIn("bindings/build_fake.sh", fields_a["inputs"]["files"])
+        self.assertEqual(fields_a["key_rule"], bc.KEY_RULE)
         b = self.tree("b")
         out_b = self.base / "out-b"
         self.build(b, self.write_map("b"), out_b)
@@ -751,3 +801,229 @@ class RealBuildScriptsAreReadable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# closure-v2 for bindings/merged_build.sh (2026-11-04)
+# ---------------------------------------------------------------------------
+
+MERGED_SCRIPT = """#!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"
+PY=${MOJOLEARN_MERGED_PYTHON:-python3}
+plan=$("$PY" tools/merged_bindings.py plan --dir x)
+# `mojo build` of a generated root: script_plan cannot read it literally
+"$@" build -j "${MOJOLEARN_COMPILE_JOBS:-2}" ${MOJOLEARN_MOJO_BUILD_FLAGS:-} -I . -I bindings "$root" -o x
+mkdir -p python/mojolearn/identical
+printf 'merged %s\\n' "$*" > python/mojolearn/identical/.tmp.so
+mv python/mojolearn/identical/.tmp.so python/mojolearn/identical/_mojolearn_native_a.so
+"""
+
+
+def make_merged_repo(root):
+    root = Path(root)
+    make_repo(root)
+    (root / "tools").mkdir(exist_ok=True)
+    shutil.copy(Path(__file__).resolve().parent / "merged_bindings.py", root / "tools" / "merged_bindings.py")
+    (root / "bindings" / "merged_build.sh").write_text(MERGED_SCRIPT)
+    (root / "bindings" / "build_defines.sh").write_text("MOJOLEARN_BUILD_DEFINE_FLAGS=${MOJOLEARN_BUILD_DEFINES:-}\n")
+    (root / "kernels").mkdir()
+    for name, imports in (("_mojolearn_a1", "from kernels import ka\nfrom core import g\n"),
+                          ("_mojolearn_a2", "from kernels import ka\n"),
+                          ("_mojolearn_b1", "from kernels import kb\nfrom core import g\n"),
+                          ("_mojolearn_t", "from tokenizer.impl.unicode_table_generated import TABLE\n"
+                                           "from tokenizer.impl import unicode_class\n")):
+        (root / "bindings" / (name + ".mojo")).write_text(
+            imports + "from std.python import PythonObject\n\n\ndef build_%s() -> PythonObject:\n    pass\n" % name)
+    (root / "kernels" / "ka.mojo").write_text("fn ka(): pass\n")
+    (root / "kernels" / "kb.mojo").write_text("fn kb(): pass\n")
+    (root / "tokenizer" / "impl").mkdir(parents=True)
+    (root / "tokenizer" / "tools").mkdir()
+    (root / "tokenizer" / "__init__.mojo").write_text("")
+    (root / "tokenizer" / "impl" / "__init__.mojo").write_text("")
+    (root / "tokenizer" / "impl" / "unicode_class.mojo").write_text('comptime UNICODE_VERSION_PINNED = "15"\n')
+    (root / "tokenizer" / "tools" / "gen_unicode_categories.py").write_text("print('gen')\n")
+    (root / "bindings" / "merged_groups.json").write_text(json.dumps({
+        "index_file": "_mojolearn_merged.json",
+        "dirs": {"identical": {"path": "python/mojolearn/identical", "optional": {},
+                               "groups": {"_mojolearn_native_a": ["_mojolearn_a1", "_mojolearn_a2"],
+                                          "_mojolearn_native_b": ["_mojolearn_b1"],
+                                          "_mojolearn_native_t": ["_mojolearn_t"]}},
+                 "host": {"path": "python/mojolearn/host", "optional": {}, "groups": {}}},
+        "darwin_metal1": [], "darwin_metal1_suffix": "_m1"}))
+    return root
+
+
+class MergedClosureTests(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.repo = make_merged_repo(Path(self.td.name) / "repo").resolve()
+
+    def key(self, group, env=None, plat="linux"):
+        env = dict({"MOJOLEARN_GPU_ARCHS": "sm_89"}, **(env or {}))
+        return bc.key_fields(self.repo, self.repo / "bindings/merged_build.sh", ["gpu", "--group", group], env,
+                             "img", dev_arch="sm_89", os_info=dict(OS), plat=plat)
+
+    def test_a_merged_group_keys_its_own_members_closure(self):
+        f = self.key("_mojolearn_native_a")
+        self.assertEqual(f["source"]["scope"], "closure")
+        self.assertEqual(f["merged"][0]["members"], ["_mojolearn_a1", "_mojolearn_a2"])
+        self.assertNotIn("device_arch", f, "a merged GPU build names its target; the box GPU is not an input")
+        _, closure = bc.key_fields_closure(self.repo, self.repo / "bindings/merged_build.sh",
+                                           ["gpu", "--group", "_mojolearn_native_a"],
+                                           {"MOJOLEARN_GPU_ARCHS": "sm_89"}, "img", os_info=dict(OS), plat="linux")
+        self.assertIn("kernels/ka.mojo", closure)
+        self.assertNotIn("kernels/kb.mojo", closure)
+        self.assertNotIn("core/unrelated.mojo", closure)
+
+    def test_an_edit_in_one_group_leaves_the_other_groups_keys(self):
+        a, b = bc.key_of(self.key("_mojolearn_native_a")), bc.key_of(self.key("_mojolearn_native_b"))
+        (self.repo / "kernels" / "kb.mojo").write_text("fn kb(): return\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a)
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_b")), b)
+        # a shared file moves both
+        (self.repo / "core" / "g.mojo").write_text("fn g(): return\n")
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_a")), a)
+
+    def test_membership_and_root_text_are_keyed_per_group(self):
+        a, b = bc.key_of(self.key("_mojolearn_native_a")), bc.key_of(self.key("_mojolearn_native_b"))
+        m = json.loads((self.repo / "bindings/merged_groups.json").read_text())
+        m["dirs"]["identical"]["groups"]["_mojolearn_native_b"] = ["_mojolearn_b1", "_mojolearn_t"]
+        del m["dirs"]["identical"]["groups"]["_mojolearn_native_t"]
+        (self.repo / "bindings/merged_groups.json").write_text(json.dumps(m))
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a, "another group's edit")
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_b")), b)
+        # A generator edit that does not change the root text moves nothing.
+        mb = self.repo / "tools" / "merged_bindings.py"
+        mb.write_text(mb.read_text() + "\n# a new subcommand would go here\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a)
+
+    def test_the_slot_token_and_merged_key_do_not_split_a_group(self):
+        base = bc.key_of(self.key("_mojolearn_native_a"))
+        moved = self.key("_mojolearn_native_a", {"MOJOLEARN_SLOT_TOKEN": "18ecb160", "MOJOLEARN_MERGED_KEY": "a4",
+                                                 "MOJOLEARN_MERGED_PYTHON": "/x/python3",
+                                                 "MOJOLEARN_CUDA_CODE_FORMAT": "ptx"})
+        self.assertEqual(bc.key_of(moved), base)
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_a", {"MOJOLEARN_COMPILE_JOBS": "8"})), base)
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_a", {"MOJOLEARN_BUILD_DEFINES": "X=1"})), base)
+
+    def test_a_generated_source_is_keyed_by_its_generator_not_its_bytes(self):
+        before = bc.key_of(self.key("_mojolearn_native_t"))
+        (self.repo / "tokenizer/impl/unicode_table_generated.mojo").write_text("comptime TABLE = 1\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_t")), before, "the first generator run")
+        (self.repo / "tokenizer/tools/gen_unicode_categories.py").write_text("print('gen2')\n")
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_t")), before)
+        a = bc.key_of(self.key("_mojolearn_native_a"))
+        (self.repo / "tokenizer/tools/gen_unicode_categories.py").write_text("print('gen3')\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a, "only groups that import the table")
+
+    def test_the_generated_table_matches_generated_sources(self):
+        import generated_sources as gs
+        self.assertEqual(set(bc.GENERATED_SOURCES), set(gs.GENERATED))
+        for rel, (directory, pin) in bc.GENERATED_SOURCES.items():
+            self.assertEqual(directory, gs.GENERATOR_DIRS[rel])
+            self.assertIn(pin, gs.GENERATED[rel])
+
+    def test_an_unknown_group_or_argument_is_unkeyable(self):
+        with self.assertRaises(bc.UnkeyableBuild):
+            self.key("_mojolearn_native_nope")
+        with self.assertRaises(bc.UnkeyableBuild):
+            bc.key_fields(self.repo, self.repo / "bindings/merged_build.sh", ["gpu", "--bogus"], {}, "i",
+                          dev_arch="x", os_info=dict(OS), plat="linux")
+
+    def test_the_real_tree_keys_every_merged_group_without_a_fallback(self):
+        repo = Path(__file__).resolve().parents[1]
+        import merged_bindings as mb
+        for d in ("identical", "host"):
+            for plat in ("linux", "darwin"):
+                for stem, _, _ in mb.plan(d, plat, True):
+                    env = {"MOJOLEARN_PACKAGE_BYTE_LM": "1"}
+                    if d == "identical" and plat == "linux":
+                        env["MOJOLEARN_GPU_ARCHS"] = "sm_89"
+                    with self.subTest((d, plat, stem)):
+                        f = bc.key_fields(repo, repo / "bindings/merged_build.sh",
+                                          ["host" if d == "host" else "gpu", "--group", stem], env, "i",
+                                          dev_arch="none", os_info=dict(OS), plat=plat)
+                        self.assertEqual(f["source"]["scope"], "closure")
+                        self.assertLess(f["source"]["files"], len(bc.tree_sources(repo)))
+
+
+class ExplainSeedHotTests(unittest.TestCase):
+    """explain (the plan line a build prints before compiling), seed
+    directories of a release-scoped local cache, and the hot-only box route."""
+
+    OUT = "python/mojolearn/identical/_mojolearn_fake.so"
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.base = Path(self.td.name).resolve()
+        self.repo = make_repo(self.base / "mojolearn")
+        self.orig = (bc.device_arch, bc.os_fields, bc.darwin_toolchain)
+        bc.device_arch, bc.os_fields = (lambda: "none"), (lambda: dict(OS))
+        bc.darwin_toolchain = lambda: {}
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        bc.device_arch, bc.os_fields, bc.darwin_toolchain = self.orig
+
+    def env(self, **extra):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("MOJOLEARN_")}
+        env.update(MOJOLEARN_BINCACHE_OUTPUTS=self.OUT, MOJOLEARN_BINCACHE_MAP=str(self.base / "no-map.tsv"),
+                   BINCACHE_TEST_MARKER=str(self.repo / "ran.txt"))
+        env.update(extra)
+        return env
+
+    def explain(self, env):
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            rc = bc.cmd_explain([str(self.repo / "bindings/build_fake.sh")], environ=env)
+        finally:
+            sys.stdout = old
+        return rc, buf.getvalue().strip()
+
+    def test_explain_then_seed_a_release_scoped_cache(self):
+        old_release = self.base / "release-old"
+        env = self.env(MOJOLEARN_BINCACHE_DIR=str(old_release))
+        rc, line = self.explain(env)
+        self.assertEqual(rc, 0)
+        self.assertTrue(line.startswith("compile: no earlier build"), line)
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertTrue(self.explain(env)[1].startswith("hit (%s)" % old_release))
+        (self.repo / self.OUT).unlink()
+        (self.repo / "ran.txt").unlink()
+        new_release = self.base / "release-new"
+        env = self.env(MOJOLEARN_BINCACHE_DIR=str(new_release), MOJOLEARN_BINCACHE_SEED_DIRS=str(old_release))
+        self.assertTrue(self.explain(env)[1].startswith("hit (%s)" % old_release))
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertFalse((self.repo / "ran.txt").exists(), "a seeded hit compiles nothing")
+        self.assertEqual(len(list(new_release.glob("*.tar.gz"))), 1, "the seed is copied into the release cache")
+        rows = [l.split("\t") for l in (new_release / "provenance" / "provenance.tsv").read_text().splitlines()]
+        self.assertEqual(rows[-1][2], "hit")
+        # an edit: explain names the changed closure file
+        (self.repo / self.OUT).unlink()
+        (self.repo / "core/a.mojo").write_text("from layout import TileTensor\nfn f(): return\n")
+        rc, line = self.explain(env)
+        self.assertTrue(line.startswith("compile: closure changed: core/a.mojo"), line)
+
+    def test_hot_only_route_caches_on_the_box_without_a_map(self):
+        hot = self.base / "hot"
+        env = self.env(MOJOLEARN_BINCACHE_HOT_DIR=str(hot), MOJOLEARN_BINCACHE_OUT=str(self.base / "out"),
+                       MOJOLEARN_BINCACHE_SHELL="sh", MOJOLEARN_BINCACHE_IMAGE="box:nvidia")
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertEqual(len(list(hot.glob("*.tar.gz"))), 1)
+        self.assertTrue(self.explain(env)[1].startswith("hit (%s)" % hot))
+        (self.repo / self.OUT).unlink()
+        (self.repo / "ran.txt").unlink()
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertFalse((self.repo / "ran.txt").exists())
+        rows = [l.split("\t") for l in (self.base / "out" / "provenance.tsv").read_text().splitlines()]
+        self.assertEqual([r[2] for r in rows], ["miss+built-not-uploaded:no-slot", "hot-hit"])
+
+    def test_explain_reports_an_unresolved_import_and_exits_3(self):
+        (self.repo / "core/a.mojo").write_text("from nowhere.at_all import thing\n")
+        rc, line = self.explain(self.env(MOJOLEARN_BINCACHE_DIR=str(self.base / "c")))
+        self.assertEqual(rc, 3)
+        self.assertIn("nowhere.at_all", line)

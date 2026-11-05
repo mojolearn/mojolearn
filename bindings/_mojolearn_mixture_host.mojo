@@ -24,6 +24,7 @@ The sabotage arm (`mixture_host_sabotage`) is
 `gemm/host/gemm_oracle.mojo::GEMM_ORACLE_HOST_SABOTAGE`
 (`-D MOJOLEARN_HOST_SABOTAGE=1`): every GEMM leaf walks descending.
 """
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -136,6 +137,7 @@ def gmm_fit_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_mixture_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_mixture_host")
         module.def_function[mixture_host_numeric_mode_binding]("mixture_host_numeric_mode")

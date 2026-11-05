@@ -236,7 +236,13 @@ WHOLE_DIR_PEAK_GIB = {
 #:           _neural_host 7.95, _forest_host 8.66, _x_host 8.07
 #: Each shard records its own peak (GHA/memory.txt): raise a row when a run
 #: records more, never lower one below a recorded value. A group not named
-#: here plans at its directory's whole-set peak.
+#: here (a stem bindings/merged_groups.json gained by splitting a group, as the
+#: 2026-11-04 host split did: _mojolearn_native_classical_host and
+#: _mojolearn_native_series_host left _mojolearn_native_host and
+#: _mojolearn_native_tokenizer_host) plans at the largest row of its tier and
+#: vendor: a split only removes members, so the largest measured group bounds
+#: it, and its first build records its own peak (docs/build/HOT_GROUPS.md).
+#: A tier with no row at all plans at its directory's whole-set peak.
 UNIT_PEAK_GIB = {
     ("identical", "_mojolearn_native", "cuda"): 13, ("identical", "_mojolearn_native", "hip"): 13,
     ("identical", "_mojolearn_native_trees", "cuda"): 13, ("identical", "_mojolearn_native_trees", "hip"): 12,
@@ -310,6 +316,9 @@ def unit_peak_gib(entry, vendor, merged):
     row = UNIT_PEAK_GIB.get((tier, unit_group(entry), vendor))
     if row is not None:
         return row
+    measured = [v for (t, _g, vv), v in UNIT_PEAK_GIB.items() if t == tier and vv == vendor]
+    if measured:
+        return max(measured)
     return WHOLE_DIR_PEAK_GIB.get((tier, vendor), max(WHOLE_DIR_PEAK_GIB.values()))
 
 

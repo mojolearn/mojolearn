@@ -3,6 +3,7 @@
 """THE CNN LANE'S GPU BINDING (algorithm expansion lane 8).
 Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
 twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
@@ -1429,6 +1430,7 @@ def vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_cnn() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_cnn")
         m.def_function[gemm_binding]("x_cnn_gemm")

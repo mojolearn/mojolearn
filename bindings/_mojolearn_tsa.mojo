@@ -42,6 +42,7 @@ THE GIL is released around every device call.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
@@ -344,6 +345,7 @@ def tsa_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_tsa() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_tsa")
         m.def_function[tsa_vendor_binding]("tsa_vendor")

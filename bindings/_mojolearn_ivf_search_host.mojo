@@ -22,6 +22,7 @@ The sabotage arm (`ivf_search_host_sabotage`) is
 axis descending, and every returned distance has its bits moved
 (`ivf_sabotage_value_flip`), so the integer `ties` fixture moves too.
 """
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -86,6 +87,7 @@ def ivf_numeric_mode_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_ivf_search_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_ivf_search_host")
         module.def_function[ivf_search_host_numeric_mode_binding]("ivf_search_host_numeric_mode")

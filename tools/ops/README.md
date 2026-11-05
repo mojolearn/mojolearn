@@ -5,7 +5,9 @@ Live copies: ~/mojolearn-evidence/lq/lq and ~/mojolearn-ops/. compile_slot.sh no
 `lq` is retired for releases (docs/plans/POST_0863_RELEASE_TOOLING.md item 4): the NVIDIA/AMD release
 gate runs through `release_gate.py` (Mac side) and `release_gate_job.sh` (the box job), launched with
 `tools/nvidia_central.sh submit` or `tools/do_amd_steward.sh run` and persisted to R2. The `lq` copy here
-is historical.
+is historical. The post-publication published-nvidia and published-amd producers run the same way:
+`published_install.py` (Mac side; tools/release.py's published-<vendor> steps call it) and
+`published_install_job.sh` (the box job, which takes its vendor from nvidia-smi or rocm-smi).
 
 ## Incremental development builds
 

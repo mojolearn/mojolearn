@@ -123,8 +123,24 @@ def rows_at(evidence, path):
     return [r.split('\t') for r in evidence.text(path).splitlines() if r.strip()]
 
 
-def device_recipe(fields, recipe, stem):
+def device_recipe(fields, recipe, stem, root=None, revision=None):
     rel = 'python/mojolearn/identical/' + stem + '.so'
+    if fields.get('key_rule') == bincache.KEY_RULE:
+        # closure-v2 (tools/bincache.py): the group's own closure, inputs,
+        # membership and read variables at the original revision.
+        require(fields['script'] == 'bindings/merged_build.sh' and fields['args'][:3] == ['gpu', '--group', stem]
+                and fields['numeric_mode'] == 'identical' and fields['gpu_archs'] == 'gfx942'
+                and fields['target_column'] == 'amd' and 'variant' not in fields
+                and fields['repo_path'] == '/root/mojolearn' and fields['os']['machine'] == 'x86_64',
+                'original device recipe differs')
+        environ = dict(MODULAR_HOME='/root/mojolearn/.pixi/envs/default/share/max',
+            MOJOLEARN_BUILD_PIXI_ENV='default', MOJOLEARN_BUILD_TIERS='identical',
+            MOJOLEARN_COMPILE_JOBS='8', MOJOLEARN_CUDA_CODE_FORMAT='native',
+            MOJOLEARN_GPU_ARCHS='gfx942', MOJOLEARN_LINUX_CPU='x86-64-v3',
+            MOJOLEARN_NUMERIC_MODE='identical', MOJOLEARN_PACKAGE_BYTE_LM='1', MOJOLEARN_TARGET_COLUMN='amd')
+        require(root is not None and bincache.merged_fields_reproduce(fields, root, revision, environ, [rel]),
+                'device closure-v2 source, inputs or environment differ')
+        return
     require(fields['source'] == recipe['source']
             and fields['declared'] == dict(inputs=recipe['declared'], outputs=[rel], shell='bash')
             and fields['script'] == 'bindings/merged_build.sh'
@@ -172,8 +188,8 @@ def device_groups(rows, root, site, compiler, patchelf, evidence, overrides=()):
                 and manifest['source_commit'] == revision
                 and fields == evidence.json(report / 'bincache/keys' / (key + '.json')),
                 'original device key/source differs')
-        recipe = source_recipe(str(root), revision)
-        device_recipe(fields, recipe, stem)
+        recipe = None if fields.get('key_rule') == bincache.KEY_RULE else source_recipe(str(root), revision)
+        device_recipe(fields, recipe, stem, root, revision)
         require(manifest['installed_toolchain'] == fields['toolchain']['packages'],
                 'original installed toolchain differs')
         rawsha = hashlib.sha256(data).hexdigest()

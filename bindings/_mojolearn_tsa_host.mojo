@@ -36,6 +36,7 @@ under IDENTICAL. The guards are `kpss_test_host`'s, `kpss_test`'s and
 `tsa/impl/timeSeries/stationarity.mojo`, `tsa/impl/timeSeries/
 arima_helpers.mojo`); the flag is `kpss_pvalue(stat) > pval_threshold`.
 """
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
@@ -184,6 +185,7 @@ def holtwinters_fit_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_tsa_host() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_tsa_host")
         module.def_function[tsa_host_numeric_mode_binding]("tsa_host_numeric_mode")

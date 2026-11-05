@@ -20,6 +20,7 @@ read-backs `embedding_numeric_mode` (1) and `embedding_vendor` ("cpu"), so
 `_backend._HOST_MODULES` (`"_mojolearn_embedding":
 "_mojolearn_embedding_host"`). The GPU binding exports nothing else.
 """
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -153,6 +154,7 @@ def embedding_backward_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_embedding_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_embedding_host")
         m.def_function[embedding_host_numeric_mode_binding]("embedding_host_numeric_mode")

@@ -1,4 +1,3 @@
-from bindings.trees_bagging_members_native import bagging_members
 # SPDX-License-Identifier: Apache-2.0
 # Native public attribute resolution and zero-copy fitted-output boundary.
 # No generic object getter, property invocation, Array.__array__, or Python
@@ -241,8 +240,11 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
         if neural_descriptor_entry(entry.__self__, "classical_native_call", False) is not entry:
             raise Error("TypeError: SVM coefficient property owner changed after connection")
         return py_call(entry, model, PythonObject("family_svc_svc_coef" if kind == "svm_svc_coef" else "family_svc_svr_coef"), Python.tuple(None), owner[1])
-    if kind == "bagging_estimators":
-        return bagging_members(model)
+    # "bagging_estimators" (Bagging estimators_) is a native_property_recipes
+    # entry connected by python/mojolearn/_native_public_attributes.py: the
+    # tree owner's own "trees_bagging_members" operation, the one the
+    # estimators_ property calls. Dispatching it here pulled the forest
+    # owner into every closure of this file (the tokenizer host's).
     if kind == "cholesky_logdet":
         var info = PythonObject(None)
         try:

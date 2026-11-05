@@ -260,10 +260,10 @@ if [[ "$MERGED" = 1 ]]; then
     python3 tools/merged_bindings.py check --dir host --platform linux --byte-lm "$PACKAGE_BYTE_LM" \
       --expect "$HOST_NAMES" || exit 2
   fi
-  # The cache key (tools/bincache.py) hashes every .mojo file of the tree for
-  # a merged build (its compile line names a generated root), every MOJOLEARN_*
-  # variable and the scripts; the root generator and the group manifest are
-  # neither, so their digest rides in as a variable.
+  # The cache key (tools/bincache.py closure-v2) keys each group's own import
+  # closure, members and root text; this digest is exported for the records
+  # only and is not a key field any more (NON_BUILD_ENV_V2). Under the v1 rule
+  # (MOJOLEARN_BINCACHE_SOURCE=tree) it still keys the manifest and generator.
   MERGED_KEY=$(cat bindings/merged_groups.json tools/merged_bindings.py | sha256sum | cut -c1-64)
 else
   say "binding layout: per-binding (MOJOLEARN_MERGED_BINDINGS=0)"

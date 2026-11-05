@@ -8,6 +8,7 @@ classes run unchanged on a CPU-only install (`_backend._HOST_MODULES`).
 
 The sabotage arm (`x_sequence_host_sabotage`, -D MOJOLEARN_HOST_SABOTAGE=1)
 runs the GEMM reduction k descending (`sequence/ops.mojo`)."""
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -656,6 +657,7 @@ def onnx_import_file_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_sequence_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence_host")
         m.def_function[host_numeric_mode_binding]("x_sequence_host_numeric_mode")

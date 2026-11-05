@@ -260,8 +260,9 @@ class LightReleaseTests(unittest.TestCase):
         inputs = workflow.get('on', workflow.get(True))['workflow_dispatch']['inputs']
         self.assertEqual(inputs['validation_profile']['default'], 'light')
         jobs = workflow['jobs']
-        self.assertEqual(jobs['alpha_stage']['needs'], 'validate_inputs')
-        self.assertEqual(jobs['build']['needs'], 'validate_inputs')
+        # Both stages also wait for the Mac-admitted ledger recheck (ledger_admission, 8b02b6f163).
+        self.assertEqual(jobs['alpha_stage']['needs'], ['validate_inputs', 'ledger_admission'])
+        self.assertEqual(jobs['build']['needs'], ['validate_inputs', 'ledger_admission'])
         self.assertIn("validation_profile == 'full'", jobs['build']['if'])
         self.assertIn('exit 2', jobs['validate_inputs']['steps'][0]['run'])
         self.assertIn("validation_profile == 'full'", jobs['cpu_certification']['if'])

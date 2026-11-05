@@ -141,6 +141,13 @@ core/hostptr.mojo:u16_ptr	an address-to-pointer cast, no value
 core/hostptr.mojo:i8_ptr	an address-to-pointer cast, no value
 core/six_lane_experiment_guards.mojo:_check_configuration	compile-time asserts over the experiment defines, no runtime value
 core/six_lane_experiment_guards.mojo:*	compile-time experiment-define guards, no runtime value
+core/experiment_guards_cluster.mojo:*	compile-time experiment-define guards of one family, no runtime value
+core/experiment_guards_decomposition.mojo:*	compile-time experiment-define guards of one family, no runtime value
+core/experiment_guards_kernel.mojo:*	compile-time experiment-define guards of one family, no runtime value
+core/experiment_guards_linear.mojo:*	compile-time experiment-define guards of one family, no runtime value
+core/experiment_guards_neural.mojo:*	compile-time experiment-define guards of one family, no runtime value
+core/experiment_guards_series.mojo:*	compile-time experiment-define guards of one family, no runtime value
+core/experiment_guards_trees.mojo:*	compile-time experiment-define guards of one family, no runtime value
 transformer/experiments/profile.mojo:*	the transformer's arithmetic-profile words (build metadata), no data value
 training/neural_arithmetic_profile.mojo:neural_training_profile	the neural arithmetic-profile word (build metadata), no data value
 training/byte_lm_config.mojo:byte_lm_arithmetic_suffix	the byte LM's arithmetic-profile suffix (build metadata), no data value

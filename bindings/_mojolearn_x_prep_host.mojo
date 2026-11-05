@@ -1,6 +1,7 @@
 """CPU binding for `_mojolearn_x_prep`. HOST ONLY: the same units as the
 device, run in a loop on the caller's arena (x_prep/host/program.mojo), with
 the GPU binding's export names and address contract."""
+from core.experiment_guards_base import BASE_GUARDS_OK
 from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -140,6 +141,7 @@ def idn_fam2_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_prep_host() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep_host")
         m.def_function[x_prep_host_numeric_mode_binding]("x_prep_host_numeric_mode")

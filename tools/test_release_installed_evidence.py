@@ -188,56 +188,62 @@ def test_runtime_on_unqualified_wheels_or_tampered_junit_is_refused(tmp_path, re
 
 
 # ---------------------------------------------------------------- published-<vendor>
-def published_dir(tmp_path, revision, core, *, candidate_sha=None, version=VERSION, job_exit=0):
+from test_release_published_bytes import nvidia_set  # noqa: E402  (real wheels with RECORD, version 0.8.66)
+
+PUB_VERSION = '0.8.66'
+
+
+def published_dir(tmp_path, revision, wheels, *, candidate_sha=None, index_url=None, gate=True):
+    """A retained published-<vendor> bytes check as `check` leaves it: the request, the resolved files and the
+    gate receipt copied by content (no install, no device)."""
     out = tmp_path / 'published'
-    downloaded = put(out / 'wheels' / core.name, core.read_text())
-    digest = sha(downloaded)
-    site = '/venv/lib/python3.12/site-packages'
-    put(out / 'wheel-manifest.json', dict(
-        schema='mojolearn-pypi-wheel-manifest/1', index_url=published.PYPI_INDEX, version=version, vendor='nvidia',
-        all_digests_match=True,
-        files=[dict(distribution='mojolearn-core', file=core.name, path=str(downloaded), sha256=digest,
-                    pypi_sha256=digest, pypi_digest_match=True)],
-        loaded={'mojolearn-core': dict(version=version, location=site,
-                                       direct_url=dict(url='file:///w/' + core.name,
-                                                       archive_info=dict(hashes=dict(sha256=digest)))),
-                'import mojolearn': dict(module_file=site + '/mojolearn/__init__.py')}))
-    put(out / 'installed-bytes.json', dict(site=site, compared=12, differ=[], missing=[]))
-    from release_gate_profiles import CORRECTNESS_JOBS, COMMAND_TIMEOUT_SECONDS
-    put(out / 'correctness/results.json', dict(
-        status='PASSED', scope='expanded', source_commit=revision, installed_from=dict(expected_version=version),
-        installed=dict(vendor='cuda'),
-        jobs=[dict(name=name, exit_code=job_exit if name == 'models' else 0, timed_out=False,
-                   timeout_seconds=COMMAND_TIMEOUT_SECONDS, elapsed_seconds=1.0) for name in CORRECTNESS_JOBS]))
-    smoke = out / 'adapter-smoke'
-    results = {'torch-compile/adapter-results.json': ['torch_compile:mlp'],
-               'torch-training/training-results.json': ['mlp: resumed 2+2 equals uninterrupted 4'],
-               'max-training/max-training-results.json': ['mlp: compile, execute', 'mlp: resume exact']}
-    phases = {}
-    for relative, checks in results.items():
-        put(smoke / relative, dict(complete=True, checks=checks, failures=[]))
-    for phase in ('torch-compile', 'torch-training', 'max-training'):
-        put(smoke / (phase + '.log'), 'fixture\n')
-        phases[phase] = dict(exit=0, seconds=1.0, timed_out=False)
-    put(smoke / 'adapter-smoke.json', dict(status='PASSED', device='cuda:0', problems=[], phases=phases,
-        frameworks=dict(torch='ran', max='ran'), installed={'mojolearn-core': version}))
-    put(out / 'request.json', dict(vendor='nvidia', version=version, install_exit=0, source_commit=revision,
-                                   candidates={core.name: candidate_sha or sha(core)}))
-    put(out / published.REPORT, published.judge(out))
+    resolved, digests = [], {}
+    for w in wheels:
+        dist = published.wheel_tags(w.name)['distribution']
+        downloaded = out / 'wheels' / dist / w.name
+        downloaded.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(w, downloaded)
+        digests[dist] = digest = sha(downloaded)
+        resolved.append(dict(distribution=dist, requested=dist + '==' + PUB_VERSION, candidate=w.name, pip_exit=0,
+                             files=[w.name], file=w.name, sha256=digest, index_sha256=digest))
+    evidence = []
+    if gate:
+        receipt = put(tmp_path / 'gate' / 'gate-smoke.json', dict(verdict='PASS', candidate=dict(wheels=digests)))
+        copy = put(out / 'gate-evidence' / (sha(receipt)[:16] + '-gate-smoke.json'), receipt.read_text())
+        evidence.append(dict(source=str(receipt), path=copy.relative_to(out).as_posix(), sha256=sha(copy)))
+    candidates = {w.name: sha(w) for w in wheels}
+    candidates.update(candidate_sha or {})
+    put(out / 'request.json', dict(
+        mode='bytes', vendor='nvidia', version=PUB_VERSION, index_url=index_url or published.PYPI_INDEX,
+        source_commit=revision, candidates=candidates,
+        gate=dict(verdict='gate-nvidia PASS: 11 installed correctness records', evidence=evidence),
+        resolved=resolved))
+    put(out / published.REPORT, published.judge(out, index_url or published.PYPI_INDEX))
     return out
+
+
+def published_ledger(tmp_path, repo, revision, artifacts):
+    configuration = configuration_for(artifacts)
+    catalog = dict(CATALOG, requirements=[s for s in CATALOG['requirements'] if s['id'] == 'published-nvidia'])
+    rows = requirements(repo, revision, PUB_VERSION, catalog=catalog, configuration=configuration,
+                        expand_dependencies=False)['requirements']
+    ledger = RequirementsLedger(tmp_path / 'ledger.json')
+    ledger.sync(dict(schema='mojolearn.release-requirements.v1', version=PUB_VERSION, source_revision=revision,
+                     requirements=rows, source_root=str(repo), configuration=configuration))
+    return ledger, rows
 
 
 def test_published_install_is_admitted_against_the_qualified_artifacts(tmp_path, repo):
     revision = git(repo, 'rev-parse', 'HEAD')
-    core = wheel(tmp_path)
-    out = published_dir(tmp_path, revision, core)
+    wheels = nvidia_set(tmp_path / 'cand')
+    out = published_dir(tmp_path, revision, wheels)
     report = json.loads((out / published.REPORT).read_text())
     assert report['status'] == 'passed', report['checks']
     assert {row['id']: row['expected'] for row in report['coverage']} == {
-        'index-install': 4, 'published-artifact-hashes': 3, 'installed-smoke': 11, 'installed-adapters': 5}
-    ledger, rows = ledger_for(tmp_path, repo, revision, {'published-nvidia'}, configuration_for({core.name: sha(core)}))
+        'index-resolution': 8, 'published-artifact-hashes': 3, 'wheel-integrity': 3, 'gate-evidence': 5}
+    ledger, rows = published_ledger(tmp_path, repo, revision, {w.name: sha(w) for w in wheels})
     assert producer_admission_available(rows['published-nvidia'])
-    # The box directory is pulled home before admission: evidence is judged where it now lies.
+    # The directory is moved before admission: evidence is judged where it now lies.
     home = tmp_path / 'home/published'
     shutil.copytree(out, home)
     shutil.rmtree(out)
@@ -245,19 +251,22 @@ def test_published_install_is_admitted_against_the_qualified_artifacts(tmp_path,
     receipt = json.loads((tmp_path / 'review/receipts.json').read_text())['published-nvidia']
     assert all(Path(ref['path']).is_relative_to(tmp_path / 'home') or Path(ref['path']).is_relative_to(tmp_path / 'review')
                for ref in receipt['evidence'])
+    assert any('gate-evidence' in ref['path'] for ref in receipt['evidence'])
     assert result['actions'] == {'published-nvidia': 'reuse'}
     assert ledger.gate(stage='post') == (True, [])
 
 
 def test_published_bytes_other_than_the_candidate_are_refused(tmp_path, repo):
     revision = git(repo, 'rev-parse', 'HEAD')
-    core = wheel(tmp_path)
-    out = published_dir(tmp_path, revision, core, candidate_sha='c' * 64)
+    wheels = nvidia_set(tmp_path / 'cand')
+    out = published_dir(tmp_path, revision, wheels, candidate_sha={wheels[1].name: 'c' * 64})
     report = json.loads((out / published.REPORT).read_text())
     assert report['status'] == 'failed'
+    assert report['mismatch'] == [dict(file=wheels[1].name, published_sha256=sha(wheels[1]), candidate=wheels[1].name,
+                                       candidate_sha256='c' * 64)]
     # A passing report whose bytes differ from the ledger's qualified artifacts is refused too.
-    good = published_dir(tmp_path / 'g', revision, core)
-    ledger, _ = ledger_for(tmp_path, repo, revision, {'published-nvidia'}, configuration_for({core.name: 'd' * 64}))
+    good = published_dir(tmp_path / 'g', revision, wheels)
+    ledger, _ = published_ledger(tmp_path, repo, revision, {w.name: 'd' * 64 for w in wheels})
     with pytest.raises(ValueError, match='no requirement could be admitted'):
         admission.prepare('published-install', repo, ledger.path, tmp_path / 'review',
                           dict(report=good / published.REPORT))
@@ -265,11 +274,21 @@ def test_published_bytes_other_than_the_candidate_are_refused(tmp_path, repo):
     assert 'qualified artifacts' in review['refused']['published-nvidia']
 
 
-def test_published_failed_smoke_job_fails(tmp_path, repo):
-    out = published_dir(tmp_path, git(repo, 'rev-parse', 'HEAD'), wheel(tmp_path), job_exit=1)
+def test_published_without_gate_evidence_fails(tmp_path, repo):
+    out = published_dir(tmp_path, git(repo, 'rev-parse', 'HEAD'), nvidia_set(tmp_path / 'cand'), gate=False)
     report = json.loads((out / published.REPORT).read_text())
     assert report['status'] == 'failed'
-    assert [row['id'] for row in report['coverage'] if row['status'] != 'passed'] == ['installed-smoke']
+    assert [row['id'] for row in report['coverage'] if row['status'] != 'passed'] == ['gate-evidence']
+
+
+def test_a_report_made_against_another_index_is_refused_by_the_ledger(tmp_path, repo):
+    revision = git(repo, 'rev-parse', 'HEAD')
+    wheels = nvidia_set(tmp_path / 'cand')
+    out = published_dir(tmp_path, revision, wheels, index_url='file:///fake/simple')
+    assert json.loads((out / published.REPORT).read_text())['status'] == 'passed'   # passed for its own index
+    ledger, _ = published_ledger(tmp_path, repo, revision, {w.name: sha(w) for w in wheels})
+    with pytest.raises(ValueError, match='differs from its raw producer files'):
+        admission.prepare('published-install', repo, ledger.path, tmp_path / 'review', dict(report=out / published.REPORT))
 
 
 def test_real_catalog_rows_have_installed_adapters():

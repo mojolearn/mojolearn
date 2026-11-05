@@ -4,6 +4,7 @@
 HOST ONLY: the entry points of x_decomp/api.mojo on the host executor
 (x_decomp/host.mojo), under the GPU binding's names and address contract,
 plus the family read-backs."""
+from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -54,6 +55,7 @@ def x_decomp_host_sabotage_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_decomp_host() -> PythonObject:
+    comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp_host")
         m.def_function[x_decomp_host_numeric_mode_binding]("x_decomp_host_numeric_mode")

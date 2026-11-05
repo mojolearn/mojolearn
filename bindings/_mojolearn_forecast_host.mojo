@@ -37,6 +37,7 @@ The sabotage arm (`forecast_host_sabotage`) is
 `-D MOJOLEARN_HOST_SABOTAGE=1` every finite predicted or forecast value has
 its lowest bit flipped, so the saved-model gate must read a mismatch.
 """
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -112,6 +113,7 @@ def arima_numeric_mode_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_forecast_host() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_forecast_host")
         module.def_function[forecast_host_numeric_mode_binding]("forecast_host_numeric_mode")

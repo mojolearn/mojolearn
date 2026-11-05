@@ -11,10 +11,18 @@ import sys
 import xml.etree.ElementTree as ET
 
 from candidate_wheel_install import wheel_record
+import merged_bindings
 
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def host_file(site):
+    """The installed merged host file holding the tokenizer host binding (the forest input-admission path), read
+    from the installed host index; the stem is never hard-coded (bindings/merged_groups.json may regroup)."""
+    index = json.loads((site / 'mojolearn/host/_mojolearn_merged.json').read_text())
+    return merged_bindings.member_file('host', '_mojolearn_tokenizer_host', index=index)
 
 
 def main():
@@ -67,7 +75,7 @@ def main():
                   wheels=manifest['wheels'], checks=checks, cases=len(cases),
                   junit=dict(path='tests.xml', sha256=sha(out / 'tests.xml')),
                   test_sha256=sha(test),
-                  host_native_sha256=sha(site / 'mojolearn/host/_mojolearn_native_tokenizer_host.so'),
+                  host_native_sha256=sha(site / 'mojolearn/host' / host_file(site)),
                   verifier_sha256=sha(site / 'mojolearn/_verify_distributed.py'),
                   scope='Final installed wheel, dependencies, comparator self-test and four public CPU forest cases. GPU arithmetic and adapter checks are reused separately.')
     (out / 'result.json').write_text(json.dumps(report, indent=2) + '\n')

@@ -702,7 +702,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     return "".join(s)
 
 
-BIND_HEAD = """from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+BIND_HEAD = """from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -738,6 +739,7 @@ def x_neighbors_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_neighbors() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
         _add_ops(m)
@@ -797,6 +799,7 @@ def x_neighbors_vendor_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_neighbors_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors_host")
         m.def_function[x_neighbors_host_numeric_mode_binding]("x_neighbors_host_numeric_mode")

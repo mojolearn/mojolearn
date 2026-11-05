@@ -18,7 +18,7 @@ Default pip installation includes every released target.
 pinned PTX dependency. The PTX slot (`cuda/sm_80`, installed at
 `cuda_ptx/sm_80`) has its own build proof. Both package markers bind the
 same PTX manifest SHA256; native and PTX files have disjoint owners.
-Every wheel is checked against PyPI's 100 MiB file limit here, at pack time;
+Every wheel is checked against its project's PyPI file limit (packaging/pypi_limits.json) here, at pack time;
 an oversize wheel fails the pack with its per-set compressed sizes.
 Kernel bytes are unchanged. Native roots move to cuda_native/ and hip_native/
 at the same directory depth, preserving RUNPATH while avoiding ownership overlap
@@ -289,7 +289,6 @@ def tier_names(tier, include_byte_lm=False, *, vendor=None):
         names = names + ("_mojolearn_byte_lm",)
     return names
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
-PYPI_LIMIT = 100 * 1024 * 1024
 LINUX_VENDORS = ("cuda", "hip")
 REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 #: One loaded sets/<vendor>/<arch> directory. `reuse` is None for a set a leg
@@ -316,6 +315,13 @@ from verify_linux_surface_qualification import (  # noqa: E402
 # THE SPLIT (2026-09-25): which plugin ships which vendor directory, read from
 # python/mojolearn/gpu_plugins.py by path, the table the loader reads too.
 gpu_plugins = load_gpu_plugins()
+# PER-PROJECT PyPI LIMITS (2026-11-05): packaging/pypi_limits.json holds what PyPI
+# granted (mojolearn-nvidia and mojolearn-amd 250 MiB per file since 2026-11-04;
+# mojolearn, mojolearn-core and mojolearn-nvidia-ptx the 100 MiB default).
+sys.path.insert(0, str(REPO / "packaging"))
+import pypi_limits  # noqa: E402
+#: The combined (unsplit) wheel publishes as `mojolearn`.
+PYPI_LIMIT = pypi_limits.file_limit("mojolearn")
 #: The profiles that emit the split wheels from the same inputs:
 #: `mojolearn-core` (core-linux), `mojolearn-nvidia`, `mojolearn-nvidia-ptx`,
 #: `mojolearn-amd` and the file-free `mojolearn` (meta-linux, requiring the
@@ -350,10 +356,16 @@ SPLIT_PLAT = "manylinux_2_35_x86_64"
 # submodule runs the package's __init__, which selects a backend and refuses
 # on a box with no built binary (the release inventory test, Wheel CI).
 # host_surface.py itself imports nothing from the package.
+# NOT registered in sys.modules: a source-tree module under a mojolearn* name
+# left there by this import (tools/release.py -> release_reuse -> pack_wheel)
+# is seen by every later reader of sys.modules in the same process; the
+# installed-runtime qualifier's inventory (tools/qualify_native_runtime_installed.py
+# installed_module_inventory) correctly refuses it as product imported outside
+# the installed environment. Nothing looks the alias up; the module object is
+# held here as `host_surface`.
 import importlib.util  # noqa: E402
 _hs_spec = importlib.util.spec_from_file_location("mojolearn_host_surface", PY_DIR / "mojolearn" / "host_surface.py")
 host_surface = importlib.util.module_from_spec(_hs_spec)
-sys.modules[_hs_spec.name] = host_surface
 _hs_spec.loader.exec_module(host_surface)
 # THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), from the
 # per-lane fragments the manifest merges; empty until a lane declares one.
@@ -1792,13 +1804,13 @@ def main(argv=None, _gates=True):
         wheels = {}
         for whl, vendor in built:
             distribution = kind_distribution(vendor)
-            limit = gpu_plugins.wheel_size_limit(distribution)
+            limit = pypi_limits.file_limit(distribution)
             wheels[whl.name] = dict(distribution=distribution, compressed_bytes=whl.stat().st_size,
                                     pypi_limit_bytes=limit, over_limit=whl.stat().st_size > limit,
                                     payloads=wheel_payload_sizes(whl))
         (out / f"SIZES-{version}-linux.json").write_text(json.dumps(
             dict(wheels=wheels, pypi_limit_bytes=PYPI_LIMIT, over_limit=True, profile=a.profile), indent=2))
-        print("\n".join(["", "pack_wheel: WHEEL OVER PyPI's 100 MiB FILE LIMIT. STOP: this release cannot publish."]
+        print("\n".join(["", "pack_wheel: WHEEL OVER ITS PyPI FILE LIMIT (packaging/pypi_limits.json). STOP: this release cannot publish."]
                         + oversize), file=sys.stderr)
         return 1
 
@@ -1865,7 +1877,7 @@ def main(argv=None, _gates=True):
         for whl, vendor in built:
             size = whl.stat().st_size
             distribution = kind_distribution(vendor)
-            limit = gpu_plugins.wheel_size_limit(distribution)
+            limit = pypi_limits.file_limit(distribution)
             wheels[whl.name] = {
                 "distribution": distribution,
                 "compressed_bytes": size, "compressed_mb": round(size / 1e6, 2),
@@ -1881,12 +1893,12 @@ def main(argv=None, _gates=True):
     print(json.dumps(sizes, indent=2))
     if sizes["over_limit"]:
         # THE WHEEL SIZE CHECK RUNS HERE, AT PACK TIME (Andrew 2026-10-10), and
-        # fails loudly: PyPI refuses any file over 100 MiB, so an oversize wheel
+        # fails loudly: PyPI refuses a file over its project's limit, so an oversize wheel
         # must stop the release before any column or publish step runs.
         rows = sizes["wheels"].items() if split else [(pathlib.Path(sizes["wheel"]).name, dict(
             compressed_bytes=sizes["compressed_bytes"], pypi_limit_bytes=PYPI_LIMIT, over_limit=True,
             payloads=wheel_payload_sizes(pathlib.Path(sizes["wheel"]))))]
-        lines = ["", "pack_wheel: WHEEL OVER PyPI's 100 MiB FILE LIMIT. STOP: this release cannot publish.",
+        lines = ["", "pack_wheel: WHEEL OVER ITS PyPI FILE LIMIT (packaging/pypi_limits.json). STOP: this release cannot publish.",
                  f"  report: {out / f'SIZES-{version}-linux.json'}"]
         for name, w in rows:
             lines.append(f"  {'OVER' if w['over_limit'] else 'ok  '} {name}: {w['compressed_bytes'] / 2**20:.1f} MiB "
@@ -1903,7 +1915,7 @@ def oversize_report(built):
     rows = []
     for whl, vendor in built:
         distribution = kind_distribution(vendor)
-        rows.append((whl, whl.stat().st_size, gpu_plugins.wheel_size_limit(distribution)))
+        rows.append((whl, whl.stat().st_size, pypi_limits.file_limit(distribution)))
     if not any(size > limit for _, size, limit in rows):
         return []
     lines = []

@@ -49,6 +49,7 @@ The sabotage arm (`-D MOJOLEARN_HOST_SABOTAGE=1`, `trees_host_sabotage`)
 is `extratrees/checks/pcg_rng.mojo::PCG_HOST_SABOTAGE`: one extra draw
 before every threshold, so every forest this binary fits differs.
 """
+from core.experiment_guards_trees import TREES_GUARDS_OK
 from core.weight_compact_host import (
     host_gather_colmajor,
     host_gather_f32,
@@ -625,6 +626,7 @@ def resident_release_binding(handle: PythonObject) raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_trees_host() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_trees_host")
         module.def_function[trees_host_numeric_mode_binding]("trees_host_numeric_mode")

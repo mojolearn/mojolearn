@@ -15,7 +15,7 @@ import release_retained_compile_evidence as compiled
 from release_requirements import RequirementsLedger, digest, producer_admission_available, requirements
 
 VERSION = '0.9.1'
-ADAPTER_COVERAGE = ['torch-inference', 'torch-training', 'max-train', 'max-train-resume']
+ADAPTER_COVERAGE = list(adapters.COVERAGE)  # the catalog's adapters-* coverage
 
 
 def put(path, value):
@@ -147,7 +147,7 @@ def test_retained_adapter_smoke_is_admitted_and_reused(tmp_path, repo, gate):
     assert review['admitted'] == ['adapters-nvidia'] and review['comparison']['adapters-nvidia']['reusable']
     receipt = json.loads((tmp_path / 'review/receipts.json').read_text())['adapters-nvidia']
     assert {row['id']: row['expected'] for row in receipt['coverage']} == {
-        'torch-inference': 2, 'torch-training': 2, 'max-train': 1, 'max-train-resume': 1}
+        'torch-inference': 2, 'torch-training': 2, 'max-train': 1}
     result = admission.admit(ledger.path, repo, tmp_path / 'review/report.json')
     assert result['admitted'] == ['adapters-nvidia'] and result['actions'] == {'adapters-nvidia': 'reuse'}
     attempt = ledger.read()['attempts'][-1]
@@ -420,3 +420,20 @@ def test_mac_development_glue_interpreter_must_be_absolute(tmp_path, repo, devel
     with pytest.raises(ValueError, match='glue interpreter is not recorded as an absolute path'):
         admission.prepare('mac-development-build', repo, ledger.path, tmp_path/'invalid-glue',
                           dict(result=development['result']))
+
+
+def test_adapter_coverage_is_the_catalogs(tmp_path):
+    # 0.8.65: a hard-coded four-ID copy diverged from the catalog's three and refused every adapters-* row.
+    catalog = json.loads(adapters.CATALOG.read_text())['requirements']
+    rows = [row for row in catalog if row['id'].startswith('adapters-')]
+    assert {row['id'] for row in rows} == {'adapters-apple', 'adapters-nvidia', 'adapters-amd'}
+    for row in rows:
+        assert row['coverage'] == list(adapters.COVERAGE), row['id']
+        assert adapters.supports_requirement(dict(kind='adapters', coverage=row['coverage'],
+                                                  inputs=dict(contract=dict(id=row['id']))))
+    split = [dict(row, coverage=row['coverage'] + (['max-train-resume'] if row['id'] == 'adapters-amd' else []))
+             for row in rows]
+    path = tmp_path / 'catalog.json'
+    path.write_text(json.dumps(dict(requirements=split)))
+    with pytest.raises(ValueError, match='different coverage'):
+        adapters.catalog_coverage(path)

@@ -93,7 +93,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [
@@ -177,7 +178,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [
@@ -261,7 +263,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [
@@ -345,7 +348,8 @@
           "tools/release_runtime_composition.py",
           "tools/runtime_test_applicability.py",
           "tools/runtime_test_tree_reuse.py",
-          "tools/runtime_file_projection.py"
+          "tools/runtime_file_projection.py",
+          "tools/runtime_qualifier_units.py"
         ]
       },
       "configuration": [
@@ -563,24 +567,17 @@
       "id": "published-apple",
       "kind": "published",
       "stage": "post",
-      "scope": "Installed published wheels on apple",
+      "scope": "Published apple files resolved from PyPI for the candidate platform tags, byte-identical to the gated candidate wheels with intact RECORD; the gate's runtime, correctness and adapter receipts by reference (no reinstall, no device)",
       "coverage": [
-        "index-install",
+        "index-resolution",
         "published-artifact-hashes",
-        "installed-smoke",
-        "installed-adapters"
+        "wheel-integrity",
+        "gate-evidence"
       ],
       "source_inputs": {
         "published_harness": [
-          "tools/gate_smoke_box.py",
-          "tools/adapter_gate.py",
-          "tools/check_light_release.py",
           "tools/release_published_install.py",
           "tools/pypi_wheel_install.py",
-          "tools/qualify_verifier_wheel.py",
-          "tools/adapter_wheel_smoke.py",
-          "tools/release_gate_profiles.py",
-          "tools/release_adapter_evidence.py",
           "tools/release_installed_evidence.py"
         ]
       },
@@ -594,24 +591,17 @@
       "id": "published-nvidia",
       "kind": "published",
       "stage": "post",
-      "scope": "Installed published wheels on nvidia",
+      "scope": "Published nvidia files resolved from PyPI for the candidate platform tags, byte-identical to the gated candidate wheels with intact RECORD; the gate's runtime, correctness and adapter receipts by reference (no reinstall, no device)",
       "coverage": [
-        "index-install",
+        "index-resolution",
         "published-artifact-hashes",
-        "installed-smoke",
-        "installed-adapters"
+        "wheel-integrity",
+        "gate-evidence"
       ],
       "source_inputs": {
         "published_harness": [
-          "tools/gate_smoke_box.py",
-          "tools/adapter_gate.py",
-          "tools/check_light_release.py",
           "tools/release_published_install.py",
           "tools/pypi_wheel_install.py",
-          "tools/qualify_verifier_wheel.py",
-          "tools/adapter_wheel_smoke.py",
-          "tools/release_gate_profiles.py",
-          "tools/release_adapter_evidence.py",
           "tools/release_installed_evidence.py"
         ]
       },
@@ -625,24 +615,17 @@
       "id": "published-amd",
       "kind": "published",
       "stage": "post",
-      "scope": "Installed published wheels on amd",
+      "scope": "Published amd files resolved from PyPI for the candidate platform tags, byte-identical to the gated candidate wheels with intact RECORD; the gate's runtime, correctness and adapter receipts by reference (no reinstall, no device)",
       "coverage": [
-        "index-install",
+        "index-resolution",
         "published-artifact-hashes",
-        "installed-smoke",
-        "installed-adapters"
+        "wheel-integrity",
+        "gate-evidence"
       ],
       "source_inputs": {
         "published_harness": [
-          "tools/gate_smoke_box.py",
-          "tools/adapter_gate.py",
-          "tools/check_light_release.py",
           "tools/release_published_install.py",
           "tools/pypi_wheel_install.py",
-          "tools/qualify_verifier_wheel.py",
-          "tools/adapter_wheel_smoke.py",
-          "tools/release_gate_profiles.py",
-          "tools/release_adapter_evidence.py",
           "tools/release_installed_evidence.py"
         ]
       },

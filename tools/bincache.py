@@ -10,7 +10,13 @@ the build environment and the box image, so a second box with the same inputs
 can take the first box's bytes instead of recompiling them.
 
 WHAT THE KEY IS. sha256 over a canonical JSON of every input that changes the
-bytes (`key_fields`):
+bytes (`key_fields`). Since 2026-11-04 the default rule is closure-v2
+(KEY_RULE, the section "key rule closure-v2" below): the exact import closure
+of the build's own roots (for bindings/merged_build.sh, the members of the
+group it compiles), no whole-tree fallback (an unresolvable import fails the
+key, naming it), and only the variables a keyed input reads. The first rule,
+described next, stays computable (`rule="v1"`, MOJOLEARN_BINCACHE_SOURCE=tree)
+so archives and receipts keyed under it remain verifiable:
   * the build script and the sha256 of every source file the binding can
     reach: the Mojo import closure of the file its `mojo build` line names,
     over-approximated file by file (any import that cannot be resolved falls
@@ -52,6 +58,8 @@ after the leg (`promote`), server side. No URL is ever printed or logged.
   MOJOLEARN_BINCACHE=0):
     python3 tools/bincache.py build bindings/build_rf.sh [args...]
     python3 tools/bincache.py key bindings/build_rf.sh     # print the fields
+    python3 tools/bincache.py explain bindings/merged_build.sh gpu --group G
+        # one line, before anything compiles: `hit (<where>)` or `compile: <reason>`
   ON THE MAC (through tools/bincache_leg.sh, which loads ~/.mojolearn_r2):
     python3 tools/bincache.py plan --partition P --image I --leg-id L
     python3 tools/bincache.py promote <leg out>/remote/bincache
@@ -69,6 +77,7 @@ Provenance lands in $MOJOLEARN_BINCACHE_OUT (default
 was a cache hit, and the sha256 of every file it placed; keys/<key>.json holds
 the fields. Stdlib only.
 """
+import atexit
 import datetime
 import hashlib
 import hmac
@@ -364,9 +373,18 @@ def script_plan(repo, script, args):
     return roots, sorted(incs), shells
 
 
+#: Why the legacy (v1) source key of a build last widened to the whole tree, per (repo, script, args):
+#: `bincache.py explain` prints it. Kept outside the key fields so v1 keys stay byte-identical.
+WIDENED = {}
+
+
 def source_digest(repo, script, args, force_tree=False):
     repo = Path(repo).resolve()
     plan = None if force_tree else script_plan(repo, script, args)
+    widened_key = (str(repo), str(Path(script).resolve()), tuple(args))
+    WIDENED.pop(widened_key, None)
+    if plan is None and not force_tree:
+        WIDENED[widened_key] = "the compile line names no readable root; the legacy key widened to the whole tree"
     scope = "closure"
     files = set()
     if plan is not None:
@@ -380,6 +398,8 @@ def source_digest(repo, script, args, force_tree=False):
             for module, names in parse_imports(f.read_text(errors="replace")):
                 got = resolve(module, names, f, incs)
                 if got is None:
+                    WIDENED[widened_key] = "unresolved import %r in %s widened the closure" % (
+                        module, os.path.relpath(f, repo))
                     plan = None
                     break
                 todo.extend(g.resolve() for g in got if g.resolve() not in files)
@@ -425,6 +445,417 @@ def pixi_toml_build_part(text):
             continue
         out.append(line.rstrip())
     return "\n".join(out) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# key rule closure-v2 (2026-11-04): precise closures, only byte-relevant env
+# ---------------------------------------------------------------------------
+#
+# WHY. Under the first rule (now "v1": fields without `key_rule`, still
+# verifiable through source_digest/local_inputs/build_env, which are kept
+# unchanged) every merged group of every release missed. Measured from the
+# keys/<key>.json the releases kept (docs/build/COMPILE_CLOSURES.md):
+#   * bindings/merged_build.sh compiles a generated root ("$root"), which
+#     script_plan cannot read literally, so EVERY merged key hashed all ~3,950
+#     .mojo files of the tree: any edit anywhere rebuilt all 13 macOS groups and
+#     all 9 groups of every Linux leg;
+#   * MOJOLEARN_SLOT_TOKEN, the tools/mac_slot.py lease token, is random per
+#     run and was keyed: two macOS builds of one commit (0.8.65, 07:50Z and
+#     09:07Z) missed 13 of 13;
+#   * MOJOLEARN_MERGED_KEY hashed the whole manifest and tools/merged_bindings.py,
+#     so a one-group edit or a new CLI flag in the generator changed every key;
+#   * leg-level variables no bindings/ script reads (MOJOLEARN_CUDA_CODE_FORMAT,
+#     MOJOLEARN_BUILD_TIERS) split the vendor-neutral host groups by leg.
+# THE RULE. A key is a pure function of what the compile reads:
+#   * source: the Mojo import closure from the build's actual roots (for a
+#     merged build, bindings/<member>.mojo of each member of the group(s) it
+#     compiles, -I . -I bindings), plus pixi.toml (build part) and pixi.lock.
+#     An import that names this tree and resolves to nothing FAILS the key
+#     (UnresolvedImport names the file and the import); there is no whole-tree
+#     fallback. A build-time generated source (GENERATED_SOURCES) is keyed by
+#     its tracked generator inputs, never by the generated bytes, so the key is
+#     the same before and after the first generator run;
+#   * merged: per group, the directory, stem, flags class, members and the
+#     sha256 of the exact root text tools/merged_bindings.py writes;
+#   * inputs: the shell and Python files the build executes (followed from the
+#     script, comment-only edits of shell files ignored); the generator
+#     directories are keyed by the source rule, tools/merged_bindings.py by
+#     `merged`;
+#   * build_env: MOJO_*/MODULAR_* variables (the toolchain reads them) and the
+#     MOJOLEARN_* variables a keyed input READS (named on a non-comment line,
+#     including dynamic names such as MOJOLEARN_${FAMILY}_HOST_OUTDIR), minus
+#     NON_BUILD_ENV/NON_BUILD_ENV_V2/NON_BUILD_PREFIXES;
+#   * device_arch is not keyed for a merged GPU build: its accelerator is the
+#     explicit MOJOLEARN_GPU_ARCHS target (Linux) or the pinned Metal flags
+#     (macOS), never the box's GPU; host builds keep it;
+#   * everything else as in v1 (toolchain, numeric mode, archs, column, image,
+#     OS, repo path, args).
+# A sabotage or fault-injection variable keeps the build a negative control
+# even when no script reads it (`sabotage_env`).
+KEY_RULE = "closure-v2"
+NON_BUILD_ENV_V2 = (
+    # tools/mac_slot.py lease token: random per run (0.8.65: 13/13 misses on a rerun).
+    "MOJOLEARN_SLOT_TOKEN",
+    # Superseded by the `merged` field (exact members and root text per group).
+    "MOJOLEARN_MERGED_KEY",
+    # The interpreter that runs the build glue (tools/merged_bindings.py root/index).
+    "MOJOLEARN_MERGED_PYTHON",
+    # Credential path; packager routing (per-binding reuse, merged vs per-binding layout).
+    "MOJOLEARN_RUNPOD_KEY_FILE", "MOJOLEARN_REUSE_DIR", "MOJOLEARN_REUSE_PLAN",
+    "MOJOLEARN_MERGED_BINDINGS",
+    # Leg-level packaging switches applied after the compile (build_sets.sh PTX/cubin passes).
+    "MOJOLEARN_CUDA_CODE_FORMAT", "MOJOLEARN_BUILD_TIERS")
+#: Keyed whether or not a script names them: which pixi environment runs the compiler.
+ALWAYS_KEYED_ENV = ("MOJOLEARN_BUILD_PIXI_ENV",)
+#: Build-time generated sources -> (generator directory, tracked pin). The same
+#: table as tools/generated_sources.py GENERATED/GENERATOR_DIRS (a test holds
+#: them equal); repeated here so this file stays stdlib-only on a box overlay.
+GENERATED_SOURCES = {"tokenizer/impl/unicode_table_generated.mojo":
+                     ("tokenizer/tools", "tokenizer/impl/unicode_class.mojo")}
+_DIR_REF_RE = re.compile(r"\)\"?/([\w.-]+\.(?:sh|py))\b")
+_VAR_RE = re.compile(r"MOJOLEARN_(?:[A-Za-z0-9_]|\$\{?[A-Za-z_]\w*\}?|\$\([^)]*\))*")
+_GENERATOR_SKIP = (".pyc", ".pyo", ".swp", ".swo", ".tmp", ".orig", ".rej", "~")
+
+
+class UnkeyableBuild(Exception):
+    """A build whose inputs this file cannot name exactly. Never widened."""
+
+
+class UnresolvedImport(UnkeyableBuild):
+    def __init__(self, importer, module):
+        self.importer, self.module = importer, module
+        super().__init__("unresolved import %r in %s: name its file, or add a toolchain package "
+                         "to EXTERNAL_TOP" % (module, importer))
+
+
+def _merged_bindings():
+    try:
+        import merged_bindings
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import merged_bindings
+    return merged_bindings
+
+
+def build_platform():
+    return "darwin" if sys.platform == "darwin" else "linux"
+
+
+def merged_rows(repo, args, environ, plat=None):
+    """(directory, [(stem, flags_class, [members])]) that
+    `bindings/merged_build.sh <args>` compiles, read from REPO's manifest the way
+    the script reads it (tools/merged_bindings.py plan)."""
+    kind, group, layout = "gpu", None, "release"
+    args = list(args)
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("gpu", "host"):
+            kind = a
+        elif a in ("--group", "--outdir", "--layout", "--rootdir"):
+            if i + 1 >= len(args):
+                raise UnkeyableBuild("merged_build.sh: %s needs a value" % a)
+            i += 1
+            if a == "--group":
+                group = args[i]
+            elif a == "--layout":
+                layout = args[i]
+        else:
+            raise UnkeyableBuild("merged_build.sh: unknown argument %r" % a)
+        i += 1
+    plat = plat or build_platform()
+    mode = environ.get("MOJOLEARN_NUMERIC_MODE") or "identical"
+    directory = "host" if kind == "host" else mode
+    byte_lm = environ.get("MOJOLEARN_PACKAGE_BYTE_LM") or ("1" if plat == "darwin" else "0")
+    try:
+        rows = _merged_bindings().plan(directory, plat, byte_lm == "1", layout, repo=repo)
+    except (KeyError, ValueError) as exc:
+        raise UnkeyableBuild("merged_build.sh: no %s plan: %s" % (directory, exc))
+    if group is not None:
+        rows = [r for r in rows if r[0] == group]
+        if not rows:
+            raise UnkeyableBuild("merged_build.sh: no group %r in the %s plan" % (group, directory))
+    return directory, rows
+
+
+def _rel(path, repo):
+    return os.path.relpath(path, repo)
+
+
+def _generated_targets(module, names, importer, roots, repo):
+    """GENERATED_SOURCES rels this import could name, present on disk or not."""
+    if module.startswith("."):
+        dots = len(module) - len(module.lstrip("."))
+        base = importer.parent
+        for _ in range(dots - 1):
+            base = base.parent
+        search, parts = [base], [p for p in module.lstrip(".").split(".") if p]
+    else:
+        search, parts = list(roots) + [importer.parent], module.split(".")
+    tail = [os.path.join(*parts[:-1], parts[-1] + ".mojo")] if parts else []
+    tail += [os.path.join(*parts, n + ".mojo") for n in names if n != "*"]
+    out = set()
+    top = str(repo)
+    for root in search:
+        for t in tail:
+            r = os.path.relpath(os.path.normpath(os.path.join(str(root), t)), top)
+            if r in GENERATED_SOURCES:
+                out.add(r)
+    return out
+
+
+#: (path, mtime_ns, size, include roots) -> (dependencies, generated, unresolved
+#: module or None): one parse per file per process, however many keys read it.
+_NODES = {}
+
+
+def _node(f, rel, incs, repo):
+    st = f.stat()
+    memo = (str(f), st.st_mtime_ns, st.st_size, tuple(str(i) for i in incs))
+    hit = _NODES.get(memo)
+    if hit is not None:
+        return hit
+    deps, generated, unresolved = [], set(), None
+    for module, names in parse_imports(f.read_text(errors="replace")):
+        gen = _generated_targets(module, names, f, incs, repo)
+        generated |= gen
+        got = resolve(module, names, f, incs)
+        if got is None:
+            if not gen and unresolved is None:
+                unresolved = module
+            continue
+        for g in got:
+            g = g.resolve()
+            r = _rel(g, repo)
+            if r in GENERATED_SOURCES:
+                generated.add(r)
+            else:
+                deps.append((g, r))
+    _NODES[memo] = out = (deps, frozenset(generated), unresolved)
+    return out
+
+
+def import_closure(repo, roots, incs):
+    """({rel: sha256} of every Mojo source the roots reach, {generated rels}).
+    Raises UnresolvedImport for an import of this tree that names no file."""
+    repo = Path(repo).resolve()
+    files, generated = {}, set()
+    todo = [(Path(r).resolve(), None) for r in roots]
+    while todo:
+        f, rel = todo.pop()
+        rel = rel or _rel(f, repo)
+        if rel in files or rel in GENERATED_SOURCES:
+            continue
+        if rel.startswith(".."):
+            raise UnkeyableBuild("build source outside the tree: %s" % f)
+        if not f.is_file():
+            raise UnkeyableBuild("missing build source %s" % rel)
+        files[rel] = sha256_file(f)
+        deps, gen, unresolved = _node(f, rel, incs, repo)
+        if unresolved is not None:
+            raise UnresolvedImport(rel, unresolved)
+        generated |= gen
+        todo.extend((g, r) for g, r in deps if r not in files)
+    return files, generated
+
+
+def generator_inputs(repo, generated):
+    """{rel: sha256} of the tracked generator inputs of each generated source."""
+    repo = Path(repo).resolve()
+    out = {}
+    for rel in sorted(generated):
+        directory, pin = GENERATED_SOURCES[rel]
+        for p in sorted((repo / directory).rglob("*")):
+            if (p.is_file() and "__pycache__" not in p.parts and not p.name.startswith(".")
+                    and not p.name.endswith(_GENERATOR_SKIP)):
+                out[_rel(p, repo)] = sha256_file(p)
+        if (repo / pin).is_file():
+            out[pin] = sha256_file(repo / pin)
+    return out
+
+
+def executable_text(text):
+    """A shell file's executable lines: comments and blank lines dropped (the
+    rule of tools/development_build.py recipe_text)."""
+    lines = (line.rstrip() for line in text.splitlines())
+    return "\n".join(line for line in lines if line.strip() and not line.lstrip().startswith("#")) + "\n"
+
+
+def executed_inputs(repo, script, merged=False):
+    """({rel: sha256}, [texts]) of the shell and Python files the build runs,
+    followed from SCRIPT through every shell file a non-comment line names
+    (including `"$(dirname -- "$0")/build_defines.sh"`). Shell files hash their
+    executable lines. Generator directories (GENERATED_SOURCES) are keyed by
+    the source rule; a merged build keys tools/merged_bindings.py's output
+    (`merged`) instead of the generator's own bytes. TEXTS are every executed
+    file's text, for the read-set of build_env."""
+    repo = Path(repo).resolve()
+    gen_dirs = {repo / d for d, _ in GENERATED_SOURCES.values()}
+    skip = {repo / "tools" / "merged_bindings.py"} if merged else set()
+    seen, todo, files, texts = set(), [Path(script).resolve()], {}, []
+    while todo:
+        f = todo.pop()
+        if f in seen or not f.is_file():
+            continue
+        seen.add(f)
+        text = f.read_text(errors="replace")
+        texts.append(text)
+        if f in skip or any(d in f.parents for d in gen_dirs):
+            continue
+        rel = _rel(f, repo)
+        files[rel] = sha256_bytes(executable_text(text).encode()) if f.suffix == ".sh" else sha256_file(f)
+        if f.suffix != ".sh":
+            continue
+        for line in text.replace("\\\n", " ").splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            refs = [(r, (repo, f.parent)) for r in _REF_RE.findall(line)]
+            refs += [(r, (f.parent,)) for r in _DIR_REF_RE.findall(line)]
+            for ref, bases in refs:
+                for base in bases:
+                    cand = (base / ref)
+                    if cand.is_file() and cand.resolve().is_relative_to(repo):
+                        todo.append(cand.resolve())
+                        break
+    return files, texts
+
+
+def read_variables(texts):
+    """(names, patterns) of the MOJOLEARN_* variables the texts name outside
+    comments; a name built at run time becomes a pattern."""
+    names, patterns = set(), set()
+    for text in texts:
+        for line in text.splitlines():
+            if line.lstrip().startswith("#"):
+                continue  # a full-line comment; a trailing one only keys more
+            for tok in _VAR_RE.findall(line):
+                if "$" in tok:
+                    pat = re.sub(r"\\\$(\\\{)?[A-Za-z_]\w*(\\\})?|\\\$\\\([^)]*\\\)", "[A-Za-z0-9_]*", re.escape(tok))
+                    patterns.add(pat)
+                else:
+                    names.add(tok)
+    return names, sorted(patterns)
+
+
+def keyed_env(environ, readers):
+    """The build_env of a closure-v2 key (see KEY_RULE above)."""
+    names, patterns = readers
+    compiled = [re.compile(p) for p in patterns]
+    env = {}
+    for k, v in environ.items():
+        if not k.startswith(KEY_ENV_PREFIXES) or k in NON_BUILD_ENV or k in NON_BUILD_ENV_V2 \
+                or k.startswith(NON_BUILD_PREFIXES):
+            continue
+        if k.startswith("MOJOLEARN_") and k not in ALWAYS_KEYED_ENV and k not in names \
+                and not any(p.fullmatch(k) for p in compiled):
+            continue
+        env[k] = v
+    return env
+
+
+def source_closure(repo, script, args, environ, plat=None):
+    """Everything a closure-v2 key reads from the tree, as a dict:
+    source (scope/digest/files), merged (or None), inputs (digest/files),
+    readers (for keyed_env), closure ({rel: sha256}, not a key field)."""
+    repo = Path(repo).resolve()
+    script = Path(script)
+    if not script.is_absolute():
+        script = (repo / script) if (repo / script).is_file() else script.resolve()
+    merged = None
+    if script.name == "merged_build.sh":
+        directory, rows = merged_rows(repo, args, environ, plat)
+        mb = _merged_bindings()
+        roots = [repo / "bindings" / (m + ".mojo") for _, _, mem in rows for m in mem]
+        incs = [repo, repo / "bindings"]
+        merged = [dict(dir=directory, stem=stem, flags_class=cls, members=list(mem),
+                       root_sha256=sha256_bytes(mb.root_text(stem, mem, repo=repo).encode()))
+                  for stem, cls, mem in rows]
+    else:
+        plan = script_plan(repo, script, args)
+        if plan is None:
+            raise UnkeyableBuild("cannot read the compile line of %s" % _rel(script, repo))
+        roots, incs, _ = plan
+    global _DIR_NAMES
+    listings = _DIR_NAMES
+    if listings is None:
+        _DIR_NAMES = {}  # the tree does not change while one key is computed
+    try:
+        closure, generated = import_closure(repo, roots, incs)
+    finally:
+        _DIR_NAMES = listings
+    closure.update(generator_inputs(repo, generated))
+    for extra in ("pixi.toml", "pixi.lock"):
+        p = repo / extra
+        if p.is_file():
+            closure[extra] = (sha256_bytes(pixi_toml_build_part(p.read_text(errors="replace")).encode())
+                              if extra == "pixi.toml" else sha256_file(p))
+    h = hashlib.sha256()
+    for rel in sorted(closure):
+        h.update(rel.encode() + b"\0" + closure[rel].encode() + b"\n")
+    inputs, texts = executed_inputs(repo, script, merged=merged is not None)
+    hi = hashlib.sha256()
+    for rel in sorted(inputs):
+        hi.update(rel.encode() + b"\0" + inputs[rel].encode() + b"\n")
+    if merged is not None:
+        texts.append((repo / "tools" / "merged_bindings.py").read_text(errors="replace")
+                     if (repo / "tools" / "merged_bindings.py").is_file() else "")
+    return dict(source=dict(scope="closure", digest=h.hexdigest(), files=len(closure)),
+                merged=merged, inputs=dict(digest=hi.hexdigest(), files=sorted(inputs)),
+                readers=read_variables(texts), closure=closure)
+
+
+_REVISION_TREES = {}
+
+
+def revision_tree(root, revision):
+    """A temporary directory holding the build inputs of one committed revision
+    (every .mojo file, bindings/, tokenizer/, tools/, pixi.toml, pixi.lock),
+    extracted once per process from `git archive`; never a checkout. Verifiers
+    of closure-v2 keys recompute source/inputs/merged from it."""
+    memo = (str(Path(root).resolve()), revision)
+    if memo in _REVISION_TREES:
+        return _REVISION_TREES[memo]
+    dest = Path(tempfile.mkdtemp(prefix="bincache-revision-"))
+    proc = subprocess.Popen(["git", "-C", memo[0], "archive", revision], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    with tarfile.open(fileobj=proc.stdout, mode="r|") as archive:
+        for member in archive:
+            name = member.name
+            if member.isfile() and ".." not in name.split("/") and (
+                    name.endswith(".mojo") or name.startswith(("bindings/", "tokenizer/", "tools/"))
+                    or name in ("pixi.toml", "pixi.lock")):
+                archive.extract(member, dest, filter="data")
+    err = proc.stderr.read().decode(errors="replace")
+    proc.stdout.close()
+    proc.stderr.close()
+    if proc.wait() != 0:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise UnkeyableBuild("git archive %s failed: %s" % (revision, err.strip()))
+    _REVISION_TREES[memo] = dest
+    atexit.register(shutil.rmtree, dest, True)
+    return dest
+
+
+def revision_closure(root, revision, script, args, environ, plat=None):
+    """source_closure at a committed revision: dict(source, inputs, merged,
+    readers) for a closure-v2 verifier to compare with recorded fields."""
+    tree = revision_tree(root, revision)
+    sc = source_closure(tree, tree / script, args, environ, plat)
+    return dict(source=sc["source"], inputs=sc["inputs"], merged=sc["merged"], readers=sc["readers"])
+
+
+def merged_fields_reproduce(fields, root, revision, environ, outputs, shell="bash", plat="linux"):
+    """True when the closure-v2 FIELDS of a declared merged build are exactly
+    what this file computes at REVISION when the build ran under ENVIRON (the
+    variables it was given, before keyed_env keeps the ones its inputs read).
+    For verifiers of retained release compilations."""
+    if fields.get("key_rule") != KEY_RULE:
+        return False
+    want = revision_closure(root, revision, fields["script"], fields.get("args") or [], environ, plat)
+    return (fields.get("source") == want["source"] and fields.get("inputs") == want["inputs"]
+            and fields.get("merged") == want["merged"]
+            and fields.get("build_env") == keyed_env(environ, want["readers"])
+            and fields.get("declared") == dict(outputs=list(outputs), shell=shell))
 
 
 # ---------------------------------------------------------------------------
@@ -568,7 +999,54 @@ def build_env(environ):
     return env
 
 
-def key_fields(repo, script, args, environ, image, dev_arch=None, os_info=None, force_tree=False):
+def key_fields(repo, script, args, environ, image, dev_arch=None, os_info=None, force_tree=False,
+               rule=None, plat=None):
+    """The key fields of one build. rule None (the default) is closure-v2
+    (KEY_RULE); rule "v1" -- or force_tree, the explicit whole-tree opt-in
+    MOJOLEARN_BINCACHE_SOURCE=tree -- is the first rule, kept so archives and
+    receipts keyed under it stay verifiable."""
+    if rule in (None, KEY_RULE) and not force_tree:
+        return key_fields_closure(repo, script, args, environ, image, dev_arch, os_info, plat)[0]
+    if rule not in ("v1", None, KEY_RULE):
+        raise ValueError("unknown bincache key rule %r" % (rule,))
+    return key_fields_v1(repo, script, args, environ, image, dev_arch, os_info, force_tree)
+
+
+def key_fields_closure(repo, script, args, environ, image, dev_arch=None, os_info=None, plat=None):
+    """(fields, {rel: sha256} closure) under closure-v2. Raises UnkeyableBuild."""
+    repo = Path(repo).resolve()
+    sc = source_closure(repo, script, args, environ, plat)
+    fields = dict(
+        schema=SCHEMA,
+        key_rule=KEY_RULE,
+        script=os.path.relpath(Path(script).resolve(), repo),
+        args=list(args),
+        source=sc["source"],
+        inputs=sc["inputs"],
+        toolchain=toolchain(repo),
+        numeric_mode=environ.get("MOJOLEARN_NUMERIC_MODE") or "identical",
+        gpu_archs=environ.get("MOJOLEARN_GPU_ARCHS", ""),
+        target_column=environ.get("MOJOLEARN_TARGET_COLUMN", ""),
+        build_env=keyed_env(environ, sc["readers"]),
+        image=image,
+        os=os_fields() if os_info is None else os_info,
+        repo_path=str(repo),
+    )
+    if sc["merged"] is not None:
+        fields["merged"] = sc["merged"]
+    # A merged GPU build names its accelerator (MOJOLEARN_GPU_ARCHS on Linux,
+    # the pinned Metal flags on macOS); the box it runs on is not an input.
+    if not (sc["merged"] is not None and any(r["dir"] != "host" for r in sc["merged"])):
+        fields["device_arch"] = device_arch() if dev_arch is None else dev_arch
+    sab = {k: v for k, v in build_env(environ).items() if SABOTAGE_RE.search(k) or SABOTAGE_RE.search(v)}
+    if sab:
+        fields["sabotage_env"] = sab
+    if is_sabotage(fields):
+        fields["variant"] = "sabotage"
+    return fields, sc["closure"]
+
+
+def key_fields_v1(repo, script, args, environ, image, dev_arch=None, os_info=None, force_tree=False):
     repo = Path(repo).resolve()
     src, _ = source_digest(repo, script, args, force_tree=force_tree)
     fields = dict(
@@ -594,7 +1072,8 @@ def key_fields(repo, script, args, environ, image, dev_arch=None, os_info=None, 
 
 
 def is_sabotage(fields):
-    for k, v in list(fields.get("build_env", {}).items()) + [("args", " ".join(fields.get("args", [])))]:
+    for k, v in (list(fields.get("build_env", {}).items()) + list(fields.get("sabotage_env", {}).items())
+                 + [("args", " ".join(fields.get("args", [])))]):
         if SABOTAGE_RE.search(k) or SABOTAGE_RE.search(str(v)):
             return True
     return False
@@ -602,7 +1081,8 @@ def is_sabotage(fields):
 
 def refusal(fields, environ):
     """Why this build must never touch the cache, or ''."""
-    for k, v in list(fields["build_env"].items()) + [("args", " ".join(fields["args"]))]:
+    for k, v in (list(fields["build_env"].items()) + list(fields.get("sabotage_env", {}).items())
+                 + [("args", " ".join(fields["args"]))]):
         if SABOTAGE_RE.search(k) or SABOTAGE_RE.search(v):
             return "sabotage:" + k
     return outdir_refusal(fields, environ)
@@ -818,6 +1298,13 @@ class Record:
         if self.dir is not None:
             (self.dir / "keys" / (key + ".json")).write_text(json.dumps(fields, indent=1, sort_keys=True))
 
+    def closure(self, key, closure):
+        """closures/<key>.json: {rel: sha256} of the key's source closure. Not a
+        key field (the digest is); it lets `explain` name the files that changed."""
+        if self.dir is not None and closure is not None:
+            (self.dir / "closures").mkdir(exist_ok=True)
+            (self.dir / "closures" / (key + ".json")).write_text(json.dumps(closure, indent=0, sort_keys=True))
+
     def placement(self, script, outcome, key, placed, manifest):
         """One JSON line per cache HIT: the bytes placed and the archive's own
         record of where they came from (its builder, its build time and the
@@ -957,12 +1444,223 @@ def local_inputs(repo, script):
     return dict(digest=h.hexdigest(), files=rels)
 
 
+#: id(fields) -> closure of the newest local_fields call, so cmd_build_local
+#: keeps calling local_fields (the retained-admission tests replace it) and
+#: still writes the closure sidecar when the real one ran.
+_LOCAL_CLOSURES = {}
+
+
 def local_fields(repo, script, args, environ, outputs, shell):
-    fields = key_fields(repo, script, args, environ, "local",
-                        force_tree=environ.get("MOJOLEARN_BINCACHE_SOURCE") == "tree")
-    fields["local"] = dict(inputs=local_inputs(repo, script), outputs=sorted(outputs), shell=shell,
-                           host_toolchain=darwin_toolchain())
+    fields, closure = build_fields(repo, script, args, environ, "local", outputs, shell, local=True)
+    _LOCAL_CLOSURES.clear()
+    _LOCAL_CLOSURES[id(fields)] = closure
     return fields
+
+
+def build_fields(repo, script, args, environ, image, declared=None, shell="sh", local=False,
+                 dev_arch=None, os_info=None, plat=None):
+    """(fields, closure) of a cache build. closure-v2 unless the explicit
+    whole-tree opt-in MOJOLEARN_BINCACHE_SOURCE=tree asks for the v1 rule
+    (closure is then None). A LOCAL cache adds `local` (declared outputs, the
+    shell, the Mac's own toolchain), a declared R2 build `declared`; under v1
+    both also carry local_inputs, under closure-v2 the executed inputs are the
+    top-level `inputs` field."""
+    v1 = environ.get("MOJOLEARN_BINCACHE_SOURCE") == "tree"
+    if v1:
+        fields, closure = key_fields(repo, script, args, environ, image, dev_arch, os_info, force_tree=True), None
+    else:
+        fields, closure = key_fields_closure(repo, script, args, environ, image, dev_arch, os_info, plat)
+    if local:
+        fields["local"] = dict(outputs=sorted(declared or []), shell=shell, host_toolchain=darwin_toolchain())
+        if v1:
+            fields["local"]["inputs"] = local_inputs(repo, script)
+    elif declared is not None:
+        fields["declared"] = dict(outputs=declared, shell=shell)
+        if v1:
+            fields["declared"]["inputs"] = local_inputs(repo, script)
+    return fields, closure
+
+
+def key_error(rec, rel_script, exc, t0):
+    """Record (loudly, for an unkeyable build) why no key exists; '' outcome text."""
+    if isinstance(exc, UnkeyableBuild):
+        print("BINCACHE ERROR %s: %s; building WITHOUT the cache" % (rel_script, exc), file=sys.stderr)
+        what = "unresolved-import:%s@%s" % (exc.module, exc.importer) if isinstance(exc, UnresolvedImport) \
+            else "unkeyable"
+        return "error-key:" + what.replace("\t", " ").replace(" ", "_")
+    return "error-key:%s" % type(exc).__name__
+
+
+def seed_dirs(environ):
+    """MOJOLEARN_BINCACHE_SEED_DIRS: earlier caches (os.pathsep-separated, newest
+    first) a LOCAL cache may copy a verified archive from. tools/release.py
+    names the earlier releases' macos-bincache directories, so a release-scoped
+    cache (kept whole as that release's provenance) still hits every group
+    whose key did not change since an earlier release."""
+    return [Path(d) for d in environ.get("MOJOLEARN_BINCACHE_SEED_DIRS", "").split(os.pathsep) if d]
+
+
+def seed_archive(cache_dir, key, fields, environ):
+    """Copy KEY's archive from the first seed directory that holds a valid one
+    into CACHE_DIR; the seed directory, or ''. Never raises."""
+    for d in seed_dirs(environ):
+        cand = d / (key + ".tar.gz")
+        if not cand.is_file() or cand.resolve().parent == Path(cache_dir).resolve():
+            continue
+        try:
+            verify_archive(str(cand), key, fields)
+            tmp = Path(cache_dir) / (".seed-%d-%s.tar.gz" % (os.getpid(), key))
+            shutil.copyfile(cand, tmp)
+            verify_archive(str(tmp), key, fields)
+            os.replace(tmp, Path(cache_dir) / (key + ".tar.gz"))
+            return str(d)
+        except (Reject, OSError):
+            continue
+    return ""
+
+
+def _manifest_of(arc):
+    try:
+        with tarfile.open(arc, "r:gz") as tf:
+            return json.loads(tf.extractfile("manifest.json").read())
+    except Exception:
+        return None
+
+
+def _changed(old, new, prefix=""):
+    """Dotted names of the fields that differ between two field dicts."""
+    out = []
+    for k in sorted(set(old) | set(new)):
+        a, b = old.get(k), new.get(k)
+        if a == b:
+            continue
+        if isinstance(a, dict) and isinstance(b, dict) and k not in ("source",):
+            out += _changed(a, b, prefix + k + ".")
+        else:
+            out.append(prefix + k)
+    return out
+
+
+def compile_reason(fields, closure, candidates):
+    """Why FIELDS has no archive: the nearest earlier build of the same script
+    and arguments among CANDIDATES (archive paths), and what differs."""
+    best = None
+    for arc in candidates:
+        m = _manifest_of(arc)
+        f = (m or {}).get("fields") or {}
+        if f.get("script") == fields.get("script") and f.get("args") == fields.get("args") \
+                and f.get("numeric_mode") == fields.get("numeric_mode"):
+            when = m.get("built", "")
+            if best is None or when > best[0]:
+                best = (when, m)
+    if best is None:
+        return "no earlier build of this group in the cache"
+    old = best[1]
+    if old["fields"].get("key_rule") != fields.get("key_rule"):
+        return "key rule changed (%s -> %s); a one-time rebuild" % (
+            old["fields"].get("key_rule", "v1"), fields.get("key_rule", "v1"))
+    diffs = _changed(old["fields"], fields)
+    if "source" in diffs and closure is not None and isinstance(old.get("closure"), dict):
+        prev = old["closure"]
+        files = sorted(r for r in set(prev) | set(closure) if prev.get(r) != closure.get(r))
+        diffs.remove("source")
+        shown = ", ".join(files[:6]) + (" (+%d)" % (len(files) - 6) if len(files) > 6 else "")
+        return "closure changed: " + shown + ("; also " + ", ".join(diffs) if diffs else "")
+    return "changed: " + ", ".join(diffs[:8]) if diffs else "archive absent"
+
+
+def invalidations(repo, changed, platforms=("darwin", "linux")):
+    """{changed file: ["<platform>/<set>/<stem>", ...]}: the merged groups whose closure-v2 closure holds
+    each file, read from REPO's working tree (tools/compile_closures.py walk). A file in no closure maps
+    to []."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import compile_closures as cc
+    tree = Path(repo).resolve()
+    out = {f: [] for f in changed}
+    for plat in platforms:
+        for d, stem, _cls, mem in cc.group_rows(tree, plat):
+            closure = set()
+            for m in mem:
+                closure |= set(cc.closure_of(tree, [tree / "bindings" / (m + ".mojo")]))
+            for f in changed:
+                if f in closure:
+                    out[f].append("%s/%s/%s" % (plat, d, stem))
+    return out
+
+
+def invalidation_lines(inv):
+    return ["%s invalidates these %d groups: %s" % (f, len(g), ", ".join(g)) if g else
+            "%s invalidates no merged group" % f for f, g in sorted(inv.items())]
+
+
+def cmd_explain(argv, environ=None):
+    """explain [--since REV] <script> [args...]: one line, `hit (<where>) key=K` or
+    `compile: <reason> key=K`, for the build cmd_build would run with this
+    environment (MOJOLEARN_BINCACHE_DIR/_SEED_DIRS, _HOT_DIR, _MAP, _OUTPUTS,
+    _SHELL, _IMAGE). Compiles nothing, writes nothing. Exit 0, or 3 when the
+    build cannot be keyed (the reason names the import).
+
+    --since REV first prints, per file changed since REV (git diff REV, the working tree), "<file>
+    invalidates these N groups: ...". With MOJOLEARN_BINCACHE_KEY_RULE=v1 it also prints the legacy key's
+    scope and, when it widened to the whole tree, why ("unresolved import <x> in <file> widened the
+    closure"); closure-v2 keys never widen, they fail on the import (exit 3)."""
+    environ = dict(os.environ if environ is None else environ)
+    since = None
+    if argv[:1] == ["--since"] and len(argv) >= 2:
+        since, argv = argv[1], argv[2:]
+    if not argv:
+        print("usage: bincache.py explain [--since REV] <script> [args...]", file=sys.stderr)
+        return 2
+    script, args = argv[0], argv[1:]
+    repo = Path(script).resolve().parent.parent
+    label = "%s %s" % (os.path.relpath(Path(script).resolve(), repo), " ".join(args))
+    if since:
+        diff = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", since], capture_output=True, text=True)
+        if diff.returncode != 0:
+            print("explain: git diff %s failed: %s" % (since, diff.stderr.strip()[:200]), file=sys.stderr)
+            return 2
+        changed = sorted(x for x in diff.stdout.splitlines() if x.endswith(".mojo"))
+        try:
+            for line in invalidation_lines(invalidations(repo, changed)):
+                print(line)
+        except UnkeyableBuild as exc:
+            print("invalidations: unkeyable: %s" % exc)
+    if environ.get("MOJOLEARN_BINCACHE_KEY_RULE") == "v1":
+        # The legacy key (still recomputed by the retained-compile verifiers): say what it read and,
+        # when it widened to the whole tree, why. Closure-v2 never widens; it fails on the import.
+        src, _rels = source_digest(repo, script, args)
+        widened = WIDENED.get((str(repo.resolve()), str(Path(script).resolve()), tuple(args)))
+        print("legacy key: scope=%s files=%d%s  [%s]" % (src["scope"], src["files"],
+                                                          ("; " + widened) if widened else "", label))
+    outputs = sorted(o for o in environ.get("MOJOLEARN_BINCACHE_OUTPUTS", "").split() if o) or None
+    local_dir = environ.get("MOJOLEARN_BINCACHE_DIR") if environ.get("MOJOLEARN_BINCACHE", "") != "0" else None
+    map_path = environ.get("MOJOLEARN_BINCACHE_MAP", DEFAULT_MAP)
+    urls = read_map(map_path) if os.path.isfile(map_path) and not local_dir else \
+        dict(header=dict(image=environ.get("MOJOLEARN_BINCACHE_IMAGE", "")), get={}, sget={}, put=[])
+    try:
+        if local_dir:
+            fields, closure = build_fields(repo, script, args, environ, "local", outputs,
+                                           environ.get("MOJOLEARN_BINCACHE_SHELL", "sh"), local=True)
+        else:
+            fields, closure = build_fields(repo, script, args, environ, urls["header"].get("image", ""),
+                                           outputs, environ.get("MOJOLEARN_BINCACHE_SHELL", "sh"))
+    except UnkeyableBuild as exc:
+        print("compile: unkeyable: %s  [%s]" % (exc, label))
+        return 3
+    key = key_of(fields)
+    dirs = ([Path(local_dir)] + seed_dirs(environ)) if local_dir else []
+    if environ.get("MOJOLEARN_BINCACHE_HOT_DIR") and not local_dir:
+        dirs.append(Path(environ["MOJOLEARN_BINCACHE_HOT_DIR"]))
+    for d in dirs:
+        if (d / (key + ".tar.gz")).is_file():
+            print("hit (%s) key=%s  [%s]" % (d, key[:16], label))
+            return 0
+    if key in urls["get"]:
+        print("hit (r2) key=%s  [%s]" % (key[:16], label))
+        return 0
+    cands = [p for d in dirs if d.is_dir() for p in d.glob("*.tar.gz")]
+    print("compile: %s key=%s  [%s]" % (compile_reason(fields, closure, cands), key[:16], label))
+    return 0
 
 
 def _prune(cache_dir, keep):
@@ -998,12 +1696,15 @@ def cmd_build_local(script, args, environ, cache_dir):
     try:
         cache_dir.mkdir(parents=True, exist_ok=True)
         fields = local_fields(repo, script, args, environ, outputs, shell)
+        closure = _LOCAL_CLOSURES.pop(id(fields), None)
     except Exception as exc:                                   # never lose a build over the cache
+        why_key = key_error(rec, rel_script, exc, t0)
         if retained_device:
-            rec.row(rel_script, "retained-refused:error-key:" + type(exc).__name__, "", time.time() - t0, [])
+            rec.row(rel_script, "retained-" + why_key.replace("error-key", "refused:error-key", 1), "",
+                    time.time() - t0, [])
             return 2
         rc = subprocess.call(plain, env=environ)
-        rec.row(rel_script, "error-key:%s" % type(exc).__name__, "", time.time() - t0, [])
+        rec.row(rel_script, why_key, "", time.time() - t0, [])
         return rc
     why = refusal(fields, environ)
     if why:
@@ -1015,6 +1716,7 @@ def cmd_build_local(script, args, environ, cache_dir):
         return rc
     key = key_of(fields)
     rec.key(key, fields)
+    rec.closure(key, closure)
     if environ.get("MOJOLEARN_BINCACHE_RETAINED_APPLE"):
         # Explicit source reconciliation may admit an unchanged Apple device
         # output while a host edit changes the broad merged tree key. Preserve
@@ -1032,6 +1734,10 @@ def cmd_build_local(script, args, environ, cache_dir):
             return admitted
     arc = cache_dir / (key + ".tar.gz")
     miss = "miss"
+    if not arc.is_file():
+        seeded = seed_archive(cache_dir, key, fields, environ)
+        if seeded:
+            print("BINCACHE seeded %s key=%s from %s" % (rel_script, key[:16], seeded))
     if arc.is_file():
         try:
             manifest, blobs = verify_archive(str(arc), key, fields)
@@ -1086,7 +1792,8 @@ def cmd_build_local(script, args, environ, cache_dir):
             builder=dict(host=platform.node(), leg="local"),
             build_seconds=round(build_seconds, 1), build_log_sha256=log_sha,
             installed_toolchain=installed_toolchain(repo),
-            built=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+            built=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            **({"closure": closure} if closure is not None else {})))
         # The archive must read back as a hit would read it, or it is not kept.
         verify_archive(tmp, key, fields)
         os.replace(tmp, arc)
@@ -1170,11 +1877,20 @@ def cmd_build(argv, environ=None):
         print("MOJOLEARN_BINCACHE_SHELL must be sh or bash", file=sys.stderr)
         return 2
     plain = [shell, script] + args
-    if environ.get("MOJOLEARN_BINCACHE", "") == "0" or not os.path.isfile(map_path):
+    # THE BOX-LOCAL ROUTE (2026-11-04): with no URL map but a hot directory
+    # (tools/box_merged_verify.sh keeps one on the box across jobs), the hot
+    # directory alone is the cache; MOJOLEARN_BINCACHE_IMAGE names the image.
+    hot_only = (not os.path.isfile(map_path) and bool(environ.get("MOJOLEARN_BINCACHE_HOT_DIR"))
+                and environ.get("MOJOLEARN_BINCACHE", "") != "0")
+    if environ.get("MOJOLEARN_BINCACHE", "") == "0" or (not os.path.isfile(map_path) and not hot_only):
         return compile_or_refuse(plain)
     t0 = time.time()
     repo = Path(script).resolve().parent.parent
-    urls = read_map(map_path)
+    if hot_only:
+        urls = dict(header=dict(image=environ.get("MOJOLEARN_BINCACHE_IMAGE", ""), leg="hot-only"),
+                    get={}, sget={}, put=[])
+    else:
+        urls = read_map(map_path)
     rec = Record(environ.get("MOJOLEARN_BINCACHE_OUT", DEFAULT_OUT))
     rel_script = os.path.relpath(Path(script).resolve(), repo)
     # DECLARED OUTPUTS (MOJOLEARN_BINCACHE_OUTPUTS; the release build,
@@ -1192,13 +1908,12 @@ def cmd_build(argv, environ=None):
             rec.row(rel_script, "refused:unsafe-declared-output", "", time.time() - t0, [])
             return rc
     try:
-        fields = key_fields(repo, script, args, environ, urls["header"].get("image", ""),
-                            force_tree=environ.get("MOJOLEARN_BINCACHE_SOURCE") == "tree")
-        if declared is not None:
-            fields["declared"] = dict(inputs=local_inputs(repo, script), outputs=declared, shell=shell)
+        fields, closure = build_fields(repo, script, args, environ, urls["header"].get("image", ""),
+                                       declared, shell)
     except Exception as exc:                                   # never lose a build over the cache
+        why_key = key_error(rec, rel_script, exc, t0)
         rc = compile_or_refuse(plain)
-        rec.row(rel_script, "error-key:%s" % type(exc).__name__, "", time.time() - t0, [])
+        rec.row(rel_script, why_key, "", time.time() - t0, [])
         return rc
     why = refusal(fields, environ)
     negative = bool(why.startswith("sabotage:") and environ.get("MOJOLEARN_BINCACHE_NEGATIVE", "") == "1"
@@ -1213,6 +1928,7 @@ def cmd_build(argv, environ=None):
     tag = "negative-" if negative else ""
     key = key_of(fields)
     rec.key(key, fields)
+    rec.closure(key, closure)
     miss = tag + "miss"
     # THE BOX-LOCAL HOT DIRECTORY (MOJOLEARN_BINCACHE_HOT_DIR, the release
     # build, 2026-09-22): archives this box built earlier in the same run, so
@@ -1286,6 +2002,8 @@ def cmd_build(argv, environ=None):
                  # the commit whose build produced the bytes it ships.
                  source_commit=environ.get("MOJOLEARN_COMMIT", ""),
                  built=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    if closure is not None:
+        extra["closure"] = closure  # not a key field; `explain` names changed files from it
     with tempfile.TemporaryDirectory(prefix="bincache-") as td:
         arc = os.path.join(td, "a.tar.gz")
         pack(arc, key, fields, repo, outputs, extra)
@@ -1298,7 +2016,7 @@ def cmd_build(argv, environ=None):
                 os.replace(tmp_hot, hot / (key + ".tar.gz"))
             except (Reject, OSError):
                 pass
-        slot, put_url = claim_slot(map_path, urls["put"])
+        slot, put_url = claim_slot(map_path, urls["put"]) if urls["put"] else (None, None)
         if slot is None:
             rec.row(rel_script, miss + "+built-not-uploaded:no-slot", key, time.time() - t0, files_meta)
             return 0
@@ -1557,14 +2275,18 @@ def cmd_key(argv):
         raise SystemExit("usage: bincache.py key <script> [args...]")
     environ = dict(os.environ)
     repo = Path(argv[0]).resolve().parent.parent
-    fields = key_fields(repo, argv[0], argv[1:], environ, environ.get("MOJOLEARN_BINCACHE_IMAGE", ""),
-                        force_tree=environ.get("MOJOLEARN_BINCACHE_SOURCE") == "tree")
+    try:
+        fields = key_fields(repo, argv[0], argv[1:], environ, environ.get("MOJOLEARN_BINCACHE_IMAGE", ""),
+                            force_tree=environ.get("MOJOLEARN_BINCACHE_SOURCE") == "tree")
+    except UnkeyableBuild as exc:
+        print("BINCACHE ERROR %s: %s" % (argv[0], exc), file=sys.stderr)
+        return 3
     print(json.dumps(dict(key=key_of(fields), refusal=refusal(fields, environ), fields=fields), indent=1, sort_keys=True))
     return 0
 
 
 def main(argv):
-    cmds = {"build": cmd_build, "key": cmd_key, "plan": cmd_plan, "promote": cmd_promote,
+    cmds = {"build": cmd_build, "key": cmd_key, "explain": cmd_explain, "plan": cmd_plan, "promote": cmd_promote,
             "selftest-r2": cmd_selftest_r2,
             "device-arch": lambda a: print(device_arch()) or 0}
     if not argv or argv[0] not in cmds:

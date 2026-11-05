@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import tempfile
 import sys
+import time
 import types
 import xml.etree.ElementTree as ET
 import zipfile
@@ -866,7 +867,8 @@ def worker(request_path):
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in (nodes or request["test_files"])],
-                              plugins=[InstalledGuard(), exact_guard or whole_guard]))
+                              plugins=[InstalledGuard(), exact_guard or whole_guard,
+                                       ProgressLog(out / PROGRESS)]))
     except Exception as error:
         worker_error = type(error).__name__ + ": " + str(error)
     finally:
@@ -885,11 +887,212 @@ def worker(request_path):
     return code if code is not None and not inventory_errors and worker_error is None else 1
 
 
+#: Per-test progress, one JSON line per pytest event, flushed as it happens. A run that is stopped
+#: (a test that exceeds --test-timeout, or the whole run exceeding --timeout) never reaches pytest's
+#: own --junitxml write; this file is what still records the tests that finished (tests.partial.xml).
+PROGRESS = "tests.progress.jsonl"
+PARTIAL_JUNIT = "tests.partial.xml"
+#: The 0.8.65 gates ran one 900 s budget over the whole worker and were stopped at 23% (AMD MI300X)
+#: and 12% (NVIDIA L40S) of the 73-file selection: about 3,900 s and 7,500 s for the full run. The
+#: run budget is about twice the slower vendor; a hung test is caught by the per-test bound instead.
+RUN_TIMEOUT_S = 14400
+TEST_TIMEOUT_S = 900
+
+
+class ProgressLog:
+    """Append every test start and phase report to PROGRESS (worker side)."""
+    def __init__(self, path):
+        self.stream = open(path, "a", buffering=1)
+
+    def _write(self, **row):
+        self.stream.write(json.dumps(row) + "\n")
+        self.stream.flush()
+
+    def pytest_collectreport(self, report):
+        # A heartbeat while the 73 files import, so collection is not mistaken for a hung test.
+        self._write(event="collect", nodeid=report.nodeid, outcome=report.outcome, time=time.time())
+
+    def pytest_runtest_logstart(self, nodeid, location):
+        self._write(event="start", nodeid=nodeid, time=time.time())
+
+    def pytest_runtest_logreport(self, report):
+        message = ""
+        if report.outcome == "skipped" and isinstance(report.longrepr, tuple) and len(report.longrepr) == 3:
+            message = str(report.longrepr[2])
+        elif report.outcome == "failed":
+            message = str(report.longrepr)[-2000:]
+        self._write(event="report", nodeid=report.nodeid, when=report.when, outcome=report.outcome,
+                    message=message, time=time.time())
+
+
+def _junit_names(nodeid):
+    path, _, rest = nodeid.partition("::")
+    parts = rest.split("::") if rest else [""]
+    module = path[:-3] if path.endswith(".py") else path
+    return ".".join([module.replace("/", ".")] + parts[:-1]), parts[-1]
+
+
+def partial_junit(progress, destination, stopped=None):
+    """Fold PROGRESS into a junit file junit_summary reads. A test that started and has no
+    final report when the run was stopped is an error naming the stop. Returns the summary."""
+    order, cases = [], {}
+    lines = Path(progress).read_text().splitlines() if Path(progress).is_file() else []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue  # the last line can be torn by the kill
+        if row.get("event") not in ("start", "report"):
+            continue
+        node = row.get("nodeid", "")
+        if node not in cases:
+            order.append(node)
+            cases[node] = dict(outcome=None, message="", done=False)
+        case = cases[node]
+        if row.get("event") != "report":
+            continue
+        when, outcome = row.get("when"), row.get("outcome")
+        if outcome == "failed":
+            case.update(outcome="failed", message=row.get("message", ""))
+        elif outcome == "skipped" and case["outcome"] != "failed":
+            case.update(outcome="skipped", message=row.get("message", ""))
+        elif when == "call" and outcome == "passed" and case["outcome"] is None:
+            case["outcome"] = "passed"
+        if when == "teardown":
+            case["done"] = True
+    suite = ET.Element("testsuite", name="pytest-partial", stopped=str(stopped or ""))
+    for node in order:
+        case = cases[node]
+        classname, name = _junit_names(node)
+        element = ET.SubElement(suite, "testcase", classname=classname, name=name)
+        if not case["done"] and case["outcome"] != "failed":
+            ET.SubElement(element, "error", message="stopped: " + str(stopped or "worker ended")).text = ""
+        elif case["outcome"] == "failed":
+            ET.SubElement(element, "failure", message="failed").text = case["message"]
+        elif case["outcome"] == "skipped":
+            ET.SubElement(element, "skipped", message=case["message"])
+    ET.ElementTree(suite).write(destination)
+    return junit_summary(destination)
+
+
+def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, poll=5.0):
+    """Run the worker; stop it when the whole run exceeds run_timeout or no test event has been
+    written for test_timeout seconds (one test running too long). Returns (exit, stop, elapsed)."""
+    started = time.monotonic()
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
+    last, size, stop = started, -1, None
+    while process.poll() is None:
+        time.sleep(poll)
+        now = time.monotonic()
+        current = Path(progress).stat().st_size if Path(progress).exists() else 0
+        if current != size:
+            size, last = current, now
+        if now - started > run_timeout:
+            stop = dict(kind="run", budget_s=run_timeout)
+        elif now - last > test_timeout:
+            stop = dict(kind="test", budget_s=test_timeout)
+        if stop:
+            process.kill()
+            process.wait()
+            break
+    elapsed = round(time.monotonic() - started, 1)
+    if stop:
+        stop["elapsed_s"] = elapsed
+    return process.returncode, stop, elapsed
+
+
 def run_command(name, command, out, *, cwd, env=None, timeout=900):
     with (out / (name + ".log")).open("wb") as log:
         result = subprocess.run(command, cwd=cwd, env=env, stdout=log,
                                 stderr=subprocess.STDOUT, timeout=timeout)
     require(result.returncode == 0, name + " failed; see retained log")
+
+
+class _UnitsDone(Exception):
+    """Per-unit mode finished its units; the single-run path below is not taken."""
+
+
+def unit_status(qualifier_status):
+    return {"selected-tests-passed": "passed", "selected-tests-not-applicable": "not-applicable"}.get(
+        qualifier_status, "failed")
+
+
+def run_units(args, selected, *, out, tests, python, env, payload, test_commit, clock=time.monotonic,
+              bounded=None):
+    """Run each selected whole file as its own bounded worker (qualify/runs/<stem>/) and write its unit
+    receipt as soon as it ends. A unit's budget is the plan's (3x its last seconds, at least 120 s),
+    clipped to what the outer --timeout leaves; a unit over its budget, or never started because the
+    outer cap ran out, is a FAILED receipt naming the unit. Returns [{unit, status, seconds, reason}]."""
+    import runtime_qualifier_units as units
+    bounded = bounded or run_bounded
+    plan = json.loads(Path(args.unit_plan).read_text())
+    require(plan.get("schema") == units.PLAN_SCHEMA, "not a runtime unit plan")
+    planned = {row["unit"]: row for row in plan["units"] if row.get("decision") == "run"}
+    require(set(selected) == set(planned), "unit plan and selected files differ")
+    units_dir, store = Path(plan["units_dir"]), plan.get("store")
+    started, results = clock(), []
+    for name in selected:
+        entry = planned[name]
+        unit_out = out / units.RUNS_DIR / units.stem(name)
+        (unit_out / "work").mkdir(parents=True)
+        request = dict(out=str(unit_out), tests=str(tests), payload=payload, test_files=[name],
+                       test_commit=test_commit, test_nodes=None, vendor=args.vendor,
+                       numeric_mode=args.numeric_mode, generation_device=env["MOJOLEARN_GENERATION_DEVICE"])
+        (unit_out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
+        remaining = int(args.timeout - (clock() - started))
+        budget = min(int(entry["budget_s"]), remaining)
+        common = dict(unit=name, vendor=plan["vendor"], backend=args.vendor, device=plan["device_class"],
+                      budget_s=budget, wheels=plan["wheels"], source_commit=plan["source_commit"],
+                      test_commit=test_commit, closure=entry.get("closure"),
+                      run=unit_out.relative_to(out.parent).as_posix())
+        if budget < 1:
+            receipt = units.unit_receipt(status="failed", seconds=0, scope=None, cases=0, stopped="not-started",
+                                         reason=f"unit {name} not started: the whole-run budget of "
+                                                f"{args.timeout} s was spent", **common)
+            junit = b"<testsuite/>"
+        else:
+            with (unit_out / "tests.log").open("wb") as log:
+                worker_exit, stop, elapsed = bounded(
+                    [str(python), str(out / "controller.py"), "--worker", str(unit_out / "request.json")],
+                    cwd=unit_out / "work", env=env, log=log, progress=unit_out / PROGRESS,
+                    run_timeout=budget, test_timeout=min(args.test_timeout, budget))
+            installed_path = unit_out / "installed-modules.json"
+            installed = json.loads(installed_path.read_text()) if installed_path.is_file() else {}
+            junit_path = unit_out / "tests.xml"
+            if stop is not None or not junit_path.is_file():
+                junit_path = unit_out / PARTIAL_JUNIT
+                partial_junit(unit_out / PROGRESS, junit_path, stop and stop["kind"] + " timeout")
+            summary = junit_summary(junit_path)
+            scope = test_scope_summary(summary, [name], args.vendor, interpreter=installed.get("interpreter"))
+            collected = installed.get("whole_file_collection") or []
+            whole = exact_node_summary(collected, [c.get("exact_node", "") for c in summary["cases"]])["complete"]
+            qualifier = selected_test_status(worker_exit if whole and not installed.get("inventory_errors")
+                                             and installed.get("worker_error") is None else 1,
+                                             summary, scope, installed_path.is_file())
+            status = "failed" if stop is not None else unit_status(qualifier)
+            reason = ""
+            if stop is not None and stop["kind"] == "run":
+                reason = (f"unit {name} over its budget of {budget} s (stopped after {stop['elapsed_s']} s"
+                          + ("; clipped by the whole-run budget)" if budget < int(entry["budget_s"]) else ")"))
+            elif stop is not None:
+                reason = f"unit {name}: one test made no progress for {stop['budget_s']} s"
+            elif status == "failed":
+                reason = (f"unit {name}: {qualifier}, worker exit {worker_exit}, "
+                          f"{len(summary['failures'])} failure(s), whole-file collection "
+                          + ("complete" if whole else "incomplete"))
+            receipt = units.unit_receipt(status=status, seconds=elapsed, scope=scope["scopes"].get(name),
+                                         cases=summary["total"], stopped=stop and stop["kind"], reason=reason,
+                                         interpreter=installed.get("interpreter"),
+                                         natives=units.natives_of(installed), **common)
+            junit = junit_path.read_bytes()
+        receipt = units.put_receipt(units_dir, receipt, junit)
+        if store:
+            units.store_receipt(store, receipt, junit)
+        print("UNIT %s %s %.1fs%s" % (name, receipt["status"], receipt["seconds"],
+                                      (" " + receipt["reason"]) if receipt["reason"] else ""), flush=True)
+        results.append(dict(unit=name, status=receipt["status"], seconds=receipt["seconds"],
+                            reason=receipt["reason"]))
+    return results
 
 
 def freeze_committed_tests(git_root, revision, destination):
@@ -972,8 +1175,14 @@ def main():
     parser.add_argument("--dependency", action="append", default=[])
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--timeout", type=int, default=RUN_TIMEOUT_S, help="whole test run budget, seconds")
+    parser.add_argument("--test-timeout", type=int, default=TEST_TIMEOUT_S,
+                        help="longest one test may run (no test event for this long stops the run), seconds")
+    parser.add_argument("--unit-plan", type=Path,
+                        help="per-unit mode: the JSON plan tools/release_runtime_installed.py writes (budgets, "
+                             "closures, units dir, unit store); --timeout stays the outer cap")
     args = parser.parse_args()
+    require(args.unit_plan is None or not args.test_node, "per-unit mode selects whole files")
     selected = selected_files(args.test_file, args.test_node)
     source, out = args.source_root.resolve(), args.out.resolve()
     git_root = (args.git_root or source).resolve()
@@ -1043,6 +1252,18 @@ def main():
                     + report["test_dependencies"], out, cwd=out, env=env)
         run_command("pip-freeze", [str(python), "-m", "pip", "freeze", "--all"], out, cwd=out, env=env)
         shutil.copyfile(__file__, out / "controller.py")
+        if args.unit_plan:
+            # Per-unit mode (tools/runtime_qualifier_units.py): one bounded worker per selected file, one
+            # receipt per file written the moment it finishes (qualify/units/ and the unit store).
+            report["units"] = run_units(args, selected, out=out, tests=tests, python=python, env=env,
+                                        payload=payload, test_commit=report["test_commit"])
+            report["test_selection_kind"] = "whole-file-units"
+            passing = [u for u in report["units"] if u["status"] in ("passed", "not-applicable")]
+            report["status"] = ("selected-tests-passed" if len(passing) == len(report["units"])
+                                and any(u["status"] == "passed" for u in report["units"])
+                                else "selected-tests-not-applicable" if len(passing) == len(report["units"])
+                                and report["units"] else "failed-or-incomplete")
+            raise _UnitsDone()
         request = dict(out=str(out), tests=str(tests), payload=payload, test_files=selected,
                        test_commit=report["test_commit"],
                        test_nodes=args.test_node,
@@ -1051,10 +1272,21 @@ def main():
         (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
         (out / "work").mkdir()
         with (out / "tests.log").open("wb") as log:
-            result = subprocess.run([str(python), str(out / "controller.py"), "--worker", str(out / "request.json")],
-                                    cwd=out / "work", env=env, stdout=log, stderr=subprocess.STDOUT,
-                                    timeout=args.timeout)
-        report["worker_exit"] = result.returncode
+            worker_exit, stop, elapsed = run_bounded(
+                [str(python), str(out / "controller.py"), "--worker", str(out / "request.json")],
+                cwd=out / "work", env=env, log=log, progress=out / PROGRESS,
+                run_timeout=args.timeout, test_timeout=args.test_timeout)
+        report.update(worker_exit=worker_exit, tests_elapsed_s=elapsed,
+                      budgets=dict(run_timeout_s=args.timeout, test_timeout_s=args.test_timeout))
+        if stop is not None or not (out / "tests.xml").exists():
+            # Stopped (or crashed) before pytest wrote its junit: keep what finished.
+            partial = partial_junit(out / PROGRESS, out / PARTIAL_JUNIT, stop and stop["kind"] + " timeout")
+            report["partial_tests"] = dict(path=PARTIAL_JUNIT, total=partial["total"], passed=partial["passed"],
+                                           failed=len(partial["failures"]), skipped=len(partial["skipped"]))
+        if stop is not None:
+            report["timed_out"] = stop
+            raise TimeoutError("%s timeout after %.0f s (budget %d s); %d tests finished, see %s" % (
+                stop["kind"], stop["elapsed_s"], stop["budget_s"], report["partial_tests"]["passed"], PARTIAL_JUNIT))
         receipt_path = out / "installed-modules.json"
         receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
         report["pytest_exit"] = receipt.get("pytest_exit")
@@ -1077,8 +1309,10 @@ def main():
                     [c.get("exact_node", "") for c in tests_summary.get("cases", [])])["complete"]
                     and receipt.get("whole_file_collection"), "executed JUnit differs from whole-file collection")
         scope = report["test_scope_summary"]
-        report["status"] = selected_test_status(result.returncode, tests_summary, scope,
+        report["status"] = selected_test_status(worker_exit, tests_summary, scope,
                                                (out / "installed-modules.json").is_file())
+    except _UnitsDone:
+        pass
     except Exception as error:
         report["status"] = "failed-or-incomplete"
         report["error"] = type(error).__name__ + ": " + str(error)

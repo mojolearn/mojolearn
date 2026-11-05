@@ -39283,6 +39283,15 @@
   },
   {
    "algorithms": [],
+   "control": "mamba_bwd_folds",
+   "define": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS",
+   "file": "mamba-folds",
+   "reasons": [
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
    "control": "attn_head_share",
    "define": "MOJOLEARN_IDN_ATTN_HEAD_SHARE",
    "file": "neural-gemm-attn-dedupe",
@@ -40366,6 +40375,13 @@
     "path": "experiments/six_lane_integration/grid_controls/lu-resident-pair.json",
     "sha256": "40a645c5099e2ac66d332185793a31abb63a419ed81066d86197a0653cc9e3c6"
    },
+   "mamba-folds": {
+    "branch": "lane/mamba-folds",
+    "head": "db803a1337",
+    "lane": "mamba-folds",
+    "path": "experiments/six_lane_integration/grid_controls/mamba-folds.json",
+    "sha256": "858e2e16dd29a7b97546bc40a829a620ba421794b02340ce73f7b9b12cf37570"
+   },
    "moe-resident": {
     "branch": "lane/moe-resident",
     "head": "26ef6a308",
@@ -40536,9 +40552,20 @@
    }
   },
   "guards": {
-   "asserts": 346,
+   "asserts": 348,
+   "modules": {
+    "core/experiment_guards_base.mojo": "5d3778bde4ed2f391abec13a854a9ae59728c871090b2ab541a4cfd2752e1d68",
+    "core/experiment_guards_cluster.mojo": "4735b834edcd16e7f113c820e24feddcf9f82ad07198658ca80d31760255592b",
+    "core/experiment_guards_decomposition.mojo": "b1ce8b71a52b2d8a5edbf18237c1a6154cee6c961ff8a15175ac964e63d373b6",
+    "core/experiment_guards_kernel.mojo": "b2f8afc65bf932c90e97ae81fdc01edf0302001d6161122c8172c2b987911af9",
+    "core/experiment_guards_linear.mojo": "b8fcc92d368deec19df203b7367fcd80be399edb469fba7a13fa56a59288a30d",
+    "core/experiment_guards_neural.mojo": "a74c6250c1fbb854cef46c138f8a71538e7f3076611e4276b75c9a35e50d6682",
+    "core/experiment_guards_series.mojo": "5807ff460f1653598343b1bc2e2205d0a1424835412e09d839607c90b0923bcd",
+    "core/experiment_guards_trees.mojo": "c8daf0c08ca681dcd12745c91543e9c9676450ec3276696981bfeaf3adeb28ca",
+    "core/six_lane_experiment_guards.mojo": "c0b88d349c4235b3a7734ceb8c69b9654e63bff61d4d93ed953c988bf6c78f23"
+   },
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "99a3450dc943e1938468f1ef5c5b07f7251e076f0c1df632ad2aacc4276ee374"
+   "sha256": "c0b88d349c4235b3a7734ceb8c69b9654e63bff61d4d93ed953c988bf6c78f23"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -40688,6 +40715,7 @@
   "lm-lean-step": 2,
   "lu-delayed-update": 1,
   "lu-resident-pair": 0,
+  "mamba-folds": 1,
   "moe-resident": 1,
   "neighbors-small-ports": 0,
   "neural-ce-denom": 0,
@@ -40755,12 +40783,12 @@
   "cells": 2482,
   "configs": 541,
   "configs_per_vendor": 541,
-  "controls": 275,
+  "controls": 276,
   "deferred_configs": 98,
   "deferred_cross_configs": 2973,
   "deferred_cross_groups": 67,
-  "excluded_controls": 92,
-  "guard_asserts": 346,
+  "excluded_controls": 93,
+  "guard_asserts": 348,
   "mapped_algorithms": 90,
   "packed_multi_member": 95,
   "packs": 293,

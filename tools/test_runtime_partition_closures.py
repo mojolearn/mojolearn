@@ -1,6 +1,7 @@
 """Runtime partition dependency boundaries; these checks never compile Mojo."""
 from pathlib import Path
 import json
+import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -8,6 +9,37 @@ import bincache
 from development_build import SourceGraph
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+ADD_TYPE = re.compile(r"\.add_type\[(.+?)\]\(\"(\w+)\"\)")
+REGISTRAR = re.compile(r"^def (\w+)\(mut module: PythonModuleBuilder\)[^\n]*:\n((?:[ \t]+[^\n]*\n|\n)*)", re.M)
+
+
+def registered_types(member):
+    """(names the entry registers, names it attaches through a lookup-guarded shared registrar).
+
+    One process loads every binding, and a Mojo type registered by two modules aborts the import, so a
+    type has one owner. Registrations are what the entry itself calls: its own module.add_type lines and
+    the registrar functions (def f(mut module: PythonModuleBuilder) with an add_type) it calls with its
+    module. A file in the closure for another export registers nothing. A registrar that looks the type up
+    first (native_identity_type) is shared by design and reported apart.
+    """
+    graph = SourceGraph(ROOT)
+    entry = f"bindings/{member}.mojo"
+    closure = graph.closure([member])
+    assert closure['scope'] == 'closure', closure['unresolved']
+    source = (ROOT/entry).read_text()
+    own = {name for _, name in ADD_TYPE.findall(source)}
+    shared = set()
+    for path in closure['files']:
+        if path == entry:
+            continue
+        for match in REGISTRAR.finditer((ROOT/path).read_text()):
+            body = match.group(2)
+            if ".add_type[" in body and re.search(rf"\b{match.group(1)}\(module\)", source):
+                names = {name for _, name in ADD_TYPE.findall(body)}
+                (shared if "lookup_py_type_object" in body else own).update(names)
+    return own, shared
 
 
 def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
@@ -86,7 +118,10 @@ def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency
     assert 'bindings/family_native.mojo' not in closure['files']
     assert 'bindings/host_archive_native.mojo' not in closure['files']
     assert 'bindings/_mojolearn_tokenizer_host.mojo' not in closure['files']
-    assert all('.add_type' not in (ROOT/path).read_text() for path in closure['files'])
+    own, shared = registered_types('_mojolearn_runtime_manifold_host')
+    assert own and all(name.startswith('_Manifold') for name in own), own
+    assert not shared, shared
+    assert not own & registered_types('_mojolearn_tokenizer_host')[0]
     assert release_host_members().count('_mojolearn_runtime_manifold_host') == 1
 
 
@@ -112,12 +147,18 @@ def test_sequential_adds_no_registered_type_and_existing_types_each_keep_one_own
     assert owner['scope'] == tokenizer['scope'] == 'closure'
     assert 'bindings/sequential_execution.mojo' in owner['files']
     assert 'bindings/sequential_execution.mojo' not in tokenizer['files']
-    assert all('.add_type' not in (ROOT/path).read_text() for path in owner['files'])
+    # The sequential owner registers only its own types and attaches the shared identity key.
+    own, shared = registered_types('_mojolearn_runtime_sequential_host')
+    assert own and all(name.startswith('_Sequential') for name in own), own
+    assert shared <= {'_NativeIdentityKey'}, shared
+    # Every type registered by a release host entry has exactly one owner.
+    owners = {}
+    for member in release_host_members():
+        for name in registered_types(member)[0]:
+            owners.setdefault(name, []).append(member)
+    assert not {name: found for name, found in owners.items() if len(found) > 1}
+    assert owners['_TreesResident'] == ['_mojolearn_runtime_classical_host']
     source = (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    assert source.count('module.add_type[') == 6
-    classical = (ROOT/'bindings/_mojolearn_runtime_classical_host.mojo').read_text()
-    assert classical.count('module.add_type[') == 1
-    assert 'module.add_type[TreesResident]("_TreesResident")' in classical
     assert 'module.add_type[TreesResident]' not in source
     assert release_host_members().count('_mojolearn_runtime_sequential_host') == 1
 

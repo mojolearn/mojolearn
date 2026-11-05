@@ -21,6 +21,7 @@ update; `rollback` exposes the same restore for a failure the Python layer
 detects after native success.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
 from training.byte_lm_native_status import byte_lm_status
 from training.byte_lm_native_dispatch import BYTE_LM_NATIVE_TABLE
@@ -1748,6 +1749,7 @@ def byte_lm_arithmetic_suffix_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_byte_lm() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm")
         module.def_function[byte_lm_arithmetic_suffix_binding]("byte_lm_arithmetic_suffix")

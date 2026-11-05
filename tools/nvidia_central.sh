@@ -18,7 +18,7 @@
 #                                                      most 3). Idempotent: never more than N.
 #   tools/nvidia_central.sh sync   <lane> <worktree>   patch-sync to /root/mojolearn-<lane> on the lane's pod
 #                                                      (a lane is assigned to one pod at its first sync)
-#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--no-persist] <script-on-box>
+#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] <script-on-box>
 #                                                      THE WAY TO RUN A GATE: enqueue; prints the job id
 #                                                      (<pod>-<n>, e.g. nvc1-0003). Default and max cap 240 min.
 #                                                      The job runs under tools/box_persist_run.sh: DIR (relative to
@@ -27,6 +27,9 @@
 #                                                      from the pod every NVC_PERSIST_EVERY_MIN and on any exit
 #                                                      (tools/box_persist.py fetch --tag <tag>, printed on stderr).
 #                                                      --no-persist refuses unless MOJOLEARN_ALLOW_UNPERSISTED=1.
+#                                                      --env K=V (repeatable; K upper case, V plain characters) sets
+#                                                      an environment variable for the persisted job, e.g. the
+#                                                      lane scope tools/reference_refresh.sh passes (SCOPE=all).
 #   tools/nvidia_central.sh queue                      every pod's queued/running jobs, last finished, slots, lease
 #   tools/nvidia_central.sh status [<id>]              no id: pods, lanes, queues; id: that job
 #   tools/nvidia_central.sh log    <id> [N]            last N (default 40) lines of the job's log
@@ -338,7 +341,7 @@ sync)
     say "lane $lane is on $k ($GPU_COUNT GPU slots, $GPU); submit with: tools/nvidia_central.sh submit $lane <script>"
     ;;
 submit)
-    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1
+    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1; jobenv=''
     while [ $# -gt 0 ]; do
         case "$1" in
             --gpus) n="${2:?--gpus N}"; shift 2 ;;
@@ -346,10 +349,16 @@ submit)
             --note) note="${2:?--note TEXT}"; shift 2 ;;
             --results) results="${2:?--results DIR}"; shift 2 ;;
             --no-persist) persist=0; shift ;;
+            --env)
+                kv="${2:?--env K=V}"
+                [[ "$kv" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:/@+=-]*$ ]] \
+                    || die "--env $kv: K must be upper case and V plain characters (no spaces or quotes)"
+                jobenv="$jobenv $kv"; shift 2 ;;
             *) break ;;
         esac
     done
-    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--no-persist] <script-on-box> (one script path; put arguments inside the script)"
+    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] <script-on-box> (one script path; put arguments inside the script)"
+    [ -z "$jobenv" ] || [ "$persist" = 1 ] || die "--env applies to a persisted job only (drop --no-persist)"
     need_lane_pod "$lane"
     script=$1
     if [ "$persist" = 1 ]; then
@@ -365,7 +374,8 @@ submit)
             cat "$TMPD/persist.sh"
             printf "cat > %s <<'BOX_PERSIST_JOB_EOF'\n" "$(sq "$jobsh")"
             printf '#!/bin/bash\n# tools/nvidia_central.sh submit: %s under tools/box_persist_run.sh (results persist to R2 from the box)\n' "$abs"
-            printf 'exec bash %s %s %s -- bash %s\n' "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
+            # --env values are checked plain above, so they need no quoting here
+            printf 'exec env%s bash %s %s %s -- bash %s\n' "$jobenv" "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
             printf 'BOX_PERSIST_JOB_EOF\nchmod 700 %s\n' "$(sq "$jobsh")"
         } > "$TMPD/stage.sh"
         staged=$(BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh") || true

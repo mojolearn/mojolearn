@@ -186,7 +186,9 @@ def test_release_floor_ancestry_is_one_git_call_per_record_commit(tmp_path, monk
     monkeypatch.setattr(ic, "harness", lambda: types.SimpleNamespace(LANES=lanes))
     monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
     monkeypatch.setattr(ic, "vref", lambda: types.SimpleNamespace(stale_reference_lanes=lambda t, h: []))
-    monkeypatch.setattr(ic, "release_floor", lambda: "c" * 40)
+    monkeypatch.setattr(ic, "release_floor_info", lambda: {"commit": "c" * 40, "tags": {}})
+    monkeypatch.setattr(ic, "floor_receipts_for", lambda table, info, lanes, cls, points, log_dir=None:
+                        {lane: {"ok": True, "reason": "receipt"} for lane in lanes})
     asked = []
     monkeypatch.setattr(ic, "is_ancestor", lambda a, b: asked.append(a) or a == "a" * 40)
     monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
@@ -198,3 +200,64 @@ def test_release_floor_ancestry_is_one_git_call_per_record_commit(tmp_path, monk
     assert ic.cmd_changed_lanes(args) == 0
     assert sorted(asked) == ["a" * 40, "b" * 40]
     capsys.readouterr()
+
+
+def test_floor_moves_only_receipted_rows(tmp_path, monkeypatch, capsys):
+    """FLOOR RECEIPTS (lane ledger-floor-receipts): a row recorded before the release floor is measured
+    from the floor only when the floor holds an admitted receipt for it; every other row is measured
+    from its own record commit, as the ledger does."""
+    lanes = ["lane_ok", "lane_no", "lane_new"]
+    records = [{"commit": "a" * 40, "commit_time": 1}, {"commit": "d" * 40, "commit_time": 3}]
+    cells = {f"{lane}/base": {"train": {"ref": f"{i:016x}", "cols": {"nvidia": 1 if lane == "lane_new" else 0}}}
+             for i, lane in enumerate(lanes)}
+    table = tmp_path / "table.json"
+    table.write_text(json.dumps({"cells": cells, "records": records}))
+    monkeypatch.setattr(ic, "harness", lambda: types.SimpleNamespace(LANES=lanes))
+    monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
+    monkeypatch.setattr(ic, "vref", lambda: types.SimpleNamespace(stale_reference_lanes=lambda t, h: []))
+    floor = {"commit": "c" * 40, "tags": {"nvidia": "alpha-api-0.8.64-nvidia-x", "amd": "alpha-api-0.8.64-amd-x"}}
+    monkeypatch.setattr(ic, "release_floor_info", lambda: floor)
+    seen = {}
+
+    def receipts(table_doc, info, older, cls, points, log_dir=None):
+        seen.update(info=info, older=sorted(older), cls=cls, digest=table_doc["cells"]["lane_ok/base"]["train"]["ref"])
+        return {"lane_ok": {"ok": True, "reason": "admitted receipt"},
+                "lane_no": {"ok": False, "reason": "the floor rests on a waived row: identity-nvidia/lane_no"}}
+    monkeypatch.setattr(ic, "floor_receipts_for", receipts)
+    monkeypatch.setattr(ic, "is_ancestor", lambda a, b: a == "a" * 40)
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
+    monkeypatch.setattr(lane_select, "changed_paths", lambda ref: [ref])
+    # Only the record commit's diff reaches anything: lane_no (and lane_ok, were it measured from it).
+    monkeypatch.setattr(lane_select, "select", lambda paths, ref=None, sources=None, backend=None, stop_when=None:
+                        {"lanes": ["lane_ok", "lane_no"] if ref == "a" * 40 else [], "unattributed": [],
+                         "stopped_early": False})
+    args = types.SimpleNamespace(table=str(table), since="", scope="all", no_release_floor=False,
+                                 backend="cuda", floor_desc="")
+    assert ic.cmd_changed_lanes(args) == 0
+    out, err = capsys.readouterr()
+    assert out.strip() == "lane_no"
+    assert seen["older"] == ["lane_no", "lane_ok"] and seen["info"] is floor and seen["cls"] == ""
+    assert seen["digest"] == "0" * 16
+    assert "1 of 2 row(s) recorded before it are measured from it" in err
+    assert "no floor for lane_no: the floor rests on a waived row" in err
+
+
+def test_floor_receipts_for_needs_the_table_and_every_class(monkeypatch):
+    calls = []
+
+    def fake(root, head, info, wanted, log_dir=None):
+        calls.append(sorted(wanted))
+        return {key: {"ok": key != ("lane_b", "amd"), "reason": f"r {key[1]}"} for key in wanted}
+    import release_identity_reference as rir
+    monkeypatch.setattr(rir, "floor_receipts", fake)
+    table = {"cells": {"lane_a/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0}}},
+                       "lane_b/base": {"train": {"ref": "2" * 16, "cols": {"nvidia": 0, "amd": 1}}}}}
+    points = {"lane_c": {"source": "bench/results/identity_break/x/nvidia.identical.json"}}
+    got = ic.floor_receipts_for(table, {"commit": "c" * 40, "tags": {}}, ["lane_a", "lane_b", "lane_c"], "",
+                                points)
+    assert calls == [[("lane_a", "nvidia"), ("lane_b", "amd"), ("lane_b", "nvidia")]]
+    assert got["lane_a"]["ok"] and not got["lane_b"]["ok"] and got["lane_b"]["reason"] == "r amd"
+    assert not got["lane_c"]["ok"] and "column record" in got["lane_c"]["reason"]
+    calls.clear()
+    got = ic.floor_receipts_for(table, {"commit": "c" * 40, "tags": {}}, ["lane_b"], "nvidia", {})
+    assert calls == [[("lane_b", "nvidia")]] and got["lane_b"]["ok"]

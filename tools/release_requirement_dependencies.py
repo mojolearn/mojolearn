@@ -18,6 +18,7 @@ the corresponding unit; it never expands to a guessed whole-library rerun.
 from __future__ import annotations
 
 import copy
+from contextvars import ContextVar
 from functools import lru_cache
 import hashlib
 import json
@@ -28,6 +29,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 from release_requirement_routes import loader_routes
 
 SCHEMA = "mojolearn.release-dependencies.v1"
@@ -213,6 +215,8 @@ def _worker_snapshot(root, request):
                 source_revision=result["revision"], changed_paths=paths,
                 selector_sources={p: _file_hash(root, p) for p in
                     ("tools/lane_select.py", "tools/bincache.py", "tools/identity_break.py")})
+    if request.get("reference_closures"):
+        result["reference_closures"] = _reference_closures(root, ls, request["reference_closures"])
     # Exact recipe/harness bytes are collected in the frozen tree as well.
     extra = request.get("extra_paths", [])
     result["extra_sources"] = {p: _file_hash(root, p) for p in extra}
@@ -231,12 +235,86 @@ def _worker_snapshot(root, request):
     return result
 
 
-def _tracked_state(root, revision):
-    """Verify actual tracked bytes, including assume-unchanged/skip-worktree files."""
+REFERENCE_SCHEMA = "mojolearn.release-identity-reference-closures.v1"
+
+
+def reference_key(base, backend):
+    """The key of one (base revision, column backend) selection in a snapshot's ``reference_closures``."""
+    return base + "|" + (backend or "any")
+
+
+def _reference_closures(root, ls, spec):
+    """THE RECORDER'S CLOSURE COMPARISON, AT THE FREEZE (lane ledger-trusts-reference, 2026-11-04).
+
+    For each requested (base revision, backend, lanes): the lanes among ``lanes`` whose source closure
+    changed between the base and this frozen tree, decided by the frozen ``tools/lane_select.py`` exactly
+    as ``tools/identity_columns.py changed-lanes`` / ``reuse-check`` decide REUSED vs RECORD
+    (``changed_paths(base)``, ``select(..., backend, stop_when=lanes)``). A lane absent from
+    ``selected`` with no ``unattributed`` path has an unchanged closure. Precision limitations are not
+    a separate verdict: they only ever describe a lane the selection already holds.
+
+    Also returns the frozen harness facts the admitted table is judged against (its sha256, fixtures,
+    lane revisions and registry), read from the same frozen tree."""
+    h = ls.identity_break()
+    harness = dict(sha256=_file_hash(root, "tools/identity_break.py"), fixtures=sorted(h.FIXTURES),
+                   lane_revisions=dict(getattr(h, "LANE_REVISIONS", {}) or {}), lanes=sorted(h.LANES))
+    selections = {}
+    sources = None
+    for base, backend, lanes in spec.get("bases", []):
+        if sources is None:
+            sources, _ = ls.lane_sources()
+        base = _revision(root, base)
+        wanted = set(lanes)
+        paths = list(ls.changed_paths(base))
+        sel = ls.select(paths, ref=base, sources=sources, backend=backend, stop_when=wanted)
+        selected = sorted(wanted & set(sel["lanes"]))
+        by_path = sel.get("by_path", {})
+        selections[reference_key(base, backend)] = dict(
+            base_revision=base, backend=backend, changed_paths=len(paths), selected=selected,
+            lane_paths={lane: sorted(p for p, hit in by_path.items() if lane in hit) for lane in selected},
+            unattributed=sorted(sel.get("unattributed", [])), stopped_early=bool(sel.get("stopped_early")))
+    return dict(schema=REFERENCE_SCHEMA, harness=harness, selections=selections,
+                selector_sources={p: _file_hash(root, p) for p in
+                                  ("tools/lane_select.py", "tools/bincache.py", "tools/identity_break.py",
+                                   "tools/identity_columns.py")})
+
+
+#: TOOLING AFTER A FREEZE (lane ledger-trusts-reference, 2026-11-04). Tracked paths whose bytes cannot
+#: change a computed bit, a built binary or a retained record: release tooling, prose and CI. A source
+#: checkout at the frozen commit may carry a later tooling fix in these paths (0.8.65: the assemble patch
+#: in tools/release.py); the frozen view then takes their bytes from the frozen commit's Git objects, so
+#: the analysis is still exactly the frozen tree, and the source checkout is not refused for them.
+#: Everything else (bindings/, core/ and every kernel tree, python/mojolearn, packaging/, bench/ evidence,
+#: pixi and build files) is still byte-checked against the frozen commit. The identity harness inside
+#: tools/ decides fixtures and so evidence: it stays checked.
+TOOLING_PREFIXES = ("tools/", "docs/", "docs-site/", ".github/", "experiments/")
+TOOLING_FILES = frozenset(("CHANGELOG.md", "AGENTS.md", "CLAUDE.md", "README.md"))
+EVIDENCE_TOOLING = ("tools/identity_break.py", "tools/identity_lanes/")
+
+
+def tooling_only(path):
+    """True for a tracked path whose bytes cannot determine bits or evidence (TOOLING_PREFIXES)."""
+    if path.startswith(EVIDENCE_TOOLING):
+        return False
+    return path in TOOLING_FILES or path.startswith(TOOLING_PREFIXES)
+
+
+def _tracked_state(root, revision, *, tooling_from_revision=False):
+    """Verify actual tracked bytes, including assume-unchanged/skip-worktree files.
+
+    ``{path: (mode, blob, stamp)}``. With ``tooling_from_revision`` (the source checkout a frozen view is
+    cloned from), a tooling-only path (``tooling_only``) whose bytes, mode or presence differ from the
+    frozen commit is not refused: it is recorded with stamp None and ``_clone_tracked_tree`` writes the
+    frozen commit's own blob into the view. HEAD must still be the frozen commit, and every other tracked
+    path (and every staged change outside tooling) must be exactly the frozen commit's."""
     if _revision(root, "HEAD") != revision:
         raise ValueError("dependency source HEAD changed from the requested revision")
-    if subprocess.run(["git", "-C", str(root), "diff", "--cached", "--quiet", revision, "--"],
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+    staged = subprocess.run(["git", "-C", str(root), "diff", "--cached", "--name-only", "-z", revision, "--"],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if staged.returncode:
+        raise ValueError("dependency source staged state is unreadable")
+    if any(not (tooling_from_revision and tooling_only(os.fsdecode(name)))
+           for name in staged.stdout.split(b"\0") if name):
         raise ValueError("dependency source has staged changes")
     algorithm = _git(root, "rev-parse", "--show-object-format")
     entries = subprocess.check_output(["git", "-C", str(root), "ls-tree", "-rz", "--full-tree", revision])
@@ -249,45 +327,79 @@ def _tracked_state(root, revision):
         path = os.fsdecode(raw_path)
         if kind != "blob" or mode not in ("100644", "100755", "120000"):
             raise ValueError("unsupported tracked dependency source kind: " + path)
-        source = root / path
         try:
-            before = source.lstat()
-            if mode == "120000":
-                if not stat.S_ISLNK(before.st_mode):
-                    raise ValueError("tracked dependency symlink changed: " + path)
-                data = os.fsencode(os.readlink(source))
-                actual = hashlib.new(algorithm, b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
-            else:
-                if not stat.S_ISREG(before.st_mode) or bool(before.st_mode & stat.S_IXUSR) != (mode == "100755"):
-                    raise ValueError("tracked dependency file mode changed: " + path)
-                value = hashlib.new(algorithm, b"blob " + str(before.st_size).encode() + b"\0")
-                with source.open("rb") as stream:
-                    for block in iter(lambda: stream.read(1048576), b""):
-                        value.update(block)
-                actual = value.hexdigest()
-            after = source.lstat()
-        except OSError as error:
-            raise ValueError("tracked dependency source unavailable: " + path) from error
-        # ctime/inode catch an edit followed by restoration of the original
-        # bytes or mtime. Access time is intentionally not part of the guard.
-        def stamp(info):
-            return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
-                    info.st_mtime_ns, info.st_ctime_ns)
-        if stamp(before) != stamp(after):
-            raise ValueError("dependency source changed while being checked: " + path)
-        if actual != expected:
-            raise ValueError("tracked dependency source differs from requested revision: " + path)
-        state[path] = (mode, actual, stamp(after))
+            state[path] = (mode, expected, _tracked_stamp(root, path, mode, expected, algorithm))
+        except ValueError:
+            if not (tooling_from_revision and tooling_only(path)):
+                raise
+            state[path] = (mode, expected, None)
     return state
+
+
+def _tracked_stamp(root, path, mode, expected, algorithm):
+    """The stat stamp of one tracked file whose bytes and mode are the frozen commit's, else ValueError."""
+    source = root / path
+    try:
+        before = source.lstat()
+        if mode == "120000":
+            if not stat.S_ISLNK(before.st_mode):
+                raise ValueError("tracked dependency symlink changed: " + path)
+            data = os.fsencode(os.readlink(source))
+            actual = hashlib.new(algorithm, b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+        else:
+            if not stat.S_ISREG(before.st_mode) or bool(before.st_mode & stat.S_IXUSR) != (mode == "100755"):
+                raise ValueError("tracked dependency file mode changed: " + path)
+            value = hashlib.new(algorithm, b"blob " + str(before.st_size).encode() + b"\0")
+            with source.open("rb") as stream:
+                for block in iter(lambda: stream.read(1048576), b""):
+                    value.update(block)
+            actual = value.hexdigest()
+        after = source.lstat()
+    except OSError as error:
+        raise ValueError("tracked dependency source unavailable: " + path) from error
+    # ctime/inode catch an edit followed by restoration of the original
+    # bytes or mtime. Access time is intentionally not part of the guard.
+    def stamp(info):
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                info.st_mtime_ns, info.st_ctime_ns)
+    if stamp(before) != stamp(after):
+        raise ValueError("dependency source changed while being checked: " + path)
+    if actual != expected:
+        raise ValueError("tracked dependency source differs from requested revision: " + path)
+    return stamp(after)
+
+
+def tooling_overlay(state):
+    """Tooling paths a frozen view takes from the frozen commit's Git objects (stamp None)."""
+    return sorted(path for path, (_, _, stamp) in state.items() if stamp is None)
+
+
+def _tooling_commit():
+    """The commit of the checkout running this analyzer (release tooling), recorded beside the source."""
+    tools = Path(__file__).resolve().parent
+    try:
+        commit = _git(tools, "rev-parse", "HEAD")
+        dirty = bool(_git(tools, "status", "--porcelain", "--untracked-files=no", "--", "."))
+    except (OSError, subprocess.CalledProcessError):
+        return dict(commit=None, tools_dirty=None)
+    return dict(commit=commit, tools_dirty=dirty)
 
 
 def _clone_tracked_tree(root, tree, state, log):
     """Make a tracked-only CoW view; never hardlink mutable source files."""
     parents = {}
-    for name, (mode, _, _) in state.items():
+    for name, (mode, blob, stamp) in state.items():
         destination = tree / name
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if mode == "120000":
+        if stamp is None:
+            # A tooling path that differs in the source checkout: the frozen commit's own bytes.
+            data = subprocess.check_output(["git", "-C", str(root), "cat-file", "blob", blob])
+            if mode == "120000":
+                destination.symlink_to(os.fsdecode(data))
+            else:
+                destination.write_bytes(data)
+                destination.chmod(0o755 if mode == "100755" else 0o644)
+        elif mode == "120000":
             destination.symlink_to(os.readlink(root / name))
         else:
             parents.setdefault(destination.parent, []).append(root / name)
@@ -321,6 +433,347 @@ def _run_snapshot_worker(tree, temporary, request, log):
     return json.loads(out.read_text())
 
 
+# ---------------------------------------------------------------- parallel and remote analysis workers
+#
+# 0.8.65: the publish admission bundle ran its frozen dependency workers one at a time, 2h42m of the
+# macOS package's 2h46m (10 workers, 6-37 min each; ~/mojolearn-evidence/ledger-storage-notes/MEASUREMENTS.md).
+# ``prefetch`` runs the caller's computation in discovery mode: every frozen_snapshot it would start is
+# recorded instead (SnapshotPending), then all of them run at once, on all cores or on the box named by
+# MOJOLEARN_ADMISSION_WORKER, into the same content-keyed cache (token = digest(revision, request), checked
+# against the analyzer digest). A discovery round repeats until nothing new is requested; the caller then
+# runs its real computation, which finds every snapshot cached and is exactly the sequential result.
+
+_DISCOVERY = ContextVar("release_dependency_discovery", default=None)
+_FAILED = {}
+_WORKTREES = threading.Lock()
+
+# TEMPORARY DEPENDENCY WORKTREES ARE REGISTERED AND REMOVED ON EXIT (2026-11-05). 0.8.65 left seven
+# <tmp>/mojolearn-dependencies-*/tree worktrees registered in the release checkout: the `finally` above
+# never runs when the process is killed (a step timeout, a closed terminal). Every tree is recorded in
+# WORKTREE_REGISTRY (one JSON per tree: pid, root, tree, created) the moment `worktree add` succeeds; an
+# atexit hook and a SIGTERM/SIGHUP handler remove this process's live trees; `--gc-worktrees` removes
+# registered or listed dependency trees whose process is gone and that are older than a day. It never
+# touches a worktree outside a `mojolearn-dependencies-*` temporary directory (never ~/mojolearn-wt/*).
+WORKTREE_PREFIX = "mojolearn-dependencies-"
+WORKTREE_GC_AGE_S = 24 * 3600
+_LIVE_WORKTREES = {}
+
+
+def worktree_registry():
+    return Path(os.environ.get("MOJOLEARN_DEPENDENCY_WORKTREES")
+                or Path.home() / "mojolearn-evidence/release-dependencies/worktrees")
+
+
+def _registry_file(tree):
+    return worktree_registry() / (hashlib.sha256(str(tree).encode()).hexdigest()[:16] + ".json")
+
+
+def _register_worktree(root, tree):
+    import time
+    _install_worktree_cleanup()
+    _LIVE_WORKTREES[str(tree)] = str(root)
+    try:
+        worktree_registry().mkdir(parents=True, exist_ok=True)
+        _registry_file(tree).write_text(json.dumps(dict(pid=os.getpid(), root=str(root), tree=str(tree),
+                                                        created=time.time()), sort_keys=True) + "\n")
+    except OSError:
+        pass  # the in-process hook still removes it; --gc-worktrees finds it in `git worktree list`
+
+
+def _unregister_worktree(tree):
+    _LIVE_WORKTREES.pop(str(tree), None)
+    try:
+        _registry_file(tree).unlink()
+    except OSError:
+        pass
+
+
+def _remove_live_worktrees():
+    """This process's registered trees: `git worktree remove --force`, then the temporary directory."""
+    import shutil
+    for tree, root in list(_LIVE_WORKTREES.items()):
+        subprocess.run(["git", "-C", root, "worktree", "remove", "--force", tree],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if Path(tree).parent.name.startswith(WORKTREE_PREFIX):
+            shutil.rmtree(Path(tree).parent, ignore_errors=True)
+        _unregister_worktree(tree)
+
+
+_CLEANUP_INSTALLED = []
+
+
+def _install_worktree_cleanup():
+    if _CLEANUP_INSTALLED:
+        return
+    _CLEANUP_INSTALLED.append(True)
+    import atexit
+    import signal
+    atexit.register(_remove_live_worktrees)
+    if threading.current_thread() is not threading.main_thread():
+        return
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            previous = signal.getsignal(sig)
+        except (ValueError, OSError):
+            continue
+        if previous not in (signal.SIG_DFL, None):
+            continue  # someone else owns it; atexit still runs on a normal exit
+
+        def handler(signum, _frame, _sig=sig):
+            _remove_live_worktrees()
+            signal.signal(_sig, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+        signal.signal(sig, handler)
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+    except (OSError, ValueError, TypeError):
+        return False
+    return True
+
+
+def _listed_worktrees(root, runner=subprocess.run):
+    out = runner(["git", "-C", str(root), "worktree", "list", "--porcelain"], capture_output=True, text=True)
+    return [line[len("worktree "):] for line in (out.stdout or "").splitlines() if line.startswith("worktree ")]
+
+
+def _is_dependency_tree(path, protect):
+    p = Path(path)
+    if any(str(p).startswith(str(x).rstrip("/") + "/") for x in protect):
+        return False
+    return p.name == "tree" and p.parent.name.startswith(WORKTREE_PREFIX)
+
+
+def gc_worktrees(root, max_age_s=WORKTREE_GC_AGE_S, now=None, dry=False, runner=subprocess.run,
+                 protect=(Path.home() / "mojolearn-wt",)):
+    """Remove stale temporary dependency worktrees of ROOT: listed by `git worktree list` or registered,
+    under a `mojolearn-dependencies-*` directory, older than MAX_AGE_S, their registering process gone.
+    A tree whose directory is already gone loses its registration (`.git/worktrees/<id>`, matched by its
+    gitdir file: the targeted equivalent of `git worktree prune`, which would also prune other sessions'
+    missing trees). Returns dict(removed, kept, pruned)."""
+    import shutil
+    import time
+    now = time.time() if now is None else now
+    registered = {}
+    for f in sorted(worktree_registry().glob("*.json")) if worktree_registry().is_dir() else []:
+        try:
+            row = json.loads(f.read_text())
+            registered[row["tree"]] = dict(row, file=str(f))
+        except (OSError, ValueError, KeyError):
+            continue
+    candidates = {t for t in _listed_worktrees(root, runner) if _is_dependency_tree(t, protect)}
+    candidates |= {t for t, row in registered.items() if row.get("root") == str(root) and _is_dependency_tree(t, protect)}
+    removed, kept, pruned = [], [], []
+    for tree in sorted(candidates):
+        row = registered.get(tree) or {}
+        if row.get("pid") and _pid_alive(row["pid"]) and row["pid"] != os.getpid():
+            kept.append((tree, "its process %s is alive" % row["pid"]))
+            continue
+        p = Path(tree)
+        try:
+            born = row.get("created") or p.parent.stat().st_mtime
+        except OSError:
+            born = row.get("created") or 0
+        if now - born < max_age_s:
+            kept.append((tree, "younger than %d hours" % (max_age_s // 3600)))
+            continue
+        if dry:
+            removed.append(tree)
+            continue
+        if p.exists():
+            runner(["git", "-C", str(root), "worktree", "remove", "--force", tree], capture_output=True, text=True)
+            shutil.rmtree(p.parent, ignore_errors=True)
+            removed.append(tree)
+        admin = Path(root) / ".git" / "worktrees"
+        for gitdir in admin.glob("*/gitdir") if admin.is_dir() else []:
+            try:
+                if Path(gitdir.read_text().strip()).parent.resolve() in (p, p.resolve()):
+                    shutil.rmtree(gitdir.parent, ignore_errors=True)
+                    pruned.append(tree)
+            except OSError:
+                continue
+        if row.get("file"):
+            Path(row["file"]).unlink(missing_ok=True)
+    return dict(removed=removed, kept=kept, pruned=pruned)
+
+
+class SnapshotPending(ValueError):
+    """Discovery only: a frozen snapshot this computation needs is not cached yet."""
+
+
+def admission_jobs():
+    value = os.environ.get("MOJOLEARN_ADMISSION_JOBS", "")
+    if value:
+        if not value.isdigit() or int(value) < 1:
+            raise ValueError("MOJOLEARN_ADMISSION_JOBS must be a positive integer")
+        return int(value)
+    return os.cpu_count() or 1
+
+
+def prefetch(compute, *, jobs=None, worker=None, rounds=8, say=None, ran=None):
+    """``compute()``, after every frozen snapshot it needs ran in parallel; returns its value.
+
+    Each round runs ``compute`` in discovery mode; a round that needed nothing uncached was an ordinary
+    run (discovery only acts on a cache miss), so its value or error is the result: no extra pass. The
+    snapshots run in a round are appended to ``ran`` ([{token, seconds, ok}])."""
+    jobs = jobs or admission_jobs()
+    worker = worker or os.environ.get("MOJOLEARN_ADMISSION_WORKER") or "local"
+    say = say or (lambda line: print(line, file=sys.stderr))
+    ran = [] if ran is None else ran
+    for round_ in range(rounds):
+        pending, value, error = {}, None, None
+        context = _DISCOVERY.set(pending)
+        try:
+            value = compute()
+        except Exception as problem:  # noqa: BLE001 - an error with nothing pending is the real result
+            error = problem
+        finally:
+            _DISCOVERY.reset(context)
+        if not pending:
+            if error is not None:
+                raise error
+            return value
+        say(f"dependency analysis round {round_ + 1}: {len(pending)} frozen snapshot(s) on {worker}, {jobs} at once")
+        ran += run_snapshots(pending, jobs=jobs, worker=worker, say=say)
+    return compute()
+
+
+def run_snapshots(pending, *, jobs, worker="local", say=print):
+    """{token: (root, revision, request, log_dir)} -> run each into its cache; failures kept in _FAILED."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    if worker != "local":
+        return remote_snapshots(pending, worker, jobs=jobs, say=say)
+
+    def one(item):
+        token, (root, revision, request, logs) = item
+        started = time.time()
+        try:
+            frozen_snapshot(root, revision, request, log_dir=logs)
+            ok = True
+        except Exception as error:  # noqa: BLE001 - recorded; the real computation raises it
+            _FAILED[token] = "frozen dependency analysis failed in prefetch: " + (str(error) or type(error).__name__)
+            ok = False
+        return dict(token=token, seconds=round(time.time() - started, 1), ok=ok)
+
+    with ThreadPoolExecutor(max_workers=max(1, min(jobs, len(pending)))) as pool:
+        results = list(pool.map(one, sorted(pending.items())))
+    for row in results:
+        say(f"  snapshot {row['token']}: {'ok' if row['ok'] else 'FAILED'} {row['seconds']} s")
+    return results
+
+
+ANALYZER_FILES = ("release_requirement_dependencies.py", "release_requirement_routes.py")
+_EMPTY_TAR = bytes(10240)
+
+
+def _analyzer():
+    return digest({name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
+                   for name in ANALYZER_FILES})
+
+
+def remote_snapshots(pending, target, *, jobs, say=print):
+    """Run the snapshots on ``target`` (ssh destination); the Mac only ships, starts and collects.
+
+    Ships the frozen source by ``git push`` of the exact revisions (and every base revision a request
+    compares with) to a bare repository on the box, plus this analyzer's own files; runs the workers there
+    in parallel (``--remote-batch``); brings each report back by its content-derived token and admits it
+    only when its analyzer digest, revision and request equal the local ones. The ledger never leaves
+    the Mac: workers read only (revision, request). Commands: MOJOLEARN_ADMISSION_SSH (default
+    ``ssh -o BatchMode=yes``), MOJOLEARN_ADMISSION_REMOTE_DIR, MOJOLEARN_ADMISSION_REMOTE_PYTHON."""
+    import io
+    import shlex
+    import tarfile
+    import time
+    ssh = shlex.split(os.environ.get("MOJOLEARN_ADMISSION_SSH") or "ssh -o BatchMode=yes")
+    base = os.environ.get("MOJOLEARN_ADMISSION_REMOTE_DIR") or "mojolearn-admission"
+    python = os.environ.get("MOJOLEARN_ADMISSION_REMOTE_PYTHON") or "python3"
+    if not re.fullmatch(r"[A-Za-z0-9._/~-]+", base) or not re.fullmatch(r"[A-Za-z0-9._/-]+", python):
+        raise ValueError("unsafe MOJOLEARN_ADMISSION_REMOTE_DIR or _REMOTE_PYTHON")
+    analyzer = _analyzer()
+
+    def remote(command, data=None):
+        return subprocess.run([*ssh, target, command], input=data, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, check=True).stdout
+
+    started = time.time()
+    results = []
+    roots = {}
+    for token, (root, revision, request, logs) in pending.items():
+        roots.setdefault(root, []).append((token, revision, request, logs))
+    for root, items in roots.items():
+        remote(f"mkdir -p {base}/logs {base}/tooling/{analyzer} && "
+               f"(test -d {base}/repo.git || git init -q --bare {base}/repo.git)")
+        revisions = sorted({revision for _, revision, _, _ in items}
+                           | {_revision(root, request["base_revision"]) for _, _, request, _ in items
+                              if request.get("base_revision")})
+        env = dict(os.environ, GIT_SSH_COMMAND=" ".join(shlex.quote(part) for part in ssh))
+        subprocess.run(["git", "-C", root, "push", "--quiet", "--force", f"{target}:{base}/repo.git",
+                        *[f"{revision}:refs/admission/{revision}" for revision in revisions]],
+                       env=env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        bundle = io.BytesIO()
+        with tarfile.open(fileobj=bundle, mode="w") as archive:
+            for name in ANALYZER_FILES:
+                archive.add(str(Path(__file__).parent / name), arcname=name, recursive=False)
+        remote(f"tar -x -C {base}/tooling/{analyzer}", bundle.getvalue())
+        batch = [dict(token=token, revision=revision, request=request) for token, revision, request, _ in items]
+        say(f"  remote {target}: {len(batch)} snapshot(s), {len(revisions)} revision(s) pushed")
+        remote(f"cd {base} && {python} tooling/{analyzer}/release_requirement_dependencies.py "
+               f"--remote-batch repo.git logs {int(jobs)}", json.dumps(batch).encode())
+        names = " ".join(f"{token}.json {token}.log" for token, _, _, _ in items)
+        archive_bytes = remote(f"cd {base}/logs && set -- && for f in {names}; do [ -f \"$f\" ] && set -- \"$@\" \"$f\"; done; "
+                               'if [ $# -gt 0 ]; then tar -cf - "$@"; fi')
+        found = {}
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes or _EMPTY_TAR), mode="r:") as archive:
+            for member in archive:
+                if not member.isfile() or not re.fullmatch(r"[0-9a-f]{16}\.(json|log)", member.name):
+                    raise ValueError("unexpected member in remote dependency results: " + member.name)
+                found[member.name] = archive.extractfile(member).read()
+        for token, revision, request, logs in items:
+            logs = Path(logs)
+            logs.mkdir(parents=True, exist_ok=True)
+            data = found.get(token + ".json")
+            ok = False
+            if data is None:
+                _FAILED[token] = "remote dependency analysis produced no report on " + target
+            else:
+                body = json.loads(data)
+                if (body.get("analyzer") != analyzer or body.get("revision") != revision
+                        or body.get("request") != request or "snapshot" not in body):
+                    _FAILED[token] = "remote dependency report differs from the requested analysis"
+                else:
+                    body["source_view"] = dict(body.get("source_view") or {}, worker=target,
+                                               report_sha256=hashlib.sha256(data).hexdigest())
+                    _write_report(logs / (token + ".json"), body)
+                    ok = True
+            if token + ".log" in found:
+                (logs / (token + ".log")).write_bytes(found[token + ".log"])
+            results.append(dict(token=token, ok=ok, seconds=None, worker=target))
+    say(f"  remote {target}: {sum(r['ok'] for r in results)}/{len(results)} ok in {round(time.time() - started, 1)} s")
+    return results
+
+
+def _remote_batch(repo, logs, jobs):
+    """Box side of remote_snapshots: run a batch (stdin JSON) of frozen snapshots in parallel."""
+    from concurrent.futures import ThreadPoolExecutor
+    batch = json.loads(sys.stdin.read())
+    repo, logs = Path(repo).resolve(), Path(logs).resolve()
+
+    def one(item):
+        try:
+            frozen_snapshot(repo, item["revision"], item["request"], log_dir=logs)
+            return item["token"], None
+        except Exception as error:  # noqa: BLE001 - reported; the Mac refuses a missing report
+            return item["token"], str(error) or type(error).__name__
+
+    with ThreadPoolExecutor(max_workers=max(1, min(int(jobs), len(batch) or 1))) as pool:
+        for token, error in pool.map(one, batch):
+            print(json.dumps(dict(token=token, ok=error is None, error=error)))
+    return 0
+
+
 def frozen_snapshot(root, revision, request, *, log_dir=None):
     """Analyze an exact detached source view, retaining the complete log."""
     root = Path(root).resolve()
@@ -331,12 +784,18 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
     report = logs / (token + ".json")
     log_path = logs / (token + ".log")
     # Never reuse a cached result under a different analyzer implementation.
-    analyzer = digest({name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
-                       for name in ("release_requirement_dependencies.py", "release_requirement_routes.py")})
+    analyzer = _analyzer()
     if report.is_file():
         old = json.loads(report.read_text())
         if old.get("analyzer") == analyzer and old.get("request") == request and old.get("revision") == revision:
             return old["snapshot"]
+    if token in _FAILED:
+        # A prefetch already ran this exact analysis and it failed: report that, never run it twice.
+        raise ValueError(_FAILED[token])
+    pending = _DISCOVERY.get()
+    if pending is not None:
+        pending.setdefault(token, (str(root), revision, copy.deepcopy(request), str(logs)))
+        raise SnapshotPending(token)
     with tempfile.TemporaryDirectory(prefix="mojolearn-dependencies-") as temporary:
         temporary = Path(temporary)
         tree = temporary / "tree"
@@ -345,10 +804,16 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
             # Only reuse exact current bytes, and exclude ALL untracked files:
             # clean Git status alone would admit generated Mojo and pyc files
             # that do not exist in the requested revision's source tree.
-            clone_current = sys.platform == "darwin" and _revision(root, "HEAD") == revision
-            before = _tracked_state(root, revision) if clone_current else None
+            # A bare repository (MOJOLEARN_ADMISSION_WORKER: the source pushed to a box) has no checkout
+            # to clone: it is always a fresh checkout of the exact revision.
+            clone_current = (sys.platform == "darwin" and not _bare(root)
+                             and _revision(root, "HEAD") == revision)
+            before = _tracked_state(root, revision, tooling_from_revision=True) if clone_current else None
+            # The source commit and the release tooling are two commits (tools/release.py): name both.
             source_view = dict(method="tracked-cow" if clone_current else "git-checkout",
-                               source_checkout=str(root), tracked_files_checked=len(before or {}))
+                               source_checkout=str(root), tracked_files_checked=len(before or {}),
+                               tooling_from_revision=tooling_overlay(before or {}),
+                               tooling=_tooling_commit())
             log.write("source view: " + json.dumps(source_view, sort_keys=True) + "\n")
             log.flush()
             command = ["git", "-C", str(root), "worktree", "add", "--detach"]
@@ -356,8 +821,10 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                 command.append("--no-checkout")
             added = False
             try:
-                subprocess.run(command + [str(tree), revision], stdout=log, stderr=subprocess.STDOUT, check=True)
+                with _WORKTREES:
+                    subprocess.run(command + [str(tree), revision], stdout=log, stderr=subprocess.STDOUT, check=True)
                 added = True
+                _register_worktree(root, tree)
                 if clone_current:
                     _clone_tracked_tree(root, tree, before, log)
                 view_before = _tracked_state(tree, revision)
@@ -377,11 +844,32 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                 # Failed `worktree add` can leave a registration too. Remove
                 # only this unique temporary tree; never prune other sessions.
                 if added or (tree / ".git").exists():
-                    subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
-                                   stdout=log, stderr=subprocess.STDOUT, check=True)
-    report.write_text(json.dumps(dict(analyzer=analyzer, revision=revision, request=request,
-                                     source_view=source_view, snapshot=snapshot), sort_keys=True) + "\n")
+                    with _WORKTREES:
+                        subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
+                                       stdout=log, stderr=subprocess.STDOUT, check=True)
+                _unregister_worktree(tree)
+    _write_report(report, dict(analyzer=analyzer, revision=revision, request=request,
+                               source_view=source_view, snapshot=snapshot))
     return snapshot
+
+
+def _write_report(report, body):
+    """Atomic: parallel workers and a reader of the cache never see a partial report."""
+    fd, name = tempfile.mkstemp(prefix=report.name + ".", dir=report.parent)
+    try:
+        with os.fdopen(fd, "w") as out:
+            out.write(json.dumps(body, sort_keys=True) + "\n")
+        os.replace(name, report)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def _bare(root):
+    try:
+        return _git(root, "rev-parse", "--is-bare-repository") == "true"
+    except (OSError, subprocess.CalledProcessError):
+        return False
 
 
 def _vendor(spec):
@@ -1043,6 +1531,24 @@ def decision_proof(proof):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 2 and sys.argv[1] == "--gc-worktrees":
+        import argparse
+        ap = argparse.ArgumentParser(prog="release_requirement_dependencies.py --gc-worktrees")
+        ap.add_argument("--gc-worktrees", action="store_true")
+        ap.add_argument("--root", default=str(Path(__file__).resolve().parents[1]))
+        ap.add_argument("--max-age-hours", type=float, default=WORKTREE_GC_AGE_S / 3600)
+        ap.add_argument("--dry-run", action="store_true")
+        a = ap.parse_args()
+        result = gc_worktrees(Path(a.root), max_age_s=a.max_age_hours * 3600, dry=a.dry_run)
+        for tree in result["removed"]:
+            print(("would remove " if a.dry_run else "removed ") + tree)
+        for tree in result["pruned"]:
+            print("pruned the registration of " + tree)
+        for tree, why in result["kept"]:
+            print("kept %s: %s" % (tree, why))
+        raise SystemExit(0)
+    if len(sys.argv) == 5 and sys.argv[1] == "--remote-batch":
+        raise SystemExit(_remote_batch(*sys.argv[2:5]))
     if len(sys.argv) != 5 or sys.argv[1] != "--worker":
         raise SystemExit("library API: expand_catalog / equivalence_proofs / validate_equivalence_proof")
     Path(sys.argv[4]).write_text(json.dumps(_worker_snapshot(sys.argv[2], json.loads(Path(sys.argv[3]).read_text())), sort_keys=True))

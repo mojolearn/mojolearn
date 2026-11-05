@@ -67,6 +67,7 @@ tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
 it; the `break_ties_high` flag in `dims` is the Python door's environment
 spelling of the same arm.
 """
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
@@ -1241,6 +1242,7 @@ def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_tokenizer_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_host")
         transport_initialize()

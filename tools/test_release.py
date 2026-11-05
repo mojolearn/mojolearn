@@ -364,8 +364,13 @@ class RunTests(unittest.TestCase):
                               "--state-dir", str(self.state), *extra],
                              capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
+        # published-smoke-<vendor> is selected only by an explicit --published-smoke VENDOR (release.py go):
+        # unrequested, it is not planned at all; every other step is.
         for step in release.Release.STEPS:
-            self.assertIn("-- " + step, out.stdout)
+            if step in release.PUBLISHED_SMOKE_STEPS:
+                self.assertNotIn("-- " + step + "\n", out.stdout)
+            else:
+                self.assertIn("-- " + step, out.stdout)
         self.assertFalse(self.state.exists())
         return out
 

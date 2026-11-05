@@ -61,17 +61,21 @@ ENTRY_DIR = REPO / "bindings" / "entry"
 INDEX_FORMAT = 1
 
 
-def manifest():
-    return json.loads(MANIFEST.read_text())
+def manifest(repo=None):
+    """The merged manifest of REPO (default: this checkout). tools/bincache.py
+    keys a merged build of another tree (a `git archive` of a commit) from
+    that tree's own manifest."""
+    path = MANIFEST if repo is None else pathlib.Path(repo) / "bindings" / "merged_groups.json"
+    return json.loads(path.read_text())
 
 
 def default_platform():
     return "darwin" if _platform.system() == "Darwin" else "linux"
 
 
-def members(dir_name, plat, byte_lm):
+def members(dir_name, plat, byte_lm, repo=None):
     """{stem: [members]} for one directory set on one platform."""
-    m = manifest()
+    m = manifest(repo)
     d = m["dirs"][dir_name]
     out = {stem: list(names) for stem, names in d["groups"].items()}
     if byte_lm:
@@ -98,7 +102,7 @@ def optional_rule(dir_name, d, name, rule):
     return stem, plats
 
 
-def development_members(dir_name, plat, byte_lm):
+def development_members(dir_name, plat, byte_lm, repo=None):
     """Partition the release surface without changing the release manifest.
 
     Optional members have one explicit owner in this partition and are filtered
@@ -107,32 +111,34 @@ def development_members(dir_name, plat, byte_lm):
     """
     if dir_name not in ("identical", "host"):
         raise ValueError("development builds support identical and host only")
-    groups = json.loads(DEVELOPMENT_MANIFEST.read_text())["groups"][dir_name]
+    dev = DEVELOPMENT_MANIFEST if repo is None else pathlib.Path(repo) / "bindings" / "development_groups.json"
+    groups = json.loads(dev.read_text())["groups"][dir_name]
     configured = [n for names in groups.values() for n in names]
     duplicates = sorted(n for n, count in Counter(configured).items() if count != 1)
-    d = manifest()["dirs"][dir_name]
+    d = manifest(repo)["dirs"][dir_name]
     possible = {n for names in d["groups"].values() for n in names} | set(d.get("optional", {}))
     if duplicates or set(configured) != possible:
         raise ValueError(f"development partition differs: duplicate={duplicates}, "
                          f"missing={sorted(possible - set(configured))}, "
                          f"unknown={sorted(set(configured) - possible)}")
-    wanted = {n for names in members(dir_name, plat, byte_lm).values() for n in names}
+    wanted = {n for names in members(dir_name, plat, byte_lm, repo).values() for n in names}
     suffix = "_host" if dir_name == "host" else ""
     return {f"_mojolearn_dev_{group}{suffix}": [n for n in names if n in wanted]
             for group, names in groups.items() if any(n in wanted for n in names)}
 
 
-def plan(dir_name, plat, byte_lm, layout="release"):
+def plan(dir_name, plat, byte_lm, layout="release", repo=None):
     """[(stem, flags_class, [members])]: the files one build of `dir_name`
     writes. On macOS a group splits by flags class so each member keeps the
     exact compile flags its own build script passes."""
-    m = manifest()
+    m = manifest(repo)
     metal1 = set(m.get("darwin_metal1", []))
     suffix = m.get("darwin_metal1_suffix", "_m1")
     rows = []
     if layout not in ("release", "development"):
         raise ValueError(f"unknown merged layout: {layout}")
-    groups = development_members(dir_name, plat, byte_lm) if layout == "development" else members(dir_name, plat, byte_lm)
+    groups = (development_members(dir_name, plat, byte_lm, repo) if layout == "development"
+              else members(dir_name, plat, byte_lm, repo))
     for stem, names in groups.items():
         if dir_name == "host":
             rows.append((stem, "host", names))
@@ -149,10 +155,26 @@ def plan(dir_name, plat, byte_lm, layout="release"):
     return rows
 
 
-def binding_names():
+def member_file(dir_name, member, repo=None, index=None):
+    """The merged file (`<stem>.so`) that holds MEMBER in directory set DIR_NAME: from INDEX (a directory's
+    `_mojolearn_merged.json`, what a build actually wrote) when given, else from the manifest. Tools that
+    need one member's native file name it through this, never by a hard-coded group stem."""
+    if index is not None:
+        hits = [f for f, names in index.get("files", {}).items() if member in names]
+    else:
+        d = manifest(repo)["dirs"][dir_name]
+        hits = [stem + ".so" for stem, names in d["groups"].items() if member in names]
+        hits += [optional_rule(dir_name, d, name, rule)[0] + ".so"
+                 for name, rule in d.get("optional", {}).items() if name == member]
+    if len(hits) != 1:
+        raise ValueError(f"{member}: in {len(hits)} merged files of {dir_name} ({hits}); exactly one expected")
+    return hits[0]
+
+
+def binding_names(repo=None):
     """Every binding source with a module body builder, sorted."""
     out = []
-    for f in sorted((REPO / "bindings").glob("_mojolearn*.mojo")):
+    for f in sorted((pathlib.Path(repo or REPO) / "bindings").glob("_mojolearn*.mojo")):
         if f"def build_{f.stem}() -> PythonObject:" in f.read_text(errors="replace"):
             out.append(f.stem)
     return out
@@ -232,8 +254,8 @@ def PyInit_{stem}() abi("C") -> PythonObject:
 '''
 
 
-def root_text(stem, names):
-    known = set(binding_names())
+def root_text(stem, names, repo=None):
+    known = set(binding_names(repo))
     missing = [n for n in names if n not in known]
     if missing:
         raise SystemExit(f"merged_bindings: no module body builder for {', '.join(missing)}")

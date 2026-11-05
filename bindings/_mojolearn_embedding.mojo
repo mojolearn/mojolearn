@@ -26,6 +26,7 @@ device call, and nothing inside the `GILReleased` block touches a
 `PythonObject`.
 """
 
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.ffi import _Global
 from std.sys.compile import is_defined
@@ -1094,6 +1095,7 @@ def embedding_backward_dev_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_embedding() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_embedding")
         m.def_function[embedding_vendor_binding]("embedding_vendor")

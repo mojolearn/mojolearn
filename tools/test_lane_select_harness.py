@@ -301,18 +301,10 @@ def test_a_one_kernel_change_selects_its_lanes_and_explains_every_extra():
             assert foreign in limited, f"a k-means oracle edit selected {foreign} with no dispatch record"
 
 
-def _pending_precision(function):
-    try:
-        import pytest
-    except ImportError:
-        return function
-    return pytest.mark.xfail(reason="native-dispatch precision debt (tools/LANE_SELECTOR_PRECISION.md); "
-                             "the desired k-means bound returns when the dispatcher is resolved",
-                             strict=True, raises=_UnprovedPrecision)(function)
-
-
-@_pending_precision
-def test_pending_precision_a_one_kernel_change_selects_only_its_lanes():
+# Was a strict expected failure (native-dispatch precision debt); the k-means
+# bound holds since the dispatcher narrowing of 2026-11-01 (5116ae42eb,
+# 20903291c0): 96 of 513 lanes, no foreign lane, every k-means consumer kept.
+def test_a_one_kernel_change_selects_only_its_lanes():
     sel = lane_select.select(["cluster/host/kmeans_oracle.mojo"])
     assert not sel["unattributed"] and not sel["every_rules"]
     # 47 since 2026-09-23 (measured; see test_lane_select.py): the lanes whose
