@@ -268,6 +268,10 @@ def test_constructor_resolution_and_mode_wrapper_still_match_the_audited_source(
         assert kind == 'class'
         ancestry = []
         for base in index.mro(cls):
+            # The wrapper's class keyword (_native_constructor) skips mode
+            # injection; the audited NumericModeMixin events assume no row
+            # class or base requests it.
+            assert not any(k.arg == '_native_constructor' for k in base.node.keywords), (row['declared_class'], base.name)
             declarations = []
             for node in base.node.body:
                 if isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -525,7 +529,9 @@ def test_umap_validation_is_connected_without_a_python_callback():
     cls = next(cls for cls in ns['_CLASSES'] if cls.__name__ == 'UMAP')
     plan = ns['_CONTEXT']['plans'][cls]
     assert plan['validation_kind'] == 'umap'
-    assert plan['events'][-1] == ('numeric_mode', 'parameter', 'numeric_mode', True)
+    # UMAP's own constructor writes numeric_mode (native-public, no
+    # NumericModeMixin wrapper); validation still precedes that write.
+    assert plan['events'][-1] == ('numeric_mode', 'parameter', 'numeric_mode', False)
     assert all('validation_kind' in p for p in ns['_CONTEXT']['plans'].values())
     constructor = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
     body = constructor.split('var validated = False', 1)[1]
