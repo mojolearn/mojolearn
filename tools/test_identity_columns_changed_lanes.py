@@ -379,3 +379,81 @@ def test_na_placeholder_is_only_the_n_a_prefix():
     assert not ic.is_placeholder_part({"ref": "1" * 16})
     assert not ic.is_placeholder_part({"ref": None, "conflict": True})
     assert not ic.is_placeholder_part({"ref": "N/A"})
+
+
+# ------------------------------------ declared no-route lanes are N/A on cpu, not KNOWN-BAD (lane planner-na-parts)
+# The 874dc2043b cpu plan read KNOWN-BAD 3 for optim-resident-io, sequence-device-release and
+# training-device-cross-entropy: their cpu cells REFUSED because the harness itself declares them
+# GPU_ONLY_LANES (no cpu route). An undeclared refusal, or a declared lane that DIVERGED, stays known-bad.
+
+C1, C2 = "c1" * 20, "c2" * 20
+
+
+def _cpu_record(path, cls, lanes, verdicts):
+    cells = {}
+    for lane in lanes:
+        verdict = verdicts.get(lane, "STABLE")
+        cells[f"{lane}/base"] = {"verdict": verdict, "hashes": [] if verdict == "REFUSED" else ["0" * 16],
+                                 "infer_verdict": "N/A",
+                                 **({"error": "RuntimeError: requires the resident ABI"} if verdict == "REFUSED" else {})}
+    doc = dict(mode="identical", complete=True, vendor=cls, commit=C2, cells=cells,
+               fixtures={"base": dict(X="h", y_clf="h", y_reg="h")}, heldout={"base": dict(X="h")},
+               lane_revisions={})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc))
+
+
+def _na_run(tmp_path, monkeypatch, cls, verdicts, gpu_only, lanes, changed=None):
+    v = types.SimpleNamespace(record_device_class=lambda j, p: (j.get("vendor"), None),
+                              admit=lambda j, p, known_lanes=(): None, stale_reference_lanes=lambda t, h: [])
+    h = types.SimpleNamespace(LANES=list(lanes), FIXTURES=("base",), LANE_REVISIONS={}, GPU_ONLY_LANES=gpu_only,
+                              _h=lambda x: "h", fixture=lambda f: (1, 2, 3), heldout=lambda f: 4)
+    monkeypatch.setattr(ic, "harness", lambda: h)
+    monkeypatch.setattr(ic, "vref", lambda: v)
+    monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
+    monkeypatch.setattr(ic, "_commit_time", lambda c, cache: {C1: 100, C2: 200}.get(c))
+    monkeypatch.setattr(ic, "harness_sha256", lambda h: "H")
+    monkeypatch.setattr(ic, "is_shallow", lambda: False)
+    monkeypatch.setattr(ic, "deepen_for_reuse", lambda points, log=None: None)
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
+    monkeypatch.setattr(lane_select, "changed_paths", lambda ref: ["x.mojo"])
+    monkeypatch.setattr(lane_select, "select", lambda paths, ref=None, sources=None, backend=None, stop_when=None:
+                        {"lanes": sorted((changed or {}).get(ref, ())), "unattributed": [], "stopped_early": False})
+    table = tmp_path / "table.json"
+    table.write_text(json.dumps({"cells": {}, "records": []}))
+    recs = tmp_path / "records"
+    _cpu_record(recs / f"{cls}.identical.json", cls, [l for l in lanes if l != "no-evidence"], verdicts)
+    summary = tmp_path / "reuse.json"
+    args = types.SimpleNamespace(table=str(table), since="", scope="all", no_release_floor=True,
+                                 backend="cpu" if cls == "cpu" else "metal", floor_desc="", cls=cls,
+                                 records=[str(recs)], summary_json=str(summary))
+    assert ic.cmd_changed_lanes(args) == 0
+    return json.loads(summary.read_text())
+
+
+def test_declared_no_cpu_route_refusal_is_na_not_known_bad(tmp_path, monkeypatch, capsys):
+    lanes = ["ok", "resident", "diverged", "undeclared", "no-evidence"]
+    gpu_only = {"resident": "no resident buffers", "diverged": "declared", "no-evidence": "declared"}
+    doc = _na_run(tmp_path, monkeypatch, "cpu",
+                  {"resident": "REFUSED", "diverged": "DIVERGENT", "undeclared": "REFUSED"}, gpu_only, lanes)
+    out, err = capsys.readouterr()
+    assert out.strip() == ""                                   # nothing owed: no-evidence is n/a, not recorded
+    assert "REUSED 1 RECORD 0 KNOWN-BAD 2 of 5 (all) N/A 2" in err
+    assert sorted(doc["not_applicable"]) == ["no-evidence", "resident"]
+    assert sorted(doc["known_bad"]) == ["diverged", "undeclared"]
+    assert "no resident buffers" in doc["not_applicable"]["resident"]["reason"]
+    assert "# n/a resident:" in err and "# known-bad undeclared:" in err
+    import reference_refresh as rr
+    assert rr.parse_selection(err) == dict(record=0, reused=1, known_bad=2, total=5, not_applicable=2)
+    import release_plan
+    facts = release_plan.lane_facts(doc, None, "cpu")
+    assert facts["resident"]["owed"] is False and facts["resident"]["not_applicable"] is True
+
+
+def test_declared_lane_is_not_na_on_a_gpu_class(tmp_path, monkeypatch, capsys):
+    """GPU_ONLY_LANES speaks for the cpu class only: an Apple refusal (e.g. a TypeError) stays known-bad."""
+    lanes = ["ok", "resident"]
+    doc = _na_run(tmp_path, monkeypatch, "apple", {"resident": "REFUSED"}, {"resident": "declared"}, lanes)
+    err = capsys.readouterr()[1]
+    assert "REUSED 1 RECORD 0 KNOWN-BAD 1 of 2 (all) N/A 0" in err
+    assert doc["not_applicable"] == {} and sorted(doc["known_bad"]) == ["resident"]
