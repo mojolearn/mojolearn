@@ -1663,7 +1663,14 @@ class Release:
         """One persistent readiness ledger across freezes of this version."""
         return release_requirements.RequirementsLedger(self.base / "requirements.json")
 
+    DRY_READINESS = "not evaluated in a dry run: the readiness analysis runs dependency workers"
+
     def readiness_manifest(self):
+        # A dry run is read-only and prints the plan: the frozen dependency analysis (release_requirements ->
+        # release_requirement_dependencies.expand_catalog) clones the tracked tree and runs snapshot workers,
+        # which took the two dry-run tests in tools/test_release.py past their 600 s timeout. Never run it here.
+        if self.dry:
+            raise StepFailed(self.DRY_READINESS)
         configuration = dict(self.readiness().read().get("configuration", {}))
         configuration_path = getattr(self.args, "requirements_configuration", None)
         if configuration_path:
@@ -2671,6 +2678,8 @@ class Release:
         try:
             wanted, rows, attempts = self.requirement_units(vendor, arch)
         except (Exception, SystemExit) as exc:  # glue: an unreadable ledger is not "retained"
+            if self.dry:
+                return None, self.DRY_READINESS, False
             return None, f"the readiness ledger cannot be read ({exc})", False
         if not wanted:
             return None, "it owns no declared compile requirement", False
