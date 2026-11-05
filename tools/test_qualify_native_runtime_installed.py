@@ -595,6 +595,18 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertEqual(q.test_dependencies(names), ["numpy", "pytest", "pandas", "scipy", "torch"])
         self.assertEqual(q.test_dependencies([names[0]]), ["numpy", "pytest"])
 
+    def test_unit_plan_dependencies_cover_reused_units(self):
+        # Rerunning only test_native_cv_lda.py must install what the full plan installs
+        # (pyarrow from test_cache_release_native.py), so a reused-vs-rerun split cannot
+        # change the storage pandas gives its string columns.
+        plan = dict(units=[dict(unit="test_native_cv_lda.py", decision="run"),
+                           dict(unit="test_cache_release_native.py", decision="reuse"),
+                           dict(unit="not-a-registered-file.py", decision="reuse")])
+        files = q.unit_plan_dependency_files(plan, ["test_native_cv_lda.py"])
+        self.assertEqual(files, ["test_native_cv_lda.py", "test_cache_release_native.py"])
+        self.assertIn("pyarrow", q.test_dependencies(files))
+        self.assertNotIn("pyarrow", q.test_dependencies(["test_native_cv_lda.py"]))
+
     def scope_fixture(self, file, *, passed=1, reason=q.CPU_RESIDENT_SKIP):
         cases = [dict(name=name, classname="mojolearn.tests." + Path(file).stem,
                       outcome="skipped", skip_reason=reason)

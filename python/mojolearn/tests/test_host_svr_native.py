@@ -17,7 +17,7 @@ from mojolearn import _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests import _legacy_host_inference as legacy
 from mojolearn.tests.test_host_archive_native import _archive, _state
-from mojolearn.tests.test_host_inference_native import _input, _refused, test_application_subclass_keeps_constructor_fit_and_score_guards as _subclass_guards
+from mojolearn.tests.test_host_inference_native import _input, _internal_read, _refused, test_application_subclass_keeps_constructor_fit_and_score_guards as _subclass_guards
 from mojolearn.tests.test_host_kernel_inference_native import FORMATS
 
 KERNELS = ("linear", "rbf", "poly", "sigmoid", "precomputed")
@@ -78,8 +78,8 @@ def test_svr_native_coefficient_property_preserves_contract(tmp_path, kernel, ze
     result = audit_native_call(getattr, model, "coef_").assert_native()
     assert type(result) is np.ndarray and result.dtype == np.dtype("<f4")
     assert _state(result) == _state(expected)
-    assert type(model.coef_).__name__ == "Array"
-    assert _state(model.coef_) == _state(expected)
+    assert type(_internal_read(model, "coef_")).__name__ == "Array"
+    assert _state(_internal_read(model, "coef_")) == _state(expected)
 
 
 @pytest.mark.parametrize("field", ["dual_coef_", "support_vectors_"])

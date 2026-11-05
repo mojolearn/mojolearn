@@ -37,6 +37,18 @@ def _input(features, kind):
     return _layout(values, kind)
 
 
+def _internal_read(model, name):
+    # The native attribute owner publishes a host Array to package-internal
+    # callers and a NumPy view to application code, classifying the caller by
+    # its module globals. A test module's own name depends on the runner's
+    # import mode (`mojolearn.tests.<file>` from a source checkout, `<file>`
+    # under --import-mode=importlib in the installed qualifier), so read the
+    # internal view through an explicitly marked internal caller.
+    namespace = {"__name__": "host_attribute_internal_reader", "__mojolearn_internal__": True}
+    exec("def read(model, name):\n    return getattr(model, name)\n", namespace)
+    return namespace["read"](model, name)
+
+
 def _refused(audit, exception=ValueError):
     assert isinstance(audit.exception, exception), audit.report()
     report = audit.report()
@@ -205,7 +217,7 @@ def test_native_method_lookup_and_fitted_attribute_publication(tmp_path, name):
     field = "cluster_centers_" if name == "KMeans" else "coef_"
     value = audit_native_call(getattr, model, field).assert_native()
     assert type(value) is np.ndarray
-    assert type(getattr(model, field)).__name__ == "Array"
+    assert type(_internal_read(model, field)).__name__ == "Array"
     assert np.shares_memory(value, np.asarray(vars(model)[field]))
     audit_native_call(method, _input(model.n_features_in_, "float32")).assert_native()
 
@@ -253,9 +265,10 @@ def test_application_subclass_keeps_constructor_fit_and_score_guards(name):
             return self
         def score(self, X, y=None):
             return 123
-    model = Custom(numeric_mode="identical") if name == "KMeans" else Custom()
-    if name == "KMeans":
-        assert vars(model)["numeric_mode"] == "identical"
+    # KMeans, like ElasticNet and Lasso, is a native-public estimator: its own
+    # constructor takes numeric_mode, so no mode keyword is injected into an
+    # application __init__ that does not declare one (ordinary Python).
+    model = Custom()
     with pytest.raises(ValueError, match="not fitted"):
         model.score([[1., 2.]])
     with pytest.raises(ValueError):
