@@ -559,6 +559,14 @@ def record_sources(dirs):
 _OPTIONAL_PARTS = ("batchgrad", "batchscale", "ragged", "rlpair")
 
 
+def is_placeholder_part(ent):
+    """A table part whose reference is an N/A placeholder ("n/a:<reason>") carries
+    no reference bits, so the record index it points at is not evidence a lane
+    rests on (identity_admission_guard treats it the same way): it never dates a
+    lane and never makes one uncovered (lane planner-na-parts, 2026-11-05)."""
+    return str((ent or {}).get("ref") or "").startswith("n/a:")
+
+
 def harness_sha256(h):
     """sha256 of the harness source `h` was loaded from (None for a stand-in)."""
     path = getattr(h, "__file__", None)
@@ -669,6 +677,8 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
         if lane not in wanted:
             continue
         for part, ent in cell.items():
+            if is_placeholder_part(ent):
+                continue                 # an n/a placeholder carries no bits: it dates nothing
             col = (ent.get("cols") or {}).get(cls)
             if col is None and not ent.get("conflict") and part in optional:
                 continue                 # e.g. a legacy rlpair n/a row only Apple ever recorded
@@ -777,6 +787,8 @@ def cmd_changed_lanes(args):
         for key, cell in (table.get("cells") or {}).items():
             lane = key.partition("/")[0]
             for part, ent in cell.items():
+                if is_placeholder_part(ent):
+                    continue             # n/a placeholder: no reference bits, so no date (as reuse_points)
                 cols = ent.get("cols") or {}
                 if tcls:
                     if tcls not in cols:
