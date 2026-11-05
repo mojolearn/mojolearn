@@ -6,6 +6,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## 0.8.66 (published 2026-11-05)
 
+- **Classifiers on pandas 3 with pyarrow.** Feature names are read from Arrow-backed string columns (`string[pyarrow]`, `ArrowDtype`), which used to refuse with a storage error.
 - **Sequence programs on Apple.** Tape programs, program save/load and ONNX import connect their native executor once per process. On a Mac with both numeric tiers installed the second tier used to refuse with "captured program connection is already registered".
 - **Public attributes.** `estimators_` of bagging estimators reads through the compiled tree owner.
 - **Constructors.** Native-public constructors reset `numeric_mode` the same way on a repeated `__init__`.
