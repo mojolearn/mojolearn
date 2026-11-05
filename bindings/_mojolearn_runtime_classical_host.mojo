@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Logical host owner for classical. Release builds merge this builder
 # with the other host builders; development builds give it an independent
-# source/cache boundary. TreesResident is registered, allocated and finalized only in this owner.
+# source/cache boundary. TreesResident is registered, allocated and finalized only in this owner
+# (registered once per process; the registrars below).
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -9,6 +10,9 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
+from std.python.bindings import lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.trees_lifetime import TreesResident
 from bindings.trees_explainer_native import TreeShapOwner
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
@@ -67,6 +71,45 @@ def runtime_classical_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(RUNTIME_CLASSICAL_SABOTAGE)
 
 
+# This host's own Python types. Its PyInit can run twice in one process (see
+# bindings/py_type_registry.mojo); each registrar creates the type on the first
+# initialization and attaches the existing type object on any later one.
+def register_trees_resident(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[TreesResident]()
+    except error:
+        if not py_type_absent(error, String(reflect[TreesResident].name())):
+            raise error
+        _ = module.add_type[TreesResident]("_TreesResident")
+        return
+    py_type_attach(module.module, "_TreesResident", existing)
+
+
+def register_tree_shap_owner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[TreeShapOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[TreeShapOwner].name())):
+            raise error
+        _ = module.add_type[TreeShapOwner]("_TreeShapOwner")
+        return
+    py_type_attach(module.module, "_TreeShapOwner", existing)
+
+
+def register_compiled_binding_snapshot(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[CompiledBindingSnapshot]()
+    except error:
+        if not py_type_absent(error, String(reflect[CompiledBindingSnapshot].name())):
+            raise error
+        _ = module.add_type[CompiledBindingSnapshot]("_CompiledBindingSnapshot")
+        return
+    py_type_attach(module.module, "_CompiledBindingSnapshot", existing)
+
+
 def build__mojolearn_runtime_classical_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -100,13 +143,16 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         module.def_py_c_function(str_labels_c, "str_labels_native_call")
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
         module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
-        _ = module.add_type[TreesResident]("_TreesResident")
-        # Values this host allocates with PythonObject(alloc=...): the Tree SHAP owner and the
-        # compiled-binding snapshots of the SVM, hierarchy and x_neighbors descriptor owners.
-        # Registered once per process here (the manifold and tokenizer hosts allocate snapshots
-        # through the same x_neighbors admission and must not register them a second time).
-        _ = module.add_type[TreeShapOwner]("_TreeShapOwner")
-        _ = module.add_type[CompiledBindingSnapshot]("_CompiledBindingSnapshot")
+        # Values this host allocates with PythonObject(alloc=...): resident trees, the Tree SHAP
+        # owner and the compiled-binding snapshots of the SVM, hierarchy and x_neighbors descriptor
+        # owners. Registered once per process here (the manifold and tokenizer hosts allocate
+        # snapshots through the same x_neighbors admission and must not register them a second
+        # time). This PyInit can run twice in one process (`mojolearn._host.` at package connection,
+        # then `mojolearn.host.` through the merged finder); a second run attaches the existing
+        # type objects instead of aborting (bindings/py_type_registry.mojo).
+        register_trees_resident(module)
+        register_tree_shap_owner(module)
+        register_compiled_binding_snapshot(module)
         register_scaler_snapshot(module)
         register_lin_buffer_pin(module)
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")

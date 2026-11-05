@@ -8,7 +8,9 @@
 from std.math import isinf
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from std.python.bindings import PythonModuleBuilder
+from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
 from std.sys.compile import is_defined
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_setattr, py_type
@@ -539,7 +541,17 @@ struct LinBufferPin[MODE: Int = LIN_PIN_MODE](Movable, Writable):
 def register_lin_buffer_pin(mut module: PythonModuleBuilder) raises:
     # The module that owns the linalg public operations registers the pin
     # once; lin_borrow_array allocates it with PythonObject(alloc=...).
-    _ = module.add_type[LinBufferPin[]]("_LinBufferPin")
+    # Once per process: a second initialization of the owner attaches the
+    # existing type object (bindings/py_type_registry.mojo).
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[LinBufferPin[]]()
+    except error:
+        if not py_type_absent(error, String(reflect[LinBufferPin[]].name())):
+            raise error
+        _ = module.add_type[LinBufferPin[]]("_LinBufferPin")
+        return
+    py_type_attach(module.module, "_LinBufferPin", existing)
 
 
 def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonObject) raises -> LinBuf:
