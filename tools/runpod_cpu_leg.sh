@@ -578,7 +578,7 @@ echo "  pod $POD_NAME  image $IMAGE  flavors $FLAVORS  vCPU $VCPU  disk ${DISK}G
 echo "  envs $ENVS  build [$BUILD]  sabotage-build [$SAB_BUILD]  jobs $JOBS  bincache=$BINCACHE envcache=$ENVCACHE"
 SRC=$(make_source) || die "the source tarball did not build"
 echo "  source: $(echo "$SRC" | cut -f1) files, $(echo "$SRC" | cut -f2) bytes gz, sha256 $(echo "$SRC" | cut -f3 | cut -c1-16)"
-[ "$(echo "$SRC" | cut -f2)" -le 40000000 ] || die "the source tarball is over 40 MB; the uplink is the rental's bottleneck (leg-archive-uplink-limit)"
+[ "$(echo "$SRC" | cut -f2)" -le 50000000 ] || die "the source tarball is over 50 MB; the uplink is the rental's bottleneck (leg-archive-uplink-limit)"
 write_box_script
 write_create_request "$TMPD/create.json"
 echo "  box script OK (bash -n, no placeholder, commit baked in); create request: $(tr -d ' \n' < "$TMPD/create.json")"
