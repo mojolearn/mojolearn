@@ -1,0 +1,17 @@
+{
+  "files": {
+    "mojolearn_nvidia-0.8.65-py3-none-manylinux_2_35_x86_64.whl": "e9ce359d332dcd922602c5c66a66bba919910a792d0f96be1b2e3b6834af722c"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "6519a54c657930757a36a520a03724d78318140e"
+  },
+  "release_profile": "alpha-api",
+  "requirements_admission": {
+    "bundle_sha256": "d151da6ee8166180e4e893730d74416b8dc287bcfac5b6bf535e2faece078865",
+    "source_commit": "6519a54c657930757a36a520a03724d78318140e"
+  },
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.65"
+}
