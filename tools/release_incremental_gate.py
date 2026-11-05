@@ -14,6 +14,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
+import generated_wheel_members
 import merged_bindings
 import release_evidence as evidence
 import release_gate_reuse as reuse
@@ -23,10 +24,9 @@ SCHEMA = 'mojolearn.release.incremental-gate.v1'
 #: forest input-admission path (bindings/merged_groups.json; _mojolearn_native_tokenizer_host.so at 0.8.65).
 HOST = 'mojolearn/host/' + merged_bindings.member_file('host', '_mojolearn_tokenizer_host')
 VERIFIER = 'mojolearn/_verify_distributed.py'
-FIXTURE_FILES = {
-    'mojolearn/_identity_break.py': 'tools/identity_break.py',
-    'mojolearn/_identity_lane_neighbors.py': 'tools/identity_lanes/neighbors.py',
-}
+#: The two fixture members and their sources, from the one generated-member table.
+FIXTURE_FILES = {member: generated_wheel_members.source_path(member)
+                 for member in ('mojolearn/_identity_break.py', 'mojolearn/_identity_lane_neighbors.py')}
 FIXTURE_ARMS = {
     'coverage-precise-x_neighbors-p2m_transpose_i': 'knn-clf/base',
     'coverage-precise-x_neighbors-p2m_const_cols': 'x-neighbors-nearest-centroid/base',
