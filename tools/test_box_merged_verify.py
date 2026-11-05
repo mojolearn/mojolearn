@@ -272,8 +272,9 @@ def test_per_set_compiler_workers_follow_release_policy(box, vendor, gpu_workers
     builds = [json.loads(line) for line in events.splitlines() if line.startswith("[")]
     builds = [row for row in builds if row[0] == "pixi" and "bindings/merged_build.sh" in row[1]]
     host_workers = overrides.get("BOX_HOST_COMPILE_JOBS", "2")
-    # one cached compile per group: 4 identical groups, then 5 host groups
-    assert [row[3] for row in builds] == [gpu_workers] * 4 + [host_workers] * 5
+    # one cached compile per group: the identical groups, then the host groups (bindings/merged_groups.json)
+    n_identical, n_host = (len(merged_bindings.plan(d, "linux", True)) for d in ("identical", "host"))
+    assert [row[3] for row in builds] == [gpu_workers] * n_identical + [host_workers] * n_host
     for tag, workers in (("gpu-identical", gpu_workers), ("host", host_workers)):
         assert f"MOJOLEARN_COMPILE_JOBS={workers}" in (out / f"build-{tag}.command").read_text()
     assert f"gpu_compile_jobs\t{gpu_workers}\n" in (out / "run.tsv").read_text()

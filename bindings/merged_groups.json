@@ -11,6 +11,9 @@
   "members (tokenizer, neural, byte LM, forest) sit in different groups. A stem never equals a member,",
   "and every host stem ends in _host so the packers' _mojolearn_*_host.so glob still finds it.",
   "Splitting changes link units only: same sources, same flags, same kernels, no bit change.",
+  "2026-11-04 (docs/build/HOT_GROUPS.md): the two compiler-limited host groups split along their closure clusters;",
+  "_mojolearn_runtime_classical_host (442 of 702 files, 391 its own) and _mojolearn_tokenizer_host (655 of 741, 626",
+  "its own) each compile alone, their small neighbours in _mojolearn_native_host and _mojolearn_native_series_host.",
   "dirs.<dir>.optional: member -> {group, platforms}: it joins that group on those platforms when MOJOLEARN_PACKAGE_BYTE_LM=1.",
   "darwin_metal1: members whose per-binding script passes --target-accelerator metal:1 on macOS;",
   "on macOS they compile into <stem>_m1 so every member keeps its own compile flags.",
@@ -129,7 +132,6 @@
    "path": "host",
    "groups": {
     "_mojolearn_native_host": [
-     "_mojolearn_runtime_classical_host",
      "_mojolearn_core_host",
      "_mojolearn_linalg_host",
      "_mojolearn_estimators_host",
@@ -137,8 +139,13 @@
      "_mojolearn_preprocessing_host",
      "_mojolearn_solver_host"
     ],
+    "_mojolearn_native_classical_host": [
+     "_mojolearn_runtime_classical_host"
+    ],
     "_mojolearn_native_tokenizer_host": [
-     "_mojolearn_tokenizer_host",
+     "_mojolearn_tokenizer_host"
+    ],
+    "_mojolearn_native_series_host": [
      "_mojolearn_tsa_host",
      "_mojolearn_arima_host",
      "_mojolearn_forecast_host",
