@@ -5295,8 +5295,6 @@ class Release:
         out.write_text(json.dumps(plan, indent=1, sort_keys=True) + "\n")
         for line in rp.lines(plan) + ["note: " + n for n in plan["notes"]]:
             self.say(line)
-        if plan.get("report_totals"):
-            self.say(plan["report_totals"])
         self.say(f"== plan.json: {out}")
         return 0 if plan["publish"]["status"] == "ready" else 3
 
