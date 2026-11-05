@@ -345,3 +345,37 @@ def test_table_mode_own_class_older_than_a_change_stays_owed(tmp_path, monkeypat
     owed, err = _owed(capsys)
     assert owed == ["lane_mix", "lane_none", "lane_old"]
     assert "1 lack one" in err
+
+
+# ------------------------------------ n/a placeholder parts (lane planner-na-parts, 2026-11-05)
+# After f038e50b19 the nvidia plan still owed 46 lanes (mlp, samba-*, optim-*, ...) "since 0db362a62516":
+# every real part sat at the new nvidia record; only the rlpair "n/a:no-sampler" placeholder kept an old
+# record index, and a placeholder carries no reference bits (identity_admission_guard skips it too).
+
+def test_na_placeholder_part_does_not_date_a_lane(tmp_path, monkeypatch, capsys):
+    cells = {"lane_na/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0}},
+                              "rlpair": {"ref": "n/a:no-sampler", "cols": {"nvidia": 2, "amd": 2}}},
+             "lane_old/base": {"train": {"ref": "2" * 16, "cols": {"nvidia": 2}},
+                               "rlpair": {"ref": "n/a:no-sampler", "cols": {"nvidia": 2}}}}
+    changed = {P: {"lane_na", "lane_old"}, O: {"lane_na", "lane_old"}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == ["lane_old"]                  # its train cell itself rests on the old record
+    assert "class nvidia (backend cuda): 2 lane(s)" in err and "0 lack one" in err
+    # --class mode (reuse_points) agrees: the table row of lane_na rests on N, lane_old on P.
+    monkeypatch.setattr(ic, "is_shallow", lambda: False)
+    monkeypatch.setattr(ic, "_commit_time", lambda c, cache: {N: 30, O: 10, P: 20}.get(c))
+    monkeypatch.setattr(ic, "harness_sha256", lambda h: "H")
+    h = types.SimpleNamespace(FIXTURES=["base"], LANES=["lane_na", "lane_old"], fixture=lambda f: (0, 0, 0),
+                              heldout=lambda f: 0, _h=lambda x: "h")
+    table = json.loads((tmp_path / "table.json").read_text())
+    table["harness_sha256"] = "H"
+    pts = ic.reuse_points(h, ["lane_na", "lane_old"], table, "nvidia", [])
+    assert pts["lane_na"]["commit"] == N and pts["lane_old"]["commit"] == P
+
+
+def test_na_placeholder_is_only_the_n_a_prefix():
+    assert ic.is_placeholder_part({"ref": "n/a:no-sampler"})
+    assert not ic.is_placeholder_part({"ref": "1" * 16})
+    assert not ic.is_placeholder_part({"ref": None, "conflict": True})
+    assert not ic.is_placeholder_part({"ref": "N/A"})
