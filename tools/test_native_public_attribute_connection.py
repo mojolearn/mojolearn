@@ -10,6 +10,13 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class _Available:
+    # Stand-in for `_mode.available_if`'s descriptor: the connector reads
+    # only its instance `check` field, never calls it.
+    def __init__(self, check):
+        self.check = check
+
+
 class PublicAttributeConnection(unittest.TestCase):
     def fixture(self):
         package = ModuleType('_attribute_fixture')
@@ -30,6 +37,22 @@ class PublicAttributeConnection(unittest.TestCase):
         array = ModuleType(package.__name__ + '._array')
         cholesky = ModuleType(package.__name__ + '._cholesky_impl')
         cholesky.Cholesky = type('Cholesky', (), {'logdet_': property(lambda self: 1)})
+        # SVC/SVR declarations the connector reads by identity: coef_
+        # properties and the available_if predict_proba/predict_log_proba
+        # descriptors whose `check` is the native availability predicate.
+        svm = ModuleType(package.__name__ + '._svm_impl')
+        def check(self):
+            raise AssertionError('availability predicate ran during connection')
+        svm.SVC = type('SVC', (), {'coef_': property(lambda self: 1),
+                                   'predict_proba': _Available(check),
+                                   'predict_log_proba': _Available(check)})
+        svm.SVR = type('SVR', (), {'coef_': property(lambda self: 1)})
+        svm._NATIVE = svm._NATIVE_CONTEXT = None
+        # The real ARIMA property connector; the fixture package has no
+        # _arima_impl module, so it connects nothing and imports nothing.
+        mode_properties = ModuleType(package.__name__ + '._native_mode_properties')
+        exec(compile((ROOT / 'python/mojolearn/_native_mode_properties.py').read_text(), 'mode_properties', 'exec'),
+             vars(mode_properties))
         tokenizer = ModuleType(package.__name__ + '.tokenizer')
         tokenizer._binding = lambda: (_ for _ in ()).throw(AssertionError('fixture imported binary'))
         namespace = {'__name__': package.__name__ + '._native_public_attributes', '__package__': package.__name__}
@@ -41,7 +64,7 @@ class PublicAttributeConnection(unittest.TestCase):
         context = dict(plans={}, pending={}, missing=object(), descriptor=descriptor,
                        property_schemas={vars(cholesky.Cholesky)['logdet_']: 'cholesky_logdet'}, stl_connected=False)
         namespace['_CONTEXT'] = context
-        modules = {m.__name__: m for m in (package, mode, bridge, tokenizer, cholesky, array)}
+        modules = {m.__name__: m for m in (package, mode, bridge, tokenizer, cholesky, svm, mode_properties, array)}
         return package, mode, namespace, context, modules, original
 
     def test_unknown_properties_and_getattr_keep_original_slots(self):
@@ -172,8 +195,20 @@ class PublicAttributeConnection(unittest.TestCase):
 
     def test_no_python_getter_or_audited_frame_callback_in_native_owner(self):
         source = (ROOT / 'bindings/public_attributes_native.mojo').read_text()
+        # The generic slot is PublicOutputsMixin's own __getattribute__ for
+        # classes that hold no connected plan: it is CPython's C generic
+        # lookup (object.__getattribute__ in C) followed by the native
+        # Array/NumPy rule. That one entry may call PyObject_GenericGetAttr;
+        # the connected-owner path (every other function) must not.
+        start = source.index('def _public_attribute_generic_entry[')
+        end = source.find('\ndef ', start + 1)
+        end = len(source) if end < 0 else end
+        generic = source[start:end]
+        self.assertEqual(generic.count('"PyObject_GenericGetAttr"'), 1)
+        source = source[:start] + source[end:]
         for forbidden in ('Python.import_module', 'PyObject_GenericGetAttr', '._getframe(', '.f_code', '.fget(', '.__array__('):
             self.assertNotIn(forbidden, source)
+            self.assertNotIn(forbidden, generic.replace('"PyObject_GenericGetAttr"', ''))
         for required in ('"PyEval_GetFrame"', '"PyFrame_GetCode"', '"PyFrame_GetBack"', '_classical_descriptor_get', '_array_view'):
             self.assertIn(required, source)
         self.assertIn('"PyMethod_New"', source)
