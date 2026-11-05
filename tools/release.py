@@ -248,6 +248,19 @@ ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
 
 
+def ignore_hangup():
+    """A real run survives its terminal closing (2026-11-05, interruption recovery): SIGHUP is ignored by
+    the controller and, inherited, by the compiles and uploads it runs in the foreground, whose output it
+    keeps teeing into their logs (say() drops what it cannot print). A kill or a reboot still stops it;
+    every step then resumes from the state (docs/release/RELEASE_PLAN.md, interruption recovery)."""
+    import signal
+    try:
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    except (ValueError, OSError, AttributeError):   # not the main thread, or no SIGHUP on this platform
+        return False
+    return True
+
+
 def release_plan_module():
     """tools/release_plan.py of THIS tooling tree (the decision table is tooling, not the frozen source)."""
     sys.path.insert(0, str(ROOT / "tools"))
@@ -1424,7 +1437,12 @@ class Release:
         with self._out:
             if tag:
                 msg = "\n".join(f"[{tag}] {line}" for line in (str(msg).splitlines() or [""]))
-            print(msg, flush=True)
+            try:
+                print(msg, flush=True)
+            except (OSError, ValueError):
+                # A disconnected controller terminal (EIO, a closed pipe): the step logs and the state carry
+                # everything, so the run goes on instead of crashing the step that printed (2026-11-05).
+                pass
 
     def sleep(self, seconds):
         if not self.dry:
@@ -5312,6 +5330,7 @@ class Release:
             self.say("== end of plan (the " + " and ".join(self.PIPELINES)
                      + " pipelines run at once in a real run; see --status)")
             return 0
+        ignore_hangup()
         try:
             status = self.schedule(steps)
         finally:

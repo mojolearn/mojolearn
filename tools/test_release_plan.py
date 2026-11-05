@@ -257,3 +257,28 @@ def test_waste_json_is_written_after_a_real_run_with_step_seconds(tmp_path):
     path = r.write_waste()
     doc = json.loads(path.read_text())
     assert doc["steps"] == {"linux-pack": 12.5, "record": 40.0} and doc["admission_seconds"] == 40.0
+
+
+# ---------------------------------------------------------------- interruption recovery
+def test_say_survives_a_disconnected_terminal(tmp_path, monkeypatch):
+    import release
+    from test_release_no_hands import make
+    r = make(tmp_path)
+    del r.say   # the instance fake; use the real method
+
+    class Gone:
+        def write(self, _):
+            raise OSError(5, "Input/output error")
+
+        def flush(self):
+            raise OSError(5, "Input/output error")
+    monkeypatch.setattr(sys, "stdout", Gone())
+    release.Release.say(r, "a line nobody can read")   # no exception
+
+
+def test_a_real_run_ignores_sighup(monkeypatch):
+    import signal
+    import release
+    seen = {}
+    monkeypatch.setattr(signal, "signal", lambda sig, handler: seen.setdefault(sig, handler))
+    assert release.ignore_hangup() is True and seen == {signal.SIGHUP: signal.SIG_IGN}
