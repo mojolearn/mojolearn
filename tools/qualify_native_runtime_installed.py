@@ -430,6 +430,16 @@ def test_dependencies(selected, extra=()):
                           for dependency in TEST_DEPENDENCIES.get(name, ())] + list(extra)))
 
 
+def unit_plan_dependency_files(plan, selected):
+    """The files whose test dependencies the per-unit venv installs: every unit in the plan,
+    run or reused, not only the ones this invocation runs. A unit's environment then does not
+    depend on which other units happened to need rerunning: with pandas 3, pyarrow (declared
+    by other units) changes the storage of every DataFrame string column, so the same unit
+    passed alone and failed in the full 73-unit run of the 0.8.66 Apple gate."""
+    planned = [row["unit"] for row in plan.get("units", []) if row.get("unit") in PUBLIC_TESTS]
+    return list(dict.fromkeys(list(selected) + planned))
+
+
 def require(condition, why):
     if not condition:
         raise ValueError(why)
@@ -1240,7 +1250,9 @@ def main():
         report["selected_test_nodes"] = args.test_node
         report["selected_public_scope"] = {name:PUBLIC_TESTS[name] for name in selected}
         report["selected_test_applicability"] = test_applicability(selected, args.vendor)
-        report["test_dependencies"] = test_dependencies(selected, args.dependency)
+        dependency_files = (unit_plan_dependency_files(json.loads(Path(args.unit_plan).read_text()), selected)
+                            if args.unit_plan else selected)
+        report["test_dependencies"] = test_dependencies(dependency_files, args.dependency)
         venv = out / "venv"
         run_command("venv", [args.python, "-m", "venv", str(venv)], out, cwd=out)
         python = venv / "bin/python"
