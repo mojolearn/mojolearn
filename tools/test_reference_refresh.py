@@ -456,6 +456,62 @@ class TestAdmit(Base):
         self.assertEqual(self.state()["admit"]["phase"], "refused")
         self.assertEqual(sh.count("git commit"), 0)
 
+    def _refused_with_edits(self, before, after):
+        """A refused admission whose tree shows BEFORE edits ahead of the admit call and AFTER edits once it ran."""
+        sh = FakeShell()
+        sh.admit_rc, sh.admit_out = 2, "admit_identity_columns: emit-reference refused; table unchanged\n"
+        self.finished(sh)
+        real = sh.run
+        ran = []
+
+        def run(cmd, **k):
+            cmd = [str(c) for c in cmd]
+            if cmd[:3] == ["git", "diff", "--name-only"]:
+                sh.cmds.append(cmd)
+                return 0, "\0".join(after if ran else before)
+            if "admit_identity_columns.sh" in " ".join(cmd):
+                ran.append(True)
+            return real(cmd, **k)
+        sh.run = run
+        with self.assertRaises(rr.Refused) as caught:
+            self.refresh(sh, ["nvidia"]).run(wait=False)
+        restores = [c for c in sh.cmds if c[:4] == ["git", "checkout", "-q", "HEAD"]]
+        return sh, restores, str(caught.exception)
+
+    def test_a_refused_emit_restores_only_the_pointer_files_it_generated(self):
+        pointers = ["docs/verification/latest/auto/identity-apple-m4.json",
+                    "docs/verification/latest/auto/identity-nvidia-l40s.json"]
+        other = "python/mojolearn/verify_reference/table.json"
+        sh, restores, why = self._refused_with_edits([], pointers + [other])
+        self.assertEqual(len(restores), 1)
+        self.assertEqual(restores[0][4:], ["--"] + pointers)
+        self.assertNotIn(other, restores[0])
+        a = self.state()["admit"]
+        self.assertEqual(a["phase"], "refused")
+        self.assertEqual(a["restored"], pointers)
+        self.assertEqual(a["tracked_edits_left"], [other])
+        self.assertIn("LEFT", why)
+        self.assertEqual(sh.count("git reset"), 0)
+        self.assertEqual(sh.count("git stash"), 0)
+
+    def test_a_pointer_edited_before_the_run_is_not_restored(self):
+        p = "docs/verification/latest/auto/identity-apple-m4.json"
+        sh, restores, _ = self._refused_with_edits([p], [p])
+        self.assertEqual(restores, [])
+        self.assertEqual(self.state()["admit"]["tracked_edits_left"], [p])
+
+    def test_a_refusal_with_no_generated_edits_restores_nothing(self):
+        sh, restores, _ = self._refused_with_edits([], [])
+        self.assertEqual(restores, [])
+        self.assertEqual(self.state()["admit"]["restored"], [])
+
+    def test_generated_pattern_is_the_retained_identity_summary_only(self):
+        self.assertTrue(rr.ADMIT_GENERATED.match("docs/verification/latest/auto/identity-cpu.json"))
+        for path in ("docs/verification/latest/README.md", "docs/verification/latest/auto/api-all.json",
+                     "python/mojolearn/verify_reference/table.json",
+                     "docs/verification/latest/auto/sub/identity-x.json"):
+            self.assertIsNone(rr.ADMIT_GENERATED.match(path), path)
+
 
 OLD = "1111111111111111111111111111111111111111"
 NEW = "3333333333333333333333333333333333333333"

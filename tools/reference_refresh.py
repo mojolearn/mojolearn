@@ -95,6 +95,12 @@ RECORD_OUTPUT_PATHS = ("bench/results/identity_break", "bench/results/reference_
 #: Files that travel with a record into admission (tools/admit_identity_columns.sh's NEXT line names them).
 RECORD_COMPANIONS = (".provenance.txt", ".source-report.json.gz", ".verifier-run.json")
 NOT_A_RECORD = (".admission-preview-", ".other-commit-")
+#: Tracked files tools/admit_identity_columns.sh rewrites BEFORE its emit-reference can refuse: the
+#: identity_admission_guard.py `inputs` step retains each record and repoints these per-vendor summaries
+#: (tools/retain_run_summary.py retain_identity). A refused admission restores exactly these, and only when
+#: the run itself changed them (0.8.66: the admission tree kept them after a refused emit, and the next run
+#: refused on "tracked edits"). Untracked retained records stay: the next run reuses them.
+ADMIT_GENERATED = re.compile(r"^docs/verification/latest/auto/identity-[^/]+\.json$")
 
 
 def utc():
@@ -850,15 +856,19 @@ class Refresh:
         tree = self.admit_tree
         if not a.get("commit"):
             self.prepare_admit_tree(tree, branch)
+            before = self.tracked_edits(tree)
             env = dict(PYTHON=self.py, EVIDENCE=str(self.home / "admit"), REF_TAG="ref-%s" % self.sha12)
             log = self.log("admit.log")
             rc, out = self.sh.run(["bash", "tools/admit_identity_columns.sh", "--build-host", *dirs], cwd=str(tree),
                                   log=log, env=env)
             paths = parse_admit_next(out)
             if rc != 0 or not paths:
-                a.update(phase="refused", why="admission refused (rc=%s); see %s" % (rc, log))
+                restored, left = self.restore_generated(tree, before)
+                a.update(phase="refused", why="admission refused (rc=%s); see %s" % (rc, log),
+                         restored=restored, tracked_edits_left=left)
                 self.state.save()
-                raise Refused(a["why"])
+                raise Refused(a["why"] + ("; restored %d generated pointer file(s)" % len(restored) if restored else "")
+                              + ("; tracked edits LEFT in %s: %s" % (tree, ", ".join(left[:6])) if left else ""))
             dest = next((x for x in paths if x.startswith(ADMISSIONS)), None)
             if dest is None:
                 a.update(phase="refused", why="the admission named no %s directory; see %s" % (ADMISSIONS, log))
@@ -915,6 +925,33 @@ class Refresh:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a") as fh:
             fh.write(self.readme_section())
+
+    def tracked_edits(self, tree):
+        """Tracked paths of TREE that differ from its HEAD (staged or not); None when git cannot say."""
+        rc, out = self.git("diff", "--name-only", "-z", "HEAD", cwd=tree)
+        if rc != 0:
+            return None
+        return sorted(p for p in out.split("\0") if p.strip())
+
+    def restore_generated(self, tree, before):
+        """After a refused admission: put back the ADMIT_GENERATED files this run changed, nothing else (no
+        reset). A file already edited before the run, or any path git could not account for, is left and
+        returned in `left`. Returns (restored, left)."""
+        after = self.tracked_edits(tree)
+        if after is None:
+            return [], ["(git diff failed: nothing restored)"]
+        if before is None:
+            return [], list(after)   # the run's own changes cannot be told apart: restore nothing
+        new = [p for p in after if p not in set(before)]
+        ours = [p for p in new if ADMIT_GENERATED.match(p)]
+        left = [p for p in after if p not in ours]
+        if ours:
+            rc, out = self.git("checkout", "-q", "HEAD", "--", *ours, cwd=tree)
+            if rc != 0:
+                return [], after
+            self.say("admission refused: restored %d generated pointer file(s) in %s: %s"
+                     % (len(ours), tree, ", ".join(ours)))
+        return ours, left
 
     def prepare_admit_tree(self, tree, branch):
         """The admission checkout on ref/<sha12>, started from origin/main so earlier admissions are its base."""
