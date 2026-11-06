@@ -24,6 +24,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_attr import py_attr
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
@@ -244,8 +245,11 @@ def _zeros(count: Int, context: PythonObject) raises -> PythonObject:
 
 
 def _class_zero(xt: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_class_major([0.0], n)`."""
-    return _class_major(xt, Python.list(PythonObject(0.0)), n, context)
+    """`_class_major([0.0], n)`: a zero-filled buffer (`trees_empty` fills
+    zero bytes, +0.0), without the separate fill program it used to run
+    (lane perf-sweep-trees, 2026-11-05). Same bits."""
+    _ = xt
+    return trees_vector(n, "<f8", context)
 
 
 # ---------------------------------------------------------------- members
@@ -1147,7 +1151,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         var m = len(rows[0])
         _set(model, "estimators_", fitted)
         _set(model, "classes_", classes)
-        var getter = Python.import_module("operator").itemgetter
+        var getter = native_loaded_module("operator").itemgetter
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
             var labels = trees_encode_labels(column, context)
@@ -1415,8 +1419,6 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var n = _rows(Xa)
     var k = len(_attr(model, "classes_", Python.list()))
     var members = _attr(model, "estimators_", Python.list())
-    var acc = _class_zero(xt, n * k, context)
-    var rows = _arange(xt, n, context)
     if k == 2:
         # `_trees_binary_proba`: rows (1 - p, p) of the positive column
         var p = _f32_array(_proba_positive(xt, members[0], Xa, context), 1, "p", context)
@@ -1428,6 +1430,8 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var fused = py_get(xt, PythonObject("x_trees_ovr_assemble"))
     if fused is not None and len(members) == k:
         return trees_reshape(_ovr_fused(xt, fused, members, Xa, n, k, False, 1, context), Python.tuple(n, k), context)
+    var acc = _class_zero(xt, n * k, context)
+    var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_proba_positive(xt, members[j], Xa, context), n, context)
         _ = _place(xt, acc, n, k, blk, rows, j)

@@ -711,7 +711,7 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: TreesMatrix,
     """`_BaggingBase._oob_outputs`: each member's output on its out-of-bag
     rows, added in member order; (sums, counts)."""
     var n = x.rows
-    var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
+    var acc = trees_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var counts = trees_vector(n, "<i4", context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
@@ -821,7 +821,7 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
         _ = proba  # keep the Python object alive through the native call above
         return out
     var xt = _xt(fields, context)
-    var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
+    var acc = trees_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var rows_all = _arange(xt, n, context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
@@ -1112,7 +1112,7 @@ def _ada_decision(fields: PythonObject, x: TreesMatrix, xt: PythonObject, contex
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
-    var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
+    var acc = trees_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var members = fields["estimators_"]
     var alphas = fields["estimator_weights_"]
     # One device copy of X for every one-tree member (trees_staged_input).
