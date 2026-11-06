@@ -112,7 +112,14 @@ GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/rel
 #: the measurement smoke's venv (release_gate_job.sh phase measuresmoke): the exact wheels plus these harness packages
 #: (the board harness and its data prep read NumPy; the two causal-LM recipes fetch their public checkpoints with
 #: huggingface_hub). Harness only: nothing here is an opponent library and nothing reaches the runtime.
-MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub")
+#: The untimed quality references some of our cells are scored against are part of that harness (pinned as the board
+#: pins them, tools/opponent_wheels.sh and bench_board_algos.PINS_COMMON): scikit-learn (the algos preprocessing
+#: oracle, rfe, the hdbscan scorer), scipy (the als input split, the NB count matrix), statsmodels (select-d). They
+#: are never raced: the smoke runs no opponent arm.
+MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub", "scikit-learn==1.7.2", "scipy==1.17.1", "statsmodels==0.15.0")
+#: the fixture generator's own venv (tools/neural_fixtures_box.sh NF_TORCH / NF_PYG, CPU index): it writes the layer
+#: lanes' inputs once before the batches; never the measured venv, never raced
+MEASURE_SMOKE_FIXTURE_PIP = ("numpy", "torch==2.13.0", "torch-geometric==2.8.0.post1")
 #: the measurement smoke's ceiling (minutes); see tools/release_measurement_smoke.py for the expected duration
 MEASURE_SMOKE_MINUTES = 90
 #: the presigned-GET data plan the measurement smoke stages from R2 (tools/release_measurement_smoke.py data-plan)
@@ -304,6 +311,7 @@ class Plan:
                  f"GATE_UNITS={1 if self.units_plan else 0}", f"GATE_BUILD_AUTOGRAD={1 if self.build_autograd else 0}",
                  f"GATE_REUSE_UNCHANGED={1 if self.reuse_unchanged else 0}",
                  bash_array("MEASURE_SMOKE_PIP", MEASURE_SMOKE_PIP),
+                 bash_array("MEASURE_SMOKE_FIXTURE_PIP", MEASURE_SMOKE_FIXTURE_PIP),
                  f"GATE_MEASURE_SMOKE_MINUTES={MEASURE_SMOKE_MINUTES}"]
         return "\n".join(lines) + "\n"
 

@@ -289,6 +289,20 @@ if [ "$mrc" = 0 ]; then
       && "$mpy" -m pip install -q --no-cache-dir "${MEASURE_SMOKE_PIP[@]}"; } > "$J/measure-venv.log" 2>&1 || mrc=$?
     [ "$mrc" = 0 ] || say "measuresmoke: the venv install exited $mrc (see measure-venv.log): FAIL"
 fi
+fpy=()
+if [ "$mrc" = 0 ]; then
+    # the layer lanes' input fixtures are written by the CPU torch the fixture generator pins
+    # (tools/neural_fixtures_box.sh), in a venv of its own: never the measured venv, never raced
+    if { python3 -m venv "$GATE_WORK/fixture-venv" \
+         && "$GATE_WORK/fixture-venv/bin/python" -m pip install -q --no-cache-dir "${MEASURE_SMOKE_FIXTURE_PIP[@]}" \
+              --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple; } \
+            > "$J/fixture-venv.log" 2>&1; then
+        fpy=(--fixture-python "$GATE_WORK/fixture-venv/bin/python")
+    else
+        say "measuresmoke: the fixture venv did not install (see fixture-venv.log); the layer recipes will FAIL"
+        fpy=()
+    fi
+fi
 if [ "$mrc" = 0 ]; then
     if [ -f "$IN/measuresmoke-data.json" ]; then
         python3 tools/release_measurement_smoke.py stage --data-plan "$IN/measuresmoke-data.json" --home "$HOME" \
@@ -300,10 +314,10 @@ if [ "$mrc" = 0 ]; then
     [ "$mrc" = 0 ] || say "measuresmoke: staging the plan's data exited $mrc: FAIL"
 fi
 if [ "$mrc" = 0 ]; then
-    MOJOLEARN_BOARD_LM_CHECKPOINTS="$GATE_WORK/hf-checkpoints" \
-    python3 tools/release_measurement_smoke.py run --vendor "$GATE_VENDOR" --python "$mpy" \
+    # run by the measured venv's python (the plan imports the board harness, which reads NumPy)
+    "$mpy" tools/release_measurement_smoke.py run --vendor "$GATE_VENDOR" --python "$mpy" \
         --data-root "$HOME/datasets/gbm-bench" --ceiling $(( ${GATE_MEASURE_SMOKE_MINUTES:-90} * 60 )) \
-        --out "$mout" --work "$GATE_WORK/measuresmoke-work" > "$J/measuresmoke.log" 2>&1 || mrc=$?
+        --out "$mout" --work "$GATE_WORK/measuresmoke-work" ${fpy[@]+"${fpy[@]}"} > "$J/measuresmoke.log" 2>&1 || mrc=$?
     grep -E '^MEASURESMOKE' "$J/measuresmoke.log" | tail -n 20 || true
 fi
 say "measuresmoke exited $mrc"

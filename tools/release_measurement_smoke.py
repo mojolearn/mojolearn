@@ -317,12 +317,53 @@ def run_batch(args, k, ids, deadline, recipe_timeout):
 
 
 def batch_env(args):
-    env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
-    env.pop("PYTHONHOME", None)
+    """The installed wheel's shipped defaults: every MOJOLEARN_* variable of the box is dropped (a job-level knob, a
+    vendor override or a fault switch would change a route: a FAIL that is not a product defect, as in
+    tools/logical_shard_identity.py worker_env), then only what the harness needs is set."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("PYTHONPATH", "PYTHONHOME") and not k.startswith("MOJOLEARN_")}
+    env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_NUMERIC_MODE"] = MODE
+    # the two causal-LM recipes' public checkpoints (bench_board_neural.lm_checkpoint fetches them once)
+    env["MOJOLEARN_BOARD_LM_CHECKPOINTS"] = str(Path(args.work) / "hf-checkpoints")
     env.setdefault("GBM_BENCH_DATA", args.data_root)
+    # the layer lanes' fixtures, generated once before the batches (fixtures() below)
+    env["MOJOLEARN_NEURAL_FIXTURES"] = str(fixture_dir(args))
+    # no run summary into the gate tree: retain_run_summary.retain_board (smoke=True) would write a timing summary
+    # under docs/measurements/latest/auto/ of the source tree, from every batch at once. An absent repository makes
+    # it print RETENTION FAILED and keep the run's own exit code (tools/retain_run_summary.py try_retain).
+    env["MOJOLEARN_SUMMARY_REPO"] = str(Path(args.work) / "no-run-summary")
     return env
+
+
+def fixture_dir(args):
+    return Path(args.work) / "cache" / "algos-data" / "neural-fixtures"
+
+
+def fixtures(args, races, out, deadline):
+    """The algos layer lanes' input fixtures (tools/neural_fixtures.py generate over the smoke-size blocks the prep
+    wrote, then verify), with --fixture-python: a separate venv holding the CPU torch / torch-geometric the fixture
+    generator pins (tools/neural_fixtures_box.sh), never the measured venv; torch only writes inputs here, it is not
+    raced. Without it, or when it fails, the layer recipes refuse on their own ("neural fixtures missing") and FAIL
+    with that reason. Returns the record kept in the summary."""
+    import release_gate_profiles as P
+    B = _bb()
+    lanes = sorted({r["lane"] for r in races if r["family"] == "algos" and B.ALGOS.LANES[r["lane"]]["kind"] == "layer"})
+    if not lanes:
+        return dict(lanes=0)
+    if not args.fixture_python:
+        return dict(lanes=len(lanes), exit_code=None, why="no --fixture-python: the layer recipes refuse")
+    data = Path(args.work) / "cache" / "algos-data" / ("rows-%d" % B.SMOKE_ROWS)
+    log = out / "logs" / "fixtures.log"
+    env = batch_env(args)
+    env["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
+    rec = P.bounded_run([args.fixture_python, str(HERE / "neural_fixtures.py"), "generate", "--out",
+                         str(fixture_dir(args)), "--data", str(data), "--lanes", ",".join(lanes)], log,
+                        max(0.0, deadline - time.time()), env=env, cwd=str(ROOT))
+    if rec["exit_code"] == 0:
+        rec = P.bounded_run([args.python, str(HERE / "neural_fixtures.py"), "verify", "--dir", str(fixture_dir(args))],
+                            log, max(0.0, deadline - time.time()), env=env, cwd=str(ROOT))
+    return dict(lanes=len(lanes), exit_code=rec["exit_code"], timed_out=rec["timed_out"])
 
 
 def _tail(path, n=1):
@@ -397,6 +438,7 @@ def cmd_run(args):
     import release_gate_profiles as P
     prep = P.bounded_run(board_command(args, work / "prep", ["--preflight-only", "--prep-only"]), out / "logs/prep.log",
                          max(0.0, deadline - time.time()), env=batch_env(args), cwd=str(ROOT))
+    fixture_rec = fixtures(args, races, out, deadline) if prep["exit_code"] == 0 else dict(exit_code=None)
     batches = []
     if prep["exit_code"] != 0:
         reason = "the untimed data prep exited %s: %s" % (prep["exit_code"], _tail(out / "logs/prep.log"))
@@ -421,7 +463,7 @@ def cmd_run(args):
                 device_gb_per_worker=DEVICE_GB_PER_WORKER, host_gb_per_worker=HOST_GB_PER_WORKER,
                 measured_peak_device_mb=peak.peak, ceiling_seconds=args.ceiling,
                 recipe_timeout_seconds=recipe_timeout, elapsed_seconds=round(time.time() - started, 1),
-                prep=dict(exit_code=prep["exit_code"], timed_out=prep["timed_out"]),
+                prep=dict(exit_code=prep["exit_code"], timed_out=prep["timed_out"]), fixtures=fixture_rec,
                 batches=[{k: b.get(k) for k in ("batch", "recipes", "exit_code", "timed_out", "ceiling_hit",
                                                  "started_late", "elapsed_seconds", "log")} for b in batches])
     doc = summarize(args.vendor, ids, verdicts, meta)
@@ -560,6 +602,8 @@ def main(argv=None):
     p.add_argument("--out", required=True, help="the summary and logs (fetched home)")
     p.add_argument("--work", required=True, help="the batch smoke boards, prep and caches (stay on the box)")
     p.add_argument("--data-root", default=os.path.join(os.path.expanduser("~"), "datasets", "gbm-bench"))
+    p.add_argument("--fixture-python", default=None,
+                   help="a venv with the fixture generator's CPU torch + torch-geometric (the layer lanes' inputs)")
     p.add_argument("--jobs", type=int, default=0, help="override the worker count (default: cores and memory)")
     p.add_argument("--ceiling", type=int, default=PHASE_CEILING_S, help="the phase ceiling, seconds")
     args = ap.parse_args(argv)
