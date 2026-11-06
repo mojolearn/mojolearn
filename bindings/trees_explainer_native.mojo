@@ -262,9 +262,20 @@ struct TreeShapOwner(Movable, Writable):
                 pass
 
 
+def _is_owner(value: PythonObject) -> Bool:
+    """`type(value)` is the bound TreeShapOwner type. The binding's own type
+    check (downcast_value_ptr compares the registered type object) replaces
+    allocating a throwaway owner on every call only to read its type
+    (p3-trees)."""
+    try:
+        _ = value.downcast_value_ptr[TreeShapOwner]()
+        return True
+    except:
+        return False
+
+
 def _admit_owner(owner: PythonObject) raises:
-    var prototype = PythonObject(alloc=TreeShapOwner(PythonObject(None), PythonObject(None), 0))
-    if py_type(owner) is not py_type(prototype):
+    if not _is_owner(owner):
         raise Error("TypeError: TreeExplainer requires its native cache owner")
     if py_contains(_class_fields(py_type(owner)), "__del__"):
         raise Error("TypeError: TreeExplainer refuses injected Python finalizers")
@@ -292,8 +303,7 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
             kept = kept or value is changes[names[i]]
         if kept:
             continue
-        var prototype = PythonObject(alloc=TreeShapOwner(PythonObject(None), PythonObject(None), 0))
-        if py_type(value) is py_type(prototype):
+        if _is_owner(value):
             native_release_weakrefs(value, context)
             _admit_owner(value)
             var previous_owner = value.downcast_value_ptr[TreeShapOwner]()
