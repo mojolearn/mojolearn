@@ -1451,7 +1451,7 @@ def _connect_host_inference():
     entries = {}
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
-                                                          "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
+                                                          "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "qn_proba", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
                             ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:

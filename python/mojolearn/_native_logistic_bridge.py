@@ -4,7 +4,7 @@
 
 _ESTIMATOR_ENTRIES = ("estimators_vendor", "estimators_numeric_mode", "qn_fit", "qn_decision_function",
                       "qn_sigmoid", "qn_softmax")
-_OPTIONAL_ENTRIES = ("qn_predict_binary", "qn_predict_multiclass", "py2mojo_rows", "py2mojo_linear_flags")
+_OPTIONAL_ENTRIES = ("qn_predict_binary", "qn_predict_multiclass", "py2mojo_rows", "py2mojo_linear_flags", "qn_proba")
 _X_TREES_ENTRIES = ("x_trees_code_counts", "x_trees_class_rows", "x_trees_mul_f32")
 
 
