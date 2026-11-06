@@ -46,8 +46,15 @@ def classical_view(source: PythonObject, context: PythonObject, name: String = "
 def classical_refuse_sparse(source: PythonObject, est: String) raises:
     # scipy.sparse containers are recognized by their defining module, so no
     # attribute or property of the container runs.
-    var module = py_type(source).__module__
-    if py_type(module) is native_loaded_module("builtins").str and Bool(py=py_call(module.startswith, "scipy.sparse")):
+    # p3-labels-metrics: this runs twice per classical call (the door and
+    # the X check); an exact list or tuple is never sparse, and the module
+    # name is tested as a native string (no Python startswith call).
+    var b = native_loaded_module("builtins")
+    var cls = py_type(source)
+    if cls is b.list or cls is b.tuple:
+        return
+    var module = cls.__module__
+    if py_type(module) is b.str and String(py=module).startswith("scipy.sparse"):
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
 
 
