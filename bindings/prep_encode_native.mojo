@@ -248,6 +248,13 @@ struct EncProg(Movable):
         var flat = _input(value, 1, False, context)
         return self.put(flat, Int(py=flat.size))
 
+    def put_fitted(mut self, owner: PythonObject, name: String, value: PythonObject, context: PythonObject) raises -> Int:
+        # `put_array` of the fitted field `name` of `owner`: the admitted flat
+        # float32 vector is kept per model (`_fitted_flat`), so a transform
+        # re-admits it only after the field was reassigned (refit, load).
+        var flat = _fitted_flat(owner, name, value, context)
+        return self.put(flat[1], Int(py=flat[2]))
+
     def put_floats(mut self, values: List[Float64], context: PythonObject) raises -> Int:
         # `_Prog.put_list`: the values rounded to float32 ([0.0] when empty).
         return self.put(_floats(values, context), max(len(values), 1))
@@ -278,6 +285,25 @@ struct EncProg(Movable):
         xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words,
                   self.inout_ranges.copy())
         return Python.tuple(arena, store)
+
+
+def _fitted_flat(owner: PythonObject, name: String, value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """(value, flat float32 vector, words) of a fitted field: `_input`'s
+    admission and conversion of `value`, kept in the prepared-owner registry
+    keyed weakly by the model (one slot per field name, never in the model's
+    `__dict__`) and reused while the field holds the same object (perf2-prep).
+    Not noticed: a value written in place into a fitted array whose
+    admission produced a converted copy (the fitted arrays are written by
+    the encoder alone)."""
+    var mods = NativeModules()
+    var slot = String("prep_encode_fitted_v1:") + name
+    var record = prepared_get(mods, slot, owner)
+    if record is not None and record[0] is value:
+        return record
+    var flat = _input(value, 1, False, context)
+    record = Python.tuple(value, flat, Int(py=flat.size))
+    prepared_put(mods, slot, owner, record)
+    return record
 
 
 def _floats(values: List[Float64], context: PythonObject) raises -> PythonObject:
@@ -632,7 +658,7 @@ def _imputer_transform(model: PythonObject, values: PythonObject, context: Pytho
     var p = EncProg()
     var x_in = p.put_x(values)
     var xo = _mark_missing(p, x_in, n * d, fields["missing_values"], context)
-    var so = p.put_array(fields["_fill"], context)
+    var so = p.put_fitted(model, "_fill", fields["_fill"], context)
     var ko = p.put_floats(_to_floats(keep), context)
     var out = p.alloc(n * dout)
     _stage(p.program, OP_FILL, n * dout, xo, n, d, so, out, ko, dout)
@@ -895,8 +921,8 @@ def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonO
     var stride = Int(py=fields["_stride"])
     var p = EncProg()
     var xo = p.put_x(values)
-    var eo = p.put_array(fields["_edges"], context)
-    var no = p.put_array(fields["_ne"], context)
+    var eo = p.put_fitted(model, "_edges", fields["_edges"], context)
+    var no = p.put_fitted(model, "_ne", fields["_ne"], context)
     var codes = p.alloc(n * d)
     _stage(p.program, OP_KBINS_CODES, n * d, xo, n, d, eo, stride, no, codes)
     var encode = fields["encode"]
@@ -957,7 +983,7 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
         bad_code = -1
         why = "can not be inverted because they contain all zeros"
     var out = p.output(n * d, entries)
-    var eo2 = p.put_array(fields["_edges"], context)
+    var eo2 = p.put_fitted(model, "_edges", fields["_edges"], context)
     _stage(p.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
     var staged = _bad_rows_stages(p, codes, n, d, bad_code, NONE)
     var ran = p.run(entries, context)
@@ -1967,8 +1993,8 @@ def _target_transform(model: PythonObject, values: PythonObject, context: Python
     var cmax = Int(py=fields["_cmax"])
     var p = EncProg()
     var codes = _codes(p, values, fields["categories_"], context, _target_scratch(mode, entries), model)[0]
-    var enc = p.put_array(fields["_enc"], context)
-    var meta = p.put_array(fields["_meta"], context)
+    var enc = p.put_fitted(model, "_enc", fields["_enc"], context)
+    var meta = p.put_fitted(model, "_meta", fields["_meta"], context)
     var out = p.output(n * d * T, entries)
     _stage(p.program, OP_TE_APPLY, n * d * T, codes, n, d, T, NONE, enc, cmax, meta, 0, out)
     var ran = p.run(entries, context)
@@ -2245,7 +2271,7 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
     var extrap_error = _is_str(fields["extrapolation"]) and String(fields["extrapolation"]) == "error"
     var p = EncProg()
     var xo = p.put_x(values)
-    var ko = p.put_array(fields["_knots"], context)
+    var ko = p.put_fitted(model, "_knots", fields["_knots"], context)
     var out = p.alloc(n * W) if fortran else p.output(n * W, entries)
     var st = p.alloc(6 * d)
     var check = extrap_error or missing_error
