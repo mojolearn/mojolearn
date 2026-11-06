@@ -1724,6 +1724,17 @@ def _train_native_values(module: PythonObject, documents: PythonObject, size_val
 def tokenizer_public_call(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     _sequence(args, "operation arguments")
     _sequence(context, "connected context")
+    # The per-call encode/decode operations are matched first; every other
+    # operation is a construction or metadata call (same semantics, the
+    # names are distinct, so order does not change which branch runs).
+    if operation == "bpe_encode":
+        return _bpe_encode(args[0], args[1], args[2], _bool(args[3], "bytes_only"), _bool(args[4], "batch"), context)
+    if operation == "bpe_decode":
+        return _bpe_decode(args[0], args[1], _bool(args[2], "bytes_only"), _bool(args[3], "batch"), args[4], context)
+    if operation == "vocab_encode":
+        return _vocab_encode(args[0], args[1], args[2], args[3], _bool(args[4], "bytes_only"), context)
+    if operation == "vocab_decode":
+        return _vocab_decode(args[0], args[1], _bool(args[2], "bytes_only"), args[3], context)
     if operation == "connect_bpe":
         if len(context) != 8:
             raise Error("TypeError: BPE connection requires eight metadata entries")
