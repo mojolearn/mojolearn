@@ -31,6 +31,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -49,6 +50,13 @@ from tokenizer.fast.bpe_fast_impl import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Direct PyNumber_Index / PyLong_AsLongLong through entries resolved once
+    # per process: no class-name String, no operator module stamp, no Python
+    # call per argument. Any refusal keeps the original path and wording.
+    var word = 0
+    if lm_try_index(value, word):
+        return word
+    # Not an index: keep the original wording (NumPy bool_ included).
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("tokenizer fast: integers expected, not booleans")
@@ -60,10 +68,13 @@ def _index(value: PythonObject) raises -> Int:
 
 
 def _flag(value: PythonObject, name: String) raises -> Bool:
+    # Exact bool singletons, compared by identity (no class-name String).
+    if value is PythonObject(True):
+        return True
+    if value is PythonObject(False):
+        return False
     var type_name = String(py=value.__class__.__name__)
-    if type_name != "bool":
-        raise Error("tokenizer fast: " + name + " must be a bool, got " + type_name)
-    return Bool(py=value)
+    raise Error("tokenizer fast: " + name + " must be a bool, got " + type_name)
 
 
 def tokenizer_fast_numeric_mode_binding() raises -> PythonObject:

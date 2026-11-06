@@ -3,6 +3,7 @@
 # registry shapes/names and profile spelling are owned here after admission.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython import lm_try_index
 from bindings.py_balanced import py_call, py_type, py_contains, py_fields, py_setitem
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
@@ -140,13 +141,16 @@ def _shape_of(state: PythonObject) raises -> _Shape:
     for i in range(9):  # small-loop(the nine dimension names)
         if py_contains(value, names[i]):
             var v = value[names[i]]
-            if py_type(v) is b.bool or String(py=py_type(v).__name__) == "bool_":
-                raise Error("ValueError: Byte-LM shape requires integer dimensions")
             var n = 0
-            try:
-                n = Int(py=py_call(native_loaded_module("operator").index, v))
-            except:
-                raise Error("ValueError: Byte-LM shape requires integer dimensions")
+            # Fast path through PyNumber_Index resolved once; bools and any
+            # refusal take the original checks and wording.
+            if not lm_try_index(v, n):
+                if py_type(v) is b.bool or String(py=py_type(v).__name__) == "bool_":
+                    raise Error("ValueError: Byte-LM shape requires integer dimensions")
+                try:
+                    n = Int(py=py_call(native_loaded_module("operator").index, v))
+                except:
+                    raise Error("ValueError: Byte-LM shape requires integer dimensions")
             if not (0 < n and n <= (1 << 20)):
                 raise Error("ValueError: Byte-LM dimensions must be in [1, 2**20]")
             dims[i] = n
@@ -181,6 +185,14 @@ def byte_lm_lengths(source: PythonObject, batch: Int, length: Int, context: Pyth
     var result = List[Int]()
     for i in range(batch):  # driver-loop: over one admitted length metadata word per sequence
         var value = values[i]
+        # Fast path: one PyNumber_Index through entries resolved once, range
+        # checked natively; bools and any refusal take the original path.
+        var word = 0
+        if lm_try_index(value, word):
+            if word < 1 or word > length:
+                raise Error("lengths must be in [1, L]")
+            result.append(word)
+            continue
         if py_type(value) is bi.bool or String(py=py_type(value).__name__) == "bool_":
             raise Error("TypeError: lengths entries must be integers, not booleans")
         var scalar = PythonObject(None)

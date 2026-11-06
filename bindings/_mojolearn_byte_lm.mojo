@@ -36,6 +36,7 @@ from std.memory import bitcast, memcmp
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython import lm_try_index
 from std.time import perf_counter_ns
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call
@@ -462,13 +463,19 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
 def _byte_config(shape: PythonObject) raises -> ByteConfig:
     if len(shape) != 7 and len(shape) != 9 and len(shape) != 10:
         raise Error("byte LM: expected 7, 9 or 10 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab[,chunked_head_v2]])")
-    var operator_module = native_loaded_module("operator")
     var values = List[Int]()
     for i in range(len(shape)):  # small-loop(shape: 7 to 10 configuration words)
-        var type_name = String(py=shape[i].__class__.__name__)
+        var item = shape[i]
+        # Fast path: PyNumber_Index through entries resolved once (no class
+        # name String, no operator call); any refusal keeps the original path.
+        var word = 0
+        if lm_try_index(item, word):
+            values.append(word)
+            continue
+        var type_name = String(py=item.__class__.__name__)
         if type_name == "bool" or type_name == "bool_":
             raise Error("byte LM: shape dimensions must be integers, not booleans")
-        values.append(Int(py=py_call(operator_module.index, shape[i])))
+        values.append(Int(py=py_call(native_loaded_module("operator").index, item)))
     if len(values) == 7:
         values.append(2)
         values.append(256)
@@ -513,13 +520,17 @@ def _logits_dims(dims: PythonObject, shape: ByteConfig) raises -> List[Int]:
     address is read."""
     if len(dims) != 2:
         raise Error("byte LM logits: expected dims [batch, length]")
-    var operator_module = native_loaded_module("operator")
     var out = List[Int]()
     for i in range(2):  # small-loop(dims: batch and length words)
-        var type_name = String(py=dims[i].__class__.__name__)
+        var item = dims[i]
+        var word = 0
+        if lm_try_index(item, word):
+            out.append(word)
+            continue
+        var type_name = String(py=item.__class__.__name__)
         if type_name == "bool" or type_name == "bool_":
             raise Error("byte LM logits: dims must be integers, not booleans")
-        out.append(Int(py=py_call(operator_module.index, dims[i])))
+        out.append(Int(py=py_call(native_loaded_module("operator").index, item)))
     if out[0] < 1 or out[0] > BYTE_LOGITS_MAX_BATCH or out[1] < 1 or out[1] > shape.length:
         raise Error("byte LM logits: batch in [1, " + String(BYTE_LOGITS_MAX_BATCH)
                     + "] and length in [1, " + String(shape.length) + "]")
@@ -547,7 +558,9 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
 
 
 def _claimed_step(completed: PythonObject) raises -> Int:
-    var claimed = Int(py=native_loaded_module("operator").index(completed))
+    var claimed = 0
+    if not lm_try_index(completed, claimed):
+        claimed = Int(py=native_loaded_module("operator").index(completed))
     if claimed < 0 or claimed >= 1000000:
         raise Error("byte LM: completed step outside admitted bound")
     return claimed

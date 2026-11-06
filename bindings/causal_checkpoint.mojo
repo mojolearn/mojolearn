@@ -18,6 +18,8 @@ from bindings.native_buffer_address import native_buffer_address
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot
 from bindings.mode_metadata_native import _class_fields
+from bindings.native_class_admission import class_record, class_admit
+from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
 from bindings.causal_model_config import model_record_fields, model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.linalg_ops_lowbit import _lin_from_f16, lin_connected_binding
@@ -93,6 +95,9 @@ def _file_fields(mut mods: NativeModules, value: PythonObject) raises -> PythonO
         Python.tuple("path", "_fh", "_mm", "_infos", "data_start", "data_size", "metadata"))
 
 
+comptime _INFO_SLOTS = "checkpoint_tensor_info_slots_v1"
+
+
 def _checkpoint_fields(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
     return model_record_fields(mods, value, _checkpoint_context()["checkpoint_class"],
         Python.tuple("root", "_paths", "_weight_map", "_open", "_infos"))
@@ -104,6 +109,11 @@ def _info_slots(mut mods: NativeModules, value: PythonObject) raises -> PythonOb
     var bi = mods.module("builtins")
     if py_type(value) is not cls:
         raise Error("TypeError: tensor metadata requires its connected TensorInfo class")
+    # The admission below is class-level only: keep its slots per class
+    # epoch (type watcher), so a map of N tensors is not N class walks.
+    var cached = class_record(mods, _INFO_SLOTS, cls)
+    if cached is not None:
+        return cached
     var namespace = _class_fields(cls)
     var bases = py_call(bi.type.__dict__["__bases__"].__get__, cls)
     if len(bases) != 1 or bases[0] is not bi.object:
@@ -118,6 +128,9 @@ def _info_slots(mut mods: NativeModules, value: PythonObject) raises -> PythonOb
         if py_type(slot) is not member or slot.__objclass__ is not cls or model_string(mods, slot.__name__) != name:
             raise Error("TypeError: TensorInfo storage descriptors changed")
         py_setitem(slots, name, slot)
+    # The member descriptors reference the TensorInfo class, which the
+    # checkpoint connection already holds for the process lifetime.
+    class_admit(mods, _INFO_SLOTS, cls, slots)
     return slots
 
 
@@ -168,6 +181,15 @@ def _info_map(mut mods: NativeModules, value: PythonObject) raises -> PythonObje
 
 def _checkpoint_pinned_bytes(pin: AdmittedBorrowedBuffer) raises -> PythonObject:
     var count = pin.layout.value().count * pin.layout.value().itemsize
+    ref cpy0 = Python().cpython()
+    if count > 0 and pin.layout.value().contiguous():
+        # One copy: the bytes object is built straight from the pinned
+        # contiguous storage (no zero-filled intermediate List).
+        var direct = lm_cpython_table()[].PyBytes_FromStringAndSize(pin.layout.value().address, count)
+        _ = pin
+        if not direct:
+            raise cpy0.unsafe_get_error()
+        return PythonObject(from_owned=direct)
     var bytes = List[UInt8](length=count, fill=0)
     pin.layout.value().copy_to(Int(bytes.unsafe_ptr()))
     ref cpy = Python().cpython()

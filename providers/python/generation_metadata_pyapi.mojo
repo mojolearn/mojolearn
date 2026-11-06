@@ -10,13 +10,17 @@ from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_array_snapshot, generation_buffer_view
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.causal_model_config import model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.generation_metadata import GenerationLayerWords
+
+
+comptime _GENERATION_STATE_SLOT = "generation_state_class_fields_v1"
 
 
 def _generation_fields(value: PythonObject, names: PythonObject, allow_state: Bool = False) raises -> PythonObject:
@@ -39,6 +43,14 @@ def _generation_fields(value: PythonObject, names: PythonObject, allow_state: Bo
     if not allow_state:
         raise Error("TypeError: generation requires an admitted native metadata snapshot")
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    # The class-level admission below depends on (cls, names) only: keep its
+    # verdict per class epoch (type watcher) and re-check per call only the
+    # instance storage read by _fields. The connected class registry cannot
+    # change after connection (generation_initialize_binding refuses it).
+    var mods = NativeModules()
+    var record = class_record(mods, _GENERATION_STATE_SLOT, cls)
+    if record is not None and py_type(names) is bi.tuple and Bool(py=py_call(bi.tuple.__eq__, record, names)):
+        return _fields(value)
     var admitted = cls is g[].state_cls
     model_dict(g[].layer_classes)
     var layer_classes = py_call(bi.list, g[].layer_classes.values())
@@ -57,6 +69,8 @@ def _generation_fields(value: PythonObject, names: PythonObject, allow_state: Bo
         for j in range(len(names)):  # small-loop(consumed state field names)
             if py_contains(row, names[j]):
                 raise Error("TypeError: generation state fields cannot be replaced by descriptors")
+    if py_type(names) is bi.tuple:
+        class_admit(mods, _GENERATION_STATE_SLOT, cls, names)
     return _fields(value)
 
 

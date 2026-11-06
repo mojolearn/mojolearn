@@ -43,6 +43,7 @@ from core.generation_policy_impl import GenerationSamplingScratch
 from core.generation_kv_policy import GenerationReadControl
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
+from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.sha256_door import sha256_update, sha256_update_text
 from std.math import isfinite
 from std.os import getenv
@@ -1290,7 +1291,6 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
     var v = Int(py=model.vocab_size)
     var int15 = model._head_int15 is not None
     var keep = List[PythonObject]()
-    var copies = List[PythonObject]()
     var held = Bool(read_plan) and read_plan.value().resident_active
     if held and not _legacy_resident_valid(read_plan.value()):
         # A supported parameters() call may expose/invalidate the model while
@@ -1370,24 +1370,22 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
             mods.released()
         _ = out  # keep the Python object alive through the native call above
-        for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-            var blk = _block_at(mods, model, blocks, i)
-            var st = state.layers[i]
-            var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
-            var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
-            var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
-            var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
-            # `provider` is the entry read once above the loop.
-            if provider is not None:
-                _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
-                mods.released()
-            else:
-                _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
-                mods.released()
-            _resident_publish_profile(blk, st)
-            py_setattr(st, "cached_tokens", cached)
-            _ = out  # keep the Python object alive through the native call above
-        _writeback(copies)
+        if retain:
+            # The read keeps these sessions for its next forward, which skips
+            # the upload, and nothing reads the host caches between tokens of
+            # one read (the stream is busy). Export the device KV once, when
+            # the read publishes or cancels its sessions, instead of after
+            # every token: the final host bytes are those of the last
+            # per-token export (same layers, same order).
+            read_plan.value().export_owed = True
+            read_plan.value().export_state = state
+            read_plan.value().export_batch = b
+            for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+                var st = state.layers[i]
+                _resident_publish_profile(_block_at(mods, model, blocks, i), st)
+                py_setattr(st, "cached_tokens", cached)
+        else:
+            _resident_export_states(mods, model, e, provider, sessions, state, blocks, b, cached)
     except error:
         mods.released()
         if retain:
@@ -1401,8 +1399,8 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             mods.released()
         raise error
     if retain:
-        # Export/writeback above is still per successful forward, before host
-        # selection. Only the upload and cache-owner publication are deferred.
+        # The upload, the KV export and the cache-owner publication are
+        # deferred to the read's finish (or cancel).
         _ = read_plan
     elif persist:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
@@ -1415,6 +1413,16 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
 
 
 def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    var verdict = -1
+    var blocks = List[PythonObject]()
+    return _use_native_generation_engine(mods, model, state, verdict, blocks)
+
+
+def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, state: PythonObject,
+                                  mut resident_verdict: Int, mut resident_blocks: List[PythonObject]) raises -> Bool:
+    # `resident_verdict` receives 1/0 when the resident check ran (else stays
+    # -1) and `resident_blocks` its admitted layers, so the caller decides the
+    # route once per public call.
     # Select once at a public operation boundary, never in the token/layer
     # loop. No failed native admission/execution is caught and retried through
     # the object route: a selected engine keeps its original refusal semantics.
@@ -1442,10 +1450,15 @@ def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, 
     # Existing resident execution already owns a separate supported native
     # program. Its route, distributed execution and packed arithmetic remain
     # supported; they are explicit remaining migration scopes, not refusals.
-    return not _resident_forward_ok(mods, model, state)
+    var resident = _resident_forward_ok(mods, model, state, resident_blocks)
+    resident_verdict = 1 if resident else 0
+    return not resident
 
 
-def _engine_admission(mut mods: NativeModules, model: PythonObject, state: PythonObject, batch: Int, length: Int) raises -> GenerationEngineAdmission:
+def _engine_admission(mut mods: NativeModules, model: PythonObject, state: PythonObject, batch: Int, length: Int,
+                      resident_refused: Bool = False) raises -> GenerationEngineAdmission:
+    # `resident_refused`: the caller's route decision for this same call
+    # already found the resident route unavailable; skip the repeat check.
     # Once selected, admission failures propagate. The boundary selector
     # handles unsupported routes before execution, without exception fallback.
     _state(mods, model, state, batch, length)
@@ -1453,7 +1466,7 @@ def _engine_admission(mut mods: NativeModules, model: PythonObject, state: Pytho
         var entries = model._native_entries
         if py_get(entries, "parallel_call") is not None:
             raise Error("CausalLM: native generation engine distributed execution is pending")
-        if _resident_forward_ok(mods, model, state):
+        if not resident_refused and _resident_forward_ok(mods, model, state):
             raise Error("CausalLM: native generation engine does not replace the existing resident route")
         if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1":
             raise Error("CausalLM: native generation engine requires the supported session setup")
@@ -1471,12 +1484,13 @@ def _engine_admission(mut mods: NativeModules, model: PythonObject, state: Pytho
         raise problem
 
 
-def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
+                resident_refused: Bool = False) raises -> PythonObject:
     _causal_array_guard()
     var shape = ids.shape
     var batch = Int(py=shape[0])
     var length = Int(py=shape[1])
-    var owner = _engine_admission(mods, model, state, batch, length)
+    var owner = _engine_admission(mods, model, state, batch, length, resident_refused)
     var keep = List[PythonObject]()
     var address = _addr(ids, keep)
     var logits = List[Float32]()
@@ -1522,6 +1536,10 @@ struct LegacyGenerationReadPlan(Movable):
     # The read's admitted layer fields (resident route), filled once by the
     # resident check or the first resident forward; cleared with the loan.
     var blocks: List[PythonObject]
+    # A retained read defers the per-token KV export to its finish/cancel.
+    var export_owed: Bool
+    var export_state: PythonObject
+    var export_batch: Int
 
     def __init__(out self, model: PythonObject, state: PythonObject, batch: Int, resident: Bool) raises:
         self.resident = resident
@@ -1541,6 +1559,9 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
         self.blocks = List[PythonObject]()
+        self.export_owed = False
+        self.export_state = PythonObject(None)
+        self.export_batch = 0
 
     def clear_resident(mut self):
         self.resident_active = False
@@ -1549,6 +1570,8 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
         self.blocks.clear()
+        self.export_owed = False
+        self.export_state = PythonObject(None)
 
     def positions(self, state: PythonObject, batch: Int, length: Int) raises:
         # Position/capacity checks retain their per-step execution point, before
@@ -1562,6 +1585,43 @@ struct LegacyGenerationReadPlan(Movable):
             raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
         if have + length > self.capacity:
             raise Error("CausalLM: sequence exceeds allocated state capacity")
+
+
+def _resident_export_states(mut mods: NativeModules, model: PythonObject, e: PythonObject, provider: PythonObject,
+                            sessions: PythonObject, state: PythonObject, blocks: List[PythonObject], b: Int,
+                            cached: PythonObject) raises:
+    # Device KV of every layer session into the state's host caches (op 22).
+    # `cached` None leaves cached_tokens and the profile as they are.
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+        var blk = _block_at(mods, model, blocks, i)
+        var st = state.layers[i]
+        var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
+        var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
+        var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
+        var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
+        if provider is not None:
+            _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
+            mods.released()
+        else:
+            _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
+            mods.released()
+        if cached is not None:
+            _resident_publish_profile(blk, st)
+            py_setattr(st, "cached_tokens", cached)
+    _writeback(copies)
+    _ = keep^
+
+
+def _legacy_resident_export(mut mods: NativeModules, model: PythonObject, mut plan: LegacyGenerationReadPlan) raises:
+    # The one deferred KV export of a read that kept its sessions.
+    if not plan.export_owed:
+        return
+    plan.export_owed = False
+    var e = model._native_entries
+    _resident_export_states(mods, model, e, py_get(e, "native_block_operations"), plan.resident_sessions,
+                            plan.export_state, plan.blocks, plan.export_batch, PythonObject(None))
 
 
 def _legacy_resident_valid(mut plan: LegacyGenerationReadPlan) raises -> Bool:
@@ -1586,6 +1646,12 @@ def _legacy_resident_cancel(mut mods: NativeModules, model: PythonObject, mut pl
     var sessions = plan.resident_sessions
     plan.resident_active = False
     try:
+        # Bring the deferred device KV home before the sessions close, so a
+        # fresh open (or a checkpoint) sees the advanced caches.
+        _legacy_resident_export(mods, model, plan)
+    except:
+        mods.released()
+    try:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
     except:
         mods.released()
@@ -1609,6 +1675,7 @@ def _legacy_resident_finish(mut mods: NativeModules, model: PythonObject, mut re
         if not _legacy_resident_valid(plan):
             _legacy_resident_cancel(mods, model, plan)
             return
+        _legacy_resident_export(mods, model, plan)
         causal_model_cache_set(mods, model, plan.resident_fields, "_resident_sessions",
             Python.tuple(plan.resident_key, plan.resident_lm, plan.resident_sessions))
         causal_model_cache_set(mods, model, plan.resident_fields, "_resident_busy", False)
@@ -1626,16 +1693,21 @@ def _legacy_read_captured(mut mods: NativeModules, model: PythonObject, state: P
 
 
 def _run(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
-    if _use_native_generation_engine(mods, model, state):
-        return _run_engine(mods, model, ids, state)
+    # The route is decided once here; the resident verdict and its admitted
+    # layers are passed down instead of re-running the check.
+    var verdict = -1
+    var resident_blocks = List[PythonObject]()
+    if _use_native_generation_engine(mods, model, state, verdict, resident_blocks):
+        return _run_engine(mods, model, ids, state, verdict == 0)
     var snapshot: Optional[GenerationOperationSnapshot] = None
     var read_plan: Optional[LegacyGenerationReadPlan] = None
-    return _run_prepared(mods, model, ids, state, snapshot, read_plan, remote_step)
+    return _run_prepared(mods, model, ids, state, snapshot, read_plan, remote_step, False, False, verdict, resident_blocks)
 
 
 def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
                   mut snapshot: Optional[GenerationOperationSnapshot], mut read_plan: Optional[LegacyGenerationReadPlan], remote_step: Bool = False,
-                  admitted: Bool = False, retain_resident: Bool = False) raises -> PythonObject:
+                  admitted: Bool = False, retain_resident: Bool = False, resident_verdict: Int = -1,
+                  resident_blocks: List[PythonObject] = List[PythonObject]()) raises -> PythonObject:
     # `admitted`: the caller (the generation loop) already guarded the Array
     # class for this GIL-release window; do not repeat the full guard.
     if not admitted:
@@ -1657,7 +1729,15 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
         # Layer fields admitted by the resident check; the resident forward
         # (and, with a read plan, every later forward of this read) reuses them.
         var admitted_blocks = List[PythonObject]()
-        var resident = read_plan.value().resident if read_plan else _resident_forward_ok(mods, model, state, admitted_blocks)
+        var resident: Bool
+        if read_plan:
+            resident = read_plan.value().resident
+        elif resident_verdict >= 0:
+            # Decided by the caller for this same call (no state change since).
+            resident = resident_verdict == 1
+            admitted_blocks = resident_blocks.copy()
+        else:
+            resident = _resident_forward_ok(mods, model, state, admitted_blocks)
         if not read_plan and admitted and _legacy_read_captured(mods, model, state):
             read_plan = LegacyGenerationReadPlan(model, state, b, resident)
             if resident:
@@ -2853,12 +2933,29 @@ def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject
     return causal_lm_generate_text_binding(mods, model, tokenizer, text, maximum, options)
 
 
-def _array_bytes(value: PythonObject) raises -> PythonObject:
+def _hash_array(mut hash: Sha256, value: PythonObject) raises:
+    # The same bytes in the same order as `_array_bytes` (tobytes("C")),
+    # hashed straight from the pinned buffer: no bytes object and no
+    # array('B') copy per tensor. A strided buffer is packed once.
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if py_type(value) is g[].array_cls:
-        var captured = generation_array_snapshot(value)
-        return py_call(captured._mv.tobytes, "C")
-    return py_call(generation_buffer_view(value).tobytes, "C")
+    var source = generation_array_snapshot(value)._mv if py_type(value) is g[].array_cls else generation_buffer_view(value)
+    admit_native_buffer_exporter(source)
+    var pin = AdmittedBorrowedBuffer(source)
+    try:
+        var layout = pin.layout.value().copy()
+        var n = layout.count * layout.itemsize
+        if n > 0 and layout.contiguous():
+            hash.update(layout.address, n)
+        elif n > 0:
+            var packed = List[UInt8](length=n, fill=0)
+            layout.copy_to(Int(packed.unsafe_ptr()))
+            hash.update(Int(packed.unsafe_ptr()), n)
+            _ = packed^
+    except error:
+        pin.release()
+        raise error
+    pin.release()
+    _ = source
 
 
 def _hash() -> Sha256:
@@ -2878,10 +2975,10 @@ def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonO
     _hash_scalar(h, model.norm_eps)
     _hash_scalar(h, model.max_positions)
     _hash_scalar(h, model._embed.shape)
-    sha256_update(h, _array_bytes(model._embed))
+    _hash_array(h, model._embed)
     if model._norm is not None:
-        sha256_update(h, _array_bytes(model._norm))
-    sha256_update(h, _array_bytes(model._head))
+        _hash_array(h, model._norm)
+    _hash_array(h, model._head)
     for i in range(len(model._blocks)):  # driver-loop: over model layers
         var blk = _block(mods, model, i)
         _causal_array_guard()
@@ -2892,7 +2989,7 @@ def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonO
             _hash_scalar(h, blk["window"])
             for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
                 if blk["_wopt"][j] is not None:
-                    sha256_update(h, _array_bytes(blk["_wopt"][j]))
+                    _hash_array(h, blk["_wopt"][j])
         elif String(model.kind) == "mamba2":
             _hash_scalar(h, blk["dt_limit"])
         else:
@@ -2900,15 +2997,15 @@ def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonO
         for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
                 _hash_scalar(h, blk["_w"][j].shape)
-                sha256_update(h, _array_bytes(blk["_w"][j]))
+                _hash_array(h, blk["_w"][j])
         if model._head_int15 is not None:
             for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
                 if blk["_int15"][j] is not None:
                     for k in range(3):  # small-loop(int15 plane triple)
-                        sha256_update(h, _array_bytes(blk["_int15"][j][k]))
+                        _hash_array(h, blk["_int15"][j][k])
     if model._head_int15 is not None:
         for k in range(3):  # small-loop(int15 head plane triple)
-            sha256_update(h, _array_bytes(model._head_int15[k]))
+            _hash_array(h, model._head_int15[k])
     return PythonObject(h.hexdigest())
 
 
@@ -2931,8 +3028,8 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     if String(checkpoint["schema"]) == "mojolearn.generation.v2":
         _hash_scalar(h, checkpoint["sampling_policy"])
     sha256_update(h, checkpoint["pending_bytes"])
-    sha256_update(h, _array_bytes(checkpoint["prompt"]))
-    sha256_update(h, _array_bytes(checkpoint["current"]))
+    _hash_array(h, checkpoint["prompt"])
+    _hash_array(h, checkpoint["current"])
     for i in range(len(checkpoint["layers"])):  # driver-loop: over checkpoint layers
         var layer = checkpoint["layers"][i]
         var names = py_call(g[].bi.sorted, layer.keys())
@@ -2942,7 +3039,7 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
             if py_type(value) is g[].array_cls:
                 _hash_scalar(h, value.shape)
                 _hash_scalar(h, value.dtype)
-                sha256_update(h, _array_bytes(value))
+                _hash_array(h, value)
             else:
                 _hash_scalar(h, value)
     return PythonObject(h.hexdigest())

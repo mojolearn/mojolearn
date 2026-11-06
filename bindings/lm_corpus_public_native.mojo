@@ -350,16 +350,29 @@ def _batch_ids(value: PythonObject, step_value: PythonObject, context: PythonObj
 
 
 struct LmCorpusIteratorHandle(Movable, Writable):
+    # The batches owner is admitted once, at prefetch: the iterator keeps the
+    # admitted scalars and the token source snapshot (which owns the mapped
+    # ids), so each step only allocates its output and gathers natively.
     var owner: PythonObject
     var current: Int
     var stop: Int
     var closed: Bool
+    var batch: Int
+    var length: Int
+    var lo: Int
+    var modulus: Int
+    var source: PythonObject
 
     def __init__(out self, owner: PythonObject, start: Int, stop: Int):
         self.owner = owner
         self.current = start
         self.stop = stop
         self.closed = False
+        self.batch = 0
+        self.length = 0
+        self.lo = 0
+        self.modulus = 0
+        self.source = PythonObject(None)
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("<native corpus batch iterator>")
@@ -380,9 +393,17 @@ def _prefetch(owner: PythonObject, start_value: PythonObject, steps_value: Pytho
         raise Error("ValueError: prefetch start_step/steps require nonnegative ints and depth a positive int")
     var fields = _batch_fields(owner, context)
     _batch_method(owner, fields, context)
+    var handle = LmCorpusIteratorHandle(owner, start, start + steps)
+    handle.batch = corpus_int(fields["batch"], "batch", True)
+    handle.length = corpus_int(fields["length"], "length", True)
+    handle.lo = corpus_int(fields["lo"], "lo", True)
+    handle.modulus = corpus_int(fields["modulus"], "modulus", True)
+    # Bad dimensions keep raising at the first step, as before (source None).
+    if handle.batch >= 0 and handle.length >= 1:
+        handle.source = corpus_ids_snapshot(fields["ids_all"], context)
     var iterator = corpus_new(context["iterator_class"])
     var slots = corpus_fields(iterator, context["iterator_class"], Python.tuple("_handle"))
-    py_setitem(slots, "_handle", PythonObject(alloc=LmCorpusIteratorHandle(owner, start, start + steps)))
+    py_setitem(slots, "_handle", PythonObject(alloc=handle^))
     return iterator
 
 
@@ -395,9 +416,16 @@ def _iterator_next(value: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("StopIteration:")
     var step = handle[].current
     try:
-        var batch_fields = _batch_fields(handle[].owner, context)
-        _batch_method(handle[].owner, batch_fields, context)
-        var output = _batch_ids(handle[].owner, PythonObject(step), context, batch_fields)
+        var batch = handle[].batch
+        var length = handle[].length
+        if handle[].source is None:
+            raise Error("ValueError: tokens_gather_rows: bad dims")
+        var base = corpus_batch_base(PythonObject(step), batch, length)
+        var source = handle[].source
+        var output = corpus_empty(Python.tuple(batch, length + 1), context)
+        _ = tokenizer_gather_rows_native(Int(py=source._addr), Int(py=source.size), Int(py=output._addr), Int(py=output.size),
+            batch, length, handle[].lo, handle[].modulus, base)
+        _ = source^
         handle[].current += 1
         return Python.tuple(step, output)
     except error:
