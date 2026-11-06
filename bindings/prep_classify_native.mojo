@@ -1202,7 +1202,9 @@ def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: 
     var est = fields["covariance_estimator"]
     var tot = NONE
     if eigen:
-        var y0 = pr.put_list(_zeros(n), context)
+        # The one-class code vector: a zeroed float32 Array put as it is (no
+        # n-word host List and per-word conversion, p3-prep). Same words.
+        var y0 = pr.put(f32_array(n, context))
         var c1 = pr.alloc(1)
         var m1 = pr.alloc(d)
         var v1 = pr.alloc(d) if Bool(shr) else NONE
