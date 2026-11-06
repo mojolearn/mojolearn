@@ -195,7 +195,7 @@ def _qn_params(fields: PythonObject, l1_ratio: PythonObject) raises -> Tuple[Pyt
     return (l1_ratio * strength, (PythonObject(1.0) - l1_ratio) * strength)
 
 
-def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight: PythonObject,
+def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: PythonObject, class_weight: PythonObject,
                  labels: ClassicalLabels, n: Int, context: PythonObject) raises -> LabelsMatrix:
     """`linear_model._qn_row_weights`: no weights (address 0) for an
     unweighted fit, else the checked float32 sample weights times each row's
@@ -216,8 +216,10 @@ def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight:
                     + "instance of 'dict', a str among {'balanced'} or None. "
                     + "Got " + _repr(class_weight) + " instead.")
     var host = py_get(context, "lr_host_model")
-    var xtrees = _table(context["lr_x_trees"], _host_mode(model, logistic_fields(model, context)) if host is not None
-                        else _mode(logistic_fields(model, context), context))
+    # The mode from the fit's admitted fields snapshot (numeric_mode is a
+    # constructor parameter the fit already admitted), not a third admission.
+    var xtrees = _table(context["lr_x_trees"], _host_mode(model, fields) if host is not None
+                        else _mode(fields, context))
     var cw = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if cw is None:  # every class weight is 1
         return sw^
@@ -255,8 +257,14 @@ def _logistic_buffer_column(y: PythonObject, shape: List[Int], context: PythonOb
 
 
 def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    return logistic_fit(model, args, context, logistic_fields(model, context, False))
+
+
+def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
+                 fields: PythonObject) raises -> PythonObject:
+    # `fields`: the admitted live storage (`logistic_fields(model, context,
+    # False)`), taken once by the public door for this call.
     var b = _builtins()
-    var fields = logistic_fields(model, context, False)
     logistic_fit_replacements_admit(fields, context)
     var l1_ratio = _validate_params(fields)
     var x = classical_host_f32(args[0], 2, "X", context)
@@ -291,7 +299,7 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
                     + "which runs but has no identity gate (glm/checks/"
                     + "multinomial_check.mojo gates l2 and no penalty); refused by "
                     + "name until it is gated (CONTRIBUTING.md (Non-default paths))")
-    var sw = _row_weights(model, args[2], fields["class_weight"], labels, rows, context)
+    var sw = _row_weights(model, fields, args[2], fields["class_weight"], labels, rows, context)
     var entries = _entries(model, fields, context)
     var intercept = Bool(py=fields["fit_intercept"])
     var n_param = cols + (1 if intercept else 0)
@@ -567,9 +575,18 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         # get_params/set_params/is_fitted validate nothing beyond admission
         # (scikit-learn's convention); consuming operations check values.
         var configuring = operation == "get_params" or operation == "set_params" or operation == "is_fitted"
-        var fields = logistic_fields(model, context, True, configuring)
+        # fit reads the live storage (no dict or class-label copy): the same
+        # admission, in the same order, as the snapshot the other operations
+        # take; logistic_fit then uses it instead of admitting again.
+        var fields = logistic_fields(model, context, operation != "fit", configuring)
         if operation == "get_params":
-            result = logistic_get_params(model, context)
+            # `logistic_get_params` from this call's snapshot (the same
+            # `logistic_fields(model, context, True, True)` it would take).
+            var params = Python.dict()
+            var names = context["lr_sorted_parameters"]
+            for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
+                py_setitem(params, names[i], fields[names[i]])
+            result = params
             return result.steal_data()
         if operation == "set_params":
             result = logistic_set_params(model, args[0], context)
@@ -593,7 +610,7 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             if len(shape) == 2 and shape[1] == 1 and not _logistic_buffer_column(target, shape, context):
                 target = _flatten_labels(target, context)
             classical_admit_value(mods, args[2], context)
-            result = logistic_fit(model, Python.tuple(args[0], target, args[2]), context)
+            result = logistic_fit(model, Python.tuple(args[0], target, args[2]), context, fields)
             classifier_after_fit(logistic_storage(model, context), args[0], context)
         # `fields` (above) is the one admitted snapshot of this call: the
         # operations below read it instead of re-admitting every parameter,
