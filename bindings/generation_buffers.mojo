@@ -32,6 +32,11 @@ struct GenerationBoundary(Defaultable, Movable):
     # The Array context dictionary, built once per connected Array class
     # (formerly a new dictionary per call).
     var array_context: PythonObject
+    # The class tuple admitted last and its layer-registry size: a repeat
+    # call with the same tuple object and an unchanged registry size skips
+    # the full re-admission (generator draws call this per draw).
+    var admitted_classes: PythonObject
+    var admitted_layer_count: Int
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -41,6 +46,8 @@ struct GenerationBoundary(Defaultable, Movable):
         self.layer_classes = PythonObject(None)
         self.stream_cls = PythonObject(None)
         self.array_context = PythonObject(None)
+        self.admitted_classes = PythonObject(None)
+        self.admitted_layer_count = -1
 
 
 comptime GENERATION_BOUNDARY = _Global[
@@ -51,6 +58,9 @@ comptime GENERATION_BOUNDARY = _Global[
 
 def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if (g[].admitted_classes is not None and classes is g[].admitted_classes
+            and len(classes[2]) == g[].admitted_layer_count):
+        return PythonObject(None)
     g[].bi = native_loaded_module("builtins")
     if py_type(classes) is not g[].bi.tuple or len(classes) != 4:
         raise Error("TypeError: generation requires its import-connected class tuple")
@@ -83,6 +93,8 @@ def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
     g[].state_cls = classes[1]
     g[].layer_classes = layer_classes
     g[].stream_cls = classes[3]
+    g[].admitted_classes = classes
+    g[].admitted_layer_count = len(layer_names)
     return PythonObject(None)
 
 
