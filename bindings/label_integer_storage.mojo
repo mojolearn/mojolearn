@@ -91,6 +91,5 @@ def labels_float_storage(value: PythonObject, context: PythonObject) raises -> I
     for k in range(rank):  # driver-loop: over array rank metadata
         shape.append(Int(py=pyshape[k]))
         strides.append(Int(py=pystrides[k]))
-    var refusal = label_float_target_refusal(address, typestr == "<f8", shape, strides)
-    _ = value  # keep the Python owner alive through the native read above
-    return refusal
+    # The caller holds `value` (the buffer's owner) across this native read.
+    return label_float_target_refusal(address, typestr == "<f8", shape, strides)
