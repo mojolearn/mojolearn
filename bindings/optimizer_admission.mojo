@@ -155,9 +155,26 @@ def opt_owner_mode(owner: PythonObject, context: PythonObject) raises:
 
 
 def opt_owner(owner: PythonObject, context: PythonObject) raises:
+    opt_owner(owner, context, False)
+
+
+def opt_owner(owner: PythonObject, context: PythonObject, defer_params: Bool) raises:
+    """With `defer_params`, the `params` entry is admitted as an exact
+    list/tuple only: the caller admits each element itself before it reads it
+    (`door_step` reads every host parameter through `tensor_view`, which runs
+    the same element admission, and admits the whole list with `opt_value`
+    when the parameters are device-resident). Each tensor is admitted once
+    per step instead of twice."""
     var fields = _opt_owner_keys(owner, context)
     for name in ["_where", "_KIND", "_res", "_res_host", "_resident_wanted", "_host_fresh", "_pristine", "_p_dev", "_g_dev", "n_total", "t", "numeric_mode", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
         opt_scalar(py_get(fields, PythonObject(name)), context)
     opt_schedule(py_get(fields, "lr_schedule"), context)
-    for name in ["params", "offsets", "buf_initialized", "_m", "_v"]:  # driver-loop: over five parameter/state buffer collections
+    var params = py_get(fields, "params")
+    if defer_params:
+        var cls = py_type(params)
+        if not (cls is context["container_types"][0] or cls is context["container_types"][1]):
+            opt_value(params, context)  # the full walk raises its usual refusal
+    else:
+        opt_value(params, context)
+    for name in ["offsets", "buf_initialized", "_m", "_v"]:  # driver-loop: over four parameter/state buffer collections
         opt_value(py_get(fields, PythonObject(name)), context)

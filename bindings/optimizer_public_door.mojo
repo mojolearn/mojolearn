@@ -937,7 +937,9 @@ def door_step[K: OptKernels](
     Python glue, the ONE kernel call, the assignments of its result.
     Returns the pre-clip total norm, or None."""
     door_ready()
-    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    # Host parameters are admitted one by one by tensor_view below, before
+    # any read; only device-resident parameters need the list walk here.
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context, True)
     # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
     var d = OPT_DOOR.get_or_create_ptr()
@@ -946,6 +948,8 @@ def door_step[K: OptKernels](
     var where = String("step") if op == OP_STEP else (
         String("step_device") if op == OP_STEP_DEVICE else String("step_accumulated"))
     var p_dev = truth(getattr_or(opt, "_p_dev", PythonObject(False)))
+    if p_dev:
+        opt_value(fields["params"], d[].context)
     var parts = PythonObject(None)
     var t_tokens = -1
     if op == OP_STEP_DEVICE and not p_dev:
