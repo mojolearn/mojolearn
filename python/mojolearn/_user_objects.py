@@ -12,6 +12,8 @@ chose."""
 # binding every install loads for its host shells.
 from __future__ import annotations
 
+import array as _std_array
+
 _CALL = []
 _REFUSALS = {"TypeError": TypeError, "ValueError": ValueError, "IndexError": IndexError,
              "OverflowError": OverflowError}
@@ -38,16 +40,27 @@ def kinds(values):
     return call("kinds", values)
 
 
+#: (Array, as_index_i64), imported once on first use (a module-level import
+#: would be circular: ._buffer imports this package's modules at load).
+_DEPS = []
+
+
+def _deps():
+    if not _DEPS:
+        from ._array import Array
+        from ._buffer import as_index_i64
+        _DEPS.extend((Array, as_index_i64))
+    return _DEPS
+
+
 def take(values, indices):
     """``[values[i] for i in indices]`` for a Python list or tuple and an
     int32 or int64 index Array."""
-    import array
-    from ._array import Array
-    if isinstance(indices, array.array) and indices.typecode in ("q", "i") and indices.itemsize in (4, 8):
+    if isinstance(indices, _std_array.array) and indices.typecode in ("q", "i") and indices.itemsize in (4, 8):
         return call("take", values, indices.buffer_info()[0] if len(indices) else 0, len(indices),
                     indices.itemsize)
+    Array, as_index_i64 = _deps()
     if not isinstance(indices, Array) or indices.dtype not in ("<i4", "<i8"):
-        from ._buffer import as_index_i64
         indices = as_index_i64(indices, name="indices")
     idx = indices._as_c()
     width = 4 if idx.dtype == "<i4" else 8
@@ -57,6 +70,6 @@ def take(values, indices):
 def scatter(rows, indices, values):
     """``rows[i] = v`` for each index of ``indices`` (an int64 Array) and
     value of ``values``, in order, up to the shorter of the two."""
-    from ._buffer import as_index_i64
+    as_index_i64 = _deps()[1]
     idx = as_index_i64(indices, name="indices")._as_c()
     call("scatter", rows, idx._addr if idx.size else 0, int(idx.size), values)
