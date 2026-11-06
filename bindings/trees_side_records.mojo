@@ -119,10 +119,12 @@ def trees_key_fields(mut mods: NativeModules, key: PythonObject, fields: PythonO
     _ = py_call(key.append, PythonObject(len(items)))
     for i in range(len(items)):  # driver-loop: over a fitted model's stored fields (identity only)
         _ = py_call(key.append, items[i][0])
-        _key_shallow(mods, key, items[i][1], 0)
+        trees_key_shallow(mods, key, items[i][1], 0)
 
 
-def _key_shallow(mut mods: NativeModules, key: PythonObject, value: PythonObject, depth: Int) raises:
+def trees_key_shallow(mut mods: NativeModules, key: PythonObject, value: PythonObject, depth: Int) raises:
+    """Append `value` and, for exact list/tuple/dict values, their length and
+    items (to depth 4; deeper by identity); a non-scalar's class too."""
     _ = py_call(key.append, value)
     if depth >= 4 or value is None:
         return
@@ -131,13 +133,13 @@ def _key_shallow(mut mods: NativeModules, key: PythonObject, value: PythonObject
     if cls is b.list or cls is b.tuple:
         _ = py_call(key.append, PythonObject(len(value)))
         for i in range(len(value)):  # driver-loop: over a stored container's items (identity only)
-            _key_shallow(mods, key, value[i], depth + 1)
+            trees_key_shallow(mods, key, value[i], depth + 1)
     elif cls is b.dict:
         var items = py_call(b.list, py_call(value.items))
         _ = py_call(key.append, PythonObject(len(items)))
         for i in range(len(items)):  # driver-loop: over a stored mapping's items (identity only)
             _ = py_call(key.append, items[i][0])
-            _key_shallow(mods, key, items[i][1], depth + 1)
+            trees_key_shallow(mods, key, items[i][1], depth + 1)
     elif not (cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes):
         # A class can be reassigned on an instance: its admission is by type.
         _ = py_call(key.append, cls)
