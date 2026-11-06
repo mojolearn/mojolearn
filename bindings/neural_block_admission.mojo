@@ -25,6 +25,24 @@ def neural_native_scalar(mut mods: NativeModules, value: PythonObject, context: 
     return False
 
 
+def _neural_scalar_in_admission(
+    mut mods: NativeModules, cls: PythonObject, admission: PythonObject, mut connected: Bool, integer: Bool = False
+) raises -> Bool:
+    # Same verdict as neural_native_scalar for a non-builtin class, with the
+    # admission context resolved once per scan by the caller. The NumPy
+    # connect runs at most once per scan (`connected`), at the first value
+    # that needs it, so a scan without such values still never connects and
+    # a failing connect raises at the same value as before. A scan never
+    # releases the GIL and only walks exact list/tuple/dict containers, so
+    # the connection cannot change between values of one scan.
+    if admission is None:
+        return False
+    if not connected:
+        classical_connect_numpy(admission)
+        connected = True
+    return _one_of(cls, admission["integer_types" if integer else "scalar_types"])
+
+
 def neural_native_scalar(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> Bool:
     # Classical and other callers keep their per-call module checks.
     var mods = NativeModules()
@@ -47,26 +65,39 @@ def neural_string_keys(value: PythonObject) raises:
     neural_string_keys(mods, value)
 
 
-def neural_plain_value(mut mods: NativeModules, value: PythonObject, depth: Int = 0, context: PythonObject = PythonObject(None)) raises:
+def _neural_plain_scan(
+    mut mods: NativeModules, value: PythonObject, depth: Int, admission: PythonObject, mut connected: Bool
+) raises:
+    # One scan of one value tree: the admission context is resolved once by
+    # neural_plain_value and the NumPy connect runs at most once per scan,
+    # not once per non-plain scalar.
     if depth > 32:
         raise Error("TypeError: neural metadata nesting exceeds the supported depth")
     var b = mods.module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.int or cls is b.float or cls is b.bool or cls is b.str:
         return
-    if context is not None and neural_native_scalar(mods, value, context):
+    if _neural_scalar_in_admission(mods, cls, admission, connected):
         return
     if cls is b.list or cls is b.tuple:
         for i in range(len(value)):  # driver-loop: passive configuration and descriptor words
-            neural_plain_value(mods, value[i], depth + 1, context)
+            _neural_plain_scan(mods, value[i], depth + 1, admission, connected)
         return
     if cls is b.dict:
         neural_string_keys(mods, value)
         var keys = py_call(b.list, value.keys())
         for i in range(len(keys)):  # driver-loop: passive option dictionaries only
-            neural_plain_value(mods, value[keys[i]], depth + 1, context)
+            _neural_plain_scan(mods, value[keys[i]], depth + 1, admission, connected)
         return
     raise Error("TypeError: neural metadata requires native scalar/container values; Python conversion hooks are not supported")
+
+
+def neural_plain_value(mut mods: NativeModules, value: PythonObject, depth: Int = 0, context: PythonObject = PythonObject(None)) raises:
+    var admission = PythonObject(None)
+    if context is not None:
+        admission = py_get(context, "admission_context")
+    var connected = False
+    _neural_plain_scan(mods, value, depth, admission, connected)
 
 
 def neural_plain_value(value: PythonObject, depth: Int = 0, context: PythonObject = PythonObject(None)) raises:

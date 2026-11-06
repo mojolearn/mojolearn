@@ -831,10 +831,32 @@ def neural_training_entries(mut mods: NativeModules, fields: PythonObject, conte
     var entries = selected[family]
     if py_type(entries) is bi.str:
         raise Error("RuntimeError: " + String(entries))
-    var vendor = String(_native_function(mods, entries, family + "_vendor")())
-    mods.released()
-    var code = Int(py=_native_function(mods, entries, family + "_numeric_mode")())
-    mods.released()
+    # A compiled binding's vendor and numeric-mode answers are fixed for the
+    # module object: ask them once per binding object (weakref-guarded
+    # prepared slot, keyed by the entries object and the family), not on
+    # every forward/backward/step of every block.
+    var vendor: String
+    var code: Int
+    var verdict = PythonObject(None)
+    try:
+        verdict = prepared_get(mods, String(_NEURAL_TRAINING_VERDICT_SLOT) + String(family), entries)
+    except:
+        verdict = PythonObject(None)
+    if verdict is not None:
+        vendor = String(py=verdict[0])
+        code = Int(py=verdict[1])
+    else:
+        vendor = String(_native_function(mods, entries, family + "_vendor")())
+        mods.released()
+        code = Int(py=_native_function(mods, entries, family + "_numeric_mode")())
+        mods.released()
+        try:
+            prepared_put(mods, String(_NEURAL_TRAINING_VERDICT_SLOT) + String(family), entries,
+                         Python.tuple(PythonObject(vendor), PythonObject(code)))
+        except:
+            # An entries object without weak references keeps the per-call
+            # queries; the verdict is never cached for it.
+            pass
     if code != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: native training binding numeric mode differs from the block")
     if String(fields["_native_route"]) == "cpu":
@@ -946,6 +968,7 @@ def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: 
 
 
 comptime _NEURAL_SNAPSHOT_SLOT = "neural_block_snapshot_v1"
+comptime _NEURAL_TRAINING_VERDICT_SLOT = "neural_training_verdict_v1:"
 
 
 def _neural_derived_words(mut mods: NativeModules, snapshot: PythonObject) raises -> PythonObject:
