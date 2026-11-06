@@ -13,6 +13,7 @@
 # keep their classes and wording.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.native_array_storage import native_array_zeros, native_array_empty, native_array_from_bytes
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -70,7 +71,7 @@ comptime UNSEEN = "mojolearn: y contains previously unseen labels"
 
 # ---------------------------------------------------------------- shared
 def _builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def _raise_python(cls: PythonObject, message: String) raises:
@@ -734,7 +735,7 @@ def _lb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises 
     var neg = fields["neg_label"]
     var pos = fields["pos_label"]
     if not (Bool(py=py_call(b.isinstance, neg, integral)) and Bool(py=py_call(b.isinstance, pos, integral))
-            and _truth(py_call(Python.import_module("operator").lt, neg, pos))):
+            and _truth(py_call(native_loaded_module("operator").lt, neg, pos))):
         raise Error("mojolearn: neg_label must be an integer below pos_label")
     var mode = _default_mode(context)
     py_setitem(fields, "numeric_mode_", mode)

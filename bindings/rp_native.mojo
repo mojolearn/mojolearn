@@ -8,6 +8,7 @@
 # and the fitted matrix stored where the `components_` property reads it.
 from std.math import sqrt
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_host_f32
@@ -21,7 +22,7 @@ from bindings.jl_native import jl_min_dim
 
 
 def _str(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").str, value))
+    return String(py_call(native_loaded_module("builtins").str, value))
 
 
 def _components(fields: PythonObject) raises -> PythonObject:
@@ -109,7 +110,7 @@ def rp_set_components(model: PythonObject, value: PythonObject) raises:
 
 def rp_getstate(model: PythonObject) raises -> PythonObject:
     """`__getstate__`: a shallow copy of the instance fields."""
-    return py_call(Python.import_module("builtins").dict, py_fields(model))
+    return py_call(native_loaded_module("builtins").dict, py_fields(model))
 
 
 def _check(model: PythonObject, fields: PythonObject) raises:

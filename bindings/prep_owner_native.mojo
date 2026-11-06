@@ -10,6 +10,7 @@
 # operation name. Each owner builds the x_prep programs the Python built (the
 # same stages, operands and order, so the same bits).
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -30,7 +31,7 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
     # the encode owner serves it (or model is None: a module function).
     if model is None:
         return ""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(py_type(model)) is not b.type:
         raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
