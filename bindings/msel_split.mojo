@@ -27,6 +27,7 @@ from bindings.family_common import (
     FAMILY_I64P, FAMILY_I32P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
 )
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
+from bindings.label_input_sources import labels_series_values, labels_list_integer_storage
 from bindings.msel_common import (
     MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
@@ -1095,6 +1096,22 @@ def msel_repeated_split(model: PythonObject, x: PythonObject, y: PythonObject, g
 # ---------------------------------------------------------------- dispatch
 
 
+def _msel_label_source(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """The label input `msel_split` hands its consumers: a numeric vector
+    as is, the stored numeric vector of a numpy-backed Series, a native copy
+    of an exact flat int / bool list, else the label input step's list."""
+    if msel_numeric_vector(value, False, context):
+        return value
+    if value is not None:
+        # `value` was admitted with X and the other inputs by msel_split.
+        var stored = labels_series_values(value, context)
+        if stored is not None and msel_numeric_vector(stored, False, context):
+            return stored
+        if labels_list_integer_storage(value):
+            return py_call(msel_b().list, value)
+    return msel_labels_list(value, name, context)
+
+
 def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, var groups: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """`<splitter>.split(X, y, groups)` of a mojolearn splitter: its splits
@@ -1114,10 +1131,15 @@ def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, va
     # holds no Python leaf to pin; every consumer below encodes it through
     # msel_encode (MselGroups, msel_first_seen), which reads it from its
     # buffer. Flattening it here boxed every label on every split call.
-    if y_used and not msel_numeric_vector(y, False, context):
-        y = msel_labels_list(y, "y", context)
-    if groups_used and not msel_numeric_vector(groups, False, context):
-        groups = msel_labels_list(groups, "groups", context)
+    # perf3-label-doors: a numpy-backed pandas Series whose stored exact
+    # ndarray is such a vector is read through it (the labels its `tolist()`
+    # lists, in the same order), and an exact flat list / tuple of exact ints
+    # or bools becomes one native list copy: the label input step lists the
+    # same ints / bools and admits every one of them.
+    if y_used:
+        y = _msel_label_source(y, "y", context)
+    if groups_used:
+        groups = _msel_label_source(groups, "groups", context)
     if msel_is(model, "StratifiedGroupKFold", context):
         return msel_strat_group_split(x, y, groups, msel_int(msel_field(model, "n_splits", context)),
                                       msel_truth(msel_field(model, "shuffle", context)), msel_field(model, "random_state", context), context)
