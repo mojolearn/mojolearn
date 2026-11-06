@@ -13,7 +13,7 @@ from bindings.classical_metadata import classical_is_fitted
 from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral, metric_warn
 from bindings.classical_warnings import COLUMN_WARNING, _warning_category
-from bindings.label_integer_storage import labels_integer_storage
+from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -108,6 +108,23 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
             var shape = labels_shape_of(value, context)
             if len(shape) == 2 and shape[1] == 1:
                 metric_warn(COLUMN_WARNING, _warning_category(context), context)
+        return
+    # An exact float32/float64 ndarray or Array holds only floats, so the one
+    # check below that can refuse an element (NaN/infinity, then non-integral)
+    # reads the buffer in one native pass (bindings/label_integer_storage.mojo,
+    # core/label_storage_impl.mojo) instead of tolist + admission + three
+    # scalar calls per label (~0.15 s per 20000-label fit). Same warning, same
+    # refusals at the same first label, nothing returned: no bits change.
+    var float_refusal = labels_float_storage(value, context)
+    if float_refusal >= 0:
+        if fitting:
+            var shape = labels_shape_of(value, context)
+            if len(shape) == 2 and shape[1] == 1:
+                metric_warn(COLUMN_WARNING, _warning_category(context), context)
+            if float_refusal == 1:
+                raise Error("Input y contains NaN or infinity (" + name + ").")
+            if float_refusal == 2:
+                raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
         return
     # An exact object ndarray may still hold arbitrary Python scalar objects.
     # Reading/flattening the references is native; admission precedes hashing,
