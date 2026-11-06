@@ -108,6 +108,10 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     py_setitem(fields,"_mojolearn_fitted",True)
     if py_contains(fields,"feature_names_in_"):
         _ = py_call(fields.pop,"feature_names_in_")
+    if project and scaled is None:
+        # fit_transform without the fused projection (the direct entry, or
+        # n*d >= 2^27): the transform runs on the values prepared above.
+        return _maxabs_apply(fields,values^,entries,context)
     _ = values^
     return scaled if project else model
 
@@ -121,6 +125,14 @@ def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonO
         raise Error("RuntimeError: mojolearn: this MaxAbsScaler instance is not fitted yet")
     var entries = _entries(fields["numeric_mode_"],context)
     var values = xprep_values(source,entries,context)
+    return _maxabs_apply(fields,values,entries,context)
+
+
+def _maxabs_apply(fields: PythonObject, var values: PythonObject, entries: PythonObject,
+                  context: PythonObject) raises -> PythonObject:
+    # The transform program over already prepared `values` (the transform's
+    # own, or the ones fit_transform's fit prepared: X is not validated,
+    # converted and uploaded a second time, p3-prep).
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     if py_type(fields["n_features_in_"]) is not native_loaded_module("builtins").int or Int(py=fields["n_features_in_"]) != d:
