@@ -107,6 +107,28 @@ def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: Pyt
     return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
 
 
+def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+    # A fitted operand: converted per call as before; on a query its device
+    # copy is kept across calls (DecompKit.resident_input), else as _matrix.
+    var array = decomp_input(source, name, context)
+    var rows = Int(py=array.shape[0])
+    var cols = Int(py=array.shape[1])
+    var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, rows, cols)
+    if held >= 0:
+        return held
+    return kit.input(array, rows, cols)
+
+
+def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+    # A fitted 1-D float32 vector as a 1 x n matrix, resident as _fitted_matrix.
+    var array = classical_host_f32(source, 1, name, context)
+    var cols = Int(py=array.shape[0])
+    var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, 1, cols)
+    if held >= 0:
+        return held
+    return kit.input(array, 1, cols)
+
+
 def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector (mean_) as a 1 x n matrix.
     var array = classical_host_f32(source, 1, name, context)
@@ -385,13 +407,15 @@ def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, con
     var fields = py_fields(model)
     _check_fitted(model, fields)
     var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    # A query: the fitted dictionary stays on the device across calls.
+    kit.owner = model
     try:
         if inverse:
             var c = _matrix(kit, args[0], "code", context)
-            var d = _matrix(kit, fields["components_"], "components_", context)
+            var d = _fitted_matrix(kit, fields["components_"], "components_", context)
             return _coding_inverse(kit, c, d, fields)
         var x = _matrix(kit, args[0], "X", context)
-        var d = _matrix(kit, fields["components_"], "components_", context)
+        var d = _fitted_matrix(kit, fields["components_"], "components_", context)
         return kit.publish(_coding_encode(kit, x, d, fields))
     finally:
         kit.close()
@@ -509,10 +533,12 @@ def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool,
     var fields = py_fields(model)
     _check_fitted(model, fields)
     var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    # A query: the fitted mean and components stay on the device across calls.
+    kit.owner = model
     try:
         var x = _matrix(kit, args[0], "X", context)
-        var mean = _row(kit, fields["mean_"], "mean_", context)
-        var comps = _matrix(kit, fields["components_"], "components_", context)
+        var mean = _fitted_row(kit, fields["mean_"], "mean_", context)
+        var comps = _fitted_matrix(kit, fields["components_"], "components_", context)
         if inverse:
             var product = kit.mm(x, comps)
             return kit.publish(kit.ew(XD_ADD, product, mean))
