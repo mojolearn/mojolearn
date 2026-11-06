@@ -6,6 +6,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _class_fields
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.classical_attributes import _type_mro
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name, classical_view
@@ -21,12 +23,21 @@ from providers.python.estimator_lifecycle_pyapi import estimator_outside, estima
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 
 
-def _admit(model: PythonObject, context: PythonObject) raises -> PythonObject:
+comptime _IFOREST_CLASS_SLOT = "iforest_public_class_v1"
+
+
+def _admit(model: PythonObject, context: PythonObject, fitting: Bool) raises -> PythonObject:
     var fields = classical_family_admit(model)
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: no post-fit Python callback at the native public boundary
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: native IsolationForest cannot invoke Python fit callbacks")
+    # The class callback refusal depends only on the class rows: once per
+    # class state (native_class_admission).
+    var mods = NativeModules()
+    var cls = py_type(model)
+    if class_record(mods, _IFOREST_CLASS_SLOT, cls) is None:
+        var ancestry = _type_mro(cls)
+        for i in range(len(ancestry)):  # driver-loop: no post-fit Python callback at the native public boundary
+            if py_contains(_class_fields(mods, ancestry[i]), "_mojolearn_after_fit"):
+                raise Error("TypeError: native IsolationForest cannot invoke Python fit callbacks")
+        class_admit(mods, _IFOREST_CLASS_SLOT, cls, PythonObject(True))
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native IsolationForest cannot invoke Python fit callbacks")
     var scalars = Python.tuple("numeric_mode", "n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "verbose", "_n_estimators", "_max_samples_mode", "_max_samples_int", "_max_samples_frac", "_max_depth", "_max_features_mode", "_max_features_int", "_max_features_frac", "_contamination_auto", "_contamination", "_bootstrap", "_seed", "offset_", "max_samples_", "_if_token", "n_features_in_", "input_copied_")
@@ -45,23 +56,32 @@ def _admit(model: PythonObject, context: PythonObject) raises -> PythonObject:
         classical_admit_value(fields["feature_names_in_"], context)
     # Both fit and resident prediction may replace the native forest owner.
     # Admit only displaced fields, leaving unrelated caller state untouched.
+    # A query (score_samples/decision_function/predict, trees_public_iforest
+    # `_run`) replaces only offset_, max_samples_, _if_token and, when the
+    # resident token changes, _if_lifetime; the fitted X, feature names and
+    # the remaining learned scalars stay in place, so only fit admits them.
     var replaced = Python.list()
-    for i in range(len(scalars)):  # driver-loop: overwritten scalar arrays may retain non-native base owners
-        var name = String(scalars[i])
-        if (name.startswith("_") or name.endswith("_")) and py_contains(fields, scalars[i]):
-            _ = py_call(replaced.append, fields[scalars[i]])
-    for key in ["_if_lifetime", "_x", "feature_names_in_"]:  # driver-loop: native storage released by this operation
-        if py_contains(fields, key):
-            _ = py_call(replaced.append, fields[key])
+    if fitting:
+        for i in range(len(scalars)):  # driver-loop: overwritten scalar arrays may retain non-native base owners
+            var name = String(scalars[i])
+            if (name.startswith("_") or name.endswith("_")) and py_contains(fields, scalars[i]):
+                _ = py_call(replaced.append, fields[scalars[i]])
+        for key in ["_if_lifetime", "_x", "feature_names_in_"]:  # driver-loop: native storage released by this operation
+            if py_contains(fields, key):
+                _ = py_call(replaced.append, fields[key])
+    else:
+        for key in ["offset_", "max_samples_", "_if_token", "_if_lifetime"]:  # driver-loop: fields a query replaces
+            if py_contains(fields, key):
+                _ = py_call(replaced.append, fields[key])
     _release_tree_values(replaced, Python.tuple(), context)
     return fields
 
 
 def iforest_public_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    var fields = _admit(model, context)
     var method = String(operation[byte=String("trees_public_iforest_").byte_length():])
     var fitting = method == "fit" or method == "fit_predict"
+    var fields = _admit(model, context, fitting)
     var nested = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0))) > 0
     if not fitting:
         classical_require_fitted(model, False, method, context)
