@@ -41,6 +41,7 @@ is re-raised here as the `ValueError` scikit-learn's callers catch.
 import re
 import sys
 import warnings
+import weakref
 
 #: The wrapped fit methods that validate their arguments.
 FIT_METHODS = ("fit", "partial_fit", "fit_predict", "fit_transform")
@@ -118,8 +119,27 @@ def _conversion_warning():
 # ------------------------------------------------------------------ tags
 
 
+#: class -> (its __mro__ tuple, the MRO's class names). A class's MRO tuple
+#: is replaced when its bases change, so the identity test below notices; a
+#: dead class drops out of the weak mapping. One set per class, not up to
+#: four per validated call.
+_NAMES_CACHE = weakref.WeakKeyDictionary()
+
+
 def _names(cls):
-    return {c.__name__ for c in cls.__mro__}  # glue: the class names of the MRO (class-sized)
+    mro = cls.__mro__
+    try:
+        cached = _NAMES_CACHE.get(cls)
+    except TypeError:
+        cached = None
+    if cached is not None and cached[0] is mro:
+        return cached[1]
+    names = frozenset(c.__name__ for c in mro)  # glue: the class names of the MRO (class-sized), once per class
+    try:
+        _NAMES_CACHE[cls] = (mro, names)
+    except TypeError:
+        pass
+    return names
 
 
 def input_tag_overrides(cls):
@@ -284,8 +304,13 @@ def _column_names(X):
 def _all_finite(obj):
     """True unless a float buffer or list holds NaN or infinity (the base
     binding's `all_finite` over a zero-copy `Array` view when it can be)."""
-    from ._buffer import _materialize, all_finite
+    from ._buffer import _materialize
     a, _ = _materialize(obj, "X")
+    return _finite_array(a)
+
+
+def _finite_array(a):
+    from ._buffer import all_finite
     if a.dtype not in ("<f4", "<f8"):
         return True
     return all_finite(a)
@@ -296,10 +321,15 @@ def _integral(obj):
     device `unique_inverse` (`_labels`) finds the k distinct values and the
     core helper `reduce_stat` tests only those k, so no host pass runs over
     the rows. A y that is not a float vector answers True (not tested)."""
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from ._buffer import _materialize, _native, addr_ro
-    from ._labels import unique_inverse
+    from ._buffer import _materialize
     a, _ = _materialize(obj, "y")
+    return _integral_array(a)
+
+
+def _integral_array(a):
+    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
+    from ._buffer import _native, addr_ro
+    from ._labels import unique_inverse
     if a.dtype not in ("<f4", "<f8") or a.size == 0 or a.size != max(a.shape):  # glue: largest axis of the shape
         return True
     classes, _ = unique_inverse(a._as_c().reshape((a.size,)))
@@ -314,7 +344,9 @@ def whole_float_labels(y):
     info = describe(y)
     if info is None or info[0] != "buffer" or info[2] != "float":
         return False
-    return _all_finite(y) and _integral(y)
+    from ._buffer import _materialize
+    a, _ = _materialize(y, "y")  # one admission for both native scans
+    return _finite_array(a) and _integral_array(a)
 
 
 # ------------------------------------------------------------------ X
@@ -429,9 +461,12 @@ def _check_y(est, y):
             _conversion_warning(), stacklevel=4)
         y = y.reshape(-1)
     if container in ("buffer", "list") and vkind == "float":
-        if not _all_finite(y):
+        # One admission of y serves both native scans (was materialized twice).
+        from ._buffer import _materialize
+        a, _ = _materialize(y, "y")
+        if not _finite_array(a):
             raise ValueError(f"Input y contains NaN or infinity ({name}).")
-        if kind == "classifier" and not _integral(y):
+        if kind == "classifier" and not _integral_array(a):
             raise ValueError(
                 "Unknown label type: continuous. Maybe you are trying to fit a classifier, "
                 "which expects discrete classes on a regression target with continuous values.")
@@ -457,10 +492,13 @@ def _check_lengths(info, y):
 class Check:
     """What `before_fit` / `before_call` saw, for `after_fit` and `reraise`."""
 
-    __slots__ = ("X", "info", "fitting")
+    __slots__ = ("X", "info", "fitting", "prior_width")
 
-    def __init__(self, X, info, fitting):
+    def __init__(self, X, info, fitting, prior_width=None):
         self.X, self.info, self.fitting = X, info, fitting
+        # The `n_features_in_` object present before a full (re)fit, or
+        # _MISSING; None for a partial_fit or a predict-side call.
+        self.prior_width = prior_width
 
 
 def _array_like(obj):
@@ -506,7 +544,8 @@ def before_fit(est, method, slots, args, kwargs):
         if y2 is not y:
             args, kwargs = _put(args, kwargs, iy, yname, y2)
         _check_lengths(info, y2)
-    return args, kwargs, Check(X, info, True)
+    prior = None if method == "partial_fit" else vars(est).get("n_features_in_", _MISSING)
+    return args, kwargs, Check(X, info, True, prior)
 
 
 def before_call(est, method, slots, args, kwargs):
@@ -533,11 +572,19 @@ def after_fit(est, check):
     estimator did not."""
     info = check.info
     state = vars(est)
-    if info is not None and len(info[1]) == 2 and "n_features_in_" not in state:
-        try:
-            est.n_features_in_ = info[1][1]
-        except AttributeError:
-            pass
+    if info is not None and len(info[1]) == 2:
+        current = state.get("n_features_in_", _MISSING)
+        # Set it when absent, and on a full refit when the value is still the
+        # one from before this fit (the estimator did not set it) but X's
+        # width changed: a stale width from the previous fit would otherwise
+        # refuse every correctly shaped predict after the refit.
+        stale = (check.prior_width is not None and current is not _MISSING
+                 and current is check.prior_width and current != info[1][1])
+        if current is _MISSING or stale:
+            try:
+                est.n_features_in_ = info[1][1]
+            except AttributeError:
+                pass
     names = _column_names(check.X)
     if names is None:
         state.pop("feature_names_in_", None)
