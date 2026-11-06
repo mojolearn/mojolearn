@@ -39,7 +39,11 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.svm_mixture_native import svm_mixture_operation
-from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.estimator_binding_pyapi import estimator_binding, _estimator_mode_word
+from bindings.cluster_side_records import (
+    cluster_is_subclass, cluster_refuse_fit_callbacks, cluster_record_key, cluster_record_get,
+    cluster_record_put, cluster_record_drop,
+)
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.mode_metadata_native import _class_fields
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
@@ -58,6 +62,12 @@ comptime _REFUSE_N_INIT = ("n_init > 1 picks the best restart by a float compari
 comptime _REFUSE_WARM = ("warm_start makes the fit depend on the object's history "
                          + "rather than on its inputs (DEVIATION 1734)")
 comptime _REFUSE_INIT_TAIL = " is not a field of GmmParams (mixture/NOT_IMPLEMENTED.tsv)"
+
+# Per-model records (bindings/cluster_side_records.mojo, lane perf2-cluster):
+# the public admission of the parameters and fitted state passed for this key,
+# and the scoring operands of the default model read for this key.
+comptime _GMM_ADMIT_SLOT = "cluster_gmm_admitted_v1"
+comptime _GMM_OPERANDS_SLOT = "cluster_gmm_operands_v1"
 
 
 # ------------------------------------------------------------------ helpers
@@ -111,12 +121,27 @@ def _x_finite(source: PythonObject, name: String, context: PythonObject) raises 
 def _any_f32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_buffer.as_f32_c(source, ndim=None, name=name)`: any rank, the input
     itself when it already is float32 in C order, else one cast copy."""
+    var kept = False
+    return _any_f32_kept(source, name, context, kept)
+
+
+def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut kept: Bool) raises -> PythonObject:
+    """`_any_f32`; `kept` stays True only when the result is the storage of
+    `source` itself (an exact Array or ndarray already float32 in C order, no
+    cast copy), so a later in-place edit of `source` is seen through it."""
     var view = family_view(source, -1, name, context)
+    var result = _any_f32_view(view, name, context)
+    if kept:
+        var cls = py_type(source)
+        kept = result is view and (cls is context["array_class"] or cls is py_get(context, "ndarray"))
+    _ = view^
+    return result
+
+
+def _any_f32_view(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     var nd = Int(py=view.ndim)
     if nd <= 2:
-        var cast = family_cast_view(view, name, context)
-        _ = view^
-        return cast
+        return family_cast_view(view, name, context)
     if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_is_f32(view, context) and classical_c_order(view, context):
@@ -145,7 +170,7 @@ def _any_f32(source: PythonObject, name: String, context: PythonObject) raises -
         family_cast_rows(base + offset, s0, s1, rows, cols, item, kind,
                          FAMILY_F32P(unsafe_from_address=out + s * rows * cols * 4))
         _ = result  # keep the Python object alive through the native call above
-    _ = view^
+    _ = view  # keep the Python object alive through the native casts above
     return result
 
 
@@ -237,14 +262,17 @@ def _sorted_repr(table: PythonObject) raises -> String:
 def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObject) raises:
     """`GaussianMixture._extension`: the binary's own compile-time mode must
     be the one requested."""
-    var b = native_loaded_module("builtins")
     var want = _get_or(model, "numeric_mode", PythonObject(None))
     if not _truthy(want):
         want = context["backend_fields"]["_DEFAULT_MODE"]
     var getter = neural_descriptor_entry(binding, "mixture_numeric_mode", False)
     if getter is None:
         return
-    var got = Int(py=family_call(b.int, family_call(getter)))
+    # Perf (lane perf2-cluster): the compiled mode word is a constant of the
+    # loaded binary, read once per (module, getter) for the process
+    # (`_estimator_mode_word`, as estimator_checked_mode reads it), not
+    # called on every fit and query.
+    var got = _estimator_mode_word(binding, getter)
     var wanted = py_get(context["family_gmm_mode_codes"], want, PythonObject(None))
     if wanted is None or Int(py=wanted) != got:
         raise Error("RuntimeError: " + _GMM + "numeric_mode=" + family_repr(want) + " was requested "
@@ -360,24 +388,51 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
 
 
 def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject, name: String, what: String,
-                    out_buf: PythonObject, context: PythonObject) raises:
+                    out_buf: PythonObject, context: PythonObject, key: PythonObject = PythonObject(None)) raises:
     """`_model_lists` then the scoring entry `name` writing `out`: the
-    fitted check, the feature count, the mode check and the call."""
-    var b = native_loaded_module("builtins")
-    if not family_raw_has(model, "weights_"):
-        raise Error(_GMM + "call fit before " + what)
+    fitted check, the feature count, the mode check and the call.
+
+    Perf (lane perf2-cluster): with a record `key` (a public query whose
+    admission key was built), the fitted operands read here (nine generic
+    attribute reads, three array admissions, the mode check) are kept per
+    model while the key matches and the binding is the same module. They are
+    recorded only when every operand is the fitted array's own storage (no
+    cast copy) read from the instance dictionary, so an in-place edit of a
+    fitted array is still seen by the next query."""
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
+    var held = cluster_record_get(_GMM_OPERANDS_SLOT, model, key)
+    if held is not None and held[0] is binding:
+        var width = held[6]
+        if Bool(py=family_call(native_loaded_module("operator").ne, PythonObject(d), width)):
+            raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(width))
+        # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model (below).
+        var held_addrs = Python.list(classical_address(held[1]), classical_address(held[2]), classical_address(held[3]),
+                                     classical_address(held[4]), classical_address(held[5]), classical_address(x),
+                                     classical_address(out_buf))
+        var held_params = Python.list(held[7], PythonObject(d), held[8], held[9], held[10], PythonObject(n))
+        _ = family_call(neural_descriptor_entry(binding, name), held_addrs, held_params)
+        _ = held^  # the recorded operands stay owned through the native call above
+        return
+    if not family_raw_has(model, "weights_"):
+        raise Error(_GMM + "call fit before " + what)
     var fitted = _get(model, "n_features_in_")
     if Bool(py=family_call(native_loaded_module("operator").ne, PythonObject(d), fitted)):
         raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(fitted))
     var weights = _get(model, "weights_")
     var k = Int(py=weights.shape[0])
-    var flat_m = _any_f32(_get(model, "means_"), "means_", context)
-    var flat_c = _any_f32(_get(model, "covariances_"), "covariances_", context)
-    var flat_p = _any_f32(_get(model, "precisions_cholesky_"), "precisions_cholesky_", context)
+    var kept = key is not None
+    var means = _get(model, "means_")
+    var flat_m = _any_f32_kept(means, "means_", context, kept)
+    var covariances = _get(model, "covariances_")
+    var flat_c = _any_f32_kept(covariances, "covariances_", context, kept)
+    var cholesky = _get(model, "precisions_cholesky_")
+    var flat_p = _any_f32_kept(cholesky, "precisions_cholesky_", context, kept)
     var log_det = _get(model, "log_det_chol_")
-    var converged = 1 if _truthy(_get(model, "converged_")) else 0
+    var converged_ = _get(model, "converged_")
+    var converged = 1 if _truthy(converged_) else 0
+    var n_iter = _get(model, "n_iter_")
+    var lower = _get(model, "lower_bound_")
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model.
     # weights, means, covariances, precisions_chol, log_det_chol, x, out;
     # k, d, n_iter, converged, lower_bound, n
@@ -389,8 +444,8 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
     _ = weights  # keep the Python object alive through the native call above
     _ = log_det  # keep the Python object alive through the native call above
     _ = flat_p  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(k), PythonObject(d), _get(model, "n_iter_"), PythonObject(converged),
-                             _get(model, "lower_bound_"), PythonObject(n))
+    var params = Python.list(PythonObject(k), PythonObject(d), n_iter, PythonObject(converged),
+                             lower, PythonObject(n))
     _check_mode(binding, model, context)
     _ = family_call(neural_descriptor_entry(binding, name), addrs, params)
     _ = log_det  # keep the Python object alive through the native call above
@@ -398,6 +453,27 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
     _ = flat_c  # keep the Python object alive through the native call above
     _ = flat_m  # keep the Python object alive through the native call above
     _ = weights  # keep the Python object alive through the native call above
+    if kept:
+        # Every operand must be the value the instance dictionary stores (no
+        # class attribute or descriptor in between) and a native array, so
+        # the record's identities cover exactly what was read.
+        var fields = py_fields(model)
+        var missing = Python.list()
+        var array_class = context["array_class"]
+        var ndarray = py_get(context, "ndarray")
+        var weights_class = py_type(weights)
+        var log_det_class = py_type(log_det)
+        kept = (weights_class is array_class or weights_class is ndarray) and (
+            log_det_class is array_class or log_det_class is ndarray)
+        var names = Python.tuple("n_features_in_", "weights_", "means_", "covariances_", "precisions_cholesky_",
+                                 "log_det_chol_", "converged_", "n_iter_", "lower_bound_")
+        var read = Python.tuple(fitted, weights, means, covariances, cholesky, log_det, converged_, n_iter, lower)
+        for i in range(len(names)):  # small-loop(nine fitted fields read above)
+            kept = kept and py_get(fields, names[i], missing) is read[i]
+        if kept:
+            cluster_record_put(_GMM_OPERANDS_SLOT, model, key,
+                               Python.tuple(binding, weights, flat_m, flat_c, flat_p, log_det, fitted,
+                                            PythonObject(k), n_iter, PythonObject(converged), lower))
     _ = weights^
     _ = flat_m^
     _ = flat_c^
