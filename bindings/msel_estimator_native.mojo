@@ -35,9 +35,20 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
         if mro[k] is not plan["mro"][k]:
             raise Error("TypeError: native estimator class ancestry changed")
     var hooks = plan["hooks"]
+    # The hook rows are grouped by class (python/mojolearn/_native_msel_dispatch.py
+    # `register`: every protected name of one ancestor, then the next), so
+    # each ancestor's live class mapping is read once per check, not once per
+    # name (lane perf-meta-estimators, 2026-11-05: every ensemble member call
+    # and every native clone runs this check). The same identities are tested.
+    var class_dict = b.type.__dict__["__dict__"].__get__
+    var base = PythonObject(None)
+    var base_fields = PythonObject(None)
     for k in range(len(hooks)):  # driver-loop: connected estimator method and storage identities
-        var fields = py_call(b.type.__dict__["__dict__"].__get__, hooks[k][0])
-        if py_get(fields, hooks[k][1]) is not hooks[k][2]:
+        var hook = hooks[k]
+        if k == 0 or hook[0] is not base:
+            base = hook[0]
+            base_fields = py_call(class_dict, base)
+        if py_get(base_fields, hook[1]) is not hook[2]:
             raise Error("TypeError: native estimator methods or storage hooks changed")
     var fields = py_call(plan["fields_get"], model, cls)
     var names = py_call(b.list, fields.keys())
