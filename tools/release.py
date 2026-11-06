@@ -4413,13 +4413,13 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if not self.dry:
                 self.record_candidate_requirement(vendor, run_id)
             return why
-        work = self.rel / "gates"
-        output = self.gate_out(vendor)
         job_ok, job_why = self.gate_ok(vendor, measure=False)
         if job_why.startswith(self.RUNTIME_GATE_FAILED):
             # The smoke passed and the qualifier ran: relaunching would only rerun green work. A qualifier
             # failure is fixed in code and qualified at the next freeze.
             raise StepFailed(f"the {vendor} release gate did not pass: {job_why}")
+        work = self.rel / "gates"
+        output = self.gate_out(vendor)
         if not job_ok:
             self.launch_gate_job(vendor, run_id, work, output)
             if self.dry:
