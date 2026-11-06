@@ -2,7 +2,8 @@
 """Native admission before Samba can encounter a Python-defined protocol."""
 from std.python import Python, PythonObject
 from std.ffi import _Global
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 
 
@@ -347,12 +348,24 @@ def _samba_remember(value: PythonObject, admission: PythonObject, bi: PythonObje
     py_setitem(table, py_call(bi.id, value), Python.tuple(admission, _samba_shadow(value, admission, bi)))
 
 
+# Class-watcher slot of a passed Samba layout guard (one record per class).
+comptime _SAMBA_GUARD_SLOT = "p3_samba_layout_guard_v1"
+
+
 def samba_admit(operation: String, values: PythonObject, context: PythonObject) raises:
     # One checked builtin connection for this GIL-held recursive admission.
     var bi = native_loaded_module("builtins")
     var admission = context["admission"]
     var guards = admission["guards"]
+    var mods = NativeModules()
     for i in range(len(guards)):  # driver-loop: over registered runtime record/Array layouts
+        # A guard depends only on its class rows (own namespace and MRO). Once
+        # it passed, the class-watcher record (bindings/native_class_admission.mojo)
+        # stays valid until the class or an ancestor is modified, which bumps
+        # its epoch; Python 3.10/3.11 have no watcher and keep the full check.
+        var guarded = guards[i][2]
+        if class_record(mods, _SAMBA_GUARD_SLOT, guarded) is not None:
+            continue
         if py_call(admission["type_mro"], guards[i][2]) is not guards[i][3]:
             raise Error("TypeError: Samba native owner inheritance has changed")
         var namespace = guards[i][0]
@@ -360,6 +373,7 @@ def samba_admit(operation: String, values: PythonObject, context: PythonObject) 
         for j in range(len(pairs)):  # driver-loop: over descriptors that native execution reads or writes
             if py_get(namespace, pairs[j][0]) is not pairs[j][1]:
                 raise Error("TypeError: Samba native owner layout has a replaced Python descriptor or attribute hook")
+        class_admit(mods, _SAMBA_GUARD_SLOT, guarded, PythonObject(True))
     if operation == "construct":
         # The public wrapper creates exact tuples; check this before indexing
         # so a direct C-boundary call cannot execute an arbitrary __getitem__.
