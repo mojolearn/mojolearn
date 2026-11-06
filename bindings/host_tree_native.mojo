@@ -2,6 +2,8 @@
 # Whole-operation CPU tree inference: native input admission, saved-state
 # validation, buffer ownership, kernel calls and completed output publication.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
@@ -207,9 +209,26 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
             host_label_gather_f64(indices, words_f, Int(py=classical_address(out)))
         _ = out  # keep the Python object alive through the native gather above
         return out
-    var out = Python.list()
+    # p3-trees: the k saved class objects are read once and the n output
+    # slots filled in one PyList_New(n) (PyList_SetItem with a new
+    # reference), not one Python index and one bound append per row.
+    var k = len(classes)
+    var labels = List[PythonObject]()
+    for c in range(k):  # driver-loop: over the saved class labels (model structure)
+        labels.append(classes[c])
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(rows)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var out = PythonObject(from_owned=raw)
+    var table = cpython_table()
     for i in range(rows):  # driver-loop: publish completed native string/bool/large-integer labels
-        _ = py_call(out.append, classes[indices[i]])
+        var code = indices[i]
+        if code < 0 or code >= k:
+            raise Error("IndexError: list index out of range")
+        if table[].PyList_SetItem(out._obj_ptr, i, cpy.Py_NewRef(labels[code]._obj_ptr)) != 0:
+            raise cpy.unsafe_get_error()
+    _ = labels^
     return out
 
 
