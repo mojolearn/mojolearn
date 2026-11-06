@@ -19,6 +19,8 @@
 # identities and the connected plans' field dictionaries: no Python protocol of
 # a value runs before the full admission has accepted it.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.prep_native_estimator import prep_estimator_call, prep_estimator_plan
@@ -88,31 +90,113 @@ def _record_of(model: PythonObject, context: PythonObject) raises -> PythonObjec
     return record
 
 
-def _same_record(held: PythonObject, record: PythonObject) raises -> Bool:
-    var b = native_loaded_module("builtins")
-    if py_type(held) is not b.list or len(held) != len(record):
+# Perf (perf3-nbr-msel-trees, trees R5): a call compares the held record
+# while it walks the configuration, in the same order `_record_into` wrote it,
+# instead of building a fresh record list (one append per identity, a list
+# copy per container) and comparing the two afterwards. It stops at the first
+# difference. Lists, tuples and dicts are read in place through the CPython
+# accessors (borrowed references, no Python temporaries); sets keep the
+# `list(value)` copy. A miss builds the record exactly as before.
+def _held_at(held: PythonObject, pos: Int) raises -> PythonObject:
+    var table = perf2_cpython_table()
+    return PythonObject(from_borrowed=table[].PyList_GetItem(held._obj_ptr, pos))
+
+
+def _held_count(held: PythonObject, mut pos: Int, count: Int) raises -> Bool:
+    if pos >= len(held):
         return False
-    for k in range(len(record)):  # driver-loop: recorded configuration identities
-        var a = held[k]
-        var c = record[k]
-        if a is c:
-            continue
-        # Counts are fresh int objects on each walk: compare them by value.
-        if py_type(a) is b.int and py_type(c) is b.int and Int(py=a) == Int(py=c):
-            continue
+    var item = _held_at(held, pos)
+    if py_type(item) is not native_loaded_module("builtins").int or Int(py=item) != count:
         return False
+    pos += 1
     return True
+
+
+def _match_into(held: PythonObject, mut pos: Int, value: PythonObject, context: PythonObject,
+                depth: Int) raises -> Bool:
+    """True when the identities under `value` equal the held record from
+    `pos` on (advancing `pos`), in `_record_into`'s order."""
+    if depth > _MAX_DEPTH or pos >= len(held):
+        return False
+    if _held_at(held, pos) is not value:
+        return False
+    pos += 1
+    if value is None:
+        return True
+    var b = native_loaded_module("builtins")
+    var kind = py_type(value)
+    if kind is b.bool or kind is b.int or kind is b.float or kind is b.str:
+        return True
+    var table = perf2_cpython_table()
+    if kind is b.dict:
+        var size = len(value)
+        if not _held_count(held, pos, size):
+            return False
+        ref cpy = Python().cpython()
+        var at = Int(0)
+        var key = PyObjectPtr()
+        var item = PyObjectPtr()
+        for _ in range(size):  # driver-loop: constructor parameter mapping entries
+            if cpy.PyDict_Next(value._obj_ptr, Pointer(to=at).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+                return False
+            if not _match_into(held, pos, PythonObject(from_borrowed=key), context, depth + 1):
+                return False
+            if not _match_into(held, pos, PythonObject(from_borrowed=item), context, depth + 1):
+                return False
+        return True
+    if kind is b.list or kind is b.tuple:
+        var size = len(value)
+        if not _held_count(held, pos, size):
+            return False
+        var is_list = kind is b.list
+        for k in range(size):  # driver-loop: constructor parameter container items
+            var entry = PythonObject(from_borrowed=table[].PyList_GetItem(value._obj_ptr, k)) if is_list else PythonObject(from_borrowed=table[].PyTuple_GetItem(value._obj_ptr, k))
+            if not _match_into(held, pos, entry, context, depth + 1):
+                return False
+        return True
+    if kind is b.set or kind is b.frozenset:
+        var items = py_call(b.list, value)
+        if not _held_count(held, pos, len(items)):
+            return False
+        for k in range(len(items)):  # driver-loop: constructor parameter container items
+            if not _match_into(held, pos, items[k], context, depth + 1):
+                return False
+        return True
+    var plan = prep_estimator_plan(value, context)
+    if plan is None:
+        return True
+    var names = plan["parameters"]
+    var fields = py_call(plan["fields_get"], value, kind)
+    for k in range(len(names)):  # driver-loop: a member's fixed constructor parameters
+        if not _match_into(held, pos, py_get(fields, names[k]), context, depth + 1):
+            return False
+    return True
+
+
+def _held_matches(held: PythonObject, model: PythonObject, context: PythonObject) raises -> Bool:
+    """True when `held` (a record `_record_of` built) still describes `model`."""
+    if py_type(held) is not native_loaded_module("builtins").list:
+        return False
+    var plan = prep_estimator_plan(model, context)
+    if plan is None:
+        return False
+    var names = plan["parameters"]
+    var fields = py_call(plan["fields_get"], model, py_type(model))
+    var pos = Int(0)
+    for k in range(len(names)):  # driver-loop: the meta-estimator's fixed constructor parameters
+        if not _match_into(held, pos, py_get(fields, names[k]), context, 1):
+            return False
+    return pos == len(held)
 
 
 def meta_admit_configuration(model: PythonObject, context: PythonObject) raises:
     """The meta-estimator's constructor admission (`__admit__`: one native
     clone of the model and every member), skipped while the identity record
     stored by the last successful admission still matches."""
+    var held = trees_side_get(_RECORD_SLOT, model)
+    if held is not None and _held_matches(held, model, context):
+        return
     var record = _record_of(model, context)
-    if record is not None:
-        var held = trees_side_get(_RECORD_SLOT, model)
-        if held is not None and _same_record(held, record):
-            return
     _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
     if record is not None:
         _ = trees_side_put(_RECORD_SLOT, model, record)
