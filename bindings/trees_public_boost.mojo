@@ -32,6 +32,7 @@ from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_staged_input import trees_stage_members, trees_unstage
 from bindings.native_loaded_module import NativeModules
+from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
@@ -41,7 +42,7 @@ from bindings.trees_public_inputs import (
     trees_weighted_rows, trees_call,
 )
 from bindings.trees_public_forest import (
-    ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh,
+    ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
     forest_capture_mode, forest_effective_mode, forest_export, forest_fit_arrays, forest_kind,
     _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
     _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
@@ -348,6 +349,49 @@ def _member_fit(member: PythonObject, X: PythonObject, y: PythonObject, sample_w
 
 def _member_predict(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     return forest_predict(member, Python.tuple(X), context)
+
+
+def _member_codes(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`as_i32_c(member.predict(X))` of an AdaBoost member, whose classes are
+    the ensemble's codes, without decoding and re-encoding (lane
+    perf-trees-owed, 2026-11-06): the member's own class codes (int32, or
+    int64 from the vote argmax) mapped through its classes. Classes 0..k-1
+    in order (the usual case: every round sees every class) map to
+    themselves: the codes are the answer (int64 narrowed once). Other exact
+    int classes in int32 range go through one int32 gather. Anything else
+    decodes as before. The int32 values are the decoded labels' in every case."""
+    var pair = forest_predict_codes(member, Python.tuple(X), context)
+    var codes = pair[1]
+    var labels = classifier_label_list(pair[0], context)
+    var k = len(labels)
+    var int_t = trees_builtins().int
+    var identity = k > 0
+    var table = trees_vector(max(k, 1), "<i4", context)
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
+    for c in range(k):  # driver-loop: over the member's k classes
+        var v = labels[c]
+        if py_type(v) is not int_t or Bool(py=v < PythonObject(0)) or Bool(py=v > PythonObject(2147483647)):
+            _ = table
+            return _i32_codes(trees_decode_labels(pair[0], codes, context), context)
+        var code = Int(py=v)
+        t[c] = Int32(code)
+        identity = identity and code == c
+    _ = table  # keep the table alive through the writes above
+    var n = Int(py=codes.size)
+    var narrow = codes
+    if String(codes.dtype) != "<i4":
+        narrow = trees_vector(n, "<i4", context)
+        trees_cast(trees_address(codes), String(codes.dtype), trees_address(narrow), "<i4", n, context)
+        _ = narrow  # keep the Python object alive through the native call above
+    if identity:
+        return narrow
+    var out = trees_vector(n, "<i4", context)
+    _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)), PythonObject(k),
+                      PythonObject(trees_address(narrow)), PythonObject(n), PythonObject(trees_address(out)))
+    _ = table  # keep the Python object alive through the native call above
+    _ = narrow  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    return out
 
 
 def _member_proba(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1008,7 +1052,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                     _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
                 else:
                     _member_fit(member, xa, codes, _w32(xt, w, n, context), context)
-                var pred = _i32_codes(_member_predict(member, xa, context), context)
+                var pred = _member_codes(member, xa, context)
                 _ = py_call_typed(_x(xt, "x_trees_samme_step"), _A(w), _A(pred), _A(codes), _A(stats),
                                   Python.list(_P(n), _P(k), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
                 _ = pred  # keep the Python object alive through the native call above
@@ -1139,7 +1183,7 @@ def _ada_decision(fields: PythonObject, x: TreesMatrix, xt: PythonObject, contex
     var wp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(weights.buffer_info)[0]))
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
-            var pred = _i32_codes(_member_predict(members[i], xa, context), context)
+            var pred = _member_codes(members[i], xa, context)
             var a = wp[unsafe_offset=i]
             _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
     finally:
