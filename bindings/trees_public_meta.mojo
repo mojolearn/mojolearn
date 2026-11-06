@@ -1890,7 +1890,14 @@ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: P
     if operation == "trees_meta_fit_transform":
         var fitted = _meta_fit(model, kind, args[0], args[1], _fit_params_weight(args[2]), context)
         _ = fitted
-        return _meta_transform(model, kind, args[0], context)
+        # The transform half stages X for its forest members like transform.
+        var prepared = _staged_input(model, kind, args[0], context)
+        var result = PythonObject(None)
+        try:
+            result = _meta_transform(model, kind, prepared[0], context)
+        finally:
+            trees_unstage(prepared[1])
+        return result
     if operation == "trees_meta_score":
         var X = args[0]
         var y = args[1]
