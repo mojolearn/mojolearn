@@ -1827,12 +1827,15 @@ def _staged_input(model: PythonObject, kind: String, X: PythonObject, context: P
     as the one device copy its forest members share (bindings/trees_staged_input.mojo).
     Any refusal here leaves `(X, [])`: the operation then raises it itself,
     in its own order and words."""
+    var Xa: PythonObject
     try:
-        var Xa = _check_x(model, X, context)
-        var staged = trees_stage_members(_member_list(model, kind), trees_address(Xa), _rows(Xa), _cols(Xa), context)
-        return Python.tuple(Xa, staged)
+        Xa = _check_x(model, X, context)
     except:
         return Python.tuple(X, Python.list())
+    # Staging never leaves a binary staged on a refusal: a failed stage is
+    # unstaged inside trees_stage_members, and the caller unstages the rest.
+    return Python.tuple(Xa, trees_stage_members(_member_list(model, kind), trees_address(Xa), _rows(Xa), _cols(Xa),
+                                                context))
 
 
 def meta_admitted_operation(model: PythonObject, kind: String, operation: String, args: PythonObject,

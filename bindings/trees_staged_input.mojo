@@ -95,9 +95,17 @@ def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int
         var unstage = trees_entry(tables[j], "forest_unstage_input_gpu")
         if stage is None or unstage is None:
             continue
-        # Registered before the call: an upload error still unstages.
+        # Registered before the call, so the caller's unstage covers it. A
+        # failed staging is unstaged here and skipped: staging is optional,
+        # the members then upload as before.
         _ = py_call(staged.append, unstage)
-        _ = py_call(stage, PythonObject(x_addr), Python.list(PythonObject(rows), PythonObject(cols)))
+        try:
+            _ = py_call(stage, PythonObject(x_addr), Python.list(PythonObject(rows), PythonObject(cols)))
+        except:
+            try:
+                _ = py_call(unstage)
+            except:
+                pass
     return staged
 
 
