@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Stateless preprocessing admits and snapshots its native provider context
 # before lazy NumPy setup, dispatch, metadata access, or numerical execution.
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -66,6 +67,31 @@ def _connect_numpy_once(source: PythonObject, context: PythonObject) raises:
     py_setitem(source, _NUMPY_CACHE, kept)
 
 
+struct _ContextTemplate(Defaultable, Movable):
+    # The operation context and output context built once from the immutable
+    # CONNECTION records (records copied, fixed maps built), kept with a
+    # strong reference to the connection tuple and reused while the bridge
+    # still exports that same tuple (p3-prep). Each operation takes its own
+    # shallow copy of both dicts; the fixed lookup maps (array_fields,
+    # array_storage_slots, buffer_codes, prep_stateless_kinds,
+    # warning_category_slots) are shared read-only tables that no operation
+    # writes. The templates never leave this module.
+    var connection: PythonObject
+    var context: PythonObject
+    var output: PythonObject
+
+    def __init__(out self):
+        self.connection = PythonObject(None)
+        self.context = PythonObject(None)
+        self.output = PythonObject(None)
+
+
+comptime _CONTEXT_TEMPLATE = _Global[
+    StorageType=_ContextTemplate, name="MojolearnPrepOperationContextTemplateV1",
+    init_fn=_ContextTemplate.__init__,
+]
+
+
 def prep_operation_context(source: PythonObject) raises -> PythonObject:
     # native_loaded_module verifies the bridge module and the exact immutable
     # CONNECTION export captured at import. Replacing a context's own alleged
@@ -74,10 +100,17 @@ def prep_operation_context(source: PythonObject) raises -> PythonObject:
     var connection = native_loaded_module("mojolearn._native_prep_stateless_bridge").CONTEXT_CONNECTION
     if py_type(connection) is not b.tuple or len(connection) != 6 or source is not connection[0]:
         raise Error("TypeError: preprocessing requires its originally connected native provider context")
-    var context = _copy_records(connection[1], b)
-    _fixed_maps(context, connection[2], b)
-    var output = _copy_records(connection[4], b)
-    _fixed_maps(output, connection[5], b)
+    var g = _CONTEXT_TEMPLATE.get_or_create_ptr()
+    if g[].connection is not connection or g[].context is None:
+        var built = _copy_records(connection[1], b)
+        _fixed_maps(built, connection[2], b)
+        var built_output = _copy_records(connection[4], b)
+        _fixed_maps(built_output, connection[5], b)
+        g[].context = built
+        g[].output = built_output
+        g[].connection = connection
+    var context = py_call(b.dict, g[].context)
+    var output = py_call(b.dict, g[].output)
     # The process mode is mutable process data: the backend namespace (a
     # small module dict) is copied in C before a readback or input
     # preparation can release the GIL, so one operation reads one mode.
