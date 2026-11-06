@@ -21,6 +21,12 @@
 #   overlay  when GATE_OVERLAY_SHA256 is set: the gate runner overlay (route-overlay.tgz, only GATE_OVERLAY
 #            files) over the tree, AFTER the build (which reads the clean tree) and BEFORE the gate; every
 #            file's sha256 before and after in out/route-overlay.txt; the files are restored on exit;
+#   identity when GATE_IDENTITY_COLUMNS is set (tools/release.py --identity-on-wheels, Andrew 2026-11-05: ONE
+#            execution of the identity lanes per device class, on the built wheels): tools/identity_wheel_record.py
+#            installs the exact wheels (sha256 against GATE_IDENTITY_SHA256), selects the owed lanes by the
+#            recorder's reuse rule and records them, every column on its own GPU(s) when the box has several,
+#            into out/identity/ (identity-wheels.json + the column records); the gate below then runs with
+#            --no-identity-lanes, so no lane runs twice;
 #   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged;
 #   runtime-qualify  tools/release_runtime_installed.py run against GATE_WHEELS (runtime-<vendor> ledger
 #            evidence, per unit: runtime-units-<class>/ receipts, earlier receipts from runtime-units-prior.tgz),
@@ -141,6 +147,26 @@ if ! python3 -c 'import ensurepip, venv' 2>/dev/null; then
     { apt-get -o DPkg::Lock::Timeout=300 update -qq && apt-get -o DPkg::Lock::Timeout=300 install -y -qq "python$pyv-venv"; } > "$J/apt.log" 2>&1
 fi
 
+PHASE=identity
+irc=0
+if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
+    if [ "$GATE_VENDOR" = nvidia ]; then
+        ngpu=$(nvidia-smi -L | grep -c '^GPU ')
+    else
+        ngpu=$(rocm-smi --showid --csv 2>/dev/null | grep -c '^card' || true)
+        [ "$ngpu" -gt 0 ] || ngpu=1
+    fi
+    shas=(); for x in "${GATE_IDENTITY_SHA256[@]}"; do shas+=(--sha256 "$x"); done
+    whl=(); for w in "${GATE_WHEELS[@]}"; do whl+=(--wheel "$w"); done
+    mkdir -p "$GATE_WORK/out/identity"
+    say "identity: columns $GATE_IDENTITY_COLUMNS on $ngpu GPU(s), $(nproc) core(s)"
+    python3 tools/identity_wheel_record.py --columns "$GATE_IDENTITY_COLUMNS" \
+        --label-device "$GATE_IDENTITY_LABEL_DEVICE" "${whl[@]}" "${shas[@]}" --gpus "$ngpu" \
+        --out "$GATE_WORK/out/identity" --venv "$GATE_WORK/identity-venv" > "$J/identity.log" 2>&1 || irc=$?
+    grep -E '^identity-wheels: (busy plan|.*REUSED|DONE|FAILED)' "$J/identity.log" | head -n 12 || true
+    say "identity record exited $irc"
+fi
+
 PHASE=pixi
 PIXI=$(command -v pixi || echo /root/.pixi/bin/pixi)
 [ -x "$PIXI" ] || { curl -fsSL https://pixi.sh/install.sh | bash > "$J/pixi-install.log" 2>&1; PIXI=/root/.pixi/bin/pixi; }
@@ -257,4 +283,6 @@ if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
     fi
 fi
 PHASE=complete
+# the one box job's verdict: the device checks' (the gate) and the identity record's
+[ "$grc" != 0 ] || grc=$irc
 exit "$grc"
