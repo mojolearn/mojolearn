@@ -690,10 +690,12 @@ def _gpr_score(model: PythonObject, args: PythonObject, context: PythonObject) r
         raise Error(String(_GPR) + ": y must be 1-D with one "
                     + "entry per row of X, got shape " + family_shape_repr(view) + " against "
                     + String(n) + " predictions")
-    _ = view^
     if not py_contains(context, PythonObject("family_metrics_ops")):
         raise Error("ImportError: mojolearn GaussianProcessRegressor.score needs the metrics owner (mojolearn._expansion_metrics)")
-    var t = family_as_f32(args[2], 1, "y", context)
+    # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
+    # row 629): y is not viewed and converted a second time.
+    var t = family_as_f32(view, 1, "y", context)
+    _ = view^
     var r = _reg_new(Python.tuple(t, pred, PythonObject(None)), PythonObject("uniform_average"), "score", True, context)
     var sq = Int(py=context["family_metrics_terms"]["sq"])
     r.program(0.0, context)
