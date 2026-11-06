@@ -109,10 +109,13 @@ def test_only_the_loaded_bindings_exports_are_names():
         def connect():
             from . import _backend
             module = _backend.load_host_module("{HOST}")
-            return module.manifold_native_call, module.not_an_export_of_it, "kmeans_fit"
+            return (module.manifold_native_call, module.not_an_export_of_it, "kmeans_fit",
+                    getattr(module, "runtime_manifold_host_vendor"))
     """
     with _Seeded(text):
         _loads, names = ls.sink_region_loads(SINK, {"connect"})
+    # An attribute read of the loaded module is a name; a string (a registry's
+    # getattr table) is not, even when it spells an export of that binding.
     assert names == {"manifold_native_call"}, names
 
 

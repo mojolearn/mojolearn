@@ -4203,9 +4203,9 @@ _SINK_LOAD_CALLS = _BINDING_CALLS | frozenset({"connect_bindings"})
 
 def sink_region_loads(rel, wanted):
     """(bindings, names) a REGISTRY (an enumerator sink) LOADS in the region a
-    lane runs: every binding a binding call there (`_BINDING_CALLS`) names by a
-    LITERAL argument, and the identifier-shaped names that region reads which
-    are exports of those bindings. `wanted` is what the lane's importers ask of
+    lane runs: every binding a binding call there (`_SINK_LOAD_CALLS`) names by
+    a LITERAL argument, and the attribute names that region reads which are
+    exports of those bindings. `wanted` is what the lane's importers ask of
     the file (`_region_nodes`; None is the whole file).
 
     WHY A SINK STILL LOADS (2026-11-05). A registry's binding NAMES are not
@@ -4264,7 +4264,11 @@ def sink_region_loads(rel, wanted):
         exports = set().union(*[set(_binding_exports(os.path.join("bindings", b + ".mojo")))
                                 | set(_delegated_exports(os.path.join("bindings", b + ".mojo")))
                                 for b in loads])
-        names = _names_in_nodes(nodes) & exports
+        # ATTRIBUTE READS ONLY (`module.manifold_native_call`). A registry's
+        # string tables (`_classical_host.py` captures `cd_predict`,
+        # `kde_score_samples`, ... by `getattr` at import, for every lane that
+        # enters it) are the registry part, not a call this lane makes.
+        names = {sub.attr for top in nodes for sub in ast.walk(top) if isinstance(sub, ast.Attribute)} & exports
     hit = _SINK_LOADS[key] = (frozenset(loads), frozenset(names))
     return hit
 
@@ -5030,7 +5034,11 @@ def lane_sources():
                     # (`sink_region_loads`). Never whole through a sink.
                     loads, names = sink_region_loads(rel, wanted)
                     declared |= loads
-                    used |= names
+                    if rel not in ubiquitous_py:
+                        # a file every lane enters says nothing about this one
+                        # (the rule `binding_seeds` keeps for a binding every
+                        # lane reaches): its loads stay the source alone
+                        used |= names
                     if rel in seeds_of[lane]:
                         # the lane's own door (`_followed_seeds`): "no export
                         # named" stays wide for what it loads, as for any seed
