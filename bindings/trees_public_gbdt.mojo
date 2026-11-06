@@ -58,6 +58,12 @@ def gbdt_mode(fields: PythonObject, context: PythonObject) raises -> String:
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(mode) is b.str:
+        # Already clean (the usual case): no isinstance/strip/lower calls
+        # (p3-trees).
+        var exact = String(py=mode)
+        if exact == "fast" or exact == "identical":
+            return exact
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
     var clean = String(py_call(py_call(mode.strip).lower))

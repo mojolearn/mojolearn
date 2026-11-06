@@ -21,6 +21,7 @@
 # classifier `predict` decodes the resident labels (or the argmax of the
 # vote) without returning to Python between the vote and the decode.
 from std.math import sqrt
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
@@ -188,6 +189,12 @@ def _check_mode(mode: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
     if mode is None:
         return mode
+    if py_type(mode) is b.str:
+        # The stored value is usually already clean: no strip()/lower() calls
+        # (p3-trees). The value returned compares equal to the cleaned one.
+        var exact = String(py=mode)
+        if exact == "fast" or exact == "identical":
+            return mode
     if py_type(mode) is not b.str and not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
     var clean = py_call(py_call(mode.strip).lower)
@@ -1453,13 +1460,41 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
     return out
 
 
+struct _FusedLabelFacts(Movable):
+    """`forest_identical_fused_labels()` of each loaded forest binary, keyed
+    on the compiled entry's address (a bound function its connected table
+    holds for the life of the process). The answer is compile-time; every
+    identical predict called the entry again (p3-trees)."""
+    var answers: Dict[Int, Bool]
+
+    def __init__(out self):
+        self.answers = Dict[Int, Bool]()
+
+
+comptime _FUSED_LABEL_FACTS = _Global[
+    StorageType=_FusedLabelFacts, name="MojoTreesForestFusedLabelFacts", init_fn=_FusedLabelFacts.__init__,
+]
+
+
+def _fused_labels_capable(native: PythonObject) raises -> Bool:
+    var capability = trees_entry(native, "forest_identical_fused_labels")
+    if capability is None:
+        return False
+    var key = Int(capability._obj_ptr)
+    var facts = _FUSED_LABEL_FACTS.get_or_create_ptr()
+    if key in facts[].answers:
+        return facts[].answers[key]
+    var answer = _truthy(py_call_typed(capability))
+    facts[].answers[key] = answer
+    return answer
+
+
 def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestInput, context: PythonObject) raises -> PythonObject:
     """`ForestProtocol._predict_forest_labels`: the resident classifier's
     int32 codes, or None where the fused label route does not apply."""
     var engine = staged.engine
-    var capability = trees_entry(staged.native, "forest_identical_fused_labels")
     if staged.mode == "identical":
-        if capability is None or not _truthy(py_call_typed(capability)):
+        if not _fused_labels_capable(staged.native):
             return PythonObject(None)
         if not (engine == "sequential" and staged.ordered_export) and engine != "parallel_groves":
             return PythonObject(None)
