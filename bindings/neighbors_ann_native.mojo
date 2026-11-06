@@ -6,6 +6,7 @@
 # Numerical exports still use the existing packed CPython extension ABI; a
 # descriptor-only ANN provider remains explicit migration work. No arithmetic
 # or vendor identity lane is introduced by these boundary repairs.
+from std.memory import memcpy, MutPointer
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_drop
@@ -318,6 +319,13 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     py_setitem(fields, "list_offsets_", offsets)
     py_setitem(fields, "list_indices_", indices)
     py_setitem(fields, "list_data_", _ann_view(data, Python.tuple(n, dim), context))
+    # p3-neighbors-cluster: fitted index arrays are read-only from fit on (the
+    # resident device copy is keyed by identity; bindings/p3nc_fitted_freeze.mojo).
+    _ = fitted_freeze(fields["centers_"], context)
+    _ = fitted_freeze(fields["center_norms_"], context)
+    _ = fitted_freeze(fields["list_offsets_"], context)
+    _ = fitted_freeze(fields["list_indices_"], context)
+    _ = fitted_freeze(fields["list_data_"], context)
     py_setitem(fields, "n_features_in_", PythonObject(dim))
     py_setitem(fields, "n_rows_", PythonObject(n))
     py_setitem(fields, "n_lists_", n_lists_o)
@@ -427,6 +435,13 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     py_setitem(fields, "list_indices_", indices)
     py_setitem(fields, "codebooks_", _ann_view(codebooks, Python.tuple(pq_dim, n_codes, pq_len), context))
     py_setitem(fields, "codes_", _ann_view(codes, Python.tuple(n, pq_dim), context))
+    # p3-neighbors-cluster: fitted index arrays are read-only from fit on (the
+    # resident device copy is keyed by identity; bindings/p3nc_fitted_freeze.mojo).
+    _ = fitted_freeze(fields["centers_"], context)
+    _ = fitted_freeze(fields["list_offsets_"], context)
+    _ = fitted_freeze(fields["list_indices_"], context)
+    _ = fitted_freeze(fields["codebooks_"], context)
+    _ = fitted_freeze(fields["codes_"], context)
     py_setitem(fields, "n_features_in_", PythonObject(dim))
     py_setitem(fields, "n_rows_", PythonObject(n))
     py_setitem(fields, "n_lists_", n_lists_o)
@@ -490,6 +505,14 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     py_setitem(fields, "sq_vmin_", vmin)
     py_setitem(fields, "sq_delta_", delta)
     py_setitem(fields, "codes_", _ann_view(codes, Python.tuple(n, dim), context))
+    # p3-neighbors-cluster: fitted index arrays are read-only from fit on (the
+    # resident device copy is keyed by identity; bindings/p3nc_fitted_freeze.mojo).
+    _ = fitted_freeze(fields["centers_"], context)
+    _ = fitted_freeze(fields["list_offsets_"], context)
+    _ = fitted_freeze(fields["list_indices_"], context)
+    _ = fitted_freeze(fields["sq_vmin_"], context)
+    _ = fitted_freeze(fields["sq_delta_"], context)
+    _ = fitted_freeze(fields["codes_"], context)
     py_setitem(fields, "n_features_in_", PythonObject(dim))
     py_setitem(fields, "n_rows_", PythonObject(n))
     py_setitem(fields, "n_lists_", n_lists_o)
@@ -547,6 +570,14 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     py_setitem(fields, "codes_", _ann_view(codes, Python.tuple(n, words), context))
     py_setitem(fields, "norms_", norms)
     py_setitem(fields, "ip_factors_", ips)
+    # p3-neighbors-cluster: fitted index arrays are read-only from fit on (the
+    # resident device copy is keyed by identity; bindings/p3nc_fitted_freeze.mojo).
+    _ = fitted_freeze(fields["centers_"], context)
+    _ = fitted_freeze(fields["list_offsets_"], context)
+    _ = fitted_freeze(fields["list_indices_"], context)
+    _ = fitted_freeze(fields["codes_"], context)
+    _ = fitted_freeze(fields["norms_"], context)
+    _ = fitted_freeze(fields["ip_factors_"], context)
     py_setitem(fields, "n_features_in_", PythonObject(dim))
     py_setitem(fields, "n_rows_", PythonObject(n))
     py_setitem(fields, "n_lists_", n_lists_o)
@@ -581,10 +612,23 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                     Python.list(PythonObject(n), PythonObject(d), PythonObject(kdeg), PythonObject(deg)))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = graph  # keep the Python object alive through the native call above
-    var dataset = x_snapshot.keep if x_snapshot.is_array else _ann_buffer_array(
-        x_snapshot.keep, n, d, x_snapshot.source.addr, context)
+    # p3-neighbors-cluster (caller-aliased inputs): the index keeps X, and the
+    # resident device copy is keyed by the kept array's identity. Unless the
+    # conversion already made an owned copy, fit keeps an owned snapshot, never
+    # the caller's own buffer, and it is read-only from here on.
+    var dataset: PythonObject
+    if x_snapshot.copied and x_snapshot.is_array:
+        dataset = x_snapshot.keep
+    else:
+        var flat = _ann_empty(n * d, "<f4", context)
+        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flat))),
+               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_snapshot.source.addr), count=n * d)
+        _ = x_snapshot  # the source storage stays alive through the copy above
+        dataset = _ann_view(flat, Python.tuple(n, d), context)
     py_setitem(fields, "dataset_", dataset)
     py_setitem(fields, "graph_", _ann_view(graph, Python.tuple(n, deg), context))
+    _ = fitted_freeze(dataset, context)
+    _ = fitted_freeze(fields["graph_"], context)
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "n_rows_", PythonObject(n))
     py_setitem(fields, "graph_degree_", PythonObject(deg))

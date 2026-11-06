@@ -559,6 +559,11 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
     _ = old_data
     py_setitem(fields, "list_offsets_", offsets)
     py_setitem(fields, "list_indices_", indices)
+    # p3-neighbors-cluster: the extended index arrays are read-only (the
+    # resident device copy is keyed by identity).
+    _ = fitted_freeze(offsets, context)
+    _ = fitted_freeze(indices, context)
+    _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
     py_setitem(fields, "n_rows_", PythonObject(total))
     py_setitem(fields, "extend_labels_", labels)
