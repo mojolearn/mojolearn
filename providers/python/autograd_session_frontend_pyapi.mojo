@@ -2,7 +2,8 @@
 # Session admission uses the common provider and retains its exact registry.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, program_admission_context, program_numeric_scalar
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_connect, neural_descriptor_entry, neural_descriptor_matches,
@@ -25,17 +26,32 @@ def ops_session_fields(session: PythonObject) raises -> PythonObject:
     var cls = context["ops_session_class"]
     if py_type(session) is not cls:
         raise Error("TypeError: Session requires its connected native owner class; Python subclass hooks are unsupported")
-    var b = native_loaded_module("builtins")
-    var namespace = py_call(b.type.__dict__["__dict__"].__get__, cls)
     var layout = context["ops_session_layout"]
-    for i in range(len(layout)):  # driver-loop: over connected Session descriptor identities
-        if py_get(namespace, layout[i][0]) is not layout[i][1]:
-            raise Error("TypeError: Session owner has a replaced Python attribute hook or storage descriptor")
+    # The layout check depends only on the class rows: keep it per class
+    # under the type watcher (bindings/native_class_admission.mojo); the
+    # instance key check per dictionary under the dict watcher. Python
+    # 3.10/3.11 keep both full checks on every operation.
+    var mods = NativeModules()
+    var record = class_record(mods, _SESSION_LAYOUT_SLOT, cls)
+    if record is None or Int(py=record) != Int(layout._obj_ptr):
+        var b = native_loaded_module("builtins")
+        var namespace = py_call(b.type.__dict__["__dict__"].__get__, cls)
+        for i in range(len(layout)):  # driver-loop: over connected Session descriptor identities
+            if py_get(namespace, layout[i][0]) is not layout[i][1]:
+                raise Error("TypeError: Session owner has a replaced Python attribute hook or storage descriptor")
+        class_admit(mods, _SESSION_LAYOUT_SLOT, cls, PythonObject(Int(layout._obj_ptr)))
     var fields = py_fields(session)
     if py_type(fields) is not py_type(Python.dict()):
         raise Error("TypeError: Session requires a native instance dictionary")
-    _session_string_keys(fields)
+    if not dict_keys_admitted(fields):
+        _session_string_keys(fields)
+        dict_keys_admit(fields)
     return fields
+
+
+# Class-watcher slot of the Session layout verdict (payload: the address of
+# the connected layout tuple it was checked against; the context keeps it).
+comptime _SESSION_LAYOUT_SLOT = "p3_autograd_session_layout_v1"
 
 
 def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode: PythonObject,
