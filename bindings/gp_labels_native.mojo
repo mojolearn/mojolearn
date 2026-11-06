@@ -248,7 +248,9 @@ def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject)
     # by code point (Python's str order), the first of equal labels kept.
     var text = classical_text_buffer_labels(y, context)
     if text:
-        return Python.tuple(text.value().classes, text.value().codes)
+        # a local copy first, as trees_public_score.mojo:352 (pass 2, C7)
+        var found = text.value().copy()
+        return Python.tuple(found.classes, found.codes)
     var source = gp_label_list(y, context) if py_type(y) is context["array_class"] else y
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
@@ -261,7 +263,8 @@ def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject)
     if labels_all_exact_str(flat):
         var named = classical_text_list_labels(flat, context)
         if named:
-            return Python.tuple(named.value().classes, named.value().codes)
+            var found = named.value().copy()
+            return Python.tuple(found.classes, found.codes)
     return _gp_sorted_classes(flat, context)
 
 
