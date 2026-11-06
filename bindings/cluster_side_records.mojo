@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: Apache-2.0
+# Native records of the cluster family doors (lane perf2-cluster,
+# 2026-11-06): KMeans and the other family-lifecycle estimators,
+# GaussianMixture, HDBSCAN, DBSCAN and KernelDensity.
+#
+# Their public queries (predict, transform, score_samples, approximate_predict,
+# membership_vector, ...) used to redo, on every call, work whose result
+# depends only on objects the model or its class already holds:
+#
+# - the class-ancestry walk refusing a `_mojolearn_after_fit` hook (one
+#   `type.__dict__` read and key admission per ancestor);
+# - the connected-class check (an MRO walk comparing every ancestor);
+# - the admission of every constructor parameter and fitted field (each a
+#   full value admission with its type-vector construction);
+# - views of the fitted arrays a query hands to its kernel.
+#
+# Class facts are kept per class state (bindings/native_class_admission.mojo:
+# a type watcher invalidates them on any modification of the class or an
+# ancestor). Model facts are kept per model in the prepared-owner registry
+# (bindings/native_prepared_owner.mojo, through bindings/trees_side_records.mojo):
+# keyed by a weak reference to the model, outside its `__dict__`, so a query
+# leaves `__dict__` unchanged, pickles and copies carry no record, and a
+# record dies with its model. A model record is valid while its key matches:
+# the model's class and the identities of every field the cached work read
+# (exact containers item by item, with their lengths), so `set_params`, a
+# refit, an assignment or an in-place edit of a stored list, tuple or dict
+# changes the key and the full admission runs again, with its refusals in
+# their original order. A record is written only after the full path
+# succeeded, and never holds its own model.
+from std.ffi import _Global, c_int
+from std.python import Python, PythonObject
+from std.python._cpython import ExternalFunction, PyObjectPtr
+from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
+from bindings.mode_metadata_native import _class_fields
+from bindings.classical_attributes import _type_mro
+from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
+
+# int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b)
+comptime _PyType_IsSubtype = ExternalFunction[
+    "PyType_IsSubtype", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
+
+
+struct ClusterCPython(Movable):
+    # Resolved once per process from the interpreter library the standard
+    # library selected (the bindings/cpython_table.mojo pattern): no dlsym by
+    # name per call.
+    var PyType_IsSubtype: _PyType_IsSubtype.type
+
+    def __init__(out self):
+        ref cpy = Python().cpython()
+        var lib = cpy.lib.borrow()
+        self.PyType_IsSubtype = _PyType_IsSubtype.load(lib)
+
+
+# Shared by every Mojo extension in the process: bump the name's version
+# whenever a field is added, removed or reordered.
+comptime CLUSTER_CPYTHON = _Global[
+    StorageType=ClusterCPython, name="MojolearnClusterCPythonV1",
+    init_fn=ClusterCPython.__init__,
+]
+
+# Py_TPFLAGS_TYPE_SUBCLASS: set on `type` and every metaclass.
+comptime _TYPE_SUBCLASS_FLAG = UInt64(1) << 31
+
+
+def cluster_is_subclass(cls: PythonObject, owner: PythonObject) raises -> Bool:
+    """`owner` is in `cls.__mro__` (`cls` a class): CPython's own MRO test,
+    with no Python-level tuple walk. An `owner` that is not a class is
+    compared against the MRO entries one by one, as before."""
+    var owner_type = py_type(owner)
+    if (cpython_table()[].PyType_GetFlags(owner_type._obj_ptr) & _TYPE_SUBCLASS_FLAG) == UInt64(0):
+        var ancestry = _type_mro(cls)
+        for i in range(len(ancestry)):  # driver-loop: over class ancestry (an owner that is not a class)
+            if ancestry[i] is owner:
+                return True
+        return False
+    var t = CLUSTER_CPYTHON.get_or_create_ptr()
+    return Int(t[].PyType_IsSubtype(cls._obj_ptr, owner._obj_ptr)) != 0
+
+
+comptime _AFTER_FIT_SLOT = "cluster_after_fit_free_v1"
+
+
+def cluster_refuse_fit_callbacks(cls: PythonObject, message: String) raises:
+    """Raise `message` when `cls` or an ancestor defines `_mojolearn_after_fit`.
+
+    The ancestry walk (one class namespace read per ancestor) ran on every
+    public call. A class that passed it is recorded per class state: any
+    modification of the class or of an ancestor (attribute assignment or
+    deletion, `__bases__`) invalidates the record and the walk runs again.
+    Where type watchers are unavailable (Python 3.10, 3.11) the walk runs on
+    every call, as before."""
+    var mods = NativeModules()
+    if class_record(mods, _AFTER_FIT_SLOT, cls) is not None:
+        return
+    var ancestry = _type_mro(cls)
+    for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from a native call
+        if py_contains(_class_fields(mods, ancestry[i]), "_mojolearn_after_fit"):
+            raise Error(message)
+    class_admit(mods, _AFTER_FIT_SLOT, cls, PythonObject(True))
+
+
+def cluster_record_key(model: PythonObject, fields: PythonObject, required: PythonObject,
+                       optional: PythonObject) raises -> PythonObject:
+    """The identity key of a model record: the model's class, then for each
+    name in `required` (all must be stored in `fields`) and `optional` (a
+    presence word, then the value when stored) the name and the stored value,
+    exact lists, tuples and dicts item by item to depth 4, any other
+    non-scalar with its class. None when a required name is not stored in
+    the instance dictionary (its value then comes from a class or a default
+    the key does not cover): such a model is never recorded."""
+    var mods = NativeModules()
+    var key = Python.list(py_type(model))
+    for i in range(len(required)):  # driver-loop: over connected constructor parameter names (identity key)
+        var name = required[i]
+        if not py_contains(fields, name):
+            return PythonObject(None)
+        _ = py_call(key.append, name)
+        trees_key_shallow(mods, key, fields[name], 0)
+    for i in range(len(optional)):  # driver-loop: over fitted field names (identity key)
+        var name = optional[i]
+        _ = py_call(key.append, name)
+        if py_contains(fields, name):
+            _ = py_call(key.append, PythonObject(1))
+            trees_key_shallow(mods, key, fields[name], 0)
+        else:
+            _ = py_call(key.append, PythonObject(0))
+    return key
+
+
+def cluster_record_get(slot: String, model: PythonObject, key: PythonObject) raises -> PythonObject:
+    """The payload `slot` holds for `model` under an identical key, or None."""
+    if key is None:
+        return PythonObject(None)
+    var held = trees_side_get(slot, model)
+    if held is None or not trees_key_same(held[0], key):
+        return PythonObject(None)
+    return held[1]
+
+
+def cluster_record_put(slot: String, model: PythonObject, key: PythonObject, payload: PythonObject) raises:
+    """Keep `payload` (never None) for `model` under `key`, replacing any
+    older record in `slot`. No-op without a key, and for a model that takes
+    no weak reference (it then runs the full path on every call)."""
+    if key is None:
+        return
+    _ = trees_side_put(slot, model, Python.tuple(key, payload))
+
+
+def cluster_record_drop(slot: String, model: PythonObject) raises:
+    """Forget `model`'s record in `slot` (a fit: the fitted arrays a record
+    holds are released now, not at the next query)."""
+    trees_side_drop(slot, model)

@@ -23,6 +23,7 @@ from core.family_cast_impl import family_cast_rows, family_cast_rows_f64, family
 from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
 from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.optimizer_public_words import stash_python_error
+from bindings.native_class_admission import static_builtin_type
 from core.family_weights_impl import (
     family_fill_f32, family_fill_f64, family_weight_status, family_weight_status_f64,
     FAMILY_WEIGHTS_NONFINITE, FAMILY_WEIGHTS_NEGATIVE,
@@ -54,18 +55,37 @@ def family_isinstance(value: PythonObject, classes: PythonObject) raises -> Bool
     return Bool(py=py_call(native_loaded_module("builtins").isinstance, value, classes))
 
 
+# Perf (lane perf2-cluster): the parameter tests below run several times per
+# public call. For a value whose class is exactly str, int, float or bool the
+# answer is known without a call: `isinstance` returns at its exact-type check
+# before any `__instancecheck__`, and bool is a final class. Those classes are
+# static builtin types, resolved once per process (static_builtin_type), so
+# the common case needs no builtins namespace stamp; any other value takes
+# the `isinstance` calls as before.
 def family_is_str(value: PythonObject) raises -> Bool:
+    if py_type(value) is static_builtin_type("builtins", "str"):
+        return True
     return family_isinstance(value, native_loaded_module("builtins").str)
 
 
 def family_is_int(value: PythonObject) raises -> Bool:
     """An int that is not a bool (`isinstance(v, int) and not isinstance(v, bool)`)."""
+    var cls = py_type(value)
+    if cls is static_builtin_type("builtins", "int"):
+        return True
+    if cls is static_builtin_type("builtins", "bool"):
+        return False
     var b = native_loaded_module("builtins")
     return family_isinstance(value, b.int) and not family_isinstance(value, b.bool)
 
 
 def family_is_real(value: PythonObject) raises -> Bool:
     """An int or float that is not a bool."""
+    var cls = py_type(value)
+    if cls is static_builtin_type("builtins", "int") or cls is static_builtin_type("builtins", "float"):
+        return True
+    if cls is static_builtin_type("builtins", "bool"):
+        return False
     var b = native_loaded_module("builtins")
     return family_isinstance(value, Python.tuple(b.int, b.float)) and not family_isinstance(value, b.bool)
 
@@ -116,7 +136,17 @@ def family_entry(binding: PythonObject, name: String, context: PythonObject) rai
     model's numeric mode. A by-name refusal of the binding (a tier that is
     not built, an entry a CPU-only install does not have) is raised
     unchanged; anything other than a compiled entry is refused."""
-    var entry = family_call(native_loaded_module("builtins").getattr, binding, PythonObject(name))
+    # Perf (lane perf2-cluster): CPython's own attribute lookup, the one
+    # `getattr(binding, name)` makes (a module `__getattr__` included), not a
+    # call of `builtins.getattr` through the builtins connection (a namespace
+    # stamp walk per entry, several entries per public call). A failure is
+    # stashed and restored unchanged at the door, as family_call did.
+    ref cpy = Python().cpython()
+    var raw = cpy.PyObject_GetAttrString(binding._obj_ptr, name.copy())
+    if not raw:
+        var failure = stash_python_error()
+        raise failure^
+    var entry = PythonObject(from_owned=raw)
     if py_type(entry) is not context["family_builtin_type"]:
         raise Error("TypeError: mojolearn: " + name + " must be a compiled entry")
     return entry
@@ -184,7 +214,6 @@ def family_cast_view(view: PythonObject, name: String, context: PythonObject) ra
     no finiteness refusal (as_f32_c made none): the view itself when it is
     already float32 in C order, otherwise a new mojolearn Array of its shape.
     """
-    var b = native_loaded_module("builtins")
     var nd = Int(py=view.ndim)
     if nd > 2:
         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
@@ -192,6 +221,8 @@ def family_cast_view(view: PythonObject, name: String, context: PythonObject) ra
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_is_f32(view, context) and classical_c_order(view, context):
         return view
+    # Perf (lane perf2-cluster): the builtins connection only for a cast.
+    var b = native_loaded_module("builtins")
     # Shape and strides read once each (they were read per dimension).
     var shape = view.shape
     var rows = 1 if nd == 0 else Int(py=shape[0])
@@ -212,7 +243,6 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
     """`_buffer.as_f64_c`'s cast of a checked view of rank 0, 1 or 2: the
     view itself when it is already float64 in C order, otherwise a new
     mojolearn Array of its shape."""
-    var b = native_loaded_module("builtins")
     var nd = Int(py=view.ndim)
     if nd > 2:
         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
@@ -220,6 +250,7 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_dtype_str(view, context) == "<f8" and classical_c_order(view, context):
         return view
+    var b = native_loaded_module("builtins")
     var shape = view.shape
     var rows = 1 if nd == 0 else Int(py=shape[0])
     var cols = 1 if nd < 2 else Int(py=shape[1])
@@ -233,6 +264,14 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
                          FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))))
     _ = result  # keep the Python object alive through the native call above
     return result
+
+
+def _family_shape_tuple(shape: List[Int]) raises -> PythonObject:
+    """`tuple(shape)` of admitted native dimensions, for a refusal message."""
+    var shape_words = Python.list()
+    for word in shape:  # small-loop(admitted rank for an error message)
+        _ = py_call(shape_words.append, word)
+    return py_call(native_loaded_module("builtins").tuple, shape_words)
 
 
 def family_input_snapshot(source: PythonObject, ndim: Int, name: String,
@@ -249,23 +288,22 @@ def family_input_snapshot(source: PythonObject, ndim: Int, name: String,
     var view = classical_view(prepared, context, name)
     var shape = array_shape_once(view, context)
     var nd = len(shape)
-    var shape_words = Python.list()
     var count = 1
     for word in shape:  # driver-loop: over captured native array rank metadata
-        _ = py_call(shape_words.append, word)
         count *= word
-    var pyshape = py_call(native_loaded_module("builtins").tuple, shape_words)
+    # Perf (lane perf2-cluster): the Python shape tuple is built only for a
+    # refusal's message, not on every admitted input.
     if ndim >= 0 and nd != ndim:
         var hint = String("")
         if ndim == 2 and nd < 2:
             hint = ". " + String(RESHAPE_HINT)
         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
-                    + "-D shape " + family_repr(pyshape) + hint)
+                    + "-D shape " + family_repr(_family_shape_tuple(shape)) + hint)
     if count == 0:
         var what = String("sample(s)")
         if nd == 2 and shape[0] != 0:
             what = "feature(s)"
-        var text = family_repr(pyshape)
+        var text = family_repr(_family_shape_tuple(shape))
         raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
                     + " (shape=" + text + ") while a minimum of 1 is required.")
     if nd > 2:

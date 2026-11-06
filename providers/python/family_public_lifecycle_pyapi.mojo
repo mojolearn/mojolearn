@@ -15,13 +15,14 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.mode_metadata_native import _fields, _fitted, _class_fields
-from bindings.classical_attributes import classical_connect_numpy, _type_mro
+from bindings.mode_metadata_native import _fields, _fitted
+from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_estimator_name, classical_check_width
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.family_common import FAMILY_F32P, family_f32_snapshot, family_owned_snapshot
+from bindings.cluster_side_records import cluster_refuse_fit_callbacks
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_complete,
 )
@@ -106,7 +107,10 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     if operation == "family_xn_graph_svgp_score":
         return FamilyLifecycle("score")
     # KMeans (bindings/kmeans_native.mojo): its own by-name non-finite refusal;
-    # X reaches the owner as the caller passed it (array init receives the rows).
+    # a fit's X reaches the owner as the caller passed it (array init receives
+    # the rows). Perf (lane perf2-cluster): predict and transform take the
+    # admitted float32 snapshot, so X is admitted and cast once per query
+    # (the owner then only scans it for its by-name refusal), not twice.
     if operation == "family_kmeans_fit":
         return FamilyLifecycle("fit", replace=False)
     if operation == "family_kmeans_fit_predict":
@@ -114,9 +118,9 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     if operation == "family_kmeans_fit_transform":
         return FamilyLifecycle("fit_transform", replace=False)
     if operation == "family_kmeans_predict":
-        return FamilyLifecycle("predict", replace=False)
+        return FamilyLifecycle("predict")
     if operation == "family_kmeans_transform":
-        return FamilyLifecycle("transform", replace=False)
+        return FamilyLifecycle("transform")
     # LinearSVC / LinearSVR (bindings/svc_linear_native.mojo, svm_mixture_native.mojo).
     if operation == "family_svc_linear_svc_fit":
         return FamilyLifecycle("fit", scan=True, replace=False, target=2, classifier=True, required=True)
@@ -146,10 +150,10 @@ def kpca_lifecycle_spec(operation: String) -> FamilyLifecycle:
     return FamilyLifecycle("")
 
 
-def _precomputed(fields: PythonObject) raises -> Bool:
+def _precomputed(fields: PythonObject, b: PythonObject) raises -> Bool:
     # scikit-learn skips the width check for a precomputed kernel or metric:
-    # the query's columns are the training rows.
-    var b = native_loaded_module("builtins")
+    # the query's columns are the training rows. `b`: the operation's
+    # admitted builtins connection.
     for key in ["kernel", "metric", "affinity"]:  # small-loop(three fixed precomputed-mode parameters)
         var value = py_get(fields, key)
         if py_type(value) is b.str and String(py=value) == "precomputed":
@@ -175,10 +179,9 @@ def family_lifecycle_begin(model: PythonObject, operation: String, spec: FamilyL
     var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
     if py_type(fitted) is not b.bool and py_type(fitted) is not b.int:
         raise Error("TypeError: native fitted flags cannot invoke Python boolean hooks")
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from a native fit
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: native fitting cannot invoke Python completion callbacks")
+    # Perf (lane perf2-cluster): the ancestry walk runs once per class state
+    # (bindings/cluster_side_records.mojo), not on every public call.
+    cluster_refuse_fit_callbacks(py_type(model), "TypeError: native fitting cannot invoke Python completion callbacks")
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native fitting cannot invoke Python completion callbacks")
     var name = classical_estimator_name(model)
@@ -220,7 +223,7 @@ def family_lifecycle_begin(model: PythonObject, operation: String, spec: FamilyL
             # the owned copy.
             var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
             py_setitem(values, PythonObject(x_index), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
-    if not fitting and Int(py=depth) == 0 and columns >= 0 and not spec.graph and not _precomputed(fields):
+    if not fitting and Int(py=depth) == 0 and columns >= 0 and not spec.graph and not _precomputed(fields, b):
         var width = py_get(fields, "n_features_in_")
         if py_type(width) is b.int:
             host_inference_scalar(width, context)

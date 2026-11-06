@@ -13,6 +13,7 @@
 # (`kmeans_centers_prepare`, cluster/resident_centers.mojo) instead of
 # uploading them per call; a binding without those doors (the CPU host
 # binding) takes the per-call entries as before.
+from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -25,6 +26,8 @@ from bindings.family_common import (
     family_type_name, family_call, family_call_kw, family_entry, family_array, family_view,
     family_cast_f32, family_f32, family_nonfinite, family_sample_weight, family_field,
 )
+from bindings.classical_arrays import classical_is_f32, classical_c_order
+from core.family_cast_impl import family_all_finite_f32
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
@@ -66,27 +69,72 @@ def _kmeans_release(model: PythonObject) raises:
         pass
 
 
+struct _KMeansDoorless(Defaultable, Movable):
+    # Bindings found to have no `kmeans_centers_prepare` door (the CPU host
+    # binding): probing them raised and cleared an ImportError on every
+    # query. Strong references, so an address is never reused while listed;
+    # the binding modules live for the process anyway.
+    var bindings: List[PythonObject]
+
+    def __init__(out self):
+        self.bindings = List[PythonObject]()
+
+
+comptime _KMEANS_DOORLESS = _Global[StorageType=_KMeansDoorless, name="MojolearnKMeansDoorlessV1",
+                                    init_fn=_KMeansDoorless.__init__]
+
+
+def _kmeans_doorless(binding: PythonObject) raises -> Bool:
+    var g = _KMEANS_DOORLESS.get_or_create_ptr()
+    for i in range(len(g[].bindings)):  # small-loop(bindings: the few connected KMeans bindings without a resident door)
+        if g[].bindings[i] is binding:
+            return True
+    return False
+
+
+def _kmeans_held(fields: PythonObject, binding: PythonObject, centers: PythonObject, k: Int,
+                 d: Int) raises -> PythonObject:
+    """The held resident record `((centers, k, d), handle, binding)` when it
+    was minted from this very `cluster_centers_` object (the record keeps a
+    reference to it, so it cannot be replaced by a new array at the same
+    address) by this binding at this shape, else None."""
+    var b = native_loaded_module("builtins")
+    var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
+    if holder is None or py_type(holder) is not b.dict:
+        return PythonObject(None)
+    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    if held is None:
+        return PythonObject(None)
+    if held[0][0] is centers and held[2] is binding and Int(py=held[0][1]) == k and Int(py=held[0][2]) == d:
+        return held
+    return PythonObject(None)
+
+
 def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: PythonObject, c: PythonObject,
                      k: Int, d: Int, context: PythonObject) raises -> PythonObject:
     """The handle of the device copy of the fitted centroids, uploaded at
     the first query after a fit and reused while `cluster_centers_` is the
-    same object (the held key keeps a reference to it, so it cannot be
-    replaced by a new array at the same address) and the binding is the one
-    that minted it; None where the binding has no resident door. The holder
-    dictionary changes, never the model's `__dict__` keys after a fit."""
+    same object and the binding is the one that minted it (`_kmeans_held`);
+    None where the binding has no resident door. The holder dictionary
+    changes, never the model's `__dict__` keys after a fit."""
+    var fields = py_fields(model)
+    var held = _kmeans_held(fields, binding, centers, k, d)
+    if held is not None:
+        return held[1]
+    if _kmeans_doorless(binding):
+        return PythonObject(None)
     var prepare = _kmeans_optional_entry(binding, "kmeans_centers_prepare", context)
     if prepare is None:
+        var g = _KMEANS_DOORLESS.get_or_create_ptr()
+        if len(g[].bindings) < 64:
+            g[].bindings.append(binding)
         return PythonObject(None)
     var b = native_loaded_module("builtins")
-    var fields = py_fields(model)
     var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         holder = Python.dict()
         py_setitem(fields, _HOLDER, holder)
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
-    if held is not None:
-        if held[0][0] is centers and held[2] is binding and Int(py=held[0][1]) == k and Int(py=held[0][2]) == d:
-            return held[1]
+    if py_get(holder, PythonObject("index"), PythonObject(None)) is not None:
         _kmeans_release(model)
     var handle = family_call(prepare, classical_address(c), Python.list(PythonObject(k), PythonObject(d)))
     # The minting binding travels with the handle: the release (here, and
@@ -275,28 +323,62 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     return labels
 
 
+def _kmeans_admitted(source: PythonObject, context: PythonObject) raises -> Bool:
+    """`source` is the public lifecycle's admitted dense snapshot: an exact
+    Array or ndarray (a sparse X passes through unreplaced and is neither),
+    float32 in C order."""
+    var cls = py_type(source)
+    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+        return False
+    return classical_is_f32(source, context) and classical_c_order(source, context)
+
+
 def _kmeans_inference(model: PythonObject, binding: PythonObject, source: PythonObject, transform: Bool,
-                      context: PythonObject) raises -> PythonObject:
-    """`KMeans.predict` (labels) or `KMeans.transform` (distances)."""
+                      context: PythonObject, admitted: Bool = False) raises -> PythonObject:
+    """`KMeans.predict` (labels) or `KMeans.transform` (distances).
+
+    Perf (lane perf2-cluster): with `admitted`, `source` is the snapshot the
+    public lifecycle admitted and cast (a 2-D, non-empty float32 C-order
+    array), so X is only scanned for the by-name refusal here, not admitted
+    and cast a second time; the scan reads the same float32 words the cast
+    made, so the refusal fires for exactly the same inputs. The fitted
+    centroids are admitted only when a device copy is minted or the binding
+    has no resident door: a resident hit (same `cluster_centers_` object,
+    binding and shape) reuses the copy without reading them."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
     var centers = py_get(fields, PythonObject("cluster_centers_"), PythonObject(None))
     if centers is None:
         raise Error("RuntimeError: this estimator is not fitted yet")
     var metric_code = _kmeans_metric(fields, context)
-    var x = _kmeans_f32(source, "X", "predict/transform", context)
+    var x: PythonObject
+    if admitted and _kmeans_admitted(source, context):
+        x = source
+        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+            raise _kmeans_nonfinite("X", "predict/transform")
+        _ = x  # keep the Python object alive through the native scan above
+    else:
+        x = _kmeans_f32(source, "X", "predict/transform", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var dc = Int(py=centers.shape[1])
+    var shape = centers.shape
+    var dc = Int(py=shape[1])
     if d != dc:
         raise Error("mojolearn: X has " + String(d) + " features, KMeans was fitted with " + String(dc))
-    var c = family_f32(centers, 2, "cluster_centers_", context)
-    var k = Int(py=c.shape[0])
+    var k = Int(py=shape[0])
+    var c = PythonObject(None)
+    var handle = PythonObject(None)
+    var held = _kmeans_held(fields, binding, centers, k, d)
+    if held is not None:
+        handle = held[1]
+    else:
+        c = family_f32(centers, 2, "cluster_centers_", context)
+        k = Int(py=c.shape[0])
+        handle = _kmeans_resident(model, binding, centers, c, k, d, context)
     # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_predict_binding and
     # kmeans_transform_binding: n_samples, n_features, n_clusters, metric.
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(metric_code))
     var out: PythonObject
-    var handle = _kmeans_resident(model, binding, centers, c, k, d, context)
     if transform:
         out = family_array(Python.tuple(n, k), "<f4", context)
         if handle is not None:
@@ -325,8 +407,10 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
 
 
 def _kmeans_operation_route(model: PythonObject, operation: String, args: PythonObject,
-                            context: PythonObject) raises -> PythonObject:
-    """The KMeans public operations: args[0] is the resolved binding."""
+                            context: PythonObject, admitted: Bool = False) raises -> PythonObject:
+    """The KMeans public operations: args[0] is the resolved binding.
+    `admitted`: the public lifecycle replaced X (args[1]) by its admitted
+    float32 snapshot."""
     if operation == "family_kmeans_fit":
         _ = _kmeans_fit(model, args, context)
         return model
@@ -347,9 +431,9 @@ def _kmeans_operation_route(model: PythonObject, operation: String, args: Python
         py_setitem(fields, _HOLDER, Python.dict())
         return PythonObject(None)
     if operation == "family_kmeans_predict":
-        return _kmeans_inference(model, args[0], args[1], False, context)
+        return _kmeans_inference(model, args[0], args[1], False, context, admitted)
     if operation == "family_kmeans_transform":
-        return _kmeans_inference(model, args[0], args[1], True, context)
+        return _kmeans_inference(model, args[0], args[1], True, context, admitted)
     raise Error("unknown KMeans operation " + operation)
 
 
@@ -365,7 +449,7 @@ def kmeans_operation(model: PythonObject, operation: String, args: PythonObject,
     var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
     var result = PythonObject(None)
     try:
-        result = _kmeans_operation_route(model, operation, call.args, context)
+        result = _kmeans_operation_route(model, operation, call.args, context, lifecycle.replace)
     except error:
         var failure = neighbors_public_refusal(error, call, model)
         raise failure^
