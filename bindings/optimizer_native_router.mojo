@@ -7,6 +7,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.sequence_layers_native import sequence_layers_operation
 from bindings.training_extra_native import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
+from bindings.samba_head_native import training_samba_head_loss
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
@@ -300,6 +301,8 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_cross_entropy(values, entries, context)
     if operation == "chunked_lm_head_loss":
         return training_chunked_lm_head(values, entries, context)
+    if operation == "samba_head_loss":
+        return training_samba_head_loss(values, entries, context)
     if operation == "mlp_inference_sessions":
         return training_mlp_sessions(values, entries)
     if operation == "binding":
