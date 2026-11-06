@@ -41,6 +41,8 @@ def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonO
     has no such door (the CPU host binding refuses an absent name with
     ImportError, a module with AttributeError: both mean "no residency
     here", and the pending exception is discarded)."""
+    if _kmeans_door_absent(binding, name):
+        return PythonObject(None)
     try:
         return family_entry(binding, name, context)
     except error:
@@ -49,6 +51,7 @@ def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonO
         _ = optimizer_python_error(error)
         ref cpy = Python().cpython()
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        _kmeans_mark_absent(binding, name)
         return PythonObject(None)
 
 
@@ -75,22 +78,38 @@ struct _KMeansDoorless(Defaultable, Movable):
     # binding): probing them raised and cleared an ImportError on every
     # query. Strong references, so an address is never reused while listed;
     # the binding modules live for the process anyway.
+    # p3-neighbors-cluster: (binding, door name) pairs, so every optional
+    # door (`kmeans_fit_transform` too, probed on every fit_transform) is
+    # probed once per binding; the layout changed, so the global's name did.
     var bindings: List[PythonObject]
+    var names: List[String]
 
     def __init__(out self):
         self.bindings = List[PythonObject]()
+        self.names = List[String]()
 
 
-comptime _KMEANS_DOORLESS = _Global[StorageType=_KMeansDoorless, name="MojolearnKMeansDoorlessV1",
+comptime _KMEANS_DOORLESS = _Global[StorageType=_KMeansDoorless, name="MojolearnKMeansDoorlessV2",
                                     init_fn=_KMeansDoorless.__init__]
 
 
-def _kmeans_doorless(binding: PythonObject) raises -> Bool:
+def _kmeans_door_absent(binding: PythonObject, name: String) raises -> Bool:
     var g = _KMEANS_DOORLESS.get_or_create_ptr()
-    for i in range(len(g[].bindings)):  # small-loop(bindings: the few connected KMeans bindings without a resident door)
-        if g[].bindings[i] is binding:
+    for i in range(len(g[].bindings)):  # small-loop(bindings: the few connected KMeans bindings without a door)
+        if g[].bindings[i] is binding and g[].names[i] == name:
             return True
     return False
+
+
+def _kmeans_mark_absent(binding: PythonObject, name: String) raises:
+    var g = _KMEANS_DOORLESS.get_or_create_ptr()
+    if len(g[].bindings) < 64:
+        g[].bindings.append(binding)
+        g[].names.append(name)
+
+
+def _kmeans_doorless(binding: PythonObject) raises -> Bool:
+    return _kmeans_door_absent(binding, "kmeans_centers_prepare")
 
 
 def _kmeans_centers_ready(centers: PythonObject, context: PythonObject) raises -> Bool:
@@ -151,9 +170,6 @@ def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: Python
     _ = fitted_freeze(centers, context)
     var prepare = _kmeans_optional_entry(binding, "kmeans_centers_prepare", context)
     if prepare is None:
-        var g = _KMEANS_DOORLESS.get_or_create_ptr()
-        if len(g[].bindings) < 64:
-            g[].bindings.append(binding)
         return PythonObject(None)
     var b = native_loaded_module("builtins")
     var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
