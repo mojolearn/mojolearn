@@ -19,7 +19,7 @@ from bindings.family_common import family_array, family_as_f32, family_entry, fa
 from bindings.family_common import family_f32_snapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
-from bindings.neighbors_knn_native import knn_door
+from bindings.neighbors_knn_native import knn_door, knn_state_values, knn_state_unchanged
 from bindings.neighbors_ann_native import _ivf_metric, _ann_release
 from bindings.neighbors_ann_query_native import ann_pq_materialize
 from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, _i32_vector, _flag
@@ -36,9 +36,9 @@ def _query_kind(model: PythonObject, context: PythonObject) raises -> PythonObje
     return kind
 
 
-def _query_route(model: PythonObject, group: String, context: PythonObject) raises -> PythonObject:
+def _query_route(model: PythonObject, kind: PythonObject, group: String, context: PythonObject) raises -> PythonObject:
+    # `kind` comes from the caller's `_query_kind` (one layout check per call).
     var b = native_loaded_module("builtins")
-    var kind = _query_kind(model, context)
     var fields = py_fields(model)
     var mode = py_get(fields, "numeric_mode")
     var host = Bool(py=kind[1])
@@ -57,10 +57,21 @@ def _query_route(model: PythonObject, group: String, context: PythonObject) rais
     var result = routes[group][mode]
     if py_type(result) is b.str:
         raise Error("ImportError: " + String(result))
+    # The routes are fixed import-time modules: check each one's compile-time
+    # mode once per process, not on every query.
+    var checked = py_get(context, "neighbor_query_checked_routes")
+    if checked is None or py_type(checked) is not b.dict:
+        checked = Python.dict()
+        py_setitem(context, "neighbor_query_checked_routes", checked)
+    var key = Python.tuple(py_call(b.id, result), mode)
+    var seen = py_get(checked, key)
+    if seen is not None and seen is result:
+        return result
     var mode_name = String("mojolearn_numeric_mode") if group == "base" else String("x_neighbors_numeric_mode") if group == "sort" else String("ivf_numeric_mode")
     var getter = knn_door(result, mode_name)
     if getter is not None and Int(py=family_call(getter)) != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: neighbor binding reports a different compile-time numeric mode")
+    py_setitem(checked, key, result)
     return result
 
 
@@ -74,39 +85,57 @@ def _resident_owner(cached: PythonObject, context: PythonObject) raises -> Pytho
     if connected is None or connected[0] is not cached[2]:
         raise Error("TypeError: resident binding must be an import-time connected native owner")
     classical_admit_value(cached[0], context)
+    if cached[2] is connected[1]:
+        return cached  # unchanged identity keeps the admission stamp valid
     return Python.tuple(cached[0], cached[1], connected[1])
 
 
-def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject,
-                 check_arrays: Bool = True) raises:
+def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject) raises -> Bool:
+    """Admit the fitted state, once while it is unchanged: True when every
+    fitted array, scalar and resident tuple is the object admitted before
+    (or has just been admitted), so the query reads only its own input.
+    k-NN stamps live in the resident holder (reset by fit); IVF stamps in
+    `_query_admitted` (dropped by extend and getstate). Radius is unstamped."""
     var fields = py_fields(model)
-    if check_arrays:
-        var names = Python.tuple("_index", "centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
-        for i in range(len(names)):  # small-loop(fixed fitted array owners)
-            var value = py_get(fields, names[i])
-            if value is not None:
-                classical_admit_value(value, context)
-                if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
-                    raise Error("TypeError: fitted neighbor arrays require native array storage")
-                if not classical_c_order(value, context):
-                    raise Error("ValueError: fitted neighbor arrays require C-contiguous storage")
+    var b = native_loaded_module("builtins")
+    var names = Python.tuple("_index", "centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
     var scalars = Python.tuple("n_samples_fit_", "n_features_in_", "n_rows_", "n_lists_", "metric_code_", "metric", "p", "algorithm", "query_tile", "_metric_value", "_metric_arg")
+    var text = String(kind[0])
+    var holder = PythonObject(None)
+    if text == "knn":
+        holder = py_get(fields, "_resident_holder")
+        if holder is not None:
+            if py_type(holder) is not b.dict:
+                raise Error("TypeError: neighbor resident holder requires a native dictionary")
+            var keys = py_call(b.tuple, holder.keys())
+            for i in range(len(keys)):  # driver-loop: resident metadata keys, before dictionary comparisons
+                if py_type(keys[i]) is not b.str:
+                    raise Error("TypeError: resident metadata requires exact string keys")
+    if text == "ivf" or holder is not None:
+        var resident = py_get(holder, "index") if holder is not None else py_get(fields, "_resident")
+        var stamp = knn_state_values(fields, names + scalars) + Python.tuple(resident)
+        var stored = py_get(holder, "admitted_query") if holder is not None else py_get(fields, "_query_admitted")
+        if knn_state_unchanged(stored, stamp):
+            return True
+    for i in range(len(names)):  # small-loop(fixed fitted array owners)
+        var value = py_get(fields, names[i])
+        if value is not None:
+            classical_admit_value(value, context)
+            if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
+                raise Error("TypeError: fitted neighbor arrays require native array storage")
+            if not classical_c_order(value, context):
+                raise Error("ValueError: fitted neighbor arrays require C-contiguous storage")
     for i in range(len(scalars)):  # small-loop(fixed native query configuration)
         var value = py_get(fields, scalars[i])
         if value is not None:
             host_inference_scalar(value, context)
-    if String(kind[0]) == "ivf":
+    if text == "ivf":
         py_setitem(fields, "_resident", _resident_owner(py_get(fields, "_resident"), context))
-    elif String(kind[0]) == "knn":
-        var holder = py_get(fields, "_resident_holder")
-        if holder is not None:
-            if py_type(holder) is not native_loaded_module("builtins").dict:
-                raise Error("TypeError: neighbor resident holder requires a native dictionary")
-            var keys = py_call(native_loaded_module("builtins").tuple, holder.keys())
-            for i in range(len(keys)):  # driver-loop: resident metadata keys, before dictionary comparisons
-                if py_type(keys[i]) is not native_loaded_module("builtins").str:
-                    raise Error("TypeError: resident metadata requires exact string keys")
-            py_setitem(holder, "index", _resident_owner(py_get(holder, "index"), context))
+        py_setitem(fields, "_query_admitted", knn_state_values(fields, names + scalars) + Python.tuple(py_get(fields, "_resident")))
+    elif text == "knn" and holder is not None:
+        py_setitem(holder, "index", _resident_owner(py_get(holder, "index"), context))
+        py_setitem(holder, "admitted_query", knn_state_values(fields, names + scalars) + Python.tuple(py_get(holder, "index")))
+    return True
 
 
 def _ivf_key_entry(fields: PythonObject, name: String) raises -> PythonObject:
@@ -180,7 +209,8 @@ def _ivf_filter(source: PythonObject, n: Int, context: PythonObject) raises -> P
     return _i32_vector(value, "filter", context)
 
 
-def _ivf_search(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _ivf_search(model: PythonObject, kind: PythonObject, args: PythonObject, admitted: Bool,
+                context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
@@ -200,11 +230,11 @@ def _ivf_search(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("TypeError: metric requires a native name or code")
     if Int(py=_ivf_metric(fields, context)) != fitted[3]:
         raise Error("ValueError: metric differs from the fitted index")
-    var binding = _query_route(model, "ivf", context)
+    var binding = _query_route(model, kind, "ivf", context)
     var mode = knn_door(binding, "ivf_numeric_mode")
     var requested = py_get(fields, "numeric_mode")
     if requested is None:
-        requested = PythonObject("identical") if Bool(py=_query_kind(model, context)[1]) else context["backend_fields"]["_DEFAULT_MODE"]
+        requested = PythonObject("identical") if Bool(py=kind[1]) else context["backend_fields"]["_DEFAULT_MODE"]
     if mode is not None:
         var expected = py_get(context["family_xn_ann_ivf_mode_codes"], requested)
         if expected is None or Int(py=family_call(mode)) != Int(py=expected):
@@ -218,7 +248,7 @@ def _ivf_search(model: PythonObject, args: PythonObject, context: PythonObject) 
     var ids = family_array(Python.tuple(m, k), "<i4", context)
     var count = family_array(Python.tuple(m), "<i4", context)
     var keep = _ivf_filter(args[1], n, context)
-    var stored_snapshots = _ivf_search_snapshots(fields, fitted, context)
+    var stored_snapshots = _ivf_search_snapshots(fields, fitted, admitted, context)
     var handle = _ivf_snapshot_resident(fields, binding, stored_snapshots, fitted, context)
     var addresses = Python.list(q.source.addr, classical_address(dist), classical_address(ids), classical_address(count))
     var sizes = Python.list(n, dim, fitted[2], fitted[3], m, k, fields["n_probes"])
@@ -242,11 +272,13 @@ def _ivf_search(model: PythonObject, args: PythonObject, context: PythonObject) 
 
 
 def _ivf_stored_snapshot(fields: PythonObject, name: String, expected: List[Int],
-                         kind: Int, context: PythonObject) raises -> ArrayMetadata:
+                         kind: Int, context: PythonObject, admitted: Bool = False) raises -> ArrayMetadata:
     # Fitted arrays are mutable public state. Admit exact storage before any
     # metadata read, then carry its owner and descriptor through the operation.
+    # `admitted`: this exact object passed `_admit_state` (unchanged since).
     var value = py_get(fields, name)
-    classical_admit_value(value, context)
+    if not admitted:
+        classical_admit_value(value, context)
     if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
         raise Error("TypeError: " + name + " requires native array storage")
     var shape = array_shape_once(value, context)
@@ -263,7 +295,8 @@ def _ivf_stored_snapshot(fields: PythonObject, name: String, expected: List[Int]
     return snapshot^
 
 
-def _ivf_search_snapshots(fields: PythonObject, fitted: List[Int], context: PythonObject) raises -> List[ArrayMetadata]:
+def _ivf_search_snapshots(fields: PythonObject, fitted: List[Int], admitted: Bool,
+                          context: PythonObject) raises -> List[ArrayMetadata]:
     # Each fitted exporter is admitted and captured once for this search.
     # These retained owners cover cache-key construction, optional upload and
     # execution even if mutable Array slots are replaced during native work.
@@ -273,12 +306,12 @@ def _ivf_search_snapshots(fields: PythonObject, fitted: List[Int], context: Pyth
     if n < 1 or dim < 1 or lists < 1 or lists > n:
         raise Error("ValueError: invalid fitted IVF index dimensions")
     var snapshots = List[ArrayMetadata]()
-    snapshots.append(_ivf_stored_snapshot(fields, "centers_", [lists, dim], CAST_KIND_FLOAT, context))
-    snapshots.append(_ivf_stored_snapshot(fields, "center_norms_", [lists], CAST_KIND_FLOAT, context))
-    snapshots.append(_ivf_stored_snapshot(fields, "list_offsets_", [lists + 1], CAST_KIND_SIGNED, context))
-    snapshots.append(_ivf_stored_snapshot(fields, "list_indices_", [n], CAST_KIND_SIGNED, context))
+    snapshots.append(_ivf_stored_snapshot(fields, "centers_", [lists, dim], CAST_KIND_FLOAT, context, admitted))
+    snapshots.append(_ivf_stored_snapshot(fields, "center_norms_", [lists], CAST_KIND_FLOAT, context, admitted))
+    snapshots.append(_ivf_stored_snapshot(fields, "list_offsets_", [lists + 1], CAST_KIND_SIGNED, context, admitted))
+    snapshots.append(_ivf_stored_snapshot(fields, "list_indices_", [n], CAST_KIND_SIGNED, context, admitted))
     if py_get(fields, "list_data_") is not None:
-        snapshots.append(_ivf_stored_snapshot(fields, "list_data_", [n, dim], CAST_KIND_FLOAT, context))
+        snapshots.append(_ivf_stored_snapshot(fields, "list_data_", [n, dim], CAST_KIND_FLOAT, context, admitted))
     return snapshots^
 
 
@@ -375,8 +408,11 @@ def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject,
     return handle
 
 
-def _ivf_extend(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
+    # Extend replaces the fitted arrays: drop the admission stamp (and the
+    # old arrays it holds); the next search admits the extended index once.
+    _ = py_call(fields.pop, "_query_admitted", PythonObject(None))
     var b = native_loaded_module("builtins")
     if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
         raise Error("ValueError: mojolearn IVFIndex: call fit (or load) before extend")
@@ -412,7 +448,7 @@ def _ivf_extend(model: PythonObject, args: PythonObject, context: PythonObject) 
         py_setitem(fields, "list_data_", exported)
         _ = py_call(fields.pop, "_device_list_data")
     var old_data = _ivf_stored_snapshot(fields, "list_data_", [n, dim], CAST_KIND_FLOAT, context)
-    var binding = _query_route(model, "ivf", context)
+    var binding = _query_route(model, kind, "ivf", context)
     var entry = family_entry(binding, "ivf_flat_extend", context)
     var total = n + m
     var offsets = family_array(Python.tuple(n_lists + 1), "<i4", context)
@@ -443,17 +479,18 @@ def neighbor_query(model: PythonObject, op: String, args: PythonObject, context:
     classical_connect_numpy(context)
     var kind = _query_kind(model, context)
     if op == "extend" and String(kind[0]) == "ivf":
-        return _ivf_extend(model, args, context)
-    _admit_state(model, kind, context, not (op == "search" and String(kind[0]) == "ivf"))
+        return _ivf_extend(model, kind, args, context)
+    var admitted = _admit_state(model, kind, context)
     if op == "getstate" and String(kind[0]) == "ivf":
         var fields = py_fields(model)
         _ivf_materialize(fields, context)
         var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident", PythonObject(None))
+        _ = py_call(state.pop, "_query_admitted", PythonObject(None))
         return state
     if op == "search" and String(kind[0]) == "ivf":
-        return _ivf_search(model, args, context)
-    var binding = _query_route(model, "base", context)
+        return _ivf_search(model, kind, args, admitted, context)
+    var binding = _query_route(model, kind, "base", context)
     if op == "kneighbors" and String(kind[0]) == "knn":
         return parallel_public_result(neighbor_kneighbors(model, args[0], args[1], args[2], binding, context), op, PythonObject(None), context)
     if op == "radius_neighbors" and String(kind[0]) == "radius":
@@ -466,7 +503,7 @@ def neighbor_query(model: PythonObject, op: String, args: PythonObject, context:
         # Resolve the fixed sort route only when requested; an unsorted CPU
         # query never needs the optional expansion binary.
         if _flag(args[3], "sort_results", context):
-            py_setitem(entries, "_mojolearn_x_neighbors", _query_route(model, "sort", context))
+            py_setitem(entries, "_mojolearn_x_neighbors", _query_route(model, kind, "sort", context))
         py_setitem(tables, "worker_bindings", entries)
         return _radius(model, args[0], kwargs, binding, tables, context)
     raise Error("TypeError: unsupported native neighbor query for this model")
@@ -504,7 +541,7 @@ def neighbor_query_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         var fields = py_fields(model)
         var text = String(name)
         if String(kind[0]) == "ivf" and text == "list_data_":
-            _admit_state(model, kind, context)
+            _ = _admit_state(model, kind, context)
             _ivf_materialize(fields, context)
         if String(kind[0]) == "ann_pq" and text == "codes_":
             _ = ann_pq_materialize(model, context)
