@@ -132,8 +132,7 @@ Both platforms also support CPU training and inference.
 This release ships native NVIDIA kernels for the sm_89 architecture (Ada:
 L40S, L40, L4, RTX 4090) and AMD kernels for gfx942 (MI300X, MI325X). A PTX
 build for every NVIDIA GPU with compute capability 8.0 or newer (A100,
-H100/H200, Blackwell, ...) is built and recorded in the reference table, but
-not shipped while the NVIDIA wheel with it exceeds PyPI's 100 MiB limit; other
+H100/H200, Blackwell, ...) ships in the same `mojolearn-nvidia` package; other
 architectures need a source build. See [NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md).
 
 mojolearn never substitutes the CPU for a GPU it cannot serve.

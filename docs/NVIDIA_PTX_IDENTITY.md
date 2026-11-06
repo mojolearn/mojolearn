@@ -4,15 +4,27 @@ Andrew 2026-10-10: PTX is a normal target; no flag.
 
 ## Distribution layout
 
-The release packages native `sm_89` in `mojolearn-nvidia` and PTX `sm_80`
-in `mojolearn-nvidia-ptx`. NVIDIA requires the PTX distribution at exactly
-the same version, so `pip install mojolearn` installs both automatically.
-Their files occupy separate directories at the existing loader paths.
-Both package markers bind the PTX manifest's SHA256.
+The release packages native `sm_89` and PTX `sm_80` in one wheel,
+`mojolearn-nvidia` (Andrew 2026-11-05), at the existing loader paths
+(`cuda_native/sm_89`, `cuda_ptx/sm_80`). Its marker binds the PTX manifest's
+SHA256.
 
 Releases through 0.8.52 shipped native `sm_89` only. The native and PTX
-sets together packed at 134.1 MiB, over PyPI's 100 MiB file limit. Splitting
-the files lets each distribution fit under that limit.
+sets together packed at 134.1 MiB, over PyPI's 100 MiB file limit, so
+releases 0.8.53 to 0.8.65 shipped the PTX set in its own exactly pinned
+`mojolearn-nvidia-ptx`. PyPI granted `mojolearn-nvidia` 250 MiB per file on
+2026-11-04 (`packaging/pypi_limits.json`) and the two sets pack to about
+63 MiB, so the split is undone.
+
+Upgrading from a release with `mojolearn-nvidia-ptx`: pip installs the new
+`mojolearn-nvidia`, which writes the `cuda_ptx/sm_80` files over the old
+ones, and leaves `mojolearn-nvidia-ptx` installed because nothing removes
+an orphaned distribution. The loader never reads it; a stale PTX file the
+new manifest does not list fails the manifest check at import (fail
+closed), never loads. A later `pip uninstall mojolearn-nvidia-ptx` deletes
+the files its old RECORD lists, which are now `mojolearn-nvidia`'s, and the
+import then refuses with "missing its PTX set"; the repair is
+`pip install --force-reinstall --no-deps "mojolearn-nvidia==<version>"`.
 
 ## Available build slots
 
@@ -121,10 +133,11 @@ places the two can produce different bits, and what holds each one:
   converting the IDENTICAL modules to cubins. It needs no GPU.
 - `cross-compile-check` compiles sm_80 like any arch.
 - `pack_wheel.py --profile release-split` packs the PTX set into
-  `mojolearn-nvidia-ptx` with its own build proof. The split audit checks
-  disjoint file ownership and matching PTX manifest digests across packages.
-  Publication uploads the Linux core first, PTX before NVIDIA, and the
-  aggregate Linux `mojolearn` package after the vendor packages.
+  `mojolearn-nvidia` beside the native set, with its own build proof. The
+  split audit checks the set's bytes against the manifest the NVIDIA marker
+  binds, and the pack's size check prints both sets against the 250 MiB limit.
+  Publication uploads the Linux core first, then the vendor packages, and the
+  aggregate Linux `mojolearn` package last.
 
 ## Installed artifact qualification
 
@@ -143,7 +156,7 @@ selection JSON containing a nonempty `lanes` list:
 bash tools/release_installed_checks.sh qualify-identity \
   "$CORE_WHEEL" "$CORE_SHA256" cuda /root/results-ptx-qualification \
   "$WHEEL_SOURCE_COMMIT" sm_80 "$SELECTION_JSON" \
-  "$NVIDIA_WHEEL" "$PTX_WHEEL"
+  "$NVIDIA_WHEEL"
 ```
 
 The source commit is the one inside the wheel's `identity_columns/COMMIT`,
