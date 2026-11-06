@@ -4074,6 +4074,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
                "--python", self.smoke_python() if not self.dry else "python3.12",
                "--device-class", self.apple_device_class(), "--unit-store", str(self.apple_runtime_store()),
                "--timeout", str(self.APPLE_RUNTIME_SECONDS), "--out", str(out)]
+        if self.single() and not self.reuse():
+            cmd.append("--redo")   # --identity-on-wheels runs every unit unless --reuse-unchanged opted in
         for directory in self.runtime_unit_sources("gate-apple"):
             if directory != self.apple_runtime_store():
                 cmd += ["--prior-units", str(directory)]
@@ -4143,7 +4145,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # release cross-diff is deleted: identity is decided by the table admit.
         if self.single():
             # the Apple column recorded from this wheel (or every lane reused) replaces the self-test receipt
-            if not self.dry and not (self.apple_identity_ok()[0] or self.lanes_owed("apple") == []):
+            if not self.dry and not (self.apple_identity_ok()[0] or (self.reuse() and self.lanes_owed("apple") == [])):
                 raise StepFailed("no Apple column for this macOS wheel (%s); run gate-apple" % self.apple_identity_ok()[1])
             return self.publish("macos", self.macos_wheel(), None)
         if not self.gpu_smoke():
@@ -5859,6 +5861,9 @@ def main(argv=None):
                     help="THE ONE RUN (default off until the orchestrator has run it once): identity recorded from "
                          "the built wheels on each device class (NVIDIA/AMD box jobs, Apple in gate-apple, CPU on "
                          "GitHub), admitted, the table repacked into the wheels, then publish; no gate repeats a lane")
+    ap.add_argument("--reuse-unchanged", action="store_true",
+                    help="with --identity-on-wheels: OPT IN to reusing unchanged lanes, check units and runtime units "
+                         "(the selector decides). Default off: the one run runs every lane, unit and runtime unit")
     ap.add_argument("--nvidia-columns", default="",
                     help="with --identity-on-wheels: the NVIDIA columns of the box job, comma list of nvidia, ptx "
                          "(default nvidia,ptx); each on its own GPU when the pod has several")

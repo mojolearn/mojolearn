@@ -91,6 +91,10 @@ on:
         required: false
         default: ""
         type: string
+      reuse_unchanged:
+        required: false
+        default: "false"
+        type: string
   workflow_dispatch:
     inputs:
       confirm:
@@ -147,6 +151,11 @@ on:
         description: "mode wheel: the owed CPU autograd entries (empty: every CPU entry)"
         required: false
         default: ""
+        type: string
+      reuse_unchanged:
+        description: "mode wheel: true reuses unchanged cpu lanes and units (release.py --reuse-unchanged); default: run everything"
+        required: false
+        default: "false"
         type: string
 
 run-name: ${{ inputs.mode == 'wheel' && format('cpu-identity wheel {0} {1}', inputs.source_commit, inputs.token) || 'CPU identity gate' }}
@@ -295,6 +304,7 @@ jobs:
           python3 tools/identity_wheel_record.py --columns cpu \
             --wheel "$RUNNER_TEMP/wheels/$WHEEL_NAME" --sha256 "$WHEEL_NAME=$WHEEL_SHA256" \
             --shard "${{ matrix.shard }}/${{ inputs.shards }}" --out "$RUNNER_TEMP/wheel-out/identity" \
+            $( [ "${{ inputs.reuse_unchanged }}" = true ] && echo --reuse-unchanged ) \
             --venv "$RUNNER_TEMP/identity-venv" 2>&1 | tee "$RUNNER_TEMP/identity.log" | grep -E '^identity-wheels:'
           exit "${PIPESTATUS[0]}"
       - name: Upload the cpu column records
@@ -344,6 +354,7 @@ jobs:
           WHEEL_NAME: ${{ inputs.wheel_name }}
           WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
           CHECKS: ${{ inputs.checks }}
+          REUSE_UNCHANGED: ${{ inputs.reuse_unchanged == 'true' && '1' || '0' }}
           AUTOGRAD_ENTRIES: ${{ inputs.autograd_entries }}
         run: |
           bash tools/cpu_wheel_checks.sh "$RUNNER_TEMP/wheels/$WHEEL_NAME" "$WHEEL_SHA256" "${{ inputs.source_commit }}" \

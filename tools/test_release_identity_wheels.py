@@ -24,7 +24,7 @@ def args(**kw):
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
                 smoke_via="lq", hopper_box="", smoke_branch="main", cpu_column=False, gpu_smoke=False,
                 owner_waiver=None, status=False, refreeze=False, source_checkout="", published_smoke=[],
-                published_smoke_reason="", identity_on_wheels=False, nvidia_columns="")
+                published_smoke_reason="", identity_on_wheels=False, nvidia_columns="", reuse_unchanged=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -80,6 +80,9 @@ def test_one_box_job_per_vendor_records_the_columns(tmp_path, monkeypatch):
     r = make(tmp_path, identity_on_wheels=True, nvidia_columns="nvidia,ptx")
     monkeypatch.setattr(r, "units_plan", lambda vendor: None)   # no packed wheels here: no units plan to offer
     assert r.gate_identity_args("nvidia") == ["--identity-columns", "nvidia,ptx", "--label-device", "l40s"]
+    reuse = make(tmp_path / "r", identity_on_wheels=True, reuse_unchanged=True)
+    monkeypatch.setattr(reuse, "units_plan", lambda vendor: None)
+    assert "--reuse-unchanged" in reuse.gate_identity_args("amd")
     assert r.gate_identity_args("amd") == ["--identity-columns", "amd", "--label-device", "mi325x"]
 
 
@@ -110,7 +113,7 @@ def test_the_gate_must_match_the_mode(tmp_path):
 
 
 def test_no_rental_when_the_vendor_owes_nothing(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True)
+    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
     monkeypatch.setattr(r, "gate_ok", lambda vendor: (True, "PASS"))
     monkeypatch.setattr(r, "lanes_owed", lambda col: [])
     assert r.box_step_owed("gate-amd") is None
@@ -202,7 +205,7 @@ def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monke
 
 
 def test_a_vendor_that_owes_nothing_is_composed_on_the_mac_and_rents_nothing(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True)
+    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
     verdicts = iter([(False, "no gate report"), (True, "PASS")])
     monkeypatch.setattr(r, "gate_ok", lambda vendor: next(verdicts))
     monkeypatch.setattr(r, "lanes_owed", lambda col: [])
@@ -213,7 +216,7 @@ def test_a_vendor_that_owes_nothing_is_composed_on_the_mac_and_rents_nothing(tmp
 
 
 def test_a_vendor_whose_runtime_units_are_owed_rents(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True)
+    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
     monkeypatch.setattr(r, "gate_ok", lambda vendor: (False, "no gate report"))
     monkeypatch.setattr(r, "lanes_owed", lambda col: [])
     monkeypatch.setattr(r, "units_plan", lambda vendor: dict(reused=26, owed=[]))
@@ -223,7 +226,7 @@ def test_a_vendor_whose_runtime_units_are_owed_rents(tmp_path, monkeypatch):
 
 
 def test_cpu_with_nothing_owed_dispatches_nothing(tmp_path, monkeypatch):
-    r = make(tmp_path, identity_on_wheels=True)
+    r = make(tmp_path, identity_on_wheels=True, reuse_unchanged=True)
     core = tmp_path / "core.whl"
     core.write_bytes(b"core")
     monkeypatch.setattr(r, "split_final", lambda package: core)
@@ -245,3 +248,30 @@ def test_an_unchanged_apple_adapter_unit_runs_nothing(tmp_path, monkeypatch):
                         owed=[], units=[dict(unit="adapters", decision="reuse")]))
     monkeypatch.setattr(r, "apple_adapter_gate", lambda: pytest.fail("the adapter smoke must not run"))
     assert r.apple_adapter_unit_gate().startswith("adapters REUSED") and r.apple_adapter_unit_ok()
+
+
+def test_the_default_runs_everything_and_never_asks_the_selector(tmp_path, monkeypatch):
+    # Andrew 2026-11-05: the selector cannot be trusted to narrow; --reuse-unchanged is the only way to reuse
+    r = make(tmp_path, identity_on_wheels=True)
+    assert r.single() and not r.reuse()
+    monkeypatch.setattr(r, "gate_ok", lambda vendor: (False, "no gate report"))
+    monkeypatch.setattr(r, "lanes_owed", lambda col: pytest.fail("no lane selection in the full run"))
+    monkeypatch.setattr(r, "compose_without_box", lambda vendor: pytest.fail("nothing is composed in the full run"))
+    monkeypatch.setattr(r, "units_plan", lambda vendor: dict(reused=0, owed=["install-load", "adapters"]))
+    assert r.box_step_owed("gate-nvidia") == "no gate report"
+    assert any("REUSED 0 / RUN all lane(s); units RUN all" in l for l in r.lines)
+    assert r.vendor_lanes("amd") == (0, "all")
+    assert not make(tmp_path / "off").reuse()                    # the option off: nothing of this applies
+
+
+def test_identity_at_freeze_never_holds_the_full_run(tmp_path, monkeypatch):
+    def runner(cmd, env, log, detach=False):
+        out = pathlib.Path(cmd[cmd.index("--json") + 1])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(dict(schema="mojolearn.identity-at-freeze.v1", adopted=False, held=["nvidia", "amd"],
+                                       columns={})))
+        return 4
+    r = make(tmp_path, runner=runner, identity_on_wheels=True)
+    monkeypatch.setattr(r, "source_checkout", lambda create=True: tmp_path / "src")
+    result, _ = r.step_identity_at_freeze()
+    assert "recorded once from the built wheels" in result

@@ -169,8 +169,32 @@ class Run:
         env.update(extra or {})
         return env
 
+    def all_lanes(self, py, column, lab):
+        """RUN EVERYTHING (Andrew 2026-11-05: the selector cannot be trusted to narrow): every lane of the full scope
+        (identity_columns.py lanes --scope all), the harness's declared GPU-only lanes left out of the cpu column
+        (identity_break.GPU_ONLY_LANES: no CPU route; a full CPU column drops them by name). No selector decides."""
+        out = self.out / lab / "select"
+        out.mkdir(parents=True, exist_ok=True)
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        p = self.run([str(py), "tools/identity_columns.py", "lanes", "--scope", "all"], cwd=str(ROOT),
+                     capture_output=True, text=True, env=env)
+        (out / "lanes.log").write_text((p.stdout or "") + (p.stderr or ""))
+        text = (p.stdout or "").strip() if p.returncode == 0 else ""
+        lanes = [x for x in text.splitlines()[-1].split(",") if x] if text else []
+        if not lanes:
+            raise RuntimeError("could not list the lanes for %s (%s)" % (lab, out / "lanes.log"))
+        if column == "cpu":
+            q = self.run([str(py), "-c", "import sys; sys.path.insert(0, 'tools'); import identity_columns as c; "
+                          "print(','.join(sorted(getattr(c.harness(), 'GPU_ONLY_LANES', {}) or {})))"],
+                         cwd=str(ROOT), capture_output=True, text=True, env=env)
+            if q.returncode != 0:
+                raise RuntimeError("could not read the harness's GPU-only lanes for %s" % lab)
+            gpu_only = set(x for x in (q.stdout or "").strip().split(",") if x)
+            lanes = [x for x in lanes if x not in gpu_only]
+        return lanes, 0
+
     def select(self, py, listed, column, lab):
-        """The recorder's own default selection for this column (SELECT_ONLY=1)."""
+        """--reuse-unchanged only: the recorder's own reuse selection for this column (SELECT_ONLY=1)."""
         out = self.out / lab / "select"
         out.mkdir(parents=True, exist_ok=True)
         p = self.run(["bash", str(RECORDER), lab, str(out)], cwd=str(ROOT), capture_output=True, text=True,
@@ -206,12 +230,14 @@ class Run:
                                     wheels=listed.read_text().split("\n")[:-1])
         shard_i, shard_n = (int(x) for x in self.a.shard.split("/"))
         for c in columns:
-            lanes, reused = self.select(py, listed, c, labels[c])
+            lanes, reused = (self.select(py, listed, c, labels[c]) if self.a.reuse_unchanged
+                             else self.all_lanes(py, c, labels[c]))
             # --shard i/N (the GitHub CPU matrix): every job selects by the same rule and records lanes[i::N]
             lanes = lanes[shard_i::shard_n]
             selected[c] = lanes
             report["columns"][c] = dict(label=labels[c], owed=len(lanes), reused=reused, chunks=[], rc=0)
-            self.say("%s: REUSED %s / RUN %d" % (labels[c], "?" if reused is None else reused, len(lanes)))
+            self.say("%s: REUSED %s / RUN %s" % (labels[c], "?" if reused is None else reused,
+                                                 len(lanes) if self.a.reuse_unchanged else "all (%d)" % len(lanes)))
         tasks = []
         for c in columns:
             for i, (chunk, slot) in enumerate(zip(chunks(selected[c], len(slots[c])), slots[c])):
@@ -224,9 +250,19 @@ class Run:
         threads, results = [], {}
 
         def work(c, i, chunk, slot):
+            # A FAILURE NEVER STOPS THE OTHERS: every chunk runs; failures are collected and reported once below
+            try:
+                record(c, i, chunk, slot)
+            except Exception as exc:   # a crashed launch is this chunk's failure, never the run's
+                results[(c, i)] = dict(worker=i, device=slot[0], lanes=len(chunk), rc=1, records=[],
+                                       error="%s: %s" % (type(exc).__name__, exc))
+                self.say("%s w%d (device %s): CRASHED %s" % (labels[c], i, slot[0], exc))
+
+        def record(c, i, chunk, slot):
             out = self.out / labels[c] / ("w%d" % i)
             out.mkdir(parents=True, exist_ok=True)
-            env = self.env(py, listed, slot[0], c, dict(LANES=",".join(chunk), LANE_SELECTION="auto-reuse-chunk"))
+            env = self.env(py, listed, slot[0], c, dict(LANES=",".join(chunk), LANE_SELECTION=(
+                "auto-reuse-chunk" if self.a.reuse_unchanged else "full-chunk")))
             with open(out / "record.log", "w") as log:
                 rc = self.popen(["bash", str(RECORDER), labels[c], str(out)], cwd=str(ROOT), env=env,
                                 stdout=log, stderr=subprocess.STDOUT).wait()
@@ -259,6 +295,11 @@ class Run:
                 row["rc"] = r["rc"] or 1
                 ok = False
         report["ok"] = ok
+        failed = ["%s w%d (%d lane(s), rc %s)" % (labels[c], i, r["lanes"], r["rc"]) for (c, i), r in sorted(results.items())
+                  if not (r["rc"] == 0 and r["records"] and all(x["admissible"] for x in r["records"]))]
+        report["failures"] = failed
+        if failed:
+            self.say("FAILURES (%d chunk(s); every other chunk ran): %s" % (len(failed), "; ".join(failed)))
         (self.out / "identity-wheels.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n")
         self.say("%s: %s" % ("DONE" if ok else "FAILED", self.out / "identity-wheels.json"))
         return 0 if ok else 1
@@ -276,6 +317,8 @@ def parse(argv=None):
     ap.add_argument("--venv", default="")
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--shard", default="0/1", help="i/N: record every N-th owed lane from i (a CI job matrix)")
+    ap.add_argument("--reuse-unchanged", action="store_true",
+                    help="opt in to the recorder's reuse selection (unchanged lanes are not run); default: every lane")
     a = ap.parse_args(argv)
     m = re.fullmatch(r"(\d+)/(\d+)", a.shard)
     if not m or not 0 <= int(m.group(1)) < int(m.group(2)):

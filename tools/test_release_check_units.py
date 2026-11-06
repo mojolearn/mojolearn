@@ -57,15 +57,18 @@ def test_plan_reads_the_store_and_skips_compiled_checks_on_cpu(tmp_path, monkeyp
     # fast: the closure walks are the tooling's own (tested there); here a fixed closure stands in
     monkeypatch.setattr(U, "python_closure", lambda root, seeds: ["python/mojolearn/__init__.py"])
     w = wheel(tmp_path / "a.whl")
-    doc = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store")
+    doc = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store", reuse=True)
     assert all("source" not in U.entry(r["unit"]) for r in doc["units"] if r["unit"].startswith("autograd/"))
     assert doc["reused"] == 0 and doc["owed"]
     row = next(r for r in doc["units"] if r["unit"] == U.INSTALL_LOAD)
     d = tmp_path / "store" / "cpu-linux-x86_64" / U.safe(U.INSTALL_LOAD)
     d.mkdir(parents=True)
     (d / "k.json").write_text(json.dumps(rec(row["key"], device="cpu-linux-x86_64")))
-    again = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store")
+    again = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store", reuse=True)
     assert U.INSTALL_LOAD not in again["owed"] and again["reused"] == 1
+    # the default (no --reuse-unchanged): every unit runs, whatever the store holds
+    full = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store")
+    assert full["reused"] == 0 and U.INSTALL_LOAD in full["owed"] and len(full["owed"]) == len(full["units"])
 
 
 def test_summary_errors():

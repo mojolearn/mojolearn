@@ -117,6 +117,11 @@ class IdentityOnWheels:
         # behaviour applies only when the option is explicitly on
         return bool(getattr(getattr(self, "args", None), "identity_on_wheels", False))
 
+    def reuse(self):
+        """--reuse-unchanged: opt in to reusing unchanged lanes, check units and runtime units. OFF by default
+        (Andrew 2026-11-05: the selector cannot be trusted to narrow; the one run runs EVERYTHING)."""
+        return self.single() and bool(getattr(getattr(self, "args", None), "reuse_unchanged", False))
+
     def nvidia_columns(self):
         text = getattr(self.args, "nvidia_columns", "") or ",".join(DEFAULT_NVIDIA_COLUMNS)
         cols = [c for c in text.split(",") if c]
@@ -170,6 +175,8 @@ class IdentityOnWheels:
     def vendor_lanes(self, vendor):
         """(reused, owed) lane counts of a vendor's columns by the recorder's selection; owed None: undecided."""
         reused, run = 0, 0
+        if not self.reuse():
+            return 0, "all"   # the full run: no selector decides
         for col in self.vendor_columns(vendor):
             owed = self.lanes_owed(col)
             if owed is None:
@@ -186,13 +193,14 @@ class IdentityOnWheels:
         reused, run = self.vendor_lanes(vendor)
         plan = self.units_plan(vendor) if not ok else None
         composed = ""
-        if not ok and run == 0 and plan is not None and not plan["owed"] and not self.dry:
+        if self.reuse() and not ok and run == 0 and plan is not None and not plan["owed"] and not self.dry:
             # NOTHING OWED: no lane, no check unit; the runtime report is composed from reused unit receipts on
             # this Mac (release_runtime_installed.py run --reused-only, which launches nothing). If every runtime
             # unit is reused too, the box job's evidence exists without a box: no rental.
             composed = self.compose_without_box(vendor)
             ok, why = self.gate_ok(vendor)
-        units = "" if plan is None else "; units REUSED %d / RUN %d" % (plan["reused"], len(plan["owed"]))
+        units = "" if plan is None else ("; units REUSED %d / RUN %d" % (plan["reused"], len(plan["owed"]))
+                                         if self.reuse() else "; units RUN all")
         self.say("  %s: REUSED %d / RUN %s lane(s)%s; %s%s" % (
             vendor, reused, "?" if run is None else run, units,
             ("nothing owed, composed on this Mac" if composed == "composed" else "done for these wheel bytes")
@@ -299,7 +307,7 @@ class IdentityOnWheels:
         out.parent.mkdir(parents=True, exist_ok=True)
         cmd = [sys.executable, "tools/release_check_units.py", "plan", "--vendor", vendor,
                "--device-class", self.device_class(vendor), "--source-root", str(self.src),
-               "--store", str(self.unit_store()), "--json", str(out)]
+               "--store", str(self.unit_store()), "--json", str(out)] + (["--reuse-unchanged"] if self.reuse() else [])
         for w in wheels:
             cmd += ["--wheel", str(w)]
         with open(self.identity_dir() / ("units-%s.log" % vendor), "w") as log:
@@ -324,6 +332,8 @@ class IdentityOnWheels:
         if not self.single():
             return []
         args = ["--identity-columns", ",".join(self.vendor_columns(vendor)), "--label-device", self.label_device(vendor)]
+        if self.reuse():
+            args.append("--reuse-unchanged")
         if not self.dry and self.units_plan(vendor) is not None:
             args += ["--units-plan", str(self.units_plan_path(vendor))]
         return args
@@ -370,8 +380,7 @@ class IdentityOnWheels:
         ok, why = self.apple_identity_ok()
         if ok:
             return why + " (summary exists)"
-        owed = self.lanes_owed("apple")
-        if owed == []:
+        if self.reuse() and self.lanes_owed("apple") == []:
             return "Apple column: REUSED, RUN 0 (no lane's closure changed)"
         w = self.macos_wheel()
         if not w and not self.dry:
@@ -385,7 +394,8 @@ class IdentityOnWheels:
         self.must([sys.executable, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
                    sys.executable, str(ROOT / "tools" / "identity_wheel_record.py"), "--columns", "apple",
                    "--label-device", self.label_device("apple"), "--wheel", str(w or name), "--sha256", "%s=%s" % (name, digest),
-                   "--out", str(out), "--python", self.smoke_python() if not self.dry else "python3.12"],
+                   "--out", str(out), "--python", self.smoke_python() if not self.dry else "python3.12"]
+                  + (["--reuse-unchanged"] if self.reuse() else []),
                   log=self.rel / "gate-apple-identity.log", what="the Apple column from the macOS wheel", cwd=self.src)
         if self.dry:
             return None
@@ -421,8 +431,9 @@ class IdentityOnWheels:
         return result
 
     def apple_runtime_reused(self):
-        """runtime-apple composed from reused receipts without the Metal lock (nothing launched), or None."""
-        if self.dry or self.apple_runtime_ok()[0]:
+        """runtime-apple composed from reused receipts without the Metal lock (nothing launched), or None.
+        Only with --reuse-unchanged: the default full run runs every unit."""
+        if self.dry or not self.reuse() or self.apple_runtime_ok()[0]:
             return None
         w = self.macos_wheel()
         if not w:
@@ -441,7 +452,7 @@ class IdentityOnWheels:
         out = self.cpu_out()
         reused = read_json(out / "reused.json") or {}
         core = self.split_final("linux")
-        if (reused.get("source_commit") == self.commit and core and reused.get("wheel_sha256") == sha256(core)
+        if (self.reuse() and reused.get("source_commit") == self.commit and core and reused.get("wheel_sha256") == sha256(core)
                 and (read_json(out / "runtime-cpu" / "runtime-report.json") or {}).get("status") == "passed"):
             return True, "cpu: REUSED %s lane(s) / RUN 0, units REUSED %s / RUN 0, runtime composed; no dispatch" % (
                 reused.get("lanes_reused"), reused.get("units_reused"))
@@ -476,9 +487,9 @@ class IdentityOnWheels:
         out = self.cpu_out()
         # THE UNIT RULE ON THE CPU COLUMN: nothing owed (no cpu lane, no cpu unit, every runtime-cpu unit reused)
         # -> no dispatch at all; otherwise the run carries only the owed check groups
-        lanes = self.lanes_owed("cpu") if not self.dry else None
+        lanes = self.lanes_owed("cpu") if not self.dry and self.reuse() else None
         plan = self.units_plan("cpu") if core and not self.dry else None
-        if (not self.dry and lanes == [] and plan is not None and not plan["owed"]
+        if (self.reuse() and not self.dry and lanes == [] and plan is not None and not plan["owed"]
                 and self.compose_runtime("cpu", [core], self.device_class("cpu"), out / "runtime-cpu")):
             write_json(out / "reused.json", dict(source_commit=self.commit, wheel_sha256=sha256(core),
                                                  lanes_reused=self.__dict__.get("_lanes_owed", {}).get("cpu:reused"),
@@ -491,7 +502,9 @@ class IdentityOnWheels:
                           for u in owed} | {"runtime"}) if plan is not None
                   else ["adapters", "autograd", "correctness", "runtime"])   # no plan: every group runs
         entries = ",".join(u.split("/", 1)[1] for u in owed if u.startswith("autograd/"))
-        if plan is not None:
+        if plan is not None and not self.reuse():
+            self.say("  cpu: RUN all lanes, all units (%s)" % ",".join(groups))
+        elif plan is not None:
             self.say("  cpu: REUSED %s / RUN %s lane(s); units REUSED %d / RUN %d (%s)" % (
                 self.__dict__.get("_lanes_owed", {}).get("cpu:reused"), "?" if lanes is None else len(lanes),
                 plan["reused"], len(plan["owed"]), ",".join(groups)))
@@ -508,7 +521,8 @@ class IdentityOnWheels:
                 self.version, self.commit[:12]))
         fields = dict(confirm="RUN-HEAVY", mode="wheel", wheel_url=url, wheel_name=core.name,
                       wheel_sha256=sha256(core), source_commit=self.commit, shards=str(CPU_SHARDS),
-                      runtime_prior_url=prior_url, token=token, checks=",".join(groups), autograd_entries=entries)
+                      runtime_prior_url=prior_url, token=token, checks=",".join(groups), autograd_entries=entries,
+                      reuse_unchanged="true" if self.reuse() else "false")
         argv = ["workflow", "run", CPU_WORKFLOW, "--ref", "main"]
         for k, v in fields.items():
             argv += ["-f", "%s=%s" % (k, v)]

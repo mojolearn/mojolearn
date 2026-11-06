@@ -90,6 +90,8 @@
 #   SELECT_ONLY=1           the default auto-reuse selection only: prints LANES-SELECTED <csv> (or
 #                           NOTHING-CHANGED) and records nothing
 #   LANE_SELECTION=auto-reuse-chunk  with LANES: this record is one chunk of a SELECT_ONLY selection
+#   LANE_SELECTION=full-chunk  with LANES: one chunk of a full column (every lane; release.py --identity-on-wheels
+#                           default, Andrew 2026-11-05: run everything once per release, no selector)
 #                           (tools/identity_wheel_record.py runs the chunks in parallel)
 #
 # Start ledger-managed release columns through release_identity_run.py after
@@ -309,9 +311,10 @@ if src:
 fi
 [ "${SELECT_ONLY:-0}" = 0 ] || [ "$SELECTION" = auto-reuse ] || die "SELECT_ONLY=1 needs the default auto-reuse selection"
 if [ -n "${LANE_SELECTION:-}" ]; then
-    [ "$LANE_SELECTION" = auto-reuse-chunk ] && [ "$SELECTION" = explicit ] && [ -n "${LANES:-}" ] \
-        || die "LANE_SELECTION=auto-reuse-chunk names a chunk of a SELECT_ONLY selection given as LANES"
-    SELECTION=auto-reuse-chunk
+    case "$LANE_SELECTION" in auto-reuse-chunk|full-chunk) ;; *) die "LANE_SELECTION is auto-reuse-chunk or full-chunk";; esac
+    [ "$SELECTION" = explicit ] && [ -n "${LANES:-}" ] \
+        || die "LANE_SELECTION=$LANE_SELECTION names a chunk given as LANES"
+    SELECTION=$LANE_SELECTION
 fi
 if [ -n "${ONLY_CHANGED:-}" ]; then
     SELECTION=only-changed-$ONLY_CHANGED

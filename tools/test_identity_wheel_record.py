@@ -21,7 +21,8 @@ if [ "${SELECT_ONLY:-0}" = 1 ]; then
   if [ -z "$owed" ]; then echo "REUSED 9 / RECORD 0 $label"; echo "NOTHING-CHANGED $label"; exit 0; fi
   echo "REUSED 7 / RECORD 2 $label"; echo "LANES-SELECTED $owed"; exit 0
 fi
-[ "$RECORD_FROM_INSTALLED" = 1 ] && [ "$LANE_SELECTION" = auto-reuse-chunk ] || { echo "bad env"; exit 9; }
+[ "$RECORD_FROM_INSTALLED" = 1 ] && case "$LANE_SELECTION" in auto-reuse-chunk|full-chunk) true;; *) false;; esac \
+  || { echo "bad env"; exit 9; }
 echo "{}" > "$out/$label.lanes-x.identical.json"
 echo "DEVICE ${CUDA_VISIBLE_DEVICES:-${HIP_VISIBLE_DEVICES:-none}} LANES $LANES"
 echo "RECORDED $label.lanes-x rc=0 admissible=yes json=$out/$label.lanes-x.identical.json"
@@ -64,7 +65,8 @@ def test_workers_use_every_core_bounded_by_memory():
 def test_two_columns_on_two_gpus_record_once_in_parallel(tmp_path, fake, capsys):
     fake.setenv("FAKE_OWED_nvidia_l40s", "knn,ols")
     fake.setenv("FAKE_OWED_nvidia_ptx_l40s_sm80", "ridge")
-    a = args(tmp_path, "--columns", "nvidia,ptx", "--label-device", "l40s", "--gpus", "2", "--workers-per-gpu", "1")
+    a = args(tmp_path, "--columns", "nvidia,ptx", "--label-device", "l40s", "--gpus", "2", "--workers-per-gpu", "1",
+             "--reuse-unchanged")
     assert R.Run(a).main() == 0
     doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
     assert doc["ok"] and doc["columns"]["nvidia"]["owed"] == 2 and doc["columns"]["ptx"]["owed"] == 1
@@ -76,7 +78,7 @@ def test_two_columns_on_two_gpus_record_once_in_parallel(tmp_path, fake, capsys)
 
 
 def test_nothing_owed_records_nothing_and_is_ok(tmp_path, fake, capsys):
-    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1")
+    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--reuse-unchanged")
     assert R.Run(a).main() == 0
     doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
     assert doc["columns"]["amd"]["owed"] == 0 and doc["columns"]["amd"]["chunks"] == []
@@ -86,7 +88,7 @@ def test_nothing_owed_records_nothing_and_is_ok(tmp_path, fake, capsys):
 
 def test_a_cpu_shard_records_its_share(tmp_path, fake):
     fake.setenv("FAKE_OWED_cpu", "a,b,c,d,e")
-    a = args(tmp_path, "--columns", "cpu", "--shard", "1/2", "--workers-per-gpu", "2")
+    a = args(tmp_path, "--columns", "cpu", "--shard", "1/2", "--workers-per-gpu", "2", "--reuse-unchanged")
     assert R.Run(a).main() == 0
     doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
     assert doc["columns"]["cpu"]["owed"] == 2 and sum(c["lanes"] for c in doc["columns"]["cpu"]["chunks"]) == 2
@@ -107,3 +109,47 @@ def test_summary_errors_name_what_is_missing():
     errs = RIW.summary_errors(doc, ["nvidia", "ptx"])
     assert any("columns" in e for e in errs) and any("exited 1" in e for e in errs)
     assert any("recorded 1 of 2" in e for e in errs) and any("inadmissible" in e for e in errs)
+
+
+def test_by_default_every_lane_runs_and_no_selector_is_asked(tmp_path, fake, capsys):
+    # Andrew 2026-11-05: run everything once per release; the selection (SELECT_ONLY) is never consulted
+    fake.setattr(R.Run, "select", lambda *a, **k: pytest.fail("the selector must not decide the default run"))
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["knn", "ols", "ridge"], 0))
+    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--workers-per-gpu", "3")
+    assert R.Run(a).main() == 0
+    doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
+    assert doc["columns"]["amd"]["owed"] == 3 and len(doc["columns"]["amd"]["chunks"]) == 3
+    out = capsys.readouterr().out
+    assert "amd-mi325x: REUSED 0 / RUN all (3)" in out and "busy plan: 3 worker(s) of 3" in out
+
+
+def test_a_failing_chunk_does_not_stop_the_others(tmp_path, fake, capsys):
+    fake.setattr(R.Run, "all_lanes", lambda self, py, column, lab: (["knn", "bad", "ols"], 0))
+    real = R.Run.env
+
+    def env(self, py, listed, device, column, extra=None):
+        e = real(self, py, listed, device, column, extra)
+        if "bad" in (extra or {}).get("LANES", ""):
+            e["RECORD_FROM_INSTALLED"] = "0"     # the fake recorder exits 9 for this chunk
+        return e
+    fake.setattr(R.Run, "env", env)
+    a = args(tmp_path, "--columns", "amd", "--label-device", "mi325x", "--gpus", "1", "--workers-per-gpu", "3")
+    assert R.Run(a).main() == 1
+    doc = json.loads((tmp_path / "out" / "identity-wheels.json").read_text())
+    assert sum(1 for c in doc["columns"]["amd"]["chunks"] if c["rc"] == 0) == 2 and len(doc["failures"]) == 1
+    assert "FAILURES (1 chunk(s); every other chunk ran)" in capsys.readouterr().out
+
+
+def test_the_full_lane_list_drops_only_declared_gpu_only_lanes_on_cpu(tmp_path):
+    class P:
+        def __init__(self, out):
+            self.returncode, self.stdout, self.stderr = 0, out, ""
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        return P("a,b,gpu1\n" if "lanes" in cmd else "gpu1\n")
+    a = args(tmp_path, "--columns", "cpu")
+    r = R.Run(a, run=run)
+    assert r.all_lanes(pathlib.Path(sys.executable), "cpu", "cpu") == (["a", "b"], 0)
+    assert r.all_lanes(pathlib.Path(sys.executable), "amd", "amd-x") == (["a", "b", "gpu1"], 0)

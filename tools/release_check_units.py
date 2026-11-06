@@ -206,14 +206,17 @@ def decide(key, history, device):
     return "run", "; ".join(why) or "no record for this device class"
 
 
-def plan(vendor, device, root, wheels, store):
+def plan(vendor, device, root, wheels, store, reuse=False):
+    """Every unit RUNS by default (Andrew 2026-11-05: run everything once per release); with REUSE (release.py
+    --reuse-unchanged) a unit whose key matches its newest passing record is reused instead."""
     members = wheel_members(wheels)
     rows = []
     for unit in units():
         if vendor == "cpu" and unit.startswith("autograd/") and "source" in entry(unit):
             continue   # compiled device-check executables: GPU only
         key = unit_key(unit, root, members)
-        decision, detail = decide(key, records(store, device, unit), device)
+        decision, detail = (decide(key, records(store, device, unit), device) if reuse
+                            else ("run", "full run (no --reuse-unchanged)"))
         rows.append(dict(unit=unit, decision=decision, key=key,
                          **({"reused": detail.get("at"), "record_digest": detail.get("digest")} if decision == "reuse"
                             else {"reason": detail})))
@@ -372,6 +375,7 @@ def main(argv=None):
     p.add_argument("--wheel", action="append", required=True)
     p.add_argument("--store", required=True)
     p.add_argument("--json", required=True)
+    p.add_argument("--reuse-unchanged", action="store_true", help="reuse units whose key matches their record")
     r = sub.add_parser("run")
     r.add_argument("--plan", required=True)
     r.add_argument("--python", required=True, help="the venv interpreter the wheels are installed in")
@@ -383,7 +387,7 @@ def main(argv=None):
     r.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     if a.cmd == "plan":
-        doc = plan(a.vendor, a.device_class, a.source_root, a.wheel, a.store)
+        doc = plan(a.vendor, a.device_class, a.source_root, a.wheel, a.store, reuse=a.reuse_unchanged)
         Path(a.json).parent.mkdir(parents=True, exist_ok=True)
         Path(a.json).write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
         print("check-units plan %s: REUSED %d / RUN %d" % (a.device_class, doc["reused"], len(doc["owed"])))

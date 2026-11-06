@@ -194,7 +194,7 @@ class Plan:
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
                  profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None,
-                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None):
+                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, reuse_unchanged=False):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
@@ -239,6 +239,8 @@ class Plan:
         if self.identity_columns and not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", label_device or ""):
             raise SystemExit("release-gate: --identity-columns needs --label-device (a lowercase slug, e.g. l40s)")
         self.label_device = label_device
+        #: --reuse-unchanged (release.py): the one run reuses unchanged lanes and runtime units; default: everything runs
+        self.reuse_unchanged = bool(reuse_unchanged)
         #: THE DEVICE CHECKS AS UNITS (tools/release_check_units.py): the plan the Mac made before the rental; with
         #: it the job runs exactly its owed units (install/load, autograd entries, adapters) instead of the gate's
         #: stage list, and builds the autograd executables only when a compiled check is owed
@@ -280,7 +282,8 @@ class Plan:
                  f"GATE_IDENTITY_LABEL_DEVICE={self.label_device}",
                  bash_array("GATE_IDENTITY_SHA256", [f"{w.name}={sha256(w) if w.is_file() else 'DRY-RUN'}"
                                                      for w in self.wheels] if self.identity_columns else []),
-                 f"GATE_UNITS={1 if self.units_plan else 0}", f"GATE_BUILD_AUTOGRAD={1 if self.build_autograd else 0}"]
+                 f"GATE_UNITS={1 if self.units_plan else 0}", f"GATE_BUILD_AUTOGRAD={1 if self.build_autograd else 0}",
+                 f"GATE_REUSE_UNCHANGED={1 if self.reuse_unchanged else 0}"]
         return "\n".join(lines) + "\n"
 
     def uploads(self):
@@ -621,6 +624,8 @@ class Runner:
             key_inputs.append(overlay["digest"])   # a runner fix is a new job, never a resumed old one
         if getattr(a, "identity_columns", ""):
             key_inputs.append(["identity", a.identity_columns, getattr(a, "label_device", "")])
+        if getattr(a, "reuse_unchanged", False):
+            key_inputs.append("reuse-unchanged")
         if getattr(a, "units_plan", None) and Path(a.units_plan).is_file():
             key_inputs.append(["units", sha256(a.units_plan)])
         key = hashlib.sha256(json.dumps(key_inputs).encode()).hexdigest()
@@ -635,7 +640,8 @@ class Runner:
                     overlay=overlay, runtime_prior=getattr(a, "runtime_prior", None),
                     identity_columns=[c for c in (getattr(a, "identity_columns", "") or "").split(",") if c],
                     label_device=getattr(a, "label_device", "") or "",
-                    units_plan=getattr(a, "units_plan", None))
+                    units_plan=getattr(a, "units_plan", None),
+                    reuse_unchanged=getattr(a, "reuse_unchanged", False))
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -752,6 +758,8 @@ def parse(argv):
                          "wheels before its device checks (nvidia: nvidia,ptx; amd: amd); the gate then drops its "
                          "identity-lane jobs")
     ap.add_argument("--label-device", default="", help="the device slug of the column labels (l40s, mi325x)")
+    ap.add_argument("--reuse-unchanged", action="store_true",
+                    help="with --identity-columns: reuse unchanged lanes and runtime units (default: everything runs)")
     ap.add_argument("--units-plan", default=None,
                     help="tools/release_check_units.py plan: the job runs exactly its owed device-check units")
     ap.add_argument("--runtime-prior", default=None,
