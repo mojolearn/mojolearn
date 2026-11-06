@@ -13,6 +13,7 @@
 # uploaded once, and the dictionary, mean and components are not downloaded
 # and re-uploaded between the two.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
@@ -35,7 +36,7 @@ def _name(model: PythonObject) raises -> String:
 
 
 def _is_str(value: PythonObject, text: String) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Bool(py=py_call(b.isinstance, value, b.str)) and String(py=value) == text
 
 
@@ -69,7 +70,7 @@ def _fit_index(fit_algorithm: PythonObject) raises -> Int:
 
 def _is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
     # The model's class MRO, read through type's own descriptor, holds cls.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         if mro[k] is cls:
@@ -116,7 +117,7 @@ def _sparse_encode(mut kit: DecompKit, x: Int, d: Int, algorithm: PythonObject, 
     # `_expansion_decomp._sparse_encode`.
     var index = _algo_index(algorithm)
     if index < 0:
-        raise Error("algorithm=" + String(py=py_call(Python.import_module("builtins").repr, algorithm))
+        raise Error("algorithm=" + String(py=py_call(native_loaded_module("builtins").repr, algorithm))
                     + " is not carried; one of " + String(XD_SPARSE_ALGOS))
     var n = kit.nrows(x)
     var m = kit.ncols(x)
@@ -541,7 +542,7 @@ def dict_learning_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var call = PythonObject(from_borrowed=args_ptr)
         if len(call) != 4:
             raise Error("TypeError: dict_learning_native_call requires model, operation, arguments and connected context")
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple or py_type(call[3]) is not b.dict:
             raise Error("TypeError: native dictionary learning requires an operation, an argument tuple and its context")
         var model = call[0]

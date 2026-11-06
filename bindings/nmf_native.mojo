@@ -6,6 +6,7 @@
 # kit steps the Python shell sequenced, the same entries, operands and order,
 # so the same bits), and the fitted attributes stored as the shell stored them.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_host_f32
@@ -25,7 +26,7 @@ comptime _TRANSFORM = 5
 
 
 def _contains(options: PythonObject, value: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("operator").contains, options, value))
+    return Bool(py=py_call(native_loaded_module("operator").contains, options, value))
 
 
 def _beta(fields: PythonObject) raises -> Float64:
@@ -148,7 +149,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
 
 def nmf_fit(model: PythonObject, source: PythonObject, params: PythonObject, context: PythonObject) raises -> PythonObject:
     """`NMF.fit(X, **params)`: fit_transform with the W / H keywords."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var keys = py_call(b.list, params.keys())
     for k in range(len(keys)):  # driver-loop: over the caller's keyword names
         if not _contains(Python.tuple("W", "H", "y"), keys[k]):
