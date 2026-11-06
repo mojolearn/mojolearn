@@ -152,6 +152,21 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
     sequential_admit_value(mods, value, context, depth)
 
 
+struct SequentialValueAdmitter(Movable):
+    """`sequential_admit_value` for many values of one operation (a label
+    loop): the module view and the fixed admission type identities are read
+    once, not once per value. Each value is still walked and admitted."""
+    var mods: NativeModules
+    var types: _SequentialValueTypes
+
+    def __init__(out self, context: PythonObject) raises:
+        self.mods = NativeModules()
+        self.types = _SequentialValueTypes(self.mods, context)
+
+    def admit(mut self, value: PythonObject, context: PythonObject) raises:
+        _sequential_admit_value(self.mods, value, context, self.types, 0)
+
+
 struct _SequentialFieldNames(Defaultable, Movable):
     # Fixed operation metadata is built once; execution never recreates the
     # tuple whose identity participates in prepared admission. Mutable model

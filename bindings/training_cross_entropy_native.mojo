@@ -72,7 +72,10 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
         raise Error("TypeError: invalid cross_entropy argument envelope")
     refuse_kwargs(values[7], "cross_entropy")
     var reduction = loss_reduction(values[3], context)
-    if loss_truth(values[6], context) and reduction == 0:
+    # return_grad is admitted and read once per call; the three later reads
+    # of the same value repeated the whole native admission walk.
+    var want_grad = loss_truth(values[6], context)
+    if want_grad and reduction == 0:
         raise Error("NotImplementedError: cross_entropy reduction='none' has no backward")
     var logits = values[0]
     var device = py_type(logits) is context["device_class"]
@@ -121,7 +124,6 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
         smoothing = training_scalar_float(values[4], "cross_entropy", context)
     var loss = new_array([1], "<f4")
     var row_loss = new_array([rows], "<f4")
-    var want_grad = loss_truth(values[6], context)
     var gradient = PythonObject(None)
     if device:
         if want_grad:
@@ -132,7 +134,7 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
         gradient = new_array([1], "<f4")
     var ignored = training_scalar_number(values[2], "cross_entropy", context, True)
     var divisor = training_scalar_number(PythonObject(0) if values[5] is None else values[5], "cross_entropy", context, True)
-    var params = Python.list(rows, vocab, ignored, reduction, divisor, 1 if loss_truth(values[6], context) else 0)
+    var params = Python.list(rows, vocab, ignored, reduction, divisor, 1 if want_grad else 0)
     if device:
         smoothing = training_scalar_float(values[4], "cross_entropy", context)
     py_call(params.append, smoothing)
@@ -149,7 +151,7 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
     else:
         var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))
         result = PythonObject(Float64(pointer[0]))
-    if loss_truth(values[6], context):
+    if want_grad:
         result = Python.tuple(result, gradient)
     _ = keep^
     _ = targets^

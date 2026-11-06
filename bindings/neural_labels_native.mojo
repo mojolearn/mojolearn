@@ -8,7 +8,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.sequential_admission import sequential_admit_value
+from bindings.sequential_admission import sequential_admit_value, SequentialValueAdmitter
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array
 from bindings.xseq_native_common import xseq_neural_provider
@@ -64,6 +64,7 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
     if len(layout.shape) != 1:
         raise Error("ValueError: text and object labels must be one-dimensional")
     ref cpy = Python().cpython()
+    var admitter = SequentialValueAdmitter(context)
     for i in range(layout.count):  # driver-loop: native label schema decoding, never input hooks
         var address = layout.item_address([i])
         var raw = PyObjectPtr()
@@ -94,7 +95,7 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
         if not raw:
             raise cpy.unsafe_get_error()
         var value = PythonObject(from_owned=raw)
-        sequential_admit_value(value, context)
+        admitter.admit(value, context)
         _ = py_call(result.append, value)
     return result
 
@@ -133,8 +134,10 @@ def neural_encode_labels(source: PythonObject, entries: PythonObject, context: P
     ref cpy = Python().cpython()
     var all_text = True
     var all_bytes = True
+    # Every label is already admitted: a list/tuple source by the walk of
+    # `source` above (it visits each element), an ndarray's decoded values by
+    # `_flat`. The per-label re-admission repeated that walk.
     for i in range(count):  # driver-loop: native label kind admission
-        sequential_admit_value(labels[i], context)
         var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(py_type(labels[i])._obj_ptr)
         all_text = all_text and (flags & UInt64(1 << 28)) != 0
         all_bytes = all_bytes and (flags & UInt64(1 << 27)) != 0
@@ -217,6 +220,7 @@ def neural_decode_labels(classes: PythonObject, codes: PythonObject, context: Py
     var count = code_layout.count
     var result = _object_array(count, context) if kind == "O" else sequential_array(Python.tuple(count), classes.dtype, context)
     var base = native_buffer_address(result)
+    var admitter = SequentialValueAdmitter(context)
     for i in range(count):  # driver-loop: publish one predicted label from its native class words
         var code_address = code_layout.item_address([i])
         var index = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=code_address)[0]) if code_layout.itemsize == 4 else Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=code_address)[0])
@@ -228,7 +232,7 @@ def neural_decode_labels(classes: PythonObject, codes: PythonObject, context: Py
             if not raw:
                 raise Error("TypeError: classes_ contains an uninitialized object slot")
             var value = PythonObject(from_owned=cpy.Py_NewRef(raw))
-            sequential_admit_value(value, context)
+            admitter.admit(value, context)
             var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(py_type(value)._obj_ptr)
             if (flags & UInt64((1 << 28) | (1 << 27))) == 0:
                 raise Error("TypeError: object classes_ requires native string or bytes values")

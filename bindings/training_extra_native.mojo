@@ -42,12 +42,13 @@ def _rd_operand(value: PythonObject, name: String, mut view: TensorView) raises 
     return count
 
 
-def _rd_uint(value: PythonObject, name: String, bits: Int) raises -> PythonObject:
-    """`_residual_dropout_impl._uint`."""
-    var b = Python.import_module("builtins")
+def _rd_uint(value: PythonObject, name: String, bits: Int, b: PythonObject,
+             index_fn: PythonObject) raises -> PythonObject:
+    """`_residual_dropout_impl._uint`. `b` and `index_fn` (builtins and
+    operator.index) are looked up once by the caller, not per word."""
     if py_type(value) is b.bool:
         raise Error("TypeError: " + name + " must be an unsigned integer")
-    var index = py_call_typed(Python.import_module("operator").index, value)
+    var index = py_call_typed(index_fn, value)
     if Bool(py=index < PythonObject(0)) or Bool(py=index >= PythonObject(1).__lshift__(PythonObject(bits))):
         raise Error("ValueError: " + name + " is outside its unsigned integer range")
     return index
@@ -58,9 +59,10 @@ def _rd_params(count: Int, p: PythonObject, seed: PythonObject, stream: PythonOb
     """`_residual_dropout_impl._params`: [count, offset, seed low, seed high,
     stream, p]."""
     var b = Python.import_module("builtins")
-    var s = _rd_uint(seed, "seed", 64)
-    var st = _rd_uint(stream, "stream", 32)
-    var off = _rd_uint(offset, "offset", 63)
+    var index_fn = Python.import_module("operator").index
+    var s = _rd_uint(seed, "seed", 64, b, index_fn)
+    var st = _rd_uint(stream, "stream", 32, b, index_fn)
+    var off = _rd_uint(offset, "offset", 63, b, index_fn)
     var limit = PythonObject(1).__lshift__(PythonObject(63)) - PythonObject(1) - PythonObject(count)
     if Bool(py=off > limit):
         raise Error("ValueError: offset plus element count exceeds the native Philox range")
@@ -222,11 +224,14 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
     var shapes = Python.list()
     var addresses = Python.list()
     var views = List[TensorView]()
+    # Bound append methods are read once, not twice per session array.
+    var shapes_append = py_call(b.getattr, shapes, "append")
+    var addresses_append = py_call(b.getattr, addresses, "append")
     for i in range(len(inputs)):  # driver-loop: over the caller's session arrays
         var view = TensorView()
         var address = _c32(inputs[i], "session input", site, view, keep)
-        _ = py_call(py_call(b.getattr, shapes, "append"), py_ints(view.shape))
-        _ = py_call(py_call(b.getattr, addresses, "append"), PythonObject(address))
+        _ = py_call(shapes_append, py_ints(view.shape))
+        _ = py_call(addresses_append, PythonObject(address))
         views.append(view^)
     var total_rows = 0
     try:
