@@ -234,6 +234,21 @@ def _prep_scratch(value: PythonObject, sbase: Int, obase: Int, context: PythonOb
 
 
 def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The stage records come from the program's `_stages` list of lists.
+    return _prep_run_impl(prog, mode, context, List[Int32](), False)
+
+
+def prep_run_words(prog: PythonObject, mode: PythonObject, context: PythonObject,
+                   words: List[Int32]) raises -> PythonObject:
+    """The same runner for a native owner whose stage records are already
+    native words (16 per stage, scratch words already placed): the owner no
+    longer builds a Python list of 16 ints per stage for this runner to
+    type-check and convert word by word (perf3-prep-shared)."""
+    return _prep_run_impl(prog, mode, context, words, True)
+
+
+def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject,
+                   native_words: List[Int32], has_native: Bool) raises -> PythonObject:
     # Classifier owners call this runner directly, bypassing arena_prog_c.
     # Connect already-loaded native NumPy metadata in this runner's own
     # context before a DeviceRows snapshot admits an ndarray-owned view.
@@ -316,14 +331,20 @@ def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) rai
             if not is_inout:
                 _ = py_call(in_spans.append, Python.tuple(off, off + size))
         py_setitem(fields, "_in_spans", in_spans)
-        var stage_list = fields["_stages"]
-        nst = len(stage_list)
-        for i in range(nst):  # driver-loop: over the program's stage records
-            var stage = stage_list[i]
-            if len(stage) != STAGE_WORDS:
+        if has_native:
+            if len(native_words) % STAGE_WORDS != 0:
                 raise Error("ValueError: x_prep: a stage record must hold 16 words")
-            for j in range(STAGE_WORDS):  # driver-loop: over one stage record's fixed words
-                stages.append(Int32(_prep_scratch(stage[j], sbase, obase, context)))
+            nst = len(native_words) // STAGE_WORDS
+            stages = native_words.copy()
+        else:
+            var stage_list = fields["_stages"]
+            nst = len(stage_list)
+            for i in range(nst):  # driver-loop: over the program's stage records
+                var stage = stage_list[i]
+                if len(stage) != STAGE_WORDS:
+                    raise Error("ValueError: x_prep: a stage record must hold 16 words")
+                for j in range(STAGE_WORDS):  # driver-loop: over one stage record's fixed words
+                    stages.append(Int32(_prep_scratch(stage[j], sbase, obase, context)))
         if nst == 0:
             stages.append(0)
         var pa = Int(stages.unsafe_ptr())
