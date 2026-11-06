@@ -43,6 +43,7 @@ from core.generation_policy_impl import GenerationSamplingScratch
 from core.generation_kv_policy import GenerationReadControl
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
+from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.sha256_door import sha256_update, sha256_update_text
 from std.math import isfinite
 from std.os import getenv
@@ -2940,6 +2941,31 @@ def _array_bytes(value: PythonObject) raises -> PythonObject:
     return py_call(generation_buffer_view(value).tobytes, "C")
 
 
+def _hash_array(mut hash: Sha256, value: PythonObject) raises:
+    # The same bytes in the same order as `_array_bytes` (tobytes("C")),
+    # hashed straight from the pinned buffer: no bytes object and no
+    # array('B') copy per tensor. A strided buffer is packed once.
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var source = generation_array_snapshot(value)._mv if py_type(value) is g[].array_cls else generation_buffer_view(value)
+    admit_native_buffer_exporter(source)
+    var pin = AdmittedBorrowedBuffer(source)
+    try:
+        var layout = pin.layout.value().copy()
+        var n = layout.count * layout.itemsize
+        if n > 0 and layout.contiguous():
+            hash.update(layout.address, n)
+        elif n > 0:
+            var packed = List[UInt8](length=n, fill=0)
+            layout.copy_to(Int(packed.unsafe_ptr()))
+            hash.update(Int(packed.unsafe_ptr()), n)
+            _ = packed^
+    except error:
+        pin.release()
+        raise error
+    pin.release()
+    _ = source
+
+
 def _hash() -> Sha256:
     return Sha256()
 
@@ -2957,10 +2983,10 @@ def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonO
     _hash_scalar(h, model.norm_eps)
     _hash_scalar(h, model.max_positions)
     _hash_scalar(h, model._embed.shape)
-    sha256_update(h, _array_bytes(model._embed))
+    _hash_array(h, model._embed)
     if model._norm is not None:
-        sha256_update(h, _array_bytes(model._norm))
-    sha256_update(h, _array_bytes(model._head))
+        _hash_array(h, model._norm)
+    _hash_array(h, model._head)
     for i in range(len(model._blocks)):  # driver-loop: over model layers
         var blk = _block(mods, model, i)
         _causal_array_guard()
@@ -2971,7 +2997,7 @@ def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonO
             _hash_scalar(h, blk["window"])
             for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
                 if blk["_wopt"][j] is not None:
-                    sha256_update(h, _array_bytes(blk["_wopt"][j]))
+                    _hash_array(h, blk["_wopt"][j])
         elif String(model.kind) == "mamba2":
             _hash_scalar(h, blk["dt_limit"])
         else:
@@ -2979,15 +3005,15 @@ def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonO
         for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
                 _hash_scalar(h, blk["_w"][j].shape)
-                sha256_update(h, _array_bytes(blk["_w"][j]))
+                _hash_array(h, blk["_w"][j])
         if model._head_int15 is not None:
             for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
                 if blk["_int15"][j] is not None:
                     for k in range(3):  # small-loop(int15 plane triple)
-                        sha256_update(h, _array_bytes(blk["_int15"][j][k]))
+                        _hash_array(h, blk["_int15"][j][k])
     if model._head_int15 is not None:
         for k in range(3):  # small-loop(int15 head plane triple)
-            sha256_update(h, _array_bytes(model._head_int15[k]))
+            _hash_array(h, model._head_int15[k])
     return PythonObject(h.hexdigest())
 
 
@@ -3010,8 +3036,8 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     if String(checkpoint["schema"]) == "mojolearn.generation.v2":
         _hash_scalar(h, checkpoint["sampling_policy"])
     sha256_update(h, checkpoint["pending_bytes"])
-    sha256_update(h, _array_bytes(checkpoint["prompt"]))
-    sha256_update(h, _array_bytes(checkpoint["current"]))
+    _hash_array(h, checkpoint["prompt"])
+    _hash_array(h, checkpoint["current"])
     for i in range(len(checkpoint["layers"])):  # driver-loop: over checkpoint layers
         var layer = checkpoint["layers"][i]
         var names = py_call(g[].bi.sorted, layer.keys())
@@ -3021,7 +3047,7 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
             if py_type(value) is g[].array_cls:
                 _hash_scalar(h, value.shape)
                 _hash_scalar(h, value.dtype)
-                sha256_update(h, _array_bytes(value))
+                _hash_array(h, value)
             else:
                 _hash_scalar(h, value)
     return PythonObject(h.hexdigest())
