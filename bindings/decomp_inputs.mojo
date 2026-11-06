@@ -26,13 +26,17 @@ def decomp_input(source: PythonObject, est: String, context: PythonObject) raise
         raise Error("Complex data not supported: " + est + " got a complex X.")
     if kind == "b" or kind == "i" or kind == "u" or kind == "f":
         var nd = Int(py=view.ndim)
-        var shape = String(py_call(native_loaded_module("builtins").repr, view.shape))
+        # The shape's repr names a refusal only; it is built on those paths
+        # alone (it went through builtins.repr on every call; p3 rank 410).
         if nd < 2:
-            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + shape + "). " + RESHAPE_HINT)
+            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape="
+                        + String(py_call(native_loaded_module("builtins").repr, view.shape)) + "). " + RESHAPE_HINT)
         if nd == 2 and Int(py=view.shape[0]) == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + shape + ") while a minimum of 1 is required by " + est + ".")
+            raise Error("Found array with 0 sample(s) (shape=" + String(py_call(native_loaded_module("builtins").repr, view.shape))
+                        + ") while a minimum of 1 is required by " + est + ".")
         if nd == 2 and Int(py=view.shape[1]) == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + shape + ") while a minimum of 1 is required by " + est + ".")
+            raise Error("Found array with 0 feature(s) (shape=" + String(py_call(native_loaded_module("builtins").repr, view.shape))
+                        + ") while a minimum of 1 is required by " + est + ".")
     var x = _cast_x(view, est, context)
     _ = view^
     return x

@@ -28,13 +28,17 @@ def decomp_input_snapshot(source: PythonObject, name: String, context: PythonObj
     var view = classical_view(value, context, name)
     var shape = array_shape_once(view, context)
     var nd = len(shape)
-    var words = Python.list()
     var count = 1
-    for dimension in shape:  # driver-loop: over captured native dimensions
-        _ = py_call(words.append, dimension)
-        count *= dimension
-    var tuple_shape = py_call(native_loaded_module("builtins").tuple, words)
-    var shown = String(py_call(native_loaded_module("builtins").repr, tuple_shape))
+    # The shape text names refusals only: it is written natively (Python's
+    # tuple repr, "(n,)" for one axis), and no Python list or tuple is built
+    # on the success path unless a cast needs the shape (p3 rank 420).
+    var shown = String("(")
+    for axis in range(nd):  # driver-loop: over captured native dimensions
+        count *= shape[axis]
+        if axis > 0:
+            shown += ", "
+        shown += String(shape[axis])
+    shown += ",)" if nd == 1 else ")"
     var complex_error = "TypeError: mojolearn: " + name + " has a non-numeric dtype"
     if public_name != "":
         complex_error = "Complex data not supported: " + public_name + " got a complex " + (String("y") if public_target else String("X")) + "."
@@ -70,6 +74,7 @@ def decomp_input_snapshot(source: PythonObject, name: String, context: PythonObj
     var snapshot = captured.value().copy()
     var original_owner = Python.tuple(source, snapshot.owner)
     if not snapshot.f32_c():
+        var tuple_shape = Python.tuple(snapshot.shape[0]) if nd == 1 else Python.tuple(snapshot.shape[0], snapshot.shape[1])
         var result = family_array(tuple_shape, "<f4", context)
         var address = Int(py=classical_address(result))
         var src = snapshot.source
