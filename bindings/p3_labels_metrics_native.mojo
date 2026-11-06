@@ -72,6 +72,15 @@ comptime _P3NumberIndex = ExternalFunction[
 # int PyObject_IsTrue(PyObject *o)
 comptime _P3IsTrue = ExternalFunction[
     "PyObject_IsTrue", def(PyObjectPtr) thin abi("C") -> c_int]
+# long long PyLong_AsLongLong(PyObject *o)  (-1 with an error set on overflow)
+comptime _P3LongAsLongLong = ExternalFunction[
+    "PyLong_AsLongLong", def(PyObjectPtr) thin abi("C") -> Int64]
+# PyObject *PyDict_GetItemWithError(PyObject *p, PyObject *key)  (borrowed; NULL: missing or error)
+comptime _P3DictGetItemWithError = ExternalFunction[
+    "PyDict_GetItemWithError", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyErr_Occurred(void)  (borrowed)
+comptime _P3ErrOccurred = ExternalFunction[
+    "PyErr_Occurred", def() thin abi("C") -> PyObjectPtr]
 
 
 struct P3Table(Movable):
@@ -88,6 +97,9 @@ struct P3Table(Movable):
     var float_from: _P3FloatFromDouble.type
     var number_index: _P3NumberIndex.type
     var is_true: _P3IsTrue.type
+    var long_as: _P3LongAsLongLong.type
+    var dict_get: _P3DictGetItemWithError.type
+    var err_occurred: _P3ErrOccurred.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -105,6 +117,9 @@ struct P3Table(Movable):
         self.float_from = _P3FloatFromDouble.load(lib)
         self.number_index = _P3NumberIndex.load(lib)
         self.is_true = _P3IsTrue.load(lib)
+        self.long_as = _P3LongAsLongLong.load(lib)
+        self.dict_get = _P3DictGetItemWithError.load(lib)
+        self.err_occurred = _P3ErrOccurred.load(lib)
 
 
 # Shared by every Mojo extension in the process; bump the version on any
@@ -478,6 +493,37 @@ def _p3_probe(seen: P3TextSet, ctext: P3Utf8, one: P3Utf8) -> Int:
                 return d
         slot = (slot + 1) & seen.mask
     return -1
+
+
+# ------------------------------------------------------------ dict codes
+
+
+def p3_dict_codes(index: PythonObject, values: PythonObject, address: Int, missing: Int) raises:
+    """`index.get(v, missing)` per item of an exact list or tuple `values`,
+    written as int32 words to `address`; `index` is an exact dict whose
+    values are Python ints within int32 (a class index table). One borrowed
+    read and one C dict probe per item: the item's own hash and equality
+    run in C for the admitted label classes, exactly as the Python lookup
+    ran them."""
+    var b = native_loaded_module("builtins")
+    var is_tuple = p3_type_word(values._obj_ptr) == Int(b.tuple._obj_ptr)
+    ref cpy = Python().cpython()
+    var t = p3_table()
+    var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
+    for i in range(len(values)):  # driver-loop: one borrowed read and one C dict probe per label
+        var raw = p3_item(values, i, is_tuple)
+        var hit = t[].dict_get(index._obj_ptr, raw)
+        if not hit:
+            if t[].err_occurred():
+                raise cpy.unsafe_get_error()
+            out[i] = Int32(missing)
+        else:
+            var code = t[].long_as(hit)
+            if code == -1 and t[].err_occurred():
+                raise cpy.unsafe_get_error()
+            out[i] = Int32(code)
+    _ = index
+    _ = values
 
 
 # ------------------------------------------------------------ integers
