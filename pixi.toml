@@ -1811,10 +1811,6 @@ pip = "*"
 # (nvc2-0035), so the suite had never run whole in this environment.
 scipy = "*"
 scikit-learn = "*"
-# packaging/linux/test_ptx_dependency.py runs the real resolver (`python -m pip download`)
-# over inert local wheels; a pixi conda env carries no pip unless it is declared
-# (CPU pod 2026-11-05: "No module named pip", 6 failures).
-pip = "*"
 
 [feature.test.pypi-dependencies]
 # 2026-10-20: the torch-reference tests skipped on the Mac
