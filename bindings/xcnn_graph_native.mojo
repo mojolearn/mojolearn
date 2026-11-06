@@ -20,6 +20,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.native_buffer_owner import native_buffer_view
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.neural_block_admission import neural_plain_value, neural_string_keys
+from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
 from bindings.xseq_native_common import XseqStream
@@ -302,6 +303,13 @@ def _dev_h(dev: PythonObject, name: String, context: PythonObject) raises -> Pyt
     return xcnn_dev_fields(dev, context)["h"][PythonObject(name)][0]
 
 
+def _dev_pair(dev: PythonObject, first: String, second: String, context: PythonObject) raises -> PythonObject:
+    """(`_dev_h(dev, first)`, `_dev_h(dev, second)`) with the owner and its
+    handle table admitted once for the launch, not once per handle."""
+    var table = xcnn_dev_fields(dev, context)["h"]
+    return Python.tuple(table[PythonObject(first)][0], table[PythonObject(second)][0])
+
+
 def _download(entries: PythonObject, h: PythonObject, out_buf: PythonObject) raises:
     """`dev.download(h, out)`."""
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_res_download"), h, xcnn_addr(out_buf), out_buf.size)
@@ -387,7 +395,8 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
     var bias = Bool(py=fields["bias"])
     var out = xcnn_new(entries, [n, f_out], False, context) if xt else xcnn_host_f32([n, f_out], context)
     var oh = out.h if (xt and not bias) else xcnn_dev_get(layer, entries, "o", n * f_out, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_dev_h(dev, "vals_f", context), hh, _dev_h(dev, "csr_f", context), oh), PythonObject(0b1111),
+    var _hv1 = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
+    _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv1[0], hh, _hv1[1], oh), PythonObject(0b1111),
               Python.list(n, f_out, Int(py=g["nnz"]), 0))
     if bias:
         var bv = _snapshot(fields["bias_"], "bias_", context)
@@ -502,7 +511,8 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op_m"), Python.list(xh, xh, auxh, aggh, _dev_h(dev, "csr_f", context)), PythonObject(0b11111),
                   Python.list(n, d_in, nnz, 0))
     else:
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_dev_h(dev, "vals_f", context), xh, _dev_h(dev, "csr_f", context), aggh),
+        var _hv2 = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
+        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv2[0], xh, _hv2[1], aggh),
                   PythonObject(0b1111), Python.list(n, d_in, nnz, 1 if mean else 0))
     var lin = fields["lin_l"]
     var lin_fields = _linear_fields(lin, context)
@@ -627,8 +637,11 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
 
 def _graph_layer_fields(layer: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(layer)
+    # One admission dictionary and module view for the whole field list.
+    var mods = NativeModules()
+    var admission = Python.dict(admission_context=context)
     for name in ["in_channels", "out_channels", "improved", "add_self_loops", "normalize", "bias", "numeric_mode", "project", "root_weight", "aggr"]:  # small-loop(graph layer configuration)
-        neural_plain_value(py_get(fields, PythonObject(name)), 0, Python.dict(admission_context=context))
+        neural_plain_value(mods, py_get(fields, PythonObject(name)), 0, admission)
     return fields
 
 
@@ -636,8 +649,10 @@ def _linear_fields(layer: PythonObject, context: PythonObject) raises -> PythonO
     if py_type(layer) is not context["xcnn_linear_class"]:
         raise Error("TypeError: graph projection requires a native linear layer")
     var fields = _fields(layer)
+    var mods = NativeModules()
+    var admission = Python.dict(admission_context=context)
     for name in ["in_features", "out_features", "numeric_mode"]:  # small-loop(linear configuration)
-        neural_plain_value(fields[PythonObject(name)], 0, Python.dict(admission_context=context))
+        neural_plain_value(mods, fields[PythonObject(name)], 0, admission)
     return fields
 
 
@@ -815,7 +830,8 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         _ = ones
     py_setitem(fields, "grad_bias_", gb)
     var dh = xcnn_dev_get(layer, entries, "dh", n * f, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_dev_h(dev, "vals_t", context), gh, _dev_h(dev, "csr_t", context), dh),
+    var _hv3 = _dev_pair(dev, "vals_t", "csr_t", context)   # one owner admission for both handles
+    _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv3[0], gh, _hv3[1], dh),
                       PythonObject(15), Python.list(n, f, graph["nnz"], 0))
     var gw = xcnn_host_f32([f, d], context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(dh, xh, xcnn_addr(gw)), PythonObject(3), Python.list(f, d, n, 2))
@@ -891,14 +907,17 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
     var aggr = String(fields["aggr"])
     if aggr == "mean":
         var scaled = xcnn_dev_get(layer, entries, "dsc", n * d, context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_dev_h(dev, "vals_f", context), dagg, _dev_h(dev, "csr_f", context), scaled),
+        var _hv4 = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
+        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv4[0], dagg, _hv4[1], scaled),
                           PythonObject(15), Python.list(n, d, graph["nnz"], 3))
         dagg = scaled
     if aggr == "max":
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op_m"), Python.list(xh, dagg, _dev_h(dev, "maxaux", context), dxs, _dev_h(dev, "csr_t", context)),
+        var _hv5 = _dev_pair(dev, "maxaux", "csr_t", context)   # one owner admission for both handles
+        _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op_m"), Python.list(xh, dagg, _hv5[0], dxs, _hv5[1]),
                           PythonObject(31), Python.list(n, d, graph["nnz"], 1))
     else:
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_dev_h(dev, "vals_t", context), dagg, _dev_h(dev, "csr_t", context), dxs),
+        var _hv6 = _dev_pair(dev, "vals_t", "csr_t", context)   # one owner admission for both handles
+        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv6[0], dagg, _hv6[1], dxs),
                           PythonObject(15), Python.list(n, d, graph["nnz"], 0))
     if root:
         var gwr = xcnn_host_f32([f, d], context)
