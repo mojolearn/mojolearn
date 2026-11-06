@@ -131,7 +131,11 @@ def decomp_entries(mode_value: PythonObject, context: PythonObject) raises -> Py
     var mode = decomp_mode(mode_value, context)
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    var name = String(py=py_call(py_call(mode.strip).lower))
+    # An exact canonical spelling needs no strip()/lower() calls (both would
+    # return it unchanged); any other spelling is normalized as before.
+    var name = String(py=mode)
+    if name != "identical" and name != "fast":
+        name = String(py=py_call(py_call(mode.strip).lower))
     if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     var entries = context["decomp_bindings"][name]
