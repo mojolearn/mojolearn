@@ -18,6 +18,8 @@ assigning `weight` and finalizing release the resident device table.
 The same compiled entries with the same argument words as the Python bodies
 it replaces, so no bit moves.
 """
+from bindings.native_class_admission import class_record, class_admit
+from bindings.native_loaded_module import NativeModules
 from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -301,6 +303,21 @@ def _class_flag(cls: PythonObject, name: String, context: PythonObject) raises -
 
 
 def _owner(cls: PythonObject, context: PythonObject) raises:
+    # The answer depends only on the class rows and the import-connected
+    # descriptors: kept per class (native_class_admission; re-run when the
+    # class or an ancestor changes; every call on Python < 3.12). Lane
+    # p3-neural-blocks: every forward/backward walked the MRO twice here.
+    var mods = NativeModules()
+    if class_record(mods, _EMB_OWNER_SLOT, cls) is not None:
+        return
+    _owner_full(cls, context)
+    class_admit(mods, _EMB_OWNER_SLOT, cls, PythonObject(True))
+
+
+comptime _EMB_OWNER_SLOT = "embedding_layer_owner_class_v1"
+
+
+def _owner_full(cls: PythonObject, context: PythonObject) raises:
     var ancestry = py_call(_b().type.__dict__["__mro__"].__get__, cls)
     var finalizer = _class_fields(context["embedding_class"])["__del__"]
     # The saved-model CPU class (HostEmbedding, python/mojolearn/_classical_host.py)
