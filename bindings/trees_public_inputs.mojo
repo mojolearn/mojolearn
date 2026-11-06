@@ -25,7 +25,6 @@ from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.cpython_table import cpython_table
-from bindings.optimizer_public_words import stash_python_error
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
@@ -1055,8 +1054,7 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n)
     if not raw:
-        var failure = stash_python_error()
-        raise failure^
+        raise cpy.unsafe_get_error()
     # Owns the NULL-filled list: a refusal below releases the filled slots.
     var values = PythonObject(from_owned=raw)
     var table = cpython_table()
@@ -1068,8 +1066,7 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
             raise Error("IndexError: list index out of range")
         # SetItem steals the new reference on success and failure alike.
         if table[].PyList_SetItem(values._obj_ptr, i, cpy.Py_NewRef(labels[code]._obj_ptr)) != 0:
-            var failure = stash_python_error()
-            raise failure^
+            raise cpy.unsafe_get_error()
     _ = wide_codes  # keep the Python object alive through the reads above
     _ = labels^
     return values
