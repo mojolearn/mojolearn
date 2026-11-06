@@ -50,9 +50,9 @@ def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
     checkpoint = source.split('def byte_lm_checkpoint(')[1].split('def byte_lm_train_step(')[0]
     assert 'byte_checkpoint_load(args[0], io_error)' in checkpoint
     assert 'byte_checkpoint_save(args[0], state, io_error)' in checkpoint
-    assert checkpoint.index('_validated_state(source, context)') < checkpoint.index('native_storage_allocate(trainer)')
-    assert 'return io_error.restore()' in source
-    assert '_initialize_state_fields(restored, state,' in checkpoint
+    assert checkpoint.index('_validated_state(mods, source, context)') < checkpoint.index('native_storage_allocate(trainer)')
+    assert 'return io_error^.restore()' in source
+    assert '_initialize_state_fields(mods, restored, state,' in checkpoint
     assert 'py_call(trainer' not in checkpoint
 
 
