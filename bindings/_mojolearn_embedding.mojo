@@ -189,7 +189,7 @@ def _emb_lock(mut lock: List[Int64]) raises:
             return
 
 
-def _emb_unlock(mut lock: List[Int64]) raises:
+def _emb_unlock(mut lock: List[Int64]):
     var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](lock.unsafe_ptr())
     Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
 
