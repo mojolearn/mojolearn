@@ -128,6 +128,14 @@ def _truth(value: PythonObject) raises -> Bool:
     return Bool(py=family_call(_b().bool, value))
 
 
+def _int_word(value: PythonObject) raises -> Int:
+    """`int(value)`; an exact int is read without the Python call
+    (perf2-neighbors)."""
+    if py_type(value) is _b().int:
+        return Int(py=value)
+    return Int(py=family_call(_b().int, value))
+
+
 def _eq(a: PythonObject, b: PythonObject) raises -> Bool:
     """`bool(a == b)`."""
     # Perf (perf2-neighbors): two exact strs compare natively (str equality
@@ -450,10 +458,9 @@ def _lof_novelty(fields: PythonObject, what: String) raises:
 def _lof_score_samples(binding: PythonObject, fields: PythonObject, source: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     """`LocalOutlierFactor.score_samples(X)` after its novelty check."""
-    var b = _b()
     var q = _f32(source, context)
-    var k = Int(py=family_call(b.int, family_field(fields, "n_neighbors_")))
-    var nf = Int(py=family_call(b.int, family_field(fields, "n_samples_fit_")))
+    var k = _int_word(family_field(fields, "n_neighbors_"))
+    var nf = _int_word(family_field(fields, "n_samples_fit_"))
     var fit_x = family_field(fields, "_fit_X")
     var pair = _knn(binding, q, fit_x, k, False, context)
     var dist = pair[0]
@@ -484,8 +491,14 @@ def _lof_decision(model: PythonObject, args: PythonObject, context: PythonObject
     var fields = py_fields(model)
     _lof_novelty(fields, "decision_function")
     var score = _lof_score_samples(args[0], fields, args[1], context)
-    var op = native_loaded_module("operator")
-    var shift = Float64(py=family_call(_b().float, family_call(op.neg, family_field(fields, "offset_"))))
+    var offset = family_field(fields, "offset_")
+    var shift: Float64
+    if py_type(offset) is _b().float:
+        # Exact float: float(-x) is -x exactly (perf2-neighbors).
+        shift = -Float64(py=offset)
+    else:
+        var op = native_loaded_module("operator")
+        shift = Float64(py=family_call(_b().float, family_call(op.neg, offset)))
     return _unary(args[0], score, _U_IDENTITY, 1.0, shift, context)
 
 
@@ -937,7 +950,7 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var fit_x = family_field(fields, "_fit_X")
     var m = _rows(fit_x)
     var out = _out(Python.tuple(n, d), "<f4", context)
-    var k = Int(py=family_call(b.int, family_field(fields, "n_neighbors")))
+    var k = _int_word(family_field(fields, "n_neighbors"))
     if k < 1:
         raise Error("n_neighbors must be >= 1")
     var distance = 1 if _eq(family_field(fields, "weights"), PythonObject("distance")) else 0
