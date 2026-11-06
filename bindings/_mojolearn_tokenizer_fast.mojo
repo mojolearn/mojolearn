@@ -31,7 +31,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
+from bindings.p3_lm_tokenizer_cpython import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -52,21 +52,11 @@ from tokenizer.fast.bpe_fast_impl import (
 def _index(value: PythonObject) raises -> Int:
     # Direct PyNumber_Index / PyLong_AsLongLong through entries resolved once
     # per process: no class-name String, no operator module stamp, no Python
-    # call per argument. Booleans are refused first (exact True/False).
-    if value is PythonObject(True) or value is PythonObject(False):
-        raise Error("tokenizer fast: integers expected, not booleans")
-    var table = lm_cpython_table()
-    var indexed = table[].PyNumber_Index(value._obj_ptr)
-    if indexed:
-        var owned = PythonObject(from_owned=indexed)
-        var word = table[].PyLong_AsLongLong(owned._obj_ptr)
-        if word == -1 and table[].PyErr_Occurred():
-            ref cpy = Python().cpython()
-            raise cpy.unsafe_get_error()
-        return Int(word)
+    # call per argument. Any refusal keeps the original path and wording.
+    var word = 0
+    if lm_try_index(value, word):
+        return word
     # Not an index: keep the original wording (NumPy bool_ included).
-    ref cpy = Python().cpython()
-    cpy.lib.get_function[NoneType]("PyErr_Clear")()
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("tokenizer fast: integers expected, not booleans")

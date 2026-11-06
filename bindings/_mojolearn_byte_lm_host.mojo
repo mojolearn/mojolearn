@@ -14,6 +14,7 @@ from std.memory import bitcast, memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -71,6 +72,12 @@ comptime BYTE_HOST_MAX_LOGITS = 268435456
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Fast path: PyNumber_Index through entries resolved once (no class-name
+    # String, no operator module stamp, no Python call per word); any refusal
+    # keeps the original path and wording below.
+    var word = 0
+    if lm_try_index(value, word):
+        return word
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("byte LM host: integers expected, not booleans")
