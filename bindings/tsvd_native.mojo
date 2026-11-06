@@ -20,8 +20,9 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32
+from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32, classical_is_f32
 from bindings.decomp_inputs import decomp_input, decomp_copied
+from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes
@@ -264,8 +265,18 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
                     + "accepting the name and running the Gram arm would be a silent substitution, which is "
                     + "why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
     var host = _host_only(model)
-    var x = decomp_input(source, "TruncatedSVD", context)
-    py_setitem(fields, "input_copied_", PythonObject(decomp_copied(source, context)))
+    # A SciPy sparse X (TruncatedSVD's main input) is densified once: the
+    # conversion and the input_copied_ flag used to densify it twice. Same
+    # arrays and flag as decomp_input / decomp_copied.
+    var x = PythonObject(None)
+    var sparse = host_sparse_format(source)
+    if sparse.byte_length() > 0:
+        var dense = host_sparse_dense(source, sparse, context)
+        x = classical_host_f32(dense, 2, "X", context)
+        py_setitem(fields, "input_copied_", PythonObject(not classical_is_f32(dense, context)))
+    else:
+        x = decomp_input(source, "TruncatedSVD", context)
+        py_setitem(fields, "input_copied_", PythonObject(decomp_copied(source, context)))
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if rows < 2 or cols < 2:
