@@ -235,7 +235,7 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
         var raw = cpy.lib.get_function[Optional[_ResidentBytes]]("PyCapsule_GetPointer")(
             capsule, names[].capsule_name.as_c_string_slice().unsafe_ptr())
         if not raw:
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
             return None
         var words = _ResidentWords(unsafe_from_address=Int(raw.value()))
         var free = words[0]
@@ -245,11 +245,13 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
             var pending = cpy.PyErr_FetchTriple()
             var argument = cpy.lib.get_function[PyObjectPtr]("PyLong_FromSsize_t")(handle)
             if argument:
-                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(free, argument)
+                # both arguments as address words, as words[0] is (no call
+                # on main mixes an Int and a PyObjectPtr argument; pass 2 C8)
+                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(free, Int(argument))
                 if result:
                     cpy.lib.get_function[NoneType]("Py_DecRef")(result)
                 cpy.lib.get_function[NoneType]("Py_DecRef")(argument)
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
             cpy.lib.get_function[NoneType]("Py_DecRef")(free)
             cpy.PyErr_Restore(pending[0], pending[1], pending[2])
         external_call["free", NoneType](raw.value())
