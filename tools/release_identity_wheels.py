@@ -182,16 +182,80 @@ class IdentityOnWheels:
         reuse of the device checks (an earlier PASS for the same bytes). Prints REUSED n / RUN m."""
         ok, why = self.gate_ok(vendor)
         reused, run = self.vendor_lanes(vendor)
-        self.say("  %s: REUSED %d / RUN %s lane(s); device checks %s%s" % (
-            vendor, reused, "?" if run is None else run, "done for these wheel bytes" if ok else "owed",
+        plan = self.units_plan(vendor) if not ok else None
+        units = "" if plan is None else "; units REUSED %d / RUN %d" % (plan["reused"], len(plan["owed"]))
+        self.say("  %s: REUSED %d / RUN %s lane(s)%s; %s%s" % (
+            vendor, reused, "?" if run is None else run, units,
+            "done for these wheel bytes" if ok else "the installed-runtime qualifier reports on the box",
             "; no rental" if ok else ""))
         return None if ok else why
+
+    # ------------------------------------------------------------------ the device checks as units
+    def unit_store(self):
+        return self.base.parent / "check-units"
+
+    def device_class(self, vendor):
+        return {"nvidia": "nvidia-sm_89", "amd": "amd-gfx942", "cpu": "cpu-linux-x86_64"}.get(
+            vendor) or "apple-" + self.label_device("apple")
+
+    def units_plan_path(self, vendor):
+        return self.identity_dir() / ("units-%s.json" % vendor)
+
+    def units_plan(self, vendor):
+        """tools/release_check_units.py plan for VENDOR's wheels at the frozen source (static, on this Mac): which
+        device-check units are owed and which reuse an earlier record of the same key. None: undecidable."""
+        cache = self.__dict__.setdefault("_units_plan", {})
+        if vendor in cache:
+            return cache[vendor]
+        wheels = [self.macos_wheel()] if vendor == "apple" else self.candidate_gate_wheels(vendor)
+        out = self.units_plan_path(vendor)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [sys.executable, "tools/release_check_units.py", "plan", "--vendor", vendor,
+               "--device-class", self.device_class(vendor), "--source-root", str(self.src),
+               "--store", str(self.unit_store()), "--json", str(out)]
+        for w in wheels:
+            cmd += ["--wheel", str(w)]
+        with open(self.identity_dir() / ("units-%s.log" % vendor), "w") as log:
+            rc = subprocess.run(cmd, cwd=str(self.src), stdout=log, stderr=subprocess.STDOUT).returncode
+        cache[vendor] = read_json(out) if rc == 0 else None
+        return cache[vendor]
+
+    def keep_unit_records(self, root):
+        """Every unit record a run brought home (<root>/records/<class>/<unit>/<key12>.json) into the store."""
+        import shutil
+        kept = 0
+        for p in sorted(Path(root).glob("records/*/*/*.json")):
+            dest = self.unit_store() / p.relative_to(Path(root) / "records")
+            if not dest.exists():
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, dest)
+                kept += 1
+        return kept
 
     # ------------------------------------------------------------------ the box job
     def gate_identity_args(self, vendor):
         if not self.single():
             return []
-        return ["--identity-columns", ",".join(self.vendor_columns(vendor)), "--label-device", self.label_device(vendor)]
+        args = ["--identity-columns", ",".join(self.vendor_columns(vendor)), "--label-device", self.label_device(vendor)]
+        if not self.dry and self.units_plan(vendor) is not None:
+            args += ["--units-plan", str(self.units_plan_path(vendor))]
+        return args
+
+    def single_gate_ok(self, vendor, output):
+        """(ok, why) of the one box job under --identity-on-wheels: the identity summary of its columns, every owed
+        device-check unit passed (the rest reused), and the installed-runtime qualifier's report."""
+        import release_check_units as U
+        errors = ["identity: " + e for e in summary_errors(read_json(Path(output) / "identity" / SUMMARY),
+                                                           self.vendor_columns(vendor))]
+        plan = read_json(self.units_plan_path(vendor))
+        errors += ["units: " + e for e in U.summary_errors(read_json(Path(output) / "units" / U.SUMMARY), plan)]
+        runtime, cases = self.gate_runtime_error(vendor, output)
+        if runtime:
+            errors.append(runtime)
+        if errors:
+            return False, "; ".join(errors)
+        self.keep_unit_records(Path(output) / "units")
+        return True, "PASS: identity recorded once from these wheels; device-check units passed or reused; %s runtime cases" % cases
 
     def gate_identity_errors(self, vendor, output, correctness):
         """Under --identity-on-wheels: the box job's column record must be complete (or nothing owed) and its gate

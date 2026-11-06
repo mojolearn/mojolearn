@@ -116,7 +116,9 @@ def test_no_rental_when_the_vendor_owes_nothing(tmp_path, monkeypatch):
     assert any("amd: REUSED 0 / RUN 0 lane(s)" in l and "no rental" in l for l in r.lines)
     monkeypatch.setattr(r, "gate_ok", lambda vendor: (False, "no gate report"))
     monkeypatch.setattr(r, "lanes_owed", lambda col: ["knn"])
+    monkeypatch.setattr(r, "units_plan", lambda vendor: dict(reused=25, owed=["install-load"]))
     assert r.box_step_owed("gate-nvidia") == "no gate report"
+    assert any("units REUSED 25 / RUN 1" in l for l in r.lines)
 
 
 def test_nothing_publishes_before_the_admission_and_the_repack_ships(tmp_path):
@@ -178,3 +180,21 @@ def test_the_ledger_judges_identity_at_a_source_equal_admission_only(tmp_path, m
     monkeypatch.setenv(RIW.REFERENCE_ENV, "%s:%s" % (f, later))
     with pytest.raises(ValueError, match="not source-equal"):
         L._reference_revision(repo, f)
+
+
+def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monkeypatch):
+    import release_check_units as U
+    r = make(tmp_path, identity_on_wheels=True)
+    out = tmp_path / "gate"
+    plan = dict(schema=U.PLAN_SCHEMA, units=[dict(unit="install-load", decision="run"), dict(unit="adapters", decision="reuse")])
+    r.units_plan_path("amd").parent.mkdir(parents=True, exist_ok=True)
+    r.units_plan_path("amd").write_text(json.dumps(plan))
+    monkeypatch.setattr(r, "gate_runtime_error", lambda vendor, output: (None, 12))
+    ok, why = r.single_gate_ok("amd", out)
+    assert not ok and "no identity-wheels summary" in why and "no check-units summary" in why
+    summary(out / "identity", ["amd"])
+    (out / "units").mkdir(parents=True)
+    (out / "units" / U.SUMMARY).write_text(json.dumps(dict(schema=U.SCHEMA + "+summary", units={
+        "install-load": dict(decision="run", status="passed"), "adapters": dict(decision="reuse", status="reused")})))
+    ok, why = r.single_gate_ok("amd", out)
+    assert ok and "12 runtime cases" in why

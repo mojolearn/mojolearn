@@ -4316,6 +4316,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
             output = self.gate_out(vendor)
         except (StepFailed, OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
             return False, 'candidate artifacts are not ready: '+str(error)
+        if self.single():
+            # --identity-on-wheels: the one box job (identity + device-check units + runtime), not the gate stages
+            return self.single_gate_ok(vendor, output)
         doc = read_json(output / "gate-smoke.json")
         if not doc:
             return False, f"no gate report at {output / 'gate-smoke.json'}"
