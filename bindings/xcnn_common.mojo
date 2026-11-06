@@ -20,7 +20,7 @@ from bindings.sequential_inputs import sequential_input
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.xseq_native_common import xseq_f32
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_numpy_metadata import native_numpy_type
@@ -522,6 +522,12 @@ def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonOb
     var b = xcnn_builtins()
     if py_type(table) is not b.dict:
         raise Error("TypeError: CNN resident handles require an exact dictionary")
+    # p3-cnn-sequence-tsa: a handle table that passed the full check below and
+    # has not changed since (a dictionary watcher sees every insert, replace,
+    # delete and deallocation) is not walked again; a BasicBlock forward read
+    # it about ten times per call. Python 3.10/3.11 keep the walk.
+    if dict_keys_admitted(table):
+        return fields
     var names = py_call(b.list, table.keys())
     for i in range(len(names)):  # driver-loop: native resident buffer allocation metadata
         if py_type(names[i]) is not b.str:
@@ -531,6 +537,7 @@ def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonOb
         if (py_type(item) is not b.tuple or len(item) != 2 or py_type(item[0]) is not b.int
                 or py_type(item[1]) is not b.int or Int(py=item[0]) < 1 or Int(py=item[1]) < 1):
             raise Error("TypeError: CNN resident buffers require native handle/capacity pairs")
+    dict_keys_admit(table)
     return fields
 
 
