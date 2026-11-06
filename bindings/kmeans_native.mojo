@@ -28,6 +28,7 @@ from bindings.family_common import (
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
 from core.family_cast_impl import family_all_finite_f32
+from core.p3nc_scan import p3nc_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
@@ -406,7 +407,7 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     var x: PythonObject
     if admitted and _kmeans_admitted(source, context):
         x = source
-        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise _kmeans_nonfinite("X", "predict/transform")
         _ = x  # keep the Python object alive through the native scan above
     else:
@@ -435,7 +436,7 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         elif _kmeans_doorless(binding):
             # Host column (no resident door): the admission of a ready
             # array is its finite scan; the same refusal as the cast's.
-            if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))), k * d):
+            if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))), k * d):
                 raise Error("Input cluster_centers_ contains NaN or infinity")
             c = centers
             resolved = True

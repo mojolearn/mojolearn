@@ -44,6 +44,7 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_labels import _any_contiguous_address
 from bindings.neighbors_knn_native import knn_door
 from core.family_cast_impl import family_all_finite_f32
+from core.p3nc_scan import p3nc_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_freeze
 
 
@@ -327,7 +328,7 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var dense = _kde_dense(args[1], context)
     var x = dense[0]
     py_setitem(fields, "input_copied_", dense[1])
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+    if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         # DEVIATION 604 refuses a non-finite fit set at the first
         # score_samples; refusing it here as well names the input at the
         # call that supplied it, as scikit-learn's fit does.
