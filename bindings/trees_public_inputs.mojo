@@ -41,6 +41,7 @@ from bindings.classical_labels import (
     _text_list_labels as classical_text_list_labels,
 )
 from bindings.label_input_sources import labels_storage_source
+from bindings.perf3_label_doors_text import labels_all_exact_str
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -869,7 +870,7 @@ def trees_encode_labels(y: PythonObject, context: PythonObject) raises -> TreesL
     # str subclasses, which the native str reader would take): code points
     # read natively and sorted by the stable merge sort, the same classes
     # (first of each run) and codes as the ORDER RULE.
-    if _all_exact_str(flat, b):
+    if labels_all_exact_str(flat):
         var named = classical_text_list_labels(flat, context)
         if named:
             return _trees_of(named.value())
@@ -878,30 +879,6 @@ def trees_encode_labels(y: PythonObject, context: PythonObject) raises -> TreesL
 
 def _trees_of(labels: ClassicalLabels) -> TreesLabels:
     return TreesLabels(labels.classes, labels.codes, labels.n)
-
-
-def _all_exact_str(flat: PythonObject, b: PythonObject) raises -> Bool:
-    """True for a nonempty list whose every label is exactly a str, read by
-    class pointer through the list's C storage (no label boxed into a Python
-    call), stopping at the first other label."""
-    var n = len(flat)
-    if n == 0 or py_type(flat) is not b.list:
-        return False
-    ref cpy = Python().cpython()
-    var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
-    var str_type = b.str
-    for i in range(n):  # driver-loop: exact str label classes by pointer, one C read per label
-        var raw = get_item(flat._obj_ptr, i)
-        if not raw:
-            raise cpy.unsafe_get_error()
-        var item_type = cpy.PyObject_Type(raw)
-        var same = item_type == str_type._obj_ptr
-        cpy.Py_DecRef(item_type)
-        if not same:
-            return False
-    _ = flat  # keep the list alive through the borrowed item reads above
-    _ = str_type
-    return True
 
 
 def trees_label_kind(var classes: PythonObject, context: PythonObject) raises -> String:
