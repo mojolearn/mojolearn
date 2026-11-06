@@ -346,13 +346,18 @@ class IdentityOnWheels:
                                                            self.vendor_columns(vendor))]
         plan = read_json(self.units_plan_path(vendor))
         errors += ["units: " + e for e in U.summary_errors(read_json(Path(output) / "units" / U.SUMMARY), plan)]
+        # THE ONE-GPU MULTI-DEVICE GATE, UNCONDITIONAL (Andrew 2026-11-06): every box job runs
+        # tools/logical_shard_identity.py on these wheel bytes whatever changed; no reuse or selector waives it.
+        import logical_shard_identity as LS
+        errors += ["shardcheck: " + e for e in LS.summary_errors(read_json(Path(output) / "shardcheck" / LS.SUMMARY))]
         runtime, cases = self.gate_runtime_error(vendor, output)
         if runtime:
             errors.append(runtime)
         if errors:
             return False, "; ".join(errors)
         self.keep_unit_records(Path(output) / "units")
-        return True, "PASS: identity recorded once from these wheels; device-check units passed or reused; %s runtime cases" % cases
+        return True, ("PASS: identity recorded once from these wheels; device-check units passed or reused; "
+                      "logical-shard gate MATCH; %s runtime cases" % cases)
 
     def gate_identity_errors(self, vendor, output, correctness):
         """Under --identity-on-wheels: the box job's column record must be complete (or nothing owed) and its gate

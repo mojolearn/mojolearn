@@ -91,7 +91,9 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
               # --identity-columns (release.py --identity-on-wheels): the one identity column record of these wheels
               "identity",
               # --units-plan: the device-check unit records and their summary (tools/release_check_units.py)
-              "units")
+              "units",
+              # the one-GPU multi-device gate (tools/logical_shard_identity.py), run unconditionally by every job
+              "shardcheck")
 #: THE GATE RUNNER OVERLAY: the tooling checkout's copy of each of these files whose bytes differ from the
 #: source commit's ships with the job (route-overlay.tgz, tools/release_tooling.py write_overlay) and is
 #: applied over the source tree AFTER the autograd build (the build and its reuse proof read the clean tree)
