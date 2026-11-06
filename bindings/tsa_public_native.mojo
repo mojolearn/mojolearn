@@ -136,6 +136,15 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
         var context = call[3]
+        if operation == "hw_attribute":
+            # p3-cnn-sequence-tsa: `__getattr__` sends every missing name here
+            # (hasattr / copy / pickle probes); a name that is not one of the
+            # three lazy components is refused before any other work.
+            var probe = call[2][0]
+            if py_type(probe) is py_type(PythonObject("")):
+                var text = String(py=probe)
+                if text != "level_" and text != "trend_" and text != "season_":
+                    raise Error("AttributeError: ExponentialSmoothing has no such attribute")
         classical_connect_numpy(context)
         if operation == "kpss_test":
             return tsa_kpss(call[2], context).steal_data()
