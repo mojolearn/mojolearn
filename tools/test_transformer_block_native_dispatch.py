@@ -20,7 +20,12 @@ def test_exact_fresh_and_backward_numerical_owners_are_preserved():
                  '_transformer_run_session_backward(owner[], a,',
                  '_transformer_backward_run(a,'):
         assert call in NATIVE
-    assert NATIVE.count('owner[].clear()') == 2
+    # Fresh and backward session failures clear the owner (other ops clear too:
+    # close and the int15 path, so pin the two sites rather than a total count).
+    fresh = NATIVE.split('_transformer_run_session[True](owner[], expanded,', 1)[1].split('_transformer_run[True](expanded,', 1)[0]
+    assert 'except problem:\n                owner[].clear()\n                raise problem' in fresh
+    backward = NATIVE.split('_transformer_run_session_backward(owner[], a,', 1)[1].split('_transformer_backward_run(a,', 1)[0]
+    assert 'except problem:\n                owner[].clear()\n                raise problem' in backward
     assert 'p[6], p[1], 0, p[7], opts)' in NATIVE
     assert 'owner[].busy or owner[].closed' in NATIVE
     assert 'if not owner[].busy or owner[].closed:' in NATIVE
@@ -31,8 +36,8 @@ def test_common_descriptor_table_not_new_provider_or_extension_unwrap():
     assert 'native_descriptor_report(problem, context, sink)' in NATIVE
     body = PROVIDER.split('def neural_descriptor_reserved_execute(')[1].split('def neural_descriptor_info(')[0]
     assert 'NeuralDescriptorProvider' in body
-    assert body.index('native_descriptor_call(owner[].entry, reserve,') < body.index('with GILReleased(Python())')
-    assert body.count('native_descriptor_call(owner[].entry, release,') == 2
+    assert body.index('native_descriptor_call_spans(owner[].entry, reserve,') < body.index('with GILReleased(Python())')
+    assert body.count('native_descriptor_call_spans(owner[].entry, release,') == 2
     assert '_ = session_owner' in body and '_ = provider' in body
     for forbidden in ('getattr(', '__call__', 'PyObject_Call', 'unsafe_get_as_pointer'):
         assert forbidden not in body
@@ -46,7 +51,7 @@ def test_public_fresh_session_ephemeral_and_backward_are_hooked():
     # All old supported entries remain under the off/default branches.
     assert 'e["transformer_session_forward_fresh"]' in PUBLIC
     assert 'e["transformer_forward_fresh"]' in PUBLIC
-    assert '_native_function(entries, "transformer_session_backward")' in PUBLIC
+    assert '_native_function(mods, entries, "transformer_session_backward")' in PUBLIC
 
 
 def test_connection_carries_named_factory_and_checked_session_admission():
@@ -57,4 +62,5 @@ def test_connection_carries_named_factory_and_checked_session_admission():
     assert 'NATIVE_TRANSFORMER_BLOCK_API.get_or_create_ptr()' in shell
     causal = (ROOT / 'bindings/causal_lm_public.mojo').read_text()
     assert 'py_setitem(entries, "native_block_operations", block_provider)' in causal
-    assert 'code == 1 and vendor != "cpu"' in PUBLIC
+    # The provider connects in identical mode on every vendor, CPU included since b1c97898f5.
+    assert PUBLIC.count('if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":') == 2
