@@ -36,13 +36,20 @@ def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
     var cls = py_type(source)
     var fast = False
     var ndarray = py_get(context, "ndarray")
+    # A rank-1 <f4/<f8 ndarray or Array takes the same door: lda_native_labels
+    # checks NaN/infinity and integrality from its buffer in one native pass,
+    # and trees_encode_labels encodes it with one prepare_targets call into
+    # float64 classes, the same Python-float classes and codes the snapshot's
+    # float list encodes to, so no bits change.
     if ndarray is not None and cls is ndarray:
         var kind = String(source.dtype.kind)
-        fast = Int(py=source.ndim) == 1 and (kind == "i" or kind == "u")
+        var typestr = String(source.dtype.str)
+        fast = Int(py=source.ndim) == 1 and (kind == "i" or kind == "u" or typestr == "<f4" or typestr == "<f8")
     elif cls is context["array_class"]:
         var typestr = String(source.dtype)
         fast = Int(py=source.ndim) == 1 and (typestr.startswith("<i") or typestr.startswith("<u")
-                                             or typestr.startswith("|i") or typestr.startswith("|u"))
+                                             or typestr.startswith("|i") or typestr.startswith("|u")
+                                             or typestr == "<f4" or typestr == "<f8")
     if not fast:
         return _gp_classifier_target(source, rows, name, context)
     lda_native_labels(source, context, True, name)
