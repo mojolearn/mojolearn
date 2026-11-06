@@ -67,7 +67,12 @@ def _xt(fields: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _x(table: PythonObject, name: String) raises -> PythonObject:
-    return trees_need(table, name, "mojolearn: the x_trees binding has no " + name, "ImportError")
+    # The refusal text is built only on a miss (it was concatenated before
+    # every successful lookup); same wording as trees_need's.
+    var entry = py_get(table, PythonObject(name))
+    if entry is None:
+        raise Error("ImportError: mojolearn: the x_trees binding has no " + name)
+    return entry
 
 
 def _seed(random_state: PythonObject, context: PythonObject) raises -> Int:
@@ -277,12 +282,33 @@ def _argmax(xt: PythonObject, acc: PythonObject, n: Int, k: Int, context: Python
     return out
 
 
+comptime _SUB_COLS_SLOT = "trees_boost_sub_cols_v1"
+
+
 def _sub_cols(member: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_trees_sub_cols`: a member's classes (the ensemble's codes) as int32."""
+    """`_trees_sub_cols`: a member's classes (the ensemble's codes) as int32.
+
+    Built once per member classes (p3-trees): every predict rebuilt it per
+    member (k `int` calls and a new Array). The record holds the classes
+    object, its length and items by identity; any assignment or in-place
+    edit of an exact list/tuple `classes_` changes the key and rebuilds.
+    Other `classes_` types (an ndarray) are rebuilt on every call as before."""
     var b = trees_builtins()
     var classes = py_fields(member)["classes_"]
+    var exact = py_type(classes) is b.list or py_type(classes) is b.tuple
+    var key = Python.list(classes)
+    if exact:
+        _ = py_call(key.append, PythonObject(len(classes)))
+        for i in range(len(classes)):  # driver-loop: over the member's k classes (identity record)
+            _ = py_call(key.append, classes[i])
+        var held = trees_side_get(_SUB_COLS_SLOT, member)
+        if held is not None and trees_key_same(held[0], key):
+            return held[1]
     var store = py_call(context["array_type"], PythonObject("i"), py_call(b.map, b.int, classes))
-    return classical_wrap_array(store, Python.tuple(len(classes)), "<i4", "C", context)
+    var cols = classical_wrap_array(store, Python.tuple(len(classes)), "<i4", "C", context)
+    if exact:
+        _ = trees_side_put(_SUB_COLS_SLOT, member, Python.tuple(key, cols))
+    return cols
 
 
 # ---------------------------------------------------------------- members
@@ -733,9 +759,14 @@ def _all_columns(cols: PythonObject, d: Int) raises -> Bool:
     """`cols.tolist() == list(range(d))`."""
     if len(cols) != d:
         return False
+    # The address is read once (it was re-read through the Python attribute
+    # for every column).
+    var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(cols))
     for j in range(d):  # driver-loop: over the member's feature subset (columns-sized)
-        if _i32_word(cols, j) != j:
+        if Int(words[j]) != j:
+            _ = cols  # keep the Python object alive through the reads above
             return False
+    _ = cols  # keep the Python object alive through the reads above
     return True
 
 
