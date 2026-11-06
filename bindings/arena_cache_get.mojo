@@ -5,6 +5,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.arena_cache_stats import _attribute, _mapping, _string_keys, _admit_entry_keys
 from bindings.optimizer_public_words import stash_python_error
+from bindings.cpython_table import cpython_table
+from bindings.p3_array_arena_records import P3_CACHE_KEY_LAYOUT, p3_layout_admitted, p3_layout_admit
 from bindings.training_scalar_native import training_scalar_warning, training_void_bytes
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
 from bindings.native_scalar_decode import native_scalar_buffer
@@ -325,15 +327,19 @@ def _integer(value: PythonObject, context: PythonObject, depth: Int = 0) raises 
 def arena_cache_key(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     # The old method resolved self._key. Its ordinary fixed implementation is
     # now native; a subclass callback must be refused rather than ignored.
-    var ancestry = py_call(context["cache_type_mro"],py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: admit the existing cache-key contract before reading caller metadata
-        var mapping = _mapping(ancestry[i],context)
-        if py_contains(mapping,"_key"):
-            if mapping["_key"] is not context["cache_key_descriptor"]:
-                raise Error("TypeError: DeviceCache cannot invoke a custom key callback")
-            break
-    ref cpy = Python().cpython()
-    var fields_pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr,PyObjectPtr())
+    # p3-array-arena: the class's key contract is admitted once per class
+    # state (type watcher), not walked on every key read.
+    var model_class = py_type(model)
+    if not p3_layout_admitted(P3_CACHE_KEY_LAYOUT, model_class, context["cache_key_descriptor"]):
+        var ancestry = py_call(context["cache_type_mro"],model_class)
+        for i in range(len(ancestry)):  # driver-loop: admit the existing cache-key contract before reading caller metadata
+            var mapping = _mapping(ancestry[i],context)
+            if py_contains(mapping,"_key"):
+                if mapping["_key"] is not context["cache_key_descriptor"]:
+                    raise Error("TypeError: DeviceCache cannot invoke a custom key callback")
+                break
+        p3_layout_admit(P3_CACHE_KEY_LAYOUT, model_class, context["cache_key_descriptor"])
+    var fields_pointer = cpython_table()[].PyObject_GenericGetDict(model._obj_ptr,PyObjectPtr())
     if not fields_pointer:
         var failure = stash_python_error()
         raise failure^
