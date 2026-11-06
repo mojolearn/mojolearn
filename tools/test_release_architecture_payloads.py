@@ -43,18 +43,18 @@ def test_payloads_cannot_publish_before_own_architecture_checks():
             assert 'gpu-column-' + column in release.NEEDS['publish-' + vendor]
         assert 'linux-joint-diff' not in release.NEEDS['publish-' + vendor]   # deleted 2026-10-10: identity runs ONCE
     # 2026-10-20 order: mojolearn-core FIRST (after both GPU columns settle),
-    # then PTX and AMD, then NVIDIA, then the Linux mojolearn LAST
+    # then the vendors (the NVIDIA wheel carries its PTX set since 2026-11-05), then the Linux mojolearn LAST
     # e1f7f8e24: every publish also waits for both box release gates
     gates = ['gate-nvidia', 'gate-amd']
     assert release.NEEDS['publish-core-linux'] == ['linux-pack'] + gates
     assert all(set(gates) <= set(n) for s, n in release.NEEDS.items() if s.startswith('publish-'))
     assert {'gpu-column-nvidia', 'gpu-column-amd'} <= set(release.AFTER['publish-core-linux'])
-    assert 'publish-core-linux' in release.NEEDS['publish-nvidia-ptx']
+    assert 'publish-nvidia-ptx' not in release.NEEDS
+    assert 'publish-core-linux' in release.NEEDS['publish-nvidia']
     assert 'publish-core-linux' in release.NEEDS['publish-amd']
-    assert 'publish-nvidia-ptx' in release.NEEDS['publish-nvidia']
     assert set(release.NEEDS['publish-meta-linux']) == {'publish-core-linux', 'publish-nvidia', 'publish-amd', *gates}
     assert not any(s in release.NEEDS['publish-core-linux']
-                   for s in ('publish-nvidia', 'publish-nvidia-ptx', 'publish-amd', 'publish-meta-linux'))
+                   for s in ('publish-nvidia', 'publish-amd', 'publish-meta-linux'))
     assert 'linux-joint-diff' not in release.AFTER
 
 
