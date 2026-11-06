@@ -6,6 +6,7 @@ copies, no arithmetic on data."""
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.py_balanced import py_call
 from x_cluster.out import ClusterOut
 
 
@@ -35,8 +36,10 @@ def _py_array(arr: PythonObject, code: StaticString, src: Pointer[UInt8, _], nby
     float32 itself, widened exactly on read, an 'i' item the int32. The
     element-by-element list it replaces cost seconds on an n^2 output
     (AffinityPropagation's affinity_matrix_: 25M PythonObject appends)."""
-    var zero = native_loaded_module("builtins").bytes(nbytes)
-    var out = arr.array(PythonObject(code), zero)
+    # p3-neighbors-cluster: ONE allocation of the final array (a one-item
+    # array repeated), not a zero bytes object copied into a second buffer.
+    var one = py_call(arr.array, PythonObject(code), Python.list(PythonObject(0)))
+    var out = py_call(one.__mul__, PythonObject(nbytes // Int(py=one.itemsize)))
     if nbytes > 0:
         var addr = Int(py=out.buffer_info()[0])
         unsafe_memcpy(dest=MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=addr), src=src, count=nbytes)

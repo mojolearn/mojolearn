@@ -44,6 +44,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_labels import _any_contiguous_address
 from bindings.neighbors_knn_native import knn_door
 from core.family_cast_impl import family_all_finite_f32
+from core.p3nc_scan import p3nc_all_finite_f32
+from bindings.p3nc_fitted_freeze import fitted_freeze
 
 
 comptime _KDE_STATE_SLOT = "neighbors_kde_state_v1"
@@ -326,7 +328,7 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var dense = _kde_dense(args[1], context)
     var x = dense[0]
     py_setitem(fields, "input_copied_", dense[1])
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+    if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         # DEVIATION 604 refuses a non-finite fit set at the first
         # score_samples; refusing it here as well names the input at the
         # call that supplied it, as scikit-learn's fit does.
@@ -342,6 +344,15 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if immutable:
         x = _kde_copy(x, context)
         py_setitem(fields, "input_copied_", PythonObject(True))
+    elif not _kde_truth(dense[1]):
+        # p3-neighbors-cluster (caller-aliased inputs): the conversion handed
+        # back the caller's own float32 buffer, and the resident fit handle
+        # is keyed by its address. Fit keeps an owned snapshot instead, so a
+        # later in-place write into the caller's X never reaches a score.
+        # `input_copied_` keeps reporting what the conversion did.
+        x = _kde_copy(x, context)
+    # The fitted set is read-only (bindings/p3nc_fitted_freeze.mojo).
+    _ = fitted_freeze(x, context)
     py_setitem(fields, "_x", x)
     py_setitem(fields, "n_features_in_", x.shape[1])
     py_setitem(fields, "n_samples_fit_", x.shape[0])
@@ -350,8 +361,9 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         # scikit-learn's _check_sample_weight (shape, finite, >= 0, not all
         # zero, its wording) by the base binding's reductions
         var w = family_sample_weight(sample_weight, Int(py=x.shape[0]), False, context)
-        if immutable:
-            w = _kde_copy(w, context)
+        # Always an owned snapshot (the resident key holds its address).
+        w = _kde_copy(w, context)
+        _ = fitted_freeze(w, context)
         py_setitem(fields, "_w", w)
     else:
         py_setitem(fields, "_w", PythonObject(None))

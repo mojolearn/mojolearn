@@ -28,7 +28,8 @@ from bindings.family_common import (
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
 from core.family_cast_impl import family_all_finite_f32
-from core.sha256 import Sha256
+from core.p3nc_scan import p3nc_all_finite_f32
+from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
@@ -41,6 +42,8 @@ def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonO
     has no such door (the CPU host binding refuses an absent name with
     ImportError, a module with AttributeError: both mean "no residency
     here", and the pending exception is discarded)."""
+    if _kmeans_door_absent(binding, name):
+        return PythonObject(None)
     try:
         return family_entry(binding, name, context)
     except error:
@@ -49,6 +52,7 @@ def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonO
         _ = optimizer_python_error(error)
         ref cpy = Python().cpython()
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        _kmeans_mark_absent(binding, name)
         return PythonObject(None)
 
 
@@ -75,40 +79,44 @@ struct _KMeansDoorless(Defaultable, Movable):
     # binding): probing them raised and cleared an ImportError on every
     # query. Strong references, so an address is never reused while listed;
     # the binding modules live for the process anyway.
+    # p3-neighbors-cluster: (binding, door name) pairs, so every optional
+    # door (`kmeans_fit_transform` too, probed on every fit_transform) is
+    # probed once per binding; the layout changed, so the global's name did.
     var bindings: List[PythonObject]
+    var names: List[String]
 
     def __init__(out self):
         self.bindings = List[PythonObject]()
+        self.names = List[String]()
 
 
-comptime _KMEANS_DOORLESS = _Global[StorageType=_KMeansDoorless, name="MojolearnKMeansDoorlessV1",
+comptime _KMEANS_DOORLESS = _Global[StorageType=_KMeansDoorless, name="MojolearnKMeansDoorlessV2",
                                     init_fn=_KMeansDoorless.__init__]
 
 
-def _kmeans_doorless(binding: PythonObject) raises -> Bool:
+def _kmeans_door_absent(binding: PythonObject, name: String) raises -> Bool:
     var g = _KMEANS_DOORLESS.get_or_create_ptr()
-    for i in range(len(g[].bindings)):  # small-loop(bindings: the few connected KMeans bindings without a resident door)
-        if g[].bindings[i] is binding:
+    for i in range(len(g[].bindings)):  # small-loop(bindings: the few connected KMeans bindings without a door)
+        if g[].bindings[i] is binding and g[].names[i] == name:
             return True
     return False
 
 
-def _kmeans_centers_hash(address: Int, count: Int) -> Int:
-    """The first 63 bits of the SHA-256 (core/sha256.mojo, the identity
-    digest's hash) of the `count` float32 centroid words at host `address`:
-    one native pass over host memory, no upload, no Python. The caller keeps
-    the words alive."""
-    var hasher = Sha256()
-    hasher.update(address, count * 4)
-    var words = hasher.digest_words()
-    # 63 bits, so the word is a non-negative Int and a Python int both ways.
-    return Int(((UInt64(words[0]) & UInt64(0x7FFFFFFF)) << 32) | UInt64(words[1]))
+def _kmeans_mark_absent(binding: PythonObject, name: String) raises:
+    var g = _KMEANS_DOORLESS.get_or_create_ptr()
+    if len(g[].bindings) < 64:
+        g[].bindings.append(binding)
+        g[].names.append(name)
+
+
+def _kmeans_doorless(binding: PythonObject) raises -> Bool:
+    return _kmeans_door_absent(binding, "kmeans_centers_prepare")
 
 
 def _kmeans_centers_ready(centers: PythonObject, context: PythonObject) raises -> Bool:
     """`cluster_centers_` is an exact Array or ndarray, 2-D, non-empty,
     float32 in C order: `as_f32_c` would return its own storage, so its
-    words can be read (hashed, scanned) in place."""
+    words can be read (scanned) in place."""
     var cls = py_type(centers)
     if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
         return False
@@ -119,13 +127,13 @@ def _kmeans_centers_ready(centers: PythonObject, context: PythonObject) raises -
 
 def _kmeans_held(fields: PythonObject, binding: PythonObject, centers: PythonObject, k: Int,
                  d: Int) raises -> PythonObject:
-    """The held resident record `((centers, k, d, hash), handle, binding)`
-    when it was minted from this very `cluster_centers_` object (the record
-    keeps a reference to it, so it cannot be replaced by a new array at the
-    same address) by this binding at this shape, else None. The caller
-    compares `hash` (the uploaded words' `_kmeans_centers_hash`) with the
-    centroids' current words before it reuses the handle: an in-place edit
-    of `cluster_centers_` is never served from the stale device copy."""
+    """The held resident record `((centers, k, d), handle, binding)` when it
+    was minted from this very `cluster_centers_` object (the record keeps a
+    reference to it, so it cannot be replaced by a new array at the same
+    address) by this binding at this shape, else None. A record is minted
+    only for a read-only mojolearn Array (p3-neighbors-cluster, replacing the
+    per-query SHA-256 of the centroid words): an in-place edit raises
+    NumPy's read-only error instead of diverging from the device copy."""
     var b = native_loaded_module("builtins")
     var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
@@ -143,23 +151,26 @@ def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: Python
     """The handle of the device copy of the fitted centroids `c` (the
     admitted float32 words of `cluster_centers_`), uploaded at the first
     query after a fit and reused while `cluster_centers_` is the same object,
-    the binding is the one that minted it and the words hash the same
+    the binding is the one that minted it (the object is read-only)
     (`_kmeans_held`); None where the binding has no resident door. The
     holder dictionary changes, never the model's `__dict__` keys after a
     fit."""
     var fields = py_fields(model)
     if _kmeans_doorless(binding):
         return PythonObject(None)
-    var digest = _kmeans_centers_hash(Int(py=classical_address(c)), k * d)
-    _ = c  # keep the Python object alive through the native hash above
     var held = _kmeans_held(fields, binding, centers, k, d)
-    if held is not None and Int(py=held[0][3]) == digest:
+    if held is not None:
         return held[1]
+    # p3-neighbors-cluster (hazard class A): the record is keyed by the
+    # identity of `cluster_centers_`, never its values, so only storage that
+    # can be made read-only is held on the device; any other (a
+    # caller-assigned ndarray) takes the per-call upload, which reads the
+    # current words every query.
+    if not fitted_is_freezable(centers, context):
+        return PythonObject(None)
+    _ = fitted_freeze(centers, context)
     var prepare = _kmeans_optional_entry(binding, "kmeans_centers_prepare", context)
     if prepare is None:
-        var g = _KMEANS_DOORLESS.get_or_create_ptr()
-        if len(g[].bindings) < 64:
-            g[].bindings.append(binding)
         return PythonObject(None)
     var b = native_loaded_module("builtins")
     var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
@@ -172,10 +183,9 @@ def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: Python
     # The minting binding travels with the handle: the release (here, and
     # the native finalizer when the instance is dropped) is its own
     # `kmeans_centers_release`.
-    # The stamp's words hash rides in the key tuple: the native finalizer
-    # (bindings/host_archive_lifetime.mojo) reads a 3-tuple (key, handle,
-    # binding).
-    py_setitem(holder, "index", Python.tuple(Python.tuple(centers, PythonObject(k), PythonObject(d), PythonObject(digest)),
+    # The native finalizer (bindings/host_archive_lifetime.mojo) reads a
+    # 3-tuple (key, handle, binding).
+    py_setitem(holder, "index", Python.tuple(Python.tuple(centers, PythonObject(k), PythonObject(d)),
                                              handle, binding))
     return handle
 
@@ -341,6 +351,10 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = weights  # keep the Python object alive through the native call above
     _ = x^
     _ = weights^
+    # p3-neighbors-cluster: the fitted centroids are read-only from fit on,
+    # so no NumPy view of them taken before the first query is writeable
+    # (the resident device copy is keyed by identity).
+    _ = fitted_freeze(centers, context)
     py_setitem(fields, "cluster_centers_", centers)
     py_setitem(fields, "labels_", labels)
     py_setitem(fields, "inertia_", result[0])
@@ -380,8 +394,8 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     made, so the refusal fires for exactly the same inputs. The fitted
     centroids are admitted only when a device copy is minted or the binding
     has no resident door: a resident hit (same `cluster_centers_` object,
-    binding and shape, and the same words by a native hash of the host
-    bytes) reuses the copy without uploading them. On the host column a
+    binding and shape; a record is held only for a read-only Array)
+    reuses the copy without uploading them. On the host column a
     ready float32 C-order `cluster_centers_` is read in place after one
     native finite scan."""
     classical_connect_numpy(context)
@@ -393,7 +407,7 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     var x: PythonObject
     if admitted and _kmeans_admitted(source, context):
         x = source
-        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise _kmeans_nonfinite("X", "predict/transform")
         _ = x  # keep the Python object alive through the native scan above
     else:
@@ -411,17 +425,18 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     if _kmeans_centers_ready(centers, context):
         # Perf + correctness (lane pass2-cluster-nbr, hazard H3): the
         # centroids' own float32 words are read in place. A resident hit
-        # needs the same object, binding, shape AND the same words (a native
-        # hash of the host bytes, no upload): an in-place edit, NaN included,
-        # misses and takes the admission and a fresh upload below.
+        # needs the same object, binding and shape; records are held only
+        # for a read-only Array (p3-neighbors-cluster, replacing the per-query
+        # SHA-256), so an in-place edit raises instead of serving stale words.
         var held = _kmeans_held(fields, binding, centers, k, d)
-        if held is not None and Int(py=held[0][3]) == _kmeans_centers_hash(Int(py=classical_address(centers)), k * d):
+        if held is not None:
+            # Minted only for this read-only Array (`_kmeans_resident`).
             handle = held[1]
             resolved = True
         elif _kmeans_doorless(binding):
             # Host column (no resident door): the admission of a ready
             # array is its finite scan; the same refusal as the cast's.
-            if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))), k * d):
+            if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))), k * d):
                 raise Error("Input cluster_centers_ contains NaN or infinity")
             c = centers
             resolved = True

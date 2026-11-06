@@ -28,6 +28,7 @@ from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, _i32
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.parallel_public_result import parallel_public_result
 from bindings.scaler_lifecycle_native import _outside
+from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 
 
 def _query_kind(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -221,6 +222,8 @@ def _ivf_materialize(fields: PythonObject, context: PythonObject) raises:
     var dim = Int(py=fields["n_features_in_"])
     var data = family_array(Python.tuple(n, dim), "<f4", context)
     _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1], classical_address(data), PythonObject(n * dim))
+    # The resident handle keeps this data on the device (hazard class A).
+    _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
     _ = py_call(fields.pop, "_device_list_data")
     # Export changes only the device-data marker. Preserve every other saved
@@ -436,6 +439,8 @@ def _ivf_snapshot_materialize(fields: PythonObject, mut snapshots: List[ArrayMet
     var output = array_metadata_once(data, [n, dim], "list_data_", context)
     _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1],
                     PythonObject(output.source.addr), PythonObject(n * dim))
+    # The resident handle keeps this data on the device (hazard class A).
+    _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
     _ = py_call(fields.pop, "_device_list_data")
     # Only replace the device marker, preserving stale keys for other arrays
@@ -471,6 +476,15 @@ def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject,
         return cached[1]
     _ivf_snapshot_materialize(fields, snapshots, fitted, context)
     _ann_release(fields, "ivf_flat_index_release")
+    # p3-neighbors-cluster (hazard class A): the resident key holds identity,
+    # address and shape, never values, so the fitted arrays are made read-only
+    # when the device copy is taken (bindings/p3nc_fitted_freeze.mojo). A
+    # caller-assigned array that cannot be frozen keeps the per-call search.
+    for i in range(len(snapshots)):  # small-loop(five captured fitted arrays)
+        if not fitted_is_freezable(snapshots[i].keep, context):
+            return PythonObject(None)
+    for i in range(len(snapshots)):  # small-loop(five captured fitted arrays)
+        _ = fitted_freeze(snapshots[i].keep, context)
     var handle = family_call(prepare, _ivf_snapshot_addresses(snapshots), Python.list(fitted[0], fitted[1], fitted[2], fitted[3], 0))
     py_setitem(fields, "_resident", Python.tuple(_ivf_snapshot_key(fields, binding, snapshots, fitted), handle, binding))
     return handle
@@ -545,6 +559,11 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
     _ = old_data
     py_setitem(fields, "list_offsets_", offsets)
     py_setitem(fields, "list_indices_", indices)
+    # p3-neighbors-cluster: the extended index arrays are read-only (the
+    # resident device copy is keyed by identity).
+    _ = fitted_freeze(offsets, context)
+    _ = fitted_freeze(indices, context)
+    _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
     py_setitem(fields, "n_rows_", PythonObject(total))
     py_setitem(fields, "extend_labels_", labels)

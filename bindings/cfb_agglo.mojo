@@ -10,6 +10,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
 from core.family_cast_impl import family_all_finite_f32
+from core.p3nc_scan import p3nc_all_finite_f32
 from core.cfb_impl import cfb_any_positive_i32
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_entry, family_array, family_as_f32,
@@ -348,7 +349,10 @@ def _agglo_predict(fields: PythonObject, settings: PythonObject, binding: Python
     var labels_snapshot = array_metadata_once(labels, labels_shape^, "labels_", context)
     if labels_snapshot.source.kind != 1 or labels_snapshot.source.itemsize != 4 or not labels_snapshot.c_order or labels_snapshot.count != refs.shape[0]:
         raise Error("TypeError: hierarchy fitted labels require one native contiguous int32 value per reference row")
-    var result = hierarchy_reference_labels(fields, binding, refs.keep, labels, refs.source.addr, labels_snapshot.source.addr,
+    # p3-neighbors-cluster: the resident record is keyed by the STORED field
+    # objects (`_fit_X`, `labels_`), the ones fit minted it for; the per-call
+    # snapshot and view objects were new every call, so it never hit.
+    var result = hierarchy_reference_labels(fields, binding, refs_source, fields["labels_"], refs.source.addr, labels_snapshot.source.addr,
                                            query.source.addr, refs.shape[0], query.shape[0], query.shape[1], context)
     _ = refs^
     _ = labels_snapshot^

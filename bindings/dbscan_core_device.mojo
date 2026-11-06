@@ -3,14 +3,18 @@
 # dbscan/core_device_impl.mojo (2026-10-21).
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.py_balanced import py_call
 from max.gpu.host import DeviceContext
 from dbscan.core_device_impl import dbscan_core_count, dbscan_core_gather
 
 
 def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> PythonObject:
     """An `array.array(code)` of `nbytes` zero bytes."""
-    var zero = native_loaded_module("builtins").bytes(nbytes)
-    return arr.array(PythonObject(code), zero)
+    # p3-neighbors-cluster: ONE allocation of the final array (a one-item
+    # array repeated), not a zero bytes object copied into a second buffer.
+    var one = py_call(arr.array, PythonObject(code), Python.list(PythonObject(0)))
+    var item = Int(py=one.itemsize)
+    return py_call(one.__mul__, PythonObject(nbytes // item))
 
 
 def _array_addr(a: PythonObject) raises -> Int:

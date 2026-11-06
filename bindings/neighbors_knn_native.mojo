@@ -143,10 +143,22 @@ def _knn_list_items_same(value: PythonObject, snapshot: PythonObject) raises -> 
     return True
 
 
+def _knn_scalar_item(b: PythonObject, item: PythonObject) raises -> Bool:
+    var cls = py_type(item)
+    return cls is b.str or cls is b.int or cls is b.float or cls is b.bool
+
+
 def _knn_lists_record(fields: PythonObject, lists: PythonObject) raises -> PythonObject:
     """The admitted class lists' record: the token, then (list, tuple of its
-    items) per name, or None when a list holds anything but exact immutable
-    scalars (str, int, float, bool), whose in-place edits identity cannot see."""
+    items, tuple of nested item tuples) per name, or None when a list holds
+    anything but exact immutable scalars (str, int, float, bool) or exact
+    lists of them, whose in-place edits identity cannot see.
+
+    p3-neighbors-cluster: a classifier's `_classes_list` is a list of the
+    per-output class lists, so the record now reaches one level down (the
+    nested tuple holds, per item, None for a scalar or the tuple of the inner
+    list's items); before, it was never stored for a classifier and every
+    predict re-admitted the class lists."""
     var b = _b()
     var record = Python.list(_admitted_token())
     for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
@@ -154,32 +166,54 @@ def _knn_lists_record(fields: PythonObject, lists: PythonObject) raises -> Pytho
         if value is None:
             _ = py_call(record.append, PythonObject(None))
             _ = py_call(record.append, PythonObject(None))
+            _ = py_call(record.append, PythonObject(None))
             continue
         if py_type(value) is not b.list:
             return PythonObject(None)
         var snapshot = py_call(b.tuple, value)
+        var nested = Python.list()
         for j in range(len(snapshot)):  # driver-loop: over class-list items, once per recorded fit state
-            var cls = py_type(snapshot[j])
-            if cls is not b.str and cls is not b.int and cls is not b.float and cls is not b.bool:
+            var item = snapshot[j]
+            if _knn_scalar_item(b, item):
+                _ = py_call(nested.append, PythonObject(None))
+                continue
+            if py_type(item) is not b.list:
                 return PythonObject(None)
+            var inner = py_call(b.tuple, item)
+            for t in range(len(inner)):  # driver-loop: over one output's class items, once per recorded fit state
+                if not _knn_scalar_item(b, inner[t]):
+                    return PythonObject(None)
+            _ = py_call(nested.append, inner)
         _ = py_call(record.append, value)
         _ = py_call(record.append, snapshot)
+        _ = py_call(record.append, py_call(b.tuple, nested))
     return py_call(b.tuple, record)
 
 
 def _knn_lists_unchanged(fields: PythonObject, lists: PythonObject, stored: PythonObject) raises -> Bool:
     """True when `stored` is a record of the class lists `fields` holds now:
-    the same list objects holding the same item objects."""
-    if stored is None or py_type(stored) is not _b().tuple or len(stored) != 1 + 2 * len(lists):
+    the same list objects holding the same item objects (one level of nested
+    lists included)."""
+    if stored is None or py_type(stored) is not _b().tuple or len(stored) != 1 + 3 * len(lists):
         return False
     if stored[0] is not _admitted_token():
         return False
     for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
         var value = py_get(fields, lists[i])
-        if stored[1 + 2 * i] is not value:
+        if stored[1 + 3 * i] is not value:
             return False
-        if value is not None and not _knn_list_items_same(value, stored[2 + 2 * i]):
+        if value is None:
+            continue
+        var snapshot = stored[2 + 3 * i]
+        if not _knn_list_items_same(value, snapshot):
             return False
+        var nested = stored[3 + 3 * i]
+        for j in range(len(nested)):  # driver-loop: over nested class lists (pointer compares only)
+            var inner = nested[j]
+            if inner is None:
+                continue
+            if not _knn_list_items_same(snapshot[j], inner):
+                return False
     return True
 
 
@@ -290,10 +324,11 @@ def _holder(fields: PythonObject) raises -> PythonObject:
     var pos = Int(0)
     var key = PyObjectPtr()
     var item = PyObjectPtr()
+    # p3-neighbors-cluster: the symbol is resolved once per call, not once per
+    # holder key (the py_lists.mojo form: a typed function value, then calls).
+    var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
     for _ in range(len(holder)):  # driver-loop: resident metadata keys before dictionary comparisons
-        # The call form main compiles (bindings/causal_model_config.mojo:75);
-        # the lookup stays inline as there, over a holder of a few keys.
-        if cpy.lib.get_function[Int32]("PyDict_Next")(holder._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)) == 0:
+        if dict_next(holder._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)) == 0:
             break
         if py_type(PythonObject(from_borrowed=key)) is not str_type:
             raise Error("TypeError: neighbor resident keys must be exact strings")
@@ -526,12 +561,42 @@ def _dist_params(model: PythonObject, context: PythonObject) raises -> PythonObj
     `bindings/_mojolearn.mojo::_dist_triple` reads (the metric resolved
     first, then the weights; the base class never weights)."""
     var fields = py_fields(model)
+    # p3-neighbors-cluster: the resolved triple is kept in the resident holder
+    # (never `__dict__`) with the class and the metric, p and weights objects
+    # it was resolved from; while they are the same immutable scalars
+    # (exact str/int/float/bool/None), a query reuses it instead of resolving
+    # the metric again. Any other value (a callable, a container) resolves
+    # every call, as before.
+    var b = _b()
+    var metric = family_field(fields, "metric")
+    var p = family_field(fields, "p")
+    var weights_value = py_get(fields, "weights")
+    var cls = py_type(model)
+    var holder = py_get(fields, "_resident_holder")
+    var cacheable = (holder is not None and py_type(holder) is b.dict
+                     and _knn_immutable_word(b, metric) and _knn_immutable_word(b, p)
+                     and _knn_immutable_word(b, weights_value))
+    if cacheable:
+        var held = py_get(holder, "dist_params")
+        if (held is not None and py_type(held) is b.tuple and len(held) == 7 and held[0] is cls
+                and held[1] is metric and held[2] is p and held[3] is weights_value):
+            return Python.list(held[4], held[5], held[6])
     var cls_name = _class_name(model)
-    var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
+    var resolved = knn_resolve_metric(cls_name, metric, p, context)
     var weights = 0
     if _is_knn(model, context):
         weights = knn_resolve_weights(cls_name, family_field(fields, "weights"))
+    if cacheable:
+        py_setitem(holder, "dist_params", Python.tuple(cls, metric, p, weights_value,
+                                                       resolved[0], resolved[1], PythonObject(weights)))
     return Python.list(resolved[0], resolved[1], PythonObject(weights))
+
+
+def _knn_immutable_word(b: PythonObject, value: PythonObject) raises -> Bool:
+    if value is None:
+        return True
+    var cls = py_type(value)
+    return cls is b.str or cls is b.int or cls is b.float or cls is b.bool
 
 
 def _check_metric_input(cls_name: String, value: Int, x: ArrayMetadata) raises:
@@ -877,6 +942,18 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     _ = proba  # keep the Python object alive through the native call above
     _ = uniq  # keep the Python object alive through the native call above
     _report(fields, "used_query_tile_", used)
+    # p3-neighbors-cluster: `uniq` is the kernel's class set of the fitted
+    # `_y_cols`, the same for every query, so POLICY 7's check runs once per
+    # fitted state: skipped while `_y_cols` and `_classes_list` are the objects
+    # it passed for and the class lists' admission record still holds.
+    var class_holder = py_get(fields, "_resident_holder")
+    if class_holder is not None and py_type(class_holder) is b.dict:
+        var checked = py_get(class_holder, "class_set_checked")
+        if (checked is not None and py_type(checked) is b.tuple and len(checked) == 2
+                and checked[0] is y_cols and checked[1] is classes_list
+                and _knn_lists_unchanged(fields, Python.tuple("_classes_list", "_label_names"),
+                                         py_get(class_holder, "admitted_lists"))):
+            return Python.tuple(labels, proba, n_classes)
     # POLICY 7: the implementation's class set against ours, made visible:
     # `uniq` split at the running class counts.
     var flat = py_call(native_buffer_view(uniq._mv).tolist)
@@ -893,6 +970,8 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
                         + "classes " + family_str(py_call(list_item, found, eight)) + "..., the host sort found "
                         + family_str(family_call(py_call(b.getattr, expected, PythonObject("__getitem__")), eight))
                         + "...; the two class sets disagree")
+    if class_holder is not None and py_type(class_holder) is b.dict:
+        py_setitem(class_holder, "class_set_checked", Python.tuple(y_cols, classes_list))
     return Python.tuple(labels, proba, n_classes)
 
 

@@ -293,18 +293,17 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
         _ = py_call(addrs.append, query_address)
     _ = py_call(addrs.append, output_address)
     var output_slot = 8 if all_points else 11
+    # p3-neighbors-cluster: ONE binding call; the entry batches by
+    # `batch_size` itself (the optional 9th parameter word), so the fitted
+    # state is read once per public call instead of once per batch.
     var params = Python.list(rows, columns, edges, condensed, selected, exemplars, 0, neighbors)
-    var first = 0
-    while first < nq:  # driver-loop: public batching stays inside the single native operation
-        var count = min(batch, nq - first)
-        if not all_points:
-            py_setitem(addrs, 10, query_address + first * columns * 4)
-        py_setitem(addrs, output_slot, output_address + first * selected * 4)
-        py_setitem(params, 6, first if all_points else count)
-        if all_points:
-            py_setitem(params, 7, count)
-        _ = family_call(entry, addrs, params)
-        first += count
+    if all_points:
+        py_setitem(params, 7, nq)
+    else:
+        py_setitem(params, 6, nq)
+    _ = py_call(params.append, PythonObject(batch))
+    _ = output_slot
+    _ = family_call(entry, addrs, params)
     if held is None:
         _record(model, slot, key, binding, entry, raw, core, labels, parents, lambdas, deaths, clusters, children,
                 indices, offsets, rows, columns, edges, condensed, exemplars, selected, neighbors)

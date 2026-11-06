@@ -390,11 +390,11 @@ def hdbscan_membership_vector_binding(
             "hdbscan_membership_vector: addrs must contain 12 addresses, got "
             + String(len(addrs))
         )
-    if len(params) != 8:
+    if len(params) != 8 and len(params) != 9:
         raise Error(
             "hdbscan_membership_vector: params must contain 8 values (m, d,"
             " n_edges, n_clusters, n_selected, n_exemplars, nq, min_samples),"
-            " got " + String(len(params))
+            " plus an optional query batch size, got " + String(len(params))
         )
     var m = Int(py=params[0])
     var d = Int(py=params[1])
@@ -418,13 +418,26 @@ def hdbscan_membership_vector_binding(
     var iic = read_i32(Int(py=addrs[7]), n_edges + 1)
     var ex_idx = read_i32(Int(py=addrs[8]), n_ex)
     var offsets = read_i32(Int(py=addrs[9]), n_selected + 1)
-    var q = read_f32(Int(py=addrs[10]), nq * d)
-    var out = _f32_ptr(Int(py=addrs[11]))
+    # p3-neighbors-cluster: with the optional 9th word the public batching
+    # runs here, inside one call: the fitted state above is read once and
+    # each batch takes only its query slice and output rows (the driver made
+    # one call per batch, each copying the whole training state again).
+    var batch = Int(py=params[8]) if len(params) == 9 else nq
+    if batch < 1:
+        raise Error("hdbscan_membership_vector: batch size must be positive; refused by name")
+    var q_addr = Int(py=addrs[10])
+    var out_addr = Int(py=addrs[11])
     with GILReleased(Python()):
-        _hdbscan_membership_run(
-            x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
-            deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, out,
-        )
+        var first = 0
+        while first < nq:  # driver-loop: over query batches inside the one public call
+            var count = min(batch, nq - first)
+            var q = read_f32(q_addr + first * d * 4, count * d)
+            _hdbscan_membership_run(
+                x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
+                deaths, selected, iic, ex_idx, offsets, q, count, min_samples,
+                _f32_ptr(out_addr + first * n_selected * 4),
+            )
+            first += count
     return PythonObject(nq)
 
 
@@ -466,11 +479,11 @@ def hdbscan_all_points_membership_vectors_binding(
             "hdbscan_all_points_membership_vectors: addrs must contain 9"
             " addresses, got " + String(len(addrs))
         )
-    if len(params) != 8:
+    if len(params) != 8 and len(params) != 9:
         raise Error(
             "hdbscan_all_points_membership_vectors: params must contain 8"
             " values (m, d, n_edges, n_clusters, n_selected, n_exemplars,"
-            " row0, count), got " + String(len(params))
+            " row0, count), plus an optional row batch size, got " + String(len(params))
         )
     var m = Int(py=params[0])
     var d = Int(py=params[1])
@@ -498,12 +511,22 @@ def hdbscan_all_points_membership_vectors_binding(
     var iic = read_i32(Int(py=addrs[5]), n_edges + 1)
     var ex_idx = read_i32(Int(py=addrs[6]), n_ex)
     var offsets = read_i32(Int(py=addrs[7]), n_selected + 1)
-    var out = _f32_ptr(Int(py=addrs[8]))
+    # p3-neighbors-cluster: the optional 9th word batches the rows here,
+    # inside one call (the fitted state above is read once).
+    var batch = Int(py=params[8]) if len(params) == 9 else count
+    if batch < 1:
+        raise Error("hdbscan_all_points_membership_vectors: batch size must be positive; refused by name")
+    var out_addr = Int(py=addrs[8])
     with GILReleased(Python()):
-        _hdbscan_all_points_run(
-            x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
-            iic, ex_idx, offsets, row0, count, out,
-        )
+        var done = 0
+        while done < count:  # driver-loop: over training-row batches inside the one public call
+            var part = min(batch, count - done)
+            _hdbscan_all_points_run(
+                x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
+                iic, ex_idx, offsets, row0 + done, part,
+                _f32_ptr(out_addr + done * n_selected * 4),
+            )
+            done += part
     return PythonObject(count)
 
 

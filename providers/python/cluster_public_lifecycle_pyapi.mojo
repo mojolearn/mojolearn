@@ -3,6 +3,7 @@
 # Validation, fitted tracking, feature metadata and final output wrapping stay
 # inside this one native operation. The existing algorithm owners are retained;
 # their legacy extension dispatch remains separately tracked migration debt.
+from bindings.cpython_table import cpython_table
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
@@ -117,8 +118,7 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
         var value = _lookup(model, name, fields, plan, attributes)
         direct = direct and py_contains(fields, name) and value is fields[name]
         if String(name) == "init":
-            ref cpy = Python().cpython()
-            if cpy.lib.get_function[Int32]("PyCallable_Check")(value._obj_ptr) != 0:
+            if cpython_table()[].PyCallable_Check(value._obj_ptr) != 0:  # resolved once per process
                 raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers or use 'k-means++' or 'random'")
         classical_admit_value(value, context)
         if String(name) == "metric_params" and value is not None:

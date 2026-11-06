@@ -11,6 +11,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.family_common import family_array
 from bindings.classical_arrays import classical_address
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
 
 
 def _holder(fields: PythonObject) raises -> PythonObject:
@@ -71,6 +72,14 @@ def _handle(fields: PythonObject, binding: PythonObject, refs: PythonObject,
         if key[0] is refs and key[1] is labels and key[2] is labels and Int(py=key[3]) == n and Int(py=key[4]) == d and Int(py=key[5]) == 0:
             return Int(py=held[1])
     hierarchy_release(fields)
+    # p3-neighbors-cluster (hazard class A): the key is the identity of the
+    # stored `_fit_X` and `labels_` objects, never their values, so they are
+    # made read-only when the device copy is taken; storage that cannot be
+    # frozen keeps the one-shot predict (bindings/p3nc_fitted_freeze.mojo).
+    if not fitted_is_freezable_any(refs) or not fitted_is_freezable_any(labels):
+        return -1
+    _ = fitted_freeze_any(refs)
+    _ = fitted_freeze_any(labels)
     var handle = py_call(prepare, Python.list(refs_address, labels_address, labels_address), Python.list(n, d, 0))
     if py_type(handle) is not py_type(PythonObject(0)):
         raise Error("TypeError: native hierarchy resident handle must be an integer")

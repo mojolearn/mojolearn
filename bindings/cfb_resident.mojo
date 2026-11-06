@@ -15,6 +15,7 @@ from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_array
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.cluster_native import _labeled_reference
+from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
 
 
@@ -86,6 +87,17 @@ def cfb_handle(model: PythonObject, binding: PythonObject, refs: PythonObject, k
                 and Int(py=key[4]) == n_features and Int(py=key[5]) == metric):
             return Int(py=held[1])
     cfb_release(model)
+    # p3-neighbors-cluster (hazard class A): the key is the identity of the
+    # three fitted arrays, never their values, so they become read-only when
+    # the device copy is taken (bindings/p3nc_fitted_freeze.mojo). Storage
+    # that cannot be frozen (a caller-assigned ndarray) keeps the one-shot
+    # predict, which reads the current values every call.
+    if (not fitted_is_freezable(refs, context) or not fitted_is_freezable(keys, context)
+            or not fitted_is_freezable(labels, context)):
+        return -1
+    _ = fitted_freeze(refs, context)
+    _ = fitted_freeze(keys, context)
+    _ = fitted_freeze(labels, context)
     var handle = family_call(prepare, Python.list(classical_address(refs), classical_address(keys), classical_address(labels)),
                              Python.list(PythonObject(n_refs), PythonObject(n_features), PythonObject(metric)))
     # The minting binding travels with the handle: the release (refit, the

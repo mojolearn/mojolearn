@@ -35,7 +35,9 @@ from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.mode_metadata_native import _class_fields
 from bindings.classical_attributes import _type_mro
-from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.py_balanced import py_call, py_type, py_contains, py_get
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_arrays import classical_address
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
 
 # int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b)
@@ -126,9 +128,35 @@ def cluster_record_key(model: PythonObject, fields: PythonObject, required: Pyth
         if py_contains(fields, name):
             _ = py_call(key.append, PythonObject(1))
             trees_key_shallow(mods, key, fields[name], 0)
+            _cluster_array_words(key, fields[name])
         else:
             _ = py_call(key.append, PythonObject(0))
     return key
+
+
+def _cluster_array_words(key: PythonObject, value: PythonObject) raises:
+    """p3-neighbors-cluster (hazard class C): for a fitted ndarray or
+    mojolearn Array, its data address, rank and dimensions (exact ints), and
+    for an ndarray its dtype object and C-contiguity flag. An in-place
+    `arr.shape = ...`, `arr.dtype = ...`, `arr.resize(...)` or strides change
+    keeps the object but changes these words, so the record misses and the
+    full admission runs. Values are not part of the key: the records cache
+    admission only, and the operands are read from the arrays every call."""
+    var modules = native_loaded_module("sys").modules
+    var cls = py_type(value)
+    var arrays = py_get(modules, "mojolearn._array")
+    var numpy = py_get(modules, "numpy")
+    var is_ndarray = numpy is not None and cls is numpy.ndarray
+    if not is_ndarray and (arrays is None or cls is not arrays.Array):
+        return
+    _ = py_call(key.append, classical_address(value))
+    var shape = value.shape
+    _ = py_call(key.append, PythonObject(len(shape)))
+    for axis in range(len(shape)):  # small-loop(fitted array rank)
+        _ = py_call(key.append, PythonObject(Int(py=shape[axis])))
+    if is_ndarray:
+        _ = py_call(key.append, value.dtype)
+        _ = py_call(key.append, value.flags.c_contiguous)
 
 
 def cluster_record_get(slot: String, model: PythonObject, key: PythonObject) raises -> PythonObject:

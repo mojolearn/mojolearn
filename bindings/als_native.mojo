@@ -23,6 +23,7 @@ from bindings.decomp_kit_native import (
     decomp_input, XD_SCALE, XD_SQ, XD_SQRT, XD_DIV,
 )
 from core.decomp_native_impl import decomp_f32_to_i32
+from bindings.py_lists import py_list_f64
 
 
 def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
@@ -81,14 +82,17 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         kit.wrote_host(x)
         kit.wrote_host(y)
         if loss:
-            var losses = Python.list()
-            var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(losses_store)))
-            _ = losses_store  # keep the Python object alive through the native call above
-            for i in range(min(count, slots)):  # driver-loop: over the fit's recorded iterations
-                _ = py_call(losses.append, PythonObject(words[i]))
-                _ = losses_store  # keep the Python object alive through the native call above
-            _ = losses_store  # keep the Python object alive through the native calls above
-            py_setitem(fields, "training_loss_", losses)
+            # p3-neighbors-cluster: the recorded losses are copied out once and
+            # published as one list (PyList_New + direct slot stores,
+            # bindings/py_lists.mojo), not one `append` call per iteration.
+            var recorded = max(min(count, slots), 0)
+            var values = List[Float64](length=recorded, fill=0.0)
+            if recorded > 0:
+                memcpy(dest=values.unsafe_ptr(),
+                       src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(losses_store))),
+                       count=recorded)
+            _ = losses_store  # keep the Python object alive through the copy above
+            py_setitem(fields, "training_loss_", py_list_f64(values))
         var users = kit.publish(x)
         var items = kit.publish(y)
         py_setitem(fields, "user_factors", users)

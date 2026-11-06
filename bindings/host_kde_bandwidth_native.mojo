@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from std.memory import bitcast
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.classical_warnings import classical_warning
@@ -18,11 +18,25 @@ def kde_bandwidth_code(value: PythonObject, context: PythonObject) raises -> Str
     var cls = py_type(value)
     if py_get(context, "ndarray") is None:
         return String("")
-    var constructor = native_numpy_dtype(context)
-    var array = cls is context["ndarray"]
+    # p3-neighbors-cluster: an exact builtin float, int, bool or str is never
+    # a NumPy scalar or array, so no code matches; answered before the dtypes.
+    if (cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(0))
+            or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(""))):
+        return String("")
     var codes = Python.tuple("?", "b", "B", "h", "H", "i", "I", "l", "L", "q", "Q", "e", "f", "d", "g", "F", "D", "G", "M", "m")
+    # The twenty dtype objects are built once per connected context (they are
+    # NumPy's own singletons for these codes) instead of on every call.
+    var dtypes = py_get(context, "p3nc_kde_bandwidth_dtypes")
+    if dtypes is None:
+        var constructor = native_numpy_dtype(context)
+        var built = Python.list()
+        for i in range(len(codes)):  # driver-loop: the fixed dtype codes, once per context
+            _ = py_call(built.append, py_call(constructor, codes[i]))
+        dtypes = py_call(py_type(Python.tuple()), built)
+        py_setitem(context, "p3nc_kde_bandwidth_dtypes", dtypes)
+    var array = cls is context["ndarray"]
     for i in range(len(codes)):  # driver-loop: exact built-in numeric and temporal scalar/dtype identities
-        var dtype = py_call(constructor, codes[i])
+        var dtype = dtypes[i]
         if cls is dtype.type or (array and py_type(value.dtype) is py_type(dtype)):
             return String(codes[i])
     return String("")

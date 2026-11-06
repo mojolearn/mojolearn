@@ -20,6 +20,8 @@ from bindings.classical_warnings import classical_warn_column
 from bindings.classifier_public_lifecycle import _public_labels
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_array_view import native_array_ndarray_view
+from core.p3nc_scan import p3nc_all_finite_f32, p3nc_widen_f32_f64, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
+from bindings.p3nc_label_lists import p3nc_float_list_verdict
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_f32_snapshot, family_owned_snapshot, family_array
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
@@ -123,6 +125,16 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
             raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
         if refusal == LABELS_FLOAT_OK:
             return source
+    # p3-neighbors-cluster: an exact flat list / tuple of exact floats is
+    # checked in one native pass (bindings/p3nc_label_lists.mojo) with the
+    # walk's verdicts; the walk returns such a list unchanged.
+    var verdict = p3nc_float_list_verdict(source, classifier)
+    if verdict == P3NC_REAL_NONFINITE:
+        raise Error("Input y contains NaN or infinity (" + name + ").")
+    if verdict == P3NC_REAL_CONTINUOUS:
+        raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+    if verdict == P3NC_REAL_OK:
+        return source
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
     for i in range(len(flat)):  # driver-loop: admitted label words, never Python element protocols
@@ -172,10 +184,10 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     # KNNImputer accepts NaNs. The other local/nearest estimators had a public
     # finite scan; KDE keeps its existing fit/score scan and copy reporting.
     if not operation.startswith("family_xn_loc_imp_") and not operation.startswith("family_xn_kde_"):
-        var values = FAMILY_F32P(unsafe_from_address=snapshot.source.addr)
-        for i in range(snapshot.count):  # driver-loop: public finite-input validation
-            if not isfinite(values[i]):
-                raise Error("Input X contains NaN or infinity (" + name + ").")
+        # p3-neighbors-cluster: one eight-lane exponent-bit pass over the
+        # admitted words (core/p3nc_scan.mojo), not a scalar isfinite loop.
+        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
+            raise Error("Input X contains NaN or infinity (" + name + ").")
     if not fitting and Int(py=depth) == 0:
         var width = py_get(fields, "n_features_in_")
         if width is not None:
@@ -242,11 +254,11 @@ def _public_result(value: PythonObject, widen: Bool, context: PythonObject) rais
     if widen and String(value.dtype) == "<f4":
         var count = Int(py=value.size)
         result = family_array(value.shape, "<f8", context)
-        var source = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value)))
-        var output = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result)))
-        for i in range(count):  # driver-loop: exact public float32-to-float64 result widening
-            output[i] = Float64(source[i])
+        # p3-neighbors-cluster: eight lanes at a time (exact widening).
+        p3nc_widen_f32_f64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))),
+                           FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))), count)
         _ = value
+        _ = result
     if py_get(context, "ndarray") is not None:
         return native_array_ndarray_view(result, context)
     return result

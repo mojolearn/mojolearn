@@ -16,7 +16,7 @@ from x_ann.filter_topk import filter_topk_device
 from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_components, tsne_init_y0
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_ann.abi import check_search
+from x_ann.abi import check_search, out_f32_to, out_i32_to
 from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.switches import ANN3_DIRECT_OUT, IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
@@ -62,16 +62,24 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var codes_addr = 0
     comptime if ANN3_DIRECT_OUT:
         codes_addr = a_int(addrs, 5)
+    # p3-neighbors-cluster: the output addresses are Python items, so they are
+    # read here with the GIL held; the released block below touches no
+    # PythonObject (the host binding's pattern).
+    var centers_out = a_int(addrs, 1)
+    var offsets_out = a_int(addrs, 2)
+    var indices_out = a_int(addrs, 3)
+    var codebooks_out = a_int(addrs, 4)
+    var codes_out = a_int(addrs, 5)
     with GILReleased(Python()):
         var index = ivf_pq_build_device(
             x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr, x_addr
         )
         bst.host("build")
-        out_f32(index.centers, addrs, 1)
-        out_i32(index.offsets, addrs, 2)
-        out_i32(index.list_indices, addrs, 3)
-        out_f32(index.codebooks, addrs, 4)
-        out_i32(index.codes, addrs, 5)
+        out_f32_to(index.centers, centers_out)
+        out_i32_to(index.offsets, offsets_out)
+        out_i32_to(index.list_indices, indices_out)
+        out_f32_to(index.codebooks, codebooks_out)
+        out_i32_to(index.codes, codes_out)
         bst.host("copy_out")
     return PythonObject(n)
 
@@ -105,15 +113,20 @@ def ivf_pq_build_resident_binding(addrs: PythonObject, params: PythonObject) rai
     var index = IvfPqIndex(
         0, 0, 0, 0, 0, 0, List[Float32](), List[Int32](), List[Int32](), List[Float32](), List[Int32]()
     )
+    # p3-neighbors-cluster: output addresses read with the GIL held.
+    var centers_out = a_int(addrs, 1)
+    var offsets_out = a_int(addrs, 2)
+    var indices_out = a_int(addrs, 3)
+    var codebooks_out = a_int(addrs, 4)
     with GILReleased(Python()):
         index = ivf_pq_build_device_resident(
             x, x_addr, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, dev
         )
         bst.host("build")
-        out_f32(index.centers, addrs, 1)
-        out_i32(index.offsets, addrs, 2)
-        out_i32(index.list_indices, addrs, 3)
-        out_f32(index.codebooks, addrs, 4)
+        out_f32_to(index.centers, centers_out)
+        out_i32_to(index.offsets, offsets_out)
+        out_i32_to(index.list_indices, indices_out)
+        out_f32_to(index.codebooks, codebooks_out)
         bst.host("copy_out")
     _ = x^
     var handle = x_ann_register_pq_built(index^, dev^)
