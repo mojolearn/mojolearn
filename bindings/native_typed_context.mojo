@@ -17,7 +17,7 @@
 # calls, exactly as they do on doors that pass their connected context
 # straight through.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, shared_dict_watch, shared_dict_epoch
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 
 comptime _KEY_LABELS = "_mojolearn_typed_context_labels"
@@ -34,8 +34,16 @@ def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raise
     var key = PythonObject(_KEY_BOTH if (labels and trees) else (_KEY_LABELS if labels else _KEY_TREES))
     if py_type(context) is b.dict:
         var cached = py_get(context, key)
-        if cached is not None and py_type(cached) is b.tuple and len(cached) == 3:
-            if Int(py=cached[1]) == len(context):
+        if cached is not None and py_type(cached) is b.tuple and len(cached) == 5:
+            # Valid while the source keeps its size and the two derived
+            # inputs; on Python >= 3.12 also while the watched source dict
+            # had no edit at all since the record (a replaced value under an
+            # existing key bumps the epoch). Epoch -1: not watched.
+            var epoch = Int(py=cached[2][0])
+            if (Int(py=cached[1]) == len(context)
+                    and cached[3] is py_get(context, "scalar_types")
+                    and cached[4] is py_get(context, "integer_types")
+                    and (epoch < 0 or epoch == shared_dict_epoch(Int(context._obj_ptr)))):
                 return cached[0]
     var result = py_call(b.dict, context)
     _ = py_call(result.pop, PythonObject(_KEY_LABELS), PythonObject(None))
@@ -54,6 +62,13 @@ def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raise
         py_setitem(result, "trees_integral_type", integral)
     if py_type(context) is b.dict:
         # Insert first so the recorded source size counts the cache key.
-        py_setitem(context, key, Python.tuple(result, PythonObject(0), PythonObject(0)))
-        py_setitem(context, key, Python.tuple(result, PythonObject(len(context)), PythonObject(len(result))))
+        var epoch_slot = Python.list(PythonObject(-1))
+        py_setitem(context, key, Python.tuple(result, PythonObject(0), epoch_slot, context["scalar_types"], integral))
+        var watched = shared_dict_watch(context._obj_ptr)
+        py_setitem(context, key, Python.tuple(result, PythonObject(len(context)), epoch_slot,
+                                              context["scalar_types"], integral))
+        # The epoch is read after the record's own store (filling the list
+        # does not edit the source dict), so only later edits invalidate it.
+        if watched:
+            py_setitem(epoch_slot, PythonObject(0), PythonObject(shared_dict_epoch(Int(context._obj_ptr))))
     return result
