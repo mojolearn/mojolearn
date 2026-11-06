@@ -118,10 +118,17 @@ def gp_kernel_arrays_reused(owner: PythonObject, kernel: PythonObject, context: 
 # below must name the same fields.
 def _gp_state_context() -> List[String]:
     var names = List[String]()
-    for name in ["family_gp_binary_laplace", "family_gp_binary_namespace", "family_gp_kernel_nodes",
-                 "family_gp_kernel_bounds", "scalar_types", "native_value_types", "numeric_dtypes",
-                 "ndarray", "array_class", "mapping_types", "buffer_owner_types"]:  # small-loop(fixed connected context entry names)
-        names.append(String(name))
+    names.append("family_gp_binary_laplace")
+    names.append("family_gp_binary_namespace")
+    names.append("family_gp_kernel_nodes")
+    names.append("family_gp_kernel_bounds")
+    names.append("scalar_types")
+    names.append("native_value_types")
+    names.append("numeric_dtypes")
+    names.append("ndarray")
+    names.append("array_class")
+    names.append("mapping_types")
+    names.append("buffer_owner_types")
     return names^
 
 
