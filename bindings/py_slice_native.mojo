@@ -4,6 +4,7 @@
 # ownership machinery, not permission to invoke arbitrary __getitem__/__index__.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 
 
 def py_slice(value: PythonObject, start: PythonObject, stop: PythonObject,
@@ -12,13 +13,14 @@ def py_slice(value: PythonObject, start: PythonObject, stop: PythonObject,
     # owned PythonObject(None) bounds are balanced; no reference is adjusted
     # to compensate for the stdlib Slice conversion's borrowed-None defect.
     ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PySlice_New")(
-        start._obj_ptr, stop._obj_ptr, step._obj_ptr)
+    # Both entries resolved once per process (callers slice per fold and per
+    # candidate).
+    var t = cpython_table()
+    var pointer = t[].PySlice_New(start._obj_ptr, stop._obj_ptr, step._obj_ptr)
     if not pointer:
         raise cpy.unsafe_get_error()
     var bounds = PythonObject(from_owned=pointer)
-    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(
-        value._obj_ptr, bounds._obj_ptr)
+    var result = t[].PyObject_GetItem(value._obj_ptr, bounds._obj_ptr)
     _ = bounds^
     if not result:
         raise cpy.unsafe_get_error()

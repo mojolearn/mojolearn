@@ -20,8 +20,7 @@ def _archive_bytes(raw: PythonObject) raises -> List[UInt8]:
     var count = len(raw)
     var out = List[UInt8](capacity=count)
     if py_type(raw) is native_loaded_module("builtins").bytes:
-        ref cpy = Python().cpython()
-        var address = cpy.lib.get_function[Int]("PyBytes_AsString")(raw._obj_ptr)
+        var address = cpython_table()[].PyBytes_AsString(raw._obj_ptr)
         if address == 0:
             var failure = stash_python_error()
             raise failure^
@@ -98,9 +97,11 @@ def archive_utf32_decode(raw: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def archive_utf32_encode(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    ref cpy = Python().cpython()
+    # PyUnicode_ReadChar resolved once per process (was a by-name lookup per
+    # code point).
+    var t = cpython_table()
     for i in range(len(value)):  # driver-loop: exact Unicode metadata code points
-        var word = cpy.lib.get_function[UInt32]("PyUnicode_ReadChar")(value._obj_ptr, i)
+        var word = t[].PyUnicode_ReadChar(value._obj_ptr, i)
         if word >= 0xD800 and word <= 0xDFFF:
             _archive_unicode_failure(value, "utf-32-le", i, i + 1, "surrogates not allowed", context, True)
     return py_call(context["archive_utf32_encode"], value)[0]

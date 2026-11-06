@@ -10,7 +10,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
 from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _class_fields, _truth, _instance_fields
-from bindings.native_class_admission import class_record, class_admit, class_watch_ready
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
 from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
 from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -38,7 +38,12 @@ def _outside() raises -> Bool:
     var frame = PythonObject(from_borrowed=pointer)
     while True:  # driver-loop: skip only the old public wrapper frames
         var fields = native_frame_globals(frame)
-        _string_keys(fields)
+        # A module's globals keep their exact-string keys between reads: the
+        # full key scan runs once per watched globals state (Python >= 3.12),
+        # not on every fitted-array read; 3.10/3.11 keep the per-read scan.
+        if not dict_keys_admitted(fields):
+            _string_keys(fields)
+            dict_keys_admit(fields)
         var module = py_get(fields, "__name__")
         var skip = False
         if py_type(module) is py_type(PythonObject("")) and String(module) == "mojolearn._mode":
@@ -133,8 +138,11 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
     var reused = _plan_reused(mods, cls, mro, context)
     if reused is not None:
         var admitted_rows = List[PythonObject](capacity=len(mro))
+        # The type.__dict__ getter is read once per admission, not three
+        # attribute lookups per ancestry row.
+        var namespace_of = mods.module("builtins").type.__dict__["__dict__"].__get__
         for i in range(len(mro)):  # driver-loop: over admitted ancestry rows
-            admitted_rows.append(_namespace(mods, mro[i]))
+            admitted_rows.append(py_call(namespace_of, mro[i]))
         return _AttributeAdmission(reused[0], mro, admitted_rows^, Int(py=reused[4]), True)
     var rows = List[PythonObject](capacity=len(mro))
     var plan = PythonObject(None)
@@ -264,7 +272,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                 raise Error("TypeError: native availability requires its connected condition")
             var rule = String(condition)
             if rule == "density_predict" or rule == "svm_probability":
-                var requested = _lookup_impl[False](model, PythonObject("probability" if rule == "svm_probability" else "prediction_data"), fields, admission, context)
+                var requested = _lookup_impl[False](mods, model, PythonObject("probability" if rule == "svm_probability" else "prediction_data"), fields, admission, context)
                 var b = native_loaded_module("builtins")
                 var kind = py_type(requested)
                 var enabled = False
@@ -276,28 +284,28 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                 if not enabled:
                     raise Error("AttributeError: predict_proba is not available when probability=False" if rule == "svm_probability" else "AttributeError: prediction data was not requested")
             elif rule == "sgd_probability":
-                var loss = _lookup_impl[False](model, PythonObject("loss"), fields, admission, context)
+                var loss = _lookup_impl[False](mods, model, PythonObject("loss"), fields, admission, context)
                 if py_type(loss) is not py_type(PythonObject("")):
                     raise Error("TypeError: SGD probability availability requires an exact native loss name")
                 if String(loss) != "log_loss":
                     raise Error("AttributeError: probabilities require loss='log_loss'")
             elif rule == "spectral_predict":
-                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, admission, context)
+                var requested = _lookup_impl[False](mods, model, PythonObject("prediction_data"), fields, admission, context)
                 host_inference_scalar(requested, context, True)
                 if not Bool(py=requested):
-                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, admission, context)
+                    var references = _lookup_impl[False](mods, model, PythonObject("_fit_X"), fields, admission, context)
                     if references is None:
                         raise Error("AttributeError: spectral prediction data was not requested or stored")
             elif rule == "hierarchy_predict":
-                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, admission, context)
+                var requested = _lookup_impl[False](mods, model, PythonObject("prediction_data"), fields, admission, context)
                 if py_type(requested) is not py_type(PythonObject(True)) and py_type(requested) is not py_type(PythonObject(0)):
                     raise Error("TypeError: prediction_data availability requires an exact native boolean or integer")
                 if not Bool(py=requested):
-                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, admission, context)
+                    var references = _lookup_impl[False](mods, model, PythonObject("_fit_X"), fields, admission, context)
                     if references is None:
                         raise Error("AttributeError: prediction data was not requested or stored")
             elif rule == "novelty" or rule == "not_novelty":
-                var novelty = _lookup_impl[False](model, PythonObject("novelty"), fields, admission, context)
+                var novelty = _lookup_impl[False](mods, model, PythonObject("novelty"), fields, admission, context)
                 if py_type(novelty) is not py_type(PythonObject(True)) and py_type(novelty) is not py_type(PythonObject(0)):
                     raise Error("TypeError: novelty must be an exact native boolean or integer")
                 if Bool(py=novelty) != (rule == "novelty"):
@@ -305,7 +313,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
             else:
                 raise Error("TypeError: unknown native availability condition")
         else:
-            _ = _lookup_impl[False](model, PythonObject("transform"), fields, admission, context)
+            _ = _lookup_impl[False](mods, model, PythonObject("transform"), fields, admission, context)
     except error:
         if String(error).startswith("AttributeError:"):
             var name = schema["attribute_name"]
@@ -321,6 +329,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
 
 def _property(model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
+    var mods = NativeModules()
     if kind == "svm_svc_coef" or kind == "svm_svr_coef":
         var owner = context["svm_owner"]
         var entry = owner[0]
@@ -337,7 +346,7 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
     if kind == "cholesky_logdet":
         var info = PythonObject(None)
         try:
-            info = _lookup_impl[False](model, PythonObject("info_"), fields, admission, context)
+            info = _lookup_impl[False](mods, model, PythonObject("info_"), fields, admission, context)
         except error:
             if String(error).startswith("AttributeError:"):
                 raise Error("AttributeError: mojolearn Cholesky: logdet_ is set by fit")
@@ -347,12 +356,12 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
             raise Error("TypeError: Cholesky info_ must be native numeric status")
         if _truth(info):
             raise Error("ValueError: mojolearn Cholesky: the factorization failed (info=" + String(py_call(b.str, info)) + "), so there is no determinant to report (DEVIATION 1634)")
-        return _lookup_impl[False](model, PythonObject("_logdet"), fields, admission, context)
+        return _lookup_impl[False](mods, model, PythonObject("_logdet"), fields, admission, context)
     if kind == "stl_config":
         var out = Python.dict()
         var names = Python.tuple("period", "seasonal", "seasonal_deg", "seasonal_jump", "trend", "trend_deg", "trend_jump", "low_pass", "low_pass_deg", "low_pass_jump", "robust")
         for i in range(len(names)):  # driver-loop: supported STL configuration fields
-            py_setitem(out, names[i], _lookup_impl[False](model, names[i], fields, admission, context))
+            py_setitem(out, names[i], _lookup_impl[False](mods, model, names[i], fields, admission, context))
         return out
     var recipes = py_get(context, "native_property_recipes")
     var recipe = PythonObject(None) if recipes is None else py_get(recipes, PythonObject(kind))
@@ -370,7 +379,7 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
 # cause is unconfirmed. Reproduction and complete logs are retained under
 # experiments/peer1_neighbors_kernels_20261027 and the corresponding evidence
 # directory's cpu-compile results. No Python fallback or toolchain change.
-def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
+def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObject, name: PythonObject,
                                     fields: PythonObject, admission: _AttributeAdmission,
                                     context: PythonObject) raises -> PythonObject:
     var plan = admission.plan
@@ -381,7 +390,6 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
     var member_type = py_type(member)
     var descriptor_kind = 0
     if present:
-        var mods = NativeModules()
         descriptor_kind = _descriptor_kind(mods, member_type)
     var descriptor = descriptor_kind != 0
     var data = descriptor_kind == 3
@@ -413,7 +421,7 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
         # Creating a bound method does not execute its body. Preserve ordinary
         # subclass functions and later import-time native setter connections.
         # Use CPython's method constructor, not mutable function.__get__.
-        if member_type is native_loaded_module("types").FunctionType:
+        if member_type is mods.module("types").FunctionType:
             return _bound_function(member, model)
         if not known:
             raise Error("TypeError: Python attribute descriptor requires a native owner")
@@ -423,7 +431,15 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
 
 def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
             admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
-    return _lookup_impl[True](model, name, fields, admission, context)
+    # Callers without an operation handle (the family lifecycle providers).
+    var mods = NativeModules()
+    return _lookup_impl[True](mods, model, name, fields, admission, context)
+
+
+def _lookup(mut mods: NativeModules, model: PythonObject, name: PythonObject, fields: PythonObject,
+            admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
+    # The public attribute entry shares its admitted module view.
+    return _lookup_impl[True](mods, model, name, fields, admission, context)
 
 
 def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -444,7 +460,7 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         else:
             fields = _fields_from_admitted_rows(mods, model, admission.ancestry, admission.rows)
             _plan_admit(mods, model, admission, context)
-        var result = _lookup(model, name, fields, admission, context)
+        var result = _lookup(mods, model, name, fields, admission, context)
         var text = String(name)
         if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")
                 and py_type(result) is context["array_class"]):

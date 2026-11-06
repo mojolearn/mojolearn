@@ -441,8 +441,10 @@ def _mode_report():
         )
 
     if rep.loaded == "identical":
+        # `_backend._MissingUpperTier` is the missing-binary stub (the old
+        # name `_MissingIdentical` no longer exists, so this never matched).
         if fixture_mod is not None and type(fixture_mod).__name__ == \
-                "_MissingIdentical":
+                "_MissingUpperTier":
             # `_backend.select()` installs this stub when an identical binary
             # was not built, so the package still imports and every OTHER
             # family keeps working. It raises by name on first use. Reaching

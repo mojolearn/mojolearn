@@ -8,6 +8,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_address import native_buffer_address
 from bindings.py_balanced import py_call, py_type, py_get
+from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 def _storage_metadata() raises -> PythonObject:
@@ -31,7 +33,7 @@ def _storage_type(metadata: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var owner = cpy.lib.get_function[PyObjectPtr]("PyType_GetModule")(cls._obj_ptr)
     if not owner:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         raise Error("TypeError: native array storage requires its extension type")
     if owner != module._obj_ptr:
         raise Error("TypeError: native array storage type has a different extension owner")
@@ -90,10 +92,25 @@ def native_array_from_values(code: String, source: PythonObject) raises -> Pytho
     # Callers normalize NumPy/buffer leaves through their existing native input
     # paths. Reject Python scalar conversion protocols before native append can
     # invoke them. array.array iteration itself yields exact Python primitives.
-    for i in range(len(source)):  # driver-loop: over caller-provided scalar ABI types before native conversion
-        var item_type = py_type(source[i])
-        if item_type is not b.int and item_type is not b.float and item_type is not b.bool:
-            raise Error("TypeError: native array values cannot invoke scalar conversion hooks")
+    if cls is not native_array:
+        # Borrowed slot reads and type-pointer compares: no boxed index or
+        # PythonObject item per element (an array.array source needs no
+        # check: its iteration yields exact primitives).
+        ref cpy = Python().cpython()
+        var t = perf2_cpython_table()
+        var is_list = cls is b.list
+        var int_type = b.int._obj_ptr
+        var float_type = b.float._obj_ptr
+        var bool_type = b.bool._obj_ptr
+        for i in range(len(source)):  # driver-loop: over caller-provided scalar ABI types before native conversion
+            var raw = t[].PyList_GetItem(source._obj_ptr, i) if is_list else t[].PyTuple_GetItem(source._obj_ptr, i)
+            if not raw:
+                raise cpy.unsafe_get_error()
+            var item_type = cpy.PyObject_Type(raw)
+            var exact = item_type == int_type or item_type == float_type or item_type == bool_type
+            cpy.Py_DecRef(item_type)
+            if not exact:
+                raise Error("TypeError: native array values cannot invoke scalar conversion hooks")
     var result = native_array_empty(code)
     # array(code, another_array) converts each scalar when their typecodes
     # differ. array.extend(another_array) instead refuses that input. Preserve

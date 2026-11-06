@@ -62,25 +62,34 @@ struct _Env(Movable):
     var real: PythonObject
     var seq: PythonObject
     var array: PythonObject
+    # Callables read once per operation, not one attribute lookup per element.
+    var isinstance_fn: PythonObject
+    var eq_fn: PythonObject
+    var lt_fn: PythonObject
 
     def __init__(out self) raises:
         var b = native_loaded_module("builtins")
-        var numbers = Python.import_module("numbers")
+        # The import-time connection (sys.modules read and stamp), not the
+        # import machinery on every call.
+        var numbers = native_loaded_module("numbers")
         self.seq = Python.tuple(b.list, b.tuple)
         self.integral = numbers.Integral
         self.real = numbers.Real
         self.op = native_loaded_module("operator")
         self.array = native_loaded_module("array").array
+        self.isinstance_fn = b.isinstance
+        self.eq_fn = self.op.eq
+        self.lt_fn = self.op.lt
         self.b = b
 
     def isinstance(self, v: PythonObject, cls: PythonObject) raises -> Bool:
-        return Bool(py=py_call(self.b.isinstance, v, cls))
+        return Bool(py=py_call(self.isinstance_fn, v, cls))
 
     def eq(self, a: PythonObject, b: PythonObject) raises -> Bool:
-        return Bool(py=py_call(self.op.eq, a, b))
+        return Bool(py=py_call(self.eq_fn, a, b))
 
     def lt(self, a: PythonObject, b: PythonObject) raises -> Bool:
-        return Bool(py=py_call(self.op.lt, a, b))
+        return Bool(py=py_call(self.lt_fn, a, b))
 
     def is_bool(self, v: PythonObject) raises -> Bool:
         if self.isinstance(v, self.b.bool):

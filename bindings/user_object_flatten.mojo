@@ -4,6 +4,8 @@ from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.native_array_snapshot import native_array_snapshot
 from bindings.mode_metadata_native import _class_fields
@@ -13,7 +15,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains
 def _array_flat_values[scalar: DType, linear: Bool](address: Int, count: Int, width: Int,
         shape: List[Int], strides: List[Int], output: PythonObject) raises:
     ref cpy = Python().cpython()
-    var append = cpy.lib.get_function[Int32]("PyList_Append")
+    var t = cpython_table()
     for index in range(count):  # cpu-route: publish captured native Array scalars in logical C order
         var offset = index * width
         comptime if not linear:
@@ -29,7 +31,7 @@ def _array_flat_values[scalar: DType, linear: Bool](address: Int, count: Int, wi
             item = PythonObject(Float64(value))
         else:
             item = PythonObject(Int64(value))
-        if append(output._obj_ptr, item._obj_ptr) != 0:
+        if t[].PyList_Append(output._obj_ptr, item._obj_ptr) != 0:
             raise cpy.unsafe_get_error()
 
 
@@ -120,7 +122,16 @@ struct UserObjectFlatten(Movable):
         # Opaque labels without a conversion protocol are leaves, preserving
         # the old identity contract. Inspect actual native metadata rather
         # than asking hasattr/getattr, which could execute a caller hook.
-        # Recheck these mutable class/instance dictionaries for EVERY leaf.
+        # The class part depends only on the class rows: it is kept per class
+        # while the type watchers report no change of the class or an
+        # ancestor (Python >= 3.12; 3.10/3.11 re-check every leaf). The
+        # instance dictionary is still checked for EVERY leaf below.
+        if class_record(self.mods, _OPAQUE_LEAF_SLOT, cls) is None:
+            self.opaque_class(cls)
+            class_admit(self.mods, _OPAQUE_LEAF_SLOT, cls, PythonObject(True))
+        self.opaque_instance(value)
+
+    def opaque_class(mut self, cls: PythonObject) raises:
         var ancestry = py_call(self.b.type.__dict__["__mro__"].__get__, cls)
         var generic_get = self.b.object.__dict__["__getattribute__"]
         for i in range(len(ancestry)):  # small-loop(opaque leaf class ancestry before any protocol access)
@@ -133,13 +144,15 @@ struct UserObjectFlatten(Movable):
             var get = py_get(fields, "__getattribute__")
             if get is not None and get is not generic_get:
                 raise Error("TypeError: user-object flatten cannot invoke custom attribute hooks")
+
+    def opaque_instance(mut self, value: PythonObject) raises:
         ref cpy = Python().cpython()
         # This public generic dictionary getter reads actual instance storage,
         # bypassing overridden __dict__ properties and __getattribute__.
         var raw = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
         if not raw:
             if cpython_table()[].PyErr_ExceptionMatches(self.b.AttributeError._obj_ptr) != 0:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return  # A slots-only/native leaf need not have a dictionary.
             raise cpy.unsafe_get_error()
         var fields = PythonObject(from_owned=raw)
@@ -197,10 +210,11 @@ struct UserObjectFlatten(Movable):
         var cls = py_type(value)
         if cls is self.list_type or cls is self.tuple_type:
             var size = len(value)
-            var get_list = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
-            var get_tuple = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")
+            # Entries resolved once per process (perf2 table), not twice per container.
+            var t = perf2_cpython_table()
+            var is_list = cls is self.list_type
             for i in range(size):  # cpu-route: walk exact native nested list/tuple slots once
-                var raw = get_list(value._obj_ptr, i) if cls is self.list_type else get_tuple(value._obj_ptr, i)
+                var raw = t[].PyList_GetItem(value._obj_ptr, i) if is_list else t[].PyTuple_GetItem(value._obj_ptr, i)
                 if not raw:
                     raise cpy.unsafe_get_error()
                 var item = PythonObject(from_borrowed=raw)
@@ -208,10 +222,13 @@ struct UserObjectFlatten(Movable):
             _ = value
             return
         var primitive = converted
-        for kind in self.leaf_types:  # small-loop(fixed primitive scalar types)
-            primitive = primitive or cls is kind
+        if not primitive:
+            for kind in self.leaf_types:  # small-loop(fixed primitive scalar types)
+                if cls is kind:
+                    primitive = True
+                    break
         if primitive:
-            if cpy.lib.get_function[Int32]("PyList_Append")(output._obj_ptr, value._obj_ptr) != 0:
+            if cpython_table()[].PyList_Append(output._obj_ptr, value._obj_ptr) != 0:
                 raise cpy.unsafe_get_error()
             return
         self.prepare_foreign()
@@ -221,13 +238,16 @@ struct UserObjectFlatten(Movable):
         var method = self.native_method(cls)
         if method is None:
             self.opaque_leaf(value, cls)
-            if cpy.lib.get_function[Int32]("PyList_Append")(output._obj_ptr, value._obj_ptr) != 0:
+            if cpython_table()[].PyList_Append(output._obj_ptr, value._obj_ptr) != 0:
                 raise cpy.unsafe_get_error()
             return
         var result = py_call(method, value)
         # A native scalar's tolist may return itself (e.g. longdouble). The
         # original contract boxes once, then treats a non-container as a leaf.
         self.into(result, output, True)
+
+
+comptime _OPAQUE_LEAF_SLOT = "user_object_opaque_leaf_class_v1"
 
 
 def user_object_flatten(value: PythonObject) raises -> PythonObject:

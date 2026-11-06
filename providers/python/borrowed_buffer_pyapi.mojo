@@ -104,9 +104,10 @@ struct AdmittedBorrowedBuffer(Movable):
         self.format = String("")
         self.layout = None
         ref cpy = Python().cpython()
-        var pointer = self.exported.unsafe_ptr()
+        var pointer = self.exported.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
         # PyBUF_FULL(_RO): retain format, shape, strides and indirect storage.
-        if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(
+        # Entries resolved once per process (cpython_table), not per pin.
+        if cpython_table()[].PyObject_GetBuffer(
             admitted_exporter._obj_ptr, pointer, Int32(0x11D if writable else 0x11C)) != 0:
             raise cpy.unsafe_get_error()
         self.acquired = True
@@ -143,13 +144,11 @@ struct AdmittedBorrowedBuffer(Movable):
     def release(mut self) raises:
         if self.acquired:
             self.acquired = False
-            ref cpy = Python().cpython()
-            cpy.lib.get_function[NoneType]("PyBuffer_Release")(self.exported.unsafe_ptr())
+            cpython_table()[].PyBuffer_Release(self.exported.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
 
     def __deinit__(deinit self):
         if self.acquired:
             try:
-                ref cpy = Python().cpython()
-                cpy.lib.get_function[NoneType]("PyBuffer_Release")(self.exported.unsafe_ptr())
+                cpython_table()[].PyBuffer_Release(self.exported.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
             except:
                 pass

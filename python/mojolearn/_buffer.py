@@ -37,6 +37,8 @@ off a direct cast beyond that (DEVIATION 2306, documented, not hidden).
 
 from __future__ import annotations
 
+import sys as _sys
+
 import array
 import ctypes
 from functools import lru_cache
@@ -414,6 +416,20 @@ def _materialize(obj, name):
     contiguous supported buffer), plus whether that copied."""
     if isinstance(obj, Array):
         return obj, False
+    np = _sys.modules.get("numpy")
+    if np is not None and type(obj) is np.ndarray:
+        # An exact NumPy array is a host buffer: never a device array (its
+        # DLPack device is the CPU), never sparse, never an `__array__`-only
+        # exporter. One buffer acquisition answers both "has a buffer" and
+        # "holds Python objects" (the same error as before when NumPy cannot
+        # export its dtype), instead of the five probes below.
+        m = memoryview(obj)
+        try:
+            holds_objects = m.format == "O"
+        finally:
+            m.release()
+        if not holds_objects:
+            return _materialize_buffer(obj, name)
     # DEVIATION 2692: a device array has no host buffer, so without this it
     # falls into the nested-list branch below and dies as "holds a
     # <ClassName>, not a number" -- an error about element types, for input
@@ -510,6 +526,12 @@ def _materialize(obj, name):
                 return Array._from_flat(flat, shape, "<i8" if integral else "<f8"), True
             raise TypeError(f"mojolearn: {name} holds a {bad[0]}, not a number")
         return Array._from_flat(flat, shape, "<i8"), True
+    return _materialize_buffer(obj, name)
+
+
+def _materialize_buffer(obj, name):
+    """The buffer arm of `_materialize`: `obj` exports a host buffer that is
+    not a buffer of Python objects."""
     with Buf(obj, name=name) as b:
         if b.format[:1] in (">", "!") and b.itemsize > 1:
             # A copy may normalize endian; a zero-copy Array.from_buffer

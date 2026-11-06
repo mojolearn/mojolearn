@@ -1754,6 +1754,13 @@ def _host_prefix(basename):
 _HOST_IMPORT_ALIAS_MODULES = set()
 
 
+#: basename -> (module, is_sabotage_build) for a host binding whose
+#: read-back passed. A loaded extension cannot change its compiled answers,
+#: so later calls return it after an identity check against sys.modules
+#: (the file-exists stat, the module path and the three read-backs ran once).
+_HOST_ADMITTED = {}
+
+
 def load_host_module(basename):
     """Load (once per process, under `mojolearn._host.<basename>`, the same
     name `_byte_lm_host.py` and `_forest_host.py` use so one file is never
@@ -1762,6 +1769,11 @@ def load_host_module(basename):
     (`<prefix>_numeric_mode() == 1`) and as the kernel matrix's CPU column
     (`<prefix>_column() == "cpu"`, the comptime assert's witness), and a
     sabotage build is refused unless MOJOLEARN_HOST_ALLOW_SABOTAGE=1."""
+    admitted = _HOST_ADMITTED.get(basename)
+    if (admitted is not None
+            and sys.modules.get(_HOST_MODULE_PREFIX + basename) is admitted[0]
+            and (not admitted[1] or os.environ.get(_HOST_ALLOW_SABOTAGE) == "1")):
+        return admitted[0]
     path = host_module_path(basename)
     if not os.path.exists(path):
         raise ImportError(
@@ -1806,7 +1818,8 @@ def load_host_module(basename):
             "column, not the CPU column; rebuild it with -D MOJOLEARN_COLUMN_CPU"
         )
     sabotage = getattr(module, prefix + "_sabotage", None)
-    if sabotage is not None and bool(sabotage()) and os.environ.get(_HOST_ALLOW_SABOTAGE) != "1":
+    sabotaged = sabotage is not None and bool(sabotage())
+    if sabotaged and os.environ.get(_HOST_ALLOW_SABOTAGE) != "1":
         raise ImportError(
             f"mojolearn: {path} is a SABOTAGE build and computes wrong answers "
             f"on purpose; it is refused outside the gate ({_HOST_ALLOW_SABOTAGE}=1)"
@@ -1815,6 +1828,7 @@ def load_host_module(basename):
         from ._host_import_aliases import connect
         connect(basename, module)
         _HOST_IMPORT_ALIAS_MODULES.add(module)
+    _HOST_ADMITTED[basename] = (module, sabotaged)
     return module
 
 
@@ -2418,9 +2432,11 @@ def set_default_mode(mode):
 def binding(name, mode=None):
     """Resolve a binding and reject a readable compiled-mode mismatch at call time."""
     requested = default_mode() if mode is None else mode
-    if not isinstance(requested, str) or requested.strip().lower() not in _MODE_CODE:
+    if not isinstance(requested, str):
         raise ValueError("numeric_mode must be fast, identical or None")
     requested = requested.strip().lower()
+    if requested not in _MODE_CODE:
+        raise ValueError("numeric_mode must be fast, identical or None")
     if not _offers(name, requested):
         raise ValueError(
             f"mojolearn: {name} has no {requested!r} tier. "
@@ -2434,8 +2450,15 @@ def binding(name, mode=None):
     # refuses by name) is the answer, and it is IDENTICAL only.
     if _CPU_ONLY is not None:
         return _cpu_only_binding(name, requested)
-    selected = load_set(requested)
-    module = getattr(selected, name)
+    # `requested` is already normalized: a loaded set and an already
+    # resolved member are read directly (no second strip/lower in load_set,
+    # no failed attribute lookup before _ModeSet.__getattr__).
+    selected = _SETS.get(requested)
+    if selected is None:
+        selected = load_set(requested)
+    module = selected._modules.get(name)
+    if module is None:
+        module = getattr(selected, name)
     # A correctly built GBDT sibling does not establish RF/ET (or any other
     # extension) mode. Check the actual called module, including cached sets.
     getter_name = _vendor_fn(name).removesuffix("_vendor") + "_numeric_mode"

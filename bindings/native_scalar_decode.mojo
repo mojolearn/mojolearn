@@ -2,6 +2,7 @@
 # Shared numeric buffer decoding. Callers admit exact primitive scalar/array
 # owners first. This is not a general Python buffer/protocol admission helper.
 from std.memory import bitcast
+from bindings.cpython_table import cpython_table
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
@@ -79,17 +80,17 @@ def native_scalar_buffer_dtype(value: PythonObject, dtype: PythonObject) raises 
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()
-    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr,pointer,Int32(0x118))
+    var status = cpython_table()[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0x118))
     if status != 0:
         raise cpy.unsafe_get_error()
     try:
         if view[2] != width or view[3] != width:
             raise Error("TypeError: numeric scalar decoding requires one primitive buffer element")
-        status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(data,pointer,width,Int8(67))
+        status = cpython_table()[].PyBuffer_ToContiguous(data, pointer, width, Int8(67))
         if status != 0:
             raise cpy.unsafe_get_error()
     finally:
-        cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        cpython_table()[].PyBuffer_Release(pointer)
         # Keep the Py_buffer storage alive past the release on every path
         # (ASAP destruction could free it before PyBuffer_Release reads it).
         _ = len(view)

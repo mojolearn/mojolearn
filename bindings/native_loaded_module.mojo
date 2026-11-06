@@ -158,6 +158,13 @@ struct _AdmittedModule(Copyable, Movable):
     # Registered exports whose key object is not the namespace's own key
     # object (an equal but distinct str): the stamp looks these up by key.
     var unslotted: List[Int]
+    # Python >= 3.12: the namespace dictionary is watched (shared dictionary
+    # watcher below) and `epoch` is its watch epoch at admission. Any
+    # insertion, replacement, deletion or clear bumps the epoch, so the stamp
+    # compares one integer instead of walking the namespace. False on 3.10 /
+    # 3.11 or when the watch was refused: the stamp keeps the full walk.
+    var watched: Bool
+    var epoch: Int
 
     def __init__(out self, name: String, module: PythonObject, module_type: PythonObject, fields: PythonObject,
                  size: Int, keys: List[PythonObject], values: List[PythonObject]) raises:
@@ -172,6 +179,8 @@ struct _AdmittedModule(Copyable, Movable):
         self.namespace_keys = List[PythonObject]()
         self.slot_values = List[PyObjectPtr]()
         self.unslotted = List[Int]()
+        self.watched = False
+        self.epoch = 0
         # Raw pointers of the retained lists' items (kept alive by them).
         self.key_ptrs = List[PyObjectPtr]()
         self.value_ptrs = List[PyObjectPtr]()
@@ -205,18 +214,108 @@ struct _AdmittedModule(Copyable, Movable):
 
 
 struct _AdmittedModules(Defaultable, Movable):
-    var entries: Dict[String, _AdmittedModule]
+    # name -> position in `entries`: one String-keyed lookup per request
+    # (was a membership test plus two keyed reads, each hashing the name).
+    var index: Dict[String, Int]
+    var entries: List[_AdmittedModule]
 
     def __init__(out self):
-        self.entries = Dict[String, _AdmittedModule]()
+        self.index = Dict[String, Int]()
+        self.entries = List[_AdmittedModule]()
 
 
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever _AdmittedModule's layout changes.
 comptime _ADMITTED_MODULES = _Global[
-    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV4",
+    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV5",
     init_fn=_AdmittedModules.__init__,
 ]
+
+
+# ------------------------------------------------- shared dictionary watcher
+# CPython >= 3.12 dictionary watchers (`PyDict_AddWatcher` / `PyDict_Watch`)
+# report every insertion, replacement, deletion, clear, clone and
+# deallocation of a watched dictionary. Each event bumps that dictionary's
+# epoch in a native map (the callback runs no Python). One watcher serves
+# both the module-connection stamp here and the key admissions of
+# native_class_admission (dict_keys_admitted), so the process spends one of
+# CPython's eight dictionary-watcher slots, not two. Python 3.10 and 3.11
+# have no dictionary watchers: every caller keeps its full check there.
+
+
+struct SharedDictWatch(Defaultable, Movable):
+    # watcher: -2 not set up yet, -1 unavailable (Python < 3.12 or no free
+    # watcher slot), otherwise the interpreter's dictionary watcher ID.
+    var watcher: Int
+    var epochs: Dict[Int, Int]
+
+    def __init__(out self):
+        self.watcher = -2
+        self.epochs = Dict[Int, Int]()
+
+
+comptime SHARED_DICT_WATCH = _Global[
+    StorageType=SharedDictWatch, name="MojolearnSharedDictWatchV1",
+    init_fn=SharedDictWatch.__init__,
+]
+
+
+def _shared_dict_modified_c(event: Int32, fields: PyObjectPtr, key: PyObjectPtr, value: PyObjectPtr) abi("C") -> Int32:
+    # Dictionary watcher callback (GIL held): native map update only; never
+    # raises into CPython.
+    try:
+        var g = SHARED_DICT_WATCH.get_or_create_ptr()
+        var address = Int(fields)
+        if address in g[].epochs:
+            g[].epochs[address] = g[].epochs[address] + 1
+        else:
+            g[].epochs[address] = 1
+    except:
+        pass
+    return 0
+
+
+def shared_dict_watcher() raises -> Int:
+    """The process dictionary watcher ID, set up on first use; -1 where
+    dictionary watchers are unavailable (Python 3.10 / 3.11, or every
+    interpreter slot taken)."""
+    var g = SHARED_DICT_WATCH.get_or_create_ptr()
+    if g[].watcher != -2:
+        return g[].watcher
+    ref cpy = Python().cpython()
+    var version_ptr = cpy.lib.get_function[Pointer[Int8, MutUntrackedOrigin]]("Py_GetVersion")()
+    var version = String(unsafe_from_utf8_ptr=version_ptr)
+    if version.startswith("3.10.") or version.startswith("3.11."):
+        g[].watcher = -1
+        return -1
+    var identifier = cpy.lib.get_function[Int32]("PyDict_AddWatcher")(_shared_dict_modified_c)
+    if identifier < 0:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        g[].watcher = -1
+        return -1
+    g[].watcher = Int(identifier)
+    return g[].watcher
+
+
+def shared_dict_epoch(address: Int) raises -> Int:
+    """Watch epoch of the dictionary at `address` (0 until its first event)."""
+    var g = SHARED_DICT_WATCH.get_or_create_ptr()
+    if address in g[].epochs:
+        return g[].epochs[address]
+    return 0
+
+
+def shared_dict_watch(fields: PyObjectPtr) raises -> Bool:
+    """Watch the exact dictionary `fields`; False where watching is not
+    available or was refused (the caller keeps its full check)."""
+    var watcher = shared_dict_watcher()
+    if watcher < 0:
+        return False
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields) < 0:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return False
+    return True
 
 
 def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
@@ -246,6 +345,12 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     if not fields or fields != entry.fields._obj_ptr:
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return False
+    if entry.watched:
+        # Watched namespace (Python >= 3.12): any key or value edit since the
+        # admission bumped the epoch. One integer compare replaces the walk;
+        # the registry, module identity, type and namespace identity checks
+        # above still run on every request.
+        return shared_dict_epoch(Int(fields)) == entry.epoch
     if t[].PyDict_Size(fields) != entry.size:
         return False
     if len(entry.namespace_keys) != entry.size or len(entry.slot_values) != entry.size:
@@ -298,10 +403,21 @@ def _admit_module(name: String, module: PythonObject) raises:
             values.append(exports[j][1])
         var size = cpython_table()[].PyDict_Size(fields._obj_ptr)
         var cls = PythonObject(from_owned=cpy.PyObject_Type(module._obj_ptr))
+        var admitted = _AdmittedModule(name, module, cls, fields, size, keys, values)
+        # Watch first, then read the epoch: an edit after this point bumps it.
+        # The full check just passed with the GIL held and no Python ran since.
+        if shared_dict_watch(fields._obj_ptr):
+            admitted.watched = True
+            admitted.epoch = shared_dict_epoch(Int(fields._obj_ptr))
         var g = _ADMITTED_MODULES.get_or_create_ptr()
         # Native names index the retained connections directly. Replacing a
         # stale admission preserves the same complete module/export check.
-        g[].entries[name] = _AdmittedModule(name, module, cls, fields, size, keys, values)
+        var slot = g[].index.find(name)
+        if slot:
+            g[].entries[slot.value()] = admitted^
+        else:
+            g[].index[name] = len(g[].entries)
+            g[].entries.append(admitted^)
         return
 
 
@@ -311,10 +427,15 @@ def native_loaded_module(name: String) raises -> PythonObject:
     # export identities) runs on first use and again whenever the identity
     # stamp differs, so a refusal keeps its type, message and position. An
     # unchanged admitted connection costs one pointer-compare stamp.
+    # One String-keyed lookup, then the stamp on the admitted record by
+    # reference (no record copy). On Python >= 3.12 the stamp is pointer and
+    # epoch compares only: no namespace walk, no by-name symbol lookup.
     var g = _ADMITTED_MODULES.get_or_create_ptr()
-    if name in g[].entries:
-        if _admitted_stamp(g[].entries[name]):
-            return g[].entries[name].module
+    var slot = g[].index.find(name)
+    if slot:
+        ref entry = g[].entries[slot.value()]
+        if _admitted_stamp(entry):
+            return entry.module
     var module = _native_loaded_module_full(name)
     _admit_module(name, module)
     return module

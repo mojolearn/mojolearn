@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Read the address of an already-admitted, owned native contiguous buffer.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 
 
 def native_buffer_address(value: PythonObject) raises -> Int:
@@ -10,11 +11,11 @@ def native_buffer_address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var view = List[Int](length=10, fill=0)
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0))
+    var status = cpython_table()[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0))
     if status != 0:
         raise cpy.unsafe_get_error()
     var address = view[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    cpython_table()[].PyBuffer_Release(pointer)
     # Keep the Py_buffer storage alive past the release (ASAP destruction
     # could free it before PyBuffer_Release reads it).
     _ = view^

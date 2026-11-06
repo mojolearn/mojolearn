@@ -136,8 +136,10 @@ def estimator_checked_mode(module: PythonObject, reader: String, name: String,
     # owner validates descriptor mode once; fast retains its legacy readback.
     if name == "_mojolearn_kernel_methods" and requested == "identical":
         return module
-    if (getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") == "1"
-            and (name == "_mojolearn_svm" or name == "_mojolearn_x_neighbors")):
+    # Name tests first: the environment is read only for the two families
+    # the switch can affect, not on every public operation.
+    if ((name == "_mojolearn_svm" or name == "_mojolearn_x_neighbors")
+            and getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") == "1"):
         if requested != "identical":
             raise Error("native dispatch candidate requires identical mode")
         return module

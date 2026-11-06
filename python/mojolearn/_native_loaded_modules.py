@@ -80,6 +80,9 @@ connect_module('array', array, ('array',))
 # reading its dictionary. This standard-library owner is needed even when
 # NumPy is absent; connect the consumed type once rather than importing at use.
 connect_module('_thread', _thread, ('_local',))
+# SmallMLP item iteration over a 1-D float16 Array reads _struct.unpack
+# (bindings/small_mlp_items.mojo); without this connection it always refused.
+connect_module('_struct', _struct, ('unpack',))
 connect_module('operator', operator, tuple(name for name in vars(operator)  # glue: fixed scalar/index operator exports
                                           if not name.startswith('_')))
 # glue: only the exact integer-valued math exports the model-selection
@@ -97,11 +100,7 @@ connect_module('types', types, ('ModuleType', 'SimpleNamespace', 'MemberDescript
 connect_module('warnings', warnings, ())  # warning filters are mutable native configuration, validated by their owner
 # TargetEncoder's user-cv test reads numbers.Integral through this connection
 # instead of importing the module on every fit_transform.
-connect_module('numbers', numbers, ('Integral',))
-# SmallMLP item iteration over a 1-D float16 Array reads _struct.unpack through
-# this connection (bindings/small_mlp_items.mojo); it was never connected, so
-# that input was always refused.
-connect_module('_struct', _struct, ('unpack',))
+connect_module('numbers', numbers, ('Integral', 'Real'))  # Real: user-object kinds (bindings/user_objects_native.mojo)
 
 
 # glue: exact standard path identities, connected before any product operation.

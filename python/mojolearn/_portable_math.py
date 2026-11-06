@@ -289,7 +289,8 @@ def _pow_bound(m, n, bits, up):
     return acc, acc_s
 
 
-@functools.lru_cache(maxsize=256)
+# No result cache: an lru_cache keyed on (x, n) by equality served +0.0 for
+# -0.0 (equal, same hash) and vice versa, so the bits depended on call order.
 def powi(x, n):
     """`x ** n` for a float x and an integer n >= 0, CORRECTLY ROUNDED
     (nearest/even), without the platform pow that `x ** n` calls. The exact

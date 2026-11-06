@@ -68,6 +68,66 @@ comptime _PyType_IsSubtype = ExternalFunction[
 # int PyCallable_Check(PyObject *o)
 comptime _PyCallable_Check = ExternalFunction[
     "PyCallable_Check", def(PyObjectPtr) thin abi("C") -> c_int]
+# Lane p3-core-cpython (2026-11-06): entries that per-item and per-call
+# sites resolved by name on every use. Pointers to C strings and raw
+# buffers travel as an address `Int` (same register class as a pointer under
+# the C ABI on every supported target).
+# void PyErr_Clear(void)
+comptime _PyErr_Clear = ExternalFunction[
+    "PyErr_Clear", def() thin abi("C") -> NoneType]
+# PyObject *PyList_New(Py_ssize_t len)  (new)
+comptime _PyList_New = ExternalFunction[
+    "PyList_New", def(Int) thin abi("C") -> PyObjectPtr]
+# int PyList_Append(PyObject *list, PyObject *item)  (does not steal)
+comptime _PyList_Append = ExternalFunction[
+    "PyList_Append", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
+# PyObject *PyFloat_FromDouble(double v)  (new)
+comptime _PyFloat_FromDouble = ExternalFunction[
+    "PyFloat_FromDouble", def(Float64) thin abi("C") -> PyObjectPtr]
+# PyObject *PyLong_FromLongLong(long long v)  (new)
+comptime _PyLong_FromLongLong = ExternalFunction[
+    "PyLong_FromLongLong", def(Int64) thin abi("C") -> PyObjectPtr]
+# PyObject *PyLong_FromUnsignedLongLong(unsigned long long v)  (new)
+comptime _PyLong_FromUnsignedLongLong = ExternalFunction[
+    "PyLong_FromUnsignedLongLong", def(UInt64) thin abi("C") -> PyObjectPtr]
+# PyObject *PySlice_New(PyObject *start, PyObject *stop, PyObject *step)  (new)
+comptime _PySlice_New = ExternalFunction[
+    "PySlice_New", def(PyObjectPtr, PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyMemoryView_FromObject(PyObject *obj)  (new)
+comptime _PyMemoryView_FromObject = ExternalFunction[
+    "PyMemoryView_FromObject", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)  (new)
+comptime _PyType_GenericAlloc = ExternalFunction[
+    "PyType_GenericAlloc", def(PyObjectPtr, Int) thin abi("C") -> PyObjectPtr]
+# char *PyBytes_AsString(PyObject *o)  (address; 0 on error)
+comptime _PyBytes_AsString = ExternalFunction[
+    "PyBytes_AsString", def(PyObjectPtr) thin abi("C") -> Int]
+# Py_UCS4 PyUnicode_ReadChar(PyObject *unicode, Py_ssize_t index)
+comptime _PyUnicode_ReadChar = ExternalFunction[
+    "PyUnicode_ReadChar", def(PyObjectPtr, Int) thin abi("C") -> UInt32]
+# int Py_GetRecursionLimit(void)
+comptime _Py_GetRecursionLimit = ExternalFunction[
+    "Py_GetRecursionLimit", def() thin abi("C") -> c_int]
+# int Py_EnterRecursiveCall(const char *where)  (address of a C string)
+comptime _Py_EnterRecursiveCall = ExternalFunction[
+    "Py_EnterRecursiveCall", def(Int) thin abi("C") -> c_int]
+# void Py_LeaveRecursiveCall(void)
+comptime _Py_LeaveRecursiveCall = ExternalFunction[
+    "Py_LeaveRecursiveCall", def() thin abi("C") -> NoneType]
+# PyObject *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size, const char *errors)
+# (s and errors as addresses; errors 0 = strict)
+comptime _PyUnicode_DecodeUTF8 = ExternalFunction[
+    "PyUnicode_DecodeUTF8", def(Int, Int, Int) thin abi("C") -> PyObjectPtr]
+# double PyOS_string_to_double(const char *s, char **endptr, PyObject *overflow_exception)
+comptime _PyOS_string_to_double = ExternalFunction[
+    "PyOS_string_to_double", def(Int, Int, Int) thin abi("C") -> Float64]
+# PyObject *PyLong_FromString(const char *str, char **pend, int base)
+comptime _PyLong_FromString = ExternalFunction[
+    "PyLong_FromString", def(Int, Int, c_int) thin abi("C") -> PyObjectPtr]
+# int PyBuffer_ToContiguous(void *buf, const Py_buffer *src, Py_ssize_t len, char order)
+# (the Py_buffer as the same word storage as PyObject_GetBuffer)
+comptime _PyBuffer_ToContiguous = ExternalFunction[
+    "PyBuffer_ToContiguous", def(UnsafePointer[UInt8, MutUntrackedOrigin], UnsafePointer[Int, MutUntrackedOrigin], Int, Int8) thin abi("C") -> c_int]
 
 
 struct CPythonTable(Movable):
@@ -86,6 +146,24 @@ struct CPythonTable(Movable):
     var PyObject_GetItem: _PyObject_GetItem.type
     var PyType_IsSubtype: _PyType_IsSubtype.type
     var PyCallable_Check: _PyCallable_Check.type
+    var PyErr_Clear: _PyErr_Clear.type
+    var PyList_New: _PyList_New.type
+    var PyList_Append: _PyList_Append.type
+    var PyFloat_FromDouble: _PyFloat_FromDouble.type
+    var PyLong_FromLongLong: _PyLong_FromLongLong.type
+    var PyLong_FromUnsignedLongLong: _PyLong_FromUnsignedLongLong.type
+    var PySlice_New: _PySlice_New.type
+    var PyMemoryView_FromObject: _PyMemoryView_FromObject.type
+    var PyType_GenericAlloc: _PyType_GenericAlloc.type
+    var PyBytes_AsString: _PyBytes_AsString.type
+    var PyUnicode_ReadChar: _PyUnicode_ReadChar.type
+    var Py_GetRecursionLimit: _Py_GetRecursionLimit.type
+    var Py_EnterRecursiveCall: _Py_EnterRecursiveCall.type
+    var Py_LeaveRecursiveCall: _Py_LeaveRecursiveCall.type
+    var PyBuffer_ToContiguous: _PyBuffer_ToContiguous.type
+    var PyUnicode_DecodeUTF8: _PyUnicode_DecodeUTF8.type
+    var PyOS_string_to_double: _PyOS_string_to_double.type
+    var PyLong_FromString: _PyLong_FromString.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -105,13 +183,31 @@ struct CPythonTable(Movable):
         self.PyObject_GetItem = _PyObject_GetItem.load(lib)
         self.PyType_IsSubtype = _PyType_IsSubtype.load(lib)
         self.PyCallable_Check = _PyCallable_Check.load(lib)
+        self.PyErr_Clear = _PyErr_Clear.load(lib)
+        self.PyList_New = _PyList_New.load(lib)
+        self.PyList_Append = _PyList_Append.load(lib)
+        self.PyFloat_FromDouble = _PyFloat_FromDouble.load(lib)
+        self.PyLong_FromLongLong = _PyLong_FromLongLong.load(lib)
+        self.PyLong_FromUnsignedLongLong = _PyLong_FromUnsignedLongLong.load(lib)
+        self.PySlice_New = _PySlice_New.load(lib)
+        self.PyMemoryView_FromObject = _PyMemoryView_FromObject.load(lib)
+        self.PyType_GenericAlloc = _PyType_GenericAlloc.load(lib)
+        self.PyBytes_AsString = _PyBytes_AsString.load(lib)
+        self.PyUnicode_ReadChar = _PyUnicode_ReadChar.load(lib)
+        self.Py_GetRecursionLimit = _Py_GetRecursionLimit.load(lib)
+        self.Py_EnterRecursiveCall = _Py_EnterRecursiveCall.load(lib)
+        self.Py_LeaveRecursiveCall = _Py_LeaveRecursiveCall.load(lib)
+        self.PyBuffer_ToContiguous = _PyBuffer_ToContiguous.load(lib)
+        self.PyUnicode_DecodeUTF8 = _PyUnicode_DecodeUTF8.load(lib)
+        self.PyOS_string_to_double = _PyOS_string_to_double.load(lib)
+        self.PyLong_FromString = _PyLong_FromString.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
 # them load the same interpreter library). Bump the name's version whenever a
 # field is added, removed or reordered.
 comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name="MojolearnCPythonTableV3",
+    StorageType=CPythonTable, name="MojolearnCPythonTableV4",
     init_fn=CPythonTable.__init__,
 ]
 

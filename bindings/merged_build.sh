@@ -197,8 +197,19 @@ while read -r stem cls members; do
     else
         set -- pixi run mojo
     fi
+    # Compile jobs: MOJOLEARN_COMPILE_JOBS when set (the laptop's compile
+    # slot passes 1). Otherwise every core on a rented Linux build host
+    # (rented cores are paid for whole); 2 on macOS, the shared laptop.
+    jobs="${MOJOLEARN_COMPILE_JOBS:-}"
+    if [ -z "$jobs" ]; then
+        if [ "$(uname -s)" = Linux ]; then
+            jobs="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+        else
+            jobs=2
+        fi
+    fi
     # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-    "$@" build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+    "$@" build -j "$jobs" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
         $base_flags $class_flags $link_flags $mode_flags $column_flags $extra_flags \
         -I . -I bindings \
         "$root" -o "$tmpdir/$stem.so" < /dev/null
