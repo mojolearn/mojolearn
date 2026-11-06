@@ -13,6 +13,7 @@ against y on the metrics binding of the model's numeric mode, the kernel
 The same kernels in the same order, so the score keeps its bits.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import xseq_addr, xseq_f32p, xseq_reshape
@@ -21,7 +22,7 @@ from core.xseq_marshal import xseq_all_finite_f32, xseq_min_max_f32
 
 
 def _shape_text(value: PythonObject) raises -> String:
-    return String(py=py_call(Python.import_module("builtins").str, value.shape))
+    return String(py=py_call(native_loaded_module("builtins").str, value.shape))
 
 
 def _vector(value: PythonObject, name: String) raises -> PythonObject:
@@ -46,12 +47,14 @@ def _vector(value: PythonObject, name: String) raises -> PythonObject:
 def _metrics_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_metrics_impl._get_binding(model.numeric_mode)`: the metrics binding
     of that mode (or the process default), checked against its compiled mode."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = py_get(py_fields(model), "numeric_mode")
-    if mode is not None and (py_type(mode) is not b.str
-                             or (String(py=py_call(py_call(mode.strip).lower)) != "fast"
-                                 and String(py=py_call(py_call(mode.strip).lower)) != "identical")):
-        raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
+    if mode is not None:
+        if py_type(mode) is not b.str:
+            raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
+        var clean = String(py=py_call(py_call(mode.strip).lower))  # one strip/lower, not two
+        if clean != "fast" and clean != "identical":
+            raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
     var expected = context["backend_fields"]["_DEFAULT_MODE"] if mode is None else mode
     expected = py_call(py_call(expected.strip).lower)
     var table = context["xseq_metrics"]
@@ -77,10 +80,14 @@ def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> Pyth
                     + " entries for " + String(n) + " samples")
     var p = xseq_f32p(w)
     _ = w  # keep the Python object alive through the native call above
-    if not xseq_all_finite_f32(p, n) or xseq_min_max_f32(p, n)[0] < Float32(0.0):
+    if not xseq_all_finite_f32(p, n):
         raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
+    # one min/max scan serves both refusals (it was run twice)
+    var bounds = xseq_min_max_f32(p, n)
     _ = w  # keep the Python object alive through the native calls above
-    if not xseq_min_max_f32(p, n)[1] > Float32(0.0):
+    if bounds[0] < Float32(0.0):
+        raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
+    if not bounds[1] > Float32(0.0):
         raise Error("ValueError: mojolearn r2_score: sample_weight must have positive total weight")
     _ = w  # keep the Python object alive through the native calls above
     return w

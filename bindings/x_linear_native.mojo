@@ -31,6 +31,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_attributes import _type_mro
 from bindings.mode_metadata_native import _class_fields
 from bindings.native_loaded_module import native_loaded_module
+from bindings.py_lists import py_list_int, py_list_f64
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_error_boundary import classical_python_error
 from bindings.classical_arrays import classical_typed, classical_address
@@ -86,11 +87,14 @@ comptime _CD_WARM = "mojolearn ElasticNet: warm_start=True is not supported (cuM
 
 
 def _b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    # The import-time admitted connection (one stamp compare after the first
+    # use), not PyImport_ImportModule's __import__ round trip on every scalar
+    # helper call.
+    return native_loaded_module("builtins")
 
 
 def _op() raises -> PythonObject:
-    return Python.import_module("operator")
+    return native_loaded_module("operator")
 
 
 def _truth(value: PythonObject) raises -> Bool:
@@ -408,17 +412,13 @@ def _xl_owned(m: LabelsMatrix, context: PythonObject) raises -> PythonObject:
 
 
 def _xl_ints(values: List[Int]) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(values)):  # driver-loop: over the route's integer hyperparameters
-        _ = py_call(out.append, PythonObject(values[i]))
-    return out
+    # One PyList_New plus direct slot stores (bindings/py_lists.mojo), not a
+    # bound `append` lookup and call per hyperparameter.
+    return py_list_int(values)
 
 
 def _xl_reals(values: List[Float64]) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(values)):  # driver-loop: over the route's float hyperparameters
-        _ = py_call(out.append, PythonObject(values[i]))
-    return out
+    return py_list_f64(values)
 
 
 def _lbfgs_work(p: Int) -> Int:
@@ -1064,12 +1064,15 @@ def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, context: P
     var k = _xl_count(out, d + 3)
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    var active = Python.list()
+    # the active feature indices read natively, published as one list
+    # (py_list_int), not a bound `append` call per feature
+    var active_words = List[Int](capacity=max(k, 0))
     for i in range(k):  # driver-loop: over the active features (model structure)
-        _ = py_call(active.append, PythonObject(_xl_count(out, d + 4 + i)))
-        _ = y  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "active_", active)
+        active_words.append(_xl_count(out, d + 4 + i))
+    _ = out  # keep the result words alive through the reads above
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    py_setitem(fields, "active_", py_list_int(active_words))
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
     _ = y^
@@ -1828,7 +1831,7 @@ def _xl_undefined_warning(message: String, context: PythonObject) raises:
     var sk = py_get(context["modules"], "sklearn.exceptions")
     if sk is not None:
         category = py_call(_b().getattr, sk, PythonObject("UndefinedMetricWarning"), category)
-    var frame = py_call(Python.import_module("sys")._getframe, PythonObject(0))
+    var frame = py_call(native_loaded_module("sys")._getframe, PythonObject(0))
     var module = py_get(frame.f_globals, "__name__", "")
     classical_warning(message, category, context, Python.tuple(frame.f_code.co_filename, frame.f_lineno, module),
                       "UndefinedMetricWarning")
@@ -2352,7 +2355,7 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
 def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if len(call) != 4:
             raise Error("TypeError: x_linear_native_call requires model, operation, arguments and connected context")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple or py_type(call[3]) is not b.dict:

@@ -146,6 +146,15 @@ def _width(input: LayerInput, normalized_shape: PythonObject, context: PythonObj
     if input.absent or len(input.shape) == 0:
         raise Error("ValueError: layer_norm input requires at least one dimension")
     var d = input.shape[len(input.shape) - 1] if normalized_shape is None else _norm_d(normalized_shape, context)
+    return _width_known(input, d)
+
+
+def _width_known(input: LayerInput, d: Int) raises -> Int:
+    # `_width` for a layer width the operation already holds natively (the
+    # fitted `_D`, checked against normalized_shape): the same refusals,
+    # without boxing d and re-deriving it through Python int/isinstance.
+    if input.absent or len(input.shape) == 0:
+        raise Error("ValueError: layer_norm input requires at least one dimension")
     if d < 1 or d > 2147483647 or input.shape[len(input.shape) - 1] == 0 or input.count % d != 0:
         raise Error("ValueError: layer_norm: trailing dimensions must match normalized_shape")
     return d
@@ -313,7 +322,7 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
         if x is None:
             raise Error("RuntimeError: LayerNorm.backward: call forward first")
         var input = LayerInput(x, context)
-        _ = _width(input, PythonObject(d), context)
+        _ = _width_known(input, d)
         var result = _run(input, d, fields["weight"], fields["bias"], Float64(py=fields["eps"]), values[0],
             py_get(fields, "numeric_mode"), py_get(fields, "_stats"), shape, context)
         _ = input^
@@ -323,7 +332,7 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
     if operation != "seqln_layer":
         raise Error("ValueError: unknown LayerNorm public operation")
     var input = LayerInput(values[0], context)
-    _ = _width(input, PythonObject(d), context)
+    _ = _width_known(input, d)
     var k = len(shape)
     var same = len(input.shape) >= k
     if same:

@@ -12,7 +12,9 @@ attributes or the forecast dict. The stored-forecast reuse of theta and ETS
 is kept as it was.
 """
 from std.memory import memcpy
+from std.ffi import c_int
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.classical_attributes import classical_connect_numpy
@@ -198,11 +200,33 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         _ = y  # keep the Python object alive through the native call above
         _store(fields, "info_", info)
         # the selected model of each series: info column 4 as an index into the names
-        var codes = xseq_column_i64(info, batch, 8, 4, context)
-        var names = py_call(b.list, py_call(b.map, _getattr(models, "__getitem__"), py_call(_getattr(codes, "tolist"))))
+        var names = _theta_model_names(models, info, batch)
         _store(fields, "model_", names)
         _store(fields, "_fitted_h", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), py_call(b.list, names)))
     return xseq_mean_dict(xseq_first(forecast, xseq_truth(fields["_one"])))
+
+
+def _theta_model_names(models: PythonObject, info: PythonObject, batch: Int) raises -> PythonObject:
+    """`list(map(models.__getitem__, info[:, 4].astype(np.int64).tolist()))`
+    read natively: each row's float32 code word truncated toward zero (as
+    astype), the connected name at that index (Python indexing, its own
+    IndexError) stored straight into one new list. No int64 column copy,
+    no `tolist` and no `map` over the series."""
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(batch)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # Own the NULL-filled list at once: a failure releases every stored slot.
+    var names = PythonObject(from_owned=raw)
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var words = xseq_f32p(info)
+    for row in range(batch):  # driver-loop: over the fitted series (one selected model name each)
+        var name = models[Int(Int64(words[row * 8 + 4]))]
+        # SetItem steals the reference on both success and failure.
+        if set_item(names._obj_ptr, row, name.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
+    _ = info  # keep the code words alive through the reads above
+    return names
 
 
 # ---------------------------------------------------------------- Croston

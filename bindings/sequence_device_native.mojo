@@ -5,6 +5,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
+from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_admission import opt_scalar, opt_value
 from bindings.optimizer_device_native import device_shape, shape_count
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints
@@ -36,7 +37,7 @@ def seq_device_set(owner: PythonObject, binding: PythonObject, shape: List[Int],
 
 def seq_device_make(binding: PythonObject, shape: List[Int], handle: PythonObject, base: PythonObject,
                     context: PythonObject) raises -> PythonObject:
-    var result = py_call(Python.import_module("builtins").object.__new__, context["sequence_device_class"])
+    var result = py_call(native_loaded_module("builtins").object.__new__, context["sequence_device_class"])
     seq_device_set(result, binding, shape, handle, base, context)
     return result
 
@@ -122,7 +123,7 @@ def sequence_tensor_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
 
 def sequence_device_operation(operation: String, owner: PythonObject, values: PythonObject,
                               mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if operation == "seqdev_is":
         return PythonObject(py_type(values[0]) is context["sequence_device_class"])
     if operation == "seqdev_size_of":

@@ -9,7 +9,9 @@ Python connects the compiled `_mojolearn_x_sequence` entries once, at import
 into `xseq_native_call`, which runs the same compiled entries, in the same
 order and with the same arguments, as the Python bodies it replaces.
 """
+from std.ffi import c_int
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.sequential_admission import _one_of
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
@@ -126,9 +128,10 @@ def xseq_f32(value: PythonObject, name: String, copy: Bool, context: PythonObjec
     var cast = cast_in_kind(Int(py=dtype.num), item, name)
     var dims = List[Int]()
     var steps = List[Int]()
+    var strides = value.strides  # one attribute read, not one per axis
     for k in range(rank):  # driver-loop: over array rank metadata
         dims.append(Int(py=shape[k]))
-        steps.append(Int(py=value.strides[k]))
+        steps.append(Int(py=strides[k]))
     xseq_cast_nd(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
                  XF32P(unsafe_from_address=Int(py=sequential_address(out))))
     _ = out  # keep the Python object alive through the native call above
@@ -206,11 +209,26 @@ def xseq_column_i64(value: PythonObject, rows: Int, cols: Int, col: Int, context
 def xseq_curve_list(value: PythonObject, count: Int) raises -> PythonObject:
     """The first `count` float32 words of `value` as a list of floats
     (`curve[:count].tolist()`)."""
-    var result = Python.list()
+    # One PyList_New, then each completed float32 word boxed straight into
+    # its slot (the bindings/py_lists.mojo pattern), instead of a getattr
+    # of `append` and a call per epoch.
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # Own the NULL-filled list at once: a failure releases every stored slot.
+    var result = PythonObject(from_owned=raw)
+    var box = cpy.lib.get_function[PyObjectPtr]("PyFloat_FromDouble")
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     var p = xseq_f32p(value)
-    var b = native_loaded_module("builtins")
     for k in range(count):  # driver-loop: over the native training engine's per-epoch scalar report
-        _ = py_call(py_call(b.getattr, result, "append"), PythonObject(Float64(p[k])))
+        var item = box(Float64(p[k]))
+        if not item:
+            raise cpy.unsafe_get_error()
+        # SetItem steals the new reference on both success and failure.
+        if set_item(result._obj_ptr, k, item) != 0:
+            raise cpy.unsafe_get_error()
+    _ = value  # keep the source words alive through the reads above
     return result
 
 
