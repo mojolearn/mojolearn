@@ -141,28 +141,28 @@ def ivf_flat_extend_binding(
 
 
 struct HostIvfResident(Movable):
-    # p3-neighbors-cluster: the index sits behind a reference-counted
-    # pointer. A search copies the pointer under the registry's lock word and
-    # reads the index with the GIL released; a concurrent prepare (which may
-    # grow the dictionary) or release then drops only the registry's
-    # reference, never the memory a running search reads.
-    var index: ArcPointer[IvfHostIndex]
+    var index: IvfHostIndex
     var partial_storage: Bool
 
     def __init__(out self, var index: IvfHostIndex, partial_storage: Bool):
-        self.index = ArcPointer[IvfHostIndex](index^)
+        self.index = index^
         self.partial_storage = partial_storage
 
 
 struct HostIvfRegistry(Movable):
-    var entries: Dict[Int, HostIvfResident]
+    # p3-neighbors-cluster: each entry sits behind a reference-counted
+    # pointer. A search copies the pointer under the registry's lock word and
+    # reads the index with the GIL released; a concurrent prepare (which may
+    # grow the dictionary) or release then drops only the registry's
+    # reference, never the memory a running search reads.
+    var entries: Dict[Int, ArcPointer[HostIvfResident]]
     var next_id: Int
     # One lock word (the neighbors/resident_index.mojo pattern): searches run
     # with the GIL released.
     var lock: List[Int64]
 
     def __init__(out self):
-        self.entries = Dict[Int, HostIvfResident]()
+        self.entries = Dict[Int, ArcPointer[HostIvfResident]]()
         self.next_id = 1
         self.lock = List[Int64](length=1, fill=Int64(0))
 
@@ -207,7 +207,7 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
         arrays.centers^, arrays.center_norms^, arrays.offsets^,
         arrays.list_indices^, arrays.list_data^,
     )
-    var entry = HostIvfResident(index^, partial)
+    var entry = ArcPointer[HostIvfResident](HostIvfResident(index^, partial))
     var state = _host_ivf_registry()
     _host_ivf_lock(state)
     try:
@@ -223,16 +223,15 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
         raise error^
 
 
-def _host_ivf_view(h: Int) raises -> Tuple[ArcPointer[IvfHostIndex], Bool]:
-    """The entry's index pointer (a reference-counted copy) and its storage
-    flag, read under the lock word."""
+def _host_ivf_view(h: Int) raises -> ArcPointer[HostIvfResident]:
+    """The entry's pointer (a reference-counted copy), read under the lock
+    word."""
     var state = _host_ivf_registry()
     _host_ivf_lock(state)
     try:
         if h not in state[].entries:
             raise Error("unknown or released resident IVF-Flat index handle")
-        ref e = state[].entries[h]
-        var view = (e.index.copy(), e.partial_storage)
+        var view = state[].entries[h].copy()
         _host_ivf_unlock(state)
         return view^
     except error:
@@ -246,32 +245,30 @@ def ivf_flat_index_search_binding(
     var h = Int(py=handle)
     if len(params) != 8:
         raise Error("ivf_flat_index_search: params must contain 8 values (n, dim, n_lists, metric, m, k, n_probes, partial)")
-    var view = _host_ivf_view(h)
-    var index = view[0].copy()
-    var held_partial = view[1]
+    var e = _host_ivf_view(h)
     var partial = Int(py=params[7]) != 0
     if (
-        index[].n_rows != Int(py=params[0]) or index[].dim != Int(py=params[1])
-        or index[].n_lists != Int(py=params[2]) or index[].metric != Int(py=params[3])
-        or held_partial != partial
+        e[].index.n_rows != Int(py=params[0]) or e[].index.dim != Int(py=params[1])
+        or e[].index.n_lists != Int(py=params[2]) or e[].index.metric != Int(py=params[3])
+        or e[].partial_storage != partial
     ):
         raise Error("ivf_flat_index_search: the handle holds another index than the call names")
     var ext = ivf_search_extents(params)
     var m = ext[0]
     var k = ext[1]
     var n_probes = ext[2]
-    var queries = read_f32(Int(py=addrs[0]), m * index[].dim)
-    var keep = ivf_read_resident_filter(addrs, index[].n_rows)
+    var queries = read_f32(Int(py=addrs[0]), m * e[].index.dim)
+    var keep = ivf_read_resident_filter(addrs, e[].index.n_rows)
     var dist = List[Float32]()
     var idx = List[UInt32]()
     var cand = List[Int32]()
     with GILReleased(Python()):
-        var r = host_ivf_search(index[], queries, m, k, n_probes, partial, keep)
+        var r = host_ivf_search(e[].index, queries, m, k, n_probes, partial, keep)
         dist = r.distances^
         idx = r.indices^
         cand = r.n_candidates^
     ivf_write_resident_result(addrs, dist, idx, cand, m, k)
-    _ = index^
+    _ = e^
     return PythonObject(0)
 
 
@@ -279,16 +276,16 @@ def ivf_flat_index_release_binding(handle: PythonObject) raises -> PythonObject:
     var state = _host_ivf_registry()
     var h = Int(py=handle)
     _host_ivf_lock(state)
-    var released: Optional[HostIvfResident] = None
-    try:
-        if h not in state[].entries:
-            raise Error("unknown or released resident IVF-Flat index handle")
-        released = state[].entries.pop(h)
+    if h not in state[].entries:
         _host_ivf_unlock(state)
+        raise Error("unknown or released resident IVF-Flat index handle")
+    try:
+        var released = state[].entries.pop(h)
+        _host_ivf_unlock(state)
+        # The registry's reference is dropped outside the lock; a running
+        # search keeps its own copy until it returns.
+        _ = released^
     except error:
         _host_ivf_unlock(state)
         raise error^
-    # The registry's reference is dropped outside the lock; a running search
-    # keeps its own copy until it returns.
-    _ = released^
     return PythonObject(0)
