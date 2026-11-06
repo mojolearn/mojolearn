@@ -87,7 +87,11 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
               "adapter-smoke/adapter-smoke.json", "adapter-smoke/*.log", "adapter-smoke/*.exit",
               "adapter-smoke/*/*.json",
               # the gate runner overlay the job applied (GATE_OVERLAY): its box-side record and its manifest
-              "route-overlay.txt", "route-overlay.json")
+              "route-overlay.txt", "route-overlay.json",
+              # --identity-columns (release.py --identity-on-wheels): the one identity column record of these wheels
+              "identity",
+              # --units-plan: the device-check unit records and their summary (tools/release_check_units.py)
+              "units")
 #: THE GATE RUNNER OVERLAY: the tooling checkout's copy of each of these files whose bytes differ from the
 #: source commit's ships with the job (route-overlay.tgz, tools/release_tooling.py write_overlay) and is
 #: applied over the source tree AFTER the autograd build (the build and its reuse proof read the clean tree)
@@ -110,7 +114,7 @@ def sha256(path):
 
 
 def gate_argv(vendor, version, out_root, candidate_wheels=(), source_commit=None, autograd_manifest=None,
-              adapters=True, profile="release-light-v1"):
+              adapters=True, profile="release-light-v1", identity_once=False):
     """The box argv (run from the source tree) of tools/gate_smoke_box.py VENDOR VERSION <out_root> all.
     ADAPTERS False (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship) passes --no-adapters."""
     if vendor not in VENDORS or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
@@ -121,6 +125,8 @@ def gate_argv(vendor, version, out_root, candidate_wheels=(), source_commit=None
     argv = ["tools/gate_smoke_box.py", vendor, version, out_root, "all", "--profile", profile]
     if not adapters:
         argv.append("--no-adapters")
+    if identity_once:
+        argv.append("--no-identity-lanes")   # the one column record of the same wheels ran those lanes
     if candidate_wheels:
         if not source_commit or not autograd_manifest:
             raise SystemExit("release-gate: candidate wheels need the source commit and the autograd manifest")
@@ -188,7 +194,7 @@ class Plan:
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
                  profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None,
-                 runtime_prior=None):
+                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
@@ -223,12 +229,32 @@ class Plan:
         self.runtime_prior = Path(runtime_prior) if runtime_prior and any(Path(runtime_prior).rglob("*.json")) else None
         #: that tarball's sha256, set once Runner writes it (gate.env carries it)
         self.runtime_prior_sha256 = None
-        #: runtime-cpu (the same producer, --vendor cpu) runs on the NVIDIA job after runtime-nvidia
-        self.runtime_cpu = vendor == "nvidia"
+        #: THE ONE BOX JOB (release.py --identity-on-wheels, Andrew 2026-11-05): the identity columns this job
+        #: records from the installed wheels (tools/identity_wheel_record.py), before the device checks. Empty:
+        #: the job records nothing (the default path, unchanged).
+        self.identity_columns = [c for c in identity_columns if c]
+        allowed = {"nvidia": ("nvidia", "ptx"), "amd": ("amd",)}[vendor]
+        if any(c not in allowed for c in self.identity_columns):
+            raise SystemExit(f"release-gate: {vendor} records only {', '.join(allowed)}, not {self.identity_columns}")
+        if self.identity_columns and not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", label_device or ""):
+            raise SystemExit("release-gate: --identity-columns needs --label-device (a lowercase slug, e.g. l40s)")
+        self.label_device = label_device
+        #: THE DEVICE CHECKS AS UNITS (tools/release_check_units.py): the plan the Mac made before the rental; with
+        #: it the job runs exactly its owed units (install/load, autograd entries, adapters) instead of the gate's
+        #: stage list, and builds the autograd executables only when a compiled check is owed
+        self.units_plan = Path(units_plan) if units_plan else None
+        plan_doc = json.loads(self.units_plan.read_text()) if self.units_plan and self.units_plan.is_file() else {}
+        self.build_autograd = not self.units_plan or any(
+            r["decision"] == "run" and r["unit"].startswith("autograd/") and r["key"]["files"]
+            and any(f.endswith(".mojo") for f in r["key"]["files"]) for r in plan_doc.get("units", []))
+        #: runtime-cpu (the same producer, --vendor cpu) runs on the NVIDIA job after runtime-nvidia; with
+        #: --identity-columns every CPU check runs on GitHub's free runners instead (cpu-identity-gate.yml)
+        self.runtime_cpu = vendor == "nvidia" and not self.identity_columns
         gate_out = f"{self.work}/out"
         manifest = f"{gate_out}/autograd-bin/build-manifest.json"
         box_wheels = [f"{self.indir}/{w.name}" for w in self.wheels]
-        self.gate = gate_argv(vendor, version, gate_out, box_wheels, source_commit, manifest, adapters, profile)
+        self.gate = gate_argv(vendor, version, gate_out, box_wheels, source_commit, manifest, adapters, profile,
+                              identity_once=bool(self.identity_columns))
         reuse = f"{self.indir}/autograd-prior" if self.prior else None
         self.build = build_argv(vendor, source_commit, self.tree, f"{gate_out}/autograd-bin", reuse)
         self.build_fresh = build_argv(vendor, source_commit, self.tree, f"{gate_out}/autograd-bin")
@@ -249,7 +275,12 @@ class Plan:
                  bash_array("GATE_WHEELS", [f"{self.indir}/{w.name}" for w in self.wheels]),
                  f"GATE_OVERLAY_SHA256={self.overlay_sha256 or ''}", bash_array("GATE_OVERLAY", GATE_OVERLAY),
                  bash_array("BUILD_ARGV", self.build), bash_array("BUILD_FRESH_ARGV", self.build_fresh),
-                 bash_array("GATE_ARGV", self.gate), bash_array("GATE_FETCH", GATE_FETCH)]
+                 bash_array("GATE_ARGV", self.gate), bash_array("GATE_FETCH", GATE_FETCH),
+                 f"GATE_IDENTITY_COLUMNS={','.join(self.identity_columns)}",
+                 f"GATE_IDENTITY_LABEL_DEVICE={self.label_device}",
+                 bash_array("GATE_IDENTITY_SHA256", [f"{w.name}={sha256(w) if w.is_file() else 'DRY-RUN'}"
+                                                     for w in self.wheels] if self.identity_columns else []),
+                 f"GATE_UNITS={1 if self.units_plan else 0}", f"GATE_BUILD_AUTOGRAD={1 if self.build_autograd else 0}"]
         return "\n".join(lines) + "\n"
 
     def uploads(self):
@@ -263,6 +294,8 @@ class Plan:
             out.append((self.prior / name, f"{self.indir}/autograd-prior/{name}", name != "build-manifest.json"))
         if self.runtime_prior:
             out.append((self.staged / RUNTIME_PRIOR_TGZ, f"{self.indir}/{RUNTIME_PRIOR_TGZ}", False))
+        if self.units_plan:
+            out.append((self.units_plan, f"{self.indir}/units-plan.json", False))
         out.append((self.staged / "gate.env", f"{self.indir}/gate.env", False))
         names = [r for _, r, _ in out]
         if len(set(names)) != len(names):
@@ -586,6 +619,10 @@ class Runner:
                       sha256(ROOT / JOB_SCRIPT) if (ROOT / JOB_SCRIPT).is_file() else None]
         if overlay["files"]:
             key_inputs.append(overlay["digest"])   # a runner fix is a new job, never a resumed old one
+        if getattr(a, "identity_columns", ""):
+            key_inputs.append(["identity", a.identity_columns, getattr(a, "label_device", "")])
+        if getattr(a, "units_plan", None) and Path(a.units_plan).is_file():
+            key_inputs.append(["units", sha256(a.units_plan)])
         key = hashlib.sha256(json.dumps(key_inputs).encode()).hexdigest()
         if st.get("key") == key and st.get("tag"):
             tag = st["plan_tag"]
@@ -595,7 +632,10 @@ class Runner:
                     adapters=not a.no_adapters, profile=a.profile,
                     prior=a.autograd_prior if prior else None, prior_files=prior,
                     staged=(state_path.parent if state_path else a.out.parent) / f"inputs-{tag}",
-                    overlay=overlay, runtime_prior=getattr(a, "runtime_prior", None))
+                    overlay=overlay, runtime_prior=getattr(a, "runtime_prior", None),
+                    identity_columns=[c for c in (getattr(a, "identity_columns", "") or "").split(",") if c],
+                    label_device=getattr(a, "label_device", "") or "",
+                    units_plan=getattr(a, "units_plan", None))
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -707,6 +747,13 @@ def parse(argv):
                     help="a complete retained autograd set (build-manifest.json + binaries) the build may reuse")
     ap.add_argument("--profile", choices=("release-light-v1", "performance-campaign-v1"), default="release-light-v1")
     ap.add_argument("--no-adapters", action="store_true")
+    ap.add_argument("--identity-columns", default="",
+                    help="release.py --identity-on-wheels: the identity columns this ONE job records from the installed "
+                         "wheels before its device checks (nvidia: nvidia,ptx; amd: amd); the gate then drops its "
+                         "identity-lane jobs")
+    ap.add_argument("--label-device", default="", help="the device slug of the column labels (l40s, mi325x)")
+    ap.add_argument("--units-plan", default=None,
+                    help="tools/release_check_units.py plan: the job runs exactly its owed device-check units")
     ap.add_argument("--runtime-prior", default=None,
                     help="earlier gates' runtime unit receipts (<class>/<unit>/...) the job's qualifier may reuse")
     ap.add_argument("--poll-seconds", type=int, default=60)

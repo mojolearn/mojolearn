@@ -149,7 +149,9 @@ class CrossCompileStep(unittest.TestCase):
 
     def test_it_gates_the_first_rental_and_nothing_on_the_mac(self):
         self.assertIn("cross-compile", release.NEEDS["linux-builds"])
-        self.assertEqual(release.NEEDS["cross-compile"], ["freeze-commit"])
+        # identity-at-freeze (Andrew 2026-11-05) settles identity at the freeze before anything is built
+        self.assertEqual(release.NEEDS["cross-compile"], ["identity-at-freeze"])
+        self.assertEqual(release.NEEDS["identity-at-freeze"], ["freeze-commit"])
         self.assertEqual(release.PIPELINE_OF["cross-compile"], "core-linux")
         for mac in ("macos-build", "macos-smoke", "publish-macos", "reuse-plan", "rehearsal"):
             self.assertNotIn("cross-compile", release.NEEDS[mac])

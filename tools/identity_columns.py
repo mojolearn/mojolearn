@@ -883,20 +883,29 @@ def cmd_changed_lanes(args):
                     paths = lane_select.changed_paths(ref)
                     print(f"# diffing {len(paths)} path(s) since {ref[:12]} for {len(resting[ref])} lane(s)",
                           file=sys.stderr, flush=True)
-                    sel = lane_select.select_cached(paths, ref=ref, backend=args.backend or None,
-                                                    stop_when=resting[ref])
-                    print(f"# lane-select cache {sel.get('cache', 'n/a')} for {ref[:12]}", file=sys.stderr, flush=True)
-                    if sel.get("stopped_early") and not sel.get("unattributed"):
-                        print(f"# every lane resting on {ref[:12]} has a changed closure; "
-                              "the remaining paths were not read", file=sys.stderr)
-                    if sel.get("unattributed"):
-                        # the selector never widens or guesses: an unplaced
-                        # path re-records every lane resting on this commit
-                        print(f"# unattributed paths since {ref[:12]}: {sel['unattributed'][:5]}; "
-                              "every lane resting on it is re-recorded", file=sys.stderr)
-                        picked_by[ref] = set(lanes)
+                    import identity_at_freeze
+                    if not identity_at_freeze.source_paths(paths):
+                        # ADOPTED BY COMMIT EQUALITY (Andrew 2026-11-05: one identity run per release, on the
+                        # frozen source): this tree is the record commit's source (equal, or differing only in
+                        # record outputs: the table, the column records, the admission READMEs). No selector.
+                        print(f"# {ref[:12]} is source-equal to this tree ({len(paths)} record output path(s)); "
+                              f"{len(resting[ref])} lane(s) resting on it are reused", file=sys.stderr, flush=True)
+                        picked_by[ref] = set()
                     else:
-                        picked_by[ref] = set(sel["lanes"])
+                        sel = lane_select.select_cached(paths, ref=ref, backend=args.backend or None,
+                                                        stop_when=resting[ref])
+                        print(f"# lane-select cache {sel.get('cache', 'n/a')} for {ref[:12]}", file=sys.stderr, flush=True)
+                        if sel.get("stopped_early") and not sel.get("unattributed"):
+                            print(f"# every lane resting on {ref[:12]} has a changed closure; "
+                                  "the remaining paths were not read", file=sys.stderr)
+                        if sel.get("unattributed"):
+                            # the selector never widens or guesses: an unplaced
+                            # path re-records every lane resting on this commit
+                            print(f"# unattributed paths since {ref[:12]}: {sel['unattributed'][:5]}; "
+                                  "every lane resting on it is re-recorded", file=sys.stderr)
+                            picked_by[ref] = set(lanes)
+                        else:
+                            picked_by[ref] = set(sel["lanes"])
                 except lane_select.LaneMapFailed:
                     raise                        # the map itself failed: never "re-record all"
                 except (SystemExit, Exception) as exc:  # an unknown commit is not "unchanged"

@@ -143,7 +143,7 @@ def own_not_built(board):
 
 class Gate:
     def __init__(self, vendor, version, root, candidate_wheels=(), source_commit=None, autograd_manifest=None,
-                 adapters=True, profile=P.LIGHT):
+                 adapters=True, profile=P.LIGHT, identity_once=False):
         import bench_board as B
         import bench_board_evidence as E
         self.B, self.E = B, E
@@ -153,6 +153,8 @@ class Gate:
         self.candidate_wheels, self.source_commit = list(candidate_wheels), source_commit
         self.autograd_manifest = autograd_manifest
         self.adapters_on = adapters
+        # --no-identity-lanes (release.py --identity-on-wheels): the identity lanes ran once in the column record
+        self.identity_once = identity_once
         self.root.mkdir(parents=True, exist_ok=True)
         self.out, self.cache = self.root / "setup", str(self.root / "cache")
         (self.out / "logs").mkdir(parents=True, exist_ok=True)
@@ -297,6 +299,8 @@ class Gate:
                    "--expected-version", self.version, "--scope", "expanded", "--output", str(output)]
         if self.source_commit:
             command += ["--expected-source-commit", self.source_commit]
+        if self.identity_once:
+            command.append("--no-identity-lanes")
         rc = self.launch_light(command, self.root / "correctness.log")
         report = output / "results.json"
         document = json.loads(report.read_text()) if report.is_file() else {}
@@ -531,6 +535,9 @@ def main(argv):
     parser.add_argument('--autograd-manifest')
     parser.add_argument('--no-adapters', action='store_true',
                         help='record the adapter stage as disabled (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)')
+    parser.add_argument('--no-identity-lanes', action='store_true',
+                        help='release.py --identity-on-wheels: the correctness stage drops its identity-lane jobs '
+                             '(the one column record of the same wheels ran them)')
     args = parser.parse_args(argv)
     vendor, version, root, step = args.vendor, args.version, args.root, args.step
     if vendor not in ("nvidia", "amd"):
@@ -543,7 +550,7 @@ def main(argv):
     if args.autograd_manifest and not args.candidate_wheel:
         parser.error('autograd-manifest is a candidate-mode input')
     gate = Gate(vendor, version, root, args.candidate_wheel, args.source_commit, args.autograd_manifest,
-                adapters=not args.no_adapters, profile=args.profile)
+                adapters=not args.no_adapters, profile=args.profile, identity_once=args.no_identity_lanes)
     if args.profile == P.LIGHT and step != "verdict":
         return gate.run_light(step)
     for stage in STAGES:
