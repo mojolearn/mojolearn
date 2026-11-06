@@ -792,21 +792,26 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         var tr_view = _view_of_array(splits[f][0])
         var te_view = _view_of_array(splits[f][1])
         var col0 = 0
+        # The fold's train/test gathers are the same for every member: made
+        # once per fold, not once per member (p3-trees; folds x members host
+        # copies of X, y and the weights before). Members never write their
+        # inputs (the scikit-learn fit contract), so sharing them is safe.
+        var y_tr: PythonObject
+        if codes:
+            y_tr = _gather_codes_view(xt, y_view, tr_view, context)
+        else:
+            y_tr = _gather_vec_view(xt, y_view.addr, y_view.shape[0], tr_view, context)
+        var w_tr = PythonObject(None)
+        if sw is not None:
+            w_tr = _gather_vec_view(xt, sw_addr, n, tr_view, context)
+            _ = sw  # keep the Python object alive through the native call above
+        var Xtr = _gather_view(xt, x_view.addr, n, d, tr_view, cols_view, context)
+        _ = Xa  # keep the Python object alive through the native call above
+        var Xte = _gather_view(xt, x_view.addr, n, d, te_view, cols_view, context)
+        _ = Xa  # keep the Python object alive through the native call above
         for i in range(len(active.ests)):  # driver-loop: over members
             var e = _clone(active.ests[i], context)
-            var y_tr: PythonObject
-            if codes:
-                y_tr = _gather_codes_view(xt, y_view, tr_view, context)
-            else:
-                y_tr = _gather_vec_view(xt, y_view.addr, y_view.shape[0], tr_view, context)
-            var w_tr = PythonObject(None)
-            if sw is not None:
-                w_tr = _gather_vec_view(xt, sw_addr, n, tr_view, context)
-                _ = sw  # keep the Python object alive through the native call above
-            _fit_member(e, _gather_view(xt, x_view.addr, n, d, tr_view, cols_view, context), y_tr, w_tr, context)
-            _ = Xa  # keep the Python object alive through the native call above
-            var Xte = _gather_view(xt, x_view.addr, n, d, te_view, cols_view, context)
-            _ = Xa  # keep the Python object alive through the native call above
+            _fit_member(e, Xtr, y_tr, w_tr, context)
             var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, te_view.shape[0], binary, context), te_view.shape[0], context)
             _ = Xa  # keep the Python object alive through the native call above
             var got = _place_view(xt, meta_view, n, width, blk, te_view, col0)
