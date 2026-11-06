@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared native scaler admission and typed row-snapshot ownership.
 from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
+from bindings.p3_array_arena_records import P3_ROWS_EXACT_LAYOUT, p3_layout_admitted, p3_layout_admit
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
@@ -238,26 +239,29 @@ def _rows_fields(source: PythonObject, context: PythonObject) raises -> PythonOb
     var cls = context["maxabs_rows_class"]
     if py_type(source) is not cls or py_type(cls) is not b.type:
         raise Error("TypeError: native row selection requires its ordinary metadata class")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
-    if len(ancestry) != 2 or ancestry[1] is not b.object:
-        raise Error("TypeError: native row selection cannot inherit Python lifecycle hooks")
-    var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
-    var keys = py_call(b.list,mapping)
-    for k in range(len(keys)):  # driver-loop: class keys precede dictionary-descriptor lookup
-        if py_type(keys[k]) is not b.str:
-            raise Error("TypeError: native row selection class keys must be native strings")
     var descriptor = context["maxabs_rows_dict"]
-    if py_get(mapping,"__dict__") is not descriptor or py_type(descriptor) is not py_type(b.object.__dict__["__class__"]) or descriptor.__objclass__ is not cls:
-        raise Error("TypeError: native row selection requires a native instance dictionary slot")
-    if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
-        raise Error("TypeError: native row selection cannot install Python lifecycle hooks")
+    # p3-array-arena: the class rows are admitted once per class state (type
+    # watcher); a class modification re-runs the full check.
+    if not p3_layout_admitted(P3_ROWS_EXACT_LAYOUT, cls, descriptor):
+        var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
+        if len(ancestry) != 2 or ancestry[1] is not b.object:
+            raise Error("TypeError: native row selection cannot inherit Python lifecycle hooks")
+        var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
+        var keys = py_call(b.list,mapping)
+        for k in range(len(keys)):  # driver-loop: class keys precede dictionary-descriptor lookup
+            if py_type(keys[k]) is not b.str:
+                raise Error("TypeError: native row selection class keys must be native strings")
+        if py_get(mapping,"__dict__") is not descriptor or py_type(descriptor) is not py_type(b.object.__dict__["__class__"]) or descriptor.__objclass__ is not cls:
+            raise Error("TypeError: native row selection requires a native instance dictionary slot")
+        if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
+            raise Error("TypeError: native row selection cannot install Python lifecycle hooks")
+        p3_layout_admit(P3_ROWS_EXACT_LAYOUT, cls, descriptor)
     var fields = py_call(descriptor.__get__,source,cls)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: native row selection requires native metadata storage")
-    keys = py_call(b.list,fields)
-    for k in range(len(keys)):  # driver-loop: reject equality/hash protocols before any row metadata lookup
-        if py_type(keys[k]) is not b.str:
-            raise Error("TypeError: native row selection metadata keys must be native strings")
+    # Instance keys: one native dictionary walk, no key list.
+    if not native_namespace_string_keys(fields._obj_ptr, b.str):
+        raise Error("TypeError: native row selection metadata keys must be native strings")
     return fields
 
 

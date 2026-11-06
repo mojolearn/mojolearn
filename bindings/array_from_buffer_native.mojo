@@ -10,6 +10,7 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
+from bindings.p3_array_arena_records import P3_FROM_BUFFER_LAYOUT, p3_layout_admitted, p3_layout_admit
 
 
 def _namespace(cls: PythonObject) raises -> PythonObject:
@@ -34,10 +35,15 @@ def _is_array_class(cls: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _slots(cls: PythonObject, context: PythonObject) raises -> PythonObject:
+    var slots = context["from_buffer_slots"]
+    # p3-array-arena: the class admission below is kept per class state (type
+    # watcher; a modification of the class or any ancestor, the base Array
+    # class included, re-runs it), not repeated on every from_buffer call.
+    if p3_layout_admitted(P3_FROM_BUFFER_LAYOUT, cls, slots):
+        return slots
     if not _is_array_class(cls, context):
         raise Error("TypeError: Array.from_buffer builds a mojolearn Array class")
     var b = native_loaded_module("builtins")
-    var slots = context["from_buffer_slots"]
     var names = py_call(b.list, slots.keys())
     var base = context["array_class"]
     var base_fields = _namespace(base)
@@ -58,6 +64,7 @@ def _slots(cls: PythonObject, context: PythonObject) raises -> PythonObject:
         for j in range(len(names)):  # small-loop(refuse subclass field overrides before slot access)
             if py_contains(fields, names[j]):
                 raise Error("TypeError: Array.from_buffer requires its inherited native storage slots")
+    p3_layout_admit(P3_FROM_BUFFER_LAYOUT, cls, slots)
     return slots
 
 
@@ -239,23 +246,21 @@ def array_from_buffer(cls: PythonObject, obj: PythonObject, context: PythonObjec
     var bytes_view = PythonObject(from_owned=raw)
     var view = py_call(bytes_view.cast, context["codes"][PythonObject(dtype)])
     var result = native_storage_allocate(cls)
-    var values = Python.dict()
-    py_setitem(values, "_store", store)
-    py_setitem(values, "_base", base)
-    py_setitem(values, "_pin", pin)
-    py_setitem(values, "_mv", view)
-    py_setitem(values, "_addr", PythonObject(address))
-    py_setitem(values, "_readonly", PythonObject(readonly))
-    py_setitem(values, "shape", _tuple(shape))
-    py_setitem(values, "dtype", PythonObject(dtype))
-    py_setitem(values, "order", PythonObject(order))
-    py_setitem(values, "strides", _tuple(strides))
-    py_setitem(values, "ndim", PythonObject(len(shape)))
-    py_setitem(values, "size", PythonObject(count))
-    py_setitem(values, "nbytes", PythonObject(nbytes))
-    py_setitem(values, "itemsize", PythonObject(itemsize))
-    var names = py_call(b.list, values.keys())
-    for i in range(len(names)):  # small-loop(publish native member slots; no Python constructors or properties)
-        _ = py_call(slots[names[i]].__set__, result, values[names[i]])
+    # p3-array-arena: the fixed member slots written straight through the
+    # retained setters, in the old order (no field dict, no key list).
+    _ = py_call(slots["_store"].__set__, result, store)
+    _ = py_call(slots["_base"].__set__, result, base)
+    _ = py_call(slots["_pin"].__set__, result, pin)
+    _ = py_call(slots["_mv"].__set__, result, view)
+    _ = py_call(slots["_addr"].__set__, result, PythonObject(address))
+    _ = py_call(slots["_readonly"].__set__, result, PythonObject(readonly))
+    _ = py_call(slots["shape"].__set__, result, _tuple(shape))
+    _ = py_call(slots["dtype"].__set__, result, PythonObject(dtype))
+    _ = py_call(slots["order"].__set__, result, PythonObject(order))
+    _ = py_call(slots["strides"].__set__, result, _tuple(strides))
+    _ = py_call(slots["ndim"].__set__, result, PythonObject(len(shape)))
+    _ = py_call(slots["size"].__set__, result, PythonObject(count))
+    _ = py_call(slots["nbytes"].__set__, result, PythonObject(nbytes))
+    _ = py_call(slots["itemsize"].__set__, result, PythonObject(itemsize))
     _ = borrowed^
     return result

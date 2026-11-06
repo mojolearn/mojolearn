@@ -5,12 +5,27 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.optimizer_public_words import stash_python_error
 from bindings.sequence_dtype_native import sequence_dtype_create
+from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import native_namespace_string_keys, native_mapping_string_keys
+from bindings.p3_array_arena_records import P3_STATS_LAYOUT, p3_layout_admitted, p3_layout_admit, P3_DICT_CACHE_KEYS, p3_dict_admitted, p3_dict_admit
 
 
 def _string_keys(mapping: PythonObject, context: PythonObject) raises:
-    var keys = py_call(context["arena_native_types"]["list"],mapping)
+    # p3-array-arena: exact dicts and class mappingproxies are walked in place
+    # (no key list); any other mapping keeps the list walk. Same refusal.
+    var b = context["arena_native_types"]
+    var cls = py_type(mapping)
+    if cls is b["dict"]:
+        if not native_namespace_string_keys(mapping._obj_ptr, b["str"]):
+            raise Error("TypeError: cache metadata keys must be native strings")
+        return
+    if cls is py_type(py_call(context["cache_type_dict"], b["object"])):
+        if not native_mapping_string_keys(mapping, b["str"]):
+            raise Error("TypeError: cache metadata keys must be native strings")
+        return
+    var keys = py_call(b["list"],mapping)
     for i in range(len(keys)):  # driver-loop: admit metadata keys before lookup can invoke equality
-        if py_type(keys[i]) is not context["arena_native_types"]["str"]:
+        if py_type(keys[i]) is not b["str"]:
             raise Error("TypeError: cache metadata keys must be native strings")
 
 
@@ -35,24 +50,34 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
     if py_type(cls) is not b["type"]:
         raise Error("TypeError: cache metadata cannot invoke a custom metaclass")
     var ancestry = py_call(context["cache_type_mro"],cls)
+    # p3-array-arena: the class rows' key and hook admission (independent of
+    # `name`) is kept per class state (type watcher; any modification of the
+    # class or an ancestor re-runs it). The name lookup itself stays per call.
+    var admitted = p3_layout_admitted(P3_STATS_LAYOUT, cls, context["cache_type_mro"])
     var namespace = False
-    for i in range(len(ancestry)):  # driver-loop: a retained native namespace slot applies only to its own owner ancestry
-        namespace = namespace or ancestry[i] is context["cache_namespace_class"]
+    if not admitted:
+        for i in range(len(ancestry)):  # driver-loop: a retained native namespace slot applies only to its own owner ancestry
+            namespace = namespace or ancestry[i] is context["cache_namespace_class"]
     var selected = PythonObject(None)
     var found = False
     for i in range(len(ancestry)):  # driver-loop: ordinary attribute lookup without calling Python hooks
-        var mapping = _mapping(ancestry[i],context)
-        var hook = py_get(mapping,"__getattribute__")
-        # CPython 3.11 exposes a distinct native SimpleNamespace wrapper;
-        # newer CPython inherits object's wrapper. Both perform ordinary
-        # native lookup. Never admit arbitrary C descriptors by type/name,
-        # or a namespace wrapper transplanted onto an unrelated class.
-        var native_hook = hook is None or hook is context["cache_object_getattribute"] or (namespace and hook is context["cache_namespace_getattribute"])
-        if not native_hook or py_get(mapping,"__getattr__") is not None:
-            raise Error("TypeError: cache metadata requires native attribute access; Python hooks cannot execute")
+        var mapping = py_call(context["cache_type_dict"],ancestry[i]) if admitted else _mapping(ancestry[i],context)
+        if not admitted:
+            var hook = py_get(mapping,"__getattribute__")
+            # CPython 3.11 exposes a distinct native SimpleNamespace wrapper;
+            # newer CPython inherits object's wrapper. Both perform ordinary
+            # native lookup. Never admit arbitrary C descriptors by type/name,
+            # or a namespace wrapper transplanted onto an unrelated class.
+            var native_hook = hook is None or hook is context["cache_object_getattribute"] or (namespace and hook is context["cache_namespace_getattribute"])
+            if not native_hook or py_get(mapping,"__getattr__") is not None:
+                raise Error("TypeError: cache metadata requires native attribute access; Python hooks cannot execute")
         if not found and py_contains(mapping,name):
             selected = mapping[name]
             found = True
+            if admitted:
+                break
+    if not admitted:
+        p3_layout_admit(P3_STATS_LAYOUT, cls, context["cache_type_mro"])
     var member = found and py_type(selected) is context["cache_member_type"]
     var descriptor = False
     var data_descriptor = False
@@ -70,7 +95,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(value._obj_ptr,key._obj_ptr)
         _ = key^
         if not pointer:
-            if not required and cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["cache_attribute_error"]._obj_ptr) != 0:
+            if not required and cpython_table()[].PyErr_ExceptionMatches(context["cache_attribute_error"]._obj_ptr) != 0:
                 cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return default
             var failure = stash_python_error()
@@ -79,7 +104,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
     if descriptor and data_descriptor:
         raise Error("TypeError: cache metadata cannot invoke Python or unregistered native descriptors")
     ref cpy = Python().cpython()
-    var fields_pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr,PyObjectPtr())
+    var fields_pointer = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr,PyObjectPtr())
     if fields_pointer:
         var fields = PythonObject(from_owned=fields_pointer)
         if py_type(fields) is not b["dict"]:
@@ -87,7 +112,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         _string_keys(fields,context)
         if py_contains(fields,name):
             return fields[name]
-    elif cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["cache_attribute_error"]._obj_ptr) != 0:
+    elif cpython_table()[].PyErr_ExceptionMatches(context["cache_attribute_error"]._obj_ptr) != 0:
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
     else:
         var failure = stash_python_error()
@@ -172,7 +197,12 @@ def _admit_entry_keys(entries: PythonObject, context: PythonObject) raises:
     or equality hooks). The keys DeviceCache itself publishes are exact
     (int, int) tuples: those are admitted by three native type identity
     checks. Any other key takes the full `_hash_key` admission, so the
-    accepted and refused key sets are unchanged."""
+    accepted and refused key sets are unchanged.
+
+    p3-array-arena: the walk runs only when the dictionary changed since its
+    last full admission (dictionary watcher, Python >= 3.12)."""
+    if p3_dict_admitted(P3_DICT_CACHE_KEYS, entries):
+        return
     ref cpy = Python().cpython()
     var tuple_type = context["arena_native_types"]["tuple"]
     var int_type = context["arena_native_types"]["int"]
@@ -192,12 +222,14 @@ def _admit_entry_keys(entries: PythonObject, context: PythonObject) raises:
                 continue
         others.append(stored^)
     if len(others) == 0:
+        p3_dict_admit(P3_DICT_CACHE_KEYS, entries)
         return
     # Full admission runs after the walk, so nothing it reads can disturb
     # the in-place dictionary iteration.
     var key_types = HashKeyTypes(context)
     for i in range(len(others)):  # driver-loop: keys not of the published (int, int) shape
         _hash_key(others[i], context, key_types)
+    p3_dict_admit(P3_DICT_CACHE_KEYS, entries)
 
 
 def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject,

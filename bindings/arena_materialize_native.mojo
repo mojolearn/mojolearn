@@ -13,6 +13,11 @@ from bindings.arena_array_metadata import arena_array_metadata
 from bindings.classical_arrays import _store_code
 from bindings.optimizer_public_words import stash_python_error
 from core.array_helpers_impl import strided_copy_bytes
+from bindings.native_loaded_module import native_namespace_string_keys
+from bindings.p3_array_arena_records import (
+    P3_ARRAY_LAYOUT, P3_RESIDENT_LAYOUT, p3_layout_admitted, p3_layout_admit,
+    p3_numpy_scalar_classes, p3_numpy_dtype_class,
+)
 
 
 def _native_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
@@ -38,8 +43,13 @@ def _address(view: PythonObject) raises -> Int:
 
 
 def _array_layout(context: PythonObject) raises:
-    var b = context["arena_native_types"]
     var cls = context["array_class"]
+    var slots = context["owner_array_slots"]
+    # p3-array-arena: admitted once per class state (type watcher), not per
+    # call; any class modification re-runs the full check below.
+    if p3_layout_admitted(P3_ARRAY_LAYOUT, cls, slots):
+        return
+    var b = context["arena_native_types"]
     var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
     if len(ancestry) != 2 or ancestry[1] is not b["object"]:
         raise Error("TypeError: native row materialization requires the ordinary Array layout")
@@ -50,11 +60,11 @@ def _array_layout(context: PythonObject) raises:
             raise Error("TypeError: native row materialization requires native Array class keys")
     if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
         raise Error("TypeError: native row materialization cannot invoke Array lifecycle hooks")
-    var slots = context["owner_array_slots"]
     var names = py_call(b["list"],slots)
     for i in range(len(names)):  # driver-loop: retained slot setters bypass application __setattr__ and descriptors
         if py_get(mapping,names[i]) is not slots[names[i]]:
             raise Error("TypeError: native row materialization requires the connected Array slots")
+    p3_layout_admit(P3_ARRAY_LAYOUT, cls, slots)
 
 
 def _itemsize(dtype: String) raises -> Int:
@@ -85,16 +95,34 @@ def _array(shape: PythonObject, dtype: String, view: PythonObject, store: Python
         size *= extent
     if Int(py=view.nbytes) != size*item:
         raise Error("ValueError: native row materialization storage and shape disagree")
-    var steps = Python.list()
-    for i in range(len(shape)):  # driver-loop: publish native strides without an Array method
-        _ = py_call(steps.append,strides[i])
-    var fields = Python.dict(_store=store,_base=base,_pin=pin,_mv=view,
-        _addr=_address(view),_readonly=view.readonly,shape=shape,dtype=PythonObject(dtype),
-        ndim=len(shape),size=size,nbytes=size*item,itemsize=item,strides=py_call(b["tuple"],steps),order="C")
+    var steps = PythonObject(None)
+    if len(strides) == 1:
+        steps = Python.tuple(strides[0])
+    elif len(strides) == 2:
+        steps = Python.tuple(strides[0],strides[1])
+    else:
+        var collected = Python.list()
+        for i in range(len(shape)):  # driver-loop: publish native strides without an Array method
+            _ = py_call(collected.append,strides[i])
+        steps = py_call(b["tuple"],collected)
+    # p3-array-arena: the fixed slots are written straight through the
+    # retained setters (no field dict, no key list), in the old dict order.
     var result = native_storage_allocate(context["array_class"])
-    var names = py_call(b["list"],fields)
-    for i in range(len(names)):  # driver-loop: initialize fresh native slots; no old owners can be released
-        _ = py_call(context["owner_array_slots"][names[i]].__set__,result,fields[names[i]])
+    var slots = context["owner_array_slots"]
+    _ = py_call(slots["_store"].__set__,result,store)
+    _ = py_call(slots["_base"].__set__,result,base)
+    _ = py_call(slots["_pin"].__set__,result,pin)
+    _ = py_call(slots["_mv"].__set__,result,view)
+    _ = py_call(slots["_addr"].__set__,result,PythonObject(_address(view)))
+    _ = py_call(slots["_readonly"].__set__,result,view.readonly)
+    _ = py_call(slots["shape"].__set__,result,shape)
+    _ = py_call(slots["dtype"].__set__,result,PythonObject(dtype))
+    _ = py_call(slots["ndim"].__set__,result,PythonObject(len(shape)))
+    _ = py_call(slots["size"].__set__,result,PythonObject(size))
+    _ = py_call(slots["nbytes"].__set__,result,PythonObject(size*item))
+    _ = py_call(slots["itemsize"].__set__,result,PythonObject(item))
+    _ = py_call(slots["strides"].__set__,result,steps)
+    _ = py_call(slots["order"].__set__,result,PythonObject("C"))
     return result
 
 
@@ -217,39 +245,56 @@ def _native_item(value: PythonObject, index: PythonObject) raises -> PythonObjec
 
 
 def _objects(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # p3-array-arena: one native pass over the flat iterator (C next, no index
+    # objects, no Python list), class checks against native addresses
+    # resolved once per process, and the two conversion symbols resolved once
+    # per call instead of per element. Same admission, order and storage.
     var b = context["arena_native_types"]
-    var factory = context["native_numpy_dtype"]
-    var real_classes = Python.list()
-    for code in ["i1","u1","i2","u2","i4","u4","i8","u8","f2","f4","f8","g","q","Q"]:  # driver-loop: exact native real scalar interfaces, excluding object/custom classes
-        _ = py_call(real_classes.append,py_call(factory,code).type)
-    var values = Python.list()
+    var numpy_classes = p3_numpy_scalar_classes(context["native_numpy_dtype"])
+    var int_class = Int(b["int"]._obj_ptr)
+    var bool_class = Int(b["bool"]._obj_ptr)
+    var float_class = Int(b["float"]._obj_ptr)
+    var count = Int(py=value.size)
+    var values = List[PythonObject](capacity=count)
     var wide = False
+    ref cpy = Python().cpython()
     var flat = value.flat
-    for i in range(Int(py=value.size)):  # driver-loop: inspect object references before using a native scalar conversion
-        var atom = _native_item(flat,PythonObject(i))
-        var cls = py_type(atom)
-        var real = cls is b["int"] or cls is b["bool"] or cls is b["float"]
+    var raw_iterator = cpy.PyObject_GetIter(flat._obj_ptr)
+    if not raw_iterator:
+        raise cpy.unsafe_get_error()
+    var iterator = PythonObject(from_owned=raw_iterator)
+    for i in range(count):  # driver-loop: inspect object references before using a native scalar conversion
+        var raw = cpy.PyIter_Next(iterator._obj_ptr)
+        if not raw:
+            if cpy.PyErr_Occurred():
+                raise cpy.unsafe_get_error()
+            raise Error("RuntimeError: object array iteration ended before its size")
+        var atom = PythonObject(from_owned=raw)
+        var cls = Int(py_type(atom)._obj_ptr)
+        var real = cls == int_class or cls == bool_class or cls == float_class
         var numpy = False
-        for k in range(len(real_classes)):  # driver-loop: fixed native scalar identity set
-            numpy = numpy or cls is real_classes[k]
+        for k in range(len(numpy_classes)):  # driver-loop: fixed native scalar identity set
+            numpy = numpy or cls == numpy_classes[k]
         if not real and not numpy:
             raise Error("TypeError: native row materialization requires ordinary real numeric object elements; Python protocols cannot execute")
-        wide = wide or cls is b["float"] or numpy
-        _ = py_call(values.append,atom)
+        wide = wide or cls == float_class or numpy
+        values.append(atom^)
     var dtype = String("<f8") if wide else String("<i8")
     var result = _empty(value.shape,dtype,context)
     var address = Int(py=_slot(result,"_addr",context))
-    ref cpy = Python().cpython()
-    for i in range(len(values)):  # driver-loop: admitted scalar storage conversion, preserving the old float64/int64 choice
-        if wide:
-            var converted = cpy.lib.get_function[PyObjectPtr]("PyNumber_Float")(values[i]._obj_ptr)
+    if wide:
+        var number_float = cpy.lib.get_function[PyObjectPtr]("PyNumber_Float")
+        for i in range(len(values)):  # driver-loop: admitted scalar storage conversion, preserving the old float64/int64 choice
+            var converted = number_float(values[i]._obj_ptr)
             if not converted:
                 _ = cpy.unsafe_get_error()
                 raise Error("TypeError: numeric object element exceeds the float64 storage range")
             var scalar = PythonObject(from_owned=converted)
             MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=address)[i] = Float64(py=scalar)
-        else:
-            var integer = cpy.lib.get_function[Int64]("PyLong_AsLongLong")(values[i]._obj_ptr)
+    else:
+        var as_long = cpy.lib.get_function[Int64]("PyLong_AsLongLong")
+        for i in range(len(values)):  # driver-loop: admitted scalar storage conversion, preserving the old float64/int64 choice
+            var integer = as_long(values[i]._obj_ptr)
             if cpython_table()[].PyErr_Occurred():
                 _ = cpy.unsafe_get_error()
                 raise Error("TypeError: numeric object element exceeds the int64 storage range")
@@ -290,6 +335,14 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
     if target != dtype or kind == "b":
         var out = _empty(shape,target,context)
         var output = Int(py=_slot(out,"_addr",context))
+        if kind == "u" and item == 2:
+            # p3-array-arena: uint16 -> uint32 widening is exact; run it in the
+            # connected chunked cast entry (codes 6 -> 4) instead of a serial
+            # host loop. bool, int16 and uint64 have no source code there yet.
+            if count:
+                _ = _native_call(context["arena_cast"],Python.tuple(address,6,output,4,count))
+            _ = store^
+            return out
         for i in range(count):  # driver-loop: existing native-width buffer conversion without NumPy arithmetic
             if kind == "b":
                 MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=output)[i] = UInt8(MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=address)[i] != 0)
@@ -387,11 +440,9 @@ def _prepare(value: PythonObject, context: PythonObject, snapshot: Bool = False)
         _ = descriptor^
         return output
     var dtype = value.dtype
-    var factory = context["native_numpy_dtype"]
-    var known = False
-    for code in ["?","i1","u1","i2","u2","i4","u4","i8","u8","f2","f4","f8","O","c8","c16","q","Q"]:  # driver-loop: exact native dtype classes precede dtype access or buffer acquisition
-        known = known or py_type(dtype) is py_type(py_call(factory,code))
-    if not known:
+    # p3-array-arena: the 17 exact dtype classes are resolved once per process
+    # (bindings/p3_array_arena_records.mojo), not constructed per call.
+    if not p3_numpy_dtype_class(context["native_numpy_dtype"], py_type(dtype)):
         raise Error("TypeError: native row materialization requires ordinary supported numeric dtype metadata")
     var kind = String(dtype.kind)
     var item = Int(py=dtype.itemsize)
@@ -424,21 +475,23 @@ def _resident_fields(owner: PythonObject, context: PythonObject) raises -> Pytho
     if py_type(owner) is not context["arena_resident_class"]:
         raise Error("TypeError: native row materialization requires the ordinary model-selection resident owner")
     var cls = context["arena_resident_class"]
-    var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
-    if len(ancestry) != 2 or ancestry[1] is not b["object"]:
-        raise Error("TypeError: native row materialization requires the ordinary resident layout")
-    var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
-    var keys = py_call(b["list"],mapping)
-    for i in range(len(keys)):  # driver-loop: class keys precede lifetime/descriptor lookup
-        if py_type(keys[i]) is not b["str"]:
-            raise Error("TypeError: resident metadata requires native string keys")
-    if py_get(mapping,"__dict__") is not context["arena_resident_dict"] or py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
-        raise Error("TypeError: native row materialization cannot invoke resident owner hooks")
+    # p3-array-arena: the class half is admitted once per class state.
+    if not p3_layout_admitted(P3_RESIDENT_LAYOUT, cls, context["arena_resident_dict"]):
+        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+        if len(ancestry) != 2 or ancestry[1] is not b["object"]:
+            raise Error("TypeError: native row materialization requires the ordinary resident layout")
+        var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
+        var keys = py_call(b["list"],mapping)
+        for i in range(len(keys)):  # driver-loop: class keys precede lifetime/descriptor lookup
+            if py_type(keys[i]) is not b["str"]:
+                raise Error("TypeError: resident metadata requires native string keys")
+        if py_get(mapping,"__dict__") is not context["arena_resident_dict"] or py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
+            raise Error("TypeError: native row materialization cannot invoke resident owner hooks")
+        p3_layout_admit(P3_RESIDENT_LAYOUT, cls, context["arena_resident_dict"])
     var fields = py_call(context["arena_resident_dict"].__get__,owner,cls)
-    keys = py_call(b["list"],fields)
-    for i in range(len(keys)):  # driver-loop: resident dictionary lookups cannot run key equality
-        if py_type(keys[i]) is not b["str"]:
-            raise Error("TypeError: resident metadata requires native string keys")
+    # Instance keys: one native dictionary walk, no key list.
+    if py_type(fields) is not b["dict"] or not native_namespace_string_keys(fields._obj_ptr, b["str"]):
+        raise Error("TypeError: resident metadata requires native string keys")
     if fields["_put"] is not context["arena_msel_put"] or fields["_free"] is not context["arena_msel_free"] or fields["_take"] is not context["arena_msel_take_rows"]:
         raise Error("TypeError: native row materialization requires its connected native resident entries")
     return fields

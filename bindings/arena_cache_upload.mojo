@@ -6,6 +6,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.arena_cache_stats import _attribute, _mapping, _admit_entry_keys
 from bindings.arena_cache_get import arena_cache_key
 from bindings.optimizer_public_words import stash_python_error, PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
+from bindings.p3_array_arena_records import (
+    P3_SETATTR_LAYOUT, p3_layout_admitted, p3_layout_admit, P3_DICT_CACHE_KEYS, p3_dict_admitted, p3_dict_admit,
+)
 
 
 def _entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -92,12 +95,16 @@ def _counter_next(model: PythonObject, name: String, context: PythonObject) rais
     # Validate setters as well as readers before any cache mutation. Native
     # member descriptors and ordinary instance dictionaries retain their
     # normal behavior; application descriptors/setattr hooks cannot execute.
-    var ancestry = py_call(context["cache_type_mro"],py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: fixed native attribute-write surface
-        var mapping = _mapping(ancestry[i],context)
-        var hook = py_get(mapping,"__setattr__")
-        if hook is not None and hook is not context["cache_object_setattr"]:
-            raise Error("TypeError: DeviceCache counters cannot invoke a custom attribute setter")
+    # p3-array-arena: admitted once per class state (type watcher).
+    var cls = py_type(model)
+    if not p3_layout_admitted(P3_SETATTR_LAYOUT, cls, context["cache_object_setattr"]):
+        var ancestry = py_call(context["cache_type_mro"],cls)
+        for i in range(len(ancestry)):  # driver-loop: fixed native attribute-write surface
+            var mapping = _mapping(ancestry[i],context)
+            var hook = py_get(mapping,"__setattr__")
+            if hook is not None and hook is not context["cache_object_setattr"]:
+                raise Error("TypeError: DeviceCache counters cannot invoke a custom attribute setter")
+        p3_layout_admit(P3_SETATTR_LAYOUT, cls, context["cache_object_setattr"])
     return _increment(_attribute(model,name,PythonObject(None),True,context),context)
 
 
@@ -283,8 +290,13 @@ def _publish(model: PythonObject, source: PythonObject, key: PythonObject,
         raise Error("RuntimeError: DeviceCache entry was published concurrently during upload")
     var next_uploads = _counter_next(model,"uploads",context)
     var entry = Python.tuple(slot,source)
+    var admitted = p3_dict_admitted(P3_DICT_CACHE_KEYS, entries)
     py_setitem(entries,key,entry)
     published = True
+    var nt = context["arena_native_types"]
+    if admitted and py_type(key) is nt["tuple"] and len(key) == 2 and py_type(key[0]) is nt["int"] and py_type(key[1]) is nt["int"]:
+        # Only this owner's own exact (int, int) key went in since the walk.
+        p3_dict_admit(P3_DICT_CACHE_KEYS, entries)
     # The published entry now owns the resource. If a native setter fails,
     # the entry remains visible and must not point at a freed slot.
     _counter_set(model,"uploads",next_uploads)

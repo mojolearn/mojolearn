@@ -30,6 +30,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address
 from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
 from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
+from bindings.x_prep_native_owner import xprep_drop_resident
+from bindings.native_loaded_module import native_namespace_string_keys
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime INT32_MAX = 2147483647
@@ -81,9 +83,9 @@ def _family_entries(mode: PythonObject, family: String, context: PythonObject) r
     var selected = mode
     if selected is None:
         selected = context["backend_fields"]["_DEFAULT_MODE"]
-    var refusal = String(context["prog_mode_refusal"])
+    # p3-array-arena: the refusal text is converted only when refusing.
     if py_type(selected) is not types["str"]:
-        raise Error("ValueError: " + refusal)
+        raise Error("ValueError: " + String(context["prog_mode_refusal"]))
     # Only a non-canonical spelling pays the two str method calls (as in
     # estimator_binding_mode); an exact "fast"/"identical" is its own
     # normalization.
@@ -92,7 +94,7 @@ def _family_entries(mode: PythonObject, family: String, context: PythonObject) r
         selected = py_call(py_call(selected.strip).lower)
         word = String(py=selected)
     if word != "fast" and word != "identical":
-        raise Error("ValueError: " + refusal)
+        raise Error("ValueError: " + String(context["prog_mode_refusal"]))
     var entries = context["prog_bindings"][selected]
     if py_type(entries) is types["str"]:
         raise Error(String(entries))
@@ -308,6 +310,10 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var scope_read = False
     var scope = PythonObject(None)
     var cache_state = PythonObject(None)
+    # In-out inputs a stage rewrites on the host (p3-array-arena, hazard D):
+    # after the run their resident device copies (taken by an earlier run in
+    # the same scope) are stale and are dropped.
+    var inout_values = List[PythonObject]()
     try:
         for k in range(len(inputs)):  # driver-loop: over the program's input buffers
             var record = inputs[k]
@@ -320,6 +326,8 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
             for j in range(len(inout_pairs) // 2):  # driver-loop: over the program's in-out input ranges
                 if inout_pairs[2 * j] == off and inout_pairs[2 * j + 1] == off + size:
                     is_inout = True
+            if is_inout:
+                inout_values.append(value)
             var src = -1
             if _is_rows(value, context):
                 # device-rows input (lane cpu4-misc): the fold's rows gathered
@@ -420,11 +428,17 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
             _ = _entry_call(entries["x_prep_run"], Python.tuple(base, host_words, pa, nst))
     except error:
         var cleanup = _release(owned, entries, "x_prep")
+        var dropped = xprep_drop_resident(inout_values, entries, context, "x_prep")
+        if dropped.byte_length() > 0:
+            cleanup += ("" if cleanup.byte_length() == 0 else "; ") + dropped
         if cleanup.byte_length() > 0:
             _drop_pending(error)
             raise Error("RuntimeError: x_prep operation failed: " + String(error) + "; cleanup also failed: " + cleanup)
         raise error
     var cleanup = _release(owned, entries, "x_prep")
+    var dropped = xprep_drop_resident(inout_values, entries, context, "x_prep")
+    if dropped.byte_length() > 0:
+        cleanup += ("" if cleanup.byte_length() == 0 else "; ") + dropped
     if cleanup.byte_length() > 0:
         raise Error("RuntimeError: x_prep slot cleanup failed: " + cleanup)
     py_setitem(fields, "arena", arena[0])
@@ -514,12 +528,13 @@ def _metrics_run_fields(fields: PythonObject, mode: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     # Metric programs are native structural data, not Python class instances.
     # Admit dictionary/key storage before any layout read can perform lookup.
+    # p3-array-arena: one native dictionary walk (no key list, no throwaway
+    # dict/list/str objects to read three builtin types).
+    var str_type = context["prog_types"]["str"]
     if py_type(fields) is not py_type(Python.dict()):
         raise Error("TypeError: native metric program fields require an exact dictionary")
-    var keys = py_call(py_type(Python.list()), fields)
-    for i in range(len(keys)):  # driver-loop: passive native program layout keys, before dictionary lookup
-        if py_type(keys[i]) is not py_type(PythonObject("")):
-            raise Error("TypeError: native metric program fields require exact string keys")
+    if not native_namespace_string_keys(fields._obj_ptr, str_type):
+        raise Error("TypeError: native metric program fields require exact string keys")
     classical_connect_numpy(context)
     var entries = _family_entries(mode, "x_metrics", context)
     var size = _int(fields["size"], context)

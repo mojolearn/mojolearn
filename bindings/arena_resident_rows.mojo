@@ -10,9 +10,16 @@ from bindings.arena_materialize_native import (
     _native_call, _prepare, _prepared_info, _cast, _slot, _empty, _resident_fields,
 )
 from bindings.msel_inputs import msel_input
+from bindings.p3_array_arena_records import P3_DICT_INT_IDS, p3_dict_admitted, p3_dict_admit
 
 
 def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
+    return _entry_info(values,entries,indices,context)[0]
+
+
+def _entry_info(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
+    # (entry, prepared info): the entry's Array admitted ONCE per call
+    # (p3-array-arena; `take` re-ran `_prepared_info` on both entries).
     var b = context["arena_native_types"]
     # The object's identity (CPython's id()) read from its native address:
     # calling builtins.id raises a `builtins.id` audit event per lookup.
@@ -22,10 +29,10 @@ def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: 
         if py_type(hit) is not b["tuple"] or len(hit) != 3:
             raise Error("TypeError: native resident entries require their native owner tuple")
         if hit[0] is values:
-            _ = _prepared_info(hit[1],context)
+            var info = _prepared_info(hit[1],context)
             if py_type(hit[2]) is not b["int"]:
                 raise Error("TypeError: native resident entries require an integer store id")
-            return hit
+            return Python.tuple(hit,info)
         raise Error("TypeError: resident identity entry does not retain its original input")
     var source = values
     if py_type(values) is not context["array_class"] and py_type(values) is not py_get(context,"ndarray"):
@@ -48,8 +55,12 @@ def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: 
         sid = Int(py=_native_call(context["arena_msel_put"],Python.tuple(prepared["address"],nbytes)))
     try:
         var result = Python.tuple(values,array,sid)
+        var admitted = p3_dict_admitted(P3_DICT_INT_IDS, entries)
         py_setitem(entries,key,result)
-        return result
+        if admitted:
+            # Only this owner's native int identity key went in since the walk.
+            p3_dict_admit(P3_DICT_INT_IDS, entries)
+        return Python.tuple(result,prepared)
     except error:
         if sid >= 0:
             # Publication failed after allocation. Free the unpublished id,
@@ -62,6 +73,21 @@ def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: 
         raise error^
 
 
+def _admit_keys(entries: PythonObject, context: PythonObject) raises:
+    # Every key an exact int before a keyed lookup (no application __eq__).
+    # p3-array-arena: walked only when the dictionary changed since its last
+    # full admission (dictionary watcher, Python >= 3.12); this owner's own
+    # int insertions re-admit it.
+    if p3_dict_admitted(P3_DICT_INT_IDS, entries):
+        return
+    var b = context["arena_native_types"]
+    var keys = py_call(b["list"],entries)
+    for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
+        if py_type(keys[i]) is not b["int"]:
+            raise Error("TypeError: resident entries require native identity keys")
+    p3_dict_admit(P3_DICT_INT_IDS, entries)
+
+
 def arena_resident_take(fields: PythonObject, values: PythonObject, indices_value: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     # _Resident.take: rows `indices_value` of `values`, gathered on the device
@@ -70,14 +96,13 @@ def arena_resident_take(fields: PythonObject, values: PythonObject, indices_valu
     var b = context["arena_native_types"]
     if py_type(entries) is not b["dict"]:
         raise Error("TypeError: resident entries require a native dictionary")
-    var keys = py_call(b["list"],entries)
-    for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
-        if py_type(keys[i]) is not b["int"]:
-            raise Error("TypeError: resident entries require native identity keys")
-    var base_entry = _entry(values,entries,False,context)
-    var index_entry = _entry(indices_value,entries,True,context)
-    var array = _prepared_info(base_entry[1],context)
-    var indices = _prepared_info(index_entry[1],context)
+    _admit_keys(entries,context)
+    var base_pair = _entry_info(values,entries,False,context)
+    var index_pair = _entry_info(indices_value,entries,True,context)
+    var base_entry = base_pair[0]
+    var index_entry = index_pair[0]
+    var array = base_pair[1]
+    var indices = index_pair[1]
     var shape = Python.list(indices["size"])
     var base_shape = array["shape"]
     for i in range(1,len(base_shape)):  # driver-loop: generic row shape preserves all trailing dimensions
@@ -98,10 +123,7 @@ def arena_resident_entry(fields: PythonObject, values: PythonObject, indices: Bo
     var b = context["arena_native_types"]
     if py_type(entries) is not b["dict"]:
         raise Error("TypeError: resident entries require a native dictionary")
-    var keys = py_call(b["list"],entries)
-    for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
-        if py_type(keys[i]) is not b["int"]:
-            raise Error("TypeError: resident entries require native identity keys")
+    _admit_keys(entries,context)
     return _entry(values,entries,indices,context)
 
 

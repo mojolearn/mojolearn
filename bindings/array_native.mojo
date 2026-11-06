@@ -21,6 +21,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.py_typed_call import py_call_typed
+from bindings.cpython_table import cpython_table
 
 
 # ------------------------------------------------------------------ calls
@@ -315,6 +316,10 @@ def _as_c(a: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _admit(a: PythonObject, context: PythonObject) raises:
+    # p3-array-arena: the exact Array class (every Array the library makes)
+    # needs no ancestry walk; a subclass keeps the MRO check.
+    if py_type(a) is context["array_class"]:
+        return
     var b = native_loaded_module("builtins")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(a))
     for i in range(len(ancestry)):  # driver-loop: the connected Array class in the instance's ancestry
@@ -401,13 +406,28 @@ def _tolist(a: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _row(c: PythonObject, shape: PythonObject, step: Int, i: Int, context: PythonObject) raises -> PythonObject:
     """`Array._row_view`: row `i` of a C-order Array, zero-copy."""
-    var b = native_loaded_module("builtins")
     var view = native_storage_allocate(context["array_class"])
     var offset = i * step
     py_setattr(view, "_store", c._store)
     py_setattr(view, "_base", c)
     py_setattr(view, "_pin", c._pin)
-    var part = _call(_attr(c._mv, "__getitem__"), _call(b.slice, PythonObject(offset), PythonObject(offset + step)))
+    # p3-array-arena: the row slice through the C API (PySlice_New and
+    # PyObject_GetItem; the same memoryview slice), not a builtins
+    # namespace connection plus two Python calls per row.
+    ref cpy = Python().cpython()
+    var start = PythonObject(offset)
+    var stop = PythonObject(offset + step)
+    var raw_slice = cpy.lib.get_function[PyObjectPtr]("PySlice_New")(start._obj_ptr, stop._obj_ptr, PyObjectPtr())
+    if not raw_slice:
+        var failure = stash_python_error()
+        raise failure^
+    var bounds = PythonObject(from_owned=raw_slice)
+    var memory = c._mv
+    var raw_part = cpython_table()[].PyObject_GetItem(memory._obj_ptr, bounds._obj_ptr)
+    if not raw_part:
+        var failure = stash_python_error()
+        raise failure^
+    var part = PythonObject(from_owned=raw_part)
     py_setattr(view, "_mv", part)
     py_setattr(view, "_addr", PythonObject(Int(py=c._addr) + offset * Int(py=c.itemsize)))
     py_setattr(view, "_readonly", c._readonly)
@@ -656,22 +676,105 @@ def _from_flat_as(cls: PythonObject, flat: PythonObject, shape: PythonObject, dt
 def _flatten_fast(nested: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_flatten_fast`: `(shape, flat)` for a flat list of Python scalars or
     a list of equal-length rows of them, by C builtins; None otherwise."""
+    # p3-array-arena: one native walk over the exact list/tuple items (exact
+    # type addresses, borrowed reads, no Python callbacks), then one walk that
+    # fills the flat list; was set(map(type)), set(map(len)), list(chain),
+    # set(map(type)) over Python objects. Same answers: the scalar and row
+    # classes are the exact members of the connected sets (int, float, bool;
+    # list, tuple), so a subclass still takes the general reader.
     var b = native_loaded_module("builtins")
     var kind = py_type(nested)
     if (kind is not b.list and kind is not b.tuple) or len(nested) == 0:
         return PythonObject(None)
-    var kinds = _call(b.set, _call(b.map, b.type, nested))
-    if _truth(_call(kinds.issubset, context["scalar_type_set"])):
-        return Python.tuple(Python.tuple(PythonObject(len(nested))), _call(b.list, nested))
-    if not _truth(_call(kinds.issubset, context["row_type_set"])):
-        return PythonObject(None)
-    var widths = _call(b.set, _call(b.map, b.len, nested))
-    if len(widths) != 1:
-        return PythonObject(None)
-    var flat = _call(b.list, _call(context["chain_from_iterable"], nested))
-    if not _truth(_call(_call(b.set, _call(b.map, b.type, flat)).issubset, context["scalar_type_set"])):
-        return PythonObject(None)
-    return Python.tuple(Python.tuple(PythonObject(len(nested)), _call(widths.pop)), flat)
+    ref cpy = Python().cpython()
+    var scalars = _member_addresses(context["scalar_type_set"])
+    var row_types = _member_addresses(context["row_type_set"])
+    var list_class = Int(b.list._obj_ptr)
+    var get_list = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
+    var get_tuple = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")
+    var n = len(nested)
+    var outer_list = kind is b.list
+    var all_scalar = True
+    var all_rows = True
+    for i in range(n):  # driver-loop: classify each top-level item by its exact class address
+        var raw = get_list(nested._obj_ptr, i) if outer_list else get_tuple(nested._obj_ptr, i)
+        if not raw:
+            var failure = stash_python_error()
+            raise failure^
+        var cls = Int(_type_address(raw))
+        all_scalar = all_scalar and _address_in(cls, scalars)
+        all_rows = all_rows and _address_in(cls, row_types)
+        if not all_scalar and not all_rows:
+            return PythonObject(None)
+    if all_scalar:
+        return Python.tuple(Python.tuple(PythonObject(n)), _call(b.list, nested))
+    var width = -1
+    for i in range(n):  # driver-loop: one equal-width check over the exact rows
+        var row = PythonObject(from_borrowed=get_list(nested._obj_ptr, i) if outer_list else get_tuple(nested._obj_ptr, i))
+        var w = len(row)
+        if width < 0:
+            width = w
+        elif w != width:
+            return PythonObject(None)
+    var raw_flat = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n * width)
+    if not raw_flat:
+        var failure = stash_python_error()
+        raise failure^
+    var flat = PythonObject(from_owned=raw_flat)
+    var set_item = cpy.lib.get_function[Int32]("PyList_SetItem")
+    for i in range(n):  # driver-loop: copy each row's item references into the flat list, checking exact scalar classes
+        var row = PythonObject(from_borrowed=get_list(nested._obj_ptr, i) if outer_list else get_tuple(nested._obj_ptr, i))
+        var row_list = Int(_type_address(row._obj_ptr)) == list_class
+        for j in range(width):  # driver-loop: items of one row
+            var item = get_list(row._obj_ptr, j) if row_list else get_tuple(row._obj_ptr, j)
+            if not item:
+                var failure = stash_python_error()
+                raise failure^
+            if not _address_in(Int(_type_address(item)), scalars):
+                return PythonObject(None)
+            # PyList_SetItem steals the new reference.
+            if set_item(flat._obj_ptr, i * width + j, cpy.Py_NewRef(item)) != 0:
+                var failure = stash_python_error()
+                raise failure^
+    return Python.tuple(Python.tuple(PythonObject(n), PythonObject(width)), flat)
+
+
+def _type_address(raw: PyObjectPtr) raises -> PyObjectPtr:
+    """The exact class of an object, as a borrowed address (the object keeps
+    its class alive)."""
+    ref cpy = Python().cpython()
+    var cls = cpy.PyObject_Type(raw)
+    cpy.Py_DecRef(cls)
+    return cls
+
+
+def _member_addresses(members: PythonObject) raises -> List[Int]:
+    """The element addresses of a small connected frozenset of classes (the
+    context retains the set, so the members stay alive)."""
+    ref cpy = Python().cpython()
+    var out = List[Int]()
+    var raw_iterator = cpy.PyObject_GetIter(members._obj_ptr)
+    if not raw_iterator:
+        var failure = stash_python_error()
+        raise failure^
+    var iterator = PythonObject(from_owned=raw_iterator)
+    while True:  # driver-loop: over the few connected class-set members
+        var raw = cpy.PyIter_Next(iterator._obj_ptr)
+        if not raw:
+            if cpy.PyErr_Occurred():
+                var failure = stash_python_error()
+                raise failure^
+            break
+        out.append(Int(raw))
+        cpy.Py_DecRef(raw)
+    return out^
+
+
+def _address_in(address: Int, members: List[Int]) -> Bool:
+    for i in range(len(members)):  # driver-loop: over the few connected class-set members
+        if members[i] == address:
+            return True
+    return False
 
 
 def _from_list(cls: PythonObject, nested: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1014,17 +1117,24 @@ def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, c
 
 
 def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonObject) raises -> PythonObject:
+    # `args` is the whole call tuple (op, array, context, *operation args):
+    # the operation arguments are read at 3.. in place, no copied list.
     if op == "init":
-        return _initialize(a, args[0], args[1], context)
+        return _initialize(a, args[3], args[4], context)
     if op == "from_buffer":
-        return array_from_buffer(a, args[0], context)
+        return array_from_buffer(a, args[3], context)
     if op == "from_list":
         # `a` is the class the classmethod was called on.
         var b = native_loaded_module("builtins")
         if py_type(a) is not b.type or not _truth(_call(b.issubclass, a, context["array_class"])):
             raise Error("TypeError: Array.from_list builds a mojolearn Array class")
-        return _from_list(a, args[0], args[1], context)
+        return _from_list(a, args[3], args[4], context)
     _admit(a, context)
+    # p3-array-arena: the per-row and per-element operations first.
+    if op == "row":
+        return _row(a, args[3], Int(py=args[4]), Int(py=args[5]), context)
+    if op == "getitem":
+        return _getitem(a, args[3], context)
     if op == "len":
         return _length(a)
     if op == "repr":
@@ -1043,16 +1153,12 @@ def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonOb
         return _tolist(a, context)
     if op == "iter":
         return _iterate(a, context)
-    if op == "row":
-        return _row(a, args[0], Int(py=args[1]), Int(py=args[2]), context)
     if op == "reshape":
-        return _reshape(a, args[0], context)
+        return _reshape(a, args[3], context)
     if op == "ravel":
         return _reshape(a, Python.tuple(PythonObject(-1)), context)
-    if op == "getitem":
-        return _getitem(a, args[0], context)
     if op == "astype":
-        return _astype(a, args[0], context)
+        return _astype(a, args[3], context)
     if op == "min":
         return _reduce(a, 0, "min", context)
     if op == "max":
@@ -1062,11 +1168,11 @@ def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonOb
     if op == "argmax":
         return _reduce(_as_c(a, context), 3, "argmax", context)
     if op == "eq":
-        return _equal(a, args[0], context)
+        return _equal(a, args[3], context)
     if op == "ne":
-        return _not_equal(a, args[0], context)
+        return _not_equal(a, args[3], context)
     if op == "array":
-        return _array_protocol(a, args[0], args[1], context)
+        return _array_protocol(a, args[3], args[4], context)
     if op == "buffer":
         return _buffer(a, context)
     if op == "reduce":
@@ -1079,13 +1185,10 @@ def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var args = PythonObject(from_borrowed=args_ptr)
         if len(args) < 3:
             raise Error("TypeError: native Array operations expect an operation, an Array and a context")
-        var b = native_loaded_module("builtins")
-        if py_type(args[0]) is not b.str:
+        var op = args[0]
+        if py_type(op) is not py_type(PythonObject("")):
             raise Error("TypeError: native Array operation names are exact strings")
-        var rest = Python.list()
-        for i in range(3, len(args)):  # small-loop(args: operation arguments): at most three per operation
-            _ = py_call(rest.append, args[i])
-        var result = _dispatch(String(args[0]), args[1], args[2], rest)
+        var result = _dispatch(String(op), args[1], args[2], args)
         return result.steal_data()
     except error:
         return _raise_error(error)

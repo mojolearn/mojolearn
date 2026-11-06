@@ -9,6 +9,21 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
 from bindings.optimizer_public_words import stash_python_error
+from bindings.cpython_table import cpython_table
+
+
+def _typecode_width(code: String) raises -> Int:
+    # p3-array-arena: the item width of the fixed-width array.array typecodes
+    # without allocating a probe store; any other code keeps the probe.
+    if code == "b" or code == "B":
+        return 1
+    if code == "h" or code == "H":
+        return 2
+    if code == "i" or code == "I" or code == "f":
+        return 4
+    if code == "d" or code == "q" or code == "Q":
+        return 8
+    return Int(py=native_array_zeros(code, 0).itemsize)
 
 
 def buffer_copy_to_array(code: String, source: PythonObject) raises -> PythonObject:
@@ -16,12 +31,12 @@ def buffer_copy_to_array(code: String, source: PythonObject) raises -> PythonObj
     `source` (any buffer exporter, contiguous or strided). The byte count must
     be a multiple of the store's item size, as array.frombytes requires."""
     ref cpy = Python().cpython()
-    var width = Int(py=native_array_zeros(code, 0).itemsize)
+    var width = _typecode_width(code)
     var view = List[Int](length=10, fill=0)
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     # PyBUF_INDIRECT without PyBUF_FORMAT: shape, strides and suboffsets, so
     # any strided exporter is accepted; the raw bytes are copied unchanged.
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(source._obj_ptr, pointer, Int32(0x118)) != 0:
+    if cpython_table()[].PyObject_GetBuffer(source._obj_ptr, pointer, Int32(0x118)) != 0:
         var failure = stash_python_error()
         raise failure^
     var result = PythonObject(None)
@@ -36,7 +51,7 @@ def buffer_copy_to_array(code: String, source: PythonObject) raises -> PythonObj
                 var failure = stash_python_error()
                 raise failure^
     finally:
-        cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        cpython_table()[].PyBuffer_Release(pointer)
         # Keep the Py_buffer storage alive past the release on every path
         # (ASAP destruction could free it before PyBuffer_Release reads it).
         _ = len(view)

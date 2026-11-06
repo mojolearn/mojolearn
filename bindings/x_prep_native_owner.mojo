@@ -13,13 +13,24 @@ from bindings.classical_arrays import classical_address, classical_is_array, cla
 from bindings.sequential_admission import sequential_admit_value
 from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields
 from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import native_namespace_string_keys
+from bindings.p3_array_arena_records import (
+    P3_CACHE_LAYOUT, p3_layout_admitted, p3_layout_admit,
+    P3_DICT_BINDING_IDS, P3_DICT_ENTRY_TUPLE_INTS, p3_dict_admitted, p3_dict_admit,
+)
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def xprep_r3(name: String) -> Bool:
     # These three existing R3 choices default on; OFF wins over ON.
-    var names = String(getenv("MOJOLEARN_XPREP_R3_OFF","")).replace("+",",").split(",")
+    # p3-array-arena: the switch stays a live read (the transport tests and
+    # A/B jobs flip it inside one process), but the usual unset case returns
+    # before any parsing or allocation.
+    var raw = String(getenv("MOJOLEARN_XPREP_R3_OFF",""))
+    if raw.byte_length() == 0:
+        return True
+    var names = raw.replace("+",",").split(",")
     for i in range(len(names)):  # driver-loop: configured transport-switch names
         if String(names[i]).strip() == name or String(names[i]).strip() == "all":
             return False
@@ -120,6 +131,10 @@ def xprep_values(source: PythonObject, entries: PythonObject, context: PythonObj
 
 
 def _cache_layout(cls: PythonObject, descriptor: PythonObject) raises:
+    # p3-array-arena: admitted once per class state (type watcher); any class
+    # modification re-runs the full check.
+    if p3_layout_admitted(P3_CACHE_LAYOUT, cls, descriptor):
+        return
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: arena caches require native class metadata")
@@ -133,6 +148,7 @@ def _cache_layout(cls: PythonObject, descriptor: PythonObject) raises:
             raise Error("TypeError: arena cache class keys must remain native strings")
     if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None or py_get(mapping,"__dict__") is not descriptor:
         raise Error("TypeError: arena cache classes cannot install Python lifecycle hooks")
+    p3_layout_admit(P3_CACHE_LAYOUT, cls, descriptor)
 
 
 def _cache_fields(value: PythonObject, cls: PythonObject, descriptor: PythonObject) raises -> PythonObject:
@@ -143,10 +159,9 @@ def _cache_fields(value: PythonObject, cls: PythonObject, descriptor: PythonObje
     var fields = py_fields(value)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: arena cache storage requires an exact native dictionary")
-    var names = py_call(b.list,fields)
-    for i in range(len(names)):  # driver-loop: inspect cache metadata keys before lookup
-        if py_type(names[i]) is not b.str:
-            raise Error("TypeError: arena cache keys must remain native strings")
+    # One native dictionary walk, no key list (p3-array-arena).
+    if not native_namespace_string_keys(fields._obj_ptr, b.str):
+        raise Error("TypeError: arena cache keys must remain native strings")
     return fields
 
 
@@ -161,10 +176,8 @@ def _resident_scope(entries: PythonObject, context: PythonObject, prefix: String
     var local_fields = local.__dict__
     if py_type(local_fields) is not b.dict:
         raise Error("TypeError: arena scope storage requires an exact native dictionary")
-    var local_keys = py_call(b.list, local_fields)
-    for i in range(len(local_keys)):  # driver-loop: thread-local keys before any keyed read
-        if py_type(local_keys[i]) is not b.str:
-            raise Error("TypeError: arena scope keys require exact native strings")
+    if not native_namespace_string_keys(local_fields._obj_ptr, b.str):
+        raise Error("TypeError: arena scope keys require exact native strings")
     var scope = py_get(local_fields,"scope")
     if scope is None or py_get(entries,PythonObject(prefix+"_dev_put")) is None or py_get(entries,PythonObject(prefix+"_dev_free")) is None:
         return PythonObject(None)
@@ -182,11 +195,15 @@ def _resident_cache(entries: PythonObject, fields: PythonObject, context: Python
     var caches = fields["caches"]
     if py_type(caches) is not b.dict:
         raise Error("TypeError: resident scope requires native cache metadata")
-    var keys = py_call(b.list,caches)
-    for i in range(len(keys)):  # driver-loop: admit resident binding identities before dictionary lookup
-        var key = keys[i]
-        if py_type(key) is not b.tuple or len(key) != 2 or py_type(key[0]) is not b.int or py_type(key[1]) is not b.str:
-            raise Error("TypeError: resident cache keys require native binding identities")
+    # p3-array-arena: the key walk runs only when the dictionary changed
+    # since its last full admission (dictionary watcher, Python >= 3.12).
+    if not p3_dict_admitted(P3_DICT_BINDING_IDS, caches):
+        var keys = py_call(b.list,caches)
+        for i in range(len(keys)):  # driver-loop: admit resident binding identities before dictionary lookup
+            var key = keys[i]
+            if py_type(key) is not b.tuple or len(key) != 2 or py_type(key[0]) is not b.int or py_type(key[1]) is not b.str:
+                raise Error("TypeError: resident cache keys require native binding identities")
+        p3_dict_admit(P3_DICT_BINDING_IDS, caches)
     var key = Python.tuple(entries["arena_binding_id"],PythonObject(prefix))
     var pair = py_get(caches,key)
     if pair is None:
@@ -200,7 +217,11 @@ def _resident_cache(entries: PythonObject, fields: PythonObject, context: Python
         py_setitem(state,"uploads",0)
         py_setitem(state,"hits",0)
         pair = Python.tuple(cache,entries["arena_binding"])
+        var admitted = p3_dict_admitted(P3_DICT_BINDING_IDS, caches)
         py_setitem(caches,key,pair)
+        if admitted:
+            # Only this owner's native (int, str) key went in since the walk.
+            p3_dict_admit(P3_DICT_BINDING_IDS, caches)
     if py_type(pair) is not b.tuple or len(pair) != 2 or pair[1] is not entries["arena_binding"]:
         raise Error("TypeError: resident cache binding identity changed")
     return pair[0]
@@ -228,10 +249,14 @@ def _cache_state(cache: PythonObject, entries: PythonObject, context: PythonObje
     if state["_put"] is not entries[PythonObject(prefix+"_dev_put")] or state["_free"] is not entries[PythonObject(prefix+"_dev_free")] or py_type(state["_entries"]) is not b.dict or py_type(state["uploads"]) is not b.int or py_type(state["hits"]) is not b.int:
         raise Error("TypeError: resident cache entries must retain native binding metadata")
     var stored = state["_entries"]
-    var keys = py_call(b.list,stored)
-    for i in range(len(keys)):  # driver-loop: native pointer/count keys precede dictionary lookup
-        if py_type(keys[i]) is not b.tuple or len(keys[i]) != 2 or py_type(keys[i][0]) is not b.int or py_type(keys[i][1]) is not b.int:
-            raise Error("TypeError: resident cache keys require native buffer identities")
+    # p3-array-arena: O(entries) key walk only when the entries dictionary
+    # changed since its last full admission (dictionary watcher).
+    if not p3_dict_admitted(P3_DICT_ENTRY_TUPLE_INTS, stored):
+        var keys = py_call(b.list,stored)
+        for i in range(len(keys)):  # driver-loop: native pointer/count keys precede dictionary lookup
+            if py_type(keys[i]) is not b.tuple or len(keys[i]) != 2 or py_type(keys[i][0]) is not b.int or py_type(keys[i][1]) is not b.int:
+                raise Error("TypeError: resident cache keys require native buffer identities")
+        p3_dict_admit(P3_DICT_ENTRY_TUPLE_INTS, stored)
     return state
 
 
@@ -251,7 +276,11 @@ def _cached_slot_in(state: PythonObject, value: PythonObject, entries: PythonObj
     var next_uploads = PythonObject(Int(py=state["uploads"])+1)
     var slot = Int(py=py_call_typed(entries[PythonObject(prefix+"_dev_put")],key[0],key[1]))
     try:
+        var admitted = p3_dict_admitted(P3_DICT_ENTRY_TUPLE_INTS, stored)
         py_setitem(stored,key,Python.tuple(slot,value))
+        if admitted:
+            # Only this owner's native (address, size) key went in since the walk.
+            p3_dict_admit(P3_DICT_ENTRY_TUPLE_INTS, stored)
     except error:
         try:
             _ = py_call_typed(entries[PythonObject(prefix+"_dev_free")],slot)
@@ -264,6 +293,48 @@ def _cached_slot_in(state: PythonObject, value: PythonObject, entries: PythonObj
 
 def _cached_slot(cache: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject, prefix: String = "x_prep") raises -> Int:
     return _cached_slot_in(_cache_state(cache, entries, context, prefix), value, entries, prefix)
+
+
+def _drop_resident_impl(values: List[PythonObject], entries: PythonObject, context: PythonObject, prefix: String) raises -> String:
+    var scope = _resident_scope(entries, context, prefix)
+    if scope is None:
+        return String()
+    var caches = scope[1]["caches"]
+    var pair = py_get(caches, Python.tuple(entries["arena_binding_id"], PythonObject(prefix)))
+    if pair is None:
+        return String()
+    var state = _cache_state(pair[0], entries, context, prefix)
+    var stored = state["_entries"]
+    var failures = String()
+    for i in range(len(values)):  # driver-loop: over the run's in-out inputs
+        var key = Python.tuple(classical_address(values[i]), values[i].size)
+        var hit = py_get(stored, key)
+        if hit is None:
+            continue
+        # Unpublish first, then free: a failed free never leaves a stale
+        # entry behind (the slot is reported, as `_release_owned` does).
+        _ = py_call(stored.pop, key)
+        var slot = Int(py=hit[0])
+        try:
+            _ = py_call_typed(entries[PythonObject(prefix+"_dev_free")], slot)
+        except error:
+            failures += ("" if failures.byte_length() == 0 else "; ")+"slot "+String(slot)+": "+String(error)
+    return failures
+
+
+def xprep_drop_resident(values: List[PythonObject], entries: PythonObject, context: PythonObject, prefix: String = "x_prep") -> String:
+    """Drop the resident device copies of a run's in-out inputs (p3-array-arena,
+    hazard D). A stage rewrote their host words, so a device copy an earlier
+    run of the same `resident()` scope took for the same (address, size) is
+    stale: it is unpublished and freed, and the next plain use uploads the
+    new words. Returns failure text (empty on success); never raises, so the
+    caller's own error or cleanup report stays in charge."""
+    if len(values) == 0:
+        return String()
+    try:
+        return _drop_resident_impl(values, entries, context, prefix)
+    except error:
+        return "resident in-out drop: "+String(error)
 
 
 def _release_owned(owned: List[Int], entries: PythonObject) -> String:
@@ -339,6 +410,7 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
     var scope = PythonObject(None)
     var cache = PythonObject(None)
     var cache_state = PythonObject(None)
+    var inout_values = List[PythonObject]()
     var direct_on = String(getenv("MOJOLEARN_XPREP_DIRECT","1").strip()) != "0"
     var dev_put_on = py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None
     try:
@@ -353,6 +425,8 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             for j in range(len(inout_ranges) // 2):  # driver-loop: over the program's in-out input ranges
                 if inout_ranges[2 * j] == offset and inout_ranges[2 * j + 1] == offset + words:
                     is_inout = True
+            if is_inout:
+                inout_values.append(value)
             if ranges and not is_inout:
                 if not scope_read:
                     scope = _resident_scope(entries,context)
@@ -416,10 +490,16 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
         _ = outs^
     except error:
         var cleanup = _release_owned(owned,entries)
+        var dropped = xprep_drop_resident(inout_values,entries,context)
+        if dropped.byte_length() > 0:
+            cleanup += ("" if cleanup.byte_length() == 0 else "; ")+dropped
         if cleanup.byte_length() > 0:
             raise Error("RuntimeError: x_prep operation failed: "+String(error)+"; cleanup also failed: "+cleanup)
         raise error
     var cleanup = _release_owned(owned,entries)
+    var dropped = xprep_drop_resident(inout_values,entries,context)
+    if dropped.byte_length() > 0:
+        cleanup += ("" if cleanup.byte_length() == 0 else "; ")+dropped
     if cleanup.byte_length() > 0:
         raise Error("RuntimeError: x_prep slot cleanup failed: "+cleanup)
     if profile:

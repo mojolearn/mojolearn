@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Normalize dtype metadata without NumPy's Python _commastring/_usefields.
+from bindings.p3_array_arena_records import P3_DICT_STR_INT, p3_dict_admitted, p3_dict_admit
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
@@ -233,14 +234,18 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
     var aliases = py_fields(context["modules"]["numpy"])["sctypeDict"]
     if py_type(aliases) is not b.dict:
         raise Error("TypeError: dtype aliases require native dictionary metadata")
-    var keys = py_call(b.list, aliases)
-    for i in range(len(keys)):  # driver-loop: validate alias keys before native dictionary lookup
-        # NumPy 1.26's registry includes integer type numbers beside names.
-        # Exact builtin int/str hashing and equality cannot invoke user hooks;
-        # subclasses or other keys must still refuse before looking up text.
-        var key_type = py_type(keys[i])
-        if key_type is not b.str and key_type is not b.int:
-            raise Error("TypeError: dtype aliases require native string or integer keys")
+    # p3-array-arena: the alias keys are walked once per dictionary state
+    # (dictionary watcher, Python >= 3.12), not on every normalization.
+    if not p3_dict_admitted(P3_DICT_STR_INT, aliases):
+        var keys = py_call(b.list, aliases)
+        for i in range(len(keys)):  # driver-loop: validate alias keys before native dictionary lookup
+            # NumPy 1.26's registry includes integer type numbers beside names.
+            # Exact builtin int/str hashing and equality cannot invoke user hooks;
+            # subclasses or other keys must still refuse before looking up text.
+            var key_type = py_type(keys[i])
+            if key_type is not b.str and key_type is not b.int:
+                raise Error("TypeError: dtype aliases require native string or integer keys")
+        p3_dict_admit(P3_DICT_STR_INT, aliases)
     var mapped = py_get(aliases, text)
     if mapped is not None:
         return sequence_dtype_normalize(mapped, classes, context, depth + 1, aligned)
