@@ -455,7 +455,12 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     if k < 0:
         return PythonObject(None)
     _ = codes  # keep the Python object alive through the native calls above
-    var classes = mx_list(py_call(raw.tolist)[py_call(b.slice, PythonObject(0), PythonObject(k))])
+    # The encoder fills only the first k slots of the n-slot class store: list
+    # those k (one k-item buffer copy, k ints), not all n then slice
+    # (pass2-prep-metrics; the n-int list was new since 0.8.55). `tolist`
+    # returns a fresh list, so no extra copy.
+    var head = raw[py_call(b.slice, PythonObject(0), PythonObject(k))]
+    var classes = py_call(head.tolist)
     _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(classes, codes)
 
