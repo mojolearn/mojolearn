@@ -102,7 +102,9 @@ class AdapterWheels(unittest.TestCase):
             digests = {n[len(prefix):]: (__import__("hashlib").sha256(b).hexdigest(), len(b))
                        for n, b in m.items() if n.startswith(prefix) and not n.endswith(manifest.MANIFEST)}
             manifest.validate(doc, digests, vendor=directory.split("_")[0], arch=arch)
-        ptx = members(wheels["mojolearn_nvidia_ptx"])
+        # the PTX slot ships in mojolearn-nvidia (2026-11-05) and carries no adapters
+        ptx = [n for n in members(wheels["mojolearn_nvidia"]) if n.startswith("mojolearn/cuda_ptx/")]
+        self.assertTrue(ptx)
         self.assertFalse([n for n in ptx if f"/{manifest.DIRECTORY}/" in n], "the PTX slot carries no adapters")
         report = json.loads(next(out.glob("SPLIT-*.json")).read_text())
         self.assertEqual(report["problems"], [])
