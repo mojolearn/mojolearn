@@ -13,6 +13,9 @@
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
+from bindings.optimizer_public_words import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
@@ -769,6 +772,32 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
     return Python.tuple(values, width)
 
 
+def _place_label_rows(rows: PythonObject, vals: PythonObject, test: PythonObject, n: Int) raises:
+    """`for i, v in zip(test, vals): rows[i] = v` over the C storage: the
+    fold's int64 test indices read through their pointer and each label
+    reference copied with PyList_SetItem (pass 3, rank 38: no boxed index
+    and no Python setitem call per row). `rows` and `vals` are exact lists."""
+    ref cpy = Python().cpython()
+    var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
+    var count = min(Int(py=test.size), len(vals))
+    var words = msel_p64(test)
+    for j in range(count):  # driver-loop: native equivalent of the existing zip placement
+        var index = Int(words[j])
+        if index < 0:
+            index += n
+        if index < 0 or index >= n:
+            raise Error("IndexError: list assignment index out of range")
+        var label = get_item(vals._obj_ptr, j)
+        if not label:
+            var failure = stash_python_error()
+            raise failure^
+        if cpython_table()[].PyList_SetItem(rows._obj_ptr, index, cpy.Py_NewRef(label)) != 0:
+            var failure = stash_python_error()
+            raise failure^
+    _ = vals  # borrowed labels stay owned through the increfs above
+    _ = test  # keep the index storage alive through the pointer reads above
+
+
 def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
     """`_cross_val_predict_place`: each fold's predictions put back in row
     order on the device (`msel_scatter_rows` into one resident block), or
@@ -829,9 +858,7 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
     for f in range(count):  # driver-loop: fold outputs placed in original row order
         var converted = _prediction_list(preds[f], context)
         var vals = converted[0]
-        var indices = tests[f]._mv
-        for j in range(min(len(indices), len(vals))):  # driver-loop: native equivalent of the existing zip placement
-            py_setitem(rows, indices[j], vals[j])
+        _place_label_rows(rows, vals, tests[f], n)
         last_width = converted[1]
     if len(last_width) > 0:
         var flat = Python.list()
