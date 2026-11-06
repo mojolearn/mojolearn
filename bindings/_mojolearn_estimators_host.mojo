@@ -1280,11 +1280,15 @@ def standard_transform_binding(
         raise Error("StandardScaler: positive dimensions with n*d<=Int32.max required")
     if with_mean < 0 or with_mean > 1 or with_std < 0 or with_std > 1:
         raise Error("StandardScaler: flags must be 0 or 1")
-    var x = _pp_load(_index(x_addr), n * d)
-    var mean = _pp_load(_index(mean_addr), d)
-    var scale = _pp_load(_index(scale_addr), d)
+    var x_address = _index(x_addr)
+    var mean_address = _index(mean_addr)
+    var scale_address = _index(scale_addr)
     var output = _pp_out(_index(out_addr))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x = _pp_load(x_address, n * d)
+        var mean = _pp_load(mean_address, d)
+        var scale = _pp_load(scale_address, d)
         standard_transform_host_run(x, mean, scale, output, n, d, inverse, with_mean, with_std)
     return PythonObject(n * d)
 
@@ -1308,11 +1312,15 @@ def minmax_transform_binding(
         raise Error("MinMaxScaler: positive dimensions with n*d<=Int32.max required")
     if not isfinite(lower) or not isfinite(upper) or lower >= upper:
         raise Error("MinMaxScaler: finite increasing Float32 feature range required")
-    var x = _pp_load(_index(x_addr), n * d)
-    var scale = _pp_load(_index(scale_addr), d)
-    var offset = _pp_load(_index(min_addr), d)
+    var x_address = _index(x_addr)
+    var scale_address = _index(scale_addr)
+    var offset_address = _index(min_addr)
     var output = _pp_out(_index(out_addr))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x = _pp_load(x_address, n * d)
+        var scale = _pp_load(scale_address, d)
+        var offset = _pp_load(offset_address, d)
         minmax_transform_host_run(x, scale, offset, output, n, d, inverse, clip, lower, upper)
     return PythonObject(n * d)
 
@@ -1370,16 +1378,17 @@ def kernel_ridge_predict_binding(
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var q = Int(py=params[9])
-    var x_fit = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var dual = read_f32(Int(py=addrs[1]), max(0, n * t))
-    var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
+    var x_fit_address = Int(py=addrs[0])
+    var dual_address = Int(py=addrs[1])
+    var x_new_address = Int(py=addrs[2])
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x_fit = read_f32(x_fit_address, max(0, n * d))
+        var dual = read_f32(dual_address, max(0, n * t))
+        var x_new = read_f32(x_new_address, max(0, q * d))
         kernel_ridge_predict_host_run(
             op, x_fit, dual, x_new, n, d, t, kernel, degree, gamma, coef0, q
         )
-    _ = x_fit^
-    _ = dual^
-    _ = x_new^
     return PythonObject(0)
 
 
@@ -1410,17 +1419,18 @@ def nystroem_transform_binding(
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var m = Int(py=params[8])
-    var components = read_f32(Int(py=addrs[0]), max(0, q * d))
-    var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
-    var x = read_f32(Int(py=addrs[5]), max(0, m * d))
+    var components_address = Int(py=addrs[0])
+    var normalization_address = Int(py=addrs[2])
+    var x_address = Int(py=addrs[5])
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var components = read_f32(components_address, max(0, q * d))
+        var normalization = read_f32(normalization_address, max(0, q * q))
+        var x = read_f32(x_address, max(0, m * d))
         nystroem_transform_host_run(
             op, components, normalization, x, q, d, kernel, degree, gamma, coef0, m
         )
-    _ = components^
-    _ = normalization^
-    _ = x^
     return PythonObject(0)
 
 
@@ -1446,15 +1456,16 @@ def rbf_sampler_transform_binding(
     var q = Int(py=params[1])
     var scale = Float32(Float64(py=params[5]))
     var m = Int(py=params[6])
-    var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
-    var offset = read_f32(Int(py=addrs[1]), max(0, q))
-    var x = read_f32(Int(py=addrs[2]), max(0, m * d))
+    var weights_address = Int(py=addrs[0])
+    var offset_address = Int(py=addrs[1])
+    var x_address = Int(py=addrs[2])
     var op = f32_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var weights = read_f32(weights_address, max(0, d * q))
+        var offset = read_f32(offset_address, max(0, q))
+        var x = read_f32(x_address, max(0, m * d))
         rbf_sampler_transform_host_run(op, weights, offset, x, d, q, scale, m)
-    _ = weights^
-    _ = offset^
-    _ = x^
     return PythonObject(0)
 
 
