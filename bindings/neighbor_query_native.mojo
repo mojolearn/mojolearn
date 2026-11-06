@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_buffer_owner import native_buffer_view
@@ -21,7 +21,7 @@ from bindings.family_common import family_f32_snapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.neighbors_knn_native import knn_door, knn_state_values, knn_state_unchanged
-from bindings.neighbors_ann_native import _ivf_metric, _ann_release
+from bindings.neighbors_ann_native import _ivf_metric, _ann_release, IVF_QUERY_STATE_SLOT
 from bindings.neighbors_ann_query_native import ann_pq_materialize
 from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, _i32_vector, _flag
 from bindings.host_inference_scalars import host_inference_scalar
@@ -98,9 +98,9 @@ def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject)
     """Admit the fitted state, once while it is unchanged: True when every
     fitted array, scalar and resident tuple is the object admitted before
     (or has just been admitted), so the query reads only its own input.
-    k-NN stamps live in the resident holder (reset by fit); IVF stamps in
-    `_query_admitted` (dropped by extend and getstate); radius stamps in the
-    native prepared registry."""
+    k-NN stamps live in the resident holder (created by fit, never pickled);
+    IVF and radius stamps in the native prepared registry, weakly keyed by the
+    model and outside `__dict__` (IVF's is dropped by fit and extend)."""
     var fields = py_fields(model)
     var b = native_loaded_module("builtins")
     var names = Python.tuple("_index", "centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
@@ -116,16 +116,16 @@ def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject)
             for i in range(len(keys)):  # driver-loop: resident metadata keys, before dictionary comparisons
                 if py_type(keys[i]) is not b.str:
                     raise Error("TypeError: resident metadata requires exact string keys")
+    var mods = NativeModules()
     if text == "ivf" or holder is not None:
         var resident = py_get(holder, "index") if holder is not None else py_get(fields, "_resident")
         var stamp = knn_state_values(fields, names + scalars) + Python.tuple(resident)
-        var stored = py_get(holder, "admitted_query") if holder is not None else py_get(fields, "_query_admitted")
+        var stored = py_get(holder, "admitted_query") if holder is not None else prepared_get(mods, IVF_QUERY_STATE_SLOT, model)
         if knn_state_unchanged(stored, stamp):
             return True
     # Radius models have no resident holder: their stamp (every slot object
     # and exact container items) lives in the native prepared registry,
     # weakly keyed by the model and outside `__dict__`.
-    var mods = NativeModules()
     var radius_stamp = PythonObject(None)
     if text == "radius":
         radius_stamp = Python.list()
@@ -149,8 +149,21 @@ def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject)
         if value is not None:
             host_inference_scalar(value, context)
     if text == "ivf":
-        py_setitem(fields, "_resident", _resident_owner(py_get(fields, "_resident"), context))
-        py_setitem(fields, "_query_admitted", knn_state_values(fields, names + scalars) + Python.tuple(py_get(fields, "_resident")))
+        # The query leaves `__dict__` unchanged: `_resident` is rewritten only
+        # when the connected binding alias replaced the stored one, and the
+        # admission stamp goes to the native prepared registry (never pickled).
+        var cached = py_get(fields, "_resident")
+        var owner = _resident_owner(cached, context)
+        if owner is not cached:
+            py_setitem(fields, "_resident", owner)
+        var ivf_stamp = knn_state_values(fields, names + scalars) + Python.tuple(owner)
+        var ivf_self_reference = False
+        for i in range(len(ivf_stamp)):  # driver-loop: over the stamp objects, refusing a self-reference
+            if ivf_stamp[i] is model:
+                ivf_self_reference = True
+                break
+        if not ivf_self_reference:
+            prepared_put(mods, IVF_QUERY_STATE_SLOT, model, ivf_stamp)
     elif text == "knn" and holder is not None:
         py_setitem(holder, "index", _resident_owner(py_get(holder, "index"), context))
         py_setitem(holder, "admitted_query", knn_state_values(fields, names + scalars) + Python.tuple(py_get(holder, "index")))
@@ -439,7 +452,8 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
     var fields = py_fields(model)
     # Extend replaces the fitted arrays: drop the admission stamp (and the
     # old arrays it holds); the next search admits the extended index once.
-    _ = py_call(fields.pop, "_query_admitted", PythonObject(None))
+    var stamp_mods = NativeModules()
+    prepared_drop(stamp_mods, IVF_QUERY_STATE_SLOT, model)
     var b = native_loaded_module("builtins")
     if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
         raise Error("ValueError: mojolearn IVFIndex: call fit (or load) before extend")
@@ -513,7 +527,6 @@ def neighbor_query(model: PythonObject, op: String, args: PythonObject, context:
         _ivf_materialize(fields, context)
         var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident", PythonObject(None))
-        _ = py_call(state.pop, "_query_admitted", PythonObject(None))
         return state
     if op == "search" and String(kind[0]) == "ivf":
         return _ivf_search(model, kind, args, admitted, context)

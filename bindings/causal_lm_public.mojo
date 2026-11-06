@@ -13,6 +13,7 @@ from core.resident_generation_read import ResidentGreedyRead, resident_greedy_pu
 from std.python import Python, PythonObject
 from std.ffi import _Global
 from std.python._cpython import PyObjectPtr, GILReleased
+from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -131,7 +132,7 @@ def _standalone_record_fields(mut mods: NativeModules, model: PythonObject) rais
     # class getset descriptor expected by the public-record helper.
     if py_type(model) is mods.module("types").SimpleNamespace:
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr, PyObjectPtr())
+        var raw = cpython_table()[].PyObject_GenericGetDict(model._obj_ptr, PyObjectPtr())
         if not raw:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=raw)
@@ -159,7 +160,7 @@ def _native_entry_fields(mut mods: NativeModules, entries: PythonObject) raises 
     ref cpy = Python().cpython()
     var fields = PythonObject(None)
     if py_type(entries) is types.ModuleType:
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(entries._obj_ptr)
+        var raw = cpy.PyModule_GetDict(entries._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
@@ -175,7 +176,7 @@ def _native_entry_fields(mut mods: NativeModules, entries: PythonObject) raises 
         prepared_namespace_admit(mods, entries, fields)
         return fields
     elif py_type(entries) is types.SimpleNamespace:
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
+        var raw = cpython_table()[].PyObject_GenericGetDict(entries._obj_ptr, PyObjectPtr())
         if not raw:
             raise cpy.unsafe_get_error()
         fields = PythonObject(from_owned=raw)

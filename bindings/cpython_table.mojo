@@ -43,6 +43,24 @@ comptime _PyErr_Occurred = ExternalFunction[
 # int PyErr_ExceptionMatches(PyObject *exc)
 comptime _PyErr_ExceptionMatches = ExternalFunction[
     "PyErr_ExceptionMatches", def(PyObjectPtr) thin abi("C") -> c_int]
+# void PyErr_SetObject(PyObject *type, PyObject *value)
+comptime _PyErr_SetObject = ExternalFunction[
+    "PyErr_SetObject", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> NoneType]
+# int PyObject_GetBuffer(PyObject *exporter, Py_buffer *view, int flags)
+# Callers pass the Py_buffer as the first word of a native `List[Int]` of at
+# least 10 words (the stable-ABI layout; `buf` is word 0, `len` word 2), cast
+# with `.unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()`.
+comptime _PyObject_GetBuffer = ExternalFunction[
+    "PyObject_GetBuffer", def(PyObjectPtr, UnsafePointer[Int, MutUntrackedOrigin], c_int) thin abi("C") -> c_int]
+# void PyBuffer_Release(Py_buffer *view)  (same Py_buffer word storage)
+comptime _PyBuffer_Release = ExternalFunction[
+    "PyBuffer_Release", def(UnsafePointer[Int, MutUntrackedOrigin]) thin abi("C") -> NoneType]
+# int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item)  (steals item)
+comptime _PyList_SetItem = ExternalFunction[
+    "PyList_SetItem", def(PyObjectPtr, Int, PyObjectPtr) thin abi("C") -> c_int]
+# PyObject *PyObject_GetItem(PyObject *o, PyObject *key)  (new, NULL on error)
+comptime _PyObject_GetItem = ExternalFunction[
+    "PyObject_GetItem", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
 
 
 struct CPythonTable(Movable):
@@ -54,6 +72,11 @@ struct CPythonTable(Movable):
     var PyObject_GenericGetDict: _PyObject_GenericGetDict.type
     var PyErr_Occurred: _PyErr_Occurred.type
     var PyErr_ExceptionMatches: _PyErr_ExceptionMatches.type
+    var PyErr_SetObject: _PyErr_SetObject.type
+    var PyObject_GetBuffer: _PyObject_GetBuffer.type
+    var PyBuffer_Release: _PyBuffer_Release.type
+    var PyList_SetItem: _PyList_SetItem.type
+    var PyObject_GetItem: _PyObject_GetItem.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -66,13 +89,18 @@ struct CPythonTable(Movable):
         self.PyObject_GenericGetDict = _PyObject_GenericGetDict.load(lib)
         self.PyErr_Occurred = _PyErr_Occurred.load(lib)
         self.PyErr_ExceptionMatches = _PyErr_ExceptionMatches.load(lib)
+        self.PyErr_SetObject = _PyErr_SetObject.load(lib)
+        self.PyObject_GetBuffer = _PyObject_GetBuffer.load(lib)
+        self.PyBuffer_Release = _PyBuffer_Release.load(lib)
+        self.PyList_SetItem = _PyList_SetItem.load(lib)
+        self.PyObject_GetItem = _PyObject_GetItem.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
 # them load the same interpreter library). Bump the name's version whenever a
 # field is added, removed or reordered.
 comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name="MojolearnCPythonTableV1",
+    StorageType=CPythonTable, name="MojolearnCPythonTableV2",
     init_fn=CPythonTable.__init__,
 ]
 

@@ -9,7 +9,8 @@ from providers.python.samba_resident_pyapi import samba_resident_provider, samba
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -111,6 +112,10 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
     return py_call(native_loaded_module("builtins").dict, result)
 
 
+# Prepared-registry slot of the resident ABI probe verdict (per entries object).
+comptime _SAMBA_RESIDENT_ABI_SLOT = "samba_resident_abi_v1"
+
+
 def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
                          device_plan: DevicePlan, schedule: PythonObject, accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
@@ -119,14 +124,18 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
         return PythonObject(None)
     var provider = samba_resident_provider(fields, entries)
     # The resident ABI of one connected entry namespace is fixed: probe it once
-    # per entries object, not with four hasattr calls on every step.
-    if py_get(fields, "_resident_abi_entries") is not entries:
+    # per entries object, not with four hasattr calls on every step. The
+    # verdict lives in the native prepared registry, weakly keyed by the
+    # entries object (never in the model's `__dict__`, so a pickle of the
+    # model carries no binding reference).
+    var abi_mods = NativeModules()
+    if prepared_get(abi_mods, _SAMBA_RESIDENT_ABI_SLOT, entries) is None:
         var enabled = True
         for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
             enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
         if not enabled:
             return PythonObject(None)
-        py_setitem(fields, "_resident_abi_entries", entries)
+        prepared_put(abi_mods, _SAMBA_RESIDENT_ABI_SLOT, entries, PythonObject(True))
     if (provider is None and not Bool(py=_native_function(entries, "samba_resident_enabled")())) or (provider is not None and neural_descriptor_execute(provider, 24, [], [], [], False) == 0):
         return PythonObject(None)
     if accumulation > 1 and not Bool(py=py_call(bi.hasattr, entries, "samba_resident_accumulated_step")):

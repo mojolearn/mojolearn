@@ -45,7 +45,7 @@ from bindings.native_process_pool import (
 from bindings.native_transport import transport_close
 from bindings.native_codec import codec_initialize
 from bindings.native_loaded_module import NativeModules
-from bindings.native_prepared_owner import prepared_key_add, prepared_key_same
+from bindings.native_prepared_owner import prepared_key_add, prepared_key_same, prepared_get, prepared_put, prepared_drop
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
     shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
@@ -891,6 +891,12 @@ def _release_query_state(pool: PythonObject, token: String, name: PythonObject, 
         process_pool_close(pool)
 
 
+# Prepared-registry slots of a ParallelQueries driver: its resident worker
+# snapshot claim (token, pool, worker ids, state key, name) and its token counter.
+comptime _QUERY_RESIDENT_SLOT = "parallel_query_resident_v1"
+comptime _QUERY_TOKENS_SLOT = "parallel_query_tokens_v1"
+
+
 def _parallel_queries(args: PythonObject) raises -> PythonObject:
     """args (queries object, X, method, kwargs): `ParallelQueries.query`.
     Every worker stores one snapshot of the estimator under the holder's
@@ -949,24 +955,29 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     _ = py_call(key.append, model)
     _ = py_call(key.append, name)
     prepared_key_add(mods, key, state)
-    var resident = py_get(holder, PythonObject("_resident_query"), PythonObject(None))
+    # The resident claim and the token counter live in the native prepared
+    # registry, weakly keyed by the driver object (outside its `__dict__`;
+    # never pickled or copied).
+    var driver = args[0]
+    var resident = prepared_get(mods, _QUERY_RESIDENT_SLOT, driver)
     var token = String()
     if (resident is not None and resident[1] is pool and not Bool(py=pool["closed"])
             and _pool_pids_same(resident[2], pool) and prepared_key_same(resident[3], key)):
         token = String(resident[0])
     else:
         if resident is not None:
-            py_setitem(holder, "_resident_query", PythonObject(None))
+            prepared_drop(mods, _QUERY_RESIDENT_SLOT, driver)
             _release_query_state(pool, String(resident[0]), resident[4], workers)
-        var counter = Int(py=py_get(holder, PythonObject("_native_tokens"), PythonObject(0))) + 1
-        py_setitem(holder, "_native_tokens", counter)
+        var last_token = prepared_get(mods, _QUERY_TOKENS_SLOT, driver)
+        var counter = (Int(py=last_token) if last_token is not None else 0) + 1
+        prepared_put(mods, _QUERY_TOKENS_SLOT, driver, PythonObject(counter))
         token = String("nq-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
         var stores = b.list()
         for i in range(workers):  # driver-loop: one snapshot request per worker
             _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
         _ = _map(pool, stores)
         # The pool starts its workers on the first map: record their IDs now.
-        py_setitem(holder, "_resident_query", Python.tuple(token, pool, _pool_pids(pool), key, name))
+        prepared_put(mods, _QUERY_RESIDENT_SLOT, driver, Python.tuple(token, pool, _pool_pids(pool), key, name))
     var results = PythonObject(None)
     var n_devices = workers
     try:
@@ -981,7 +992,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     except error:
         # A failed query leaves no resident claim: release the snapshot (as
         # before) and send it again on the next call.
-        py_setitem(holder, "_resident_query", PythonObject(None))
+        prepared_drop(mods, _QUERY_RESIDENT_SLOT, driver)
         _release_query_state(pool, token, name, workers)
         raise error^
     var outputs = b.list()

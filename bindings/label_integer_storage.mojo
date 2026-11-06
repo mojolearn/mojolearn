@@ -14,6 +14,7 @@
 # (lists, tuples, float, complex, object, str, datetime, pandas, torch, sparse,
 # subclasses) keeps its caller's existing element-by-element path.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_type, py_get
 from core.label_storage_impl import label_float_target_refusal
 
@@ -48,10 +49,10 @@ def _ndarray_buffer_address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var storage = List[Int](length=10, fill=0)
     var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x1C)) != 0:
+    if cpython_table()[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0x1C)) != 0:
         raise cpy.unsafe_get_error()
     var address = storage[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    cpython_table()[].PyBuffer_Release(pointer)
     _ = storage^
     return address
 

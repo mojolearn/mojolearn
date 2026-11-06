@@ -2,6 +2,7 @@
 # Zero-copy ndarray view of an admitted Array's retained native exporter.
 # Imported by both input and public-output owners; no model-specific routing.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.native_buffer_owner import native_buffer_view
@@ -82,11 +83,11 @@ def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises
     ref cpy = Python().cpython()
     var exported = List[Int](length=10, fill=0)
     var pointer = exported.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(buffer._obj_ptr, pointer, Int32(0x98)) != 0:
+    if cpython_table()[].PyObject_GetBuffer(buffer._obj_ptr, pointer, Int32(0x98)) != 0:
         raise cpy.unsafe_get_error()
     var address = exported[0]
     var size = exported[2]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    cpython_table()[].PyBuffer_Release(pointer)
     var offset = 0 if empty else Int(py=values["_addr"]) - address
     if offset < 0 or offset > size:
         raise Error("ValueError: native output view lies outside its retained storage")

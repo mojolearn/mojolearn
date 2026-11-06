@@ -39,7 +39,11 @@ class ModeMetadataConnection(unittest.TestCase):
         native = (ROOT / 'bindings/mode_metadata_native.mojo').read_text()
         registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
         self.assertIn('module.def_py_c_function(mode_metadata_c, "mode_metadata_native_call")', registration)
-        self.assertIn('"PyObject_GenericGetDict"', native)
+        # CPython calls go through the process-wide typed pointer table, never a
+        # per-call by-name symbol lookup.
+        self.assertIn('cpython_table()[].PyObject_GenericGetDict(model._obj_ptr, PyObjectPtr())', native)
+        self.assertIn('from bindings.cpython_table import cpython_table', native)
+        self.assertNotIn('get_function', native)
         self.assertNotIn('Python.import_module', native)
         self.assertNotIn('family_raw_get', native)
 
