@@ -368,6 +368,26 @@ def _block(mut mods: NativeModules, model: PythonObject, index: Int) raises -> P
     return neural_block_fields(mods, model._blocks[index], _causal_context_for(mods, model))
 
 
+def _block_list(mut mods: NativeModules, model: PythonObject) raises -> List[PythonObject]:
+    # One operation's admitted layer fields. Each `_block` is a full record
+    # admission (~40 field reads plus the class ancestry walk); the resident
+    # routes read the same layers for the profile check, the session key, the
+    # open and the cache export, so they admit each layer once per operation
+    # and pass this list down (the operation-snapshot pattern of `_run_prepared`).
+    var blocks = List[PythonObject]()
+    for i in range(len(model._blocks)):  # driver-loop: admit each layer's block fields once per operation
+        blocks.append(_block(mods, model, i))
+    return blocks^
+
+
+def _block_at(mut mods: NativeModules, model: PythonObject, blocks: List[PythonObject], index: Int) raises -> PythonObject:
+    # A list shorter than the layer index (never filled, or a partial profile
+    # check) falls back to the ordinary per-layer admission.
+    if index >= 0 and index < len(blocks):
+        return blocks[index]
+    return _block(mods, model, index)
+
+
 def _positions(model: PythonObject, state: PythonObject, length: Int) raises:
     var have = 0 if state is None else Int(py=state.positions)
     if length < 0 or have < 0:
@@ -894,8 +914,8 @@ def _causal_layer_run_bound(mut mods: NativeModules,
                 py_setattr(st, "cached_tokens", py_call(e["decode" if step else "forward"], addresses, params))
                 mods.released()
     else:
-        if py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
-            raise Error("neural block: state is owned by a resident decode session")
+        # The `_resident_session` refusal above already covers every layer
+        # kind; the second per-layer getattr that stood here never fired.
         # Fixed public Mamba ABI words, plus the optional Mamba1 affine tail.
         # Reserve once so the input/weights/state/report vector does not grow
         # through multiple allocations during every public decode step.
@@ -1093,6 +1113,15 @@ def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b
 
 
 def _resident_profiles_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    var blocks = List[PythonObject]()
+    return _resident_profiles_ok(mods, model, state, blocks)
+
+
+def _resident_profiles_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject,
+                          mut blocks: List[PythonObject]) raises -> Bool:
+    # `blocks` receives each admitted layer, in order; on True it holds every
+    # layer and the caller reuses it for the key, the open and the export.
+    blocks.clear()
     # Profile tags are ordinary checkpoint metadata, including for the default
     # compiled arithmetic. Compare with the selected resident module, rather
     # than declining every tagged model or silently discarding a mismatch.
@@ -1109,6 +1138,7 @@ def _resident_profiles_ok(mut mods: NativeModules, model: PythonObject, state: P
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     for i in range(len(model._blocks)):  # driver-loop: captured profile admission once per public operation
         var blk = _block(mods, model, i)
+        blocks.append(blk)
         var profile = py_get(blk, "_arithmetic_profile", PythonObject(None))
         var st = state.layers[i]
         if py_type(st) is mods.module("types").SimpleNamespace and py_get(causal_snapshot_fields(mods, st), "_causal_admission_failure") is not None:
@@ -1137,6 +1167,12 @@ def _resident_publish_profile(blk: PythonObject, state: PythonObject) raises:
 
 
 def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    var blocks = List[PythonObject]()
+    return _resident_forward_ok(mods, model, state, blocks)
+
+
+def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject,
+                         mut blocks: List[PythonObject]) raises -> Bool:
     """Whether `forward` runs as the one resident program
     (`causal_lm_session_forward`): a transformer stack with a norm, the
     resident entries, a head the resident session takes, matching arithmetic
@@ -1152,7 +1188,7 @@ def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: Py
         return False
     if model._head_int15 is not None and String(e["resident_vendor"]) != "cuda":
         return False
-    return _resident_profiles_ok(mods, model, state)
+    return _resident_profiles_ok(mods, model, state, blocks)
 
 
 def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
@@ -1242,7 +1278,7 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
     return True
 
 
-def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, output: PythonObject, prepared_key: PythonObject, mut read_plan: Optional[LegacyGenerationReadPlan]) raises -> PythonObject:
+def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, output: PythonObject, prepared_key: PythonObject, mut read_plan: Optional[LegacyGenerationReadPlan], admitted_blocks: List[PythonObject]) raises -> PythonObject:
     """`(B, L, V)` logits of `forward` in one resident program: the kept (or
     newly opened) sessions take the state's caches, run the stack, and the
     advanced caches come back into the state."""
@@ -1264,9 +1300,20 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
         _legacy_resident_cancel(mods, model, read_plan.value())
         held = False
     var fields = read_plan.value().resident_fields if held else _standalone_record_fields(mods, model)
+    # Each layer is admitted once per forward (once per read with a plan): the
+    # key, the open and the export below all read this list.
+    var blocks: List[PythonObject]
+    if len(admitted_blocks) == len(model._blocks):
+        blocks = admitted_blocks.copy()
+    elif Bool(read_plan) and len(read_plan.value().blocks) == len(model._blocks):
+        blocks = read_plan.value().blocks.copy()
+    else:
+        blocks = _block_list(mods, model)
+    if Bool(read_plan) and len(read_plan.value().blocks) == 0:
+        read_plan.value().blocks = blocks.copy()
     var persist = held or (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
-    var key = _resident_key(mods, model, state, b, int15) if prepared_key is None else prepared_key
+    var key = _resident_key(mods, model, state, b, int15, blocks) if prepared_key is None else prepared_key
     var retain = persist and Bool(read_plan) and read_plan.value().resident_reuse
     var kept = py_get(fields, "_resident_sessions") if persist and not held else PythonObject(None)
     var lm = PythonObject(None)
@@ -1304,7 +1351,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
                 if retain:
                     read_plan.value().resident_lm = PythonObject(None)
                     read_plan.value().resident_sessions = PythonObject(None)
-            var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep)
+            var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep, blocks)
             lm = opened[0]
             sessions = opened[1]
             if retain:
@@ -1323,13 +1370,13 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             mods.released()
         _ = out  # keep the Python object alive through the native call above
         for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-            var blk = _block(mods, model, i)
+            var blk = _block_at(mods, model, blocks, i)
             var st = state.layers[i]
             var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
             var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
             var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
             var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
-            var provider = py_get(e, "native_block_operations")
+            # `provider` is the entry read once above the loop.
             if provider is not None:
                 _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
                 mods.released()
@@ -1471,6 +1518,9 @@ struct LegacyGenerationReadPlan(Movable):
     var resident_cache: PythonObject
     var resident_lm: PythonObject
     var resident_sessions: PythonObject
+    # The read's admitted layer fields (resident route), filled once by the
+    # resident check or the first resident forward; cleared with the loan.
+    var blocks: List[PythonObject]
 
     def __init__(out self, model: PythonObject, state: PythonObject, batch: Int, resident: Bool) raises:
         self.resident = resident
@@ -1489,6 +1539,7 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_cache = PythonObject(None)
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
+        self.blocks = List[PythonObject]()
 
     def clear_resident(mut self):
         self.resident_active = False
@@ -1496,6 +1547,7 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_cache = PythonObject(None)
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
+        self.blocks.clear()
 
     def positions(self, state: PythonObject, batch: Int, length: Int) raises:
         # Position/capacity checks retain their per-step execution point, before
@@ -1601,9 +1653,14 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
             var windowed_result4 = py_call(parallel, "run", Python.list(causal_model_origin(mods, model), ids, causal_state_origin(mods, state), remote_step, model, state))
             mods.released()
             return windowed_result4^
-        var resident = read_plan.value().resident if read_plan else _resident_forward_ok(mods, model, state)
+        # Layer fields admitted by the resident check; the resident forward
+        # (and, with a read plan, every later forward of this read) reuses them.
+        var admitted_blocks = List[PythonObject]()
+        var resident = read_plan.value().resident if read_plan else _resident_forward_ok(mods, model, state, admitted_blocks)
         if not read_plan and admitted and _legacy_read_captured(mods, model, state):
             read_plan = LegacyGenerationReadPlan(model, state, b, resident)
+            if resident:
+                read_plan.value().blocks = admitted_blocks.copy()
             if resident and retain_resident and py_get(entries, "native_block_operations") is not None:
                 var fields = _standalone_record_fields(mods, model)
                 if (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
@@ -1619,10 +1676,12 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
                 output = plan.logits
             if resident:
                 if plan.resident_key is None:
-                    plan.resident_key = _resident_key(mods, model, state, b, model._head_int15 is not None)
+                    if len(plan.blocks) != len(model._blocks):
+                        plan.blocks = _block_list(mods, model)
+                    plan.resident_key = _resident_key(mods, model, state, b, model._head_int15 is not None, plan.blocks)
                 resident_key = plan.resident_key
         if resident:
-            var logits = _resident_forward(mods, model, ids, state, output, resident_key, read_plan)
+            var logits = _resident_forward(mods, model, ids, state, output, resident_key, read_plan, admitted_blocks)
             if read_plan:
                 read_plan.value().logits = logits
                 read_plan.value().logits_length = l
@@ -1719,6 +1778,14 @@ def _resident_open_all(mut mods: NativeModules,
     model: PythonObject, e: PythonObject, state: PythonObject, b: Int, l: Int, int15: Bool,
     mut keep: List[PythonObject],
 ) raises -> PythonObject:
+    var blocks = List[PythonObject]()
+    return _resident_open_all(mods, model, e, state, b, l, int15, keep, blocks)
+
+
+def _resident_open_all(mut mods: NativeModules,
+    model: PythonObject, e: PythonObject, state: PythonObject, b: Int, l: Int, int15: Bool,
+    mut keep: List[PythonObject], blocks: List[PythonObject],
+) raises -> PythonObject:
     """Open the model's resident sessions on `state`: one decode session per
     layer (weights and the layer's caches copied to the device) and the
     model session (embedding, norm, head). Returns (lm, sessions)."""
@@ -1728,7 +1795,7 @@ def _resident_open_all(mut mods: NativeModules,
     mods.released()
     try:
         for i in range(len(model._blocks)):  # driver-loop: over model layers
-            var blk = _block(mods, model, i)
+            var blk = _block_at(mods, model, blocks, i)
             var st = state.layers[i]
             var a = _transformer_args(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
             var open_a = g[].bi.list()
@@ -1779,12 +1846,18 @@ def _resident_open_all(mut mods: NativeModules,
 
 
 def _resident_key(mut mods: NativeModules, model: PythonObject, state: PythonObject, b: Int, int15: Bool) raises -> PythonObject:
+    var blocks = List[PythonObject]()
+    return _resident_key(mods, model, state, b, int15, blocks)
+
+
+def _resident_key(mut mods: NativeModules, model: PythonObject, state: PythonObject, b: Int, int15: Bool,
+                  blocks: List[PythonObject]) raises -> PythonObject:
     """What a kept resident session set must match: the rows, every layer's
     cache capacity/profile, the head format and the entries it was opened with."""
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var caps = g[].bi.list()
     for i in range(len(state.layers)):  # driver-loop: over model layers
-        var profile = py_get(_block(mods, model, i), "_arithmetic_profile", PythonObject(None))
+        var profile = py_get(_block_at(mods, model, blocks, i), "_arithmetic_profile", PythonObject(None))
         _ = py_call(caps.append, Python.tuple(state.layers[i].max_tokens, profile))
     var identity = py_get(_standalone_record_fields(mods, model), "_causal_entries_identity", model._native_entries)
     return Python.tuple(b, py_call(g[].bi.tuple, caps), int15, py_call(g[].bi.id, identity))
@@ -1793,9 +1866,9 @@ def _resident_key(mut mods: NativeModules, model: PythonObject, state: PythonObj
 def _resident_load_states(e: PythonObject, sessions: PythonObject, state: PythonObject, mut keep: List[PythonObject]) raises:
     """Each kept layer session takes this call's caches (the state half of
     an open; the weights stay where they are)."""
+    var provider = py_get(e, "native_block_operations")
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
         var st = state.layers[i]
-        var provider = py_get(e, "native_block_operations")
         var a: List[Int] = [_addr(st.k_cache, keep), _addr(st.v_cache, keep)]
         var p: List[Int] = [Int(py=st.cached_tokens)]
         if provider is not None:
@@ -1828,7 +1901,8 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
         # Same optional-resident eligibility sentinel used above. Complete
         # generation then enters _read and keeps legacy alias coupling.
         return PythonObject(None)
-    if not _resident_profiles_ok(mods, model, state):
+    var blocks = List[PythonObject]()
+    if not _resident_profiles_ok(mods, model, state, blocks):
         return PythonObject(None)
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var keep = List[PythonObject]()
@@ -1845,7 +1919,7 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     var persist = (py_contains(e, "transformer_decode_session_load_state")
                    and not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
-    var key = _resident_key(mods, model, state, b, int15)
+    var key = _resident_key(mods, model, state, b, int15, blocks)
     var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
     var lm = PythonObject(None)
     var sessions = PythonObject(None)
@@ -1862,7 +1936,7 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
                 causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
                 _resident_close(e, kept[1], kept[2])
                 mods.released()
-            var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep)
+            var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep, blocks)
             lm = opened[0]
             sessions = opened[1]
         var provider = py_get(e, "native_block_operations")
@@ -2110,7 +2184,8 @@ def _resident_acquire_read(mut mods: NativeModules, model: PythonObject, state: 
                            entries: PythonObject, fields: PythonObject, kept: PythonObject,
                            key: PythonObject, batch: Int, length: Int, int15: Bool,
                            mut keep: List[PythonObject], mut lm: PythonObject,
-                           mut sessions: PythonObject, mut expected: PythonObject) raises:
+                           mut sessions: PythonObject, mut expected: PythonObject,
+                           blocks: List[PythonObject]) raises:
     # Shared by greedy and sampled reads: each PUBLIC read reloads mutable host
     # KV, even when session identities/shape match. Residency removes only the
     # intra-read transfers. Pointer identity never proves unchanged contents.
@@ -2131,13 +2206,13 @@ def _resident_acquire_read(mut mods: NativeModules, model: PythonObject, state: 
             mods.released()
             lm = PythonObject(None)
             sessions = PythonObject(None)
-        var opened = _resident_open_all(mods, model, entries, state, batch, length, int15, keep)
+        var opened = _resident_open_all(mods, model, entries, state, batch, length, int15, keep, blocks)
         lm = opened[0]
         sessions = opened[1]
 
 
 def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
-                   mut admission: NativeArrayAdmission) raises -> PythonObject:
+                   mut admission: NativeArrayAdmission, blocks: List[PythonObject]) raises -> PythonObject:
     # One provider boundary owns the complete token block. Native session
     # reservations hold all layers; no Python metadata, callbacks or provider
     # imports enter the GPU token loop. Mutable state is admitted each read.
@@ -2151,7 +2226,7 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
     var fields = _standalone_record_fields(mods, s.model)
     var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
-    var key = _resident_key(mods, s.model, s.state, batch, int15)
+    var key = _resident_key(mods, s.model, s.state, batch, int15, blocks)
     var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
     var expected = kept
     var lm = PythonObject(None)
@@ -2169,7 +2244,7 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
         causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
     try:
         _resident_acquire_read(mods, s.model, s.state, entries, fields, kept,
-            key, batch, length, int15, keep, lm, sessions, expected)
+            key, batch, length, int15, keep, lm, sessions, expected, blocks)
         var cached = transformer_resident_lm_read(provider, lm, sessions,
             [_addr(s.current, keep), _addr(pending, keep), 0, Int(progress.unsafe_ptr())],
             [length, capacity, Int(py=s.state.layers[0].cached_tokens)])
@@ -2184,7 +2259,7 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
         # Export once per read, not once per token. The next public operation
         # may change or release its Array metadata, so no host address is cached.
         for i in range(len(sessions)):  # driver-loop: final owned layer-state publication
-            var blk = _block(mods, s.model, i)
+            var blk = _block_at(mods, s.model, blocks, i)
             var st = s.state.layers[i]
             var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
             var size = batch * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
@@ -2269,9 +2344,9 @@ def _sampling_read_progress(mut s: GenerationHandle, progress: ResidentGreedyRea
 
 
 def _sampling_read_state(mut mods: NativeModules, mut s: GenerationHandle, cached: Int,
-                         mut copies: List[PythonObject]) raises:
+                         mut copies: List[PythonObject], blocks: List[PythonObject]) raises:
     for i in range(len(s.state.layers)):  # driver-loop: one final layer metadata publication
-        _resident_publish_profile(_block(mods, s.model, i), s.state.layers[i])
+        _resident_publish_profile(_block_at(mods, s.model, blocks, i), s.state.layers[i])
         py_setattr(s.state.layers[i], "cached_tokens", PythonObject(cached))
     _writeback(copies)
 
@@ -2304,7 +2379,7 @@ def _generation_route_witness(route: String, capacity: Int, produced: Int,
 
 
 def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
-                            mut admission: NativeArrayAdmission) raises -> PythonObject:
+                            mut admission: NativeArrayAdmission, blocks: List[PythonObject]) raises -> PythonObject:
     # DEFAULT OFF, UNMEASURED: one device sampling read, with the same policy
     # used by host fallback. Live KV plus two alternating committed snapshots
     # cost roughly 3x KV storage and one full cache copy per successful forward. This is not a
@@ -2318,7 +2393,7 @@ def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, ca
     var int15 = s.model._head_int15 is not None
     var fields = _standalone_record_fields(mods, s.model)
     var persist = not Bool(py=py_get(fields, "_resident_busy", PythonObject(False)))
-    var key = _resident_key(mods, s.model, s.state, batch, int15)
+    var key = _resident_key(mods, s.model, s.state, batch, int15, blocks)
     var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
     var expected = kept
     var lm = PythonObject(None)
@@ -2334,7 +2409,7 @@ def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, ca
     # Pin and admit all recovery destinations before the GIL-release window.
     # No Python metadata lookup or deferred owner acquisition occurs on failure.
     for i in range(len(s.state.layers)):  # driver-loop: one read's KV destination admission
-        var blk = _block(mods, s.model, i)
+        var blk = _block_at(mods, s.model, blocks, i)
         var st = s.state.layers[i]
         var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
         var size = batch * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
@@ -2353,7 +2428,7 @@ def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, ca
         causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
     try:
         _resident_acquire_read(mods, s.model, s.state, entries, fields, kept,
-            key, batch, length, int15, keep, lm, sessions, expected)
+            key, batch, length, int15, keep, lm, sessions, expected, blocks)
         # Session opening/loading may release the GIL. Recheck the class
         # contract before preparing the final current-token span for execution.
         admission.recheck(generation_array_context())
@@ -2369,7 +2444,7 @@ def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, ca
         admission.recheck(generation_array_context())
         if not progress[0].kv_ready:
             raise Error("generation: resident sampling KV publication did not complete")
-        _sampling_read_state(mods, s, progress[0].cached_tokens, copies)
+        _sampling_read_state(mods, s, progress[0].cached_tokens, copies, blocks)
         if persist and _sampling_read_cache_valid(fields, expected):
             expected = Python.tuple(key, lm, sessions)
             causal_model_cache_set(mods, s.model, fields, "_resident_sessions", expected)
@@ -2399,7 +2474,7 @@ def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, ca
                 current_address, capacity, positions, accounted)
             admission.recheck(generation_array_context())
             if entered_native and progress[0].kv_ready:
-                _sampling_read_state(mods, s, progress[0].cached_tokens, copies)
+                _sampling_read_state(mods, s, progress[0].cached_tokens, copies, blocks)
                 state_valid = native_completed or not progress[0].failure_is_forward
         except publication:
             _ = publication
@@ -2454,17 +2529,19 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
     var failed = False
     try:
         var legacy_resident = False
+        # Layer fields admitted by the resident check, reused by the read.
+        var resident_blocks = List[PythonObject]()
         if (read_control.route == "auto" or read_control.route == "resident") and capacity > 0 and not s.done() and s.greedy:
             var entries = s.model._native_entries
             if (Bool(py=py_get(entries, "resident_read_v1", PythonObject(False)))
                     and py_get(entries, "native_block_operations") is not None
                     and py_get(entries, "parallel_call") is None
-                    and _resident_forward_ok(mods, s.model, s.state)):
+                    and _resident_forward_ok(mods, s.model, s.state, resident_blocks)):
                 admission = NativeArrayAdmission(generation_array_context())
                 # With only one possible forward there is no skipped
                 # intermediate export/reload, so storage coupling is irrelevant.
                 if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
-                    var result = _read_resident(mods, s, capacity, admission.value())
+                    var result = _read_resident(mods, s, capacity, admission.value(), resident_blocks)
                     _generation_route_witness("resident_greedy", capacity, s.produced, read_control)
                     return result
                 # Keep the original resident-forward host loop: another engine
@@ -2477,12 +2554,12 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                     and py_get(entries, "native_block_operations") is not None
                     and py_get(entries, "parallel_call") is None
                     and not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
-                    and _resident_forward_ok(mods, s.model, s.state)):
+                    and _resident_forward_ok(mods, s.model, s.state, resident_blocks)):
                 admission = NativeArrayAdmission(generation_array_context())
                 # Alias refusal changes transport only. The fallback below
                 # still selects the stream's checksum-bound FP32 policy.
                 if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
-                    var result = _read_sampling_resident(mods, s, capacity, admission.value())
+                    var result = _read_sampling_resident(mods, s, capacity, admission.value(), resident_blocks)
                     _generation_route_witness("resident_sampling", capacity, s.produced, read_control)
                     return result
                 legacy_resident = True

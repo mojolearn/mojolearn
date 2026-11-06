@@ -179,7 +179,10 @@ def _set_fitted(fields: PythonObject, n: Int, comps: PythonObject, stats: Python
 
 
 def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _snapshot(model, context)
+    # One admission of the class and instance keys serves the snapshot and
+    # the commit below (nothing between them touches the model's storage).
+    var live = tsa_hw_fields(model, context)
+    var fields = _snapshot_of(live, context)
     var checked = _check_dims(fields, fields["endog"], context)
     var data = checked[0]
     var n = Int(py=checked[1])
@@ -206,7 +209,7 @@ def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = stats  # keep the Python object alive through the native call above
     var updates = _set_fitted(fields, n, comps, stats, flags, context)
     py_setitem(updates, "_data", data)
-    _commit(tsa_hw_fields(model, context), updates, context, True)
+    _commit(live, updates, context, True)
     return model
 
 
@@ -323,7 +326,14 @@ def _settings(fields: PythonObject, context: PythonObject) raises:
 
 
 def _snapshot(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = py_call(_b().dict, tsa_hw_fields(model, context))
+    return _snapshot_of(tsa_hw_fields(model, context), context)
+
+
+def _snapshot_of(live: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The checked copy of admitted instance storage `live` (the dict
+    `tsa_hw_fields` returned): callers that commit to the model again pass
+    the same `live` instead of admitting the class and keys a second time."""
+    var fields = py_call(_b().dict, live)
     _settings(fields, context)
     if py_type(fields["fit_executed_flag"]) is not _b().bool:
         raise Error("TypeError: " + _HW + "fitted flag must be a native boolean")
@@ -410,7 +420,8 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
         which = 2
     if which < 0:
         raise Error("AttributeError: ExponentialSmoothing has no such attribute")
-    var fields = _snapshot(model, context)
+    var live = tsa_hw_fields(model, context)
+    var fields = _snapshot_of(live, context)
     if not Bool(py=fields["fit_executed_flag"]):
         if attribute:
             raise Error("AttributeError: ExponentialSmoothing has no fitted component")
@@ -437,7 +448,7 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
     if cached is None:
         var updates = Python.dict()
         py_setitem(updates, name, out)
-        _commit(tsa_hw_fields(model, context), updates, context)
+        _commit(live, updates, context)
     _ = comps
     if attribute:
         return out

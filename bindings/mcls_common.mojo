@@ -40,6 +40,9 @@ from bindings.family_common import (
 )
 from core.family_cast_impl import family_all_finite_f32
 from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
+from core.cast_in import CastIn, CAST_KIND_SIGNED
+from core.label_cast import host_unique_inverse_cast
+from core.metrics_exp_impl import mexp_gather_i32
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact, metric_i32_vector, metric_f32_vector
 from bindings.metrics_reg_native import _reg_weights
 
@@ -149,18 +152,6 @@ def mc_entry(binding: PythonObject, name: String) raises -> PythonObject:
     # __getattr__ hooks before a numerical entry can be called.
     return neural_descriptor_entry(binding, name)
 
-
-
-def mc_base(name: String, context: PythonObject) raises -> PythonObject:
-    """The base binding's label entry `name` (`prepare_targets`,
-    `gather_i32`), connected at import (the `_buffer._native` lookup)."""
-    var entries = context["family_mcls_labels"]
-    if py_type(entries) is mc_b().str:
-        raise Error(String(entries))
-    var entry = entries[PythonObject(name)]
-    if py_type(entry) is not context["family_builtin_type"]:
-        raise Error("TypeError: metric label preparation requires a compiled entry")
-    return entry
 
 
 def mc_i32_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -317,6 +308,10 @@ def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context
     var types = mc_types(labels)
     if mc_types_all(types, b.str):
         return Python.tuple(labels, PythonObject("string"))
+    if mc_types_all(types, b.int):
+        # every leaf is an exact Python int: `int(v)` is v itself, so the
+        # flattened list (a fresh list) is the converted one; no per-label call
+        return Python.tuple(labels, PythonObject("integer"))
     if mc_types_integral(types, context):
         var converted = Python.list()
         for index in range(mc_len(labels)):  # driver-loop: native integer boxing after exact type admission
@@ -368,23 +363,33 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
     return Python.tuple(store, PythonObject(count))
 
 
+def mc_encode_signed(addr: Int, item: Int, count: Int, classes_addr: Int, codes_addr: Int) raises -> Int:
+    """The ORDER RULE over `count` signed little-endian integer labels of
+    `item` bytes (contiguous): the sorted distinct values written to
+    `classes_addr` (items of the same width) and one dense int32 code per
+    row; returns k. The host label encoder called natively: no Python call
+    into the base binding's `prepare_targets` entry, the same classes and
+    codes (exact integers)."""
+    var src = CastIn(addr, CAST_KIND_SIGNED, item, count, 1, item, item)
+    var k = host_unique_inverse_cast(src, 1, classes_addr, codes_addr)
+    if k < 0:
+        raise Error("RuntimeError: prepare_targets refused integer labels")
+    return k
+
+
 def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
-    """`(classes, codes)` of `count` int64 labels through the base
-    binding's `prepare_targets` (the ORDER RULE: sorted distinct values,
-    one dense int32 code per row): the classes as a Python int list."""
+    """`(classes, codes)` of `count` int64 labels (the ORDER RULE: sorted
+    distinct values, one dense int32 code per row), encoded natively: the
+    classes as a Python int list."""
     var b = mc_b()
     var array = native_loaded_module("array").array
     var classes = family_call(array, PythonObject("q"), py_call(b.bytes, PythonObject(8 * count)))
     var codes = family_array(Python.tuple(count), "<i4", context)
-    var k = Int(py=family_call(mc_base("prepare_targets", context), py_call(store.buffer_info)[0], PythonObject(3),
-                               PythonObject(count), py_call(classes.buffer_info)[0], classical_address(codes),
-                               PythonObject(0), PythonObject(0), PythonObject(0)))
+    var k = mc_encode_signed(Int(py=py_call(store.buffer_info)[0]), 8, count,
+                             Int(py=py_call(classes.buffer_info)[0]), Int(py=classical_address(codes)))
+    _ = store  # keep the label store alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    if k < 0:
-        raise Error("RuntimeError: prepare_targets refused integer labels")
-    _ = codes  # keep the Python object alive through the native calls above
     var head = family_call(py_attr(classes, "__getitem__"), family_call(b.slice, PythonObject(0), PythonObject(k)))
-    _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(family_call(head.tolist), codes)
 
 
@@ -434,6 +439,20 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject) raises 
         return McLabels("integer", Int(py=fast[2]), fast[0], fast[1])
     var listed = mc_label_list(values, name, False, context)
     var labels = listed[0]
+    if String(listed[1]) == "integer":
+        # The converted labels are exact Python ints (pandas, uint64 or
+        # nested inputs flattened above): within int64 they take the native
+        # encoder as one int64 store; an int outside int64 keeps the Python
+        # label step below.
+        var store = PythonObject(None)
+        try:
+            store = py_call(native_loaded_module("array").array, PythonObject("q"), labels)
+        except:
+            store = PythonObject(None)
+        if store is not None:
+            var count = mc_len(store)
+            var encoded = mc_encode_store(store, count, context)
+            return McLabels("integer", count, encoded[0], encoded[1])
     var classes = mc_sorted(mc_set(labels))
     var index = mc_index(classes)
     # cpu-route: str or Python int labels, the explicit label input step (dict lookups by builtins map)
@@ -447,12 +466,14 @@ def mc_union(a: McLabels, b: McLabels) raises -> PythonObject:
 
 
 def mc_gather(labels: McLabels, table: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_label_map`: the per-class int32 `table` gathered per row by the
-    base binding's `gather_i32`."""
+    """`_label_map`: the per-class int32 `table` gathered per row, natively
+    (the codes are in range by construction; no Python call into the base
+    binding's `gather_i32` entry)."""
     var t = mc_i32_array(table, context)
     var out = family_array(Python.tuple(labels.n), "<i4", context)
-    _ = family_call(mc_base("gather_i32", context), classical_address(t), PythonObject(mc_len(labels.classes)),
-                    classical_address(labels.codes), PythonObject(labels.n), classical_address(out))
+    _ = mexp_gather_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(t))), mc_len(labels.classes),
+                        FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels.codes))), labels.n,
+                        FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))))
     _ = t  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = t^

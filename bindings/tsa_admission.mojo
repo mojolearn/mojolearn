@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Passive scalar/storage admission shared by the legacy TSA public owners.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_validate import classical_view
@@ -110,10 +111,8 @@ def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
     var fields = PythonObject(None)
     for i in range(len(mro)):  # driver-loop: exact class dictionaries and native instance storage
         var own = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
-        var keys = py_call(b.list, own)
-        for j in range(len(keys)):  # driver-loop: validate keys before any descriptor lookup
-            if py_type(keys[j]) is not b.str:
-                raise Error("TypeError: ExponentialSmoothing class keys must be native strings")
+        if not _tsa_str_items(py_call(b.list, own), b):
+            raise Error("TypeError: ExponentialSmoothing class keys must be native strings")
         if py_get(own, "__del__") is not None:
             raise Error("TypeError: ExponentialSmoothing cannot invoke lifecycle callbacks")
         var descriptor = py_get(own, "__dict__")
@@ -121,11 +120,30 @@ def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
             fields = py_call(descriptor.__get__, model)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: ExponentialSmoothing requires native instance storage")
-    var keys = py_call(b.list, fields)
-    for j in range(len(keys)):  # driver-loop: field lookup cannot invoke application key equality
-        if py_type(keys[j]) is not b.str:
-            raise Error("TypeError: ExponentialSmoothing state keys must be native strings")
+    if not _tsa_str_items(py_call(b.list, fields), b):
+        raise Error("TypeError: ExponentialSmoothing state keys must be native strings")
     return fields
+
+
+def _tsa_str_items(keys: PythonObject, b: PythonObject) raises -> Bool:
+    """True when every item of the exact list `keys` is an exact str: the
+    items are read borrowed through the list's C storage and their types
+    compared by pointer (no item boxed into a Python call, no key equality
+    or metaclass hook runs). Every Holt-Winters call admits the class and
+    instance keys, so this stays pointer reads only."""
+    ref cpy = Python().cpython()
+    var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
+    var str_class = b.str
+    var admitted = True
+    for j in range(len(keys)):  # driver-loop: over the class and instance dictionary keys (model structure)
+        var key_type = cpy.PyObject_Type(get_item(keys._obj_ptr, j))
+        admitted = key_type == str_class._obj_ptr
+        cpy.Py_DecRef(key_type)
+        if not admitted:
+            break
+    _ = keys  # keep the list alive through the borrowed item reads above
+    _ = str_class
+    return admitted
 
 
 def tsa_truth(value: PythonObject, context: PythonObject) raises -> Bool:

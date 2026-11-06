@@ -39,7 +39,9 @@ from bindings.family_common import (
     family_call, family_call_kw, family_array, family_shape_repr, family_cast_view, family_view,
 )
 from bindings.metrics_reg_native import _reg_weights
-from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral, metric_warn, metric_undefined
+from bindings.metrics_native_support import (
+    metric_is_real, metric_float, metric_integer, metric_is_integral, metric_is_integral_type, metric_warn, metric_undefined,
+)
 from bindings.metrics_native_inputs import metric_shape, metric_flatten
 from core.family_cast_impl import family_all_finite_f32
 from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
@@ -358,13 +360,23 @@ def mx_list_labels(values: PythonObject, name: String, allow_empty: Bool,
     var labels = _mx_flatten(values, context)
     if not allow_empty and mx_len(labels) == 0:
         raise Error(name + " must contain at least one label")
+    # The distinct exact types, one C-level `set(map(type, labels))`; the
+    # tests below run once per distinct type instead of once per label.
+    var types = mx_list(mx_set(py_call(b.map, b.type, labels)))
+    var n_types = mx_len(types)
     var strings = True
     var integers = True
-    for i in range(mx_len(labels)):  # driver-loop: admitted exact label scalar types, never numeric ABCs
-        strings = strings and py_type(labels[i]) is py_type(PythonObject(""))
-        integers = integers and metric_is_integral(labels[i], context)
+    var exact_int = True
+    for t in range(n_types):  # driver-loop: over the distinct exact label types (a handful)
+        var cls = types[t]
+        strings = strings and cls is b.str
+        integers = integers and metric_is_integral_type(cls, context)
+        exact_int = exact_int and cls is b.int
     if strings:
         return (labels, String("string"))
+    if integers and exact_int:
+        # `int(v)` of an exact Python int is v: the flattened list (fresh) is the converted one
+        return (labels, String("integer"))
     if integers:
         var converted = Python.list()
         for i in range(mx_len(labels)):  # driver-loop: native integer label boxing after exact type admission
@@ -457,6 +469,12 @@ def mx_encode(values: PythonObject, name: String, context: PythonObject) raises 
             return MxLab("integer", fast[0], fast[1], Int(py=fast[1].size))
     var listed = mx_list_labels(values, name, False, context)
     var labels = listed[0]
+    if listed[1] == "integer":
+        # exact Python ints (pandas, uint64 or nested inputs flattened above):
+        # within int64 they take the host label encoder as one int64 buffer
+        var native = _mx_buffer_labels(labels, name, context)
+        if native is not None:
+            return MxLab("integer", native[0], native[1], Int(py=native[1].size))
     var classes = mx_sorted(mx_set(labels))
     var index = mx_index(classes)
     var n = mx_len(labels)

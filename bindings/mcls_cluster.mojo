@@ -18,8 +18,9 @@ from bindings.family_common import (
 from bindings.metrics_reg_native import _mean_error, _r2_options
 from bindings.metrics_native_inputs import metric_shape
 from bindings.mcls_common import (
-    mc_b, mc_len, mc_float, mc_int, mc_is_str, mc_entry, mc_base, mc_shape_of, mc_rank, mc_dim,
+    mc_b, mc_len, mc_float, mc_int, mc_is_str, mc_entry, mc_shape_of, mc_rank, mc_dim,
     mc_i32_1d, mc_f32_1d, mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store,
+    mc_encode_signed,
 )
 from core.family_cast_impl import family_all_finite_f32
 from core.mcls_impl import mcls_min_i32, mcls_max_i32, mcls_copy_words
@@ -73,9 +74,8 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     var classes = family_call(native_loaded_module("array").array, PythonObject("q"),
                               py_call(b.bytes, PythonObject(8 * total)))
     var codes = family_array(Python.tuple(total), "<i4", context)
-    var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(both), PythonObject(2),
-                               PythonObject(total), py_call(classes.buffer_info)[0], classical_address(codes),
-                               PythonObject(0), PythonObject(0), PythonObject(0)))
+    var k = mc_encode_signed(base, 4, total, Int(py=py_call(classes.buffer_info)[0]),
+                             Int(py=classical_address(codes)))
     # prepare_targets writes the class table even though this caller only
     # returns its size. Its integer address does not retain the scratch owner.
     _ = classes
@@ -186,9 +186,8 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     var store = family_call(native_loaded_module("array").array, PythonObject("q"),
                             py_call(b.bytes, PythonObject(8 * n_lab)))
     var mapped = family_array(Python.tuple(n_lab), "<i4", context)
-    var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(lab), PythonObject(2),
-                               PythonObject(n_lab), py_call(store.buffer_info)[0], classical_address(mapped),
-                               PythonObject(0), PythonObject(0), PythonObject(0)))
+    var k = mc_encode_signed(Int(py=classical_address(lab)), 4, n_lab, Int(py=py_call(store.buffer_info)[0]),
+                             Int(py=classical_address(mapped)))
     # The class table is written through its integer address by prepare_targets.
     # Retain its owner until that write has completed, even though only k is returned.
     _ = store
