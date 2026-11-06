@@ -275,7 +275,7 @@ def judge_resolution(report, expected, version, served, local=()):
 
     expected: {project: (filename, sha256)} of OUR projects this root must install, nothing more.
     served:   RoutingIndex.served ({'testpypi': urls, 'pypi': urls}).
-    local:    projects whose upload was skipped (served from the local gated file instead of TestPyPI)."""
+    local:    file names whose upload was skipped (offered from the local gated file instead of TestPyPI)."""
     problems = []
     got = {}
     for item in (report or {}).get("install") or []:
@@ -298,7 +298,7 @@ def judge_resolution(report, expected, version, served, local=()):
         filename, sha = want[name]
         if row["version"] != version:
             problems.append(f"{name} resolved version {row['version']}, want {version}")
-        if name in local:
+        if filename in local:
             if not row["url"].startswith("file:"):
                 problems.append(f"{name}: its upload was skipped, but pip took {row['url']}")
         elif row["url"] not in served.get("testpypi", ()):

@@ -4080,7 +4080,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             links.mkdir(parents=True, exist_ok=True)
             for platform in local:
                 shutil.copy2(wheels[platform], links / wheels[platform].name)
-        local_projects = {TR.wheel_project(wheels[p]) for p in local}
+        local_files = {wheels[p].name for p in local}
         expect = {p: (wheels[p].name, sha256(wheels[p])) for p in ready}
         # (a) the package sets: root project, the platforms it installs, its own wheel (extras, tags, Pythons)
         sets = [(SPLIT_PACKAGES[k][0], LINUX_RESOLVES[k], wheels[k]) for k in LINUX_RESOLVES
@@ -4112,7 +4112,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             label = f"pip install {root}=={self.version} on {plat} py{python}"
             if rc != 0:
                 return label, [f"pip could not resolve it (exit {rc}; {out / 'resolve' / (slug + '.log')})"]
-            return label, TR.judge_resolution(read_json(report), want, self.version, index.served, local_projects)
+            return label, TR.judge_resolution(read_json(report), want, self.version, index.served, local_files)
 
         def download(platform):
             wheel = wheels[platform]
