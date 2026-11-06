@@ -2,7 +2,7 @@
 # One public preprocessing input snapshot, before dtype conversion or execution.
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_arrays import classical_input, classical_is_array, classical_typed, classical_address
@@ -13,7 +13,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, _one_of, sequential_admit_value
 from bindings.sequential_inputs import _promote
 from bindings.x_prep_native_inputs import _rows_fields
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_slot_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_slot_once, array_shape_once, array_metadata_once
 from providers.python.prep_metadata_pyapi import _array_snapshot, _pandas_empty_shape, _description, prep_numeric_vector
 from providers.python.prep_category_pyapi import prep_ndarray_backed, prep_category_array
 from providers.python.preprocessing_input_pyapi import _frozen_values
@@ -25,19 +25,31 @@ from core.classical_pandas_impl import pd_scatter_numeric
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
+def _shape_text(shape: List[Int]) -> String:
+    # `repr(tuple(shape))` of native ints, built natively: "()", "(5,)",
+    # "(3, 4)". Python int repr is the decimal text String(Int) writes.
+    var text = String("(")
+    for i in range(len(shape)):  # small-loop(rank: captured shape words)
+        if i > 0:
+            text += ", "
+        text += String(shape[i])
+    if len(shape) == 1:
+        text += ","
+    text += ")"
+    return text
+
+
 def prep_shape(shape: List[Int], numeric: Bool, name: String) raises:
-    var b = native_loaded_module("builtins")
-    var items = Python.list()
-    for dimension in shape:  # small-loop(rank: captured shape words)
-        _ = py_call(items.append, dimension)
-    var text = String(py_call(b.repr, py_call(b.tuple, items)))
+    # The shape text is built only on a refusal, natively: a passing call
+    # used to build a list, a tuple and its repr (about 6 CPython calls) and
+    # admit the builtins connection on every validated transform.
     var rank = len(shape)
     if numeric and rank < 2:
-        raise Error("Expected 2D array, got " + ("scalar" if rank == 0 else "1D") + " array instead (shape=" + text + "). " + RESHAPE_HINT)
+        raise Error("Expected 2D array, got " + ("scalar" if rank == 0 else "1D") + " array instead (shape=" + _shape_text(shape) + "). " + RESHAPE_HINT)
     if numeric and rank == 2 and shape[0] == 0:
-        raise Error("Found array with 0 sample(s) (shape=" + text + ") while a minimum of 1 is required by " + name + ".")
+        raise Error("Found array with 0 sample(s) (shape=" + _shape_text(shape) + ") while a minimum of 1 is required by " + name + ".")
     if numeric and rank == 2 and shape[1] == 0:
-        raise Error("Found array with 0 feature(s) (shape=" + text + ") while a minimum of 1 is required by " + name + ".")
+        raise Error("Found array with 0 feature(s) (shape=" + _shape_text(shape) + ") while a minimum of 1 is required by " + name + ".")
 
 
 def prep_finite(snapshot: ArrayMetadata, name: String) raises:
@@ -269,18 +281,58 @@ def _rows_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayM
     return result^
 
 
+def _exact_array_snapshot(source: PythonObject, name: String, validate: Bool, scan: Bool,
+                          context: PythonObject) raises -> ArrayMetadata:
+    # An exact ndarray or exact mojolearn Array: the common stateless input.
+    # The general path below reached the same snapshot through steps that
+    # cannot match these two exact classes: the scipy.sparse class scan (7
+    # module reads and up to 14 class reads), the pandas class lookups (four
+    # `_pd_class` module validations, run twice: once inside
+    # classical_admit_value and once in native_pandas_exact), the torch
+    # class lookup, nine builtins attribute reads, the NumPy scalar-type walk,
+    # classical_input (which returns an exact ndarray or Array unchanged) and
+    # a second admission of the same value inside _array_snapshot. Kept, in
+    # the same order and with the same refusals: the value admission
+    # (classical_admit_value of a non-pandas, non-container value is exactly
+    # sequential_admit_value), the shape and metadata snapshot, the Array
+    # memoryview admission, the complex refusal, the shape and finite checks.
+    # One module view serves the whole snapshot (no GIL release inside).
+    var mods = NativeModules()
+    sequential_admit_value(mods, source, context)
+    var shape = array_shape_once(source, context)
+    var snapshot = array_metadata_once(source, shape^, "input", context, allow_non_native=True, allow_unsupported=True)
+    if snapshot.is_array:
+        var view = snapshot.owner[3]
+        if py_type(view) is not mods.module("builtins").memoryview:
+            raise Error("TypeError: preprocessing Array storage requires an exact native memoryview")
+        sequential_admit_value(mods, view, context)
+    if snapshot.dtype_number == 14 or snapshot.dtype_number == 15 or snapshot.dtype_number == 16:
+        raise Error("Complex data not supported: " + name + " got a complex X.")
+    if validate:
+        prep_shape(snapshot.shape, (snapshot.dtype_number >= 0 and snapshot.dtype_number <= 13) or snapshot.dtype_number == 23, name)
+        if scan:
+            prep_finite(snapshot, name)
+    return snapshot^
+
+
 def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
                             scan: Bool, context: PythonObject,
                             allow_sparse: Bool = False,
                             check_sparse: Bool = True) raises -> ArrayMetadata:
-    var b = native_loaded_module("builtins")
-    if py_type(source) is context["maxabs_rows_class"]:
+    var source_type = py_type(source)
+    if source_type is context["maxabs_rows_class"]:
         # DeviceRows is a frame-like native handle in _sk_validate.describe;
         # it has width semantics but no outer float-buffer finite scan.
         var snapshot = _rows_snapshot(source, context)
         if validate:
             prep_shape(snapshot.shape, True, name)
         return snapshot^
+    # Exact array classes are never a sparse, pandas, torch, sequence or
+    # scalar input: identity tests only, then the one-admission snapshot.
+    var ndarray = py_get(context, "ndarray")
+    if (ndarray is not None and source_type is ndarray) or source_type is py_get(context, "array_class"):
+        return _exact_array_snapshot(source, name, validate, scan, context)
+    var b = native_loaded_module("builtins")
     # Match loaded native sparse class identities before general admission.
     # Reading an unadmitted class's __module__ could invoke metaclass or
     # descriptor hooks even on this refusal path.
@@ -367,9 +419,12 @@ def prep_transform_values(mut snapshot: ArrayMetadata, context: PythonObject) ra
         raise Error("TypeError: preprocessing input cannot be cast")
     if snapshot.f32_c() and snapshot.native_byte_order:
         var view = snapshot.owner[3] if snapshot.is_array else native_buffer_view(snapshot.keep)
-        if py_type(view) is not native_loaded_module("builtins").memoryview:
+        # One module view for the type test and the admission (no release
+        # window between them).
+        var mods = NativeModules()
+        if py_type(view) is not mods.module("builtins").memoryview:
             raise Error("TypeError: preprocessing input storage requires an exact native memoryview")
-        sequential_admit_value(view, context)
+        sequential_admit_value(mods, view, context)
         view = py_call(py_call(view.cast, "B").cast, "f")
         return _frozen_values(snapshot, view, context)
     # Allocate a private packed view, so the transport cannot reread any
