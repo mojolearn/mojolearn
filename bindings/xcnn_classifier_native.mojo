@@ -610,7 +610,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         _put(entries, xall, x, context)
         _put(entries, yall, yi, context)
         var step = 0
-        var epoch_entry = Bool(py=context["xcnn_epoch_entry"]) and _has(entries, "x_cnn_fit_epoch_r")
+        var epoch_entry = Bool(py=context["xcnn_epoch_entry"]) and _has(entries, "x_cnn_fit_epoch_d")
         var seed_lo = Int(seed64 & 0xFFFFFFFF)
         var seed_hi = Int(seed64 >> 32)
         var max_iter = Int(py=fields["max_iter"])

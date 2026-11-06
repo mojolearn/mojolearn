@@ -28,6 +28,7 @@ comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime XI64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime XU8P = MutPointer[UInt8, MutUntrackedOrigin]
+comptime _MODE_CHECKED = "_xseq_numeric_mode_checked"
 
 
 # ---------------------------------------------------------------- the route
@@ -77,8 +78,6 @@ def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     py_setitem(entries, _MODE_CHECKED, query)
     return entries
 
-
-comptime _MODE_CHECKED = "_xseq_numeric_mode_checked"
 
 
 def xseq_neural_provider(entries: PythonObject) raises -> PythonObject:
