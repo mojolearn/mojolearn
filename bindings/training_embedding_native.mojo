@@ -259,7 +259,12 @@ def embedding_indices(value: PythonObject, context: PythonObject) raises -> Pyth
         return Python.tuple(fast[0], fast[1], fast[2])
     var value_owner = value
     var numpy = py_get(context["modules"], "numpy")
-    if numpy is not None and py_type(numpy) is context["module_type"]:
+    # The complex-scalar refusal reads NumPy scalar classes only: an exact
+    # ndarray or Array is neither, so it skips the class loop (lane
+    # p3-neural-blocks; it was two boxed reads per scalar class per call).
+    var value_cls = py_type(value)
+    var container = value_cls is context["array_class"] or (numpy is not None and value_cls is native_numpy_type("ndarray", context))
+    if not container and numpy is not None and py_type(numpy) is context["module_type"]:
         var classes = sequence_dtype_classes(context)
         for i in range(len(classes)):  # driver-loop: preserve native complex-scalar refusal before general admission
             if py_type(value) is classes[i][1] and String(value.dtype.kind) == "c":
