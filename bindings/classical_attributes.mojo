@@ -191,9 +191,10 @@ def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: P
     var getter = binding[1]
     var envelope = Python.tuple(model, cls)
     var attribute_error = plan["attribute_error"]
+    var table = cpython_table()
     var result = cpy.PyObject_Call(getter._obj_ptr, envelope._obj_ptr, PyObjectPtr())
     if not result:
-        var missing = cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0
+        var missing = table[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0
         var error = cpy.unsafe_get_error()
         if missing:
             raise Error("AttributeError: " + String(error))
