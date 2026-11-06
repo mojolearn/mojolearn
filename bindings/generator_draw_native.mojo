@@ -10,7 +10,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generator_state_native import generator_fields, generator_next
 from bindings.causal_checkpoint import checkpoint_array
 from bindings.causal_lm_construct import _model_f32
-from bindings.generation_buffers import generation_initialize_binding
+from bindings.generation_buffers import generation_initialize_binding, generation_array, GENERATION_BOUNDARY
 
 
 def _generator_shape(shape: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -128,10 +128,23 @@ def _generator_run(entry: PythonObject, shape: PythonObject, count: PythonObject
                    stream: PythonObject, a: PythonObject, b: PythonObject,
                    input: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = _builtins()
-    var out = checkpoint_array(py_call(bi.bytes, count * PythonObject(4)), shape, "f", context["neural"]["array_class"])
+    var array_class = context["neural"]["array_class"]
+    var out = PythonObject(None)
     var source = input
-    if source is None:
-        source = checkpoint_array(py_call(bi.bytes, 4), Python.tuple(1), "f", context["neural"]["array_class"])
+    var total = Int(py=count)
+    if GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls is array_class and total <= 2147483647:
+        # One native zero-filled store wrapped directly (no zero bytes object
+        # copied into a second store); same class, shape, dtype and strides.
+        var dims = List[Int]()
+        for i in range(len(shape)):  # small-loop(array shape dimension words)
+            dims.append(Int(py=shape[i]))
+        out = generation_array(dims, "f")
+        if source is None:
+            source = generation_array([1], "f")
+    else:
+        out = checkpoint_array(py_call(bi.bytes, count * PythonObject(4)), shape, "f", array_class)
+        if source is None:
+            source = checkpoint_array(py_call(bi.bytes, 4), Python.tuple(1), "f", array_class)
     # Python integer primitives here preserve the legacy two's-complement
     # low/high split even if a caller edited the public seed field directly.
     var lo = seed.__and__(PythonObject(4294967295))
