@@ -31,6 +31,7 @@ from std.ffi import _Global
 from std.memory import memcpy
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.native_buffer_owner import native_storage_allocate
 
@@ -136,7 +137,7 @@ def door_ready(guarded: PythonObject) raises:
         if d[].context is not guarded:
             opt_guards(d[].context)
         return
-    d[].bi = Python.import_module("builtins")
+    d[].bi = native_loaded_module("builtins")
     var training = Python.import_module("mojolearn._training_impl")
     d[].context = py_fields(training)["_OPT_CONTEXT"]
     if d[].context is not guarded:

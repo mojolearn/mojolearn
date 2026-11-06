@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native owner of the existing Sequential model-description interface."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.native_loaded_module import NativeModules
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -29,7 +30,7 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         if operation == "initialize":
             initialize_program_arrays()
         elif operation == "construct":
-            var b = Python.import_module("builtins")
+            var b = native_loaded_module("builtins")
             var fields = sequential_fields(model)
             py_setitem(fields, "numeric_mode", args[0])
             py_setitem(fields, "input_shape", PythonObject(None) if args[1] is None else py_call(b.tuple, _shape(mods, args[1], "input_shape", False, context)))

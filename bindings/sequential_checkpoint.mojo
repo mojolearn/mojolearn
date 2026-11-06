@@ -3,6 +3,7 @@
 # The existing model checkpoint format and native model ABI remain unchanged.
 from std.collections.string import chr
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
@@ -107,7 +108,7 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
 
 def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path: PythonObject, mode: PythonObject,
                                context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var model = py_call(b.object.__new__, cls)
     var fields = sequential_fields(model)
     py_setitem(fields, "numeric_mode", mode)

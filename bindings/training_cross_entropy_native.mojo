@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public loss preparation, native routing and result ownership; kernels unchanged.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.optimizer_admission import opt_value, opt_numpy
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, new_array, contiguous_addr, refuse_kwargs
@@ -42,7 +43,7 @@ def loss_targets(value: PythonObject, device: Bool, context: PythonObject) raise
             if device:
                 raise Error("TypeError: cross_entropy targets must be a 1-D integer array")
             raise Error("ValueError: cross_entropy targets must be 1-D class indices")
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         for i in range(len(leaves)):  # driver-loop: native integer-storage leaf admission
             var cls = py_type(leaves[i])
             var builtin = cls is b.int or cls is b.bool or cls is b.float

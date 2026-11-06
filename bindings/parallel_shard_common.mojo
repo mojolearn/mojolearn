@@ -37,7 +37,7 @@ from bindings.tsa_hw_native import tsa_array
 
 
 def shard_b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def shard_ranges(count: Int, width: PythonObject, name: String, empty_message: String) raises -> List[Int]:

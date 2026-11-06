@@ -41,7 +41,7 @@ def _checkpoint_hash() -> Sha256:
 
 def _checkpoint_raw(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
-    if String(Python.import_module("sys").byteorder) != "little":
+    if String(native_loaded_module("sys").byteorder) != "little":
         raise Error("Samba streamed checkpoint requires a little-endian host")
     var own = py_type(value) is context["neural"]["array_class"]
     var view = value._mv if own else py_call(bi.memoryview, value)

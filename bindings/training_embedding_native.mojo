@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public embedding input preparation and ownership; numerical entries unchanged.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.optimizer_admission import opt_value, opt_numpy
@@ -128,7 +129,7 @@ def embedding_numpy_dtype(value: PythonObject, context: PythonObject) raises:
 
 
 def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var floating = False
     # The native float64 scalar class is read once per call, not once per
     # leaf (it was a dtype construction inside the leaf loop).
@@ -177,7 +178,7 @@ def embedding_indices(value: PythonObject, context: PythonObject) raises -> Pyth
             if py_type(value) is classes[i][1] and String(value.dtype.kind) == "c":
                 raise Error("ValueError: Complex data not supported for embedding indices")
     opt_value(value, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if opt_numpy(py_type(value), context):
         embedding_numpy_dtype(value, context)
     var view = TensorView()

@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Reject protocol callbacks before the parallel owner touches model/process state."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.samba_admission import samba_admit, samba_admit_value, _samba_metadata
 from bindings.py_balanced import py_call, py_type
 
 
 def _neural_container(value: PythonObject, label: String, range_ok: Bool = False) raises:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is not bi.list and cls is not bi.tuple and not (range_ok and cls is bi.range):
         raise Error("TypeError: parallel " + label + " requires a native list or tuple; Python iteration hooks are not accepted")
@@ -14,7 +15,7 @@ def _neural_container(value: PythonObject, label: String, range_ok: Bool = False
 
 def neural_admit(operation: String, args: PythonObject, owner_cls: PythonObject,
                  mlp_cls: PythonObject, samba_cls: PythonObject, context: PythonObject) raises:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var admission = context["admission"]
     # Validate cached class descriptors before reading even an exact owner.
     samba_admit("parallel_layout", bi.tuple(), context)

@@ -17,6 +17,7 @@ compiled entries on the same words, so no bit moves.
 from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -62,7 +63,7 @@ comptime PARALLEL_FORECAST_BOUNDARY = _Global[
 
 
 def _b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def _ranges(count: Int, width: PythonObject) raises -> List[Int]:

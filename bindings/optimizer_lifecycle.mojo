@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native finalization of existing optimizer resident allocations."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 
 
@@ -13,7 +14,7 @@ def optimizer_finalize_descriptor_binding(context: PythonObject, owner: PythonOb
 def optimizer_finalize_binding(owner: PythonObject) raises -> PythonObject:
     var bi: PythonObject
     try:
-        bi = Python.import_module("builtins")
+        bi = native_loaded_module("builtins")
     except:
         # interpreter shutdown (no import machinery left): the process is
         # releasing everything; there is nothing to close through

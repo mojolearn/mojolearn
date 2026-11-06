@@ -10,6 +10,7 @@ argument words, and the result. The kernels and their order are unchanged,
 so every result keeps its bits.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import TensorView, tensor_view, contiguous_addr, base_format, new_array, py_ints, shape_text
@@ -57,8 +58,8 @@ def _rd_params(count: Int, p: PythonObject, seed: PythonObject, stream: PythonOb
                offset: PythonObject) raises -> PythonObject:
     """`_residual_dropout_impl._params`: [count, offset, seed low, seed high,
     stream, p]."""
-    var b = Python.import_module("builtins")
-    var index_fn = Python.import_module("operator").index
+    var b = native_loaded_module("builtins")
+    var index_fn = native_loaded_module("operator").index
     var s = _rd_uint(seed, "seed", 64, b, index_fn)
     var st = _rd_uint(stream, "stream", 32, b, index_fn)
     var off = _rd_uint(offset, "offset", 63, b, index_fn)
@@ -142,7 +143,7 @@ def _c32(value: PythonObject, name: String, site: String, mut view: TensorView,
 
 def training_chunked_lm_head(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """values: (hidden, weight, targets, return_grad)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var site = String("training.chunked_lm_head_loss")
     var keep = List[List[Float32]]()
     var hv = TensorView()
@@ -199,7 +200,7 @@ def training_chunked_lm_head(values: PythonObject, entries: PythonObject, contex
 
 def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises -> PythonObject:
     """values: (inputs, weight1, bias1, weight2, bias2)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var site = String("mlp_inference_sessions")
     var keep = List[List[Float32]]()
     var w1v = TensorView()
