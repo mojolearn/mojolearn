@@ -77,6 +77,8 @@ BATCHES_PER_WORKER = 3
 BATCH_SETUP_S = 600
 #: the whole phase's ceiling; a batch not finished by then is killed and its unrun recipes FAIL
 PHASE_CEILING_S = 5400
+#: recipe id prefixes that run in one batch of their own (see split)
+SERIAL_PREFIXES = ("neural/",)
 #: the own-arm cell fields the board ingests besides status / quality (provenance)
 OWN_FIELDS = ("hash", "mode", "library_version", "device")
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
@@ -102,10 +104,14 @@ def plan_sha256(ids):
 
 
 def split(ids, workers, per_worker=BATCHES_PER_WORKER):
-    """Round-robin batches of the sorted ids (families interleave, so no batch holds only the slow lanes)."""
+    """The batches: the neural recipes together in one (they stage shared inputs and fetch the two LM checkpoints
+    lazily, so no two processes write the same file), every other recipe in round-robin batches of the sorted ids
+    (families interleave, so no batch holds only the slow lanes; their data prep ran once before the pool)."""
     ids = sorted(ids)
-    n = max(1, min(len(ids), workers * per_worker))
-    return [ids[k::n] for k in range(n)] if ids else []
+    serial = [i for i in ids if i.startswith(SERIAL_PREFIXES)]
+    rest = [i for i in ids if not i.startswith(SERIAL_PREFIXES)]
+    n = max(1, min(len(rest), workers * per_worker - (1 if serial else 0)))
+    return ([serial] if serial else []) + ([rest[k::n] for k in range(n)] if rest else [])
 
 
 def worker_count(cores, host_gb, device_gb, batches):
