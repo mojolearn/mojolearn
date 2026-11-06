@@ -425,7 +425,12 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     # NumPy string/byte labels also expose native scalar slots. Connect their
     # exact loaded types without a Python setup callback or ndarray iteration.
     var numpy = py_get(context["modules"], "numpy")
-    if numpy is not None and py_type(numpy) is context["native_module_type"]:
+    # p3-trees: once connected, the scalar type tuple this wrote is recorded
+    # in the context; while context["scalar_types"] is still that tuple, the
+    # list copy, the two np.dtype() calls and the context write are skipped.
+    var connected = py_get(context, "_host_tree_scalar_types")
+    if numpy is not None and py_type(numpy) is context["native_module_type"] and not (
+            connected is not None and connected is context["scalar_types"]):
         var scalars = py_call(native_loaded_module("builtins").list, context["scalar_types"])
         var dtype_class = native_numpy_dtype(context)
         var codes = Python.tuple("U", "S")
@@ -433,7 +438,9 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
             var cls = py_call(dtype_class, codes[i]).type
             if not _one_of(cls, context["scalar_types"]):
                 _ = py_call(scalars.append, cls)
-        py_setitem(context, "scalar_types", py_call(native_loaded_module("builtins").tuple, scalars))
+        var connected_types = py_call(native_loaded_module("builtins").tuple, scalars)
+        py_setitem(context, "scalar_types", connected_types)
+        py_setitem(context, "_host_tree_scalar_types", connected_types)
     classical_admit_value(args, context)
     if operation == "host_tree_init_forest":
         host_tree_initialize_forest(model, args, context)
