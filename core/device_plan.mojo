@@ -187,6 +187,26 @@ def _own_slot() raises -> Int:
     return -1
 
 
+#: THE LOGICAL-DEVICE TEST OPTION (lane multi-gpu-logical-shard-gate,
+#: Andrew 2026-11-06). Set to "1" only by tools/logical_shard_identity.py
+#: (the release's one-GPU multi-device gate); not a user feature and not
+#: documented. With it, a device list may name the same physical device more
+#: than once (`devices=(0, 0, 0)`): each rank is still its own owner, opens
+#: its own `DeviceContext(device_id=...)` (its own stream/queue) and moves its
+#: data through the same peer_clone / transfer_bytes calls a real N-GPU run
+#: uses. Only the three distinctness refusals consult it (here,
+#: bindings/parallel_plan_door.mojo `plan_devices`,
+#: bindings/parallel_public_native.mojo `_devices`); no dispatcher, split or
+#: fold reads it, so the logical run takes exactly the real multi-GPU path.
+comptime DEVICE_PLAN_LOGICAL_VARIABLE = "MOJOLEARN_DEVICE_PLAN_LOGICAL"
+
+
+def device_plan_logical() -> Bool:
+    """True when the logical-device test option is set (repeated device
+    indices admitted)."""
+    return String(getenv(DEVICE_PLAN_LOGICAL_VARIABLE)) == "1"
+
+
 def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) raises:
     """Bind `devices` (rank r runs on physical device `devices[r]`) to the
     calling thread until `device_plan_exit`, for the owner families in
@@ -194,9 +214,12 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
     var count = len(devices)
     if count < 1 or count > DEVICE_PLAN_MAX_DEVICES:
         raise Error("ValueError: a device plan names 1.." + String(DEVICE_PLAN_MAX_DEVICES) + " devices, got " + String(count))
+    var logical = device_plan_logical()
     for i in range(count):  # driver-loop: over the selected device indices
         if devices[i] < 0:
             raise Error("ValueError: devices must be distinct nonnegative integer indices")
+        if logical:
+            continue
         for j in range(i):  # driver-loop: over the earlier selected device indices
             if devices[j] == devices[i]:
                 raise Error("ValueError: devices must be distinct nonnegative integer indices")

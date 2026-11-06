@@ -196,12 +196,21 @@ def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monke
     monkeypatch.setattr(r, "gate_runtime_error", lambda vendor, output: (None, 12))
     ok, why = r.single_gate_ok("amd", out)
     assert not ok and "no identity-wheels summary" in why and "no check-units summary" in why
+    assert "shardcheck: no logical-shard summary" in why
     summary(out / "identity", ["amd"])
     (out / "units").mkdir(parents=True)
     (out / "units" / U.SUMMARY).write_text(json.dumps(dict(schema=U.SCHEMA + "+summary", units={
         "install-load": dict(decision="run", status="passed"), "adapters": dict(decision="reuse", status="reused")})))
+    # the one-GPU multi-device gate is unconditional: identity and units alone never pass the box job
     ok, why = r.single_gate_ok("amd", out)
-    assert ok and "12 runtime cases" in why
+    assert not ok and "shardcheck: no logical-shard summary" in why
+    import logical_shard_identity as LS
+    (out / "shardcheck").mkdir(parents=True)
+    lanes = {n: dict(verdict="MATCH", reason="") for n in LS.lane_names()}
+    (out / "shardcheck" / LS.SUMMARY).write_text(json.dumps(dict(schema=LS.SCHEMA, ok=True, counts=list(LS.COUNTS),
+                                                                 lanes=lanes)))
+    ok, why = r.single_gate_ok("amd", out)
+    assert ok and "12 runtime cases" in why and "logical-shard gate MATCH" in why
 
 
 def test_a_vendor_that_owes_nothing_is_composed_on_the_mac_and_rents_nothing(tmp_path, monkeypatch):

@@ -17,7 +17,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.family_common import family_call
-from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
+from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY, device_plan_logical
 
 
 def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
@@ -33,9 +33,14 @@ def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
         raise Error("ValueError: devices must be distinct nonnegative integer indices")
+    # The logical-device test option (core/device_plan.mojo) admits a
+    # repeated index; nothing else about the route changes.
+    var logical = device_plan_logical()
     for i in range(len(devices)):  # driver-loop: over the selected device indices
         if py_type(devices[i]) is not b.int or Int(py=devices[i]) < 0:
             raise Error("ValueError: devices must be distinct nonnegative integer indices")
+        if logical:
+            continue
         for j in range(i):  # driver-loop: over the earlier selected device indices
             if Int(py=devices[j]) == Int(py=devices[i]):
                 raise Error("ValueError: devices must be distinct nonnegative integer indices")
