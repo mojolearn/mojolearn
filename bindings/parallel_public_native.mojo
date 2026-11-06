@@ -12,6 +12,7 @@ from bindings.classical_arrays import classical_host_f32
 from bindings.parallel_public_result import parallel_public_result
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.trees_public_forest import forest_effective_mode, _engine
+from core.device_plan import device_plan_logical
 
 
 def _fields(model: PythonObject, plan: PythonObject) raises -> PythonObject:
@@ -51,9 +52,14 @@ def _devices(value: PythonObject) raises -> PythonObject:
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
         raise Error("ValueError: devices must be distinct nonnegative integer indices")
+    # The logical-device test option (core/device_plan.mojo) admits a
+    # repeated index; nothing else about the route changes.
+    var logical = device_plan_logical()
     for i in range(len(devices)):  # driver-loop: admitted native device indices
         if py_type(devices[i]) is not b.int or Int(py=devices[i]) < 0:
             raise Error("ValueError: devices must be distinct nonnegative integer indices")
+        if logical:
+            continue
         for j in range(i):  # driver-loop: distinct selected indices
             if Int(py=devices[i]) == Int(py=devices[j]):
                 raise Error("ValueError: devices must be distinct nonnegative integer indices")
