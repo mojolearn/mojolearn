@@ -8,6 +8,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from std.ffi import _Global
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 
 
@@ -53,7 +55,78 @@ def _repr(value: PythonObject) raises -> String:
     return String(py_call(native_loaded_module("builtins").repr, value))
 
 
+struct ProfileAdmission(Defaultable, Movable):
+    # The connected context admitted last, and every dictionary its full
+    # admission walked. Valid while none of them changed (dict watchers).
+    var context: PythonObject
+    var dicts: List[PythonObject]
+
+    def __init__(out self):
+        self.context = PythonObject(None)
+        self.dicts = List[PythonObject]()
+
+
+comptime PROFILE_ADMISSION = _Global[
+    StorageType=ProfileAdmission, name="MojolearnNumericProfileAdmissionV1",
+    init_fn=ProfileAdmission.__init__,
+]
+
+
+def _collect(value: PythonObject, mut dicts: List[PythonObject], depth: Int = 0) raises -> Bool:
+    # The dictionaries of an admitted registry. False when it holds a list:
+    # a list edit is not observable, so such a registry is walked per call.
+    var b = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is b.list or depth > 64:
+        return False
+    if cls is b.tuple:
+        for i in range(len(value)):  # driver-loop: over admitted metadata sequence items
+            if not _collect(value[i], dicts, depth + 1):
+                return False
+        return True
+    if cls is b.dict:
+        dicts.append(value)
+        var values = py_call(b.list, value.values())
+        for i in range(len(values)):  # driver-loop: over admitted profile registry records
+            if not _collect(values[i], dicts, depth + 1):
+                return False
+    return True
+
+
 def _state(context: PythonObject) raises -> PythonObject:
+    # The full admission below reads only exact dictionaries, immutable
+    # scalars and tuples. Reuse it while the same context and every
+    # dictionary it walked are unchanged (each one watched).
+    var g = PROFILE_ADMISSION.get_or_create_ptr()
+    if g[].context is context and len(g[].dicts) > 0:
+        var same = True
+        for i in range(len(g[].dicts)):  # driver-loop: over the admitted registry dictionaries
+            if not dict_keys_admitted(g[].dicts[i]):
+                same = False
+                break
+        if same:
+            return context["fields"]
+    var fields = _state_full(context)
+    # Exactly the containers _state_full walked: the context and module
+    # dictionaries themselves (keys and the bindings it read) and the four
+    # registries and USES recursively.
+    var dicts = List[PythonObject]()
+    dicts.append(context)
+    dicts.append(fields)
+    var cacheable = True
+    var names = Python.tuple("PROFILES", "REJECTED", "MEASURED", "_defaults", "USES")
+    for i in range(len(names)):  # driver-loop: fixed connected profile registries
+        if cacheable and not _collect(fields[names[i]], dicts):
+            cacheable = False
+    if cacheable:
+        for i in range(len(dicts)):  # driver-loop: over the admitted registry dictionaries
+            dict_keys_admit(dicts[i])
+        g[].context = context
+        g[].dicts = dicts^
+    return fields
+
+
+def _state_full(context: PythonObject) raises -> PythonObject:
     _dict(context)
     var fields = context["fields"]
     _dict(fields)
