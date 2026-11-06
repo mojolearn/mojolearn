@@ -4571,8 +4571,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # A new profile must not overwrite an earlier full-campaign outcome.
         return self.rel / f"gate-{vendor}" / (stamp + "-release-light-v1")
 
-    def gate_ok(self, vendor):
-        """(ok, why): the gate report that came home for this version and vendor says PASS."""
+    def gate_ok(self, vendor, measure=True):
+        """(ok, why): the gate report that came home for this version and vendor says PASS, and (measure) the
+        measurement smoke's own box job's summary passes. measure=False judges the gate job's part alone."""
         try:
             identity = self.candidate_gate_identity(vendor)
             output = self.gate_out(vendor)
@@ -4580,7 +4581,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return False, 'candidate artifacts are not ready: '+str(error)
         if self.single():
             # --identity-on-wheels: the one box job (identity + device-check units + runtime), not the gate stages
-            return self.single_gate_ok(vendor, output)
+            return self.single_gate_ok(vendor, output, measure=measure)
         doc = read_json(output / "gate-smoke.json")
         if not doc:
             return False, f"no gate report at {output / 'gate-smoke.json'}"
@@ -4619,9 +4620,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 return False, "; ".join(once)
             # the measurement smoke runs in every box job (release_gate_job.sh phase measuresmoke, unconditional)
             from release_identity_wheels import measure_smoke_errors
-            measure = measure_smoke_errors(output)
-            if measure:
-                return False, "; ".join(measure)
+            smoke = measure_smoke_errors(output) if measure else []
+            if smoke:
+                return False, "; ".join(smoke)
             runtime, cases = self.gate_runtime_error(vendor, output)
             if runtime:
                 return False, runtime
@@ -4655,6 +4656,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return None, report.get("cases")
 
     def run_gate(self, vendor):
+        """THE TWO BOX JOBS OF A VENDOR, in order on the same box: the gate job (identity record, device checks,
+        runtime qualifier; tools/ops/release_gate.py), then, once it has ended, the measurement smoke's own job
+        (--job measuresmoke). They never share the GPU, and boxes-down waits for this step, so for both. A job whose
+        part already passed is not launched again; the smoke has no reuse beyond its own landed result."""
         run_id = None
         if not self.dry:
             self.readiness_status(write=True)
@@ -4664,12 +4669,40 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if not self.dry:
                 self.record_candidate_requirement(vendor, run_id)
             return why
-        if why.startswith(self.RUNTIME_GATE_FAILED):
+        job_ok, job_why = self.gate_ok(vendor, measure=False)
+        if job_why.startswith(self.RUNTIME_GATE_FAILED):
             # The smoke passed and the qualifier ran: relaunching would only rerun green work. A qualifier
             # failure is fixed in code and qualified at the next freeze.
-            raise StepFailed(f"the {vendor} release gate did not pass: {why}")
+            raise StepFailed(f"the {vendor} release gate did not pass: {job_why}")
         work = self.rel / "gates"
         output = self.gate_out(vendor)
+        if not job_ok:
+            self.launch_gate_job(vendor, run_id, work, output)
+            if self.dry:
+                self.launch_measure_smoke_job(vendor, work, output)
+                return None
+            job_ok, job_why = self.gate_ok(vendor, measure=False)
+            if not job_ok:
+                report = output / "gate-smoke.json"
+                if run_id and report.is_file():
+                    self.readiness().record(run_id, "failed", [report], job_why, 1, 5, 0, failed=1)
+                raise StepFailed(f"the {vendor} release gate did not pass: {job_why}")
+        # the gate job has ended and passed: now the measurement smoke's own job on the same box
+        self.launch_measure_smoke_job(vendor, work, output)
+        if self.dry:
+            return None
+        ok, why = self.gate_ok(vendor)
+        if not ok:
+            if run_id:
+                from release_identity_wheels import measure_smoke_summary
+                reports = [p for p in (measure_smoke_summary(output), work / f"measuresmoke-{vendor}.log") if p.is_file()]
+                if reports:
+                    self.readiness().record(run_id, "failed", reports, why, 1, 5, 0, failed=1)
+            raise StepFailed(f"the {vendor} release gate did not pass: {why}")
+        self.record_candidate_requirement(vendor, run_id, executed=True)
+        return why
+
+    def launch_gate_job(self, vendor, run_id, work, output):
         # plan item 4 (docs/plans/POST_0863_RELEASE_TOOLING.md): one persisted box job per vendor through the
         # supported wrappers (tools/nvidia_central.sh submit, tools/do_amd_steward.sh run) that builds the eight
         # autograd executables on the box and runs the gate there; nothing outside this repository
@@ -4702,15 +4735,32 @@ class Release(release_identity_wheels.IdentityOnWheels):
             # the job submission the command makes, wrapper by wrapper (nothing runs)
             for line in release_gate_module().Runner(release_gate_module().parse(cmd[2:])).dry_lines():
                 self.say("    would: " + line)
-            return None
-        ok, why = self.gate_ok(vendor)
-        if not ok:
-            report = output / "gate-smoke.json"
-            if run_id and report.is_file():
-                self.readiness().record(run_id, "failed", [report], why, 1, 5, 0, failed=1)
-            raise StepFailed(f"the {vendor} release gate did not pass: {why}")
-        self.record_candidate_requirement(vendor, run_id, executed=True)
-        return why
+
+    def measure_smoke_cmd(self, vendor, work, output):
+        """tools/ops/release_gate.py --job measuresmoke: the measurement smoke's own persisted box job (its own
+        NVIDIA cap, MEASURE_SMOKE_CAP_MIN), landing in <gate out>/measuresmoke-job."""
+        from release_identity_wheels import MEASURE_JOB_DIR
+        cmd = [PY, "tools/ops/release_gate.py", vendor, self.version, "--job", "measuresmoke",
+               "--source-commit", self.commit, "--source-tree", str(self.source_checkout(create=not self.dry)),
+               "--out", str(output / MEASURE_JOB_DIR),
+               "--state", str(work / f"{vendor}-{output.name}-measuresmoke.job.json"),
+               "--profile", "release-light-v1", "--max-wait-hours", "72", "--no-adapters"]
+        for wheel in self.candidate_gate_wheels(vendor):
+            cmd += ['--candidate-wheel', str(wheel)]
+        return cmd
+
+    def launch_measure_smoke_job(self, vendor, work, output):
+        cmd = self.measure_smoke_cmd(vendor, work, output)
+        self.refuse_device_lanes_after_publish("gate-" + vendor)
+        if not self.dry:
+            work.mkdir(parents=True, exist_ok=True)
+        try:
+            self.must(cmd, log=work / f"measuresmoke-{vendor}.log", what=f"the {vendor} measurement smoke box job")
+        except StepFailed as error:
+            self.say(f"the {vendor} measurement smoke job: {error}")   # the verdict that follows names why
+        if self.dry:
+            for line in release_gate_module().Runner(release_gate_module().parse(cmd[2:])).dry_lines():
+                self.say("    would: " + line)
 
     def runtime_unit_sources(self, gate):
         """Every retained directory of installed-runtime unit receipts under GATE (gate-nvidia, gate-amd,

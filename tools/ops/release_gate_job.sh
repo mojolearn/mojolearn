@@ -30,9 +30,10 @@
 #   shardcheck  ALWAYS (no change detection), right after the overlay (the tool is a GATE_OVERLAY file):
 #            tools/logical_shard_identity.py, the one-GPU multi-device gate (1, 2 and 3 logical devices on this
 #            card, same digests) on the exact wheels (+ numpy for the harness), into out/shardcheck/;
-#   measuresmoke  ALWAYS (no change detection), right after shardcheck (the tool is a GATE_OVERLAY file):
-#            tools/release_measurement_smoke.py, every recipe of the measurement plan once at its smoke shape through
-#            tools/bench_board.py --smoke, our GPU arm only, on the exact wheels, into out/measuresmoke/;
+#   measuresmoke  ONLY in the measurement smoke's own job (GATE_JOB=measuresmoke; every release runs that job after
+#            the gate job, on the same box): after the overlay, tools/release_measurement_smoke.py, every recipe of the
+#            measurement plan once at its smoke shape through tools/bench_board.py --smoke, our GPU arm only, on the
+#            exact wheels, into out/measuresmoke/; then that job ends (no identity, build, shardcheck or gate);
 #   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged;
 #   runtime-qualify  tools/release_runtime_installed.py run against GATE_WHEELS (runtime-<vendor> ledger
 #            evidence, per unit: runtime-units-<class>/ receipts, earlier receipts from runtime-units-prior.tgz),
@@ -54,6 +55,8 @@ RES="${MOJOLEARN_RESULTS_DIR:?release_gate_job.sh runs under tools/box_persist_r
 [[ "${GATE_RUNTIME_PRIOR_SHA256:-}" =~ ^([0-9a-f]{64})?$ ]] || { echo "release-gate-job: bad GATE_RUNTIME_PRIOR_SHA256" >&2; exit 2; }
 [[ "${GATE_RUNTIME_CPU:-0}" =~ ^[01]$ ]] || { echo "release-gate-job: bad GATE_RUNTIME_CPU" >&2; exit 2; }
 [[ "$GATE_BUILD_MINUTES" =~ ^[1-9][0-9]*$ ]] || { echo "release-gate-job: bad GATE_BUILD_MINUTES" >&2; exit 2; }
+GATE_JOB=${GATE_JOB:-gate}
+[[ "$GATE_JOB" =~ ^(gate|measuresmoke)$ ]] || { echo "release-gate-job: bad GATE_JOB" >&2; exit 2; }
 [[ "${GATE_JOB_CAP_MINUTES:-0}" =~ ^[0-9]+$ ]] || { echo "release-gate-job: bad GATE_JOB_CAP_MINUTES" >&2; exit 2; }
 case "$GATE_VENDOR:$GATE_TARGET" in nvidia:sm_89|amd:gfx942) ;; *) echo "release-gate-job: unsupported vendor/target" >&2; exit 2 ;; esac
 J="$RES/job"
@@ -176,6 +179,8 @@ if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
 fi
 
 PHASE=pixi
+# the measurement smoke's own job (GATE_JOB=measuresmoke) builds nothing and needs no compiler
+if [ "$GATE_JOB" = gate ]; then
 PIXI=$(command -v pixi || echo /root/.pixi/bin/pixi)
 [ -x "$PIXI" ] || { curl -fsSL https://pixi.sh/install.sh | bash > "$J/pixi-install.log" 2>&1; PIXI=/root/.pixi/bin/pixi; }
 "$PIXI" install --locked -e default > "$J/pixi-default.log" 2>&1
@@ -201,6 +206,7 @@ fi
 [ "$brc" = 0 ] || { say "the autograd build exited $brc"; tail -n 20 "$J"/autograd-build*.log; exit "$brc"; }
 say "autograd executables built: $GATE_WORK/out/autograd-bin"
 fi
+fi
 
 PHASE=overlay
 if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
@@ -224,6 +230,83 @@ if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
     echo "overlay_sha256=$GATE_OVERLAY_SHA256" >> "$GATE_WORK/out/route-overlay.txt"
     cp "$IN/route-overlay.json" "$GATE_WORK/out/route-overlay.json"
     say "gate runner overlay applied: $(echo $files)"
+fi
+
+PHASE=measuresmoke
+# THE MEASUREMENT SMOKE (tools/release_measurement_smoke.py, Andrew 2026-11-06: "make the smoke on the measurements a
+# test as part of our pre release process"). UNCONDITIONAL: every release runs it, whatever changed; no change detection, selector or
+# reuse. Every recipe of the frozen measurement plan (bench_board.plan_races, identical) runs
+# ONCE through `tools/bench_board.py --smoke` (the board's smoke rows and small neural shape), OUR GPU arm only (no
+# opponent installs, no opponent store), against the exact wheel bytes, in parallel batches on this one GPU. Judged
+# on completion and on the fields the board ingests (finite quality, digest, provenance), never on speed; no timing
+# from it reaches a board. out/measuresmoke/measuresmoke.json; any recipe not PASS (or declared unsupported) fails.
+# It runs AFTER the overlay phase: the tool is a GATE_OVERLAY file, so the box judges with the Mac's copy.
+# Its own venv (never the identity venv): the exact wheels + the harness packages MEASURE_SMOKE_PIP names (harness
+# only, never the runtime); the data the plan reads comes from R2 through the presigned GETs in measuresmoke-data.json
+# (tools/release_measurement_smoke.py data-plan, minted on the Mac; files already present at their pins are kept).
+# ITS OWN BOX JOB (GATE_JOB=measuresmoke, tools/ops/release_gate.py --job measuresmoke): tools/release.py launches it
+# on the same pod / droplet only after the gate job (identity record, device checks, runtime qualifier) has ended,
+# so it never shares the GPU with them and never takes their time; the gate job (GATE_JOB=gate) skips this phase.
+if [ "$GATE_JOB" = measuresmoke ]; then
+    mrc=0
+    mpy="$GATE_WORK/measure-venv/bin/python"
+    fpyx="$GATE_WORK/fixture-venv/bin/python"
+    mout="$GATE_WORK/out/measuresmoke"
+    mkdir -p "$mout"
+    if [ "${#GATE_WHEELS[@]}" -eq 0 ]; then
+        say "measuresmoke: no wheels to install (GATE_WHEELS is empty): FAIL"
+        mrc=2
+    fi
+    fpy=()
+    if [ "$mrc" = 0 ]; then
+        # three independent setup steps at once (network and disk bound): the measured venv (the exact wheels + the
+        # harness packages), the fixture venv (the CPU torch the fixture generator pins, tools/neural_fixtures_box.sh;
+        # never the measured venv, never raced) and the plan's data from R2 (files already at their pins are kept)
+        { python3 -m venv "$GATE_WORK/measure-venv" \
+          && "$mpy" -m pip install -q --no-cache-dir "${GATE_WHEELS[@]}" \
+          && "$mpy" -m pip install -q --no-cache-dir "${MEASURE_SMOKE_PIP[@]}"; } > "$J/measure-venv.log" 2>&1 &
+        vpid=$!
+        { python3 -m venv "$GATE_WORK/fixture-venv" \
+          && "$fpyx" -m pip install -q --no-cache-dir "${MEASURE_SMOKE_FIXTURE_PIP[@]}" \
+               --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple; } \
+            > "$J/fixture-venv.log" 2>&1 &
+        fpid=$!
+        if [ -f "$IN/measuresmoke-data.json" ]; then
+            python3 tools/release_measurement_smoke.py stage --data-plan "$IN/measuresmoke-data.json" --home "$HOME" \
+                > "$J/measuresmoke-data.log" 2>&1 &
+            dpid=$!
+        else
+            say "measuresmoke: no measuresmoke-data.json input; the plan's data must already be at its pins"
+            dpid=""
+        fi
+        wait "$vpid" || { mrc=$?; say "measuresmoke: the venv install exited $mrc (see measure-venv.log): FAIL"; }
+        if wait "$fpid"; then
+            fpy=(--fixture-python "$fpyx")
+        else
+            say "measuresmoke: the fixture venv did not install (see fixture-venv.log); the layer recipes will FAIL"
+        fi
+        if [ -n "$dpid" ]; then
+            drc=0; wait "$dpid" || drc=$?
+            grep -E '^MEASURESMOKE data' "$J/measuresmoke-data.log" | head -n 12 || true
+            [ "$drc" = 0 ] || { say "measuresmoke: staging the plan's data exited $drc: FAIL"; [ "$mrc" != 0 ] || mrc=$drc; }
+        fi
+    fi
+    if [ "$mrc" = 0 ]; then
+        # run by the measured venv's python (the plan imports the board harness, which reads NumPy); its plan line
+        # (workers and the bound that set them) and its busy-cores samples (cores busy of total, the first after two
+        # minutes) reach this job log as they happen; the whole output stays in measuresmoke.log
+        set +e
+        "$mpy" tools/release_measurement_smoke.py run --vendor "$GATE_VENDOR" --python "$mpy" \
+            --data-root "$HOME/datasets/gbm-bench" --ceiling $(( ${GATE_MEASURE_SMOKE_MINUTES:-90} * 60 )) \
+            --out "$mout" --work "$GATE_WORK/measuresmoke-work" ${fpy[@]+"${fpy[@]}"} 2>&1 \
+            | tee "$J/measuresmoke.log" | grep --line-buffered -E '^MEASURESMOKE (plan|busy|vendor=)'
+        mrc=${PIPESTATUS[0]}
+        set -e
+        grep -E '^MEASURESMOKE ' "$J/measuresmoke.log" | grep -v -E '^MEASURESMOKE (plan|busy|vendor=)' | head -n 20 || true
+    fi
+
+    say "measuresmoke exited $mrc"
+    exit "$mrc"
 fi
 
 PHASE=shardcheck
@@ -262,65 +345,6 @@ if [ "$src" = 0 ]; then
     grep -E '^SHARDCHECK' "$J/shardcheck.log" | head -n 16 || true
 fi
 say "shardcheck exited $src"
-
-PHASE=measuresmoke
-# THE MEASUREMENT SMOKE (tools/release_measurement_smoke.py, Andrew 2026-11-06: "make the smoke on the measurements a
-# test as part of our pre release process"). UNCONDITIONAL: every release gate job runs it, whatever changed; no change
-# detection, selector or reuse. Every recipe of the frozen measurement plan (bench_board.plan_races, identical) runs
-# ONCE through `tools/bench_board.py --smoke` (the board's smoke rows and small neural shape), OUR GPU arm only (no
-# opponent installs, no opponent store), against the exact wheel bytes, in parallel batches on this one GPU. Judged
-# on completion and on the fields the board ingests (finite quality, digest, provenance), never on speed; no timing
-# from it reaches a board. out/measuresmoke/measuresmoke.json; any recipe not PASS (or declared unsupported) fails.
-# It runs AFTER the overlay phase: the tool is a GATE_OVERLAY file, so the box judges with the Mac's copy.
-# Its own venv (never the identity venv): the exact wheels + the harness packages MEASURE_SMOKE_PIP names (harness
-# only, never the runtime); the data the plan reads comes from R2 through the presigned GETs in measuresmoke-data.json
-# (tools/release_measurement_smoke.py data-plan, minted on the Mac; files already present at their pins are kept).
-mrc=0
-mpy="$GATE_WORK/measure-venv/bin/python"
-mout="$GATE_WORK/out/measuresmoke"
-mkdir -p "$mout"
-if [ "${#GATE_WHEELS[@]}" -eq 0 ]; then
-    say "measuresmoke: no wheels to install (GATE_WHEELS is empty): FAIL"
-    mrc=2
-fi
-if [ "$mrc" = 0 ]; then
-    { python3 -m venv "$GATE_WORK/measure-venv" \
-      && "$mpy" -m pip install -q --no-cache-dir "${GATE_WHEELS[@]}" \
-      && "$mpy" -m pip install -q --no-cache-dir "${MEASURE_SMOKE_PIP[@]}"; } > "$J/measure-venv.log" 2>&1 || mrc=$?
-    [ "$mrc" = 0 ] || say "measuresmoke: the venv install exited $mrc (see measure-venv.log): FAIL"
-fi
-fpy=()
-if [ "$mrc" = 0 ]; then
-    # the layer lanes' input fixtures are written by the CPU torch the fixture generator pins
-    # (tools/neural_fixtures_box.sh), in a venv of its own: never the measured venv, never raced
-    if { python3 -m venv "$GATE_WORK/fixture-venv" \
-         && "$GATE_WORK/fixture-venv/bin/python" -m pip install -q --no-cache-dir "${MEASURE_SMOKE_FIXTURE_PIP[@]}" \
-              --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple; } \
-            > "$J/fixture-venv.log" 2>&1; then
-        fpy=(--fixture-python "$GATE_WORK/fixture-venv/bin/python")
-    else
-        say "measuresmoke: the fixture venv did not install (see fixture-venv.log); the layer recipes will FAIL"
-        fpy=()
-    fi
-fi
-if [ "$mrc" = 0 ]; then
-    if [ -f "$IN/measuresmoke-data.json" ]; then
-        python3 tools/release_measurement_smoke.py stage --data-plan "$IN/measuresmoke-data.json" --home "$HOME" \
-            > "$J/measuresmoke-data.log" 2>&1 || mrc=$?
-        grep -E '^MEASURESMOKE data' "$J/measuresmoke-data.log" | head -n 12 || true
-    else
-        say "measuresmoke: no measuresmoke-data.json input; the plan's data must already be at its pins"
-    fi
-    [ "$mrc" = 0 ] || say "measuresmoke: staging the plan's data exited $mrc: FAIL"
-fi
-if [ "$mrc" = 0 ]; then
-    # run by the measured venv's python (the plan imports the board harness, which reads NumPy)
-    "$mpy" tools/release_measurement_smoke.py run --vendor "$GATE_VENDOR" --python "$mpy" \
-        --data-root "$HOME/datasets/gbm-bench" --ceiling $(( ${GATE_MEASURE_SMOKE_MINUTES:-90} * 60 )) \
-        --out "$mout" --work "$GATE_WORK/measuresmoke-work" ${fpy[@]+"${fpy[@]}"} > "$J/measuresmoke.log" 2>&1 || mrc=$?
-    grep -E '^MEASURESMOKE' "$J/measuresmoke.log" | tail -n 20 || true
-fi
-say "measuresmoke exited $mrc"
 
 PHASE=gate
 grc=0
@@ -408,6 +432,4 @@ PHASE=complete
 [ "$grc" != 0 ] || grc=$irc
 # ... and the one-GPU multi-device gate's (phase shardcheck, unconditional)
 [ "$grc" != 0 ] || grc=$src
-# ... and the measurement smoke's (phase measuresmoke, unconditional)
-[ "$grc" != 0 ] || grc=$mrc
 exit "$grc"

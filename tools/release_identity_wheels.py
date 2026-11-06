@@ -56,16 +56,26 @@ REFERENCE_ENV = "MOJOLEARN_IDENTITY_REFERENCE_AT"
 
 
 
-def measure_smoke_errors(output):
-    """['measuresmoke: ...'] unless the box job's measurement smoke summary passes (tools/release_measurement_smoke.py)."""
+#: where the measurement smoke's own box job lands under a gate's out (tools/ops/release_gate.py --job measuresmoke)
+MEASURE_JOB_DIR = "measuresmoke-job"
+
+
+def measure_smoke_summary(output):
     import release_measurement_smoke as MS
-    return ["measuresmoke: " + e for e in MS.summary_errors(read_json(Path(output) / "measuresmoke" / MS.SUMMARY))]
+    return Path(output) / MEASURE_JOB_DIR / "measuresmoke" / MS.SUMMARY
+
+
+def measure_smoke_errors(output):
+    """['measuresmoke: ...'] unless the measurement smoke's own box job's summary passes
+    (tools/release_measurement_smoke.py)."""
+    import release_measurement_smoke as MS
+    return ["measuresmoke: " + e for e in MS.summary_errors(read_json(measure_smoke_summary(output)))]
 
 
 def measure_smoke_note(output):
     """'<passed>/<plan> recipes' of a passing measurement smoke summary (for the PASS line)."""
     import release_measurement_smoke as MS
-    doc = read_json(Path(output) / "measuresmoke" / MS.SUMMARY) or {}
+    doc = read_json(measure_smoke_summary(output)) or {}
     c = doc.get("counts") or {}
     return "%s/%s recipes (%s unsupported)" % (c.get(MS.PASS), doc.get("plan_count"), c.get(MS.UNSUPPORTED, 0))
 
@@ -352,7 +362,7 @@ class IdentityOnWheels:
             args += ["--units-plan", str(self.units_plan_path(vendor))]
         return args
 
-    def single_gate_ok(self, vendor, output):
+    def single_gate_ok(self, vendor, output, measure=True):
         """(ok, why) of the one box job under --identity-on-wheels: the identity summary of its columns, every owed
         device-check unit passed (the rest reused), and the installed-runtime qualifier's report."""
         import release_check_units as U
@@ -366,7 +376,9 @@ class IdentityOnWheels:
         errors += ["shardcheck: " + e for e in LS.summary_errors(read_json(Path(output) / "shardcheck" / LS.SUMMARY))]
         # THE MEASUREMENT SMOKE, UNCONDITIONAL (Andrew 2026-11-06): every box job runs every measurement recipe once at
         # its smoke shape, ours only, on these wheel bytes (tools/release_measurement_smoke.py); nothing waives it.
-        errors += measure_smoke_errors(output)
+        # (measure=False: the gate job's own part, so run_gate knows which of the two box jobs still has to run)
+        if measure:
+            errors += measure_smoke_errors(output)
         runtime, cases = self.gate_runtime_error(vendor, output)
         if runtime:
             errors.append(runtime)
@@ -374,7 +386,8 @@ class IdentityOnWheels:
             return False, "; ".join(errors)
         self.keep_unit_records(Path(output) / "units")
         return True, ("PASS: identity recorded once from these wheels; device-check units passed or reused; "
-                      "logical-shard gate MATCH; measurement smoke %s; %s runtime cases" % (measure_smoke_note(output), cases))
+                      "logical-shard gate MATCH; measurement smoke %s; %s runtime cases"
+                      % (measure_smoke_note(output) if measure else "not judged here", cases))
 
     def gate_identity_errors(self, vendor, output, correctness):
         """Under --identity-on-wheels: the box job's column record must be complete (or nothing owed) and its gate

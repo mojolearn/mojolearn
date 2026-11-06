@@ -163,7 +163,7 @@ def runner(tmp_path, adapters=True):
     r.dry, r.version, r.commit = True, VERSION, COMMIT
     r.rel, r.base = tmp_path / "rel" / COMMIT[:12], tmp_path / "rel"
     r.args = SimpleNamespace(gate_autograd_root=None)
-    r.gate_ok = lambda vendor: (False, "no gate report")
+    r.gate_ok = lambda vendor, measure=True: (False, "no gate report")
     r.gate_out = lambda vendor: r.rel / f"gate-{vendor}" / "stamp-release-light-v1"
     r.source_checkout = lambda create=True: tmp_path / "source"
     r.candidate_gate_wheels = lambda vendor: wheel_files(tmp_path, vendor)
@@ -185,12 +185,22 @@ def test_release_run_gate_builds_the_exact_job_command(tmp_path, monkeypatch, ve
                 "--profile", "release-light-v1", "--max-wait-hours", "72"]
     for w in wheel_files(tmp_path, vendor):
         expected += ["--candidate-wheel", str(w)]
-    assert r.calls == [expected]
+    # the gate job, then the measurement smoke's own job (same box, after the gate job; its own cap and out)
+    smoke = [release.PY, "tools/ops/release_gate.py", vendor, VERSION, "--job", "measuresmoke",
+             "--source-commit", COMMIT, "--source-tree", str(tmp_path / "source"),
+             "--out", str(out / "measuresmoke-job"),
+             "--state", str(r.rel / "gates" / f"{vendor}-stamp-release-light-v1-measuresmoke.job.json"),
+             "--profile", "release-light-v1", "--max-wait-hours", "72", "--no-adapters"]
+    for w in wheel_files(tmp_path, vendor):
+        smoke += ["--candidate-wheel", str(w)]
+    assert r.calls == [expected, smoke]
     would = [line for line in r.said if line.startswith("    would: ")]
     launch = [line for line in would if (" submit release-gate " if vendor == "nvidia" else " run rel-") in line]
-    assert len(launch) == 1
+    assert len(launch) == 2 and "-measuresmoke-" in launch[1] and "-gate-" in launch[0]
     wrapper = "tools/nvidia_central.sh" if vendor == "nvidia" else "tools/do_amd_steward.sh"
-    assert launch[0].startswith("    would: bash " + wrapper)
+    assert all(l.startswith("    would: bash " + wrapper) for l in launch)
+    if vendor == "nvidia":
+        assert "--cap 240 " in launch[0] and "--cap %d " % RG.MEASURE_SMOKE_CAP_MIN in launch[1]
     assert not any("mojolearn-ops" in line or "release_lq_smoke" in line for line in r.said)
 
 
@@ -273,9 +283,12 @@ class FakeBox:
             final = Path(argv[argv.index("--dest") + 1]) / "final"
             (final / "out").mkdir(parents=True)
             (final / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
-            if self.measure is not None:   # the measurement smoke's summary (phase measuresmoke)
-                (final / "out" / "measuresmoke").mkdir()
-                (final / "out" / "measuresmoke" / "measuresmoke.json").write_text(json.dumps(self.measure))
+            if self.measure is not None:
+                # the measurement smoke's own job lands in <gate out>/measuresmoke-job (release.py run_gate launches
+                # it after this job); faked into this fetch so the verdict sees both
+                smoke = final / "out" / "measuresmoke-job" / "measuresmoke"
+                smoke.mkdir(parents=True)
+                (smoke / "measuresmoke.json").write_text(json.dumps(self.measure))
             if self.runtime:
                 (final / "out" / f"runtime-{self.vendor}").mkdir()
                 (final / "out" / f"runtime-{self.vendor}" / "runtime-report.json").write_text(json.dumps(self.runtime))

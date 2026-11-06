@@ -122,6 +122,15 @@ MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub", "scikit-learn==1.7.2", 
 MEASURE_SMOKE_FIXTURE_PIP = ("numpy", "torch==2.13.0", "torch-geometric==2.8.0.post1")
 #: the measurement smoke's ceiling (minutes); see tools/release_measurement_smoke.py for the expected duration
 MEASURE_SMOKE_MINUTES = 90
+#: THE MEASUREMENT SMOKE'S OWN BOX JOB (--job measuresmoke; the same job script with GATE_JOB=measuresmoke). The gate
+#: job already uses the wrapper's whole 240-minute cap (identity, build, device checks, ~125 min of runtime qualifier),
+#: so the smoke never shares that job or its GPU time: tools/release.py launches this job on the same pod / droplet
+#: after the gate job has ended. Its NVIDIA cap: the 90-minute ceiling of the run, up to 30 minutes of setup (two
+#: venvs, 4.8 GB of data from R2, the untimed prep and fixtures; estimate 20-45 min in all, see
+#: tools/release_measurement_smoke.py) and 10 minutes to copy and persist the reports.
+MEASURE_SMOKE_CAP_MIN = MEASURE_SMOKE_MINUTES + 30 + 10
+#: --job: what one launch of this tool runs on the box
+JOBS = ("gate", "measuresmoke")
 #: the presigned-GET data plan the measurement smoke stages from R2 (tools/release_measurement_smoke.py data-plan)
 MEASURE_SMOKE_DATA = "measuresmoke-data.json"
 TERMINAL_NV = ("done", "failed", "cancelled", "timeout", "interrupted")
@@ -220,18 +229,25 @@ class Plan:
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
                  profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None,
-                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, reuse_unchanged=False):
+                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, reuse_unchanged=False,
+                 job="gate"):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
             raise SystemExit("release-gate: --source-commit must be a full sha")
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", tag):
             raise SystemExit("release-gate: the tag must be [A-Za-z0-9_.-]")
+        if job not in JOBS:
+            raise SystemExit(f"release-gate: --job is one of {', '.join(JOBS)}")
+        self.job = job
         self.vendor, self.version, self.commit, self.tag = vendor, version, source_commit, tag
         self.v = VENDORS[vendor]
         self.wrapper = self.v["wrapper"]
         self.source_tree, self.out = str(source_tree), Path(out)
         stem = self.out.name
+        if job == "measuresmoke":
+            # its out is <gate out>/measuresmoke-job: the box paths take the gate out's own (candidate-unique) name
+            stem = self.out.parent.name + "-measuresmoke"
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", stem):
             raise SystemExit(f"release-gate: the out directory's name {stem!r} must be [A-Za-z0-9_.-]")
         self.indir = f"{IN_BASE}/{version}/{vendor}/{stem}/in"
@@ -277,7 +293,11 @@ class Plan:
             and any(f.endswith(".mojo") for f in r["key"]["files"]) for r in plan_doc.get("units", []))
         #: runtime-cpu (the same producer, --vendor cpu) runs on the NVIDIA job after runtime-nvidia; with
         #: --identity-columns every CPU check runs on GitHub's free runners instead (cpu-identity-gate.yml)
-        self.runtime_cpu = vendor == "nvidia" and not self.identity_columns
+        self.runtime_cpu = vendor == "nvidia" and not self.identity_columns and job == "gate"
+        if job == "measuresmoke":
+            # the smoke's job records no identity, builds nothing and runs no qualifier
+            self.identity_columns, self.units_plan, self.build_autograd = [], None, False
+            self.prior, self.prior_files, self.runtime_prior = None, [], None
         gate_out = f"{self.work}/out"
         manifest = f"{gate_out}/autograd-bin/build-manifest.json"
         box_wheels = [f"{self.indir}/{w.name}" for w in self.wheels]
@@ -297,7 +317,8 @@ class Plan:
                  f"GATE_WORK={self.work}", f"GATE_BUILD_MINUTES={BUILD_MINUTES}",
                  f"GATE_ADAPTERS={1 if self.adapters else 0}", f"GATE_PROFILE={self.profile}",
                  f"GATE_REUSE={1 if self.prior else 0}", f"GATE_RUNTIME_MINUTES={RUNTIME_MINUTES}",
-                 f"GATE_JOB_CAP_MINUTES={NV_CAP_MIN if self.vendor == 'nvidia' else 0}",
+                 f"GATE_JOB_CAP_MINUTES={self.cap_minutes() if self.vendor == 'nvidia' else 0}",
+                 f"GATE_JOB={self.job}",
                  f"GATE_RUNTIME_CPU={1 if self.runtime_cpu else 0}",
                  f"GATE_RUNTIME_PRIOR_SHA256={self.runtime_prior_sha256 or ''}",
                  bash_array("GATE_WHEELS", [f"{self.indir}/{w.name}" for w in self.wheels]),
@@ -328,8 +349,9 @@ class Plan:
             out.append((self.staged / RUNTIME_PRIOR_TGZ, f"{self.indir}/{RUNTIME_PRIOR_TGZ}", False))
         if self.units_plan:
             out.append((self.units_plan, f"{self.indir}/units-plan.json", False))
-        # the measurement smoke's data: presigned GETs minted on the Mac (Runner.main writes it before gate.env)
-        out.append((self.staged / MEASURE_SMOKE_DATA, f"{self.indir}/{MEASURE_SMOKE_DATA}", False))
+        if self.job == "measuresmoke":
+            # the measurement smoke's data: presigned GETs minted on the Mac (Runner.main writes it before gate.env)
+            out.append((self.staged / MEASURE_SMOKE_DATA, f"{self.indir}/{MEASURE_SMOKE_DATA}", False))
         out.append((self.staged / "gate.env", f"{self.indir}/gate.env", False))
         names = [r for _, r, _ in out]
         if len(set(names)) != len(names):
@@ -364,9 +386,13 @@ class Plan:
         """argv: the persisted job (NVIDIA: queued, prints the job id; AMD: runs in the foreground)."""
         script = f"{self.indir}/release_gate_job.sh"
         if self.vendor == "nvidia":
-            return ["bash", self.wrapper, "submit", LANE, "--cap", str(NV_CAP_MIN), "--note", self.tag,
+            return ["bash", self.wrapper, "submit", LANE, "--cap", str(self.cap_minutes()), "--note", self.tag,
                     "--results", self.res, script]
         return ["bash", self.wrapper, "run", self.tag, self.res, "bash", script]
+
+    def cap_minutes(self):
+        """nvidia_central.sh submit --cap: the gate job the wrapper's maximum, the smoke's job its own estimate."""
+        return MEASURE_SMOKE_CAP_MIN if self.job == "measuresmoke" else NV_CAP_MIN
 
     def fetch(self, tag, dest, listing=False):
         return [sys.executable, "tools/box_persist.py", "fetch", "--tag", tag, "--dest", str(dest)] + (
@@ -387,9 +413,13 @@ class Plan:
             lines.append(q(self.upload(remote)) + " < " + shlex.quote(str(local)))
         lines.append(q(self.verify([r for _, r, _ in ups], [r for _, r, x in ups if x])) + "  # == local sha256")
         lines.append(q(self.launch()))
-        lines.append("  on the box, in " + self.tree + " at " + self.commit[:12] + ": pixi run -e default python3 "
-                     + q(self.build))
-        lines.append("  on the box, then: python3 " + q(self.gate))
+        if self.job == "measuresmoke":
+            lines.append("  on the box, in " + self.tree + " at " + self.commit[:12]
+                         + ": GATE_JOB=measuresmoke: python3 tools/release_measurement_smoke.py stage / run")
+        else:
+            lines.append("  on the box, in " + self.tree + " at " + self.commit[:12] + ": pixi run -e default python3 "
+                         + q(self.build))
+            lines.append("  on the box, then: python3 " + q(self.gate))
         tag = "<the R2 tag the wrapper prints>"
         lines.append(q(self.fetch(tag, self.staged.parent / "fetch-<tag>"))
                      + f"  # then <fetch>/final/out -> {self.out}")
@@ -451,6 +481,13 @@ def gate_verdict_home(out, vendor, version):
     if doc.get("verdict") != "PASS":
         return False, f"verdict {doc.get('verdict')}: " + "; ".join(doc.get("verdict_reasons") or [])
     return True, "PASS"
+
+
+def read_summary(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
 
 
 def persist_tag(text):
@@ -639,7 +676,8 @@ class Runner:
         """(plan, key, state path, state): the launch's plan, its input key and a resumable earlier launch."""
         a = self.a
         prior = prior_files(a.autograd_prior, a.vendor)
-        tag = f"rel-{a.version}-gate-{a.vendor}-{dt.datetime.fromtimestamp(self.clock(), dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        job = getattr(a, "job", "gate")
+        tag = f"rel-{a.version}-{'gate' if job == 'gate' else 'measuresmoke'}-{a.vendor}-{dt.datetime.fromtimestamp(self.clock(), dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
         state_path = Path(a.state) if a.state else None
         st = {}
         if state_path and state_path.is_file():
@@ -648,7 +686,8 @@ class Runner:
             except ValueError:
                 st = {}
         overlay = gate_overlay(a.source_commit)
-        key_inputs = [a.vendor, a.version, a.source_commit, a.profile, not a.no_adapters,
+        key_inputs = [job] if job != "gate" else []
+        key_inputs += [a.vendor, a.version, a.source_commit, a.profile, not a.no_adapters,
                       [sha256(w) if Path(w).is_file() else str(w) for w in a.candidate_wheel],
                       sha256(ROOT / JOB_SCRIPT) if (ROOT / JOB_SCRIPT).is_file() else None]
         if overlay["files"]:
@@ -672,7 +711,7 @@ class Runner:
                     identity_columns=[c for c in (getattr(a, "identity_columns", "") or "").split(",") if c],
                     label_device=getattr(a, "label_device", "") or "",
                     units_plan=getattr(a, "units_plan", None),
-                    reuse_unchanged=getattr(a, "reuse_unchanged", False))
+                    reuse_unchanged=getattr(a, "reuse_unchanged", False), job=job)
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -686,7 +725,7 @@ class Runner:
             for line in plan.describe():
                 print("  would: " + line)
             return 0
-        if self.adopt_landed():
+        if plan.job == "gate" and self.adopt_landed():
             if state_path and state_path.is_file():
                 state_path.unlink()   # a landed PASS for this candidate settles any earlier launch
             ok, why = gate_verdict_home(a.out, a.vendor, a.version)
@@ -715,12 +754,13 @@ class Runner:
                 _, plan.runtime_prior_sha256 = write_runtime_prior(plan.runtime_prior, plan.staged)
                 say(f"runtime unit receipts to reuse: {sum(1 for _ in plan.runtime_prior.rglob('*.json'))} "
                     f"from {plan.runtime_prior}")
-            # the measurement smoke's data plan: one presigned GET per file the plan reads (the R2 secret stays here)
-            import release_measurement_smoke as MS
-            files = MS.write_data_plan(a.vendor, plan.staged / MEASURE_SMOKE_DATA, presign=lambda key, secs: (self.call(
-                ["sh", ROOT / "tools/dataset_store.sh", "presign", key, secs]).stdout or "").strip())
-            say(f"measurement smoke data plan: {len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.2f} GB "
-                f"(presigned GETs; files already at their pins on the box are kept)")
+            if plan.job == "measuresmoke":
+                # the measurement smoke's data plan: one presigned GET per file the plan reads (the R2 secret stays)
+                import release_measurement_smoke as MS
+                files = MS.write_data_plan(a.vendor, plan.staged / MEASURE_SMOKE_DATA, presign=lambda key, secs: (
+                    self.call(["sh", ROOT / "tools/dataset_store.sh", "presign", key, secs]).stdout or "").strip())
+                say(f"measurement smoke data plan: {len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.2f} GB "
+                    f"(presigned GETs; files already at their pins on the box are kept)")
             (plan.staged / "gate.env").write_text(plan.env_text())
             self.stage(plan)
             record = dict(key=key, plan_tag=tag, vendor=a.vendor, launched_at=dt.datetime.now(
@@ -772,6 +812,11 @@ class Runner:
             state_path.unlink()
         if not home:
             return job_rc or 1
+        if plan.job == "measuresmoke":
+            import release_measurement_smoke as MS
+            errors = MS.summary_errors(read_summary(a.out / "measuresmoke" / MS.SUMMARY))
+            say(f"measurement smoke {a.vendor} {a.version}: " + ("; ".join(errors) if errors else "PASS"))
+            return 1 if errors else (job_rc or 0)
         ok, why = gate_verdict_home(a.out, a.vendor, a.version)
         say(f"gate {a.vendor} {a.version}: {why}")
         return 0 if ok else (job_rc or 1)
@@ -801,6 +846,9 @@ def parse(argv):
                     help="tools/release_check_units.py plan: the job runs exactly its owed device-check units")
     ap.add_argument("--runtime-prior", default=None,
                     help="earlier gates' runtime unit receipts (<class>/<unit>/...) the job's qualifier may reuse")
+    ap.add_argument("--job", choices=JOBS, default="gate",
+                    help="gate: the release gate job; measuresmoke: the measurement smoke's own job (launched after "
+                         "the gate job, on the same box; --out is <gate out>/measuresmoke-job)")
     ap.add_argument("--poll-seconds", type=int, default=60)
     ap.add_argument("--max-wait-hours", type=float, default=72.0)
     ap.add_argument("--dry-run", action="store_true", help="print the wrapper commands; run nothing")

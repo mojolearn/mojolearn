@@ -7820,7 +7820,12 @@ def partition_disagreement(reference, labels, ari=None):
 INDEPENDENT_REFERENCE = {"layer": "torch-eager-fp32", "optim": "torch-eager-fp32",
                          "outlier": "sklearn-cpu", "pagerank": "networkx-cpu",
                          "components": "networkx-cpu", "x-kpss": "statsmodels-cpu",
-                         "x-selectd": "statsmodels-cpu"}
+                         "x-selectd": "statsmodels-cpu",
+                         # SCORER GAP (lane release-measurement-smoke, 2026-11-06): jl-min-dim's only metric,
+                         # equal_fraction_vs_sklearn (bench_board_extra quality "jl"), reads the sklearn-cpu arm's
+                         # integers, so ours raced alone had none. Its untimed reference is that same arm (the
+                         # lane's "other" opponent), run after the timed workers like every entry above.
+                         "x-jl": "sklearn-cpu"}
 
 
 def independent_reference_arm(lane):
@@ -7831,7 +7836,7 @@ def independent_reference_arm(lane):
         return None
     if s["kind"] == "optim" and not s.get("torch_opt"):
         return None                   # an optimizer lane without a peer class (no opponent at all)
-    if arm == "sklearn-cpu" and not s.get("sk"):
+    if arm == "sklearn-cpu" and not s.get("sk") and arm not in s.get("other", {}):
         return None
     if arm in ("networkx-cpu", "statsmodels-cpu") and arm not in s.get("other", {}):
         return None

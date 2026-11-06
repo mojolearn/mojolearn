@@ -82,6 +82,12 @@ SERIAL_PREFIXES = ("neural/",)
 #: the own-arm cell fields the board ingests besides status / quality (provenance)
 OWN_FIELDS = ("hash", "mode", "library_version", "device")
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
+#: the refusal when no summary came home. It comes only from a box: --reuse-unchanged (a vendor composed on the Mac
+#: with no box job) never has one, by design (the smoke is unconditional).
+NO_SUMMARY = ("no measurement-smoke summary: it is produced only by the measurement smoke's own box job "
+              "(tools/ops/release_gate.py <vendor> <version> --job measuresmoke, launched by the gate-<vendor> step); "
+              "a vendor composed on the Mac under --reuse-unchanged has none. To pass, rerun the gate-<vendor> step "
+              "so that box job runs (with or without --reuse-unchanged); nothing on the Mac can stand in for it")
 
 
 def _bb():
@@ -212,7 +218,7 @@ def summarize(vendor, ids, verdicts, meta):
 def summary_errors(doc):
     """[] when the summary proves every planned recipe passed (or is declared unsupported), else why not."""
     if not isinstance(doc, dict):
-        return ["no measurement-smoke summary"]
+        return [NO_SUMMARY]
     errors = []
     if doc.get("schema") != SCHEMA:
         return ["measurement-smoke summary schema %r, not %r" % (doc.get("schema"), SCHEMA)]
@@ -293,6 +299,44 @@ class DevicePeak(threading.Thread):
             if used is not None:
                 self.peak = used if self.peak is None else max(self.peak, used)
             self.stopped.wait(self.every)
+
+
+def cpu_jiffies():
+    """(busy, total) jiffies of all CPUs from /proc/stat, or None (not Linux)."""
+    try:
+        f = [int(x) for x in Path("/proc/stat").read_text().splitlines()[0].split()[1:]]
+    except (OSError, ValueError, IndexError):
+        return None
+    idle = f[3] + (f[4] if len(f) > 4 else 0)
+    return sum(f) - idle, sum(f)
+
+
+def busy_cores(before, after, cores):
+    """Cores busy between two cpu_jiffies() samples (busy fraction of the whole host times its cores)."""
+    if not before or not after or after[1] <= before[1]:
+        return None
+    return round((after[0] - before[0]) / float(after[1] - before[1]) * cores, 1)
+
+
+class BusyCores(threading.Thread):
+    """The rented-box rule: busy cores of total, printed (MEASURESMOKE busy ...) first at `first` seconds into the
+    batches, then every `every` seconds, and kept for the summary."""
+
+    def __init__(self, cores, first=120, every=600, window=10):
+        super().__init__(daemon=True)
+        self.cores, self.first, self.every, self.window = cores, first, every, window
+        self.samples, self.stopped, self.t0 = [], threading.Event(), time.time()
+
+    def run(self):
+        wait = self.first
+        while not self.stopped.wait(wait):
+            a = cpu_jiffies()
+            if self.stopped.wait(self.window):
+                return
+            busy = busy_cores(a, cpu_jiffies(), self.cores)
+            self.samples.append(dict(at_seconds=round(time.time() - self.t0), busy=busy, of=self.cores))
+            print("MEASURESMOKE busy cores=%s of %d at %ds" % (busy, self.cores, time.time() - self.t0), flush=True)
+            wait = self.every
 
 
 def board_command(args, out, extra):
@@ -449,6 +493,7 @@ def cmd_run(args):
         args.vendor, len(ids), len(groups), workers, limit, args.ceiling), flush=True)
     peak = DevicePeak(args.vendor)
     peak.start()
+    busy = BusyCores(cores)
     # the untimed block prep, once for the whole plan, before any batch (bench_board --prep-only)
     import release_gate_profiles as P
     prep = P.bounded_run(board_command(args, work / "prep", ["--preflight-only", "--prep-only"]), out / "logs/prep.log",
@@ -462,6 +507,7 @@ def cmd_run(args):
                    for k, g in enumerate(groups)]
     else:
         from concurrent.futures import ThreadPoolExecutor
+        busy.start()
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(run_batch, args, k, g, deadline, recipe_timeout) for k, g in enumerate(groups)]
             for k, f in enumerate(futures):
@@ -469,6 +515,7 @@ def cmd_run(args):
                 rec["ids"] = groups[k]
                 batches.append(rec)
     peak.stopped.set()
+    busy.stopped.set()
     if prep["exit_code"] != 0:
         verdicts = {rid: dict(verdict=FAIL, reason=b["prep_failed"], batch=b["batch"]) for b in batches for rid in b["ids"]}
     else:
@@ -476,7 +523,7 @@ def cmd_run(args):
     meta = dict(rows=_bb().SMOKE_ROWS, neural_shape="small", runner="tools/bench_board.py --smoke",
                 cores=cores, host_available_gb=host_gb, device_total_mb=total_mb, workers=workers, limit=limit,
                 device_gb_per_worker=DEVICE_GB_PER_WORKER, host_gb_per_worker=HOST_GB_PER_WORKER,
-                measured_peak_device_mb=peak.peak, ceiling_seconds=args.ceiling,
+                measured_peak_device_mb=peak.peak, busy_cores=busy.samples, ceiling_seconds=args.ceiling,
                 recipe_timeout_seconds=recipe_timeout, elapsed_seconds=round(time.time() - started, 1),
                 prep=dict(exit_code=prep["exit_code"], timed_out=prep["timed_out"]), fixtures=fixture_rec,
                 batches=[{k: b.get(k) for k in ("batch", "recipes", "exit_code", "timed_out", "ceiling_hit",

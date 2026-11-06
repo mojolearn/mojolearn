@@ -5870,6 +5870,18 @@ def quality(lane, data, outs, *, shape="full"):
         scale = float(np.abs(c64).max()) or 1.0
         for arm, o in outs.items():
             q[arm]["max_rel_err_vs_fp64"] = float(np.abs(o["y"].astype(np.float64) - c64).max()) / scale
+    if MODEL_OF[lane] == "mlp" and lane != "mlp-train-step":
+        # SCORER GAP (lane release-measurement-smoke, 2026-11-06): mlp-predict's only metric was each arm's distance
+        # to ours, so ours raced alone (the board's default) had none. The untimed float64 evaluation of the same
+        # network on the same weights and rows (Linear(8, 16) -> ReLU -> Linear(16, 3); weights (out, in), as ours
+        # and the torch twin take them), scored like the gemm lanes: max |y - y64| / max |y64|.
+        x64 = np.asarray(data["X"][0], dtype=np.float64)
+        w1, b1, w2, b2 = (data["w:" + n].astype(np.float64) for n in MLP_NAMES)
+        y64 = np.maximum(x64 @ w1.T + b1, 0.0) @ w2.T + b2
+        scale = float(np.abs(y64).max()) or 1.0
+        for arm, o in outs.items():
+            if "y" in o and np.asarray(o["y"]).shape == y64.shape:
+                q[arm]["max_rel_err_vs_fp64"] = float(np.abs(np.asarray(o["y"], dtype=np.float64) - y64).max()) / scale
     if lane in TORCH_REFERENCE_LANES and TORCH_REFERENCE_ARM in outs:
         for arm, extra in torch_reference_quality(outs, outs[TORCH_REFERENCE_ARM]).items():
             if arm != TORCH_REFERENCE_ARM:        # its own distance is 0 by definition
