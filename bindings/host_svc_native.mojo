@@ -18,7 +18,7 @@ from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
-from bindings.host_logistic_native import host_logistic_classes, _logistic_decode
+from bindings.host_logistic_native import host_logistic_classes, _host_logistic_decode
 from bindings.host_svr_native import _svr_matrix, _svr_support, _svr_bias
 from bindings.scaler_lifecycle_native import _outside
 from core.host_sparse_impl import host_sparse_uint64_bound
@@ -294,7 +294,7 @@ def host_svc_inference(model: PythonObject, fields: PythonObject, labels: Python
         for i in range(rows):  # driver-loop: completed native class code publication
             indices.append(Int(values[i]))
         _ = index_array^
-        out = _logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
+        out = _host_logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
     _ = x^
     _ = decisions^
     _ = codes^

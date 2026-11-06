@@ -174,12 +174,31 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
     var indices = host_tree_argmax(Int(py=classical_address(vote)), rows, Int(py=vote.shape[1]))
     _ = vote_owner^
     if (integers and fits) or (numbers and not integers):
+        # Each saved class is converted at most once, the first time a row
+        # selects it (the same int()/float() of the same object the per-row
+        # conversion made, raising at the same row), then rows are written
+        # from native words: no Python object per predicted row, same bits.
+        var k = len(classes)
+        var words_i = List[Int64](length=k, fill=0)
+        var words_f = List[Float64](length=k, fill=0.0)
+        var seen = List[Bool](length=k, fill=False)
         var out = host_archive_typed(Python.tuple(rows), "<i8" if integers else "<f8", context["output_context"])
-        for i in range(rows):  # driver-loop: publish completed native label selections
+        var address = Int(py=classical_address(out))
+        var dest_i = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
+        var dest_f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=address)
+        for i in range(rows):  # publish completed native label selections (native words)
+            var c = indices[i]
+            if not seen[c]:
+                if integers:
+                    words_i[c] = Int64(Int(py=classes[c]))
+                else:
+                    words_f[c] = Float64(py=classes[c])
+                seen[c] = True
             if integers:
-                MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))[i] = Int64(Int(py=classes[indices[i]]))
+                dest_i[i] = words_i[c]
             else:
-                MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))[i] = Float64(py=classes[indices[i]])
+                dest_f[i] = words_f[c]
+        _ = out  # keep the Python object alive through the native stores above
         return out
     var out = Python.list()
     for i in range(rows):  # driver-loop: publish completed native string/bool/large-integer labels
