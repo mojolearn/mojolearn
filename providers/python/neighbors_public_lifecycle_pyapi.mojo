@@ -13,6 +13,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_estimator_name, classical_check_width
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_labels import labels_shape_of, _flatten_labels
+from bindings.label_integer_storage import labels_integer_storage
 from bindings.classical_warnings import classical_warn_column
 from bindings.classifier_public_lifecycle import _public_labels
 from bindings.host_inference_scalars import host_inference_scalar
@@ -80,6 +81,12 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     var shape = labels_shape_of(source, context)
     if len(shape) > 0 and shape[0] != rows:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(shape[0]) + "]")
+    # An exact integer/bool ndarray or Array vector holds no complex,
+    # non-finite or non-integral element and no Python object, so the element
+    # walk below cannot refuse it and the vector is returned unchanged either
+    # way: admit it from its dtype metadata instead of label by label.
+    if len(shape) == 1 and labels_integer_storage(source, context):
+        return source
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
     for i in range(len(flat)):  # driver-loop: admitted label words, never Python element protocols
