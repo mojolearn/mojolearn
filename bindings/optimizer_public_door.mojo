@@ -851,8 +851,14 @@ def _hyper(opt: PythonObject, maximize: Bool, max_norm: Float64) raises -> OptHy
 
 
 def schedule_spec(schedule: PythonObject) raises -> LrSpec:
+    opt_schedule(schedule, OPT_DOOR.get_or_create_ptr()[].context)
+    return schedule_spec_admitted(schedule)
+
+
+def schedule_spec_admitted(schedule: PythonObject) raises -> LrSpec:
+    """`schedule_spec` for a schedule its caller has just admitted with
+    `opt_schedule` (`opt_owner` admits the optimizer's `lr_schedule`)."""
     var context = OPT_DOOR.get_or_create_ptr()[].context
-    opt_schedule(schedule, context)
     var fields = py_fields(schedule)
     var kind = 0
     var classes = context["schedules"]
@@ -1030,7 +1036,8 @@ def door_step[K: OptKernels](
     req.has_sched = False
     if not (schedule is None):
         req.has_sched = True
-        req.sched = schedule_spec(schedule)
+        # opt_owner above admitted this lr_schedule field with opt_schedule.
+        req.sched = schedule_spec_admitted(schedule)
     var resident = fields["_resident_wanted"]
     if py_type(resident) is d[].context["scalar_types"][1] and not truth(resident):
         # `resident=False`: the state lives in these host arrays (no slot)
