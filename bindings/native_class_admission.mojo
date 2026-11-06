@@ -27,7 +27,7 @@ matches. A record must not strongly retain the class it belongs to.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_loaded_module import NativeModules
+from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call
 
@@ -222,3 +222,38 @@ def dict_keys_admit(fields: PythonObject) raises:
     var address = Int(fields._obj_ptr)
     var g = DICT_WATCH.get_or_create_ptr()
     g[].admitted[address] = _dict_epoch(address)
+
+
+# ---------------------------------------------------------------- static types
+# CPython's static builtin types (builtin_function_or_method, AttributeError,
+# ...) are process constants: their identity can never change. Resolve each
+# once from the admitted module connection instead of re-admitting that
+# module on every call that only compares a type identity.
+
+
+struct StaticTypes(Defaultable, Movable):
+    var types: Dict[String, PythonObject]
+
+    def __init__(out self):
+        self.types = Dict[String, PythonObject]()
+
+
+comptime STATIC_TYPES = _Global[
+    StorageType=StaticTypes, name="MojolearnStaticTypesV1",
+    init_fn=StaticTypes.__init__,
+]
+
+
+def static_builtin_type(module: String, name: String) raises -> PythonObject:
+    """`module.name` for a static (non-heap) builtin type, resolved once."""
+    var g = STATIC_TYPES.get_or_create_ptr()
+    var key = module + "." + name
+    if key in g[].types:
+        return g[].types[key]
+    var value = py_call(native_loaded_module("builtins").getattr, native_loaded_module(module), PythonObject(name))
+    ref cpy = Python().cpython()
+    # Py_TPFLAGS_HEAPTYPE (1 << 9): only immortal static types are cached.
+    if cpy.lib.get_function[UInt64]("PyType_GetFlags")(value._obj_ptr) & UInt64(1 << 9) != 0:
+        return value
+    g[].types[key] = value
+    return value
