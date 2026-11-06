@@ -740,6 +740,80 @@ def cpu_model():
     return None
 
 
+#: Environment variables that set how many threads a timed cell may use. The
+#: values are recorded as given (None when unset); they are thread counts, not
+#: secrets, and no digest, closure, reuse key or admission reads them.
+TIMING_THREAD_ENV = (
+    "MOJOLEARN_CPU_THREADS", "MOJOLEARN_VERIFY_CPU_THREADS", "MOJOLEARN_BENCH_THREADS",
+    "MOJOLEARN_FOREST_ROW_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS",
+)
+#: `i/N`: this process is shard i of N identity processes running at the same
+#: time on this machine. `run_jobs` sets it for its children; a wrapper that
+#: runs several records side by side sets it too. Unset means not stated.
+TIMING_CONCURRENCY_ENV = "MOJOLEARN_IDENTITY_CONCURRENCY"
+TIMING_ENV_SCHEMA = 1
+
+
+def cgroup_cpu_quota():
+    """CPUs this process's cgroup may use (quota / period), or None when no
+    quota is set or none can be read. cgroup v2 `cpu.max`, then v1
+    `cpu.cfs_quota_us` / `cpu.cfs_period_us`."""
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as fh:
+            quota, _, period = fh.read().strip().partition(" ")
+        if quota != "max" and period:
+            return round(int(quota) / int(period), 3)
+        return None
+    except (OSError, ValueError):
+        pass
+    try:
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as fh:
+            quota = int(fh.read().strip())
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as fh:
+            period = int(fh.read().strip())
+        return round(quota / period, 3) if quota > 0 and period > 0 else None
+    except (OSError, ValueError):
+        return None
+
+
+def other_identity_processes():
+    """How many other identity_break.py processes run on this machine now
+    (not this one, not its parent supervisor), or None if `ps` cannot be read."""
+    try:
+        out = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    mine = {os.getpid(), os.getppid()}
+    count = 0
+    for line in out.splitlines():
+        pid, _, cmd = line.strip().partition(" ")
+        if pid.isdigit() and int(pid) not in mine and "identity_break.py" in cmd:
+            count += 1
+    return count
+
+
+def timing_environment():
+    """What the cells' wall clock ran on, so two records can be judged
+    comparable (2026-11-06, lane/tools-timing-pairs): the CPU model, the
+    logical CPUs, the CPUs this process may run on and its cgroup quota,
+    the thread settings, and how many identity processes shared the machine.
+    TIMING RECORD ONLY: nothing hashed, no digest and no merge or resume
+    check reads it."""
+    try:
+        affinity = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        affinity = None
+    return dict(
+        schema=TIMING_ENV_SCHEMA, cpu_model=cpu_model(), arch=platform.machine(),
+        logical_cpus=os.cpu_count(), affinity_cpus=affinity, cgroup_cpu_quota=cgroup_cpu_quota(),
+        threads={k: os.environ.get(k) for k in TIMING_THREAD_ENV},
+        concurrency=os.environ.get(TIMING_CONCURRENCY_ENV),
+        other_identity_processes=other_identity_processes(),
+        started_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    )
+
+
 def slug(text):
     """`Apple M4` -> `apple-m4`, `Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz`
     -> `intel-r-xeon-r-platinum-8272cl-cpu-2.60ghz`."""
@@ -10427,6 +10501,7 @@ def _run_reference(args):
                              f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
+    timing_env = timing_environment()
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
                    numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
@@ -10560,6 +10635,7 @@ def _run_reference(args):
                                           platform=platform.platform(), python=platform.python_version(),
                                           numpy=np.__version__, fixtures=fixture_hashes, heldout=heldout_hashes))
     leases = [execution_lease()]
+    timing_attempts = []
     if getattr(args, "resume", False):
         cells.update(resume_cells(args.json, signature))
         with open(args.json) as stream:
@@ -10568,6 +10644,10 @@ def _run_reference(args):
         # Keep the lease that produced retained cells as well as this attempt's
         # lease. These are provenance, not inputs to the equality guard above.
         leases = list(previous.get("execution_leases", [])) + leases
+        # Retained cells were timed by the earlier attempts: keep their
+        # timing environments next to this one (timing record only).
+        timing_attempts = list(previous.get("timing_env_attempts")
+                               or ([previous["timing_env"]] if previous.get("timing_env") else []))
         print(f"# RESUME {len(cells)} completed cells", flush=True)
 
     def dump(complete):
@@ -10690,6 +10770,12 @@ def _run_reference(args):
         record["package"] = package
         record["resume_signature"] = signature
         record["execution_leases"] = leases
+        # The wall-clock environment (timing record only; see
+        # timing_environment). `timing_env_attempts` lists every attempt's
+        # environment, oldest first, when a resume carried cells over.
+        record["timing_env"] = timing_env
+        if timing_attempts:
+            record["timing_env_attempts"] = timing_attempts + [timing_env]
         atomic_json(args.json, record)
         # The untruncated text of every refusal, beside the JSON. A cell's
         # own error field is capped; this file never is.
@@ -11488,8 +11574,13 @@ def merge(paths, out, allow_separate_builds=False):
     record["complete"] = record["complete"] or record["complete_by_coverage"]
     record["skipped"] = sorted(set(s for _, j in parts for s in j.get("skipped", [])))
     record["merged_from"] = [dict(file=os.path.basename(p), cells=len(j["cells"]), complete=j.get("complete"),
-                                  platform=j.get("platform"), bindings=(j.get("package") or {}).get("bindings"))
+                                  platform=j.get("platform"), bindings=(j.get("package") or {}).get("bindings"),
+                                  timing_env=j.get("timing_env"))
                              for p, j in parts]
+    # Shards ran side by side: the merged record states how many, beside the
+    # first part's environment (timing record only).
+    if any(j.get("timing_env") for _, j in parts):
+        record["timing_env_parts"] = len(parts)
     record["merged_separate_builds"] = len(set(json.dumps(_build_digests(j)) for _, j in parts)) > 1
     # A MERGE NEVER LAUNDERS A PARTIAL PART INTO A WHOLE COLUMN (2026-09-20).
     # MERGE_SAME already refuses parts whose `parts_omitted` differ, so this
@@ -11577,7 +11668,10 @@ def run_jobs(args, argv=None):
             if args.resume and part.is_file():
                 cmd.append("--resume")
             stream = open(log, "a" if args.resume else "w")
-            proc = subprocess.Popen(cmd, stdout=stream, stderr=subprocess.STDOUT)
+            # Each child records that it ran as shard i of N side by side
+            # (timing_env.concurrency; timing record only).
+            child_env = dict(os.environ, **{TIMING_CONCURRENCY_ENV: f"{i}/{len(shards)}"})
+            proc = subprocess.Popen(cmd, stdout=stream, stderr=subprocess.STDOUT, env=child_env)
             running.append((i, proc, stream))
             print(f"# JOB {i} pid={proc.pid} lanes={','.join(shard)}", flush=True)
         codes = {}
