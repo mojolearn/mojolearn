@@ -131,8 +131,11 @@ def _write_back(source: PythonObject, values: PythonObject, output: PythonObject
 
 
 def _statistic(value: PythonObject, d: Int, name: String, context: PythonObject) raises -> PythonObject:
-    classical_admit_value(value,context)
+    # A fitted statistic the fit published is an exact Array (our own class,
+    # slot fields only): its admission is a no-op, so the per-transform
+    # admission (module checks per statistic) runs only for anything else.
     if not classical_is_array(value, context):
+        classical_admit_value(value,context)
         raise Error("StandardScaler " + name + " must remain a finite contiguous Float32 feature vector")
     if String(value.dtype) != "<f4" or Int(py=value.ndim) != 1 or Int(py=value.size) != d or not classical_c_order(value, context):
         raise Error("StandardScaler " + name + " must remain a finite contiguous Float32 feature vector")
