@@ -521,11 +521,14 @@ def _semi_class_array(classes: PythonObject, codes: PythonObject, context: Pytho
     var b = _semi_b()
     var all_int = True
     var all_real = True
+    # The class tuples are built once per call, not twice per class.
+    var int_kinds = Python.tuple(b.bool, b.int)
+    var real_kinds = Python.tuple(b.int, b.float)
     for i in range(len(classes)):  # driver-loop: over the k class labels (type test)
         var v = classes[i]
-        if all_int and not family_isinstance(v, Python.tuple(b.bool, b.int)):
+        if all_int and not family_isinstance(v, int_kinds):
             all_int = False
-        if all_real and not family_isinstance(v, Python.tuple(b.int, b.float)):
+        if all_real and not family_isinstance(v, real_kinds):
             all_real = False
     if all_int or all_real:
         var values = Python.list()
@@ -726,6 +729,10 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var n_iter = 0
     var converged = False
     var steps = _semi_int(family_field(fields, "max_iter"))
+    # tol and alpha are read once per fit, not once per iteration (lane
+    # perf-sweep-msel-nbr-svc); the same float(tol) and float32(alpha).
+    var tol = _semi_float(family_field(fields, "tol"))
+    var alpha_step = _lp_alpha_f32(fields, True) if spreading else 0.0
     for it in range(steps):  # driver-loop: over propagation iterations, one device step each
         n_iter = it
         _semi_op(binding, "absdiff_sum", Python.list(_semi_addr(ld), _semi_addr(prev), _semi_addr(s)),
@@ -733,7 +740,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         _ = prev  # keep the Python object alive through the native call above
         var change = Float64(FAMILY_F32P(unsafe_from_address=Int(py=_semi_addr(s)))[0])
         _ = s  # keep the Python object alive through the read above
-        if change < _semi_float(family_field(fields, "tol")):
+        if change < tol:
             converged = True
             break
         prev = ld
@@ -745,7 +752,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                      Python.list(PythonObject(n), PythonObject(nc)), Python.list(), context)
         else:
             _semi_op(binding, "ls_clamp", Python.list(_semi_addr(nxt), _semi_addr(ystatic), _semi_addr(out)),
-                     Python.list(PythonObject(n * nc)), Python.list(PythonObject(_lp_alpha_f32(fields, True))), context)
+                     Python.list(PythonObject(n * nc)), Python.list(PythonObject(alpha_step)), context)
         _ = nxt  # keep the Python object alive through the native call above
         _ = ystatic  # keep the Python object alive through the native call above
         _ = unlabeled  # keep the Python object alive through the native call above

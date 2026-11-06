@@ -22,6 +22,7 @@ from bindings.msel_search import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
     msel_learning_curve, msel_permutation_test_score, _search_index,
 )
+from bindings.msel_parameter_grid import PreparedParameterGrid
 from bindings.msel_public_metadata import msel_splitter_repr, msel_scorer_repr, msel_estimator_classes
 from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
 from bindings.msel_split import (
@@ -172,8 +173,10 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         return PythonObject(msel_grid_len(_msel_attr(model, "param_grid", context), context))
     if operation == "family_msel_grid_item":
         var index = _search_index(args[0], "ParameterGrid index", context)
-        var grid = msel_grid_list(_msel_attr(model, "param_grid", context), context)
-        return family_call(py_attr(grid, "__getitem__"), index)
+        # One candidate by its mixed-radix digits, not the whole grid built
+        # to return one entry (lane perf-sweep-msel-nbr-svc).
+        var prepared = PreparedParameterGrid(_msel_attr(model, "param_grid", context), context)
+        return prepared.item(Int(py=index))
     if operation == "family_msel_sampler" or operation == "family_msel_sampler_iter":
         var result = msel_sampler_list(_msel_attr(model, "param_distributions", context), _msel_attr(model, "n_iter", context),
                                        _msel_attr(model, "random_state", context), context)

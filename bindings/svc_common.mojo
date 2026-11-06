@@ -25,7 +25,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_pandas import _pd_class
 from bindings.classical_labels import _pandas_values, labels_type_name
 from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
-from bindings.classical_labels import labels_encode_labels
+from bindings.classical_labels import labels_encode_labels, labels_accuracy
 from bindings.label_admission_native import classifier_label_list
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
@@ -376,58 +376,15 @@ def _svc_classification_labels(values: PythonObject, name: String, context: Pyth
 
 def svc_accuracy(y_true: PythonObject, y_pred: PythonObject, n_pred: Int, context: PythonObject) raises -> Float64:
     """`linear_model._accuracy_host(pred, y)`: the shape refusal, then
-    `_expansion_metrics.accuracy_fraction(y, pred)`, the exact matched count
-    over the row count from the x_metrics COUNT program (`_Sums` with the
-    `_cm_stage` COUNT tail, unweighted)."""
-    var b = svc_builtins()
+    `_expansion_metrics.accuracy_fraction(y, pred)` (unweighted, the process
+    mode): the matched count over the row count from the x_metrics COUNT tail.
+
+    Perf (lane perf-sweep-msel-nbr-svc): this owner rebuilt the label lists of
+    y_true and the predictions in Python and mapped every row through a Python
+    dict before the COUNT program. The shared accuracy (`labels_accuracy`, the
+    one NearestCentroid, label propagation and the linear models use) encodes
+    numeric label buffers natively; the same matched count and row count."""
     var shape = svc_shape_of(y_true, context)
     if len(shape) != 1 or Int(py=shape[0]) != n_pred:
         raise Error("mojolearn: y must be 1-D with one entry per row of X")
-    var caller = String("accuracy_score")
-    var tl = _svc_classification_labels(y_true, "y_true", context)
-    var pl = _svc_classification_labels(y_pred, "y_pred", context)
-    var true = tl[0]
-    var pred = pl[0]
-    var n = len(true)
-    if n != len(pred):
-        raise Error("mojolearn " + caller + ": y_true and y_pred lengths differ")
-    if String(tl[1]) != String(pl[1]):
-        raise Error("TypeError: mojolearn " + caller + ": y_true and y_pred must use the same label type")
-    if n > 2147483647:
-        raise Error("mojolearn " + caller + ": at most INT32_MAX rows")
-    var present = family_call(b.sorted, family_call(family_call(b.set, true).union, pred))
-    var big_l = len(present)
-    var index = family_call(b.dict, family_call(b.zip, present, family_call(b.range, PythonObject(big_l))))
-    var yt = classical_wrap_array(family_call(context["array_type"], PythonObject("i"), family_call(b.map, py_attr(index, "__getitem__"), true)),
-                                  Python.tuple(PythonObject(n)), "<i4", "C", context)
-    var yp = classical_wrap_array(family_call(context["array_type"], PythonObject("i"), family_call(b.map, py_attr(index, "__getitem__"), pred)),
-                                  Python.tuple(PythonObject(n)), "<i4", "C", context)
-    var prog = _Prog(context["family_metrics_ops"])
-    var a = prog.put_i32(yt)
-    var bo = prog.put_i32(yp)
-    var matched = prog.scratch(n)
-    prog.stage("pair_key", n, [a, bo, matched, big_l, 1])
-    # `_group` for the match, true and pred keys (no values, no weights).
-    var offs = List[Int]()
-    var keys: List[Int] = [matched, a, bo]
-    for g in range(3):  # small-loop(groupings: match, true, pred)
-        var off = prog.alloc(big_l + 1)
-        var order = prog.scratch(n)
-        var out = prog.alloc(big_l)
-        prog.stage("group_sort", 1, [keys[g], n, big_l, off, order])
-        if big_l > 0:
-            prog.stage("group_sum", big_l, [off, order, SVC_NONE, 1, SVC_NONE, out, 1])
-        offs.append(off)
-    # `_counts` of the three groupings.
-    for g in range(3):  # small-loop(groupings: match, true, pred)
-        var cnt = prog.alloc(big_l)
-        if big_l > 0:
-            prog.stage("off_diff", big_l, [offs[g], big_l, cnt])
-    # `_cm_stage(..., _CM_COUNT, 11)`: the tail over the match OFF table.
-    var tail = prog.alloc(11)
-    prog.stage("cm_epi", 1, [_CM_COUNT, offs[0], big_l, 0, n, tail])
-    _ = prog.want(tail, 11)
-    var arena = _reg_run(prog, PythonObject(None), context)
-    _ = yt^
-    _ = yp^
-    return _arena_double(arena, tail + 8)
+    return labels_accuracy(y_true, y_pred, PythonObject(None), PythonObject(None), context)

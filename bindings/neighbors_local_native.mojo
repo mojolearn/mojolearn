@@ -646,9 +646,12 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
 
 def _nc_uniform(fields: PythonObject, context: PythonObject) raises -> Bool:
     """`NearestCentroid._uniform`: every prior within isclose of 1/C."""
-    var C = len(classifier_label_list(family_field(fields, "classes_"), context))
+    # C is the fitted prior's length (one prior per class, set with classes_
+    # by fit), not a label list rebuilt from classes_ on every query (lane
+    # perf-sweep-msel-nbr-svc: predict rebuilt it three times per call).
     var prior = family_field(fields, "class_prior_")
     var count = _size(prior)
+    var C = count
     var pp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(prior)))
     var uniform = True
     for i in range(count):  # driver-loop: over the uniform prior check (k classes)
@@ -665,10 +668,10 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
     if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
         raise Error("AttributeError: decision_function is available for metric='euclidean' only")
     var q = _f32(source, context)
-    var C = len(classifier_label_list(family_field(fields, "classes_"), context))
     # `Array.from_list(class_prior_.tolist(), "<f4")`: each prior rounded once
     var given = family_field(fields, "class_prior_")
     var count = _size(given)
+    var C = count  # one fitted prior per class (see `_nc_uniform`)
     var prior = labels_vector(count, "<f4", context)
     var gp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(given)))
     var fp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(prior)))
@@ -897,17 +900,17 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     _ = fit_x  # keep the Python object alive through the native calls above
     var valid = family_field(fields, "_valid")
     var keep = List[Int]()
+    var flags = List[Int]()
     var all_valid = True
-    for f in range(d):  # driver-loop: over the d feature columns (the fit's column masks)
+    for f in range(d):  # driver-loop: over the d feature columns (the fit's column masks, read once)
         if _truth(valid[f]):
             keep.append(f)
+            flags.append(0)
         else:
             all_valid = False
+            flags.append(1)
     if _truth(family_field(fields, "keep_empty_features")):
         if n != 0 and not all_valid:
-            var flags = List[Int]()
-            for f in range(d):  # driver-loop: over the d fit flags
-                flags.append(0 if _truth(valid[f]) else 1)
             var flag_array = _i32_from_ints(flags, context)
             var z = _out(Python.tuple(n, d), "<f4", context)
             _op(binding, "p2m_zero_cols", Python.list(classical_address(out), classical_address(flag_array),

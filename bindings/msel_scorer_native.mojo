@@ -11,7 +11,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_is_real, metric_float
 from bindings.msel_inputs import msel_input, msel_admit
 from bindings.native_buffer_owner import native_storage_allocate
-from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan
+from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan, msel_planned_call
 
 
 def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -360,7 +360,10 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
         msel_admit(memo, context)
     var predicted = PythonObject(None) if memo is None else py_get(memo, method)
     if predicted is None:
-        predicted = msel_estimator_call(estimator, String(method), Python.tuple(x), context, True)
+        # `model` is the plan checked above; only scorer admission (no
+        # Python code) ran since, so the dispatch reuses it (lane
+        # perf-sweep-msel-nbr-svc: two full plan checks per score before).
+        predicted = msel_planned_call(estimator, model, String(method), Python.tuple(x), context, True)
         if memo is not None:
             py_setitem(memo, method, predicted)
     var name = fields["_name"]
