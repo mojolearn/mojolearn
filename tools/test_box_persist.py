@@ -261,8 +261,16 @@ class TestRun(Base):
     def test_slot_rotation(self):
         tag, js = self.stage(every_sec=1, slots=2)
         res = os.path.join(self.w, "res")
-        rc, _, _ = self.runner(js, res, "sleep 5.5")
-        self.assertEqual(rc, 0)
+        # The job runs until three periodic slot uploads have landed, not for a fixed time: on a loaded box (a
+        # CPU pod running every test file at once) one upload cycle took about 4 s, so a fixed 5.5 s job saw two.
+        flag = os.path.join(self.w, "done.flag")
+        p = self.runner(js, res, "while [ ! -e %s ]; do sleep 0.1; done" % flag, wait=False)
+        slot_puts = lambda: sum(1 for x in self.srv.log if x[0] == "PUT" and x[1].endswith(("/00.tgz", "/01.tgz")))
+        landed = self.wait_for(lambda: slot_puts() >= 3, secs=90)
+        open(flag, "w").close()
+        p.communicate(timeout=60)
+        self.assertTrue(landed, "three periodic uploads within 90 s")
+        self.assertEqual(p.returncode, 0)
         m = self.manifest(tag)
         periodic = [u["name"] for u in m["uploads"] if u["label"] == "periodic"]
         self.assertGreaterEqual(len(periodic), 3, m)
