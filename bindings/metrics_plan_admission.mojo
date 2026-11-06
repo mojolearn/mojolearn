@@ -21,30 +21,17 @@ struct MetricPlanOpcodes(Movable):
             raise cpy.unsafe_get_error()
         self.values = PythonObject(from_owned=raw)
         self.codes = Dict[String, Int]()
-        var position = 0
-        var key = PyObjectPtr()
-        var value = PyObjectPtr()
-        var next = cpy.lib.get_function[Int32]("PyDict_Next")
-        var string_type = bi.str
-        var integer_type = bi.int
-        # driver-loop: over connected opcode schema entries before native plan construction
-        while next(self.values._obj_ptr, MutPointer(to=position), MutPointer(to=key), MutPointer(to=value)) != 0:
-            var key_type = cpy.PyObject_Type(key)
-            var value_type = cpy.PyObject_Type(value)
-            var admitted = key_type == string_type._obj_ptr and value_type == integer_type._obj_ptr
-            cpy.Py_DecRef(key_type)
-            cpy.Py_DecRef(value_type)
-            if not admitted:
-                raise Error("TypeError: metric opcode entries require exact string keys and integers")
-        # The private copy pins immutable exact strings/ints. Public connection
-        # mutation cannot affect this plan, even across input preparation calls.
         _ = values
 
     def get(mut self, name: String) raises -> Int:
+        # Each opcode is admitted when a stage first names it (an exact int
+        # under its exact string key), not by a walk of the whole table on
+        # every metric call.
         if name not in self.codes:
-            # No hooks can run: all keys and values were individually admitted.
-            # Avoid constructing native strings/decoding unused opcodes at setup.
-            self.codes[name] = Int(py=self.values[PythonObject(name)])
+            var value = self.values[PythonObject(name)]
+            if py_type(value) is not native_loaded_module("builtins").int:
+                raise Error("TypeError: metric opcode entries require exact string keys and integers")
+            self.codes[name] = Int(py=value)
         return self.codes[name]
 
 
