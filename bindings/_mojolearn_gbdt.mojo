@@ -49,7 +49,7 @@ the wrapper holds the caller's arrays for the length of the call.
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.device_plan import DevicePlan, device_plan_current
-from bindings.py_lists import py_list_int
+from bindings.py_lists import py_list_int, py_list_f64
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
 from std.os import abort
 from std.memory import bitcast
@@ -618,12 +618,10 @@ def _gbdt_fit_impl(
         )
         ctx.synchronize()
 
-    var learn = Python.list()
-    for i in range(len(result.learn_losses)):  # small-loop(learn_losses: one loss per boosting iteration): result glue to Python, no compute
-        learn.append(PythonObject(result.learn_losses[i]))
-    var test = Python.list()
-    for i in range(len(result.test_losses)):  # small-loop(test_losses: one loss per boosting iteration): result glue to Python, no compute
-        test.append(PythonObject(result.test_losses[i]))
+    # One PyList_New per curve filled slot by slot (bindings/py_lists.mojo),
+    # not one bound append per boosting iteration (p3-trees).
+    var learn = py_list_f64(result.learn_losses)
+    var test = py_list_f64(result.test_losses)
 
     var out = Python.list()
     out.append(PythonObject(result.text))
