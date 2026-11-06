@@ -78,7 +78,7 @@ def test_training_constructors_share_admission_helpers():
         assert 'training_f32_scalar(' in src
         assert 'training_schedule_json(' in src
     construct=byte.split('def byte_lm_construct(')[1].split('def byte_lm_logits(')[0]
-    assert construct.index('_load_snapshot(shape, context)') < construct.index('training_f32_owned(')
+    assert construct.index('_load_snapshot(mods, shape, context)') < construct.index('training_f32_owned(')
     assert 'training_f32_owned(' in construct
     copy=(ROOT/'core/training_input_copy.mojo').read_text()
     assert 'std.python' not in copy and 'PythonObject' not in copy
@@ -132,5 +132,5 @@ def test_native_metadata_readback_reuses_admission_snapshot():
     assert 'sha256_file(' in runtime
     common=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
     entry=common.split('def neural_descriptor_entry(')[1].split('def neural_descriptor_connect(')[0]
-    assert 'py_get(py_fields(module), name)' in entry
-    assert 'entry.__self__ is not module' in entry
+    assert 'py_get(_neural_descriptor_module_fields(module, bi), name)' in entry
+    assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in entry
