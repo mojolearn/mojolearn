@@ -338,6 +338,14 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
             return neighbor_kneighbors(model, args[2], args[3], PythonObject(True), neighbor_binding(tables, "neighbors_base"), context)
         finally:
             knn_release(model)
+    if operation == "reference_store":
+        # (token, params, block): one reference block fitted once and kept
+        # under the driver's token until its "release" (pass 3, rank 108).
+        _release(args[0], tables, context)
+        var stored = shard_model(tables["nearest_class"], args[1])
+        _nn_fit(stored, args[2], context)
+        py_setitem(_snapshots(), args[0], stored)
+        return PythonObject(None)
     if operation == "reference_vote":
         var model = shard_model(tables["query_classes"][args[0]], args[1])
         return _vote(model, args[2], args[3], String(args[4]), tables, context)
@@ -363,6 +371,9 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
         raise Error("RuntimeError: shard worker has no stored snapshot")
     if operation == "ivf_search":
         return _ivf_partial(model, args[1], tables, context)
+    if operation == "reference_query":
+        # (token, query rows, k): the stored block's k nearest, with distances.
+        return neighbor_kneighbors(model, args[1], args[2], PythonObject(True), neighbor_binding(tables, "neighbors_base"), context)
     if operation != "query_rows":
         raise Error("ValueError: unsupported native neighbor shard operation")
     var method = String(args[2])
