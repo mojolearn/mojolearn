@@ -30,6 +30,7 @@ from bindings.msel_common import (
     MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
     msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr, msel_admit,
+    msel_numeric_vector,
     msel_p64, msel_p32, msel_new, msel_new2, msel_i64_list, msel_i32_list, msel_read_i64, msel_slice_i64,
     msel_arange, msel_range_index, msel_split_mask, msel_split_indices, msel_index_copy, msel_as_index,
     MselGroups, MselRng, msel_mix_seed, msel_shuffle_sizes, msel_take_any, msel_lazy, msel_index_i64,
@@ -1087,9 +1088,13 @@ def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, va
     # again after any compiled helper executes. Label leaves are pinned once.
     if x_used:
         x = py_call(msel_b().range, msel_n_samples(x, context))
-    if y_used:
+    # Perf (lane perf-svm-and-msel): a numeric ndarray/Array label vector
+    # holds no Python leaf to pin; every consumer below encodes it through
+    # msel_encode (MselGroups, msel_first_seen), which reads it from its
+    # buffer. Flattening it here boxed every label on every split call.
+    if y_used and not msel_numeric_vector(y, False, context):
         y = msel_labels_list(y, "y", context)
-    if groups_used:
+    if groups_used and not msel_numeric_vector(groups, False, context):
         groups = msel_labels_list(groups, "groups", context)
     if msel_is(model, "StratifiedGroupKFold", context):
         return msel_strat_group_split(x, y, groups, msel_int(msel_field(model, "n_splits", context)),
@@ -1319,7 +1324,9 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
     else:
         var split: PythonObject
         if stratify is not None:
-            split = msel_strat_shuffle_split(msel_labels_list(stratify, "stratify", context), 1, PythonObject(n_test), PythonObject(n_train), random_state,
+            # A numeric label vector is encoded from its buffer (msel_encode).
+            var strat = stratify if msel_numeric_vector(stratify, False, context) else msel_labels_list(stratify, "stratify", context)
+            split = msel_strat_shuffle_split(strat, 1, PythonObject(n_test), PythonObject(n_train), random_state,
                                              PythonObject(0.1), context)[0]
         else:
             split = msel_shuffle_split(py_call(b.range, n), 1, PythonObject(n_test), PythonObject(n_train), random_state,
