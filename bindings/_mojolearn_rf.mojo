@@ -1178,7 +1178,7 @@ def rf_classifier_fit_weighted_session_binding(
     return _retain_rf_export(export_trees^, forest.notices)
 
 
-def _rf_session_restore_prep(session_id: Int, mut prep: List[ForestPrep]):
+def _rf_session_restore_prep(session_id: Int, mut prep: List[ForestPrep]) raises:
     """Hand a member fit's swapped-out prep back to its session, if the
     session is still open (a closed session simply drops it)."""
     var back = RF_SESSIONS.get_or_create_ptr()
