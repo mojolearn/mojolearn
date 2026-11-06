@@ -385,7 +385,10 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
 def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`roc_auc_options`; args = (binding, y_true, y_score, average,
     sample_weight, max_fpr, multi_class, labels, numeric_mode)."""
-    var shape = mc_f32_lists(args[2], "y_score", context).shape
+    # p3-labels-metrics: y_score is read and (for a list) cast once here;
+    # the multiclass loaders below take this array, not args[2] again.
+    var score_view = mc_f32_lists(args[2], "y_score", context)
+    var shape = score_view.shape
     var true = mc_targets(args[1], "roc_auc_score", context)
     var present = true.classes
     var multiclass = mc_len(present) > 2 or (mc_len(shape) == 2 and Int(py=shape[1]) > 2)
@@ -420,7 +423,7 @@ def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObje
     if ovo and args[4] is not None:
         raise Error("sample_weight is not supported for multiclass one-vs-one ROC AUC, "
                     + "'sample_weight' must be None in this case.")
-    var s = _scores(args[2], true.n, "roc_auc_score", 2, context)
+    var s = _scores(score_view, true.n, "roc_auc_score", 2, context)
     var k = Int(py=s.shape[1])
     if ovr:
         return _roc_ovr(true, s, k, args, context)
