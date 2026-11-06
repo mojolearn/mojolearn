@@ -238,11 +238,10 @@ def _rows_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayM
     var dtype = fields["dtype"]
     if py_type(dtype) is not b.str:
         raise Error("TypeError: native row selection requires native dtype metadata")
-    var host_rows = String(context["vendor"]) == "cpu" or String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) == "0" or String(dtype) != "<f4"
-    var prior = py_get(fields, "_host")
-    if host_rows and prior is not None:
-        classical_admit_value(prior, context)
-        return _array_snapshot(prior, context)
+    # No gathered host copy is cached on the selection (hazard class A,
+    # p3-prep): an unkeyed `_host` copy was served after the base Array or
+    # the indices were edited in place. The native gather below runs on each
+    # call; it is one strided copy of the selected rows.
     var base = fields["base"]
     var indices = fields["indices"]
     classical_admit_value(base, context)
@@ -265,8 +264,6 @@ def _rows_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayM
     var output = classical_typed(Python.tuple(n, d), code, context["output_context"])
     var address = Int(py=classical_address(output))
     prep_gather_rows(data.source, index.source.addr, n, address)
-    if host_rows:
-        py_setitem(fields, "_host", output)
     var shape = List[Int]()
     shape.append(n)
     shape.append(d)
