@@ -87,6 +87,30 @@ state rebuilt per call). Brief: `~/mojolearn-evidence/briefs-20261105/perf-pytho
 `lane/perf-sweep-parallel-native`. Each leaves a site table at `~/mojolearn-evidence/perf-sweep-<lane>.md`. Second
 wave, after the six fix lanes merge (they own those files now): `trees_*`, `msel_*`, `neighbors_*`, `svc_*`, `host_*`.
 
+### State 2026-11-06 (after the fix lanes): ALL MERGED, NOTHING COMPILED
+
+`integ/perf-20261105` @ `d097c8f90f` (on origin) = main + 24 fix lanes: 386 files, +13.5k/-3.4k lines. No lane
+compiled, ran, timed or checked anything. Push this branch with `MOJOLEARN_WIDE_REBUILD_OK=1` (the rebuild fence
+flags the shared modules it changes; never `--no-verify`). Per-lane site tables: `~/mojolearn-evidence/perf-sweep-*.md`.
+
+- The "20 ms per call on CPU" was NOT a CPU problem: commit b25df4e213 (Oct 25) cost every column that much and
+  7bd3eb57a6 (Oct 28) removed it; the first report paired the CPU column to Oct 25 and the GPU columns to Nov 5.
+  Corrected table: `~/mojolearn-evidence/regressions-since-0855-corrected.md` (tool: `tools/identity_timing_compare.py`
+  `cross` / `series` modes refuse cross-column claims at different commits). What remains is ~1.5-2.5 ms per public
+  call on every column (repeated module/attribute/admission checks), which the lanes attacked.
+- Top lanes still slower than 0.8.55 in the stored records are tree and discriminant-analysis TRAIN stages (per-label
+  Python checks, fixed on this branch). Most Apple-only slow lanes were Mac load on Nov 5, not code.
+- Ideas file (Fable): `~/mojolearn-evidence/ideas-cpu-per-call-cost.md`. HELD until after the first compile: one
+  `AdmittedCall` record per public call, and a native kernel call table between binding modules (also the owed
+  manifold driver inside `_mojolearn_x_decomp`).
+- Compile watch list: `bindings/cpython_table.mojo` (new pointer table, 53+ bindings, prototypes never compiled),
+  `bindings/native_class_admission.mojo` (type/dict watchers, Python >= 3.12), process-wide provider snapshot cache
+  (`providers/python/x_neighbors_admission_pyapi.mojo`; revert if sharing across extensions misbehaves),
+  `neighbor_query_native.mojo:123` and `parallel_shard_native.mojo:972` (ternaries), cluster host cells now parallel
+  (`cluster/host/host_cells.mojo:64`), identity records kept in native side tables (`bindings/trees_side_records.mojo`).
+- After the compile: scikit-learn estimator checks (dict unchanged by predict, pickle) on trees, meta, boosting,
+  isolation forest, neighbours, IVF; one profile of a one-row predict on a CPU build.
+
 ## Known product defects found tonight, not yet assigned
 
 - Isolation forest on CPU refits the whole forest on every score call (`bindings/trees_public_iforest.mojo:198-212`).
