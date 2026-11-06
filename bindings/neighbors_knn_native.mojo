@@ -29,6 +29,7 @@
 # x_neighbors for fit. Explicit bindings remain supported for native drivers.
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
+from std.ffi import _Global
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -77,20 +78,79 @@ comptime _REDUCE_INTEGRAL = 4
 # ------------------------------------------------------------------ Python glue
 
 
+# Fitted state is admitted once, not on every query (lane perf-neighbors-
+# resident, report item 4: the per-query re-admission of the fitted index and
+# its scalars came with the native query owners, e230964ecf and later). The
+# stamp is the exact tuple of the admitted objects behind a per-process native
+# token: a query whose fitted slots still hold the very same objects (`is`)
+# skips their admission; any replaced slot, a refit (a fresh resident holder),
+# a pickle or a deepcopy (a different token) admits everything again. The
+# stamp holds its objects, so an identity is never reused while it is stored.
+struct _AdmittedToken(Defaultable, Movable):
+    var token: PythonObject
+
+    def __init__(out self):
+        self.token = PythonObject(None)
+
+
+comptime _ADMITTED_TOKEN = _Global[StorageType=_AdmittedToken, name="MojolearnNeighborAdmittedTokenV1",
+    init_fn=_AdmittedToken.__init__]
+
+
+def _admitted_token() raises -> PythonObject:
+    var state = _ADMITTED_TOKEN.get_or_create_ptr()
+    if state[].token is None:
+        state[].token = py_call(_b().object)
+    return state[].token
+
+
+def knn_state_values(fields: PythonObject, names: PythonObject) raises -> PythonObject:
+    """The admission stamp of `names` in `fields`: the token, then each slot's
+    current object (None where it is absent)."""
+    var values = Python.list(_admitted_token())
+    for i in range(len(names)):  # small-loop(fixed fitted-state slot names)
+        _ = py_call(values.append, py_get(fields, names[i]))
+    return py_call(_b().tuple, values)
+
+
+def knn_state_unchanged(stored: PythonObject, values: PythonObject) raises -> Bool:
+    """True when `stored` is a stamp of exactly the objects in `values`."""
+    if stored is None or py_type(stored) is not _b().tuple or len(stored) != len(values):
+        return False
+    for i in range(len(values)):  # small-loop(fixed fitted-state identities)
+        if stored[i] is not values[i]:
+            return False
+    return True
+
+
 def _admit_knn_state(model: PythonObject, context: PythonObject) raises:
     classical_check_layout(model, context)
     var fields = py_fields(model)
+    # Class lists are mutable containers: admitted on every call (O(classes)).
+    var lists = Python.tuple("_classes_list", "_label_names")
+    for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
+        var value = py_get(fields, lists[i])
+        if value is not None:
+            classical_admit_value(value, context)
     var scalars = Python.tuple("algorithm", "metric", "p", "weights", "n_neighbors", "query_tile",
         "n_features_in_", "n_samples_fit_", "outputs_2d_")
+    var buffers = Python.tuple("_index", "_y_cols")
+    var holder = PythonObject(None)
+    if py_get(fields, "_resident_holder") is not None:
+        holder = _holder(fields)
+    var stamp = knn_state_values(fields, scalars + buffers)
+    if holder is not None and knn_state_unchanged(py_get(holder, "admitted_predict"), stamp):
+        return
     for i in range(len(scalars)):  # small-loop(fixed neighbor parameter and fitted scalar schema)
         var value = py_get(fields, scalars[i])
         if value is not None:
             host_inference_scalar(value, context, True)
-    var buffers = Python.tuple("_index", "_y_cols", "_classes_list", "_label_names")
-    for i in range(len(buffers)):  # small-loop(fixed neighbor buffer and class owners)
+    for i in range(len(buffers)):  # small-loop(fixed neighbor buffer owners)
         var value = py_get(fields, buffers[i])
         if value is not None:
             classical_admit_value(value, context)
+    if holder is not None:
+        py_setitem(holder, "admitted_predict", stamp)
 
 
 def _b() raises -> PythonObject:
@@ -654,15 +714,18 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
 # ------------------------------------------------------------------ predict
 
 
-def _queries(model: PythonObject, x_source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+def _queries(model: PythonObject, x_source: PythonObject, mut dist: PythonObject,
+             context: PythonObject) raises -> ArrayMetadata:
     """The prediction preamble: fitted check, float32 queries, the metric
-    input check (with `_dist_params`' refusals), width and k checks."""
+    input check (with `_dist_params`' refusals), width and k checks. `dist`
+    receives the resolved `_dist_params`, read once per call."""
     var fields = py_fields(model)
     if (py_get(fields, PythonObject("_index"), PythonObject(None)) is None
             or py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None):
         raise Error("mojolearn: call fit before predict")
     var q = family_f32_snapshot(x_source, 2, "X", context, True)
-    _check_metric_input(_class_name(model), Int(py=_dist_params(model, context)[0]), q)
+    dist = _dist_params(model, context)
+    _check_metric_input(_class_name(model), Int(py=dist[0]), q)
     var features = family_field(fields, "n_features_in_")
     if q.shape[1] != Int(py=features):
         raise Error("mojolearn: X has " + String(q.shape[1]) + " features, index has " + family_str(features))
@@ -679,7 +742,8 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     n_classes)`; the search and the vote are one compiled call."""
     var b = _b()
     var fields = py_fields(model)
-    var query = _queries(model, x_source, context)
+    var dist = PythonObject(None)
+    var query = _queries(model, x_source, dist, context)
     var q = query.keep
     var k = family_field(fields, "n_neighbors")
     var nq = query.shape[0]
@@ -712,7 +776,6 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     var params = Python.list(idx.shape[0], PythonObject(nq), idx.shape[1], k, family_field(fields, "query_tile"),
                              PythonObject(n_out), PythonObject(1 if want_proba else 0))
     _ = py_call(params.extend, n_classes)
-    var dist = _dist_params(model, context)
     var used: PythonObject
     if handle is not None:
         # The handle rides at the front of `params`: a binding takes at most
@@ -813,7 +876,8 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     query, float32; one compiled call for the search and the mean."""
     var b = _b()
     var fields = py_fields(model)
-    var query = _queries(model, x_source, context)
+    var dist = PythonObject(None)
+    var query = _queries(model, x_source, dist, context)
     var q = query.keep
     var k = family_field(fields, "n_neighbors")
     var nq = query.shape[0]
@@ -830,7 +894,6 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     # (bindings/_mojolearn.mojo::knn_regress_binding).
     var params = Python.list(idx.shape[0], PythonObject(nq), idx.shape[1], k, family_field(fields, "query_tile"),
                              PythonObject(n_out))
-    var dist = _dist_params(model, context)
     var used: PythonObject
     if handle is not None:
         used = family_call(resident, handle, classical_address(idx), PythonObject(query.source.addr), classical_address(y_cols),

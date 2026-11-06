@@ -225,6 +225,9 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var binding = args[0]
     var fields = _fields(model)
     _ = py_call(fields.pop, PythonObject("_device_list_data"), PythonObject(None))
+    # A refit replaces every fitted array: drop the query admission stamp
+    # (bindings/neighbor_query_native.mojo `_admit_state`) and what it holds.
+    _ = py_call(fields.pop, PythonObject("_query_admitted"), PythonObject(None))
     _ann_release(fields, "ivf_flat_index_release")
     var x = x_snapshot.keep
     var n = x_snapshot.shape[0]
