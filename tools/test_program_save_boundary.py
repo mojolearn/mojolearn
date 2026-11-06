@@ -35,7 +35,10 @@ def test_save_provenance_is_import_connected_and_exact():
     assert 'py_type(version) is not b.str or py_type(platform) is not b.str' in source
     bridge = (ROOT/'python/mojolearn/_native_program_save_bridge.py').read_text()
     assert 'system.sysname + \' \' + system.machine' in bridge
-    assert 'layouts=(_layout(cls),), version=__version__' in bridge
+    # 1edde63a6a added the Session layout next to the Program layout.
+    assert 'layouts=(_layout(cls),), session_layout=_layout(session_cls),' in bridge
+    assert 'version=__version__,' in bridge
+    assert 'from ._version import __version__' in bridge
     ops = ast.parse((ROOT/'python/mojolearn/ops.py').read_text())
     assert any(isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
                and isinstance(node.value.func, ast.Name) and node.value.func.id == '_connect_program_save'
