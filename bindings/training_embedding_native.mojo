@@ -269,22 +269,28 @@ def embedding_indices(value: PythonObject, context: PythonObject) raises -> Pyth
             # conversion; admit every resulting leaf before calling a slot.
             var leaves = Python.list()
             ref cpy = Python().cpython()
+            # The stored object pointers are read straight from the buffer
+            # in logical C order (lane p3-neural-blocks): no index tuple, no
+            # by-name PyObject_GetItem per element. An exact object ndarray's
+            # item access returned the same stored object (one new
+            # reference); the leaves are admitted below as before.
+            var steps = view.strides.copy()
+            if not view.has_strides or len(steps) != len(view.shape):
+                steps = List[Int](length=len(view.shape), fill=0)
+                var step = view.itemsize
+                for j in range(len(view.shape) - 1, -1, -1):  # driver-loop: C-order strides of the object buffer
+                    steps[j] = step
+                    step *= view.shape[j]
             for i in range(count):  # driver-loop: native index-container item unboxing in logical C order
                 var remaining = i
-                var words = List[Int](length=len(view.shape), fill=0)
-                for j in range(len(view.shape) - 1, -1, -1):  # driver-loop: coordinates of one scalar item
-                    words[j] = remaining % view.shape[j]
+                var offset = 0
+                for j in range(len(view.shape) - 1, -1, -1):  # driver-loop: byte offset of one stored item
+                    offset += (remaining % view.shape[j]) * steps[j]
                     remaining //= view.shape[j]
-                var indexes = Python.list()
-                for j in range(len(words)):  # driver-loop: assemble the native scalar index tuple
-                    py_call(indexes.append, words[j])
-                var index = py_call(context["container_types"][1], indexes)
-                var item = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(value._obj_ptr, index._obj_ptr)
-                _ = index^
-                if not item:
-                    var failure = stash_python_error()
-                    raise failure^
-                var scalar = PythonObject(from_owned=item)
+                var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=view.addr + offset)[0]
+                if not raw:
+                    raise Error("TypeError: embedding indices contain an uninitialized object slot")
+                var scalar = PythonObject(from_owned=cpy.Py_NewRef(raw))
                 py_call(leaves.append, scalar)
             var packed = embedding_leaf_store(leaves, True, context)
             storage = packed[0]
