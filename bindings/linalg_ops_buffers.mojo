@@ -6,7 +6,7 @@
 # even, integers range checked, float to integer truncated toward zero), so the
 # kernels read the same element values the Python shells handed them.
 from std.math import isinf
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.sys.compile import is_defined
@@ -349,6 +349,27 @@ def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
             strides[k] = step
             step *= v.shape[k]
     var count = v.count()
+    if same and nd >= 1 and count > 0 and strides[nd - 1] == item:
+        # Same dtype, unit-stride last axis (a row slice, a transposed outer
+        # axis): one memcpy per contiguous run instead of one byte-assembled
+        # load and store per element (p3 rank 99). Same bytes.
+        var run = v.shape[nd - 1]
+        var runs = count // run
+        var ridx = List[Int](length=nd, fill=0)
+        var roff = 0
+        for r in range(runs):  # cpu-route: host input layout copy, one contiguous run at a time
+            memcpy(dest=LIN_BP(unsafe_from_address=dst + r * run * item),
+                   src=LIN_BP(unsafe_from_address=v.addr + roff), count=run * item)
+            var k = nd - 2
+            while k >= 0:  # driver-loop: over the outer axes of one run step
+                ridx[k] += 1
+                roff += strides[k]
+                if ridx[k] < v.shape[k]:
+                    break
+                roff -= strides[k] * v.shape[k]
+                ridx[k] = 0
+                k -= 1
+        return
     var idx = List[Int](length=nd, fill=0)
     var off = 0
     var low = 0
