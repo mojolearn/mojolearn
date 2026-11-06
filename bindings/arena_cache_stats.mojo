@@ -7,7 +7,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.sequence_dtype_native import sequence_dtype_create
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_namespace_string_keys, native_mapping_string_keys
-from bindings.p3_array_arena_records import P3_STATS_LAYOUT, p3_layout_admitted, p3_layout_admit
+from bindings.p3_array_arena_records import P3_STATS_LAYOUT, p3_layout_admitted, p3_layout_admit, P3_DICT_CACHE_KEYS, p3_dict_admitted, p3_dict_admit
 
 
 def _string_keys(mapping: PythonObject, context: PythonObject) raises:
@@ -197,7 +197,12 @@ def _admit_entry_keys(entries: PythonObject, context: PythonObject) raises:
     or equality hooks). The keys DeviceCache itself publishes are exact
     (int, int) tuples: those are admitted by three native type identity
     checks. Any other key takes the full `_hash_key` admission, so the
-    accepted and refused key sets are unchanged."""
+    accepted and refused key sets are unchanged.
+
+    p3-array-arena: the walk runs only when the dictionary changed since its
+    last full admission (dictionary watcher, Python >= 3.12)."""
+    if p3_dict_admitted(P3_DICT_CACHE_KEYS, entries):
+        return
     ref cpy = Python().cpython()
     var tuple_type = context["arena_native_types"]["tuple"]
     var int_type = context["arena_native_types"]["int"]
@@ -217,12 +222,14 @@ def _admit_entry_keys(entries: PythonObject, context: PythonObject) raises:
                 continue
         others.append(stored^)
     if len(others) == 0:
+        p3_dict_admit(P3_DICT_CACHE_KEYS, entries)
         return
     # Full admission runs after the walk, so nothing it reads can disturb
     # the in-place dictionary iteration.
     var key_types = HashKeyTypes(context)
     for i in range(len(others)):  # driver-loop: keys not of the published (int, int) shape
         _hash_key(others[i], context, key_types)
+    p3_dict_admit(P3_DICT_CACHE_KEYS, entries)
 
 
 def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject,

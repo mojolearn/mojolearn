@@ -45,6 +45,7 @@ comptime P3_FROM_BUFFER_LAYOUT = 7    # array_from_buffer_native class slots
 comptime P3_ARRAY_DOOR_LAYOUT = 8     # array_native._admit
 comptime P3_STATS_LAYOUT = 9          # arena_cache_stats class walks
 comptime P3_ROWS_EXACT_LAYOUT = 10    # x_prep_native_inputs._rows_fields (exact DeviceRows class)
+comptime P3_SETATTR_LAYOUT = 11       # arena_cache_upload._counter_next setter hooks
 
 
 struct P3LayoutRecords(Defaultable, Movable):
@@ -186,6 +187,7 @@ comptime P3_DICT_ENTRY_TUPLE_INTS = 1   # x_prep resident cache entries: (int, i
 comptime P3_DICT_BINDING_IDS = 2        # x_prep scope caches: (int, str) keys
 comptime P3_DICT_INT_IDS = 3            # model-selection resident entries: int keys
 comptime P3_DICT_STR_INT = 4            # numpy sctypeDict: str or int keys
+comptime P3_DICT_CACHE_KEYS = 5         # DeviceCache entries: arena_cache_stats._admit_entry_keys
 
 
 struct P3DictRecords(Defaultable, Movable):
