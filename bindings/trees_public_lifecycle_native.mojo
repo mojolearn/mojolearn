@@ -21,7 +21,7 @@ from bindings.trees_public_score import forest_score_public
 from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast, trees_f32
 from bindings.trees_public_auxiliary import forest_auxiliary, forest_shape
 from bindings.trees_public_state import forest_restore_state, tree_is_fitted
-from bindings.trees_side_records import trees_admit_parameters
+from bindings.trees_side_records import trees_admit_parameters, trees_finite_mark, trees_finite_clear
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -118,9 +118,13 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             raise Error("TypeError: native forest fit depth must be an exact integer")
         var depth = Int(py=depth_object)
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+        # classical_check_x refused NaN and infinity in x: the fit skips its
+        # second scan of it (trees_side_records `trees_finite_known`).
+        trees_finite_mark(x)
         try:
             result = forest_fit(model, Python.tuple(x, y, args[2], args[3], args[4]), context)
         finally:
+            trees_finite_clear()
             fields = py_fields(model)
             if depth > 0:
                 py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))

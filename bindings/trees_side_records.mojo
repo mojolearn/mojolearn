@@ -19,6 +19,7 @@
 # by item, with their lengths; anything else by identity). Values are
 # compared by identity only (counts by value), so no user `__eq__`/`__hash__`
 # or other Python protocol runs. A record never holds its own model.
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
@@ -184,3 +185,50 @@ def trees_admit_parameters(model: PythonObject, fields: PythonObject, names: Pyt
             classical_admit_value(fields[names[i]], context)
     if recordable:
         _ = trees_side_put(_PARAMS_SLOT, model, key)
+
+
+# ------------------------------------------------- finite-scanned fit inputs
+#
+# The forest public door admits X with classical_check_x, which refuses NaN
+# and infinity while casting; the forest fit then scanned the same X again
+# (`_finite_or_refuse`, O(n d) per fit). The door registers its admitted X
+# here for the duration of its fit, and a float32 copy made from a
+# registered source is registered too. A scan is skipped only for a matrix
+# whose owner is registered, so a matrix from any other caller (a member
+# fit, a meta-estimator) is scanned as before. Entries are strong
+# references (no address reuse while registered) and the door clears them
+# when its fit ends; a concurrent clear only causes an extra scan.
+
+
+struct TreesFiniteSources(Defaultable, Movable):
+    var items: List[PythonObject]
+
+    def __init__(out self):
+        self.items = List[PythonObject]()
+
+
+comptime TREES_FINITE = _Global[StorageType=TreesFiniteSources, name="MojolearnTreesFiniteSourcesV1",
+                                init_fn=TreesFiniteSources.__init__]
+
+
+def trees_finite_known(value: PythonObject) raises -> Bool:
+    """`value` was admitted finite by the public door of the running fit."""
+    var g = TREES_FINITE.get_or_create_ptr()
+    for i in range(len(g[].items)):  # small-loop(items: the running fit's registered inputs, one or two)
+        if g[].items[i] is value:
+            return True
+    return False
+
+
+def trees_finite_mark(value: PythonObject) raises:
+    var g = TREES_FINITE.get_or_create_ptr()
+    g[].items.append(value)
+
+
+def trees_finite_clear() raises:
+    var g = TREES_FINITE.get_or_create_ptr()
+    # Hold a second reference while the registry empties, so no object is
+    # released (no destructor runs) while the registry is being changed.
+    var items = g[].items.copy()
+    g[].items.clear()
+    _ = items^

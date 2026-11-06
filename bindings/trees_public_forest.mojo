@@ -32,6 +32,7 @@ from bindings.trees_public_inputs import (
     trees_decode_labels, trees_argmax_rows, trees_class_rows_only, trees_weighted_rows, trees_cast,
     trees_view, trees_call,
 )
+from bindings.trees_side_records import trees_finite_known, trees_finite_mark
 from bindings.trees_lifetime import trees_resident_new
 from bindings.metrics_native_support import metric_is_integral, metric_warning_location
 from bindings.classical_warnings import classical_warning
@@ -750,13 +751,20 @@ def _y_rows_check(n: Int, rows: Int) raises:
 def _x_for(source: PythonObject, rowmajor: Bool, context: PythonObject) raises -> TreesMatrix:
     """`_fit_arrays`' X: the forest layout when the fit has a row-major
     entry, else the column-major float32 copy."""
-    if rowmajor:
-        return trees_forest_layout(source, "X", context)
-    return trees_f32(source, 2, "F", "X", context)
+    var x = trees_forest_layout(source, "X", context) if rowmajor else trees_f32(source, 2, "F", "X", context)
+    # A float32 copy of an input the public door admitted finite is finite.
+    if x.keep is not source and trees_finite_known(source):
+        trees_finite_mark(x.keep)
+    return x^
 
 
 def _finite_or_refuse(x: TreesMatrix, device_scan: Bool, context: PythonObject) raises:
-    if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
+    # The public door's classical_check_x already refused NaN and infinity
+    # in this X (trees_finite_known; lane perf-trees-owed, 2026-11-06): the
+    # second O(n d) scan is skipped for it, and kept for every other caller.
+    if device_scan or trees_finite_known(x.keep):
+        return
+    if not trees_all_finite(x.addr, x.rows * x.cols, False, context):
         raise Error(TREES_NONFINITE)
 
 
@@ -862,7 +870,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         if _truthy(cfg["oob_score"]):
             oob = trees_empty(Python.tuple(labels.n, k), "<f8", context)
             score = trees_vector(1, "<f8", context)
-        var x = trees_f32(X, 2, "F", "X", context)
+        var x = _x_for(X, False, context)
         var importance = trees_vector(x.cols, "<f4", context) if importances else PythonObject(None)
         var tail = Python.list(PythonObject(0 if not weights else weights.value().addr),
                                PythonObject(0 if oob is None else trees_address(oob)),
@@ -888,7 +896,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         if not _has(rf, "rf_classifier_fit_shard"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
         var tail = Python.list(tree_start, PythonObject(0 if not weights else weights.value().addr))
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y_addr, labels.n, k,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_shard", True, tail, False), None, rf, context)
         _ = labels  # retain shard labels through the address-only fit
         _ = weights^
@@ -897,7 +905,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         if not _has(rf, "rf_classifier_fit_weighted"):
             raise Error("RuntimeError: rebuild the RF binding for class_weight support")
         var tail = Python.list(PythonObject(weights.value().addr))
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y_addr, labels.n, k,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_weighted", True, tail, True), None, rf, context)
         _ = labels
         _ = weights^
@@ -970,7 +978,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = w  # keep the Python object alive through the native call above
         var tail = Python.list(PythonObject(w.addr), w_max)
         _ = w  # keep the Python object alive through the native call above
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y32.addr, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_weighted", True, tail, True), None, rf, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
@@ -987,7 +995,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         if _truthy(cfg["oob_score"]):
             oob = trees_vector(y32.rows, "<f8", context)
             score = trees_vector(1, "<f8", context)
-        var x = trees_f32(X, 2, "F", "X", context)
+        var x = _x_for(X, False, context)
         var importance = trees_vector(x.cols, "<f4", context) if importances else PythonObject(None)
         var tail = Python.list(PythonObject(0 if oob is None else trees_address(oob)),
                                PythonObject(0 if score is None else trees_address(score)),
@@ -1010,7 +1018,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
     if tree_start is not None:
         if not _has(rf, "rf_regressor_fit_shard"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y32.addr, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_shard", True, Python.list(tree_start), False), None, rf, context)
         _ = y32^
         return model
