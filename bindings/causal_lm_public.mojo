@@ -1305,11 +1305,11 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
     var blocks: List[PythonObject]
     if len(admitted_blocks) == len(model._blocks):
         blocks = admitted_blocks.copy()
-    elif read_plan and len(read_plan.value().blocks) == len(model._blocks):
+    elif Bool(read_plan) and len(read_plan.value().blocks) == len(model._blocks):
         blocks = read_plan.value().blocks.copy()
     else:
         blocks = _block_list(mods, model)
-    if read_plan and len(read_plan.value().blocks) == 0:
+    if Bool(read_plan) and len(read_plan.value().blocks) == 0:
         read_plan.value().blocks = blocks.copy()
     var persist = held or (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
