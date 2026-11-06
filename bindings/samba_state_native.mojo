@@ -91,7 +91,7 @@ def samba_schedule_snapshot(schedule: PythonObject, context: PythonObject) raise
     var kind = String()
     for name in [String("constant"), String("linear"), String("cosine")]:  # driver-loop: over the three built-in schedule kinds
         if schedule_type is classes[name]:
-            kind = name
+            kind = String(name)
     if kind == "":
         raise Error("NotImplementedError: Samba requires ConstantLR, WarmupLinearLR or WarmupCosineLR; Python schedule callbacks cannot execute in the native runtime")
     var fields = samba_fields(schedule)
