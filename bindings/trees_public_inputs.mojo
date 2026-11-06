@@ -32,6 +32,15 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.metrics_native_support import metric_is_bool, metric_is_integral, metric_is_real, metric_float
+from bindings.classical_labels import (
+    ClassicalLabels,
+    _encode_label_view as classical_encode_label_view,
+    _native_labels as classical_native_labels,
+    _flat_list_labels as classical_flat_list_labels,
+    _text_buffer_labels as classical_text_buffer_labels,
+    _text_list_labels as classical_text_list_labels,
+)
+from bindings.label_input_sources import labels_storage_source
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -822,11 +831,77 @@ def trees_encode_labels(y: PythonObject, context: PythonObject) raises -> TreesL
     var numeric = _numeric_label_view(y, context, bool_source)
     if numeric:
         return _native_labels(numeric.value(), bool_source, context)
+    # perf3-label-doors (2026-11-06): the classical encoder's one-read paths
+    # (bindings/classical_labels.mojo, perf2-labels), each giving exactly the
+    # classes and codes the walk below gives the same input, so no bits
+    # change. A numeric ndarray / Array / numpy-backed Series this copy's view
+    # does not take (a C-ordered matrix, a bool or one-byte '|' Array,
+    # int8 / uint16 / float16 storage) is encoded from its buffer; only
+    # numeric storage is handed over, so the classical admission it runs
+    # first meets nothing this encoder would refuse differently.
+    var stored = labels_storage_source(y, context)
+    if stored is not None:
+        var kind: String
+        if py_type(stored) is py_get(context, "ndarray"):
+            kind = String(stored.dtype.kind)
+        else:
+            var typestr = String(stored.dtype)
+            kind = String(typestr[byte=1:2])
+        if kind == "i" or kind == "u" or kind == "b" or kind == "f":
+            var wide_bool = False
+            var wide = classical_encode_label_view(y, context, wide_bool)
+            if wide:
+                return _trees_of(classical_native_labels(wide.value(), wide_bool, context))
+    # An exact flat list / tuple of exact ints, floats or bools: one native
+    # encode from the container's C storage (no flatten, no type walk).
+    var direct = classical_flat_list_labels(y, context)
+    if direct:
+        return _trees_of(direct.value())
+    # An exact '<U' ndarray: UCS4 read from its buffer, native stable sort.
+    var text = classical_text_buffer_labels(y, context)
+    if text:
+        return _trees_of(text.value())
     var flat = _flatten_labels(y, context)
     var listed = _list_labels(flat, context)
     if listed:
         return listed.value().copy()
+    # A flat list of exact str labels only (this copy's ORDER RULE refuses
+    # str subclasses, which the native str reader would take): code points
+    # read natively and sorted by the stable merge sort, the same classes
+    # (first of each run) and codes as the ORDER RULE.
+    if _all_exact_str(flat, b):
+        var named = classical_text_list_labels(flat, context)
+        if named:
+            return _trees_of(named.value())
     return _sorted_classes(flat, context)
+
+
+def _trees_of(labels: ClassicalLabels) -> TreesLabels:
+    return TreesLabels(labels.classes, labels.codes, labels.n)
+
+
+def _all_exact_str(flat: PythonObject, b: PythonObject) raises -> Bool:
+    """True for a nonempty list whose every label is exactly a str, read by
+    class pointer through the list's C storage (no label boxed into a Python
+    call), stopping at the first other label."""
+    var n = len(flat)
+    if n == 0 or py_type(flat) is not b.list:
+        return False
+    ref cpy = Python().cpython()
+    var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
+    var str_type = b.str
+    for i in range(n):  # driver-loop: exact str label classes by pointer, one C read per label
+        var raw = get_item(flat._obj_ptr, i)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        var item_type = cpy.PyObject_Type(raw)
+        var same = item_type == str_type._obj_ptr
+        cpy.Py_DecRef(item_type)
+        if not same:
+            return False
+    _ = flat  # keep the list alive through the borrowed item reads above
+    _ = str_type
+    return True
 
 
 def trees_label_kind(var classes: PythonObject, context: PythonObject) raises -> String:
