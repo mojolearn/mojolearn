@@ -91,13 +91,17 @@ def decomp_seed_word(seed: PythonObject) raises -> Int:
 
 
 def decomp_is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
-    """The model's class MRO, read through type's own descriptor, holds cls."""
-    var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        if mro[k] is cls:
-            return True
-    return False
+    """The model's class MRO holds cls."""
+    # CPython's own subtype test walks the same tp_mro by identity in one
+    # native call (no builtins module check, MRO tuple fetch or per-entry
+    # Python indexing per call). An MRO holds classes only, so anything
+    # that is not a class is never found, as before.
+    var meta = py_type(py_type(PythonObject(0)))  # the builtin `type`
+    ref cpy = Python().cpython()
+    var subtype = cpy.lib.get_function[Int32]("PyType_IsSubtype")
+    if subtype(py_type(cls)._obj_ptr, meta._obj_ptr) == 0:
+        return False
+    return subtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
 
 
 def decomp_class_attr(model: PythonObject, name: String) raises -> PythonObject:
