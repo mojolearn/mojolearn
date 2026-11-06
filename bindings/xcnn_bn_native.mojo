@@ -21,6 +21,7 @@ from bindings.xcnn_common import (
 from bindings.xseq_native_common import xseq_f32
 from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value
+from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value
 from bindings.xcnn_common import xcnn_out_new, xcnn_dev_fields
 
@@ -38,10 +39,11 @@ def _truth(value: PythonObject) raises -> Bool:
 
 def _bn_admit(layer: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(layer)
+    var mods = NativeModules()   # one module view for the fifteen fields
     for name in ["num_features", "eps", "affine", "momentum", "track_running_stats", "num_batches_tracked_",  # driver-loop: over consumed passive settings
                  "input_shape", "numeric_mode", "training", "_run_stale", "_aux_k", "_mode", "_x3shape", "_shape", "_xdev"]:  # driver-loop: admit consumed passive settings before coercion
         var value = py_get(fields, PythonObject(name))
-        neural_plain_value(value, 0, context)
+        neural_plain_value(mods, value, 0, context)
     for name in ["_run_dev", "_xdev_dev"]:  # driver-loop: resident owner metadata retained by forward
         var owner = py_get(fields, PythonObject(name))
         if owner is not None:
@@ -252,7 +254,12 @@ def _host_result(y: PythonObject, shape: List[Int]) raises -> PythonObject:
 
 def xcnn_bn_forward(layer: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`BatchNorm2d.forward(x)`."""
-    var fields = _bn_admit(layer, context)
+    return _bn_forward_admitted(layer, _bn_admit(layer, context), x, context)
+
+
+def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`xcnn_bn_forward` on the fields this operation's `_bn_admit` returned
+    (the public dispatcher admits once, not once per helper)."""
     var features = Int(py=fields["num_features"])
     if xcnn_is_t(x, context):
         var b = xcnn_entries(fields, context)
@@ -317,9 +324,8 @@ def xcnn_bn_forward(layer: PythonObject, x: PythonObject, context: PythonObject)
     return _host_result(y, shape)
 
 
-def _bn_rows(layer: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`BatchNorm2d._rows(X)`."""
-    var fields = _bn_admit(layer, context)
+def _bn_rows(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`BatchNorm2d._rows(X)` on the admitted fields."""
     var a = xcnn_f32(source, "X", context)
     var s = xcnn_shape(a)
     var declared = py_get(fields, "input_shape")
@@ -395,7 +401,11 @@ def xcnn_bn_backward_dev(layer: PythonObject, entries: PythonObject, xh: PythonO
 
 
 def xcnn_bn_backward(layer: PythonObject, gradient: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _bn_admit(layer, context)
+    return _bn_backward_admitted(layer, _bn_admit(layer, context), gradient, context)
+
+
+def _bn_backward_admitted(layer: PythonObject, fields: PythonObject, gradient: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
     if py_get(fields, "_x3shape") is None or py_get(fields, "_shape") is None:
         raise Error("RuntimeError: call forward before backward")
     var shape = _shape_words(fields["_shape"], context)
@@ -457,11 +467,11 @@ def xcnn_bn_layers(layer: PythonObject, operation: String, args: PythonObject, c
             raise Error("AttributeError: " + name)
         return fields[PythonObject(name)]
     if operation == "bn_backward":
-        return xcnn_bn_backward(layer, args[0], context)
+        return _bn_backward_admitted(layer, fields, args[0], context)
     if operation == "bn_forward":
-        return xcnn_bn_forward(layer, args[0], context)
+        return _bn_forward_admitted(layer, fields, args[0], context)
     if operation == "bn_transform":
-        var out = xcnn_bn_forward(layer, _bn_rows(layer, args[0], context), context)
+        var out = _bn_forward_admitted(layer, fields, _bn_rows(fields, args[0], context), context)
         var s = xcnn_shape(out)
         var rest = 1
         for i in range(1, len(s)):  # driver-loop: over shape words
@@ -471,7 +481,7 @@ def xcnn_bn_layers(layer: PythonObject, operation: String, args: PythonObject, c
         var was = fields["training"]
         _set(fields, "training", PythonObject(True))
         try:
-            _ = xcnn_bn_forward(layer, _bn_rows(layer, args[0], context), context)
+            _ = _bn_forward_admitted(layer, fields, _bn_rows(fields, args[0], context), context)
         finally:
             _set(fields, "training", was)
         return layer
