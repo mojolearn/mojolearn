@@ -269,7 +269,10 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
         elif operation.startswith("family_xc_"):
             result = cluster_operation(model, operation, prepared, context)
         else:
-            result = mixture_operation(model, operation, prepared, context)
+            # X is the one classical_check_x admitted above (2-D, non-empty,
+            # finite, float32 C order): the BayesianGaussianMixture queries
+            # skip a second finite scan of it.
+            result = mixture_operation(model, operation, prepared, context, True)
     except error:
         var refused = _refusal(error, fitting, nested, rows, columns, name)
         raise refused^
