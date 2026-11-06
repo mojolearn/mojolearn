@@ -505,6 +505,42 @@ def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonOb
     return fields
 
 
+def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: PythonObject) raises:
+    """Before layer owner `dev` (another binding's) frees its handles: a
+    pending resident weight gradient (`_gw_dev` / `_gb_dev`, a (dev, handle)
+    pair) becomes the host `grad_weight_` / `grad_bias_` it would have
+    downloaded on first read (the `_conv_gradient` shapes), a resident
+    dropout mask becomes `_mask_host`, and every other field holding an old
+    handle number (`_idx_dev`, `_mask_dev`, `_chain`, `_gdev_for`) is
+    cleared."""
+    var b = xcnn_builtins()
+    var names = Python.tuple("_gw_dev", "_gb_dev")
+    for i in range(2):  # small-loop(the two pending gradient fields)
+        var pending = py_get(fields, names[i])
+        if pending is None or py_type(pending) is not b.tuple or len(pending) != 2 or pending[0] is not dev:
+            continue
+        var weight = i == 0
+        var shape = xcnn_shape(fields["weight_"]) if weight else [Int(py=fields["out_channels"])]
+        var value = xcnn_download(dev, pending[1], xcnn_size(shape), context)
+        if weight and Bool(py=py_get(fields, "_gw_1d")):
+            shape = [shape[0], shape[1], shape[3]]
+        py_setitem(fields, "grad_weight_" if weight else "grad_bias_", xcnn_reshape(value, shape))
+        py_setitem(fields, names[i], PythonObject(None))
+        if weight:
+            py_setitem(fields, "_gw_1d", PythonObject(False))
+    var mask = py_get(fields, "_mask_dev")
+    if mask is not None and py_get(fields, "_mask_host") is None and py_get(fields, "_mask_shape") is not None:
+        var mshape = List[Int]()
+        var words = fields["_mask_shape"]
+        for i in range(len(words)):  # small-loop(mask shape words)
+            mshape.append(Int(py=words[i]))
+        var host = xcnn_download(dev, PythonObject(Int(py=mask)), xcnn_size(mshape), context)
+        py_setitem(fields, "_mask_host", xcnn_reshape(host, mshape))
+    for name in ["_idx_dev", "_mask_dev", "_chain", "_gdev_for", "_gdev_g"]:  # small-loop(fields naming old handles)
+        if py_contains(fields, PythonObject(name)):
+            py_setitem(fields, PythonObject(name), PythonObject(None))
+
+
 def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_dev_of(layer, b)`: the layer's `_Dev` on this binding, a new one
     (the old one's arrays freed) when the binding changed."""
@@ -514,6 +550,11 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
     if dev is not None and xcnn_dev_fields(dev, context)["b"] is entries["module"]:
         return dev
     if dev is not None:
+        # p3-cnn-sequence-tsa (hazard C): fields that name a handle of the
+        # old owner are settled before its handles are freed (pending weight
+        # gradients and a dropout mask downloaded to the host, the rest
+        # cleared), so no later read uses a freed or reused handle number.
+        _xcnn_settle_old_dev(fields, dev, context)
         # `_Dev.free()`: every handle of the old binding released, the table emptied
         var old = xcnn_dev_fields(dev, context)
         var table = old["h"]
