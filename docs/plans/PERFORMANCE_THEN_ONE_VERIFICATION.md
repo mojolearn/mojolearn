@@ -218,3 +218,20 @@ profile in `~/mojolearn-evidence/forest-regressor-other-stage.md`. Fix what they
   NumPy's read-only error; replacing the attribute re-uploads). No per-call content hashes.
 - Byte LM `train_step` default returns loss and scalars only; gradients on explicit request (Andrew).
 - Lazy `models` import reverted. PCA whitening scans its fitted buffers natively on each whitened call.
+
+### Decision 2026-11-06 (evening): the owed rows move to AFTER 0.8.66 (Andrew)
+
+Supersedes item B (and A, C where they need new native entry points) of "BEFORE THE RELEASE" above: the rows the fix
+lanes left owed (new native entry points: device-resident fitted state, native training sessions, folds staying on
+the device, fused whole-step entries, the single admission record, the manifold driver) are a planned program after
+the release. Plan: `docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md` (branch `lane/plan-native-entry-points` until
+merged). 0.8.66 ships what is on `integ/perf-20261105` once it compiles and passes: tests on the compiled build,
+then freeze, the ONE verification round on the built wheels (every lane, every column; multi-GPU logical-shard
+check; measurement smoke), TestPyPI rehearsal, publish. Still before the release: items D (profile pass, run on the
+gate box while it is rented; results rank the after-release plan, they do not block the release unless a lane is
+slower than 0.8.55 for a code reason that is quick to fix) and E (release-process changes, done).
+
+Compile state: every GPU binding compiles on sm_89, sm_80 and gfx942 (GitHub cross-compile, 128 + 65 jobs); the
+Linux release build of e289f32355 compiled all eleven merged shards (three device, eight CPU) and assembled; macOS
+development build in progress on the Mac. Compiler stop without a diagnostic in the model selection group: fixed by
+keeping the estimator clone recursion on PythonObject results (cause not isolated; a standalone reproducer compiles).
