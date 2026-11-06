@@ -112,8 +112,7 @@ def _cached_value_types(mut mods: NativeModules, context: PythonObject) raises -
     # vectors are read from, in _SequentialValueTypes order.
     _ = mods.module("builtins")
     var current = List[PythonObject]()
-    for key in ["defaultdict_class", "native_value_types", "scalar_types", "mapping_types",
-                "native_default_factories", "buffer_owner_types"]:  # small-loop(six fixed context entry names)
+    for key in ["defaultdict_class", "native_value_types", "scalar_types", "mapping_types", "native_default_factories", "buffer_owner_types"]:  # small-loop(six fixed context entry names)
         current.append(py_get(context, PythonObject(key)))
     var saved = _SEQUENTIAL_VALUE_TYPES.get_or_create_ptr()
     for i in range(len(saved[].contexts)):  # driver-loop: over cached connected admission contexts (at most _VALUE_TYPE_CONTEXTS)
