@@ -266,6 +266,14 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
     return result
 
 
+def _family_shape_tuple(shape: List[Int]) raises -> PythonObject:
+    """`tuple(shape)` of admitted native dimensions, for a refusal message."""
+    var shape_words = Python.list()
+    for word in shape:  # small-loop(admitted rank for an error message)
+        _ = py_call(shape_words.append, word)
+    return py_call(native_loaded_module("builtins").tuple, shape_words)
+
+
 def family_input_snapshot(source: PythonObject, ndim: Int, name: String,
                         context: PythonObject, dense: Bool = False) raises -> ArrayMetadata:
     # Common provider metadata admission for classical algorithms. Preserve
@@ -280,23 +288,22 @@ def family_input_snapshot(source: PythonObject, ndim: Int, name: String,
     var view = classical_view(prepared, context, name)
     var shape = array_shape_once(view, context)
     var nd = len(shape)
-    var shape_words = Python.list()
     var count = 1
     for word in shape:  # driver-loop: over captured native array rank metadata
-        _ = py_call(shape_words.append, word)
         count *= word
-    var pyshape = py_call(native_loaded_module("builtins").tuple, shape_words)
+    # Perf (lane perf2-cluster): the Python shape tuple is built only for a
+    # refusal's message, not on every admitted input.
     if ndim >= 0 and nd != ndim:
         var hint = String("")
         if ndim == 2 and nd < 2:
             hint = ". " + String(RESHAPE_HINT)
         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
-                    + "-D shape " + family_repr(pyshape) + hint)
+                    + "-D shape " + family_repr(_family_shape_tuple(shape)) + hint)
     if count == 0:
         var what = String("sample(s)")
         if nd == 2 and shape[0] != 0:
             what = "feature(s)"
-        var text = family_repr(pyshape)
+        var text = family_repr(_family_shape_tuple(shape))
         raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
                     + " (shape=" + text + ") while a minimum of 1 is required.")
     if nd > 2:
