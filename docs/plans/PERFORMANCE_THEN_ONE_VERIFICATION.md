@@ -77,6 +77,16 @@ reader). Six Opus fix lanes branch from it; brief `~/mojolearn-evidence/briefs-2
 they report: merge into `integ/perf-20261105`, then the ONE compile and the ONE timing pass (step 3-4 below), on
 Andrew's go.
 
+### Python-removal sweep (Andrew, 2026-11-05 night: "be thorough ... eliminating unnecessary python calls")
+
+Removing Python from a hot path is assumed good: no measuring, no checks of any kind until the one global verify at
+the very end. Five more Opus lanes read every binding file they own and remove per-item Python work, calls back into
+Python, repeated attribute traffic and redundant calls (double validation, several native calls where one suffices,
+state rebuilt per call). Brief: `~/mojolearn-evidence/briefs-20261105/perf-python-sweep-lanes.md`. Lanes (same base):
+`lane/perf-sweep-prep`, `lane/perf-sweep-classical`, `lane/perf-sweep-metrics-tsa`, `lane/perf-sweep-neural`,
+`lane/perf-sweep-parallel-native`. Each leaves a site table at `~/mojolearn-evidence/perf-sweep-<lane>.md`. Second
+wave, after the six fix lanes merge (they own those files now): `trees_*`, `msel_*`, `neighbors_*`, `svc_*`, `host_*`.
+
 ## Known product defects found tonight, not yet assigned
 
 - Isolation forest on CPU refits the whole forest on every score call (`bindings/trees_public_iforest.mojo:198-212`).
