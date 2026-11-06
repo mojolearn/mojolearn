@@ -18,6 +18,41 @@ from providers.python.operation_lock_pyapi import OperationLockLease
 from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_construct, neural_descriptor_handle
 from providers.python.transformer_session_tape_pyapi import transformer_session_tape_forward, transformer_session_tape_backward, transformer_session_tape_discard
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
+from std.ffi import _Global
+from bindings.native_prepared_owner import prepared_key_add, prepared_key_same
+
+
+struct _GenerationStamp(Defaultable, Movable):
+    # Identity key of the last generation class connection admitted by
+    # generation_initialize_binding from this entry: the builtins and array
+    # module handles, the class tuple, its items and every layer registry
+    # key and class. Any replacement, insertion or removal changes the key.
+    var key: PythonObject
+
+    def __init__(out self):
+        self.key = PythonObject(None)
+
+
+comptime _GENERATION_STAMP = _Global[
+    StorageType=_GenerationStamp, name="MojolearnTransformerGenerationStampV1",
+    init_fn=_GenerationStamp.__init__,
+]
+
+
+def _generation_connected(mut mods: NativeModules, classes: PythonObject) raises:
+    # generation_initialize_binding re-admits the whole class registry on
+    # every call. Its result depends only on the identities in the key below,
+    # so it runs again only when one of them changed.
+    var key = mods.module("builtins").list()
+    _ = py_call(key.append, mods.module("builtins"))
+    _ = py_call(key.append, mods.module("array"))
+    prepared_key_add(mods, key, classes)
+    var g = _GENERATION_STAMP.get_or_create_ptr()
+    if g[].key is not None and prepared_key_same(g[].key, key):
+        return
+    g[].key = PythonObject(None)
+    _ = generation_initialize_binding(classes)
+    g[].key = key
 
 
 def _transformer_fields(mut mods: NativeModules, value: PythonObject, cls: PythonObject, names: PythonObject) raises -> PythonObject:
@@ -660,7 +695,7 @@ def transformer_tape_close(mut mods: NativeModules, tape: PythonObject, context:
 
 
 def transformer_public_call(mut mods: NativeModules, operation: String, values: PythonObject, context: PythonObject, neural: PythonObject) raises -> PythonObject:
-    _ = generation_initialize_binding(neural["generation_classes"])
+    _generation_connected(mods, neural["generation_classes"])
     if operation == "state_init":
         return transformer_state_init(mods, values[0], values[1], context, neural)
     if operation == "state_capacity" or operation == "state_keys" or operation == "state_values":
