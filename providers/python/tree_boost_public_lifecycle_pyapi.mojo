@@ -2,7 +2,7 @@
 # Public boost/embedding lifecycle. Existing trees_boost_* remains the internal
 # numerical ABI; this owner replaces the Python _mode validation/output stack.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_get
+from bindings.py_balanced import py_get, py_type
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from bindings.classical_labels import labels_shape_of
@@ -15,6 +15,44 @@ from bindings.parallel_public_result import parallel_public_result
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 from providers.python.gp_public_lifecycle_pyapi import _gp_classifier_target
+from bindings.prep_lda_admission import lda_native_labels
+
+
+def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
+                             context: PythonObject) raises -> PythonObject:
+    """The classifier target a boost fit hands to `trees_boost_fit`.
+
+    A rank-1 integer ndarray or Array takes the forest owner's admission
+    (`lda_native_labels`, trees_public_lifecycle_native) and is passed on
+    unchanged: `trees_encode_labels` reads it with one native call. Every
+    other target (lists, tuples, torch, bool, float, object or 2-D arrays) keeps the GP
+    label snapshot, which boxes, admits and converts each label as a Python
+    object. That snapshot cost about 2.3 s per classifier fit at 20000 rows
+    on every column (identity records b25df4e213 -> 0412c8ee2f, train stage:
+    trees-bagging-clf 0.9 -> 21 s over 9 cells on the CPU column, the
+    regressors unchanged) since 2c61cfe498 moved the boost lifecycle here.
+    The labels' values and order are the same either way (the four lanes'
+    output hashes are equal across those two records), so no bits change."""
+    var cls = py_type(source)
+    var fast = False
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is not None and cls is ndarray:
+        var kind = String(source.dtype.kind)
+        fast = Int(py=source.ndim) == 1 and (kind == "i" or kind == "u")
+    elif cls is context["array_class"]:
+        var typestr = String(source.dtype)
+        fast = Int(py=source.ndim) == 1 and (typestr.startswith("<i") or typestr.startswith("<u")
+                                             or typestr.startswith("|i") or typestr.startswith("|u"))
+    if not fast:
+        return _gp_classifier_target(source, rows, name, context)
+    lda_native_labels(source, context, True, name)
+    var target_shape = labels_shape_of(source, context)
+    if len(target_shape) == 0:
+        raise Error("mojolearn: y must be a sequence of labels")
+    if target_shape[0] != rows:
+        raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", "
+                    + String(target_shape[0]) + "]")
+    return source
 
 
 def tree_boost_public_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -41,7 +79,7 @@ def tree_boost_public_operation(model: PythonObject, operation: String, args: Py
         if kind == "rte":
             _target(args[1], rows, name, context)
         else:
-            var y = _gp_classifier_target(args[1], rows, name, context) if classifier else classical_check_y(args[1], rows, name, context)
+            var y = _boost_classifier_target(args[1], rows, name, context) if classifier else classical_check_y(args[1], rows, name, context)
             call_args = Python.tuple(x, y, args[2])
     elif method == "score":
         call_args = Python.tuple(x, args[1], args[2])
