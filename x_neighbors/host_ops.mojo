@@ -4,8 +4,9 @@
 """The neighbors lane's CPU drivers: host loops over the SAME items (see x_neighbors/gen.py)."""
 from std.sys.compile import is_defined
 from std.os import getenv
+from std.ffi import _Global
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
 from x_neighbors.proba64_nc import softmax64_item
 from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
@@ -16,21 +17,42 @@ from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p
 comptime X_NEIGHBORS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
+struct _XnHostSerial(Defaultable, Movable):
+    var on: Bool
+
+    def __init__(out self):
+        self.on = String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
+
+
+comptime _XN_HOST_SERIAL = _Global[StorageType=_XnHostSerial,
+    name="MojolearnXnHostSerialV1", init_fn=_XnHostSerial.__init__]
+
+
 #: MOJOLEARN_XN_HOST_SERIAL=1: every op's items one after another on one
-#: thread (the loop before lane/neural-pass72)
+#: thread (the loop before lane/neural-pass72). Read once per process (lane
+#: perf-host-grain); set it before the first op.
 def _xn_host_serial() -> Bool:
-    return String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
+    try:
+        return _XN_HOST_SERIAL.get_or_create_ptr()[].on
+    except:
+        return String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
 
 
 #: lane/neural-pass72 (2026-10-01): f(t) for t in [0, count), the items cut
 #: over host tasks by count only. An item is one device thread's work and
 #: writes only its own cells, so the task count and the cut move no bit; the
 #: ops with a shared scratch list and the HOST_SERIAL folds keep the
-#: one-thread loop.
-def _items[F: def(Int) -> None](ref f: F, count: Int):
+#: one-thread loop. Lane perf-host-grain (2026-11-06): `work` is the op's
+#: scalar element operations (gen.py `host_work`: elements touched, or the
+#: pairwise product for a distance / matmul / reduction item), and a call
+#: below the grain floor (`core/host_predict_threads.mojo::
+#: HOST_MIN_TASK_WORK`) runs its items on the calling thread instead of
+#: waking pool workers; 0 means unknown (no floor). Items are
+#: row-independent, so this moves no bit.
+def _items[F: def(Int) -> None](ref f: F, count: Int, work: Int = 0):
     if count <= 0:
         return
-    var tasks = host_predict_task_count(count)
+    var tasks = host_predict_task_count_work(count, work)
     if tasks <= 1 or _xn_host_serial():
         for t in range(count):
             f(t)
@@ -60,7 +82,7 @@ def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_y, imm p_res, imm n, imm m, imm d}:
         sqdist_item(t, p_x, p_y, p_res, n, m, d)
-    _items(_item, n * m)
+    _items(_item, n * m, (n * m * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -72,7 +94,7 @@ def op_nan_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_y, imm p_res, imm n, imm m, imm d}:
         nan_sqdist_item(t, p_x, p_y, p_res, n, m, d)
-    _items(_item, n * m)
+    _items(_item, n * m, (n * m * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -84,7 +106,7 @@ def op_l1dist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_y, imm p_res, imm n, imm m, imm d}:
         l1dist_item(t, p_x, p_y, p_res, n, m, d)
-    _items(_item, n * m)
+    _items(_item, n * m, (n * m * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -96,7 +118,7 @@ def op_kernel(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_y, imm p_res, imm n, imm m, imm d, imm kind, imm gamma, imm coef0, imm degree}:
         kernel_item(t, p_x, p_y, p_res, n, m, d, kind, gamma, coef0, degree)
-    _items(_item, n * m)
+    _items(_item, n * m, (n * m * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -108,7 +130,7 @@ def op_matmul(a: Int, b: Int, res: Int, n: Int, k: Int, m: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_a, imm p_b, imm p_res, imm n, imm k, imm m}:
         matmul_item(t, p_a, p_b, p_res, n, k, m)
-    _items(_item, n * m)
+    _items(_item, n * m, (n * m * k))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -119,7 +141,7 @@ def op_rowsum(a: Int, res: Int, n: Int, m: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
         rowsum_item(t, p_a, p_res, n, m)
-    _items(_item, n)
+    _items(_item, n, ((n * m) + (n)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -130,7 +152,7 @@ def op_colsum(a: Int, res: Int, n: Int, m: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
         colsum_item(t, p_a, p_res, n, m)
-    _items(_item, m)
+    _items(_item, m, ((n * m) + (m)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -141,7 +163,7 @@ def op_unary(x: Int, res: Int, count: Int, op: Int, a: Float32, b: Float32) rais
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_res, imm count, imm op, imm a, imm b}:
         unary_item(t, p_x, p_res, count, op, a, b)
-    _items(_item, count)
+    _items(_item, count, ((count) + (count)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (count) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -153,7 +175,7 @@ def op_knn_select(dmat: Int, dist: Int, idx: Int, n: Int, m: Int, k: Int, exclud
     var p_idx = _i(idx)
     def _item(t: Int) {imm p_dmat, imm p_dist, imm p_idx, imm n, imm m, imm k, imm exclude_self}:
         knn_select_item(t, p_dmat, p_dist, p_idx, n, m, k, exclude_self)
-    _items(_item, n)
+    _items(_item, n, ((n * m) + (n * k) + (n * k)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * k) > 0:
             _f(dist).unsafe_store(0, _f(dist).unsafe_load(0) + Float32(1e-3))
@@ -166,7 +188,7 @@ def op_knn_sq(x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: In
     var p_idx = _i(idx)
     def _item(t: Int) {imm p_x, imm p_y, imm p_dist, imm p_idx, imm n, imm m, imm d, imm k, imm exclude_self}:
         knn_sq_item(t, p_x, p_y, p_dist, p_idx, n, m, d, k, exclude_self)
-    _items(_item, n)
+    _items(_item, n, (n * m * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * k) > 0:
             _f(dist).unsafe_store(0, _f(dist).unsafe_load(0) + Float32(1e-3))
@@ -186,7 +208,7 @@ def op_take_rows(src: Int, rows: Int, res: Int, n_out: Int, d: Int, n_src: Int) 
     var p_res = _f(res)
     def _item(t: Int) {imm p_src, imm p_rows, imm p_res, imm n_out, imm d, imm n_src}:
         take_rows_item(t, p_src, p_rows, p_res, n_out, d, n_src)
-    _items(_item, n_out * d)
+    _items(_item, n_out * d, ((n_src * d) + (n_out) + (n_out * d)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n_out * d) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -198,7 +220,7 @@ def op_take_cols(src: Int, cols: Int, res: Int, n: Int, src_c: Int, c: Int) rais
     var p_res = _f(res)
     def _item(t: Int) {imm p_src, imm p_cols, imm p_res, imm n, imm src_c, imm c}:
         take_cols_item(t, p_src, p_cols, p_res, n, src_c, c)
-    _items(_item, n * c)
+    _items(_item, n * c, ((n * src_c) + (c) + (n * c)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * c) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -227,7 +249,7 @@ def op_lof_lrd(dist: Int, idx: Int, fit_dist: Int, lrd: Int, k: Int, n: Int, n_f
     var p_lrd = _f(lrd)
     def _item(t: Int) {imm p_dist, imm p_idx, imm p_fit_dist, imm p_lrd, imm k, imm n, imm n_fit}:
         lof_lrd_item(t, p_dist, p_idx, p_fit_dist, p_lrd, k, n, n_fit)
-    _items(_item, n)
+    _items(_item, n, ((n * k) + (n * k) + (n_fit * k) + (n)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n) > 0:
             _f(lrd).unsafe_store(0, _f(lrd).unsafe_load(0) + Float32(1e-3))
@@ -240,7 +262,7 @@ def op_lof_score(idx: Int, fit_lrd: Int, lrd: Int, score: Int, k: Int, n: Int, n
     var p_score = _f(score)
     def _item(t: Int) {imm p_idx, imm p_fit_lrd, imm p_lrd, imm p_score, imm k, imm n, imm n_fit}:
         lof_score_item(t, p_idx, p_fit_lrd, p_lrd, p_score, k, n, n_fit)
-    _items(_item, n)
+    _items(_item, n, ((n * k) + (n_fit) + (n) + (n)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n) > 0:
             _f(score).unsafe_store(0, _f(score).unsafe_load(0) + Float32(1e-3))
@@ -254,7 +276,7 @@ def op_kpca_center(k: Int, fit_cols: Int, pred_rows: Int, fit_all: Int, res: Int
     var p_res = _f(res)
     def _item(t: Int) {imm p_k, imm p_fit_cols, imm p_pred_rows, imm p_fit_all, imm p_res, imm n, imm m}:
         kpca_center_item(t, p_k, p_fit_cols, p_pred_rows, p_fit_all, p_res, n, m)
-    _items(_item, n * m)
+    _items(_item, n * m, ((n * m) + (m) + (n) + (1) + (n * m)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -265,7 +287,7 @@ def op_scale_div(x: Int, res: Int, count: Int, s: Float32) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_res, imm count, imm s}:
         scale_div_item(t, p_x, p_res, count, s)
-    _items(_item, count)
+    _items(_item, count, ((count) + (count)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (count) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -275,7 +297,7 @@ def op_svd_flip(v: Int, n: Int, c: Int) raises:
     var p_v = _f(v)
     def _item(t: Int) {imm p_v, imm n, imm c}:
         svd_flip_item(t, p_v, n, c)
-    _items(_item, c)
+    _items(_item, c, ((n * c)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * c) > 0:
             _f(v).unsafe_store(0, _f(v).unsafe_load(0) + Float32(1e-3))
@@ -287,7 +309,7 @@ def op_kpca_alpha_scale(v: Int, w: Int, res: Int, n: Int, c: Int, divide: Int) r
     var p_res = _f(res)
     def _item(t: Int) {imm p_v, imm p_w, imm p_res, imm n, imm c, imm divide}:
         kpca_alpha_scale_item(t, p_v, p_w, p_res, n, c, divide)
-    _items(_item, n * c)
+    _items(_item, n * c, ((n * c) + (c) + (n * c)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * c) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -310,7 +332,7 @@ def op_nc_shrink_d(dsc: Int, cent: Int, nk: Int, std: Int, res: Int, devs: Int, 
     var p_devs = _f(devs)
     def _item(t: Int) {imm p_dsc, imm p_cent, imm p_nk, imm p_std, imm p_res, imm p_devs, imm n, imm d, imm n_classes, imm do_shrink, imm med, imm shrink}:
         nc_shrink_d_item(t, p_dsc, p_cent, p_nk, p_std, p_res, p_devs, n, d, n_classes, do_shrink, med, shrink)
-    _items(_item, n_classes * d)
+    _items(_item, n_classes * d, ((d) + (n_classes * d) + (n_classes) + (d) + (n_classes * d) + (n_classes * d)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n_classes * d) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -325,7 +347,7 @@ def op_nc_shrink(x: Int, cent: Int, nk: Int, std: Int, res: Int, devs: Int, n: I
     var p_devs = _f(devs)
     def _item(t: Int) {imm p_x, imm p_cent, imm p_nk, imm p_std, imm p_res, imm p_devs, imm n, imm d, imm n_classes, imm do_shrink, imm med, imm shrink}:
         nc_shrink_item(t, p_x, p_cent, p_nk, p_std, p_res, p_devs, n, d, n_classes, do_shrink, med, shrink)
-    _items(_item, n_classes * d)
+    _items(_item, n_classes * d, (n_classes * d * n))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n_classes * d) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -339,7 +361,7 @@ def op_nc_decision(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d:
     var p_res = _f(res)
     def _item(t: Int) {imm p_q, imm p_cent, imm p_std, imm p_prior, imm p_res, imm n, imm d, imm n_classes}:
         nc_decision_item(t, p_q, p_cent, p_std, p_prior, p_res, n, d, n_classes)
-    _items(_item, n * n_classes)
+    _items(_item, n * n_classes, (n * n_classes * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * n_classes) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -350,7 +372,7 @@ def op_softmax(x: Int, res: Int, n: Int, c: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_res, imm n, imm c}:
         softmax_item(t, p_x, p_res, n, c)
-    _items(_item, n)
+    _items(_item, n, ((n * c) + (n * c)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * c) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -362,7 +384,7 @@ def op_softmax64(x: Int, res: Int, n: Int, c: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_res, imm n, imm c}:
         softmax64_item(t, p_x, p_res, n, c)
-    _items(_item, n)
+    _items(_item, n, ((n * c) + (n * c)))
 
 
 def op_log_softmax(x: Int, res: Int, n: Int, c: Int) raises:
@@ -370,7 +392,7 @@ def op_log_softmax(x: Int, res: Int, n: Int, c: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_res, imm n, imm c}:
         log_softmax_item(t, p_x, p_res, n, c)
-    _items(_item, n)
+    _items(_item, n, ((n * c) + (n * c)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * c) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -385,7 +407,7 @@ def op_pcs(x: Int, hidx: Int, hbit: Int, res: Int, n: Int, d_in: Int, nf: Int, n
     var p_scr = FP(unsafe_from_address=Int(s_scr.unsafe_ptr()))
     def _item(t: Int) {imm p_x, imm p_hidx, imm p_hbit, imm p_res, imm p_scr, imm n, imm d_in, imm nf, imm nc, imm degree, imm gamma, imm coef0}:
         pcs_item(t, p_x, p_hidx, p_hbit, p_res, p_scr, n, d_in, nf, nc, degree, gamma, coef0)
-    _items(_item, n)
+    _items(_item, n, ((n * d_in) + (degree * nf) + (degree * nf) + (n * nc)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * nc) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -397,7 +419,7 @@ def op_achi2(x: Int, res: Int, n: Int, d: Int, steps: Int, interval: Float32) ra
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_res, imm n, imm d, imm steps, imm interval}:
         achi2_item(t, p_x, p_res, n, d, steps, interval)
-    _items(_item, n * d)
+    _items(_item, n * d, ((n * d) + (n * d * (2 * steps - 1))))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * d * (2 * steps - 1)) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -408,7 +430,7 @@ def op_skew_weights(z: Int, res: Int, count: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_z, imm p_res, imm count}:
         skew_weights_item(t, p_z, p_res, count)
-    _items(_item, count)
+    _items(_item, count, ((count) + (count)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (count) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -421,7 +443,7 @@ def op_skew_transform(lx: Int, w: Int, off: Int, res: Int, n: Int, d: Int, nc: I
     var p_res = _f(res)
     def _item(t: Int) {imm p_lx, imm p_w, imm p_off, imm p_res, imm n, imm d, imm nc}:
         skew_transform_item(t, p_lx, p_w, p_off, p_res, n, d, nc)
-    _items(_item, n * nc)
+    _items(_item, n * nc, (n * nc * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * nc) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -444,7 +466,7 @@ def op_row_normalize(a: Int, res: Int, n: Int, m: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
         row_normalize_item(t, p_a, p_res, n, m)
-    _items(_item, n)
+    _items(_item, n, ((n * m) + (n * m)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -457,7 +479,7 @@ def op_lp_clamp(ld: Int, ystatic: Int, unlabeled: Int, res: Int, n: Int, c: Int)
     var p_res = _f(res)
     def _item(t: Int) {imm p_ld, imm p_ystatic, imm p_unlabeled, imm p_res, imm n, imm c}:
         lp_clamp_item(t, p_ld, p_ystatic, p_unlabeled, p_res, n, c)
-    _items(_item, n)
+    _items(_item, n, ((n * c) + (n * c) + (n) + (n * c)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * c) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -469,7 +491,7 @@ def op_ls_clamp(ld: Int, ystatic: Int, res: Int, count: Int, alpha: Float32) rai
     var p_res = _f(res)
     def _item(t: Int) {imm p_ld, imm p_ystatic, imm p_res, imm count, imm alpha}:
         ls_clamp_item(t, p_ld, p_ystatic, p_res, count, alpha)
-    _items(_item, count)
+    _items(_item, count, ((count) + (count) + (count)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (count) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -480,7 +502,7 @@ def op_ls_laplacian(a: Int, res: Int, n: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_a, imm p_res, imm n}:
         ls_laplacian_item(t, p_a, p_res, n)
-    _items(_item, n * n)
+    _items(_item, n * n, (n * n * n))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * n) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -500,7 +522,7 @@ def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, wei
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_fx, imm p_best_d, imm p_best_i, imm p_res, imm n, imm m, imm d, imm k, imm weights}:
         knn_impute_item(t, p_x, p_fx, p_best_d, p_best_i, p_res, n, m, d, k, weights)
-    _items(_item, n * d)
+    _items(_item, n * d, (n * d * m * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * d) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -513,7 +535,7 @@ def op_col_degree(a: Int, res: Int, n: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_a, imm p_res, imm n}:
         col_degree_item(t, p_a, p_res, n)
-    _items(_item, n)
+    _items(_item, n, ((n * n) + (n)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -525,7 +547,7 @@ def op_ls_laplacian_deg(a: Int, deg: Int, res: Int, n: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_a, imm p_deg, imm p_res, imm n}:
         ls_laplacian_deg_item(t, p_a, p_deg, p_res, n)
-    _items(_item, n * n)
+    _items(_item, n * n, ((n * n) + (n) + (n * n)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * n) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -536,7 +558,7 @@ def op_row_all_zero(a: Int, res: Int, n: Int, m: Int) raises:
     var p_res = _i(res)
     def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
         row_all_zero_item(t, p_a, p_res, n, m)
-    _items(_item, n)
+    _items(_item, n, ((n * m) + (n)))
 
 
 def op_knn_impute_cells(cells: Int, x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int) raises:
@@ -550,7 +572,7 @@ def op_knn_impute_cells(cells: Int, x: Int, fx: Int, res: Int, n: Int, m: Int, d
     var p_res = _f(res)
     def _item(t: Int) {imm p_cells, imm p_x, imm p_fx, imm p_best_d, imm p_best_i, imm p_res, imm n, imm m, imm d, imm k, imm weights, imm nc}:
         knn_impute_cell_item(t, p_cells, p_x, p_fx, p_best_d, p_best_i, p_res, n, m, d, k, weights, nc)
-    _items(_item, nc)
+    _items(_item, nc, (nc * m * d))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * d) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -567,7 +589,7 @@ def op_pagerank_step(q: Int, x: Int, p: Int, dw: Int, dangling: Int, res: Int, n
     var p_res = _f(res)
     def _item(t: Int) {imm p_q, imm p_x, imm p_p, imm p_dw, imm p_dangling, imm p_res, imm n, imm alpha}:
         pagerank_step_item(t, p_q, p_x, p_p, p_dw, p_dangling, p_res, n, alpha)
-    _items(_item, n)
+    _items(_item, n, ((n * n) + (n) + (n) + (n) + (n) + (n)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -579,7 +601,7 @@ def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
     var p_res = _i(res)
     def _item(t: Int) {imm p_a, imm p_lab, imm p_res, imm n}:
         cc_step_item(t, p_a, p_lab, p_res, n)
-    _items(_item, n)
+    _items(_item, n, ((n * n) + (n) + (n)))
 
 
 def op_graph_symmetry(a: Int, flags: Int, n: Int) raises:
@@ -597,7 +619,7 @@ def op_svgp_var(ksu: Int, cmat: Int, res: Int, n: Int, m: Int, kdiag: Float32) r
     var p_res = _f(res)
     def _item(t: Int) {imm p_ksu, imm p_cmat, imm p_res, imm n, imm m, imm kdiag}:
         svgp_var_item(t, p_ksu, p_cmat, p_res, n, m, kdiag)
-    _items(_item, n)
+    _items(_item, n, (n * m * m))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -623,7 +645,7 @@ def op_row_argmax(a: Int, res: Int, n: Int, m: Int) raises:
     var p_res = _i(res)
     def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
         row_argmax_item(t, p_a, p_res, n, m)
-    _items(_item, n)
+    _items(_item, n, ((n * m) + (n)))
 
 
 def op_nc_med_std(std: Int, res: Int, d: Int, p: Int, n_steps: Int) raises:
@@ -660,7 +682,7 @@ def op_p2m_mask_value(x: Int, res: Int, count: Int, want: Float32) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_res, imm count, imm want}:
         p2m_mask_value_item(t, p_x, p_res, count, want)
-    _items(_item, count)
+    _items(_item, count, ((count) + (count)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (count) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -672,7 +694,7 @@ def op_p2m_zero_cols(x: Int, flags: Int, res: Int, n: Int, d: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_x, imm p_flags, imm p_res, imm n, imm d}:
         p2m_zero_cols_item(t, p_x, p_flags, p_res, n, d)
-    _items(_item, n * d)
+    _items(_item, n * d, ((n * d) + (d) + (n * d)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * d) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -685,7 +707,7 @@ def op_p2m_nan_indicator(src: Int, cur: Int, cols: Int, res: Int, n: Int, d: Int
     var p_res = _f(res)
     def _item(t: Int) {imm p_src, imm p_cur, imm p_cols, imm p_res, imm n, imm d, imm c, imm q}:
         p2m_nan_indicator_item(t, p_src, p_cur, p_cols, p_res, n, d, c, q)
-    _items(_item, n * (c + q))
+    _items(_item, n * (c + q), ((n * d) + (n * c) + (q) + (n * (c + q))))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * (c + q)) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -696,7 +718,7 @@ def op_p2m_sign_label(x: Int, res: Int, count: Int, mode: Int, thr: Float32) rai
     var p_res = _i(res)
     def _item(t: Int) {imm p_x, imm p_res, imm count, imm mode, imm thr}:
         p2m_sign_label_item(t, p_x, p_res, count, mode, thr)
-    _items(_item, count)
+    _items(_item, count, ((count) + (count)))
 
 
 def op_p2m_relabel(lab: Int, res: Int, info: Int, n: Int) raises:
@@ -748,7 +770,7 @@ def op_p2m_lp_labels(codes: Int, ld: Int, ys: Int, unl: Int, n: Int, c: Int, ski
     var p_unl = _i(unl)
     def _item(t: Int) {imm p_codes, imm p_ld, imm p_ys, imm p_unl, imm n, imm c, imm skip, imm a}:
         p2m_lp_labels_item(t, p_codes, p_ld, p_ys, p_unl, n, c, skip, a)
-    _items(_item, n * c)
+    _items(_item, n * c, ((n) + (n * c) + (n * c) + (n)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * c) > 0:
             _f(ld).unsafe_store(0, _f(ld).unsafe_load(0) + Float32(1e-3))
@@ -758,7 +780,7 @@ def op_p2m_fill(res: Int, count: Int, value: Float32) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_res, imm count, imm value}:
         p2m_fill_item(t, p_res, count, value)
-    _items(_item, count)
+    _items(_item, count, ((count)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (count) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -768,7 +790,7 @@ def op_p2m_iota(res: Int, count: Int) raises:
     var p_res = _i(res)
     def _item(t: Int) {imm p_res, imm count}:
         p2m_iota_item(t, p_res, count)
-    _items(_item, count)
+    _items(_item, count, ((count)))
 
 
 def op_p2m_transpose(src: Int, res: Int, r: Int, c: Int) raises:
@@ -776,7 +798,7 @@ def op_p2m_transpose(src: Int, res: Int, r: Int, c: Int) raises:
     var p_res = _f(res)
     def _item(t: Int) {imm p_src, imm p_res, imm r, imm c}:
         p2m_transpose_item(t, p_src, p_res, r, c)
-    _items(_item, r * c)
+    _items(_item, r * c, ((r * c) + (r * c)))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (r * c) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
@@ -787,7 +809,7 @@ def op_p2m_transpose_i(src: Int, res: Int, r: Int, c: Int) raises:
     var p_res = _i(res)
     def _item(t: Int) {imm p_src, imm p_res, imm r, imm c}:
         p2m_transpose_i_item(t, p_src, p_res, r, c)
-    _items(_item, r * c)
+    _items(_item, r * c, ((r * c) + (r * c)))
 
 
 def op_p2m_row_sort(indptr: Int, cols: Int, dists: Int, out_cols: Int, out_d: Int, nq: Int, nnz: Int, p: Int, n_steps: Int) raises:
