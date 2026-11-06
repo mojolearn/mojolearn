@@ -11,6 +11,10 @@ from bindings.native_json import native_json_read, native_path, native_path_exis
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.native_class_admission import class_record, class_admit
+
+
+comptime _RECORD_FIELDS_SLOT = "causal_model_record_fields"
 
 
 struct ModelConfigConnection(Defaultable, Movable):
@@ -72,7 +76,9 @@ def model_dict(mut mods: NativeModules, value: PythonObject) raises:
     var key = PyObjectPtr()
     var item = PyObjectPtr()
     var string_type = bi.str
-    while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: over current exact dictionary keys
+    # Resolved once per call, not per key (main's compiled form, native_identity_key.mojo).
+    var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
+    while dict_next(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: over current exact dictionary keys
         if py_type(PythonObject(from_borrowed=key)) is not string_type:
             raise Error("TypeError: model metadata requires exact strings")
 
@@ -115,6 +121,16 @@ def model_record_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
     var bi = mods.module("builtins")
     if py_type(cls) is not bi.type or py_type(py_type(value)) is not bi.type:
         raise Error("TypeError: model records require ordinary connected class metadata")
+    # The ancestry walk below depends only on (type(value), cls, names). Keep
+    # its verdict per class under the type-watcher record: any change to the
+    # class or an ancestor bumps the epoch and forces the full walk again.
+    # The payload holds cls by address only (it is in the key's MRO, so it
+    # stays alive while the record can hit) and the names tuple by value.
+    var record = class_record(mods, _RECORD_FIELDS_SLOT, py_type(value))
+    if record is not None and py_type(names) is bi.tuple and Int(py=record[0]) == Int(cls._obj_ptr) and Bool(py=py_call(bi.tuple.__eq__, record[1], names)):
+        var cached_fields = _fields(mods, value)
+        model_dict(mods, cached_fields)
+        return cached_fields
     var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, py_type(value))
     var admitted = False
     for i in range(len(ancestry)):  # driver-loop: inspect model record descriptors before storage reads
@@ -130,6 +146,8 @@ def model_record_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
                 raise Error("TypeError: model state fields cannot be replaced by class descriptors")
     if not admitted:
         raise Error("TypeError: model operation requires its connected record class")
+    if py_type(names) is bi.tuple:
+        class_admit(mods, _RECORD_FIELDS_SLOT, py_type(value), Python.tuple(PythonObject(Int(cls._obj_ptr)), names))
     var fields = _fields(mods, value)
     model_dict(mods, fields)
     return fields
