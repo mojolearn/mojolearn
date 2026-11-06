@@ -218,16 +218,18 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     var steps = n - Int(py=fields["seasonal_periods"])
     var comps = fields["_comps"]
     var drop = py_call(_hw_fitted().union, Python.list("endog"))
+    # prediction reads the component state and the constructor settings the
+    # native snapshot admits (start_periods, eps, initialization_method,
+    # numeric_mode, ...): every carried scalar field, without the batch's
+    # fitted arrays, then each shard's slice. The carried fields are walked
+    # once; each shard takes a shallow copy and sets its own words.
+    var base = shard_state(fields, drop, context)
     var requests = b.list()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per device shard
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var w = hi - lo
-        # prediction reads the component state and the constructor settings
-        # the native snapshot admits (start_periods, eps,
-        # initialization_method, numeric_mode, ...): every carried scalar
-        # field, without the batch's fitted arrays, then this shard's slice.
-        var state = shard_state(fields, drop, context)
+        var state = py_call(b.dict, base)
         py_setitem(state, "n", n)
         py_setitem(state, "fit_executed_flag", fields["fit_executed_flag"])
         py_setitem(state, "ts_num", w)
