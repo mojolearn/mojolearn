@@ -49,7 +49,7 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 |---|---|---|
 | `lane/trees-boost-train-regression` @ 7580d25b71 | boosting classifier labels read natively (20x fit regression from 2c61cfe498) | compile classical runtime binding; time 5 tree lanes on NV+AMD |
 | `lane/parallel-pool-spawn-cost` @ 9eaff35ad3 | parallel spawn/close of pool workers, worker exits at once, pool timing record | build 2 bindings; `tools/pool_spawn_cost_probe.py` A/B on NV+AMD |
-| `lane/per-element-python-loops` | audit + fixes of per-item Python loops in fit/predict paths | in flight; compile + timing |
+| `lane/per-element-python-loops` @ eff066dd6a | 13 per-item Python loops found on array inputs, 8 fixed (labels for LDA/QDA/NB/logistic/forest/GBDT/sequence/GP/KNN/kernel fits, host predict decode, stratified folds); table `~/mojolearn-evidence/per-element-python-loops.md` | compile many bindings; ID checks NV+AMD; timings at 20k rows. Owed: float-y walks, SVC fit labels (`svc_common.mojo:201`), permutation_test_score (`msel_search.mojo:789`), other `msel_flatten` callers, experimental classification metrics |
 | `lane/regressions-since-0855` | timing table 0.8.55 -> now per lane and device, attribution, fix list (`~/mojolearn-evidence/regressions-since-0855.md`) | in flight; its fix list feeds new fix lanes |
 | `lane/lane-select-precision-2` @ 8cabefab4c | selector under-selection fixes + import-time rule | PARKED (2 precision tests fail); only matters with `--reuse-unchanged` |
 | `lane/build-sizing-all-cores` @ 4331938e2f | build jobs from cores and memory, no 16 cap | HELD: merged builds peak 46 GB per job; needs a measured figure |
