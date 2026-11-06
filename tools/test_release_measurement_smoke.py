@@ -157,6 +157,16 @@ def test_judging_that_raises_is_a_failure(monkeypatch, tmp_path):
     assert got[RACE["id"]]["verdict"] == MS.FAIL and "judging raised" in got[RACE["id"]]["reason"]
 
 
+def test_a_recipe_the_preflight_held_back_fails_with_the_preflight_reason(tmp_path):
+    import bench_board as B
+    held = {"races": {}, "skipped_recipes": {RACE["id"]: dict(status="REFUSED", problems=["parameter probe failed"])}}
+    (tmp_path / "board.json").write_text(json.dumps(held))
+    args = type("A", (), dict(vendor="nvidia"))
+    got = MS.judge(args, [RACE], [dict(batch=0, ids=[RACE["id"]], dir=str(tmp_path), exit_code=0, recipes=1)])
+    assert got[RACE["id"]] == dict(verdict=MS.FAIL, reason="preflight REFUSED: parameter probe failed", batch=0)
+    assert B.load_result(str(tmp_path / "board.json")) is not None
+
+
 def test_why_a_batch_left_no_record():
     assert "before its batch started" in MS.missing_reason(dict(started_late=True))
     assert "while its batch ran" in MS.missing_reason(dict(ceiling_hit=True, timed_out=True))

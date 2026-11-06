@@ -373,6 +373,8 @@ def fixtures(args, races, out, deadline):
 
 
 def _tail(path, n=1):
+    if not path:
+        return ""
     try:
         rows = [r for r in Path(path).read_text(errors="replace").splitlines() if r.strip()]
         return " | ".join(" ".join(r.split())[:200] for r in rows[-n:])
@@ -406,14 +408,21 @@ def judge(args, races, batches):
                 except (OSError, ValueError):
                     boards[b["dir"]] = {}
             rec = (boards[b["dir"]].get("races") or {}).get(rid)
-        import fnmatch
-        exempt = any(fnmatch.fnmatch(B.smoke_key(race), g) for g in B.QUALITY_EXEMPT)
+        why = missing_reason(b) if b is not None else "not in any batch"
+        if rec is None and b is not None:
+            # the board's preflight kept it from running (bench_board.select_after_preflight): refused or failed
+            board = boards.get(b["dir"]) or {}
+            for kind in ("skipped_recipes", "failed_preflight_recipes"):
+                held = (board.get(kind) or {}).get(rid)
+                if isinstance(held, dict):
+                    why = "preflight %s: %s" % (held.get("status"), "; ".join(map(str, held.get("problems") or []))[:300])
         try:
+            import fnmatch
+            exempt = any(fnmatch.fnmatch(B.smoke_key(race), g) for g in B.QUALITY_EXEMPT)
             fails = B.smoke_verdict(race, rec, args.vendor) if rec is not None else []
             unsupported = B.unsupported_our_arms(dict(race, capability_probes=(rec or {}).get("capability_probes")
                                                       or race.get("capability_probes") or {}))
-            verdict, reason = recipe_verdict(race, rec, fails, unsupported, exempt,
-                                             missing_reason(b) if b is not None else "not in any batch")
+            verdict, reason = recipe_verdict(race, rec, fails, unsupported, exempt, why)
         except Exception as exc:  # noqa: BLE001  (a judge error is a failure, never a pass)
             verdict, reason = FAIL, "judging raised %r" % (exc,)
         verdicts[rid] = dict(verdict=verdict, reason=reason, batch=b["batch"] if b else None)
