@@ -11,7 +11,7 @@ from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.optimizer_public_words import stash_python_error
-from bindings.archive_unicode_native import archive_utf8, archive_utf32_decode, archive_literal
+from bindings.archive_unicode_native import archive_utf8, archive_utf32_decode, archive_literal, _archive_bytes
 from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str, classical_i64, classical_f64, classical_wrap_array, _store_code
 from core.classical_archive_read_impl import npy_latin1_bytes, npy_peek, npy_skip_ws, npy_string_close, npy_digits_end
 
@@ -507,10 +507,21 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
 def _filename(raw: PythonObject, flags: Int, context: PythonObject) raises -> PythonObject:
     if flags & 2048:
         return archive_utf8(raw, context)
-    var parts = Python.list()
-    for k in range(len(raw)):  # driver-loop: over ZIP member filename bytes using the fixed CP437 table
-        py_call(parts.append, context["archive_cp437"][Int(py=raw[k])])
-    return py_call(PythonObject("").join, parts)
+    # The name bytes are read once from the bytes storage; CP437 equals ASCII
+    # below 128, so only a high byte consults the fixed CP437 table, and the
+    # result becomes one Python string at the end.
+    var octets = _archive_bytes(raw)
+    var text = String("")
+    var table = PythonObject(None)
+    for k in range(len(octets)):  # driver-loop: over ZIP member filename bytes using the fixed CP437 table
+        var byte = Int(octets[k])
+        if byte < 128:
+            text += chr(byte)
+        else:
+            if table is None:
+                table = context["archive_cp437"]
+            text += String(py=table[byte])
+    return PythonObject(text)
 
 
 def _inflate(raw: PythonObject, method: Int, context: PythonObject) raises -> PythonObject:

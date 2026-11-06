@@ -2,7 +2,8 @@
 # Private operation-owned metric inputs. Admission happens at the public door;
 # this snapshot preserves original container/array dtype inference and aliases.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr
+from bindings.native_buffer_owner import native_storage_allocate
 from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_arrays import classical_is_array
@@ -29,6 +30,21 @@ def _metric_flat_leaves(value: PythonObject, context: PythonObject) raises -> Bo
     return True
 
 
+def _metric_array_alias(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A private Array sharing `value`'s storage: every slot (storage owners,
+    address and metadata) is read once through the import-pinned native slot
+    descriptors and written to a fresh Array of the connected class. The GIL
+    is held throughout, so the slots form one consistent capture."""
+    var cls = context["array_class"]
+    var fields = context["array_fields"]
+    var alias = native_storage_allocate(cls)
+    var names = py_call(native_loaded_module("builtins").list, fields)
+    for i in range(len(names)):  # driver-loop: over the fixed Array slot names
+        var name = names[i]
+        py_setattr(alias, String(py=name), py_call(fields[name], value, cls))
+    return alias
+
+
 def metric_input_snapshot(value: PythonObject, memo: PythonObject,
                           context: PythonObject, depth: Int = 0) raises -> PythonObject:
     if depth > 64:
@@ -49,12 +65,20 @@ def metric_input_snapshot(value: PythonObject, memo: PythonObject,
     var result = PythonObject(None)
     if array:
         var input = LinAdmission(value, context)
-        var dtype = input.view.dtype
-        # Copy the same dtype, with the original pin/slot owners retained until
-        # copying finishes. Later readers see this private Array's metadata.
-        var output = lin_admitted_c(input^, dtype, "metric input", context, True)
-        result = output.keep
-        _ = output^
+        if input.view.c_contig:
+            # Metrics only read their inputs. A private Array that shares the
+            # admitted storage owners freezes the metadata (a caller replacing
+            # its slots cannot change what later readers see, and the owners
+            # keep the address alive); the data itself is not copied.
+            _ = input^
+            result = _metric_array_alias(value, context)
+        else:
+            var dtype = input.view.dtype
+            # Copy the same dtype, with the original pin/slot owners retained until
+            # copying finishes. Later readers see this private Array's metadata.
+            var output = lin_admitted_c(input^, dtype, "metric input", context, True)
+            result = output.keep
+            _ = output^
     elif native_array:
         # Exact array.array construction preserves the native typecode and
         # copies its C storage without caller iteration/conversion hooks.
@@ -68,11 +92,20 @@ def metric_input_snapshot(value: PythonObject, memo: PythonObject,
         var view = py_call(py_attr(ndarray, "view"), value)
         var dtype = view.dtype
         _row_dtype_admit(dtype, context)
-        result = py_call(py_attr(ndarray, "copy"), view, order="K")
-        if Bool(py=dtype.hasobject):
-            # A caller may replace its object cells while a kernel runs. The
-            # private snapshot must never become the final callback owner.
-            native_release_admit(result, context)
+        var flags = view.flags
+        if (not Bool(py=dtype.hasobject)
+                and (Bool(py=flags.c_contiguous) or Bool(py=flags.f_contiguous))):
+            # Metrics only read their inputs (scikit-learn takes no snapshot).
+            # The private view fixes shape/strides/dtype once and holds the
+            # base storage alive; a concurrent writer can change values but
+            # never the memory the kernel reads, so no data copy is needed.
+            result = view
+        else:
+            result = py_call(py_attr(ndarray, "copy"), view, order="K")
+            if Bool(py=dtype.hasobject):
+                # A caller may replace its object cells while a kernel runs. The
+                # private snapshot must never become the final callback owner.
+                native_release_admit(result, context)
         _ = view^
     elif _metric_flat_leaves(value, context):
         # Every element is a leaf, which the walk below returns unchanged and

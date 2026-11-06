@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # DeviceRows owns the same typed msel store snapshots as model_selection.
-from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
+from bindings.native_array_storage import native_array_zeros
+from bindings.arena_buffer_copy import buffer_copy_to_array
 from std.python import Python, PythonObject
 from std.math import isinf, isnan
 from gemm.f16_widen import f16_bits_to_f32
@@ -276,8 +277,8 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
         # native uint16 stays uint16; strided/endian copies become uint32.
         if dtype == "<u2":
             target = "<u4"
-    var packed = py_call(view.tobytes,"C")
-    var store = native_array_from_bytes(String(code), packed)
+    # One native C-order copy into the owned store (was tobytes then frombytes).
+    var store = buffer_copy_to_array(String(code), view)
     if not Bool(py=value.dtype.isnative) and item > 1:
         _ = py_call(store.byteswap)
     var count = Int(py=value.size)
@@ -412,7 +413,7 @@ def _prepare(value: PythonObject, context: PythonObject, snapshot: Bool = False)
     # _as_c copy preserves that width (including uint16 and half NaN bits).
     if native and supported and len(metadata["shape"]) > 0 and Bool(py=view.f_contiguous):
         var typestr = "<"+kind+String(item)
-        var store = native_array_from_bytes(String(_store_code(typestr)), py_call(view.tobytes,"C"))
+        var store = buffer_copy_to_array(String(_store_code(typestr)), view)
         return _owned(store,metadata["shape"],typestr,context)
     return _numpy_copy(value,view,kind,item,context)
 

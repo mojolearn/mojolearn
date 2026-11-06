@@ -23,7 +23,8 @@ from std.math import floor, isinf
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
@@ -50,25 +51,56 @@ comptime _U_IDENTITY = 6
 # ------------------------------------------------------------------ glue
 
 
-def _admit_local_state(model: PythonObject, context: PythonObject) raises:
+comptime _LOCAL_STATE_SLOT = "neighbors_local_state_v1"
+
+
+def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool = False) raises:
     # Mutable settings are re-admitted before comparison, coercion or truth
     # slots. Input metadata is captured by the consuming native buffer helper.
+    # The admitted state's identity stamp (every slot object and, for exact
+    # list/tuple/dict containers, their items) lives in the native prepared
+    # registry, outside `__dict__`, weakly keyed by the model: while it is
+    # unchanged a query skips the re-admission, as knn's resident stamp does.
+    # `classes_` is re-admitted on every call (an object-dtype label array can
+    # change in place without an identity change), like knn's class lists.
     classical_check_layout(model, context)
     var fields = py_fields(model)
     var scalars = Python.tuple("metric", "p", "contamination", "n_neighbors", "novelty", "shrink_threshold",
         "missing_values", "weights", "add_indicator", "keep_empty_features", "n_features_in_",
         "n_neighbors_", "n_samples_fit_", "offset_")
-    for i in range(len(scalars)):  # small-loop(fixed scalar parameter and fitted-state schema)
-        var value = py_get(fields, scalars[i])
-        if value is not None:
-            host_inference_scalar(value, context, True)
     var values = Python.tuple("metric_params", "priors", "classes_", "_fit_X", "_fit_dist", "_lrd",
         "centroids_", "class_prior_", "within_class_std_dev_", "_valid", "_miss_cols",
         "negative_outlier_factor_")
+    var mods = NativeModules()
+    var stamp = Python.list()
+    for i in range(len(scalars)):  # small-loop(fixed scalar parameter and fitted-state schema)
+        prepared_key_add(mods, stamp, py_get(fields, scalars[i]))
     for i in range(len(values)):  # small-loop(fixed native container and buffer owners)
-        var value = py_get(fields, values[i])
-        if value is not None:
-            classical_admit_value(classifier_label_list(value, context) if String(values[i]) == "classes_" else value, context)
+        if String(values[i]) != "classes_":
+            prepared_key_add(mods, stamp, py_get(fields, values[i]))
+    var record = prepared_get(mods, _LOCAL_STATE_SLOT, model)
+    if record is not None and prepared_key_same(record, stamp):
+        var classes = py_get(fields, "classes_")
+        if classes is not None:
+            classical_admit_value(classifier_label_list(classes, context), context)
+    else:
+        for i in range(len(scalars)):  # small-loop(fixed scalar parameter and fitted-state schema)
+            var value = py_get(fields, scalars[i])
+            if value is not None:
+                host_inference_scalar(value, context, True)
+        for i in range(len(values)):  # small-loop(fixed native container and buffer owners)
+            var value = py_get(fields, values[i])
+            if value is not None:
+                classical_admit_value(classifier_label_list(value, context) if String(values[i]) == "classes_" else value, context)
+    if fitting:
+        # Fit replaces the fitted slots: never retain the old arrays.
+        prepared_drop(mods, _LOCAL_STATE_SLOT, model)
+        return
+    if record is None or not prepared_key_same(record, stamp):
+        for i in range(len(stamp)):  # driver-loop: over the stamp objects, refusing a self-reference
+            if stamp[i] is model:
+                return
+        prepared_put(mods, _LOCAL_STATE_SLOT, model, stamp)
 
 
 def _b() raises -> PythonObject:
@@ -955,7 +987,7 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
 def _neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    _admit_local_state(model, context)
+    _admit_local_state(model, context, operation.endswith("_fit") or "_fit_" in operation)
     for i in range(1, len(args)):  # small-loop(public data arguments, before native preparation)
         if host_sparse_format(args[i]).byte_length() == 0:
             classical_admit_value(args[i], context)

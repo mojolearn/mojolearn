@@ -14,7 +14,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_view
 from bindings.classical_arrays import classical_is_array
-from bindings.metrics_native_inputs import metric_shape, metric_flatten
+from bindings.metrics_native_inputs import metric_shape, metric_flatten_admitted
 from bindings.native_scalar_decode import NativeScalarBuffer
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
 from bindings.mode_metadata_native import _fields
@@ -390,10 +390,10 @@ def _rs_corner(values: PythonObject, name: String, where: String, context: Pytho
             source = py_call(py_attr(context["ndarray"], "view"), values)
         elif py_type(values) is b.list:
             source = py_call(b.tuple, values)
-        var shape = metric_shape(source, context)
+        var shape = metric_shape(source, context)  # admits `source` once
         if len(shape) != 1:
             raise Error("TypeError: mojolearn " + where + ": " + name + " must be a one-dimensional native sequence")
-        items = metric_flatten(source, context)
+        items = metric_flatten_admitted(source, context)
     var count = len(items)
     var words = List[Float64]()
     for i in range(count):  # driver-loop: over the corner's coordinates (the box's dimensions)

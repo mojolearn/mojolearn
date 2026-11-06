@@ -31,7 +31,7 @@ from bindings.classical_pandas import classical_admit_value, classical_admit_fie
 from bindings.classical_tags import classical_tags
 from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
-from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_caller_frame import native_caller_globals
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.classical_family_admission_pyapi import classical_family_admit
@@ -67,18 +67,35 @@ def classical_entries(model: PythonObject, context: PythonObject) raises -> Pyth
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not Python.import_module("builtins").str:
+    var b = native_loaded_module("builtins")
+    if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     mode = mode.strip().lower()
-    if String(mode) != "identical" and String(mode) != "fast":
+    var mode_name = String(mode)
+    if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     var entries = context["classical_bindings"][mode]
-    if py_type(entries) is Python.import_module("builtins").str:
+    if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
-    if String(entries["estimators_vendor"]()) != String(context["vendor"]):
+    # The vendor and mode of a connected entry family are fixed when its
+    # binding module loads. Check them once per (entry family, selected
+    # vendor) identity and keep the verdict in the long-lived connection
+    # context; a reconnection installs new entry dictionaries (or a new
+    # vendor object), so the identities differ and the check runs again.
+    var vendor = context["vendor"]
+    var verdicts = py_get(context, "classical_entries_admitted")
+    if verdicts is not None:
+        var seen = py_get(verdicts, mode)
+        if seen is not None and seen[0] is entries and seen[1] is vendor:
+            return entries
+    if String(entries["estimators_vendor"]()) != String(vendor):
         raise Error("RuntimeError: classical native vendor differs from selected execution")
-    if Int(py=entries["estimators_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
+    if Int(py=entries["estimators_numeric_mode"]()) != (1 if mode_name == "identical" else 0):
         raise Error("RuntimeError: classical native mode differs from selected execution")
+    if verdicts is None:
+        verdicts = Python.dict()
+        py_setitem(context, "classical_entries_admitted", verdicts)
+    py_setitem(verdicts, mode, Python.tuple(entries, vendor))
     return entries
 
 

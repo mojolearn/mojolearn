@@ -18,6 +18,8 @@ from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.family_common import (
     family_call, family_is_str, family_array, FAMILY_F64P, FAMILY_I64P,
 )
+from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer_address
+from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.archive_schema_native import _schema_label_store
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import _flatten_labels
@@ -111,6 +113,48 @@ def _gp_buffer_labels(y: PythonObject, base: PythonObject, context: PythonObject
     return _gp_prepare(Int(py=classical_address(y)), code, size, typestr == "|b1", base, context)
 
 
+def _gp_float_storage_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A float32/float64 ndarray or Array of any rank and strides whose every
+    label is finite (`labels_float_storage`, one native pass): the labels read
+    straight from the buffer in C order into one float64 vector and encoded by
+    the same `prepare_targets` call the list path makes. This is the result
+    the label input step gives (`tolist` yields exact Python floats in C order,
+    flattened depth first, then `_gp_list_labels` stores them as "d"), without
+    one Python float per label. None for anything else (an empty target, a
+    NaN or infinity, another dtype or class), which keeps the label input
+    step and its refusals."""
+    if labels_float_storage(y, context, integral=False) != 0:
+        return PythonObject(None)
+    var ndarray = py_get(context, "ndarray")
+    var wide: Bool
+    var address: Int
+    if ndarray is not None and py_type(y) is ndarray:
+        wide = String(y.dtype.str) == "<f8"
+        address = _ndarray_buffer_address(y)
+    else:
+        wide = String(y.dtype) == "<f8"
+        address = Int(py=y._addr)
+    var rank = Int(py=y.ndim)
+    var pyshape = y.shape
+    var pystrides = y.strides
+    var shape = List[Int]()
+    var strides = List[Int]()
+    var total = 1
+    for k in range(rank):  # driver-loop: over array rank metadata
+        shape.append(Int(py=pyshape[k]))
+        strides.append(Int(py=pystrides[k]))
+        total *= shape[k]
+    if total == 0:
+        return PythonObject(None)
+    var store = family_array(Python.tuple(total), "<f8", context)
+    # The caller's target owns the buffer read here; `store` is new storage.
+    label_float_gather_f64(address, wide, shape, strides, Int(py=classical_address(store)))
+    _ = y  # the caller's target owns the buffer read above
+    var result = _gp_prepare(Int(py=classical_address(store)), 1, total, False, base, context)
+    _ = store^
+    return result
+
+
 def _gp_list_labels(flat: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_encode_label_list_native`: a flat list of exact ints (within int64)
     or exact floats through `prepare_targets`, else None."""
@@ -171,6 +215,11 @@ def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject)
     """`_labels.encode_labels(y)`: (classes list, int32 codes Array)."""
     classical_admit_value(y, context)
     var fast = _gp_buffer_labels(y, base, context)
+    if fast is not None:
+        return fast
+    # A strided or matrix-shaped float target: one native buffer read in
+    # place of the per-label snapshot and list walk below.
+    fast = _gp_float_storage_labels(y, base, context)
     if fast is not None:
         return fast
     var source = gp_label_list(y, context) if py_type(y) is context["array_class"] else y

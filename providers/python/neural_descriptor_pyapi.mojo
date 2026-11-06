@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Setup/ownership boundary for explicitly named native execution ABIs. No
 # unwrapping of arbitrary Python functions, extension layouts or signatures.
-from std.ffi import c_int
+from std.ffi import c_int, _Global
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -111,6 +111,64 @@ def _neural_descriptor_function_owner(function: PythonObject) raises -> PyObject
     return owner
 
 
+struct NeuralDescriptorAdmitted(Defaultable, Movable):
+    # Binding modules whose whole namespace was admitted (every key an exact
+    # string), as (module address, dictionary address, dictionary size). Plain
+    # integers only: no Python reference outlives the interpreter here.
+    var modules: List[Int]
+    var dicts: List[Int]
+    var sizes: List[Int]
+
+    def __init__(out self):
+        self.modules = List[Int]()
+        self.dicts = List[Int]()
+        self.sizes = List[Int]()
+
+
+comptime NEURAL_DESCRIPTOR_ADMITTED = _Global[StorageType=NeuralDescriptorAdmitted,
+    name="MojolearnNeuralDescriptorAdmittedV1", init_fn=NeuralDescriptorAdmitted.__init__]
+
+
+def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject) raises -> PythonObject:
+    # The module dictionary, with its key walk done once per module identity:
+    # a primitive operation resolves its entry on every call, and walking the
+    # whole binding namespace each time repeated the same verdict. The walk
+    # runs again whenever the module, its dictionary or the dictionary size
+    # changes. An inserted key changes the size; only a same-step delete plus
+    # insert keeps it, which no Mojolearn code does to a compiled binding's
+    # namespace (filled once at module init). Exact per-edit detection would
+    # need CPython dict watchers (3.12+), recorded as owed for the 3.10 floor.
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+    var module_address = Int(module._obj_ptr)
+    var dict_address = Int(raw)
+    var size = len(fields)
+    var record = NEURAL_DESCRIPTOR_ADMITTED.get_or_create_ptr()
+    var slot = -1
+    for i in range(len(record[].modules)):  # small-loop(record: admitted binding modules): a few compiled extension modules per process, never data
+        if record[].modules[i] == module_address:
+            if record[].dicts[i] == dict_address and record[].sizes[i] == size:
+                return fields
+            slot = i
+            break
+    _neural_descriptor_keys(fields, bi.str)
+    if slot >= 0:
+        record[].dicts[slot] = dict_address
+        record[].sizes[slot] = size
+    else:
+        if len(record[].modules) >= 64:
+            record[].modules.clear()
+            record[].dicts.clear()
+            record[].sizes.clear()
+        record[].modules.append(module_address)
+        record[].dicts.append(dict_address)
+        record[].sizes.append(size)
+    return fields
+
+
 def neural_descriptor_entry(module: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
     # Read an exact module dictionary, never its optional Python __getattr__.
     # Metadata/ownership doors must be compiled entries too; provider execution
@@ -118,7 +176,7 @@ def neural_descriptor_entry(module: PythonObject, name: String, required: Bool =
     var bi = native_loaded_module("builtins")
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: native provider requires an exact compiled module")
-    var entry = py_get(_neural_descriptor_module_fields(module, bi), name)
+    var entry = py_get(_neural_descriptor_module_fields_once(module, bi), name)
     if entry is None and not required:
         return entry
     if entry is None or py_type(entry) is not py_type(bi.len) or _neural_descriptor_function_owner(entry) != module._obj_ptr:

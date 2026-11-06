@@ -23,7 +23,7 @@ from core.metrics_program_plan import MetricProgramPlan
 from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
-from bindings.metrics_native_inputs import metric_shape, metric_flatten
+from bindings.metrics_native_inputs import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
 from bindings.classical_pandas import classical_admit_value
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -190,6 +190,11 @@ def mc_buffer_format(obj: PythonObject, context: PythonObject) raises -> String:
     its byte-order prefix stripped; MC_NO_FORMAT for an object without a
     buffer (a list, a scalar)."""
     classical_admit_value(obj, context)
+    return mc_buffer_format_admitted(obj, context)
+
+
+def mc_buffer_format_admitted(obj: PythonObject, context: PythonObject) raises -> String:
+    """`mc_buffer_format` of a value already admitted in this native call."""
     if classical_is_array(obj, context):
         var dtype = String(obj.dtype)
         if dtype == "<f4":
@@ -254,10 +259,12 @@ def mc_types_integral(types: PythonObject, context: PythonObject) raises -> Bool
 def mc_is_integer_labels(obj: PythonObject, context: PythonObject) raises -> Bool:
     """`linear_model._is_integer_labels`: an integer buffer format (bools
     are not integers), or a list whose every leaf is an exact int."""
-    var fmt = mc_buffer_format(obj, context)
+    # One admission walk for the format probe and the flatten below.
+    classical_admit_value(obj, context)
+    var fmt = mc_buffer_format_admitted(obj, context)
     if fmt != MC_NO_FORMAT:
         return fmt.byte_length() == 1 and String("bBhHiIlLqQnN").find(fmt) >= 0
-    var leaves = mc_flatten(obj, context)
+    var leaves = metric_flatten_admitted(obj, context)
     if mc_len(leaves) == 0:
         return False
     var types = mc_types(leaves)
@@ -267,10 +274,11 @@ def mc_is_integer_labels(obj: PythonObject, context: PythonObject) raises -> Boo
 def mc_is_float64(obj: PythonObject, context: PythonObject) raises -> Bool:
     """`_metrics_impl._is_float64`: a buffer of format 'd', or a list with a
     Python float among its leaves."""
-    var fmt = mc_buffer_format(obj, context)
+    classical_admit_value(obj, context)
+    var fmt = mc_buffer_format_admitted(obj, context)
     if fmt != MC_NO_FORMAT:
         return fmt == "d"
-    return py_contains(mc_types(mc_flatten(obj, context)), mc_b().float)
+    return py_contains(mc_types(metric_flatten_admitted(obj, context)), mc_b().float)
 
 
 # ------------------------------------------------------------------- labels
@@ -292,16 +300,19 @@ struct McLabels(Movable):
         self.codes = codes
 
 
-def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context: PythonObject) raises -> PythonObject:
+def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context: PythonObject,
+                  admitted: Bool = False) raises -> PythonObject:
     """`_metrics_impl._classification_labels`: (labels, kind) of a 1-D
     label sequence, the explicit label input step."""
     var b = mc_b()
-    if mc_rank(mc_shape_of(values, context)) != 1:
+    # `admitted`: the caller ran classical_admit_value(values) in this call.
+    var shape = metric_shape_admitted(values, context) if admitted else mc_shape_of(values, context)
+    if mc_rank(shape) != 1:
         raise Error(name + " must be one-dimensional single-label data")
     var source = values
     if family_isinstance(source, Python.tuple(b.str, b.bytes)):
         raise Error("mojolearn: y must be a sequence of labels")
-    var labels = mc_flatten(source, context)
+    var labels = metric_flatten_admitted(source, context)  # admitted by mc_shape_of above
     var size = mc_len(labels)
     if not allow_empty and size == 0:
         raise Error(name + " must contain at least one label")
@@ -393,7 +404,7 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     return Python.tuple(family_call(head.tolist), codes)
 
 
-def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> PythonObject:
+def mc_fast_labels(values: PythonObject, context: PythonObject, admitted: Bool = False) raises -> PythonObject:
     """`_native_classification_labels`: (classes, codes, n) of an integer
     or bool label buffer, or a flat list of exact Python ints within int64;
     None for everything the label input step reads."""
@@ -419,7 +430,8 @@ def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> Python
                 _ = native_buffer_view(values)
             except:
                 return PythonObject(None)
-        if mc_rank(mc_shape_of(values, context)) != 1:
+        var shape = metric_shape_admitted(values, context) if admitted else mc_shape_of(values, context)
+        if mc_rank(shape) != 1:
             return PythonObject(None)
         var packed = mc_int_store(values, context)
         if packed is None:
@@ -430,14 +442,14 @@ def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> Python
     return Python.tuple(encoded[0], encoded[1], PythonObject(count))
 
 
-def mc_labels(values: PythonObject, name: String, context: PythonObject) raises -> McLabels:
+def mc_labels(values: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> McLabels:
     """`_classification_encoded(values, name)`: the native encoder for an
     integer buffer, else the label input step, then one code per row."""
     var b = mc_b()
-    var fast = mc_fast_labels(values, context)
+    var fast = mc_fast_labels(values, context, admitted)
     if fast is not None:
         return McLabels("integer", Int(py=fast[2]), fast[0], fast[1])
-    var listed = mc_label_list(values, name, False, context)
+    var listed = mc_label_list(values, name, False, context, admitted)
     var labels = listed[0]
     if String(listed[1]) == "integer":
         # The converted labels are exact Python ints (pandas, uint64 or
@@ -529,9 +541,10 @@ def mc_positive(pos_label: PythonObject, context: PythonObject) raises -> Python
     return Python.tuple(listed[0][0], listed[1])
 
 
-def mc_refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject) raises:
+def mc_refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject,
+                         admitted: Bool = False) raises:
     """`_expansion_metrics._refuse_multilabel`."""
-    var shape = mc_shape_of(y, context)
+    var shape = metric_shape_admitted(y, context) if admitted else mc_shape_of(y, context)
     if mc_rank(shape) == 2 and mc_dim(shape, 1) != 1:
         raise Error("NotImplementedError: mojolearn " + caller + ": " + name + " is 2-D; multilabel-indicator "
                     + "targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
@@ -565,7 +578,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
     var count: Int
     if mc_is_list_like(x):
         # `as_i64_c` of a list: its exact Python ints (a column list flattened)
-        var flat = mc_flatten(x, context)
+        var flat = metric_flatten_admitted(x, context)  # admitted by mc_is_integer_labels above
         store = family_call(native_loaded_module("array").array, PythonObject("q"), flat)
         count = mc_len(store)
     else:

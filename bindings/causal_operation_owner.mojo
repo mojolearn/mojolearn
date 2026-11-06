@@ -371,6 +371,83 @@ def _causal_runtime_word(mut mods: NativeModules, fields: PythonObject, live: Py
         _ = py_call(fields.pop, name, PythonObject(None))
 
 
+def _causal_block_class_record(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
+    # Identity record of one admitted block class: the class, its MRO tuple
+    # and, per ancestor, the live namespace proxy with its key and value
+    # identities in insertion order. Taken right after a full capture admitted
+    # the class (string keys, no field descriptors, connected ancestry).
+    var bi = mods.module("builtins")
+    var mro = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    var get_namespace = bi.type.__dict__["__dict__"].__get__
+    var rows = Python.list()
+    for i in range(len(mro)):  # driver-loop: over the block class ancestry
+        var row = py_call(get_namespace, mro[i])
+        _ = py_call(rows.append, Python.tuple(row, py_call(bi.tuple, row.keys()), py_call(bi.tuple, row.values())))
+    return Python.tuple(cls, mro, py_call(bi.type, cls), rows)
+
+
+def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject, cls: PythonObject) raises -> Bool:
+    # True when the class, its metaclass, its MRO and every ancestor namespace
+    # (same keys in the same order, same values) are exactly as admitted. Live
+    # keys are compared by identity before any keyed lookup, so no foreign key
+    # hook can run; any edit sends the block through full admission again.
+    var bi = mods.module("builtins")
+    if record[0] is not cls or py_type(cls) is not record[2]:
+        return False
+    if py_call(bi.type.__dict__["__mro__"].__get__, cls) is not record[1]:
+        return False
+    ref cpy = Python().cpython()
+    var get_iterator = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")
+    var next_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")
+    var get_item = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")
+    var rows = record[3]
+    for i in range(len(rows)):  # driver-loop: over the block class ancestry
+        var row = rows[i][0]
+        var keys = rows[i][1]
+        var values = rows[i][2]
+        var count = len(keys)
+        if len(row) != count:
+            return False
+        var iterator_raw = get_iterator(row._obj_ptr)
+        if not iterator_raw:
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            return False
+        var iterator = PythonObject(from_owned=iterator_raw)
+        for j in range(count):  # driver-loop: over live class namespace key identities before lookup
+            var key_raw = next_key(iterator._obj_ptr)
+            if not key_raw:
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                return False
+            var key = PythonObject(from_owned=key_raw)
+            if key is not keys[j]:
+                return False
+        for j in range(count):  # driver-loop: over retained class namespace values
+            var raw = get_item(row._obj_ptr, keys[j]._obj_ptr)
+            if not raw:
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                return False
+            var current = PythonObject(from_owned=raw)
+            if current is not values[j]:
+                return False
+    return True
+
+
+def _causal_block_class_admitted(mut mods: NativeModules, classes: PythonObject, cls: PythonObject,
+                                 mut checked: Dict[Int, Bool]) raises -> Bool:
+    # Per call, each distinct block class is compared with its record once.
+    var identity = Int(cls._obj_ptr)
+    var known = checked.get(identity)
+    if known:
+        return known.value()
+    var result = False
+    for i in range(len(classes)):  # driver-loop: over the distinct block classes of the model
+        if classes[i][0] is cls:
+            result = _causal_block_class_unchanged(mods, classes[i], cls)
+            break
+    checked[identity] = result
+    return result
+
+
 def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
     # Prepared model capture: the full capture (_causal_model_capture_full:
     # every block snapshot, head buffers, plan, entries) runs on first use and
@@ -401,13 +478,26 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
         var blocks = live["_blocks"]
         py_setitem(fields, "_blocks", py_call(bi.list, blocks))
         var derived = record[2]
+        var classes = record[3]
+        var checked = Dict[Int, Bool]()
         var captured = Python.list()
         var seen = Dict[Int, PythonObject]()
         for i in range(len(blocks)):  # driver-loop: over unique block owners, admitted per call
             var identity = Int(blocks[i]._obj_ptr)
             var block = seen.get(identity, PythonObject(None))
             if block is None:
-                var block_live = neural_block_fields(mods, blocks[i], context)
+                var block_live: PythonObject
+                if _causal_block_class_admitted(mods, classes, py_type(blocks[i]), checked):
+                    # The identity key matched every stored block field and the
+                    # class record matched the class namespaces, so the earlier
+                    # admission still holds; only the words a call writes back
+                    # are admitted again, in neural_block_fields' order.
+                    block_live = _fields(mods, blocks[i])
+                    for name in ["_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed"]:  # small-loop(runtime launch words admitted per call)
+                        if py_contains(block_live, name):
+                            neural_plain_value(mods, block_live[name], 0, context)
+                else:
+                    block_live = neural_block_fields(mods, blocks[i], context)
                 block = py_call(bi.dict, block_live)
                 _ = py_call(block.update, derived[i])
                 py_setitem(block, "_neural_live_fields", block_live)
@@ -474,7 +564,14 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
     var template = py_call(bi.dict, fields)
     for name in ["_native_block_fields", "_causal_live_fields", "_causal_original"]:  # small-loop(per-call capture slots)
         _ = py_call(template.pop, name, PythonObject(None))
-    prepared_put(mods, _CAUSAL_MODEL_SLOT, model, Python.list(key, template, derived))
+    var classes = Python.list()
+    var class_seen = Dict[Int, Bool]()
+    for i in range(len(blocks)):  # driver-loop: over the model's blocks, one record per distinct class
+        var cls = py_type(blocks[i])
+        if Int(cls._obj_ptr) not in class_seen:
+            class_seen[Int(cls._obj_ptr)] = True
+            _ = py_call(classes.append, _causal_block_class_record(mods, cls))
+    prepared_put(mods, _CAUSAL_MODEL_SLOT, model, Python.list(key, template, derived, classes))
     return result
 
 

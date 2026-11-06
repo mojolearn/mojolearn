@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.arena_cache_stats import _attribute, _mapping, _string_keys, _hash_key, HashKeyTypes
+from bindings.arena_cache_stats import _attribute, _mapping, _string_keys, _admit_entry_keys
 from bindings.optimizer_public_words import stash_python_error
 from bindings.training_scalar_native import training_scalar_warning, training_void_bytes
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
@@ -354,10 +354,10 @@ def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObje
     if py_type(entries) is not b["dict"]:
         raise Error("TypeError: DeviceCache entries require a native dictionary")
     var key = arena_cache_key(model,args[0],context)
-    var keys = py_call(b["list"],entries)
-    var key_types = HashKeyTypes(context)
-    for i in range(len(keys)):  # driver-loop: prevent resident dictionary equality from dispatching to custom stored keys
-        _hash_key(keys[i],context,key_types)
+    # Prevent resident dictionary equality from dispatching to custom stored
+    # keys: one in-place native walk, no key list (published keys pass on type
+    # identity alone).
+    _admit_entry_keys(entries,context)
     var entry = py_get(entries,key)
     if entry is None:
         return PythonObject(None)
