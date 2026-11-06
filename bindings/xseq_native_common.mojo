@@ -39,6 +39,14 @@ def xseq_mode(fields: PythonObject, context: PythonObject) raises -> PythonObjec
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
+    # perf3-seq-neural: an exact str that already is one of the two modes
+    # (every default and every documented value) is returned as it is: the
+    # strip().lower() below would give an equal str, so the bindings lookup
+    # and the result are the same, without four Python calls per predict.
+    if py_type(mode) is b.str:
+        var text = String(py=mode)
+        if text == "identical" or text == "fast":
+            return mode
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(b.getattr, py_call(py_call(b.getattr, mode, "strip")), "lower"))
@@ -55,11 +63,22 @@ def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     var entries = context["xseq_bindings"][mode]
     if Bool(py=py_call(b.isinstance, entries, b.str)):
         raise Error(String(py=entries))
-    var actual = Int(py=py_call_typed(entries["x_sequence_numeric_mode"]))
+    # perf3-seq-neural: the compiled mode word of a connected entry table
+    # never changes, so it is asked once per table and the answer is kept in
+    # the table next to the provider (`native_model_provider`), tied to the
+    # very entry function it came from: a replaced entry is asked again.
+    var query = entries["x_sequence_numeric_mode"]
+    if py_get(entries, _MODE_CHECKED) is query:
+        return entries
+    var actual = Int(py=py_call_typed(query))
     if actual != (1 if String(py=mode) == "identical" else 0):
         raise Error("RuntimeError: mojolearn: _mojolearn_x_sequence was compiled for the other numeric mode; rebuild the "
                     + String(py=mode) + " binding")
+    py_setitem(entries, _MODE_CHECKED, query)
     return entries
+
+
+comptime _MODE_CHECKED = "_xseq_numeric_mode_checked"
 
 
 def xseq_neural_provider(entries: PythonObject) raises -> PythonObject:
