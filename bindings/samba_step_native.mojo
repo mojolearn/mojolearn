@@ -16,7 +16,7 @@ from bindings.generation_buffers import generation_initialize_binding, generatio
 from bindings.generator_state_native import generator_next
 from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_optimizer_device_plan
 from core.device_plan import DevicePlan
-from bindings.samba_training_native import samba_ids, samba_gradients, _samba_count
+from bindings.samba_training_native import samba_ids, samba_gradients_admitted, _samba_count
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
@@ -298,7 +298,7 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
                 _ = source  # keep the Python object alive through the native call above
                 _ = source^
                 _ = output^
-            var result = samba_gradients(model, xpart, ypart, PythonObject(count), stream, k * rows * length, context)
+            var result = samba_gradients_admitted(model, xpart, ypart, PythonObject(count), stream, k * rows * length, context)
             loss_ptr[k] = Float32(Float64(py=result[0]))
             _ = losses  # keep the Python object alive through the native call above
             var gradients = result[1]

@@ -19,7 +19,7 @@ from core.family_cast_impl import family_all_finite_f32
 from core.cfb_impl import cfb_f64_to_i32
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call,
-    family_array, family_as_f32, family_view, family_cast_view_f64, family_field, family_is_str, family_min,
+    family_array, family_as_f32, family_as_f32_dense, family_view, family_cast_view_f64, family_field, family_is_str, family_min,
 )
 from bindings.cluster_native import _reference_queries, _xc_array
 from bindings.spectral_umap_routes import (
@@ -27,6 +27,8 @@ from bindings.spectral_umap_routes import (
     spectral_umap_optional_entry as cfb_optional_entry,
 )
 from bindings.cfb_dbscan import cfb_borrow_copy
+from bindings.cfb_sparse_read import cfb_sparse_triples
+from bindings.host_sparse_native import host_sparse_format
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from bindings.classical_attributes import classical_connect_numpy
@@ -140,16 +142,29 @@ def _coo_of_triples(rows: PythonObject, cols: PythonObject, vals: PythonObject, 
     return _Coo(r, c, v, _int(shape[0]))
 
 
-def _coo_triples(source: PythonObject, who: String, base: PythonObject, context: PythonObject) raises -> _Coo:
-    """`_coo_triples(A, who)`: a sparse input through its `tocoo()`, a dense
-    one through the base binding's float64 nonzero scan (exact zeros
-    dropped, as `sp.coo_matrix(dense)` drops them)."""
-    var b = _builtins()
+def _sparse_triples(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`(row, col, data, shape)` of a sparse input as its `tocoo()` gives
+    them: an exact SciPy COO/CSR/CSC read from its stored buffers
+    (bindings/cfb_sparse_read.mojo), any other sparse input through its
+    own `tocoo()`; None for a dense input."""
+    var triples = cfb_sparse_triples(source, context)
+    if triples is not None:
+        return triples
     var tocoo = _tocoo(source, context)
-    if tocoo is not None:
-        var coo = family_call(tocoo)
-        var shape = family_call(b.tuple, coo.shape)
-        return _coo_of_triples(coo.row, coo.col, coo.data, shape, who, context)
+    if tocoo is None:
+        return PythonObject(None)
+    var coo = family_call(tocoo)
+    return Python.tuple(coo.row, coo.col, coo.data, family_call(_builtins().tuple, coo.shape))
+
+
+def _coo_triples(source: PythonObject, who: String, base: PythonObject, context: PythonObject) raises -> _Coo:
+    """`_coo_triples(A, who)`: a sparse input's `tocoo()` triples (read
+    natively for an exact SciPy COO/CSR/CSC), a dense one through the base
+    binding's float64 nonzero scan (exact zeros dropped, as
+    `sp.coo_matrix(dense)` drops them)."""
+    var triples = _sparse_triples(source, context)
+    if triples is not None:
+        return _coo_of_triples(triples[0], triples[1], triples[2], triples[3], who, context)
     var shape = _shape_of(source)
     if not _square(shape):
         raise Error("mojolearn " + who + ": with affinity='precomputed', X "
@@ -225,14 +240,23 @@ def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: Python
 
 
 def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_M.from_input(X)`: a scipy.sparse matrix densified (its own
-    `toarray()`), `as_f32_c`, and the finiteness refusal."""
+    """`_M.from_input(X)`: a scipy.sparse matrix densified, `as_f32_c`, and
+    the finiteness refusal. An exact nonempty SciPy container is densified
+    natively from its stored buffers straight to float32 (duplicates summed,
+    as `toarray()` sums them; `host_sparse_dense`); an empty one, or another
+    sparse-like input, through its own `toarray()` (the empty refusal names
+    its shape)."""
     var b = _builtins()
     var x = source
-    if (Bool(py=family_call(b.hasattr, x, PythonObject("toarray"))) and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
+    var exact = host_sparse_format(x).byte_length() > 0
+    if exact:
+        var shape = x.shape
+        exact = Int(py=shape[0]) > 0 and Int(py=shape[1]) > 0
+    if (not exact and Bool(py=family_call(b.hasattr, x, PythonObject("toarray")))
+            and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
             and Bool(py=family_call(b.hasattr, x, PythonObject("format")))):
         x = family_call(py_call(b.getattr, x, PythonObject("toarray")))
-    var a = family_as_f32(x, 2, "X", context)
+    var a = family_as_f32_dense(x, 2, "X", context)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
         raise Error("X: input must be finite; NaN/inf are unsupported")
     _ = a  # keep the Python object alive through the native calls above
@@ -339,22 +363,22 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     symmetrized 0.5 (C + C^T), by the base binding's `knn_affinity_f32`.
     Sets and returns `affinity_matrix_`."""
     var b = _builtins()
-    var tocoo = _tocoo(source, context)
+    var triples = _sparse_triples(source, context)
     var n: Int
     var nnz = 0
     var dense = PythonObject(None)
     var rows = PythonObject(None)
     var cols = PythonObject(None)
     var vals = PythonObject(None)
-    if tocoo is not None:
-        var coo = family_call(tocoo)
-        n = _int(coo.shape[0])
+    if triples is not None:
+        var shape = triples[3]
+        n = _int(shape[0])
         if not Bool(py=family_call(b.bool, family_call(native_loaded_module("operator").eq,
-                                                        family_call(b.tuple, coo.shape), Python.tuple(n, n)))):
+                                                        shape, Python.tuple(n, n)))):
             raise Error("mojolearn SpectralEmbedding: the precomputed distance graph must be square")
-        rows = _as_i32(coo.row, "rows", context)
-        cols = _as_i32(coo.col, "cols", context)
-        vals = family_as_f32(coo.data, 1, "data", context)
+        rows = _as_i32(triples[0], "rows", context)
+        cols = _as_i32(triples[1], "cols", context)
+        vals = family_as_f32(triples[2], 1, "data", context)
         if not (Int(py=rows.shape[0]) == Int(py=cols.shape[0]) and Int(py=cols.shape[0]) == Int(py=vals.shape[0])):
             raise Error("mojolearn SpectralEmbedding: the precomputed graph's row, col and data differ in length")
         nnz = Int(py=vals.shape[0])

@@ -26,6 +26,7 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from core.cast_in import CAST_KIND_SIGNED
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
+from bindings.byte_lm_state_admission import byte_state_admit
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.neural_block_public import _neural_lengths
 from core.neural_block_public_impl import neural_copy_row_prefixes
@@ -974,7 +975,7 @@ def byte_lm_checkpoint(mut mods: NativeModules, trainer: PythonObject, operation
     mods.released()
     var state = PythonObject(None)
     try:
-        classical_admit_value(fields["_state"], context)
+        byte_state_admit(mods, trainer, fields["_state"], context)
         var shape = _shape_of(fields["_state"])
         if operation == "export_checkpoint" and shape.n_total() * 24 + shape.n_tensors() * 8 > BYTE_JSON_LIMIT:
             raise Error("Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays")
@@ -1004,7 +1005,7 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
     mods.released()
     var result = PythonObject(None)
     try:
-        classical_admit_value(fields["_state"], context)
+        byte_state_admit(mods, trainer, fields["_state"], context)
         var shape = _shape_of(fields["_state"])
         var tokens = _ids(mods, args[0], shape, context)
         var binding = _binding(mods, fields, shape, context)
@@ -1167,7 +1168,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
     mods.released()
     var result = PythonObject(None)
     try:
-        classical_admit_value(fields["_state"], context)
+        byte_state_admit(mods, trainer, fields["_state"], context)
         var shape = _shape_of(fields["_state"])
         var admitted = _logits_input(mods, args[0], args[1], shape, context)
         var tokens = admitted[0]

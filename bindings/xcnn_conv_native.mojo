@@ -219,8 +219,9 @@ def _conv_init(layer: PythonObject, args: PythonObject, one: Bool, context: Pyth
     return PythonObject(None)
 
 
-def _conv_set_weights(layer: PythonObject, args: PythonObject, one: Bool, context: PythonObject) raises -> PythonObject:
-    var fields = _conv_admit(layer, context)
+def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObject, one: Bool,
+                      context: PythonObject) raises -> PythonObject:
+    # `fields`: the layer's fields, already admitted once by `xcnn_conv_layers`.
     var k = _pair(fields, "kernel_size")
     var outc = Int(py=fields["out_channels"])
     var inc = Int(py=fields["in_channels"]) // Int(py=fields["groups"])
@@ -247,8 +248,8 @@ def _conv_set_weights(layer: PythonObject, args: PythonObject, one: Bool, contex
     return layer
 
 
-def _conv_gradient(layer: PythonObject, weight: Bool, context: PythonObject) raises -> PythonObject:
-    var fields = _conv_admit(layer, context)
+def _conv_gradient(fields: PythonObject, weight: Bool, context: PythonObject) raises -> PythonObject:
+    # `fields`: the layer's fields, already admitted once by `xcnn_conv_layers`.
     var key = "grad_weight_" if weight else "grad_bias_"
     var pending_key = "_gw_dev" if weight else "_gb_dev"
     var pending = py_get(fields, PythonObject(pending_key))
@@ -278,9 +279,9 @@ def _save_gradients(fields: PythonObject, dw: PythonObject, db: PythonObject, co
 
 # ---------------------------------------------------------------- backward, with both host and resident routes
 
-def _conv_backward_host(layer: PythonObject, grad: PythonObject, source: PythonObject,
+def _conv_backward_host(layer: PythonObject, fields: PythonObject, grad: PythonObject, source: PythonObject,
                         context: PythonObject) raises -> PythonObject:
-    var fields = _conv_admit(layer, context)
+    # `fields`: admitted once by the caller (`_conv_backward`); not re-admitted here.
     var entries = xcnn_entries(fields, context)
     var x = xcnn_host_of(source, context) if xcnn_is_t(source, context) else source
     var xs = xcnn_shape(x)
@@ -342,12 +343,12 @@ def _conv_backward_host(layer: PythonObject, grad: PythonObject, source: PythonO
     return dx
 
 
-def _conv_backward_tensor(layer: PythonObject, grad: PythonObject, source: PythonObject,
+def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, grad: PythonObject, source: PythonObject,
                           context: PythonObject) raises -> PythonObject:
-    var fields = _conv_admit(layer, context)
+    # `fields`: admitted once by the caller (`_conv_backward`); not re-admitted here.
     var entries = xcnn_entries(fields, context)
     if not (_res_ok(fields, entries, source, context) and xcnn_on_dev(entries, grad, context)):
-        var dx = _conv_backward_host(layer, grad, source, context)
+        var dx = _conv_backward_host(layer, fields, grad, source, context)
         return xcnn_wrap(entries, dx, context) if xcnn_is_t(grad, context) else dx
     var xs = xcnn_shape(source)
     _check_x(fields, xs)
@@ -429,7 +430,14 @@ def _to_four(value: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _conv_backward(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _conv_admit(layer, context)
+    """`Conv2d.backward` / `Conv1d.backward` for direct callers: admits, then runs."""
+    return _conv_backward_fields(layer, _conv_admit(layer, context), args, context)
+
+
+def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    # `fields`: the layer's fields, admitted exactly once by the caller; the
+    # host and resident routes below reuse them (they re-admitted before).
     var source = args[1] if args[1] is not None else py_get(fields, "_x")
     if source is None:
         raise Error("RuntimeError: convolution backward needs a prior forward or an explicit x")
@@ -443,16 +451,16 @@ def _conv_backward(layer: PythonObject, args: PythonObject, context: PythonObjec
     var entries = xcnn_entries(fields, context)
     var out = PythonObject(None)
     if xcnn_is_t(grad, context) or xcnn_is_t(source, context):
-        out = _conv_backward_tensor(layer, grad, source, context)
+        out = _conv_backward_tensor(layer, fields, grad, source, context)
     elif _group_dev(fields, entries):
         var xs = source
         var gs = grad
-        out = xcnn_host_of(_conv_backward_tensor(layer, xcnn_wrap(entries, gs, context),
-                                               xcnn_wrap(entries, xs, context), context), context)
+        out = xcnn_host_of(_conv_backward_tensor(layer, fields, xcnn_wrap(entries, gs, context),
+                                                         xcnn_wrap(entries, xs, context), context), context)
         _set(fields, "_x", xs)
         _set(fields, "_xp", PythonObject(None))
     else:
-        out = _conv_backward_host(layer, grad, source, context)
+        out = _conv_backward_host(layer, fields, grad, source, context)
     if one:
         if py_get(fields, "_gw_dev") is not None:
             _set(fields, "_gw_1d", PythonObject(True))
@@ -639,14 +647,14 @@ def _pad_t(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: 
     return xp
 
 
-def _conv_forward_t(layer: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+def _conv_forward_t(layer: PythonObject, fields: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Conv2d._forward_t(x)`: x and the output resident."""
-    var fields = _conv_admit(layer, context)
+    # `fields`: admitted once by the caller; not re-admitted here.
     var entries = xcnn_entries(fields, context)
     var xs = xcnn_shape(x)
     _check_x(fields, xs)
     if not _res_ok(fields, entries, x, context):
-        return xcnn_wrap(entries, xcnn_conv2d_forward(layer, xcnn_host_of(x, context), context), context)
+        return xcnn_wrap(entries, xcnn_conv2d_forward_fields(layer, fields, xcnn_host_of(x, context), context), context)
     var values = _weight_pair(fields, context)
     var oshape = _conv_out(fields, entries, xs)
     var out = xcnn_out_new(entries, oshape, context)   # the conv stores every word
@@ -703,16 +711,24 @@ def _group_dev(fields: PythonObject, entries: PythonObject) raises -> Bool:
 
 
 def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Conv2d.forward(x)`."""
+    """`Conv2d.forward(x)` for direct callers: admits the layer, then runs."""
+    # The tensor test stays ahead of the admission, as before.
     if xcnn_is_t(x, context):
-        return _conv_forward_t(layer, x, context)
-    var fields = _conv_admit(layer, context)
+        return _conv_forward_t(layer, _conv_admit(layer, context), x, context)
+    return xcnn_conv2d_forward_fields(layer, _conv_admit(layer, context), x, context)
+
+
+def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: PythonObject,
+                               context: PythonObject) raises -> PythonObject:
+    """`Conv2d.forward(x)` on fields the caller admitted once."""
+    if xcnn_is_t(x, context):
+        return _conv_forward_t(layer, fields, x, context)
     var a = x
     var xs = xcnn_shape(a)
     _check_x(fields, xs)
     var entries = xcnn_entries(fields, context)
     if _group_dev(fields, entries):
-        var out = xcnn_host_of(_conv_forward_t(layer, xcnn_wrap(entries, a, context), context), context)
+        var out = xcnn_host_of(_conv_forward_t(layer, fields, xcnn_wrap(entries, a, context), context), context)
         _set(fields, "_x", a)
         _set(fields, "_xp", PythonObject(None))
         return out
@@ -751,24 +767,26 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
     return out
 
 
-def xcnn_conv_forward(layer: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+def xcnn_conv_forward(layer: PythonObject, fields: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Conv2d.forward` / `Conv1d.forward` (Conv2d over (N, C, 1, L))."""
+    # `fields`: admitted once by `xcnn_conv_layers` before any input is read,
+    # so the first error for a bad layer or bad x is the one raised before.
     var b = xcnn_builtins()
     if py_type(layer) is not context["xcnn_conv1d_class"]:
         var value = x if xcnn_is_t(x, context) else _snapshot(x, "x", context)
-        return xcnn_conv2d_forward(layer, value, context)
+        return xcnn_conv2d_forward_fields(layer, fields, value, context)
     if xcnn_is_t(x, context):
         var s = xcnn_shape(x)
         if len(s) != 3:
             raise Error("mojolearn: Conv1d.forward takes (N, C, L)")
-        var out = xcnn_conv2d_forward(layer, xcnn_reshape_t(x, [s[0], s[1], 1, s[2]], context), context)
+        var out = xcnn_conv2d_forward_fields(layer, fields, xcnn_reshape_t(x, [s[0], s[1], 1, s[2]], context), context)
         var o = xcnn_shape(out)
         return xcnn_reshape_t(out, [o[0], o[1], o[3]], context)
     var a = _snapshot(x, "x", context)
     var s = xcnn_shape(a)
     if len(s) != 3:
         raise Error("mojolearn: Conv1d.forward takes (N, C, L)")
-    var out = xcnn_conv2d_forward(layer, xcnn_reshape(a, [s[0], s[1], 1, s[2]]), context)
+    var out = xcnn_conv2d_forward_fields(layer, fields, xcnn_reshape(a, [s[0], s[1], 1, s[2]]), context)
     var o = xcnn_shape(out)
     return xcnn_reshape(out, [o[0], o[1], o[3]])
 
@@ -1052,22 +1070,30 @@ def _block_convs(fields: PythonObject) raises -> PythonObject:
     return convs
 
 
-def _chain_ok(fields: PythonObject, entries: PythonObject, context: PythonObject) raises -> Bool:
+def _chain_fields(fields: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The admitted fields of the block's conv layers (conv1, conv2, then the
+    downsample conv when present) when the resident chain applies, else None.
+    `_forward_chain` reuses them, so each conv is admitted once per forward
+    (`_conv_dev` re-admitted it). The chain path writes only `_pins`,
+    `_pin_src`, `_x` and `_xp`, none of them admitted fields, so the reused
+    admission is the one the re-admission would have repeated."""
     if not xcnn_mixed(entries):
-        return False
+        return PythonObject(None)
     var convs = _block_convs(fields)
+    var admitted = Python.list()
     for i in range(len(convs)):  # driver-loop: over the block's conv layers
         var f = _conv_admit(convs[i], context)
         if Int(py=f["groups"]) != 1 or _explicit(f):
-            return False
-    return True
+            return PythonObject(None)
+        _ = py_call(admitted.append, f)
+    return admitted
 
 
-def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, xh: PythonObject, xshape: List[Int],
-              name: String, context: PythonObject) raises -> PythonObject:
+def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, cf: PythonObject, xh: PythonObject,
+              xshape: List[Int], name: String, context: PythonObject) raises -> PythonObject:
     """`BasicBlock._conv_dev`: conv of resident `xh` into the block's
-    resident array `name`; (handle, out shape)."""
-    var cf = _conv_admit(conv, context)
+    resident array `name`; (handle, out shape). `cf`: the conv's fields as
+    `_chain_fields` admitted them."""
     var oshape = _conv_out(cf, xcnn_entries(cf, context), xshape)
     var yh = xcnn_dev_get(block, entries, name, xcnn_size(oshape), context)
     var values = _weight_pair(cf, context)
@@ -1113,27 +1139,27 @@ def _as_list(shape: PythonObject) raises -> List[Int]:
     return out^
 
 
-def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject,
-                   context: PythonObject) raises -> PythonObject:
+def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObject, convf: PythonObject,
+                   x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`BasicBlock._forward_chain(b, x)`: the whole block on resident arrays."""
     var dev = xcnn_dev(block, entries, context)
     var xs = xcnn_shape(x)
     if len(xs) != 4:
         raise Error("mojolearn: Conv2d.forward takes (N, C, H, W)")
     var conv1 = fields["conv1"]
-    var inc = Int(py=_fields(conv1)["in_channels"])
+    var inc = Int(py=convf[0]["in_channels"])
     if xs[1] != inc:
         raise Error("mojolearn: input has " + String(xs[1]) + " channels, the layer " + String(inc))
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(block, entries, "x", x, context)
     var map2 = xcnn_entry(entries, "x_cnn_map2_m")
-    var c1 = _conv_dev(block, entries, conv1, xh, xs, "c1", context)
+    var c1 = _conv_dev(block, entries, conv1, convf[0], xh, xs, "c1", context)
     var s1 = _as_list(c1[1])
     var n1 = xcnn_size(s1)
     var r1 = xcnn_dev_get(block, entries, "r1", n1, context)
     var b1 = _bn_dev(block, entries, fields["bn1"], c1[0], s1, "b1", context)
     _ = py_call_typed(map2, Python.list(b1, b1, r1), PythonObject(7), Python.list(0, n1))
-    var c2 = _conv_dev(block, entries, fields["conv2"], r1, s1, "c2", context)
+    var c2 = _conv_dev(block, entries, fields["conv2"], convf[1], r1, s1, "c2", context)
     var s2 = _as_list(c2[1])
     var n2 = xcnn_size(s2)
     var b2 = _bn_dev(block, entries, fields["bn2"], c2[0], s2, "b2", context)
@@ -1143,7 +1169,7 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
     var d1 = PythonObject(None)
     var sd = PythonObject(None)
     if downsampled:
-        var made = _conv_dev(block, entries, ds[0], xh, xs, "d1", context)
+        var made = _conv_dev(block, entries, ds[0], convf[2], xh, xs, "d1", context)
         d1 = made[0]
         sd = made[1]
         idh = _bn_dev(block, entries, ds[1], d1, _as_list(sd), "d2", context)
@@ -1172,7 +1198,7 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
     py_setitem(chain, "d1", d1 if downsampled else ds)
     py_setitem(chain, "sd", sd if downsampled else ds)
     _set(fields, "_chain", chain)
-    var c1f = _fields(conv1)
+    var c1f = convf[0]
     _set(c1f, "_x", x)
     _set(c1f, "_xp", x)
     return y
@@ -1183,12 +1209,14 @@ def xcnn_block_forward(block: PythonObject, x: PythonObject, context: PythonObje
     var fields = _block_fields(block, context)
     var entries = xcnn_entries(fields, context)
     if xcnn_is_t(x, context):
-        if _chain_ok(fields, entries, context) and xcnn_on_dev(entries, x, context):
-            return _forward_chain(block, fields, entries, x, context)
+        var tconvf = _chain_fields(fields, entries, context)
+        if tconvf is not None and xcnn_on_dev(entries, x, context):
+            return _forward_chain(block, fields, entries, tconvf, x, context)
         return xcnn_wrap(entries, xcnn_block_forward(block, xcnn_host_of(x, context), context), context)
     var a = xcnn_f32(x, "x", context)
-    if _chain_ok(fields, entries, context):
-        return _forward_chain(block, fields, entries, a, context)
+    var convf = _chain_fields(fields, entries, context)
+    if convf is not None:
+        return _forward_chain(block, fields, entries, convf, a, context)
     _set(fields, "_chain", PythonObject(None))
     var out = xcnn_relu_forward(fields["relu1"], xcnn_bn_forward(fields["bn1"], xcnn_conv2d_forward(fields["conv1"], a, context), context), context)
     out = xcnn_bn_forward(fields["bn2"], xcnn_conv2d_forward(fields["conv2"], out, context), context)
@@ -1211,8 +1239,8 @@ def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObj
     return xcnn_reshape(out_buf, [s[0], rest])
 
 
-def _rows(layer: PythonObject, source: PythonObject, required: Bool, context: PythonObject) raises -> PythonObject:
-    var fields = _fields(layer)
+def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: PythonObject) raises -> PythonObject:
+    # `fields`: the layer's `_fields` dict the dispatcher already read.
     var a = xcnn_f32(source, "X", context)
     var s = xcnn_shape(a)
     var declared = py_get(fields, "input_shape")
@@ -1245,11 +1273,14 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         return layer
     if operation == "conv_init" or operation == "conv_init1d":
         return _conv_init(layer, args, operation == "conv_init1d", context)
+    # One admission per call: every conv handler below takes these fields
+    # (they re-admitted the same layer 2-4 times per call before). This line
+    # stays first, so the first error a bad layer raises is unchanged.
     var fields = _conv_admit(layer, context)
     if operation == "conv_backward":
-        return _conv_backward(layer, args, context)
+        return _conv_backward_fields(layer, fields, args, context)
     if operation == "conv_set_weights" or operation == "conv_set_weights1d":
-        return _conv_set_weights(layer, args, operation == "conv_set_weights1d", context)
+        return _conv_set_weights(layer, fields, args, operation == "conv_set_weights1d", context)
     if operation == "conv_pin":
         _pin_weights(layer, fields, xcnn_entries(fields, context), context)
         return layer
@@ -1257,7 +1288,7 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         _set(fields, "_pins", PythonObject(None))
         return layer
     if operation == "conv_grad_weight" or operation == "conv_grad_bias":
-        return _conv_gradient(layer, operation == "conv_grad_weight", context)
+        return _conv_gradient(fields, operation == "conv_grad_weight", context)
     if operation == "conv_grad_weight_set" or operation == "conv_grad_bias_set":
         var weight = operation == "conv_grad_weight_set"
         _set(fields, "grad_weight_" if weight else "grad_bias_", args[0])
@@ -1270,7 +1301,7 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         var s = xcnn_shape(w)
         return xcnn_reshape(w, [s[0], s[1], s[3]])
     if operation == "conv_fit":
-        var a = _rows(layer, args[0], True, context)
+        var a = _rows(fields, args[0], True, context)
         var shape = xcnn_shape(a)
         var size = 1
         for i in range(1, len(shape)):  # driver-loop: sample shape metadata
@@ -1278,11 +1309,11 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         _set(fields, "n_features_in_", PythonObject(size))
         return layer
     if operation == "conv_forward":
-        return xcnn_conv_forward(layer, args[0], context)
+        return xcnn_conv_forward(layer, fields, args[0], context)
     if operation == "conv_transform":
-        return _flat_rows(xcnn_conv_forward(layer, _rows(layer, args[0], True, context), context), context)
+        return _flat_rows(xcnn_conv_forward(layer, fields, _rows(fields, args[0], True, context), context), context)
     if operation == "block_forward":
         return xcnn_block_forward(layer, args[0], context)
     if operation == "block_transform":
-        return _flat_rows(xcnn_block_forward(layer, _rows(layer, args[0], False, context), context), context)
+        return _flat_rows(xcnn_block_forward(layer, _rows(fields, args[0], False, context), context), context)
     raise Error("RuntimeError: unknown CNN layer operation " + operation)
