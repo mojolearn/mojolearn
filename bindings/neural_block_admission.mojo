@@ -9,6 +9,7 @@ from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter,
 from bindings.generation_buffers import generation_array, py_ints
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32
 from core.hostptr import f32_ptr
+from std.memory import memcpy
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
 
@@ -310,8 +311,33 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
                     py_setitem(saved, name, storage)
             py_setitem(result, keys[i], captured)
         else:
-            py_setitem(result, keys[i], neural_block_f32(mods, value, String(keys[i]), context))
+            py_setitem(result, keys[i], neural_block_f32_owned(mods, value, String(keys[i]), context))
     return result
+
+
+def neural_block_f32_owned(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`neural_block_f32` for a weight the model RETAINS (constructor
+    weights): always the model's own C-order float32 copy. A C-order float32
+    Array used to be kept as a view of the caller's storage, so an in-place
+    write into the caller's array after construction reached the per-layer
+    and CPU routes but not a kept resident device session (lane
+    p3-neural-blocks; resident sessions are invalidated only through
+    `parameters()`). Every other input already came back as a new array."""
+    if py_type(value) is context["array_class"]:
+        var captured = neural_array_snapshot(mods, value, context)
+        if String(captured.dtype) != "<f4":
+            raise Error(_neural_dtype_refusal(name, String(captured.dtype)))
+        if String(captured.order) == "C":
+            var dims = List[Int]()
+            for i in range(len(captured.shape)):  # driver-loop: over the weight's shape words
+                dims.append(Int(py=captured.shape[i]))
+            var result = generation_array(dims)
+            var count = Int(py=captured.size)
+            if count > 0:
+                memcpy(dest=f32_ptr(Int(py=result._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
+            _ = captured^
+            return result
+    return neural_block_f32(mods, value, name, context)
 
 
 def _neural_dtype_refusal(name: String, code: String) -> String:
