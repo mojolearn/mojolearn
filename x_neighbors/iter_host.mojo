@@ -29,7 +29,7 @@ from x_neighbors.items import (
     K_RBF, U_IDENTITY,
 )
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
 
 comptime _SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -225,11 +225,15 @@ def _tile_rows(n: Int, width: Int) -> Int:
     return max(1, min(n, t))
 
 
-def _cells[F: def(Int) -> None](ref f: F, count: Int):
-    """f(t) for t in [0, count), cut into host tasks by count only."""
+def _cells[F: def(Int) -> None](ref f: F, count: Int, work: Int = 0):
+    """f(t) for t in [0, count), cut into host tasks by count only. Every
+    cell writes only its own output, so the task count moves no bit. `work`
+    is the call's scalar element operations; below the grain floor
+    (`core/host_predict_threads.mojo::HOST_MIN_TASK_WORK`, lane
+    perf-host-grain) the cells run on the calling thread; 0 = unknown."""
     if count <= 0:
         return
-    var tasks = host_predict_task_count(count)
+    var tasks = host_predict_task_count_work(count, work)
     var part = host_predict_chunk(count, tasks)
 
     def _task(k: Int) {imm f, imm part, imm count}:
@@ -253,13 +257,13 @@ def _hsab(addr: Int, count: Int):
 def _kernel_rows(q: FP, y: FP, k: FP, rows: Int, m: Int, d: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32):
     def f(t: Int) {imm q, imm y, imm k, imm rows, imm m, imm d, imm kind, imm degree, imm gamma, imm coef0}:
         kernel_item(t, q, y, k, rows, m, d, kind, gamma, coef0, degree)
-    _cells(f, rows * m)
+    _cells(f, rows * m, rows * m * d)
 
 
 def _matmul_rows(a: FP, b: FP, res: FP, n: Int, k: Int, m: Int):
     def f(t: Int) {imm a, imm b, imm res, imm n, imm k, imm m}:
         matmul_item(t, a, b, res, n, k, m)
-    _cells(f, n * m)
+    _cells(f, n * m, n * m * k)
 
 
 def op_kpca_transform(
@@ -289,13 +293,13 @@ def op_kpca_transform(
 
         def rsum(t: Int) {imm Kc, imm rsp, imm rows, imm nf}:
             rowsum_item(t, Kc, rsp, rows, nf)
-        _cells(rsum, rows)
+        _cells(rsum, rows, rows * nf)
         for t in range(rows):
             scale_div_item(t, rsp, prp, rows, s)
 
         def cen(t: Int) {imm Kc, imm colp, imm prp, imm allp, imm kcp, imm rows, imm nf}:
             kpca_center_item(t, Kc, colp, prp, allp, kcp, rows, nf)
-        _cells(cen, rows * nf)
+        _cells(cen, rows * nf, 2 * rows * nf)
         _matmul_rows(kcp, FP(unsafe_from_address=alphas), FP(unsafe_from_address=res) + r0 * c, rows, nf, c)
         r0 += rows
     _hsab(res, nq * c)
@@ -328,7 +332,7 @@ def _scaled_rbf_rows(q: FP, z: FP, kp: FP, ksp: FP, rows: Int, m: Int, d: Int, g
 
     def f(t: Int) {imm kp, imm ksp, imm rows, imm m, imm variance}:
         unary_item(t, kp, ksp, rows * m, U_IDENTITY, variance, Float32(0))
-    _cells(f, rows * m)
+    _cells(f, rows * m, 2 * rows * m)
 
 
 def op_svgp_fit_ff(
@@ -404,7 +408,7 @@ def op_svgp_fit_ff(
 
                 def gb(t: Int) {imm kt, imm bhp, imm blp, imm grows, imm m}:
                     matmul_tn_acc_ff_item(t, kt, kt, bhp, blp, grows, m, m)
-                _cells(gb, mm)
+                _cells(gb, mm, mm * grows)
                 g0 += grows
         _ = kf^
         _ = b32^
@@ -416,7 +420,7 @@ def op_svgp_fit_ff(
 
         def bb(t: Int) {imm ksp, imm bhp, imm blp, imm rows, imm m}:
             matmul_tn_acc_ff_item(t, ksp, ksp, bhp, blp, rows, m, m)
-        _cells(bb, mm)
+        _cells(bb, mm, mm * rows)
         for t in range(m):
             matmul_tn_acc_ff_item(t, ksp, yp, vhp, vlp, rows, m, 1)
         r0 += rows
@@ -452,7 +456,7 @@ def op_svgp_predict(
 
         def vv(t: Int) {imm ksp, imm cp, imm vp, imm rows, imm m, imm kdiag}:
             svgp_var_item(t, ksp, cp, vp, rows, m, kdiag)
-        _cells(vv, rows)
+        _cells(vv, rows, rows * m * m)
         r0 += rows
     _hsab(mean, n)
     _ = kb^
