@@ -22,9 +22,10 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.prep_native_estimator import prep_estimator_call, prep_estimator_plan
+from bindings.trees_side_records import trees_side_get, trees_side_put
 
 
-comptime _RECORD_KEY = "_mojolearn_admitted"
+comptime _RECORD_SLOT = "trees_meta_admitted_v1"
 comptime _MAX_DEPTH = 64
 
 
@@ -107,12 +108,11 @@ def meta_admit_configuration(model: PythonObject, context: PythonObject) raises:
     """The meta-estimator's constructor admission (`__admit__`: one native
     clone of the model and every member), skipped while the identity record
     stored by the last successful admission still matches."""
-    var fields = py_fields(model)
     var record = _record_of(model, context)
     if record is not None:
-        var held = py_get(fields, PythonObject(_RECORD_KEY), PythonObject(None))
+        var held = trees_side_get(_RECORD_SLOT, model)
         if held is not None and _same_record(held, record):
             return
     _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
     if record is not None:
-        py_setitem(fields, PythonObject(_RECORD_KEY), record)
+        _ = trees_side_put(_RECORD_SLOT, model, record)
