@@ -157,7 +157,7 @@ def host_predict_task_count_work(rows: Int, work: Int) -> Int:
     ONLY for row-independent splits (every row a function of its own input
     and the fitted state, the contract of this module): the task count then
     moves no bit. A split whose partition feeds an ordered fold keeps its
-    partition and uses `core/host_parallel.mojo::host_parallelize_work`."""
+    own partition and is not given this count."""
     var tasks = host_predict_task_count(rows)
     if tasks <= 1 or work <= 0:
         return tasks
