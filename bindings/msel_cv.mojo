@@ -934,6 +934,80 @@ def _ascii(text: String) raises -> PythonObject:
     return py_call(PythonObject(text).encode, PythonObject("ascii"))
 
 
+def _put_i64(mut out: List[UInt8], value: Int64):
+    """Append the decimal digits of `value` (Python `str(int)` spelling)."""
+    var mag: UInt64
+    if value < 0:
+        out.append(UInt8(45))  # '-'
+        mag = (-(value + 1)).cast[DType.uint64]() + 1
+    else:
+        mag = value.cast[DType.uint64]()
+    var start = len(out)
+    while True:  # cpu-route: the digits of one index, least significant first
+        out.append(UInt8(48) + (mag % 10).cast[DType.uint8]())
+        mag = mag // 10
+        if mag == 0:
+            break
+    var i = start
+    var j = len(out) - 1
+    while i < j:  # cpu-route: reverse the digits in place
+        var t = out[i]
+        out[i] = out[j]
+        out[j] = t
+        i += 1
+        j -= 1
+
+
+def _put_indices(mut out: List[UInt8], array: PythonObject) raises:
+    """Append `[a,b,...]` for a C-contiguous int64 index Array."""
+    var count = Int(py=array.size)
+    var p = msel_p64(array)
+    out.append(UInt8(91))  # '['
+    for i in range(count):  # cpu-route: the fold's indices written from the int64 buffer
+        if i:
+            out.append(UInt8(44))  # ','
+        _put_i64(out, p[i])
+    out.append(UInt8(93))  # ']'
+    _ = array  # keep the buffer owner alive through the reads above
+
+
+def _put_le8(mut hasher: Sha256, count: Int):
+    var raw = List[UInt8](capacity=8)
+    for i in range(8):  # the 8-byte little-endian length prefix
+        raw.append(UInt8((count >> (8 * i)) & 0xFF))
+    hasher.update_list(raw)
+
+
+def _folds_digest(trains: List[PythonObject], tests: List[PythonObject]) raises -> PythonObject:
+    """`_digest(("folds", json.dumps(folds)))` written natively from the int64
+    index buffers: the same bytes as the canonical JSON of the list of
+    (train list, test list) pairs, `[[[a,...],[b,...]],...]`, with the same
+    8-byte length prefixes, so the digest is unchanged."""
+    var text = List[UInt8]()
+    text.append(UInt8(91))  # '['
+    for f in range(len(trains)):  # driver-loop: over folds
+        if f:
+            text.append(UInt8(44))  # ','
+        text.append(UInt8(91))  # '['
+        _put_indices(text, trains[f])
+        text.append(UInt8(44))  # ','
+        _put_indices(text, tests[f])
+        text.append(UInt8(93))  # ']'
+    text.append(UInt8(93))  # ']'
+    var tag = List[UInt8]()  # b"folds"
+    tag.append(UInt8(102))
+    tag.append(UInt8(111))
+    tag.append(UInt8(108))
+    tag.append(UInt8(100))
+    tag.append(UInt8(115))
+    var hasher = Sha256()
+    _put_le8(hasher, len(tag))
+    hasher.update_list(tag)
+    _put_le8(hasher, len(text))
+    hasher.update_list(text)
+    return PythonObject(hasher.hexdigest())
+
+
 def _order_digest(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_order_digest`: the values in arrival order with dtype and shape."""
     var b = msel_b()
@@ -963,7 +1037,10 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     if msel_n_samples(y, context) != n:
         raise Error("y must be a 1-D buffer array matching X rows")
     var it = family_call(b.iter, msel_fold_source(cv, estimator, x, y, groups, context))
-    var folds = Python.list()
+    # perf2-msel: the folds stay int64 index Arrays; their digest is written
+    # from the buffers (it walked Python int lists through the JSON writer).
+    var trains = List[PythonObject]()
+    var tests = List[PythonObject]()
     var sizes = Python.list()
     while True:  # driver-loop: over folds
         var item = msel_try(b.next, Python.tuple(it), b.StopIteration, context)
@@ -975,11 +1052,15 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
         if len(pair) != 2:
             raise Error(String("too many values to unpack (expected 2)") if len(pair) > 2
                         else String("not enough values to unpack (expected 2, got ") + String(len(pair)) + ")")
-        var train = py_call(b.list, msel_indices(pair[0], n, "train", context)._mv)
-        var test = py_call(b.list, msel_indices(pair[1], n, "test", context)._mv)
-        _ = py_call(folds.append, Python.tuple(train, test))
-        _ = py_call(sizes.append, py_call(b.list, Python.tuple(len(train), len(test))))
-    if len(folds) == 0:
+        var train = msel_indices(pair[0], n, "train", context)
+        var test = msel_indices(pair[1], n, "test", context)
+        var sized = Python.list()
+        _ = py_call(sized.append, PythonObject(Int(py=train.size)))
+        _ = py_call(sized.append, PythonObject(Int(py=test.size)))
+        _ = py_call(sizes.append, sized)
+        trains.append(train)
+        tests.append(test)
+    if len(trains) == 0:
         raise Error("cv must produce at least one fold")
     var descriptor = Python.dict()
     py_setitem(descriptor, "schema", context["family_msel_schema"])
@@ -988,8 +1069,8 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     py_setitem(descriptor, "X_sha256", _order_digest(x, "X", context))
     py_setitem(descriptor, "y_sha256", _order_digest(y, "y", context))
     py_setitem(descriptor, "groups_sha256", PythonObject(None) if groups is None else _order_digest(groups, "groups", context))
-    py_setitem(descriptor, "fold_assignment_sha256", _digest(Python.tuple(_ascii("folds"), _canonical(folds, context))))
-    py_setitem(descriptor, "n_folds", PythonObject(len(folds)))
+    py_setitem(descriptor, "fold_assignment_sha256", _folds_digest(trains, tests))
+    py_setitem(descriptor, "n_folds", PythonObject(len(trains)))
     py_setitem(descriptor, "fold_sizes", sizes)
     py_setitem(descriptor, "sha256", sha256_hexdigest(_canonical(descriptor, context)))
     return descriptor
