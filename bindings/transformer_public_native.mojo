@@ -20,7 +20,7 @@ from providers.python.transformer_session_tape_pyapi import transformer_session_
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from std.ffi import _Global
 from bindings.native_prepared_owner import prepared_key_add, prepared_key_same
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 
 
 struct _GenerationStamp(Defaultable, Movable):
@@ -80,7 +80,9 @@ def _transformer_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
             for j in range(len(names)):  # driver-loop: fixed owner storage schema
                 if py_contains(namespace, names[j]):
                     raise Error("TypeError: Transformer storage fields cannot be replaced by class descriptors")
-        class_admit(mods, _FIELDS_CLASS_SLOT, value_class, Python.tuple(cls, names))
+        # Not built where no record can be kept (Python 3.10/3.11).
+        if class_watch_ready():
+            class_admit(mods, _FIELDS_CLASS_SLOT, value_class, Python.tuple(cls, names))
     return _fields(mods, value)
 
 
@@ -126,13 +128,18 @@ def _transformer_array_slots(mut mods: NativeModules, context: PythonObject) rai
         if same:
             return slots
     var namespace = _class_fields(mods, array_class)
+    # The record payload is built only where a record can be kept (not on
+    # Python 3.10/3.11, which have no type watchers).
+    var ready = class_watch_ready()
     var descriptors = mods.module("builtins").list()
     for i in range(len(names)):  # driver-loop: pinned native Array storage layout
         if py_get(namespace, names[i]) is not slots[names[i]]:
             raise Error("TypeError: Transformer output requires unchanged native Array storage slots")
-        _ = py_call(descriptors.append, slots[names[i]])
-    class_admit(mods, _ARRAY_SLOTS_CLASS_SLOT, array_class,
-                Python.tuple(slots, PythonObject(len(names)), py_call(mods.module("builtins").tuple, descriptors)))
+        if ready:
+            _ = py_call(descriptors.append, slots[names[i]])
+    if ready:
+        class_admit(mods, _ARRAY_SLOTS_CLASS_SLOT, array_class,
+                    Python.tuple(slots, PythonObject(len(names)), py_call(mods.module("builtins").tuple, descriptors)))
     return slots
 
 

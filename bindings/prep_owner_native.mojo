@@ -11,7 +11,7 @@
 # same stages, operands and order, so the same bits).
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -59,8 +59,9 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
             found = String(kind)
             break
     # The payload holds the kinds table (import-time public classes), never
-    # `cls` itself.
-    class_admit(mods, _OWNER_KIND_SLOT, cls, Python.tuple(kinds, PythonObject(found)))
+    # `cls` itself. Not built where no record can be kept (Python 3.10/3.11).
+    if class_watch_ready():
+        class_admit(mods, _OWNER_KIND_SLOT, cls, Python.tuple(kinds, PythonObject(found)))
     return found
 
 

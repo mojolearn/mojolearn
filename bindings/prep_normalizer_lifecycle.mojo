@@ -9,7 +9,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _truth
 from bindings.params_metadata_native import _resolved, _value
 from bindings.native_loaded_module import NativeModules
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_warn
@@ -145,7 +145,9 @@ def _class_settings(model: PythonObject) raises -> PythonObject:
         plain = plain and (value is missing or _plain_setting(value, b))
         _ = py_call(out.append, value)
     var payload = py_call(b.tuple, out)
-    if plain:
+    # The payload is the result either way; the record is kept only where
+    # type watchers exist (not on Python 3.10/3.11).
+    if plain and class_watch_ready():
         class_admit(mods, _CLASS_SETTINGS_SLOT, cls, payload)
     return payload
 
