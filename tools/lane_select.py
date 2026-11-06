@@ -1984,7 +1984,7 @@ def _extending_files(closure):
     return out
 
 
-def _python_closure(seeds, sinks=(), regions=False):
+def _python_closure(seeds, sinks=(), regions=False, entered=None):
     """The package's own import closure of `seeds`. A sink is included but not
     followed: the walk stops at a registry rather than stepping through it into
     every other family.
@@ -1994,7 +1994,7 @@ def _python_closure(seeds, sinks=(), regions=False):
     imports nothing for it. False is the whole-file walk (what `import
     mojolearn` can load at all, `_package_import_closure`)."""
     if regions:
-        return _region_closure(seeds, sinks)
+        return _region_closure(seeds, sinks, entered=entered)
     out, stack = set(), list(seeds)
     while True:
         while stack:
@@ -2022,7 +2022,7 @@ def _python_closure(seeds, sinks=(), regions=False):
         stack.extend(fresh)
 
 
-def _region_closure(seeds, sinks=()):
+def _region_closure(seeds, sinks=(), entered=None):
     """`_python_closure` symbol by symbol: each file is followed only through
     the imports of the REGION its importers ask for (`_region_import_edges`),
     so a function-local import counts when its function can run for the lane,
@@ -2041,7 +2041,10 @@ def _region_closure(seeds, sinks=()):
     locally. Read whole, those local imports put `neural_inference.py` in 542
     of 571 lanes and connected the rf, gbdt and trees bindings to every
     lane, whose native owners then made `core/forest_inference.mojo` select
-    487 lanes (54 reviewed). `connect` imports none of them."""
+    487 lanes (54 reviewed). `connect` imports none of them.
+
+    `entered`, a dict, receives each sink the walk entered with the names its
+    importers asked of it (None: whole), for `sink_region_loads`."""
     wanted, walked, stack = {}, {}, [(s, None) for s in seeds]
     while True:
         while stack:
@@ -2062,6 +2065,8 @@ def _region_closure(seeds, sinks=()):
         # THE BACKWARD EDGE, as in `_python_closure`: an extender runs whole.
         fresh = _extending_files(set(wanted)) - set(wanted)
         if not fresh:
+            if entered is not None:
+                entered.update({rel: names for rel, names in wanted.items() if rel in sinks})
             return set(wanted)
         stack.extend((f, None) for f in fresh)
 
@@ -4163,6 +4168,58 @@ def _binding_names_in_uncached(rel, nodes):
     return out
 
 
+_SINK_LOADS = {}
+_CACHES.append(_SINK_LOADS)
+
+
+def sink_region_loads(rel, wanted):
+    """(bindings, names) a REGISTRY (an enumerator sink) LOADS in the region a
+    lane runs: every binding a binding call there (`_BINDING_CALLS`) names by a
+    LITERAL argument, and the identifier-shaped names that region reads which
+    are exports of those bindings. `wanted` is what the lane's importers ask of
+    the file (`_region_nodes`; None is the whole file).
+
+    WHY A SINK STILL LOADS (2026-11-05). A registry's binding NAMES are not
+    evidence for one lane (`ENUMERATOR_MAX_BINDINGS`), so the map took none of
+    them. The native-owner bridges then named a fourth binding:
+    `_native_runtime_manifold_bridge.py` hands three numerical bindings to
+    `_native_family_bridge.connect_bindings` and loads
+    `_mojolearn_runtime_manifold_host` in `connect`, so it became a sink, and
+    the umap lane, whose `_umap_impl.py` calls that `connect` at import and
+    whose every fit is `manifold_native_call`, lost the manifold owner and with
+    it the whole umap/ tree: `umap/*.mojo` mapped to no lane at all. A literal
+    load in code the lane runs is not a name in a list, it is a load the lane
+    performs, so it counts. A table subscript or a variable argument (the
+    registry part: `_HOST_BASENAMES[name]`, `binding(name, mode)`) still does
+    not, and the walk still stops at the sink. Widening only: this adds
+    bindings and names, never removes one."""
+    key = (rel, None if wanted is None else frozenset(wanted))
+    if key in _SINK_LOADS:
+        return _SINK_LOADS[key]
+    nodes = _region_nodes(rel, None if wanted is None else frozenset(wanted))
+    loads = set()
+    for top in nodes:
+        for node in ast.walk(top):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+            if name not in _BINDING_CALLS:
+                continue
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str) \
+                        and arg.value.startswith("_mojolearn"):
+                    loads.add(arg.value)
+    loads = {b for b in loads if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+    names = set()
+    if loads:
+        exports = set().union(*[set(_binding_exports(os.path.join("bindings", b + ".mojo")))
+                                | set(_delegated_exports(os.path.join("bindings", b + ".mojo")))
+                                for b in loads])
+        names = _names_in_nodes(nodes) & exports
+    hit = _SINK_LOADS[key] = (frozenset(loads), frozenset(names))
+    return hit
+
+
 def _import_time_names(rel, operations=False):
     """The attribute names and identifier-shaped string constants of the code
     one Python file runs WHEN IMPORTED: its module-level statements, class
@@ -4841,15 +4898,20 @@ def lane_sources():
                     members[rel] = None  # the lane reaches the module object
                 elif rel not in members or members[rel] is not None:
                     members.setdefault(rel, set()).add(name)
-        files = _python_closure(seeds, sinks, regions=True)
+        entered = {}
+        files = _python_closure(seeds, sinks, regions=True, entered=entered)
         doors = files - set(sinks)
-        bindings = door_bindings(doors)
+        # A SINK'S LITERAL LOADS in the region the lane runs (`sink_region_loads`):
+        # loads, not names, so they are this lane's bindings by syntax.
+        sink_loads = set().union(*[sink_region_loads(rel, names)[0] for rel, names in entered.items()]) \
+            if entered else set()
+        bindings = door_bindings(doors) | sink_loads
         reach[lane] = (matched, files, doors, bindings)
         seeds_of[lane] = seeds
         seed_members[lane] = members
         # The bindings a door names BY SYNTAX, without the `host_model` class
         # routes `resolved_bindings` adds (`route_only` below).
-        syntax_of[lane] = {b for rel in doors for b in _binding_names(rel)} & bindings
+        syntax_of[lane] = ({b for rel in doors for b in _binding_names(rel)} | sink_loads) & bindings
     ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
@@ -4912,6 +4974,13 @@ def lane_sources():
             limitations = {}
             for rel, wanted in walk.items():
                 if rel in sinks:
+                    # A sink is entered, not read as a door; what its region
+                    # LOADS by a literal, and the exports of exactly those
+                    # loads that region reads, are the lane's own
+                    # (`sink_region_loads`). Never whole through a sink.
+                    loads, names = sink_region_loads(rel, wanted)
+                    declared |= loads
+                    used |= names
                     continue
                 nodes = regions[rel]
                 found = _binding_names_in(rel, nodes)

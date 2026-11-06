@@ -436,6 +436,12 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
         # by syntax, plus the `host_model` route of a class a door defines
         # (`resolved_bindings`, 2026-09-23): still this lane's own doors
         resolved = lane_select.resolved_bindings(doors)
+        # ...or a registry the lane enters LOADS it by a literal argument
+        # (`sink_region_loads`, 2026-11-05). Read whole here: a superset of
+        # the region the map read, still syntax and never prose.
+        for rel in sources[lane]:
+            if rel in sinks and rel.endswith(".py"):
+                resolved |= set(lane_select.sink_region_loads(rel, None)[0])
         for binding in why[lane]["bindings"]:
             assert binding in resolved, \
                 f"{lane} carries {binding} but no door of its own resolves it"
