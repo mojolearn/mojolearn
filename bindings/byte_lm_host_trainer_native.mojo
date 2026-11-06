@@ -37,6 +37,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from core.cast_in import CAST_KIND_FLOAT
 from core.xseq_marshal import neural_cast_i32_2d, neural_first_bad_id
+from bindings.byte_perf_helpers import byte_int_list_from_i32, byte_int_list_from_i64
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _IGNORE_INDEX = -100
@@ -496,10 +497,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
         mods.released()
         if written != batch:
             raise Error("RuntimeError: byte LM host wrote an unexpected number of next bytes")
-        var output = Python.list()
-        var ids = _I32P(unsafe_from_address=next_address)
-        for row in range(batch):  # driver-loop: over completed next-token results, publishing one per batch row
-            _ = py_call(output.append, Int(ids[row]))
+        var output = byte_int_list_from_i32(next_address, batch)
         _ = next
         _ = tokens
         _ = parameters
@@ -521,9 +519,8 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
         for row in range(batch):  # driver-loop: over admitted sequences, selecting each native result row
             argmax_rows_f32(source + (row * length + sizes[row] - 1) * vocab, 1, vocab,
                 MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(indices.unsafe_ptr()) + row * 8))
-        var output = Python.list()
-        for row in range(batch):  # driver-loop: over completed next-token results, publishing one per batch row
-            _ = py_call(output.append, Int(indices[row]))
+        var output = byte_int_list_from_i64(Int(indices.unsafe_ptr()), batch)
+        _ = indices^
         _ = out
         return output
     if args[1] is not None:

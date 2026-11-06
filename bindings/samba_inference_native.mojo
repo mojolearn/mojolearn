@@ -20,6 +20,7 @@ from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
+from bindings.byte_perf_helpers import byte_view_bytes
 
 
 def _m3_shapes(b: Int, h: Int) -> List[List[Int]]:
@@ -223,7 +224,7 @@ def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries:
     return output
 
 
-def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: PythonObject, context: PythonObject) raises -> PythonObject:
+def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, List[Int]]:
     var bi = native_loaded_module("builtins")
     var own = py_type(value) is context["neural"]["array_class"]
     var view = value._mv if own else py_call(bi.memoryview, value)
@@ -240,19 +241,23 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     var fmt = String(py_call(view.format.lstrip, "=@<"))
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("Samba: inputs must be native-endian integer ids")
-    var packed = py_call(native_loaded_module("array").array, fmt)
-    _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+    # One native C-order copy of the ids under a buffer pin (formerly
+    # view.tobytes then array.frombytes: two Python copies per token step).
+    var item = Int(py=view.itemsize)
+    var packed = byte_view_bytes(view, b * l * item)
     var column_major = own and String(value.order) == "F"
     var ids = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
     _ = ids  # keep the Python object alive through the native call above
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
-    samba_inference_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l,
+    samba_inference_ids_into(Int(packed.unsafe_ptr()), item, signed, b, l,
                              column_major, vocab, lengths is not None, sizes, dst)
     _ = packed  # keep the Python object alive through the native call above
     _ = ids  # keep the Python object alive through the native call above
     _ = packed^
-    return ids
+    # The admitted ragged lengths go back to samba_forward, which formerly
+    # admitted them a second time for the output prefix copy.
+    return (ids, sizes^)
 
 
 def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject, lengths: PythonObject,
@@ -274,7 +279,8 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         entries = samba_entries(context, fields["numeric_mode"])
     var d = Int(py=config["d_model"])
     var v = Int(py=config["vocab"])
-    var ids = _samba_inference_ids(inputs, v, step, lengths, context)
+    var admitted = _samba_inference_ids(inputs, v, step, lengths, context)
+    var ids = admitted[0]
     var b = Int(py=ids.shape[0])
     var l = Int(py=ids.shape[1])
     var output = PythonObject(None)
@@ -344,7 +350,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         _ = head^
         _ = hidden^
     if lengths is not None:
-        var sizes = _neural_lengths(lengths, b, l, context["neural"])
+        var sizes = admitted[1].copy()
         var padded = generation_array([b, l, v])
         samba_copy_row_prefixes(Int(py=padded._addr), Int(py=output._addr), sizes, b, l, v)
         _ = padded  # keep the Python object alive through the native call above

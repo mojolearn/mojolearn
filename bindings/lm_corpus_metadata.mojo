@@ -67,9 +67,11 @@ def corpus_connect(args: PythonObject) raises -> PythonObject:
 def corpus_int(value: PythonObject, name: String, strict: Bool = False) raises -> Int:
     var bi = native_loaded_module("builtins")
     var cls = py_type(value)
-    if cls is not bi.int:
-        if strict or (cls is not bi.str and cls is not bi.bytes and not neural_native_scalar(value, corpus_context())):
-            raise Error("TypeError: corpus " + name + " requires a native integer; Python conversion hooks are unsupported")
+    if cls is bi.int:
+        # An exact int converts natively; int() would only return it.
+        return Int(py=value)
+    if strict or (cls is not bi.str and cls is not bi.bytes and not neural_native_scalar(value, corpus_context())):
+        raise Error("TypeError: corpus " + name + " requires a native integer; Python conversion hooks are unsupported")
     return Int(py=py_call(bi.int, value))
 
 

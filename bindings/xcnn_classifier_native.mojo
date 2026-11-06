@@ -27,6 +27,7 @@ from bindings.xseq_native_common import XseqStream
 from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
 from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value
+from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array
@@ -107,10 +108,11 @@ def _minus_one(count: Int, context: PythonObject) raises -> PythonObject:
 
 def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool = False) raises -> PythonObject:
     var fields = _fields(model)
+    var mods = NativeModules()   # one module view for every field and child layer below
     for name in ["input_shape", "conv_channels", "kernel_size", "pool_size", "learning_rate",  # driver-loop: over passive classifier settings
                  "momentum", "weight_decay", "batch_size", "max_iter", "shuffle", "random_state", "numeric_mode",
                  "optimizer", "dampening", "nesterov", "betas", "eps", "_flat"]:
-        neural_plain_value(py_get(fields, PythonObject(name)), 0, context)
+        neural_plain_value(mods, py_get(fields, PythonObject(name)), 0, context)
     if fitted and (not py_contains(fields, "classes_") or not py_contains(fields, "layers_") or not py_contains(fields, "head_")):
         raise Error("RuntimeError: call fit before classifier inference")
     var classes = py_get(fields, "classes_")
@@ -133,7 +135,7 @@ def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool 
             for key in ["in_channels", "out_channels", "kernel_size", "stride", "padding", "dilation", "groups",  # driver-loop: over compiled child options
                         "bias", "_conv_pad", "_pads", "_explicit", "ceil_mode", "count_include_pad", "divisor_override",
                         "in_features", "out_features"]:
-                neural_plain_value(py_get(state, PythonObject(key)), 0, context)
+                neural_plain_value(mods, py_get(state, PythonObject(key)), 0, context)
             for key in ["weight_", "bias_"]:  # driver-loop: native learned buffers before shape/address reads
                 if py_contains(state, PythonObject(key)):
                     var buffer = state[PythonObject(key)]
@@ -484,21 +486,46 @@ def _resident(fields: PythonObject, entries: PythonObject, handles: PythonObject
     return a
 
 
+def _plan_words(plans: List[_BlockPlan]) raises -> PythonObject:
+    """Each block's launch words (`_ints(prm)`, `_ints(pprm)`), built once
+    per batch size instead of once per launch."""
+    var out = Python.list()
+    for i in range(len(plans)):  # driver-loop: one word pair per conv block (model structure)
+        _ = py_call(out.append, Python.tuple(_ints(plans[i].prm), _ints(plans[i].pprm)))
+    return out
+
+
+def _block_handles(fields: PythonObject, rw: PythonObject) raises -> PythonObject:
+    """`rw[id(conv)]` of every block's conv, looked up once per call."""
+    var b = _b()
+    var out = Python.list()
+    var blocks = fields["_blocks"]
+    for i in range(len(blocks)):  # driver-loop: over the conv blocks (model structure)
+        _ = py_call(out.append, rw[py_call(b.id, blocks[i][0])])
+    return out
+
+
+def _forward_planned(entries: PythonObject, a: PythonObject, n: Int, hws: PythonObject, head: PythonObject,
+                     words: PythonObject, flat: PythonObject, k: Int) raises:
+    """`_forward_r(b, a, n)` on launch words and resident handles the caller
+    built once (`_plan_words`, `_block_handles`): the same entries, the same
+    words, in the same order."""
+    var src = a["x"]
+    if len(words):
+        var forward = _e(entries, "x_cnn_conv_block_forward_r")
+        for i in range(len(words)):  # driver-loop: one device launch per conv block
+            var hw = hws[i]
+            _ = py_call(forward, src, hw[0], hw[1], a["out"][i], a["idx"][i], words[i][0], words[i][1], a["saved"][i])
+            src = a["out"][i]
+    _ = py_call(_e(entries, "x_cnn_linear_forward_r"), src, head[0], head[1], a["logits"], Python.list(n, flat, k))
+
+
 def _forward_r(fields: PythonObject, entries: PythonObject, rw: PythonObject, a: PythonObject, n: Int) raises -> List[_BlockPlan]:
     """`_forward_r(b, a, n)`: logits of the n rows in a["x"], resident."""
     var b = _b()
     var plans = _plan(fields, entries, n)
-    var src = a["x"]
-    var blocks = fields["_blocks"]
-    for i in range(len(plans)):  # driver-loop: one device launch per conv block
-        var conv = blocks[i][0]
-        var hw = rw[py_call(b.id, conv)]
-        _ = py_call(_e(entries, "x_cnn_conv_block_forward_r"), src, hw[0], hw[1], a["out"][i], a["idx"][i],
-                    _ints(plans[i].prm), _ints(plans[i].pprm), a["saved"][i])
-        src = a["out"][i]
-    var head = rw[py_call(b.id, fields["head_"])]
-    _ = py_call(_e(entries, "x_cnn_linear_forward_r"), src, head[0], head[1], a["logits"],
-                Python.list(n, fields["_flat"], len(fields["classes_"])))
+    _forward_planned(entries, a, n, _block_handles(fields, rw), rw[py_call(b.id, fields["head_"])], _plan_words(plans),
+                     fields["_flat"], len(fields["classes_"]))
     return plans^
 
 
@@ -619,95 +646,138 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
             py_setitem(spec, "dims", Python.list(fields["_flat"], k))
             py_setitem(spec, "plan_full", full_plan)
             py_setitem(spec, "plan_last", last_plan)
+        # Launch words that stay fixed for the whole fit are built once (they
+        # were rebuilt per epoch or per step): the optimizer scalars, the
+        # compiled entries, each block's resident handles, its backward tail
+        # and its plan words per batch size. Same values, same order.
+        var fpar = PythonObject(None)
+        var hyper_first = PythonObject(None)
+        var hyper_rest = PythonObject(None)
+        if max_iter > 0:
+            if sgd:
+                var lr = py_call(b.float, fields["learning_rate"])
+                var mom = py_call(b.float, fields["momentum"])
+                var wd = py_call(b.float, fields["weight_decay"])
+                var damp = py_call(b.float, fields["dampening"])
+                var nest = 1.0 if Bool(py=fields["nesterov"]) else 0.0
+                fpar = Python.list(lr, mom, wd, damp, nest, 0.0)
+                hyper_first = Python.list(lr, mom, wd, damp, nest, 1.0)
+                hyper_rest = Python.list(lr, mom, wd, damp, nest, 0.0)
+            else:
+                var betas = fields["betas"]
+                fpar = Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, betas[0]),
+                                   py_call(b.float, betas[1]), py_call(b.float, fields["eps"]),
+                                   py_call(b.float, fields["weight_decay"]), 1.0 if optimizer == "adamw" else 0.0)
+        var hws = PythonObject(None)
+        var head_hw = PythonObject(None)
+        var tails = PythonObject(None)
+        var size_words = PythonObject(None)
+        var planned_m = -1
+        var plans = List[_BlockPlan]()
+        var words = PythonObject(None)
+        var flat = fields["_flat"]
+        if not epoch_entry and max_iter > 0:
+            hws = _block_handles(fields, rw)
+            head_hw = rw[py_call(b.id, fields["head_"])]
+            tails = b.list()
+            for j in range(len(hws)):  # driver-loop: the backward tail words of every conv block
+                var tail = Python.list(a["gout"][j - 1] if j > 0 else PythonObject(0), hws[j][2], hws[j][3])
+                _ = py_call(tail.extend, a["saved"][j])
+                _ = py_call(tails.append, tail)
+            size_words = b.list()
+            for q in range(len(params)):  # driver-loop: one size word list per parameter array
+                _ = py_call(size_words.append, Python.list(sizes[q]))
         for ep in range(max_iter):  # driver-loop: over the device epochs
             var epoch = b.list()
+            var total = 0.0
+            var count = 0
             if epoch_entry:
                 var losses = _empty(Python.tuple(nsteps), "float64", context)
-                var fpar = Python.list()
-                if sgd:
-                    fpar = Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, fields["momentum"]),
-                                       py_call(b.float, fields["weight_decay"]), py_call(b.float, fields["dampening"]),
-                                       1.0 if Bool(py=fields["nesterov"]) else 0.0, 0.0)
-                else:
-                    var betas = fields["betas"]
-                    fpar = Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, betas[0]),
-                                       py_call(b.float, betas[1]), py_call(b.float, fields["eps"]),
-                                       py_call(b.float, fields["weight_decay"]), 1.0 if optimizer == "adamw" else 0.0)
                 _ = py_call(_e(entries, "x_cnn_fit_epoch_d"), spec, xcnn_addr(losses),
                             Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
                 _ = losses  # keep the Python object alive through the native call above
                 step += nsteps
                 epoch = _float_words(losses)
+                # CPython 3.12+'s sum spelled out (`_portable_math.nsum`: the
+                # same Neumaier fold in the same order, core/array_helpers_impl.mojo),
+                # read straight from the float64 loss words (they were copied
+                # into a Python list and then into an array('d') first).
+                count = nsteps
+                if count:
+                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(losses))), count)
+                _ = losses  # keep the Python object alive through the native read above
             else:
                 var order_rows = _empty(Python.tuple(n), "int32", context)
                 _ = py_call(_e(entries, "x_cnn_epoch_rows"), xcnn_addr(order_rows), Python.list(n, ep, shuffle, seed_lo, seed_hi))
                 _ = order_rows  # keep the Python object alive through the native call above
+                var gather = _e(entries, "x_cnn_res_gather")
+                var softmax = _e(entries, "x_cnn_softmax_xent_r")
+                var linear_back = _e(entries, "x_cnn_linear_backward_r")
+                var step_losses = List[Float64]()
                 var s = 0
                 var k_out = k
                 while s < n:  # driver-loop: over the device minibatch steps
                     var m = min(batch, n - s)
                     var rows = py_call(context["ndarray"], Python.tuple(m), dtype=context["int32"], buffer=order_rows, offset=s * 4)
                     if not lists:
-                        _ = py_call(_e(entries, "x_cnn_res_gather"), a["x"], xall, xcnn_addr(rows), Python.list(m, row))
+                        _ = py_call(gather, a["x"], xall, xcnn_addr(rows), Python.list(m, row))
                         _ = rows  # keep the Python object alive through the native call above
-                        _ = py_call(_e(entries, "x_cnn_res_gather"), a["y"], yall, xcnn_addr(rows), Python.list(m, 1))
+                        _ = py_call(gather, a["y"], yall, xcnn_addr(rows), Python.list(m, 1))
                         _ = rows  # keep the Python object alive through the native call above
                     else:
-                        _ = py_call(_e(entries, "x_cnn_res_gather"), Python.list(a["x"], a["y"]), Python.list(xall, yall),
+                        _ = py_call(gather, Python.list(a["x"], a["y"]), Python.list(xall, yall),
                                     xcnn_addr(rows), Python.list(m, row, 1))
                         _ = rows  # keep the Python object alive through the native call above
-                    var plans = _forward_r(fields, entries, rw, a, m)
-                    var loss = py_call(b.float, py_call(_e(entries, "x_cnn_softmax_xent_r"), a["logits"], a["y"], a["glog"],
+                    if m != planned_m:
+                        # the plan depends on the batch size only: once for the
+                        # full batches, once more for a short last batch
+                        plans = _plan(fields, entries, m)
+                        words = _plan_words(plans)
+                        planned_m = m
+                    _forward_planned(entries, a, m, hws, head_hw, words, flat, k)
+                    var loss = py_call(b.float, py_call(softmax, a["logits"], a["y"], a["glog"],
                                                        a["proba"], Python.list(m, k_out)))
-                    var head = rw[py_call(b.id, fields["head_"])]
                     var last = a["out"][len(plans) - 1] if len(plans) else a["x"]
                     var glast = a["gout"][len(plans) - 1] if len(plans) else a["ghead"]
-                    _ = py_call(_e(entries, "x_cnn_linear_backward_r"), last, head[0], a["glog"], glast, head[2], head[3],
-                                Python.list(m, fields["_flat"], k_out))
-                    var bl = fields["_blocks"]
+                    _ = py_call(linear_back, last, head_hw[0], a["glog"], glast, head_hw[2], head_hw[3],
+                                Python.list(m, flat, k_out))
                     var j = len(plans) - 1
                     while j >= 0:  # driver-loop: the backward launch per conv block
-                        var hw = rw[py_call(b.id, bl[j][0])]
+                        var hw = hws[j]
                         var src = a["out"][j - 1] if j > 0 else a["x"]
-                        var dx = a["gout"][j - 1] if j > 0 else PythonObject(0)
-                        var tail = Python.list(dx, hw[2], hw[3])
-                        _ = py_call(tail.extend, a["saved"][j])
                         _ = py_call(_e(entries, "x_cnn_conv_block_backward_r"), src, hw[0], hw[1], a["gout"][j], a["idx"][j],
-                                    tail, _ints(plans[j].prm), _ints(plans[j].pprm))
+                                    tails[j], words[j][0], words[j][1])
                         j -= 1
                     step += 1
                     if sgd:
-                        var hyper = Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, fields["momentum"]),
-                                                py_call(b.float, fields["weight_decay"]), py_call(b.float, fields["dampening"]),
-                                                1.0 if Bool(py=fields["nesterov"]) else 0.0, 1.0 if step == 1 else 0.0)
+                        var hyper = hyper_first if step == 1 else hyper_rest
                         if lists:
                             _ = py_call(_e(entries, "x_cnn_sgd_r"), hp, hg, hbuf, sizes, hyper)
                         else:
+                            var sgd_entry = _e(entries, "x_cnn_sgd_r")
                             for q in range(len(params)):  # driver-loop: one optimizer launch per parameter array
-                                _ = py_call(_e(entries, "x_cnn_sgd_r"), hp[q], hg[q], hbuf[q], Python.list(sizes[q]), hyper)
+                                _ = py_call(sgd_entry, hp[q], hg[q], hbuf[q], size_words[q], hyper)
                     else:
                         var block = _empty(Python.tuple(1, 9), "float64", context)
-                        var betas = fields["betas"]
-                        _ = py_call(_e(entries, "x_cnn_adam_hyper_d"), xcnn_addr(block), Python.list(step, 1),
-                                    Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, betas[0]),
-                                                py_call(b.float, betas[1]), py_call(b.float, fields["eps"]),
-                                                py_call(b.float, fields["weight_decay"]), 1.0 if optimizer == "adamw" else 0.0))
+                        _ = py_call(_e(entries, "x_cnn_adam_hyper_d"), xcnn_addr(block), Python.list(step, 1), fpar)
                         _ = block  # keep the Python object alive through the native call above
                         var hyper = _float_words(block)
                         if lists:
                             _ = py_call(_e(entries, "x_cnn_adam_r"), hp, hg, hbuf, sizes, hyper)
                         else:
+                            var adam_entry = _e(entries, "x_cnn_adam_r")
                             for q in range(len(params)):  # driver-loop: one optimizer launch per parameter array
-                                _ = py_call(_e(entries, "x_cnn_adam_r"), hp[q], hg[q], hbuf[q], Python.list(sizes[q]), hyper)
+                                _ = py_call(adam_entry, hp[q], hg[q], hbuf[q], size_words[q], hyper)
                     _ = py_call(epoch.append, loss)
+                    step_losses.append(Float64(py=loss))
                     s += m
+                # the same Neumaier fold over the same float64 values the
+                # Python list holds (they were copied into an array('d') first)
+                count = len(step_losses)
+                if count:
+                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(step_losses.unsafe_ptr())), count)
             _ = py_call(losses_all.extend, epoch)
-            # CPython 3.12+'s sum spelled out (`_portable_math.nsum`: the same
-            # Neumaier fold in the same order, core/array_helpers_impl.mojo)
-            var vals = py_call(context["array_type"], "d", epoch)
-            var total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(vals.buffer_info)[0])),
-                                 len(vals)) if len(epoch) else 0.0
-            _ = py_call(curve.append, PythonObject(total / Float64(len(epoch))))
+            _ = py_call(curve.append, PythonObject(total / Float64(count)))
         for i in range(len(params)):  # driver-loop: reads back each parameter array handle
             var layer = params[i][0]
             var lf = _fields(layer)
@@ -764,12 +834,22 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
         var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
         var base = Int(py=xcnn_addr(x))
         _ = x  # keep the Python object alive through the native call above
+        # The conv handles, head handles and plan words are built once per
+        # batch size (they were rebuilt for every chunk).
+        var hws = _block_handles(fields, rw)
+        var head_hw = rw[py_call(b.id, fields["head_"])]
+        var flat = fields["_flat"]
+        var planned_m = -1
+        var words = PythonObject(None)
         var s = 0
         while s < n:  # driver-loop: over the device prediction batches (cap-sized)
             var m = min(cap, n - s)
             _ = py_call(_e(entries, "x_cnn_res_upload"), a["x"], base + 4 * s * row, m * row)
             _ = x  # keep the Python object alive through the native call above
-            _ = _forward_r(fields, entries, rw, a, m)
+            if m != planned_m:
+                words = _plan_words(_plan(fields, entries, m))
+                planned_m = m
+            _forward_planned(entries, a, m, hws, head_hw, words, flat, k)
             _ = py_call(_e(entries, "x_cnn_softmax_xent_r"), a["logits"], a["y"], a["glog"], a["proba"], Python.list(m, k))
             if codes:
                 _ = py_call(_e(entries, "x_cnn_res_argmax"), a["proba"], Int(py=xcnn_addr(lab)) + 4 * s, Python.list(m, k))

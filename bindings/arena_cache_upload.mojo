@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.arena_cache_stats import _attribute, _mapping, _hash_key
+from bindings.arena_cache_stats import _attribute, _mapping, _hash_key, HashKeyTypes
 from bindings.arena_cache_get import arena_cache_key
 from bindings.optimizer_public_words import stash_python_error, PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
 
@@ -13,8 +13,9 @@ def _entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(entries) is not context["arena_native_types"]["dict"]:
         raise Error("TypeError: DeviceCache entries require a native dictionary")
     var keys = py_call(context["arena_native_types"]["list"],entries)
+    var key_types = HashKeyTypes(context)
     for i in range(len(keys)):  # driver-loop: refuse application hashing/equality before a native dictionary lookup
-        _hash_key(keys[i],context)
+        _hash_key(keys[i],context,key_types)
     return entries
 
 
@@ -42,6 +43,18 @@ def _increment(value: PythonObject, context: PythonObject) raises -> PythonObjec
             var failure = stash_python_error()
             raise failure^
         return PythonObject(from_owned=pointer)
+    # An exact builtin int/bool counter that fits a machine word (every real
+    # hit/upload count) is incremented natively in one step; only a counter
+    # outside the Int range takes the arbitrary-precision binary walk below.
+    var small = 0
+    var fits = False
+    try:
+        small = Int(py=value)
+        fits = small < Int.MAX
+    except:
+        fits = False
+    if fits:
+        return PythonObject(small + 1)
     ref cpy = Python().cpython()
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_ToBase")(value._obj_ptr,Int32(2))
     if not pointer:
@@ -116,8 +129,9 @@ def _hit(model: PythonObject, key: PythonObject, context: PythonObject) raises -
         raise Error("TypeError: DeviceCache entries require native indexing without Python hooks")
     if py_type(hit) is context["arena_native_types"]["dict"]:
         var keys = py_call(context["arena_native_types"]["list"],hit)
+        var key_types = HashKeyTypes(context)
         for i in range(len(keys)):  # driver-loop: native dictionary indexing cannot compare foreign keys
-            _hash_key(keys[i],context)
+            _hash_key(keys[i],context,key_types)
     _counter_set(model,"hits",next_hits)
     ref cpy = Python().cpython()
     var zero = PythonObject(0)

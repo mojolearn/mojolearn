@@ -35,14 +35,13 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
         skip = Bool(py=_native_function(entries, "mamba3_prefill_session_reports_optional")())
     var reports = bi.list()
     var report_addresses = bi.list()
-    var report_shapes = Python.list(py_ints([b, nh, 64, 128]), py_ints([b, nh, 128]), py_ints([b, nh, 64]), py_ints([b, nh, 32]))
+    # Native report shapes; the former Python tuples were built only to be
+    # read back word by word.
+    var report_shapes: List[List[Int]] = [[b, nh, 64, 128], [b, nh, 128], [b, nh, 64], [b, nh, 32]]
     for i in range(4):  # driver-loop: over the four native Mamba3 report buffers
         var report = PythonObject(None)
         if not skip:
-            var dims = List[Int]()
-            for axis in range(len(report_shapes[i])):  # driver-loop: over report shape metadata
-                dims.append(Int(py=report_shapes[i][axis]))
-            report = generation_array(dims)
+            report = generation_array(report_shapes[i])
         _ = py_call(reports.append, report)
         _ = py_call(report_addresses.append, 0 if skip else Int(py=report._addr))
     var out = generation_array([b, l, d])

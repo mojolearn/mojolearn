@@ -47,12 +47,25 @@ struct TokenizerPublicConnection(Defaultable, Movable):
     var bpe: PythonObject
     var error_handlers: PythonObject
     var error_lookup: PythonObject
+    # Exact builtin iterator types and the fixed state-field names, captured
+    # once per process instead of rebuilt (iterator allocations, list appends)
+    # on every call and every batch row.
+    var list_iter: PythonObject
+    var tuple_iter: PythonObject
+    var range_iter: PythonObject
+    var reversed_iter: PythonObject
+    var owner_names: PythonObject
 
     def __init__(out self):
         self.vocab = PythonObject(None)
         self.bpe = PythonObject(None)
         self.error_handlers = PythonObject(None)
         self.error_lookup = PythonObject(None)
+        self.list_iter = PythonObject(None)
+        self.tuple_iter = PythonObject(None)
+        self.range_iter = PythonObject(None)
+        self.reversed_iter = PythonObject(None)
+        self.owner_names = PythonObject(None)
 
 
 comptime TOKENIZER_PUBLIC_CONNECTION = _Global[
@@ -73,6 +86,36 @@ def _bpe_context() raises -> PythonObject:
     if context is None:
         raise Error("RuntimeError: BPE tokenizer requires its import-time native connection")
     return context
+
+
+def _connect_iterator_types() raises:
+    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+    if state[].list_iter is not None:
+        return
+    var bi = native_loaded_module("builtins")
+    state[].tuple_iter = py_type(py_call(bi.iter, Python.tuple()))
+    state[].range_iter = py_type(py_call(bi.iter, py_call(bi.range, 0)))
+    state[].reversed_iter = py_type(py_call(bi.reversed, Python.list()))
+    state[].list_iter = py_type(py_call(bi.iter, Python.list()))
+
+
+def _builtin_iterator(kind: PythonObject, with_reversed: Bool) raises -> Bool:
+    # Exact builtin list/tuple/range (and optionally reversed-list) iterators.
+    _connect_iterator_types()
+    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+    if kind is state[].list_iter or kind is state[].tuple_iter or kind is state[].range_iter:
+        return True
+    return with_reversed and kind is state[].reversed_iter
+
+
+def _owner_names() raises -> PythonObject:
+    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+    if state[].owner_names is None:
+        var names = Python.list()
+        for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # small-loop(the fixed tokenizer state field names, once per process)
+            _ = py_call(names.append, PythonObject(name))
+        state[].owner_names = py_call(native_loaded_module("builtins").tuple, names)
+    return state[].owner_names
 
 
 def _int(value: PythonObject, name: String) raises -> Int:
@@ -111,10 +154,7 @@ def _documents(value: PythonObject, name: String) raises -> PythonObject:
         return value
     # Exact builtin iterators walk native container storage; a user iterator,
     # generator, list subclass or __length_hint__ override is never admitted.
-    if (kind is py_type(py_call(bi.iter, Python.list()))
-            or kind is py_type(py_call(bi.iter, Python.tuple()))
-            or kind is py_type(py_call(bi.iter, py_call(bi.range, 0)))
-            or kind is py_type(py_call(bi.reversed, Python.list()))):
+    if _builtin_iterator(kind, True):
         return py_call(bi.list, value)
     if name == "encode_batch":
         raise Error("TypeError: encode_batch takes a sequence of documents, got " + _type_name(value) + "; use native containers")
@@ -167,14 +207,15 @@ def _owner(value: PythonObject, cls: PythonObject) raises -> PythonObject:
     # _fields checks a replaced __dict__ descriptor BEFORE storage access.
     var fields = _fields(value)
     var names = py_call(bi.list, fields.keys())
-    for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # driver-loop: over native class and instance field metadata before access
-        _ = py_call(names.append, PythonObject(name))
-    for i in range(len(names)):  # driver-loop: over native class and instance field metadata before access
-        if py_contains(namespace, names[i]):
-            var descriptor = namespace[names[i]]
-            var slots = _class_fields(py_type(descriptor))
-            if py_contains(slots, "__get__") or py_contains(slots, "__set__"):
-                raise Error("TypeError: tokenizer state field was replaced by a descriptor")
+    var fixed = _owner_names()
+    for group in range(2):  # small-loop(instance field names, then the fixed state field names)
+        var group_names = names if group == 0 else fixed
+        for i in range(len(group_names)):  # driver-loop: over native class and instance field metadata before access
+            if py_contains(namespace, group_names[i]):
+                var descriptor = namespace[group_names[i]]
+                var slots = _class_fields(py_type(descriptor))
+                if py_contains(slots, "__get__") or py_contains(slots, "__set__"):
+                    raise Error("TypeError: tokenizer state field was replaced by a descriptor")
     return fields
 
 
@@ -217,6 +258,15 @@ def _connect_error_handlers() raises:
 
 
 def _bytes(value: PythonObject, allow_text: Bool = True, name: String = "text") raises -> List[UInt8]:
+    var result = List[UInt8]()
+    _ = _bytes_append(value, result, allow_text, name)
+    return result^
+
+
+def _bytes_append(value: PythonObject, mut arena: List[UInt8], allow_text: Bool = True, name: String = "text") raises -> Int:
+    # One copy from the admitted buffer straight to the end of `arena`
+    # (formerly a temporary List, then a byte-by-byte append). Returns the
+    # number of bytes appended.
     var raw = value
     if py_type(raw) is native_loaded_module("builtins").str:
         if not allow_text:
@@ -235,15 +285,26 @@ def _bytes(value: PythonObject, allow_text: Bool = True, name: String = "text") 
         raise Error("TypeError: " + name + " must be str or bytes-like, got " + _type_name(raw) + "; use exact native buffers without Python hooks")
     var pin = AdmittedBorrowedBuffer(raw)
     var count = pin.layout.value().count * pin.layout.value().itemsize
-    var result = List[UInt8](length=count, fill=0)
+    var start = len(arena)
+    arena.resize(start + count, 0)
     try:
-        pin.layout.value().copy_to(Int(result.unsafe_ptr()))
+        pin.layout.value().copy_to(Int(arena.unsafe_ptr()) + start)
     except error:
         pin.release()
+        arena.resize(start, 0)
         raise error
     pin.release()
     _ = raw
-    return result^
+    return count
+
+
+def _py_bytes_at(address: Int, count: Int) raises -> PythonObject:
+    # A bytes object straight from native storage (no temporary List).
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(address, count)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=raw)
 
 
 def _py_bytes(values: List[UInt8]) raises -> PythonObject:
@@ -287,18 +348,28 @@ def _ids(var value: PythonObject) raises -> List[Int]:
     var bi = native_loaded_module("builtins")
     var result = List[Int]()
     var kind = py_type(value)
-    if (kind is py_type(py_call(bi.iter, Python.list()))
-            or kind is py_type(py_call(bi.iter, Python.tuple()))
-            or kind is py_type(py_call(bi.iter, py_call(bi.range, 0)))):
+    if _builtin_iterator(kind, False):
         value = py_call(bi.list, value)
-    if py_type(value) is bi.list or py_type(value) is bi.tuple:
-        for i in range(len(value)):  # cpu-route: capture admitted native integer input storage without scalar callbacks
+    var list_type = bi.list
+    var tuple_type = bi.tuple
+    if py_type(value) is list_type or py_type(value) is tuple_type:
+        var int_type = bi.int
+        var bool_type = bi.bool
+        var n = len(value)
+        result.reserve(n)
+        for i in range(n):  # cpu-route: capture admitted native integer input storage without scalar callbacks
             var item = value[i]
-            if py_type(item) is bi.bool:
+            var item_type = py_type(item)
+            # Exact int converts natively with no callback; only other
+            # admitted integer scalars (NumPy) go through int().
+            if item_type is int_type:
+                result.append(Int(py=item))
+                continue
+            if item_type is bool_type:
                 raise Error("TypeError: ids must be int, not bool, at position " + String(i))
             if not is_integer_input(item):
                 raise Error("TypeError: ids must be int, got " + _type_name(item) + " at position " + String(i))
-            result.append(Int(py=py_call(bi.int, item)))
+            result.append(Int(py=py_call(int_type, item)))
         return result^
     # Ordinary integer array/memoryview/ndarray inputs retain their native
     # buffer semantics. Metadata and owner are captured once, before reading.
@@ -421,9 +492,7 @@ def _identity(text: String, ranks: Int) raises -> PythonObject:
 def _pack_tokens(tokens: PythonObject, mut arena: List[UInt8], mut lengths: List[Int]) raises:
     var values = _documents(tokens, "tokens")
     for i in range(len(values)):  # cpu-route: marshal admitted native token buffers into rank storage
-        var bytes = _bytes(values[i], False)
-        lengths.append(len(bytes))
-        tokenizer_append_bytes(arena, bytes)
+        lengths.append(_bytes_append(values[i], arena, False))
 
 
 def _fast_selected(context: PythonObject) raises -> Bool:
@@ -500,9 +569,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
     var text = List[UInt8]()
     var lengths = List[Int64]()
     for i in range(len(documents)):  # cpu-route: prepare native document buffers and publish completed token lists
-        var bytes = _bytes(documents[i], not bytes_only, "document " + String(i) if batch else "text")
-        lengths.append(Int64(len(bytes)))
-        tokenizer_append_bytes(text, bytes)
+        lengths.append(Int64(_bytes_append(documents[i], text, not bytes_only, "document " + String(i) if batch else "text")))
     var ids = List[Int32](length=max(len(text), 1), fill=0)
     var counts = List[Int64](length=max(len(lengths), 1), fill=0)
     var total = 0
@@ -644,15 +711,21 @@ def _trainer_init(value: PythonObject, size: PythonObject, frequency: PythonObje
 
 
 def _trained_finish(value: TrainedVocabulary, size: Int, frequency: Int, context: PythonObject, include_backend: Bool = True) raises -> PythonObject:
-    var tokens = Python.list()
+    # Preallocated result lists filled by PyList_SetItem; each token's bytes
+    # come straight from the arena (no per-byte copy, no append call).
+    ref cpy = Python().cpython()
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var base = Int(value.arena.unsafe_ptr())
+    var tokens = _tokenizer_result_list(value.n_tokens())
     for i in range(value.n_tokens()):  # cpu-route: publish completed native trained vocabulary and merge records
-        var bytes = List[UInt8]()
-        for j in range(value.length[i]):  # cpu-route: publish completed native trained vocabulary and merge records
-            bytes.append(value.arena[value.offset[i] + j])
-        _ = py_call(tokens.append, _py_bytes(bytes))
-    var merges = Python.list()
+        var token = _py_bytes_at(base + value.offset[i], value.length[i])
+        if set_item(tokens._obj_ptr, i, token.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
+    var merges = _tokenizer_result_list(value.n_merges())
     for i in range(value.n_merges()):  # cpu-route: publish completed native trained vocabulary and merge records
-        _ = py_call(merges.append, Python.tuple(value.merge_left[i], value.merge_right[i], 256 + i))
+        var record = Python.tuple(value.merge_left[i], value.merge_right[i], 256 + i)
+        if set_item(merges._obj_ptr, i, record.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
     var stats = Python.dict()
     py_setitem(stats, "n_tokens", PythonObject(value.n_tokens()))
     py_setitem(stats, "n_merges", PythonObject(value.n_merges()))
@@ -684,9 +757,7 @@ def _trainer_train(trainer: PythonObject, input_documents: PythonObject, context
     var arena = List[UInt8]()
     var lengths = List[Int64]()
     for i in range(len(documents)):  # cpu-route: capture documents into retained native training buffers
-        var bytes = _bytes(documents[i])
-        lengths.append(Int64(len(bytes)))
-        tokenizer_append_bytes(arena, bytes)
+        lengths.append(Int64(_bytes_append(documents[i], arena)))
     var sabotage = getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")
     var reverse = sabotage != "" and sabotage != "0"
     var fast = context[4]
@@ -930,10 +1001,8 @@ def _vocab_finish(fields: PythonObject, var tok: VocabTokenizer) raises:
     var lengths = List[Int]()
     var ids = List[Int]()
     for i in range(len(keys)):  # cpu-route: marshal admitted special-token text into native table storage
-        var bytes = _bytes(keys[i])
-        lengths.append(len(bytes))
+        lengths.append(_bytes_append(keys[i], arena))
         ids.append(_int(added[keys[i]], "added token id"))
-        tokenizer_append_bytes(arena, bytes)
     tok.set_specials(arena, lengths, ids)
     py_setitem(fields, "_n_ranks", PythonObject(tok.n_ranks()))
     py_setitem(fields, "_n_vocab", PythonObject(tok.n_vocab()))
@@ -1060,12 +1129,17 @@ def _vocab_pretokenize(tokenizer: PythonObject, data: PythonObject, context: Pyt
         raise Error("ValueError: tokenizer vocabulary is not loaded")
     var bytes = _bytes(data)
     var offsets = owner[].tok.value().pretokenize(bytes)
-    var result = Python.list()
-    for i in range(len(offsets) - 1):  # cpu-route: publish completed native pre-token boundaries as bytes
-        var part = List[UInt8]()
-        for j in range(offsets[i], offsets[i + 1]):  # cpu-route: publish completed native pre-token boundaries as bytes
-            part.append(bytes[j])
-        _ = py_call(result.append, _py_bytes(part))
+    var parts = max(len(offsets) - 1, 0)
+    var result = _tokenizer_result_list(parts)
+    ref cpy = Python().cpython()
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var base = Int(bytes.unsafe_ptr())
+    for i in range(parts):  # cpu-route: publish completed native pre-token boundaries as bytes
+        var part = _py_bytes_at(base + offsets[i], offsets[i + 1] - offsets[i])
+        if set_item(result._obj_ptr, i, part.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
+    _ = bytes
+    _ = offsets
     _ = handle
     _ = data
     return result
@@ -1587,9 +1661,7 @@ def _train_native_values(module: PythonObject, documents: PythonObject, size_val
     var arena = List[UInt8]()
     var lengths = List[Int64]()
     for i in range(len(values)):  # cpu-route: capture native training buffers before the existing trainer call
-        var bytes = _bytes(values[i], False)
-        lengths.append(Int64(len(bytes)))
-        tokenizer_append_bytes(arena, bytes)
+        lengths.append(Int64(_bytes_append(values[i], arena, False)))
     var result = PythonObject(None)
     if module is context[3]:
         var handle = BpeTrainedHandle()

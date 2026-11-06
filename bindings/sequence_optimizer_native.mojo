@@ -5,6 +5,7 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
+from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_admission import opt_exact, opt_scalar, opt_value, opt_schedule
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints
 from bindings.optimizer_device_native import device_shape, shape_count
@@ -24,7 +25,7 @@ def seq_class(owner: PythonObject, context: PythonObject) raises -> Int:
 
 
 def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var bindings = context["sequence_bindings"]
     if binding is not None:
         for name in ["identical", "fast"]:  # driver-loop: over two compiled numeric-mode owners
@@ -65,7 +66,7 @@ def seq_device(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def seq_list(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.list or py_type(value) is b.tuple:
         return py_call(b.list, value)
     if not seq_device(value, context):
@@ -74,7 +75,14 @@ def seq_list(value: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def seq_shape(value: PythonObject, context: PythonObject) raises -> List[Int]:
-    if seq_device(value, context):
+    return seq_shape_known(value, seq_device(value, context), context)
+
+
+def seq_shape_known(value: PythonObject, device: Bool, context: PythonObject) raises -> List[Int]:
+    # `seq_shape` for a value whose `seq_device` admission already ran in
+    # this operation: the step reuses that one admission instead of
+    # re-running the device owner/binding checks per parameter and gradient.
+    if device:
         return device_shape(seq_device_get(value, "shape", context), context)
     var view = TensorView()
     if not tensor_view(value, view):
@@ -128,7 +136,7 @@ def seq_cast(value: PythonObject, context: PythonObject, target: Int = -1) raise
 
 def seq_pair(value: PythonObject, context: PythonObject) raises -> PythonObject:
     opt_value(value, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.list or py_type(value) is b.tuple:
         opt_scalar(value, context)
         if len(value) != 2:
@@ -141,7 +149,7 @@ def seq_pair(value: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("ValueError: optimizer configuration requires two values")
     # Native ndarray/Array scalar reads cannot call user conversion hooks.
     if classical_is_array(source, input):
-        var packed = py_call(Python.import_module("builtins").memoryview, source._store)
+        var packed = py_call(native_loaded_module("builtins").memoryview, source._store)
         return Python.tuple(packed[0], packed[1])
     return Python.tuple(source[0], source[1])
 
@@ -149,7 +157,7 @@ def seq_pair(value: PythonObject, context: PythonObject) raises -> PythonObject:
 def seq_fields(owner: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = seq_class(owner, context)
     var fields = py_fields(owner)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var keys = py_call(b.list, fields)
     for i in range(len(keys)):  # driver-loop: over stored owner field names before native dictionary lookups
         if py_type(keys[i]) is not b.str:
@@ -164,7 +172,7 @@ def seq_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
 
 def seq_slots(fields: PythonObject, kind: Int, context: PythonObject, padded: Bool = False) raises -> PythonObject:
     var result = Python.list()
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if kind == 5:
         var states = fields["_af_state"]
         var params = fields["params"]
@@ -205,7 +213,7 @@ def _seq_real(value: PythonObject, label: String) raises -> PythonObject:
 
 def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var kind = seq_class(owner, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(owner)
     var params = seq_list(values[0], context)
     var options = values[2]
@@ -359,10 +367,10 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
     return PythonObject(None)
 
 
-def seq_step(owner: PythonObject, fields: PythonObject, gradients: PythonObject, kind: Int,
+def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gradients: PythonObject, kind: Int,
              entries: PythonObject, words: Int, handles: Int, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
-    var params = seq_list(fields["params"], context)
+    # `params` is the operation's one `seq_list(fields["params"])`, read by
+    # sequence_optimizer_operation before the step (not read twice).
     var grads = seq_list(gradients, context)
     if len(grads) != len(params):
         raise Error("ValueError: sequence optimizer needs one gradient per parameter")
@@ -379,7 +387,8 @@ def seq_step(owner: PythonObject, fields: PythonObject, gradients: PythonObject,
     classical_connect_numpy(input)
     for i in range(len(params)):  # driver-loop: over parameter/gradient buffer owners
         var parameter = params[i]
-        var shape = seq_shape(parameter, context)
+        var parameter_device = seq_device(parameter, context)
+        var shape = seq_shape_known(parameter, parameter_device, context)
         var n = shape_count(shape)
         if n > 9223372036854775807 - total:
             raise Error("OverflowError: sequence parameter count exceeds native indexing")
@@ -390,7 +399,7 @@ def seq_step(owner: PythonObject, fields: PythonObject, gradients: PythonObject,
                 raise Error("ValueError: Adafactor parameter rank changed")
             _ = py_call(rows.append, shape[0])
             _ = py_call(cols.append, shape[1] if len(shape) == 2 else 0)
-        if seq_device(parameter, context) != dev:
+        if parameter_device != dev:
             raise Error("TypeError: sequence parameter host/device ownership changed")
         if dev:
             if seq_device_get(parameter, "b", context) is not entries["module"]:
@@ -400,7 +409,7 @@ def seq_step(owner: PythonObject, fields: PythonObject, gradients: PythonObject,
             _ = py_call(addrs.append, seq_addr(parameter, n, context))
         var grad = grads[i]
         if seq_device(grad, context):
-            if not dev or seq_device_get(grad, "b", context) is not entries["module"] or not same_shape(seq_shape(grad, context), shape):
+            if not dev or seq_device_get(grad, "b", context) is not entries["module"] or not same_shape(seq_shape_known(grad, True, context), shape):
                 raise Error("ValueError: device gradient must match its parameter shape and binding")
             _ = py_call(ga.append, seq_device_get(grad, "h", context))
             _ = py_call(kinds.append, 0)
@@ -459,7 +468,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
     if operation == "seq_construct":
         return seq_construct(owner, values, mode, context)
     var kind = seq_class(owner, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(owner) if operation == "seq_finalize" else seq_fields(owner, context)
     if operation == "seq_finalize" and py_get(fields, "_res_b") is None:
         return PythonObject(None)
@@ -515,7 +524,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         var selected = seq_binding(fields["numeric_mode"], context, py_get(fields, "_dev_b"))
         if w[2] >= 0 and selected["module"] is not entries["module"]:
             raise Error("ValueError: resident optimizer state must keep its owning numeric-mode binding")
-        return seq_step(owner, fields, values[0], kind, selected, words, handles, context)
+        return seq_step(owner, fields, params, values[0], kind, selected, words, handles, context)
     if operation == "seq_lr":
         var schedule = py_get(fields, "lr_schedule")
         if schedule is not None:

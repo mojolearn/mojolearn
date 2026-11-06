@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, opt_exact
-from bindings.optimizer_public_door import schedule_spec
+from bindings.optimizer_public_door import schedule_spec_admitted
 from bindings.lr_table_helpers import _lr_refusal
 from bindings.native_array_storage import native_array_zeros
 from bindings.py_lists import py_list_f32
@@ -131,7 +131,8 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
         raise Error("KeyError: unknown native schedule kind")
     opt_schedule(owner, context)
     var kind = schedule_kind(owner, context)
-    var spec = schedule_spec(owner)
+    # Admitted by opt_schedule just above; do not walk its fields again.
+    var spec = schedule_spec_admitted(owner)
     if operation == "schedule_spec":
         return Python.tuple(Python.list(spec.kind, spec.a, spec.b, spec.c),
                             Python.list(spec.f0, spec.f1, spec.f2, spec.f3))

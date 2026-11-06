@@ -1092,8 +1092,9 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
     for i in range(len(weights)):  # driver-loop: over parameter buffers and their shapes
         _ = py_call(addresses.append, _addr(weights[i], keep))
         var shape = List[Int]()
-        for j in range(len(weights[i].shape)):  # driver-loop: over tensor shape metadata
-            shape.append(Int(py=weights[i].shape[j]))
+        var weight_shape = weights[i].shape  # read once, not once per axis
+        for j in range(len(weight_shape)):  # driver-loop: over tensor shape metadata
+            shape.append(Int(py=weight_shape[j]))
         _ = py_call(gradients.append, generation_array(shape))
     _ = py_call(addresses.append, _addr(dy, keep))
     for i in range(len(gradients)):  # driver-loop: over gradient buffer addresses
