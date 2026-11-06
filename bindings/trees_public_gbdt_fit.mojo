@@ -873,7 +873,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "test_loss_curve_", _f64_array(out[4], context) if n_eval_rows else PythonObject(None))
     py_setitem(fields, "n_features_in_", PythonObject(n_features))
     var dim = PythonObject(None)
-    if gbdt_has_ctr(text) and gbdt_vendor(table) == "cpu":
+    if gbdt_vendor(table) == "cpu" and gbdt_has_ctr(text):
         dim = py_call_typed(b.int, host_archive_gbdt_state(py_call(b.str, text), context)["dim"])
     else:
         dim = py_call_typed(trees_need(table, "gbdt_model_dim", "mojolearn: this gbdt binding has no gbdt_model_dim",
