@@ -65,15 +65,15 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
     classical_fit_replacements_admit(fields, False, context)
     var intercept = Bool(py=fields["fit_intercept"])
     var est = classical_estimator_name(model)
-    var x = classical_check_x(args[0], est, context)
+    var x = classical_check_x(args[0], est, context, admitted=True)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    var y = classical_check_y(args[1], rows, est, context)
+    var y = classical_check_y(args[1], rows, est, context, admitted=True)
     if rows < 2:
         # The solver needs two rows; scikit-learn's wording for one sample.
         raise Error(est + " cannot be fit on n_samples=" + String(rows) + ": Found array with " + String(rows)
                     + " sample(s) (shape=(" + String(rows) + ", " + String(cols) + ")) while a minimum of 2 is required.")
-    var weights = classical_check_weights_input(args[2], rows, context)
+    var weights = classical_check_weights_input(args[2], rows, context, admitted=True)
     var fast_normal = False
     if py_get(entries, "ols_normal_eq_default") is not None:
         fast_normal = Bool(py=entries["ols_normal_eq_default"]())

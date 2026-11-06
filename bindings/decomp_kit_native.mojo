@@ -142,13 +142,15 @@ def decomp_input(source: PythonObject, name: String, context: PythonObject) rais
         value = host_sparse_dense(source, format, context)
     var view = classical_view(value, context, name)
     var nd = Int(py=view.ndim)
-    var shape = _repr(view.shape)
+    # The shape's repr names a refusal only; it is built on that path alone
+    # (it was formatted through builtins.repr on every call).
     if nd != 2:
-        raise Error("mojolearn: " + name + " must be 2-D, got " + String(nd) + "-D shape " + shape
+        raise Error("mojolearn: " + name + " must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape)
                     + (String(XD_RESHAPE_HINT) if nd < 2 else String("")))
     var rows = Int(py=view.shape[0])
     var cols = Int(py=view.shape[1])
     if rows * cols == 0:
+        var shape = _repr(view.shape)
         var what = String("feature(s)") if rows > 0 else String("sample(s)")
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
                     + " (shape=" + shape + ") while a minimum of 1 is required.")
@@ -156,7 +158,7 @@ def decomp_input(source: PythonObject, name: String, context: PythonObject) rais
     if kind != "b" and kind != "i" and kind != "u" and kind != "f":
         raise Error("TypeError: mojolearn: " + name + " has a non-numeric dtype")
     try:
-        return classical_host_f32(view, 2, name, context)
+        return classical_host_f32(view, 2, name, context, admitted=True)
     except error:
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")
@@ -168,13 +170,15 @@ def decomp_shape(source: PythonObject, name: String, context: PythonObject) rais
     refusals, and no conversion (SparseCoder.fit reads only the width)."""
     var view = classical_view(source, context, name)
     var nd = Int(py=view.ndim)
-    var shape = _repr(view.shape)
+    # The shape's repr names a refusal only; it is built on that path alone
+    # (it was formatted through builtins.repr on every call).
     if nd != 2:
-        raise Error("mojolearn: " + name + " must be 2-D, got " + String(nd) + "-D shape " + shape
+        raise Error("mojolearn: " + name + " must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape)
                     + (String(XD_RESHAPE_HINT) if nd < 2 else String("")))
     var rows = Int(py=view.shape[0])
     var cols = Int(py=view.shape[1])
     if rows * cols == 0:
+        var shape = _repr(view.shape)
         var what = String("feature(s)") if rows > 0 else String("sample(s)")
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
                     + " (shape=" + shape + ") while a minimum of 1 is required.")

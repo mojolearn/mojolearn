@@ -321,6 +321,10 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
         if py_type(shape) is not b.tuple or py_type(strides) is not b.tuple or len(shape) != len(strides):
             raise Error("TypeError: GP kernel input requires native shape and stride tuples")
         var count = 1
+        # The strides are read once into native words here; the element walk
+        # below used to index the Python stride tuple for every axis of every
+        # element.
+        var steps = List[Int]()
         for i in range(len(shape)):  # driver-loop: one immutable shape/stride snapshot per input buffer
             if py_type(shape[i]) is not b.int or py_type(strides[i]) is not b.int or Int(py=shape[i]) < 0:
                 raise Error("TypeError: GP kernel input dimensions must be nonnegative native integers")
@@ -329,6 +333,7 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
                 raise Error("ValueError: GP kernel input is too large")
             count *= dimension
             result.shape.append(dimension)
+            steps.append(Int(py=strides[i]))
         if count > 0 and address == 0:
             raise Error("ValueError: GP kernel input has a null buffer address")
         var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
@@ -337,7 +342,7 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
             var offset = 0
             for reverse in range(len(result.shape)):  # driver-loop: captured rank metadata, no input callbacks
                 var axis = len(result.shape) - reverse - 1
-                offset += (residual % result.shape[axis]) * Int(py=strides[axis])
+                offset += (residual % result.shape[axis]) * steps[axis]
                 residual //= result.shape[axis]
             result.values.append(bitcast[DType.float64](native_scalar_real(data, offset, code, width, little).float64_bits()))
     finally:

@@ -293,10 +293,12 @@ def _lin_float(raw: UInt64, item: Int) -> Float64:
     return bitcast[DType.float64](raw)
 
 
-def _lin_integer(raw: UInt64, kind: Int, item: Int, typestr: String) raises -> Int:
+def _lin_integer(raw: UInt64, kind: Int, item: Int, typestr: String, low: Int, high: Int) raises -> Int:
     """One item as an exact integer for an integer target, refused as
-    Array.astype refuses (a NaN, an infinity, a value outside the target)."""
-    var ctype = _lin_ctype(typestr)
+    Array.astype refuses (a NaN, an infinity, a value outside the target).
+    `low`/`high` are `_lin_bounds(typestr)`, read once per conversion by the
+    caller; the C type name is built only for a refusal (both were rebuilt
+    for every element)."""
     var value: Int
     if kind == CAST_KIND_BOOL:
         value = 1 if raw != 0 else 0
@@ -307,7 +309,7 @@ def _lin_integer(raw: UInt64, kind: Int, item: Int, typestr: String) raises -> I
         value = Int(bitcast[DType.int64](bits))
     elif kind == CAST_KIND_UNSIGNED:
         if raw > UInt64(Int.MAX):
-            raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + ctype + " is greater than maximum")
+            raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is greater than maximum")
         value = Int(raw)
     else:
         var x = _lin_float(raw, item)
@@ -318,13 +320,10 @@ def _lin_integer(raw: UInt64, kind: Int, item: Int, typestr: String) raises -> I
         if x >= 9223372036854775808.0 or x < -9223372036854775808.0:
             raise Error("OverflowError: mojolearn: value does not fit " + typestr)
         value = Int(x)  # truncation toward zero
-    var low = 0
-    var high = 0
-    _lin_bounds(typestr, low, high)
     if value > high:
-        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + ctype + " is greater than maximum")
+        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is greater than maximum")
     if value < low:
-        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + ctype + " is less than minimum")
+        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is less than minimum")
     return value
 
 
@@ -352,6 +351,12 @@ def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
     var count = v.count()
     var idx = List[Int](length=nd, fill=0)
     var off = 0
+    var low = 0
+    var high = 0
+    _lin_bounds(typestr, low, high)
+    var wide_low = 0
+    var wide_high = 0
+    _lin_bounds("<i8", wide_low, wide_high)
     # cpu-route: the host input conversion `_buffer.as_*_c` made (the base
     # binding's cast_elements / layout copy), before the kernel call
     for t in range(count):  # cpu-route: host input conversion, element by element
@@ -365,10 +370,10 @@ def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
             if kind == CAST_KIND_FLOAT:
                 x = _lin_float(raw, item)
             else:
-                x = Float64(_lin_integer(raw, kind, item, "<i8"))
+                x = Float64(_lin_integer(raw, kind, item, "<i8", wide_low, wide_high))
             _lin_store(dst, t, 8, bitcast[DType.uint64](x))
         else:
-            var value = _lin_integer(raw, kind, item, typestr)
+            var value = _lin_integer(raw, kind, item, typestr, low, high)
             _lin_store(dst, t, titem, UInt64(bitcast[DType.uint64](Int64(value))))
         var k = nd - 1
         while k >= 0:  # driver-loop: over the axes of one index step

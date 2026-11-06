@@ -92,10 +92,11 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var fields = sequential_fields(model)
     if py_get(fields, "coef_") is None:
         raise Error("ValueError: call fit before predict")
-    var x = classical_check_x(args[0], classical_estimator_name(model), context)
+    var est = classical_estimator_name(model)
+    var x = classical_check_x(args[0], est, context, admitted=True)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    classical_check_width(cols, Int(py=fields["n_features_in_"]), classical_estimator_name(model))
+    classical_check_width(cols, Int(py=fields["n_features_in_"]), est)
     var coef = classical_host_f32(fields["coef_"], 1, "coef_", context)
     if Int(py=coef.size) != cols:
         raise Error("coef_ length differs from fitted feature count")

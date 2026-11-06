@@ -10,8 +10,9 @@ from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
 from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
 from bindings.sequential_inputs import _promote
 from bindings.sequential_arrays import sequential_array, sequential_address
-from bindings.sequential_admission import _one_of, sequential_admit_value
-from bindings.py_balanced import py_call, py_type, py_get, py_fields
+from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value
+from bindings.native_loaded_module import NativeModules
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 
 
 def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
@@ -44,23 +45,87 @@ def native_pandas_exact(value: PythonObject) raises -> Bool:
     return cls is _pd_class("pandas.core.frame", "DataFrame") or cls is _pd_class("pandas.core.series", "Series")
 
 
+struct _ClassicalAdmitTypes(Movable):
+    # The exact builtin type identities and the loaded pandas classes, read
+    # once per admitted value. Every nested list element used to rebuild an
+    # empty list and tuple for its type test, a fresh module handle and the
+    # sequential admission's type vectors (five context reads and copies),
+    # and two pandas class lookups (four module validations): per element of
+    # a list X. The values visited and the refusals raised are unchanged.
+    var list_type: PythonObject
+    var tuple_type: PythonObject
+    var int_type: PythonObject
+    var float_type: PythonObject
+    var bool_type: PythonObject
+    var str_type: PythonObject
+    var none_type: PythonObject
+    var pandas_read: Bool
+    var frame: PythonObject
+    var series: PythonObject
+
+    def __init__(out self) raises:
+        self.list_type = py_type(Python.list())
+        self.tuple_type = py_type(Python.tuple())
+        self.int_type = py_type(PythonObject(0))
+        self.float_type = py_type(PythonObject(0.0))
+        self.bool_type = py_type(PythonObject(True))
+        self.str_type = py_type(PythonObject(""))
+        self.none_type = py_type(PythonObject(None))
+        self.pandas_read = False
+        self.frame = PythonObject(None)
+        self.series = PythonObject(None)
+
+    def builtin_scalar(self, cls: PythonObject) -> Bool:
+        return (cls is self.int_type or cls is self.float_type or cls is self.bool_type
+                or cls is self.str_type or cls is self.none_type)
+
+    def pandas_exact(mut self, cls: PythonObject) raises -> Bool:
+        # The pandas classes are looked up on the first non-scalar leaf only:
+        # a list of numbers never reads them.
+        if not self.pandas_read:
+            self.frame = _pd_class("pandas.core.frame", "DataFrame")
+            self.series = _pd_class("pandas.core.series", "Series")
+            self.pandas_read = True
+        return cls is self.frame or cls is self.series
+
+
+def _classical_admit(mut mods: NativeModules, seq: _SequentialValueTypes, mut kinds: _ClassicalAdmitTypes,
+                     value: PythonObject, context: PythonObject, depth: Int) raises:
+    if depth > 64:
+        raise Error("TypeError: classical input nesting exceeds the supported depth")
+    var cls = py_type(value)
+    if cls is kinds.tuple_type or cls is kinds.list_type:
+        for k in range(len(value)):  # driver-loop: over native operation argument containers
+            _classical_admit(mods, seq, kinds, value[k], context, depth + 1)
+    elif kinds.builtin_scalar(cls):
+        # An exact builtin scalar is never pandas storage: skip the pandas
+        # class test.
+        _sequential_admit_value(mods, value, context, seq, depth)
+    elif not kinds.pandas_exact(cls):
+        _sequential_admit_value(mods, value, context, seq, depth)
+
+
 def classical_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: classical input nesting exceeds the supported depth")
-    if depth == 0:
-        # Once per admitted value, not per element (see sequential_admit_value).
-        _ = native_loaded_module("builtins")
-    var cls = py_type(value)
-    if cls is py_type(Python.tuple()) or cls is py_type(Python.list()):
-        for k in range(len(value)):  # driver-loop: over native operation argument containers
-            classical_admit_value(value[k], context, depth + 1)
-    elif (cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True))
-          or cls is py_type(PythonObject("")) or cls is py_type(PythonObject(None))):
-        # An exact builtin scalar is never pandas storage: skip the two pandas
-        # class lookups (four module validations) per list element.
-        sequential_admit_value(value, context, depth)
-    elif not native_pandas_exact(value):
-        sequential_admit_value(value, context, depth)
+    # Once per admitted value, not per element: one module handle, one set of
+    # sequential admission type vectors, one set of builtin/pandas types.
+    var mods = NativeModules()
+    _ = mods.module("builtins")
+    var seq = _SequentialValueTypes(mods, context)
+    var kinds = _ClassicalAdmitTypes()
+    _classical_admit(mods, seq, kinds, value, context, depth)
+
+
+def classical_admit_fields(fields: PythonObject, names: PythonObject, context: PythonObject) raises:
+    """`sequential_admit_value` of every connected metadata field the model
+    holds, with one module handle and one set of admission type vectors for
+    the whole pass (they were rebuilt for every field on every call)."""
+    var mods = NativeModules()
+    var seq = _SequentialValueTypes(mods, context)
+    for k in range(len(names)):  # driver-loop: over connected estimator metadata fields
+        if py_contains(fields, names[k]):
+            _sequential_admit_value(mods, fields[names[k]], context, seq, 0)
 
 
 def _pd_type_fields(cls: PythonObject) raises -> PythonObject:
