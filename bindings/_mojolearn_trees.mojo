@@ -40,6 +40,8 @@ from forest_inference_binding import (
     forest_prepare_gpu_binding, forest_release_gpu_binding,
     forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
+    forest_stage_input_gpu_binding,
+    forest_unstage_input_gpu_binding,
     forest_ordered_resident_binding,
     forest_identical_fused_labels_binding,
 )
@@ -692,6 +694,8 @@ def build__mojolearn_trees() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_predict_resident_into_gpu_binding[False, True]]("forest_predict_resident_reuse_gpu")
         m.def_function[forest_predict_resident_labels_gpu_binding[False]]("forest_predict_resident_labels_gpu")
+        m.def_function[forest_stage_input_gpu_binding[False]]("forest_stage_input_gpu")
+        m.def_function[forest_unstage_input_gpu_binding[False]]("forest_unstage_input_gpu")
         m.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
         m.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
         m.def_function[et_classifier_fit_weighted_shard_binding]("et_classifier_fit_weighted_shard")

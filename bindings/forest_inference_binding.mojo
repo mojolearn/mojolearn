@@ -7,7 +7,7 @@ native handle can be released while another call is using it.
 from std.python import PythonObject
 from core.hostptr import list_f32, list_i32
 from core.forest_inference import FOREST_PACKED_NODES
-from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
+from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels, resident_stage_input, resident_unstage_input, FOREST_ORDERED_RESIDENT
 
 
 # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -122,6 +122,30 @@ def forest_predict_resident_labels_gpu_binding[RF_INPUT: Bool](
         xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
         rows, features, outputs)
     return PythonObject(rows)
+
+
+def forest_stage_input_gpu_binding[RF_INPUT: Bool](
+    x_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`forest_stage_input_gpu(x_addr, [rows, features])`: upload the
+    borrowed C-order float32 rows once as this registry's shared input, for
+    the members of one ensemble call (lane perf-sweep-trees, 2026-11-05).
+    Returns 1 when staged, 0 when not (each member then uploads as before).
+    The caller keeps the rows alive and unchanged until it calls
+    `forest_unstage_input_gpu`."""
+    if len(params) != 2:
+        raise Error("input staging requires rows, features")
+    var rows = Int(py=params[0])
+    var features = Int(py=params[1])
+    if rows < 1 or features < 1 or rows > 2147483647 // features:
+        return PythonObject(0)
+    var xp = _f32_ptr(Int(py=x_addr))
+    return PythonObject(1 if resident_stage_input[RF_INPUT](xp.unsafe_origin_cast[MutAnyOrigin](), rows * features) else 0)
+
+
+def forest_unstage_input_gpu_binding[RF_INPUT: Bool]() raises -> PythonObject:
+    """`forest_unstage_input_gpu()`: end the staged input. Returns 0."""
+    resident_unstage_input[RF_INPUT]()
+    return PythonObject(0)
 
 
 def forest_resident_layout_binding() raises -> PythonObject:
