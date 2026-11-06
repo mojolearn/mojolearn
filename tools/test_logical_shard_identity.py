@@ -183,3 +183,14 @@ def test_the_shard_venv_always_gets_numpy():
     install = block.index("-m pip install -q --no-cache-dir 'numpy>=1.26.4'")
     # after the venv is chosen (identity venv or the fallback venv), before the tool runs
     assert block.index('shpy="$GATE_WORK/shard-venv/bin/python"') < install < block.index("logical_shard_identity.py --python")
+
+
+def test_the_worker_runs_the_shipped_defaults(monkeypatch):
+    for k, v in (("MOJOLEARN_GBDT_SHARD_ONE_DEVICE", "1"), ("MOJOLEARN_VENDOR", "cpu"),
+                 ("MOJOLEARN_NUMERIC_MODE", "fast"), ("MOJOLEARN_KMEANS_DEVICE_COUNT", "1"),
+                 ("PYTHONPATH", "/src"), ("CUDA_VISIBLE_DEVICES", "0")):
+        monkeypatch.setenv(k, v)
+    env = LS.worker_env(0)
+    assert {k for k in env if k.startswith("MOJOLEARN_")} == {LS.LOGICAL_ENV, "MOJOLEARN_NUMERIC_MODE"}
+    assert env[LS.LOGICAL_ENV] == "1" and env["MOJOLEARN_NUMERIC_MODE"] == "identical"
+    assert "PYTHONPATH" not in env and env["CUDA_VISIBLE_DEVICES"] == "0"
