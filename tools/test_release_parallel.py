@@ -73,7 +73,7 @@ class Columns(unittest.TestCase):
         self.final = final
         # the split set: the core above and the vendor and payload packages beside it
         self.plugins = {}
-        for prefix in ("mojolearn_nvidia", "mojolearn_amd", "mojolearn_nvidia_ptx"):
+        for prefix in ("mojolearn_nvidia", "mojolearn_amd"):
             p = final.parent / WHEEL.replace("mojolearn_core-", prefix + "-", 1)
             with zipfile.ZipFile(p, "w") as z:
                 z.writestr(f"mojolearn/{prefix}.txt", prefix)
