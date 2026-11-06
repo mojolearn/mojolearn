@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Optimizer admission runs before native code encounters any Python hook.
 from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.p3_numpy_types import numpy_admitted_type
 from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from std.python import Python, PythonObject
@@ -133,10 +134,15 @@ def _opt_owner_keys(owner: PythonObject, context: PythonObject) raises -> Python
         raise Error("TypeError: optimizer requires an exact SGD, Adam or AdamW native owner")
     var fields = py_fields(owner)
     var b = native_loaded_module("builtins")
-    var keys = py_call(context["container_types"][0], fields)
-    for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: optimizer metadata requires native string keys")
+    # Key admission kept per dictionary under the dict watcher
+    # (bindings/native_class_admission.mojo); Python 3.10/3.11 scan per call.
+    if py_type(fields) is not b.dict or not dict_keys_admitted(fields):
+        var keys = py_call(context["container_types"][0], fields)
+        for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
+            if py_type(keys[i]) is not b.str:
+                raise Error("TypeError: optimizer metadata requires native string keys")
+        if py_type(fields) is b.dict:
+            dict_keys_admit(fields)
     return fields
 
 
