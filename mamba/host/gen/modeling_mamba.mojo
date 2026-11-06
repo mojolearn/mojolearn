@@ -1072,7 +1072,7 @@ def mamba_rms_norm(
         var _l1_a5 = Int32(d_model)
         def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5}:
             mamba_rms_norm_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5)
-        host_launch(_launch_1, launch_count((_grid(m), 1, 1), (MAMBA_TPB, 1, 1)))
+        host_launch(_launch_1, launch_count((_grid(m), 1, 1), (MAMBA_TPB, 1, 1)), 0)
 
 
 def _mamba_rms_tree_launches(
@@ -1091,13 +1091,13 @@ def _mamba_rms_tree_launches(
     var _l2_a3 = Int32(d_model)
     def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3}:
         mamba_rms_lane_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3)
-    host_launch(_launch_2, launch_count((_grid(m * MAMBA_RMS_LANES), 1, 1), (MAMBA_TPB, 1, 1)))
+    host_launch(_launch_2, launch_count((_grid(m * MAMBA_RMS_LANES), 1, 1), (MAMBA_TPB, 1, 1)), 0)
     var _l3_a0 = sumsq.unsafe_ptr()
     var _l3_a1 = part
     var _l3_a2 = Int32(m)
     def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2}:
         mamba_rms_tree_kernel(gid_, _l3_a0, _l3_a1, _l3_a2)
-    host_launch(_launch_3, launch_count((_grid(m), 1, 1), (MAMBA_TPB, 1, 1)))
+    host_launch(_launch_3, launch_count((_grid(m), 1, 1), (MAMBA_TPB, 1, 1)), 0)
     var _l4_a0 = out_buf.unsafe_ptr()
     var _l4_a1 = x.unsafe_ptr()
     var _l4_a2 = weight.unsafe_ptr()
@@ -1106,7 +1106,7 @@ def _mamba_rms_tree_launches(
     var _l4_a5 = Int32(d_model)
     def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5}:
         mamba_rms_out_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5)
-    host_launch(_launch_4, launch_count((_grid(m * d_model), 1, 1), (MAMBA_TPB, 1, 1)))
+    host_launch(_launch_4, launch_count((_grid(m * d_model), 1, 1), (MAMBA_TPB, 1, 1)), 59)
 
 
 # ===========================================================================
@@ -1375,7 +1375,7 @@ def causal_conv1d_fn(
         var _l5_a8 = Int32(d_inner)
         def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7, imm _l5_a8}:
             nn35_causal_pair_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7, _l5_a8)
-        host_launch(_launch_5, launch_count((_grid(b * ((l + 1) // 2) * d_inner), 1, 1), (MAMBA_TPB, 1, 1)))
+        host_launch(_launch_5, launch_count((_grid(b * ((l + 1) // 2) * d_inner), 1, 1), (MAMBA_TPB, 1, 1)), 0)
     elif IDN_MAMBA_CONV_CELL:
         var _l6_a0 = conv_out.unsafe_ptr()
         var _l6_a1 = silu_out.unsafe_ptr()
@@ -1388,7 +1388,7 @@ def causal_conv1d_fn(
         var _l6_a8 = Int32(d_inner)
         def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7, imm _l6_a8}:
             causal_conv1d_cell_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7, _l6_a8)
-        host_launch(_launch_6, launch_count((_grid(b * l * d_inner), 1, 1), (MAMBA_TPB, 1, 1)))
+        host_launch(_launch_6, launch_count((_grid(b * l * d_inner), 1, 1), (MAMBA_TPB, 1, 1)), 0)
     else:
         var _l7_a0 = conv_out.unsafe_ptr()
         var _l7_a1 = silu_out.unsafe_ptr()
@@ -1401,7 +1401,7 @@ def causal_conv1d_fn(
         var _l7_a8 = Int32(d_inner)
         def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7, imm _l7_a8}:
             causal_conv1d_fn_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7, _l7_a8)
-        host_launch(_launch_7, launch_count((_grid(b * d_inner), 1, 1), (MAMBA_TPB, 1, 1)))
+        host_launch(_launch_7, launch_count((_grid(b * d_inner), 1, 1), (MAMBA_TPB, 1, 1)), 0)
     var _l8_a0 = new_win.unsafe_ptr()
     var _l8_a1 = in_proj.unsafe_ptr()
     var _l8_a2 = old_win.unsafe_ptr()
@@ -1410,7 +1410,7 @@ def causal_conv1d_fn(
     var _l8_a5 = Int32(d_inner)
     def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5}:
         causal_conv1d_window_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5)
-    host_launch(_launch_8, launch_count((_grid(b * d_inner), 1, 1), (MAMBA_TPB, 1, 1)))
+    host_launch(_launch_8, launch_count((_grid(b * d_inner), 1, 1), (MAMBA_TPB, 1, 1)), 0)
 
 
 # ===========================================================================
@@ -1574,7 +1574,7 @@ def mamba_selective_scan(
     var _l9_a4 = Int32(di)
     def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4}:
         softplus_delta_kernel(gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4)
-    host_launch(_launch_9, launch_count((_grid(m * di), 1, 1), (MAMBA_TPB, 1, 1)))
+    host_launch(_launch_9, launch_count((_grid(m * di), 1, 1), (MAMBA_TPB, 1, 1)), 0)
     _m1_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".softplus.out", stages.softplus_out, m * di
@@ -1618,7 +1618,7 @@ def mamba_selective_scan(
     var _l10_a4 = Int32(di)
     def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4}:
         z_gate_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4)
-    host_launch(_launch_10, launch_count((_grid(m * di), 1, 1), (MAMBA_TPB, 1, 1)))
+    host_launch(_launch_10, launch_count((_grid(m * di), 1, 1), (MAMBA_TPB, 1, 1)), 91)
     _m1_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".gate.out", stages.gate_out, m * di
@@ -1895,7 +1895,7 @@ def mamba_mixer_forward(
         var _l11_a2 = Int32(di * D_STATE)
         def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2}:
             mamba_a_from_a_log_kernel(gid_, _l11_a0, _l11_a1, _l11_a2)
-        host_launch(_launch_11, launch_count((_grid(di * D_STATE), 1, 1), (MAMBA_TPB, 1, 1)))
+        host_launch(_launch_11, launch_count((_grid(di * D_STATE), 1, 1), (MAMBA_TPB, 1, 1)), 33)
         _m1_stage_sync(ctx, trace)
         trace.record_device[DType.float32](
             ctx, prefix + ".A.out", stages.a_out, di * D_STATE
@@ -1987,7 +1987,7 @@ def mamba_mixer_forward(
         var _l12_a6 = Int32(xr)
         def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3, imm _l12_a4, imm _l12_a5, imm _l12_a6}:
             split_x_proj_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3, _l12_a4, _l12_a5, _l12_a6)
-        host_launch(_launch_12, launch_count((_grid(m), 1, 1), (MAMBA_TPB, 1, 1)))
+        host_launch(_launch_12, launch_count((_grid(m), 1, 1), (MAMBA_TPB, 1, 1)), 0)
         _m1_stage_sync(ctx, trace)
 
     # ---- dt_proj (:443), WITHOUT the bias: their line is
@@ -2147,7 +2147,7 @@ def mamba_block_forward(
             var _l13_a3 = Int32(m * dm)
             def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3}:
                 residual_add_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3)
-            host_launch(_launch_13, launch_count((_grid(m * dm), 1, 1), (MAMBA_TPB, 1, 1)))
+            host_launch(_launch_13, launch_count((_grid(m * dm), 1, 1), (MAMBA_TPB, 1, 1)), 13)
         elif not afn_proj_gemm_resid_into(
             ctx,
             stages.residual_out,
@@ -2175,7 +2175,7 @@ def mamba_block_forward(
             var _l14_a3 = Int32(m * dm)
             def _launch_14(gid_: Int) {imm _l14_a0, imm _l14_a1, imm _l14_a2, imm _l14_a3}:
                 residual_add_kernel(gid_, _l14_a0, _l14_a1, _l14_a2, _l14_a3)
-            host_launch(_launch_14, launch_count((_grid(m * dm), 1, 1), (MAMBA_TPB, 1, 1)))
+            host_launch(_launch_14, launch_count((_grid(m * dm), 1, 1), (MAMBA_TPB, 1, 1)), 13)
     else:
         var _l15_a0 = stages.residual_out.unsafe_ptr()
         var _l15_a1 = x.unsafe_ptr()
@@ -2183,7 +2183,7 @@ def mamba_block_forward(
         var _l15_a3 = Int32(m * dm)
         def _launch_15(gid_: Int) {imm _l15_a0, imm _l15_a1, imm _l15_a2, imm _l15_a3}:
             residual_add_kernel(gid_, _l15_a0, _l15_a1, _l15_a2, _l15_a3)
-        host_launch(_launch_15, launch_count((_grid(m * dm), 1, 1), (MAMBA_TPB, 1, 1)))
+        host_launch(_launch_15, launch_count((_grid(m * dm), 1, 1), (MAMBA_TPB, 1, 1)), 13)
     _m1_final_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm

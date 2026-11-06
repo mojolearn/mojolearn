@@ -15,6 +15,18 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+
+# Lane perf-small-fixes (2026-11-06): the fitted arrays a prediction reads by
+# index (core distances, labels, lambdas, deaths, selected clusters,
+# index_into_children) and the training rows of all_points_membership_vectors
+# are read in place through the caller's buffers instead of an owned copy per
+# call; the five prediction-data arrays of the soft passes are copied once and
+# moved into the PredictionData (they were copied twice). The training rows
+# and queries of approximate_predict / membership_vector, and parents and
+# lambdas of the soft refusal, stay owned copies: their consumers
+# (`core/knn_host_predict.mojo::host_knn_search`,
+# `hdbscan/impl/prediction_data.mojo::refuse_soft_clustering_inputs`) take
+# Lists (pointer forms there are owed). The caller's arrays outlive the call.
 from hdbscan.host.hdbscan_door_host_impl import (
     all_points_membership_host_run,
     approximate_predict_host_run,
@@ -58,12 +70,12 @@ def hdbscan_approximate_predict_binding(
             + String(n_selected) + ", nq=" + String(nq) + ")"
         )
     var x = read_f32(Int(py=addrs[0]), m * d)
-    var core = read_f32(Int(py=addrs[1]), m)
-    var labels = read_i32(Int(py=addrs[2]), m)
-    var lambdas = read_f32(Int(py=addrs[3]), n_edges)
-    var deaths = read_f32(Int(py=addrs[4]), n_clusters)
-    var selected = read_i32(Int(py=addrs[5]), n_selected)
-    var iic = read_i32(Int(py=addrs[6]), n_edges + 1)
+    var core = f32_ptr(Int(py=addrs[1]))
+    var labels = i32_ptr(Int(py=addrs[2]))
+    var lambdas = f32_ptr(Int(py=addrs[3]))
+    var deaths = f32_ptr(Int(py=addrs[4]))
+    var selected = i32_ptr(Int(py=addrs[5]))
+    var iic = i32_ptr(Int(py=addrs[6]))
     var q = read_f32(Int(py=addrs[7]), nq * d)
     var lo = i32_ptr(Int(py=addrs[8]))
     var po = f32_ptr(Int(py=addrs[9]))
@@ -116,8 +128,8 @@ def hdbscan_membership_vector_binding(
         [m, d, n_edges, n_clusters, n_selected, n_ex, nq],
     )
     var x = read_f32(Int(py=addrs[0]), m * d)
-    var core = read_f32(Int(py=addrs[1]), m)
-    var labels = read_i32(Int(py=addrs[2]), m)
+    var core = f32_ptr(Int(py=addrs[1]))
+    var labels = i32_ptr(Int(py=addrs[2]))
     var parents = read_i32(Int(py=addrs[3]), n_edges)
     var lambdas = read_f32(Int(py=addrs[4]), n_edges)
     var deaths = read_f32(Int(py=addrs[5]), n_clusters)
@@ -128,7 +140,7 @@ def hdbscan_membership_vector_binding(
     var q = read_f32(Int(py=addrs[10]), nq * d)
     var out = f32_ptr(Int(py=addrs[11]))
     with GILReleased(Python()):
-        membership_vector_host_run(x, m, d, core, labels, parents, lambdas, n_edges, n_clusters, deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, n_selected, out)
+        membership_vector_host_run(x, m, d, core, labels, parents, lambdas, n_edges, n_clusters, deaths^, selected^, iic^, ex_idx^, offsets^, q, nq, min_samples, n_selected, out)
     return PythonObject(nq)
 
 
@@ -166,7 +178,7 @@ def hdbscan_all_points_membership_vectors_binding(
             + " + " + String(count) + " exceed m=" + String(m)
             + "; refused by name"
         )
-    var x = read_f32(Int(py=addrs[0]), m * d)
+    var x = f32_ptr(Int(py=addrs[0]))
     var parents = read_i32(Int(py=addrs[1]), n_edges)
     var lambdas = read_f32(Int(py=addrs[2]), n_edges)
     var deaths = read_f32(Int(py=addrs[3]), n_clusters)
@@ -176,5 +188,5 @@ def hdbscan_all_points_membership_vectors_binding(
     var offsets = read_i32(Int(py=addrs[7]), n_selected + 1)
     var out = f32_ptr(Int(py=addrs[8]))
     with GILReleased(Python()):
-        all_points_membership_host_run(x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected, iic, ex_idx, offsets, row0, count, n_selected, out)
+        all_points_membership_host_run(x, m, d, parents, lambdas, n_edges, n_clusters, deaths^, selected^, iic^, ex_idx^, offsets^, row0, count, n_selected, out)
     return PythonObject(count)

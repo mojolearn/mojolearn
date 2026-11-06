@@ -26,6 +26,7 @@ GPU columns is the CPU identity gate's, not this file's.
 
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
+import os
 import re
 import sys
 from pathlib import Path
@@ -222,6 +223,45 @@ def _built(basename):
     return True
 
 
+def _run_with_threads(threads, code):
+    """Run `code` in a fresh interpreter with MOJOLEARN_CPU_THREADS set to
+    `threads` (None: unset) and return its stdout lines. The host thread
+    policy is read once per process (core/host_predict_threads.mojo), so a
+    count set inside this process after the first host call changes
+    nothing; only a new process honours it. The child imports the same
+    mojolearn package this process holds."""
+    import subprocess
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    if threads is None:
+        env.pop("MOJOLEARN_CPU_THREADS", None)
+    else:
+        env["MOJOLEARN_CPU_THREADS"] = threads
+    pkg_parent = str(Path(mojolearn.__file__).resolve().parent.parent)
+    proc = subprocess.run(
+        [sys.executable, "-I", "-c",
+         "import sys; sys.path.insert(0, sys.argv.pop(1)); exec(sys.argv.pop(1))",
+         pkg_parent, code],
+        env=env, capture_output=True, text=True, timeout=900,
+    )
+    assert proc.returncode == 0, (threads, proc.stdout[-2000:], proc.stderr[-4000:])
+    return proc.stdout.strip().splitlines()
+
+
+#: The HDBSCAN default-workers versus one-task check, run once per thread
+#: setting in its own process.
+_HDBSCAN_THREADS_CODE = """
+import numpy as np
+import mojolearn
+rng = np.random.default_rng(0)
+x = rng.standard_normal((96, 4)).astype(np.float32)
+m = mojolearn.HDBSCAN(min_cluster_size=5).fit(x)
+print(np.asarray(m.labels_).tobytes().hex())
+print(np.asarray(m.core_distances_).tobytes().hex())
+print(m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_)
+"""
+
+
 def _twice(fit):
     a, b = fit(), fit()
     assert a == b, "two host fits returned different bytes"
@@ -246,23 +286,11 @@ def test_estimators_fit_on_the_host_when_built():
         _twice(lambda: np.asarray(mojolearn.HDBSCAN(min_cluster_size=5).fit(x).labels_).tobytes())
         # 96**2 is below the Boruvka parallel threshold.  Its default-worker
         # answer must cover every row just like the explicit one-task path.
-        import os
-        old_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
-        try:
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-            default = mojolearn.HDBSCAN(min_cluster_size=5).fit(x)
-            os.environ["MOJOLEARN_CPU_THREADS"] = "1"
-            serial = mojolearn.HDBSCAN(min_cluster_size=5).fit(x)
-        finally:
-            if old_threads is None:
-                os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-            else:
-                os.environ["MOJOLEARN_CPU_THREADS"] = old_threads
-        assert np.asarray(default.labels_).tobytes() == np.asarray(serial.labels_).tobytes()
-        assert np.asarray(default.core_distances_).tobytes() == np.asarray(serial.core_distances_).tobytes()
-        assert (default.n_clusters_, default.n_outliers_, default.n_boruvka_rounds_) == (
-            serial.n_clusters_, serial.n_outliers_, serial.n_boruvka_rounds_
-        )
+        # Each setting runs in its own process (the thread policy is read
+        # once per process): labels, core distances and the counts.
+        default = _run_with_threads(None, _HDBSCAN_THREADS_CODE)
+        serial = _run_with_threads("1", _HDBSCAN_THREADS_CODE)
+        assert len(default) == 3 and default == serial, (default, serial)
 
 
 if __name__ == "__main__":

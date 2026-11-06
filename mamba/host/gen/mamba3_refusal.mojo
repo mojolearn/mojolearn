@@ -49,7 +49,7 @@ def m3_first_nonfinite_code(
     var _l1_a2 = Int64(n)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2}:
         m3_nonfinite_partial_kernel(gid_, _l1_a0, _l1_a1, _l1_a2)
-    host_launch(_launch_1, launch_count((blocks, 1, 1), (M3_REFUSAL_THREADS, 1, 1)))
+    host_launch(_launch_1, launch_count((blocks, 1, 1), (M3_REFUSAL_THREADS, 1, 1)), 0)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
     ctx.synchronize()
     var best = M3_REFUSAL_NONE

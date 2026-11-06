@@ -36,9 +36,8 @@ the measurement.
 """
 from core.host_parallel import host_parallelize
 from core.forest_experiments import T34_CHUNK_FOLD, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish, chunk_add
-from std.os import getenv
+from core.host_predict_threads import host_predict_workers
 from std.sys.compile import is_defined
-from std.sys.info import num_physical_cores
 
 from ensemble.decisiontree.decisiontree import DecisionTree
 from ensemble.decisiontree.decisiontree import TreeMetaDataNode as RfTree
@@ -78,20 +77,19 @@ def _divisor(n_trees: Int) -> Float32:
 
 def host_worker_count(workers: Int = 0) -> Int:
     """The thread count of a host prediction (DEVIATION 2900). `workers`
-    above zero as given; zero reads `MOJOLEARN_CPU_THREADS`, and an absent,
+    above zero as given; zero means `MOJOLEARN_CPU_THREADS`, and an absent,
     empty, zero or unparsable value means one thread per physical core.
-    Always in `[1, FOREST_HOST_MAX_THREADS]`."""
+    Always in `[1, FOREST_HOST_MAX_THREADS]`.
+
+    Lane perf-small-fixes (2026-11-06): the zero case reads the read-once
+    process policy `core/host_predict_threads.mojo::host_predict_workers`
+    (same parse, same physical-core default, same 1024 ceiling) instead of
+    reading and parsing the environment on every predict call. The count
+    feeds `host_task_count` exactly as before, so chunk boundaries and every
+    output bit are unchanged."""
     var count = workers
     if count <= 0:
-        var raw = getenv(FOREST_HOST_THREADS_ENV)
-        count = 0
-        if raw != "":
-            try:
-                count = Int(raw)
-            except:
-                count = 0
-        if count <= 0:
-            count = num_physical_cores()
+        count = host_predict_workers()
     if count < 1:
         return 1
     if count > FOREST_HOST_MAX_THREADS:

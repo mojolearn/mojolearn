@@ -293,6 +293,7 @@ struct MambaArena(Movable):
     var off: Int
     var guard: Int
     var views: Int
+    var reset_view: Optional[DeviceBuffer[DType.float32]]
 
     @staticmethod
     def slot(n: Int, guard: Int) -> Int:
@@ -306,6 +307,10 @@ struct MambaArena(Movable):
 
     def __init__(out self, ctx: DeviceContext, total: Int, guard: Int) raises:
         abort("mamba host: device-only MambaArena.__init__ is disabled")
+
+
+    def reset(mut self, used: Int, retained: Int = 0, retained_views: Int = 0) raises:
+        abort("mamba host: device-only MambaArena.reset is disabled")
 
 
     def take(mut self, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:

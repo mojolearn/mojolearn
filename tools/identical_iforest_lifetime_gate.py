@@ -14,43 +14,82 @@ import subprocess
 import sys
 
 
-def child():
+#: Instance fields an older build kept for the resident forest. The token,
+#: the training matrix it was minted for and its release lifetime are now one
+#: native side record of the estimator (bindings/trees_side_records.mojo,
+#: bindings/trees_public_iforest.mojo `_run`), keyed by a weak reference and
+#: invisible to Python, so this gate checks the observable behaviour.
+OLD_FIELDS = ("_if_token", "_if_lifetime", "_if_finalizer")
+
+
+def _bits(model, x):
     import numpy as np
-    from mojolearn import IsolationForest
+    return np.asarray(model.score_samples(x)).copy().view(np.uint32)
+
+
+def _fields(model):
+    """The instance dictionary as comparable values (keys and value types;
+    float and int values by value)."""
+    out = {}
+    for key, value in vars(model).items():
+        out[key] = value if isinstance(value, (bool, int, float, str, type(None))) else type(value).__name__
+    return out
+
+
+def child():
+    import weakref
+
+    import numpy as np
+    from mojolearn import IsolationForest, _backend
+
+    binding = _backend.binding("_mojolearn_svm", "identical")
+    probe = getattr(binding, "iforest_resident", None)
+    assert probe is not None and int(probe()) == 1, "resident path was not enabled"
 
     x = ((np.arange(257 * 7).reshape(257, 7) % 41) - 20).astype(np.float32)
+    x2 = x[::-1].copy()
     model = IsolationForest(n_estimators=3, max_samples=64, random_state=17)
     model.fit(x)
-    assert model.__dict__.get("_if_token", 0), "resident path was not enabled"
-    first = np.asarray(model.score_samples(x)).copy()
-    assert np.array_equal(first.view(np.uint32),
-                          np.asarray(model.score_samples(x)).view(np.uint32))
+    assert not any(k in vars(model) for k in OLD_FIELDS), "the resident token is in __dict__"
+    before = _fields(model)
+    first = _bits(model, x)
+    # Repeated scoring reuses the held forest: the same bits, and the
+    # instance dictionary is left as the fit left it (no token written).
+    for _ in range(3):
+        assert np.array_equal(first, _bits(model, x))
+    assert _fields(model) == before, "scoring changed the instance dictionary"
 
     restored = pickle.loads(pickle.dumps(model))
-    assert "_if_token" not in restored.__dict__
-    assert "_if_finalizer" not in restored.__dict__
-    assert np.array_equal(first.view(np.uint32),
-                          np.asarray(restored.score_samples(x)).view(np.uint32))
-    assert restored._if_token != model._if_token
-    old_finalizer = model._if_finalizer
-    model.fit(x)
-    assert not old_finalizer.alive, "refit retained the old native handle"
-    assert model._if_finalizer.alive
+    assert not any(k in vars(restored) for k in OLD_FIELDS), "a pickle carried a resident field"
+    assert np.array_equal(first, _bits(restored, x)), "an unpickled model scores differently"
+    assert not any(k in vars(restored) for k in OLD_FIELDS)
 
-    # Exceed the native cache capacity; a evicted estimator must reconstruct
+    # A refit on other data drops the held forest: its scores are a fresh
+    # model's on that data, and a refit back gives the first bits again.
+    model.fit(x2)
+    fresh = IsolationForest(n_estimators=3, max_samples=64, random_state=17).fit(x2)
+    assert np.array_equal(_bits(fresh, x), _bits(model, x)), "refit kept the old forest"
+    model.fit(x)
+    assert np.array_equal(first, _bits(model, x)), "refit back does not reproduce the first forest"
+
+    # Exceed the native cache capacity; an evicted estimator must reconstruct
     # its own forest and register the replacement token for orderly teardown.
-    held = [model, restored]
+    held = [model, restored, fresh]
     for seed in range(9):
         held.append(IsolationForest(n_estimators=2, max_samples=32,
                                     random_state=seed).fit(x))
-    assert np.array_equal(first.view(np.uint32),
-                          np.asarray(model.score_samples(x)).view(np.uint32))
-    finalizer = restored._if_finalizer
+    assert np.array_equal(first, _bits(model, x))
+    assert np.array_equal(first, _bits(restored, x))
+
+    # The side record holds no reference to its estimator: dropping the
+    # estimator collects it (and with it the record and its lifetime, which
+    # releases the native forest).
+    gone = weakref.ref(restored)
     held.remove(restored)
     del restored
     gc.collect()
-    assert not finalizer.alive, "collection retained the native handle"
-    # Retain a cycle at interpreter exit to exercise weakref's atexit path.
+    assert gone() is None, "the resident record kept its estimator alive"
+    # Retain a cycle at interpreter exit to exercise the exit release path.
     model._gate_cycle = held
     globals()["_retained_models"] = held
     digest = hashlib.sha256(first.tobytes()).hexdigest()

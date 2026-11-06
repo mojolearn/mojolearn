@@ -25,7 +25,7 @@ from std.memory import memcpy
 from std.sys import size_of
 
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
+from core.host_predict_threads import host_grain_cap, host_predict_task_count
 from gemm.contract import OP_TN
 from gemm.experiments.neural_switches import ROLE_PROJECTION
 from gemm.host.neural_gemm import gemm_oracle
@@ -51,17 +51,28 @@ def launch_count(grid: Tuple[Int, Int, Int], block: Tuple[Int, Int, Int]) raises
     return grid[0] * block[0]
 
 
-def host_launch[F: def(Int) -> None](ref f: F, n: Int):
+def host_launch[F: def(Int) -> None](ref f: F, n: Int, work_per_index: Int = 0):
     """A one-axis launch of `n` thread indices on the host (lane neural-cpu,
     2026-09-28): contiguous index ranges over `core/host_predict_threads.
     mojo`'s task count (MOJOLEARN_CPU_THREADS, or one per physical core),
     each range walked ascending on one task, every task in the caller's
     floating-point environment (`core/host_parallel.mojo`). A device kernel
     is correct in any schedule of its grid, so the split moves no bit; a
-    one-task launch is the serial loop the generator used to write."""
+    one-task launch is the serial loop the generator used to write.
+
+    `work_per_index` (lane perf-small-fixes, 2026-11-06) is the generator's
+    estimate of one index's scalar operations (`tools/mamba_host_gen.py`
+    `_index_work`: known only for a loop-free kernel, 0 when unknown). With
+    it the whole launch's work `n * work_per_index` goes through
+    `host_grain_cap`, so a launch too small to repay a pool dispatch runs on
+    the calling thread and a larger one gets no more tasks than its work
+    fills; 0 keeps the plain task count. Only the task count changes, never
+    a cell, so no bit moves."""
     if n <= 0:
         return
     var tasks = host_predict_task_count(n)
+    if work_per_index > 0:
+        tasks = host_grain_cap(tasks, n * work_per_index)
     if tasks <= 1:
         for gid in range(n):
             f(gid)

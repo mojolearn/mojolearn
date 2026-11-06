@@ -407,6 +407,51 @@ def test_iforest_fit_without_numpy_and_with_numpy_imported_later(numpy):
     assert json.loads(completed.stdout) == expected
 
 
+def test_iforest_resident_record_is_native_and_follows_the_estimator():
+    # The CPU resident forest's token, the fitted `_x` it was minted for and
+    # its release lifetime are one native side record of the estimator
+    # (bindings/host_iforest_native.mojo, bindings/trees_side_records.mojo),
+    # keyed by a weak reference; nothing of it is visible in `__dict__`. The
+    # "old_token" and "resident_finalizer" cases above cover fields an older
+    # build left in a saved instance. This test checks the behaviour.
+    import gc
+    import pickle
+    import weakref
+    old_fields = ("_if_token", "_if_lifetime", "_if_finalizer")
+    x = _x()
+    model = _model()
+    audit_native_call(model.fit, x).assert_native()
+    assert not any(k in vars(model) for k in old_fields)
+    fitted = _state(vars(model))
+    first = audit_native_call(model.score_samples, x).assert_native().tobytes()
+    # Repeated scoring reuses the held forest: the same bits, and the
+    # instance dictionary is left as the fit left it.
+    for _ in range(3):
+        assert audit_native_call(model.score_samples, x).assert_native().tobytes() == first
+    assert _state(vars(model)) == fitted
+    # A pickle carries no process-local handle and mints its own forest.
+    restored = pickle.loads(pickle.dumps(model))
+    assert not any(k in vars(restored) for k in old_fields)
+    assert audit_native_call(restored.score_samples, x).assert_native().tobytes() == first
+    # A refit on other data drops the held forest (a fresh model's scores),
+    # and a refit back reproduces the first forest.
+    other = (x[::-1] + 1).copy()
+    audit_native_call(model.fit, other).assert_native()
+    fresh = _model()
+    audit_native_call(fresh.fit, other).assert_native()
+    assert (audit_native_call(model.score_samples, x).assert_native().tobytes()
+            == audit_native_call(fresh.score_samples, x).assert_native().tobytes())
+    audit_native_call(model.fit, x).assert_native()
+    assert audit_native_call(model.score_samples, x).assert_native().tobytes() == first
+    # The record holds no reference to its estimator: dropping the estimator
+    # collects it, and with it the record and the lifetime that releases the
+    # native forest.
+    gone = weakref.ref(restored)
+    del restored
+    gc.collect()
+    assert gone() is None
+
+
 def test_iforest_fit_public_wrapper_is_one_native_call():
     source = Path(host.__file__).read_text()
     cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == "HostIsolationForest")

@@ -234,7 +234,10 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
         audit_native_call(replay.train_step, shards).assert_native()
         _assert_state_equal(audit_native_call(owner.checkpoint).assert_native()['state'],
                             audit_native_call(replay.checkpoint).assert_native()['state'])
-        pids = [row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']]
+        # one device: the update runs on the gradient worker (one shared
+        # pool, one process; bindings/parallel_neural_native.mojo)
+        assert owner._update_pool is owner._pool
+        pids = sorted({row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']})
     finally:
         primary = sys.exception()
         cleanup_errors = []
@@ -252,7 +255,7 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
                 primary.add_note('Child cleanup also failed: ' + repr(error))
         elif cleanup_errors:
             raise ExceptionGroup('Samba child cleanup failures; evidence: ' + str(tmp_path), cleanup_errors)
-    assert len(pids) == 2
+    assert len(pids) == 1
     for pid in pids:
         path = tmp_path / (str(pid) + '.json')
         assert path.exists(), str(path)

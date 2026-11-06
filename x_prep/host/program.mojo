@@ -18,7 +18,7 @@ from experiments.classical_identical_ideas.shared_controls import C08_GROUPED_OU
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_grain_cap, host_predict_chunk, host_predict_task_count
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
@@ -120,6 +120,55 @@ def _host_item[K: Int](t: Int, grouped: Bool, total: Int, f: FP, q: IP):
         _host_unit[K](t, f, q)
 
 
+#: Lane perf-small-fixes (2026-11-06): the per-op work table of the host
+#: split. `_unit_work[K]()` is the scalar element operations ONE unit of op K
+#: costs (a load, an arithmetic step and a store each count one), or 0 when
+#: the unit carries an inner loop whose length lives in its stage words (a
+#: column reduction, a sort, a row softmax, a grouped stage): 0 means
+#: unknown, and `host_grain_cap` then leaves the task count as it was.
+#: Listed are only the ops whose unit is ONE output element with no loop
+#: inside it (each body read in x_prep/prims.mojo, transform.mojo,
+#: iterative.mojo, kbins.mojo, naive_bayes/nb.mojo): an element op is about
+#: eight scalar steps (index arithmetic, two to four loads, a compare or
+#: two, one store); a transcendental per element (log, the Yeo-Johnson /
+#: Box-Cox power and its inverse) about 32; the quantile maps search their
+#: column's quantiles twice by bisection, 2 * log2(nq) steps of about four
+#: operations, which stays under 64 for every nq up to 256 and is taken as
+#: 64. The weights are cost estimates, never a shape: with
+#: HOST_MIN_TASK_WORK = 2^16 an element op runs inline below about 16k
+#: elements and gets one task per 8k elements above it, on every shape.
+#: Every op here is a stage of independent units (each unit writes only its
+#: own outputs, the device contract above), so the task count moves no bit
+#: and no fold partition depends on it.
+comptime _ELEM_WORK = 8
+comptime _TRANSCENDENTAL_WORK = 32
+comptime _QUANTILE_WORK = 64
+
+
+@always_inline
+def _unit_work[K: Int]() -> Int:
+    # element ops: 3 affine, 10 i2f, 11 f2i, 12 binarize, 19 where_neg,
+    # 23 mark_missing, 24 fill, 51 label_binarize, 60 nan_mask,
+    # 61 gather_cols, 77 ord_inverse, 78 cat_gather, 79 where_code,
+    # 80 kbins_inverse, 87 indicator, 89 remap_codes, 90 add_arrays,
+    # 102 std_scale, 103 nan_keep, 140 hcat, 141 colblock.
+    comptime if (
+        K == 3 or K == 10 or K == 11 or K == 12 or K == 19 or K == 23
+        or K == 24 or K == 51 or K == 60 or K == 61 or K == 77 or K == 78
+        or K == 79 or K == 80 or K == 87 or K == 89 or K == 90 or K == 102
+        or K == 103 or K == 140 or K == 141
+    ):
+        return _ELEM_WORK
+    # per-element transcendental: 45 pt_apply, 72 log, 75 pt_inverse.
+    elif K == 45 or K == 72 or K == 75:
+        return _TRANSCENDENTAL_WORK
+    # per-element bisection: 43 qt_apply, 74 qt_inverse.
+    elif K == 43 or K == 74:
+        return _QUANTILE_WORK
+    else:
+        return 0
+
+
 def _run_stage[K: Int](total: Int, f: FP, q: IP):
     """Items [0, items) of one stage: serially on the calling thread when one
     task covers them, else contiguous ranges across the pool."""
@@ -136,6 +185,11 @@ def _run_stage[K: Int](total: Int, f: FP, q: IP):
     var grouped = groups > 0
     var items = groups if grouped else total
     var tasks = host_predict_task_count(items)
+    comptime if _unit_work[K]() > 0:
+        # Row-independent element stage: small calls run on the calling
+        # thread (the per-op work table above).
+        if not grouped:
+            tasks = host_grain_cap(tasks, items * _unit_work[K]())
     if tasks <= 1:
         for t in range(items):
             _host_item[K](t, grouped, total, f, q)

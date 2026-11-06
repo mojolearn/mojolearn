@@ -310,7 +310,7 @@ def launch_uniform_int_ex(
     var _l1_a8 = Int32(stride)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8}:
         uniform_int_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8)
-    host_launch(_launch_1, launch_count(n_blocks, RNG_BLOCK_THREADS))
+    host_launch(_launch_1, launch_count(n_blocks, RNG_BLOCK_THREADS), 0)
     _ = out_buf.unsafe_ptr()
 
 
