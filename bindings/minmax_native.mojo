@@ -8,7 +8,9 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
+from bindings.native_loaded_module import NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.mode_metadata_native import _fields
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
@@ -71,6 +73,9 @@ def _statistic(value: PythonObject, d: Int, name: String, context: PythonObject)
     if String(value.dtype) != "<f4" or Int(py=value.ndim) != 1 or Int(py=value.size) != d or not classical_c_order(value,context):
         raise Error("MinMaxScaler " + name + " must remain a finite contiguous Float32 feature vector")
     return value
+
+
+comptime _ROWS_SLOT = "minmax_transform_rows_v1"
 
 
 def _minmax_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -330,23 +335,46 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var d = captured[].metadata.source.cols
     if d != _features(fields):
         raise Error("MinMaxScaler input feature count differs from fit")
-    var mean = _statistic(fields["min_"],d,"min_",context)
-    var scale = _statistic(fields["scale_"],d,"scale_",context)
     var bounds = minmax_range_pair(fields["feature_range_"],context) if configuration is None else Python.tuple(configuration[1],configuration[2])
     var clip = _flag(fields["clip_"],"clip_",context) if configuration is None else Bool(py=configuration[4])
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    memcpy(dest=ap, src=_ptr(mean), count=d)
-    _ = mean  # keep the Python object alive through the native call above
-    memcpy(dest=ap+d, src=_ptr(scale), count=d)
-    _ = scale  # keep the Python object alive through the native call above
-    arena[7*d+4] = 1
-    var program = List[Int32]()
-    _stage(program, 264, d, 0, d, 1, 1, 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
-    _stage(program, 248, 1, 4*d, d, 7*d)
-    _stage(program, 248, 1, 5*d, d, 7*d+1)
-    _stage(program, 248, 1, 6*d, d, 7*d+2)
-    _run(arena, program, entries)
+    # The derived and validated rows of the fitted min_ / scale_ (the stage
+    # 264 + 248 program) are kept per model in the prepared-owner registry
+    # (weakly keyed, outside __dict__), keyed by the identity of min_ and
+    # scale_, d and the numeric mode (p3-prep). When the record is taken both
+    # Arrays are made read-only (hazard class A): an in-place write through
+    # the public view raises NumPy's read-only error; replacing min_ or
+    # scale_ (refit, partial_fit, load, assignment) misses and rebuilds.
+    var mods = NativeModules()
+    var min_value = fields["min_"]
+    var scale_value = fields["scale_"]
+    var held = prepared_get(mods, _ROWS_SLOT, model)
+    if (held is not None and held[0] is min_value and held[1] is scale_value and Int(py=held[3]) == d
+            and String(held[4]) == String(mode)):
+        memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
+        _ = held  # keep the Python object alive through the copy above
+    else:
+        var mean = _statistic(min_value,d,"min_",context)
+        var scale = _statistic(scale_value,d,"scale_",context)
+        memcpy(dest=ap, src=_ptr(mean), count=d)
+        _ = mean  # keep the Python object alive through the native call above
+        memcpy(dest=ap+d, src=_ptr(scale), count=d)
+        _ = scale  # keep the Python object alive through the native call above
+        arena[7*d+4] = 1
+        var program = List[Int32]()
+        _stage(program, 264, d, 0, d, 1, 1, 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
+        _stage(program, 248, 1, 4*d, d, 7*d)
+        _stage(program, 248, 1, 5*d, d, 7*d+1)
+        _stage(program, 248, 1, 6*d, d, 7*d+2)
+        _run(arena, program, entries)
+        if bitcast[DType.int32](arena[7*d+1]) == 0 and bitcast[DType.int32](arena[7*d+2]) == 0:
+            var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
+            memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
+            _ = rows  # keep the Python object alive through the copy above
+            py_setattr(min_value, "_readonly", PythonObject(True))
+            py_setattr(scale_value, "_readonly", PythonObject(True))
+            prepared_put(mods, _ROWS_SLOT, model, Python.tuple(min_value, scale_value, rows, d, String(mode)))
     if bitcast[DType.int32](arena[7*d+1]) != 0:
         raise Error("MinMaxScaler min_ and scale_ must remain finite (NaN: a feature never seen)")
     if bitcast[DType.int32](arena[7*d+2]) != 0:
