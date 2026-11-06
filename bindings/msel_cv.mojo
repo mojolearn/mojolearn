@@ -22,7 +22,10 @@ from bindings.metrics_native_support import metric_float
 from bindings.msel_json import msel_canonical
 from bindings.sha256_door import sha256_update, sha256_hexdigest
 from core.sha256 import Sha256
-from bindings.msel_estimator_native import msel_native_clone, msel_clone_parameter, msel_estimator_call, msel_estimator_plan
+from bindings.msel_estimator_native import (
+    msel_native_clone, msel_native_clone_planned, msel_clone_parameter, msel_estimator_call, msel_estimator_plan,
+    msel_planned_call,
+)
 from bindings.family_common import (
     family_array, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str, family_type_name,
 )
@@ -52,6 +55,12 @@ def msel_classifier(estimator: PythonObject, pinned: Bool, context: PythonObject
 
 def msel_fit(estimator: PythonObject, x: PythonObject, y: PythonObject, context: PythonObject) raises:
     _ = msel_estimator_call(estimator, "fit", Python.tuple(x, y), context)
+
+
+def msel_fit_planned(estimator: PythonObject, plan: PythonObject, x: PythonObject, y: PythonObject,
+                     context: PythonObject) raises:
+    """`msel_fit` of a fresh `msel_native_clone_planned` clone and its plan."""
+    _ = msel_planned_call(estimator, plan, "fit", Python.tuple(x, y), context)
 
 
 def msel_seconds() -> Float64:
@@ -438,7 +447,9 @@ def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: 
     var raise_errors = family_is_str(error_score)
     var folds = rows.folds
     for i in range(len(folds)):  # driver-loop: over folds
-        var est = msel_clone(estimator, False, context)
+        var cloned = msel_native_clone_planned(estimator, context)
+        var est = cloned[0]
+        var plan = cloned[1]
         var t0 = msel_seconds()
         var got = rows.take(i, PythonObject(None) if y is rows.y else y, context)
         var xtr = got[0]
@@ -447,10 +458,10 @@ def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: 
         var yte = got[3]
         var ok = True
         if raise_errors:
-            msel_fit(est, xtr, ytr, context)
+            msel_fit_planned(est, plan, xtr, ytr, context)
         else:
             try:
-                msel_fit(est, xtr, ytr, context)
+                msel_fit_planned(est, plan, xtr, ytr, context)
             except error:
                 if not msel_catch(error, b.Exception):
                     raise error^
@@ -885,12 +896,15 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
     try:
         var preds = Python.list()
         for i in range(len(folds)):  # driver-loop: over folds
-            var est = msel_clone(estimator, False, context)
+            var cloned = msel_native_clone_planned(estimator, context)
+            var est = cloned[0]
+            var plan = cloned[1]
             var fr = rows.take(i, PythonObject(None), context)
-            msel_fit(est, fr[0], fr[1], context)
+            msel_fit_planned(est, plan, fr[0], fr[1], context)
             if py_type(method) is not msel_b().str:
                 raise Error("TypeError: native prediction method must be an exact string")
-            var pred = msel_estimator_call(est, String(method), Python.tuple(fr[2]), context)
+            # Fit is native: no Python ran since the clone's plan was made.
+            var pred = msel_planned_call(est, plan, String(method), Python.tuple(fr[2]), context)
             _ = py_call(preds.append, _numeric_pred(pred, context))
         result = _place(preds, tests, n, rows, context)
     finally:

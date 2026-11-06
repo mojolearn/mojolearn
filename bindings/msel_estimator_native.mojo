@@ -88,6 +88,16 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
     return _msel_admitted_dispatch(model, method, args, context, plan, scorer_response, keywords)
 
 
+def msel_planned_call(model: PythonObject, plan: PythonObject, method: String, args: PythonObject,
+                      context: PythonObject, scorer_response: Bool = False) raises -> PythonObject:
+    """`msel_estimator_call` for a model whose plan the caller has just
+    checked (`msel_estimator_plan`) or made (`msel_native_clone_planned`), with
+    no Python code run since: the class, hook and instance checks are not
+    repeated (lane perf-sweep-msel-nbr-svc: a fold's clone was checked by the
+    clone, again by its fit and twice per score)."""
+    return _msel_admitted_dispatch(model, method, args, context, plan, scorer_response, PythonObject(None))
+
+
 def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObject,
                             context: PythonObject, plan: PythonObject,
                             scorer_response: Bool, keywords: PythonObject) raises -> PythonObject:
@@ -246,6 +256,13 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int 
 
 
 def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
+    return msel_native_clone_planned(model, context, depth)[0]
+
+
+def msel_native_clone_planned(model: PythonObject, context: PythonObject,
+                              depth: Int = 0) raises -> Tuple[PythonObject, PythonObject]:
+    """(clone, plan): the fresh clone has the checked class of `model` and
+    only the constructor state written here, so `plan` admits it as is."""
     if depth > 64:
         raise Error("TypeError: native estimator configuration exceeds the supported nesting depth")
     var b = native_loaded_module("builtins")
@@ -286,7 +303,7 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
         if entry is None or py_type(entry) is not py_type(b.len):
             raise Error("ImportError: native estimator constructor binding is unavailable")
         _ = family_call(entry, result, plan["init"], py_call(b.tuple, args), plan["context"])
-    return result
+    return (result, plan)
 
 
 def msel_native_set_params(model: PythonObject, params: PythonObject,
