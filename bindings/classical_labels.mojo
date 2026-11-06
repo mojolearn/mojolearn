@@ -44,6 +44,12 @@ from bindings.label_input_sources import (
     labels_list_scalar_kind, labels_series_values, labels_text_storage,
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
 from bindings.str_labels_native import StrTable, _read, _sorted
+from bindings.cpython_table import cpython_table
+from bindings.perf3_label_doors_text import labels_all_exact_str
+from bindings.label_input_sources import LABELS_LIST_INT
+from bindings.p3_labels_metrics_native import (
+    p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
+    p3_integral_list, p3_item, p3_type_word, p3_table, P3_TEXT_OK, P3_TEXT_NOT_STR)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -148,9 +154,10 @@ def labels_helper(context: PythonObject, name: String) raises -> PythonObject:
 def labels_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     """`entry(*args)` for a compiled entry point and a Python list of its
     arguments, keeping the class of a refusal the entry raises."""
-    ref cpy = Python().cpython()
     var envelope = py_call(labels_builtins().tuple, args)
-    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallObject")(entry._obj_ptr, envelope._obj_ptr)
+    # p3-labels-metrics: PyObject_CallObject from the process-wide table (it
+    # was resolved by name, dlsym, on every call).
+    var result = p3_table()[].call_object(entry._obj_ptr, envelope._obj_ptr)
     if not result:
         raise typed_python_error()
     return PythonObject(from_owned=result)
@@ -300,10 +307,10 @@ def _any_contiguous_address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var storage = List[Int](length=10, fill=0)
     var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x9C)) != 0:
+    if cpython_table()[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0x9C)) != 0:
         raise cpy.unsafe_get_error()
     var address = storage[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    cpython_table()[].PyBuffer_Release(pointer)
     _ = storage^
     return address
 
@@ -545,8 +552,10 @@ def labels_check_sample_weight(source: PythonObject, n: Int, context: PythonObje
     var cls = py_type(source)
     var scalar = False
     var value = Float64(0)
-    if cls is b.int or cls is b.float or (labels_real_type(cls, context) and not labels_bool_type(cls, context)
-                                          and not labels_integral_type(cls, context)):
+    # One classification (it was three: real, bool, integral): a real
+    # scalar that is neither bool nor integral is kind 4.
+    _labels_connect(context)
+    if cls is b.int or cls is b.float or labels_primitive_kind(cls, context) == 4:
         scalar = True
         value = Float64(py=py_call(b.float, source))
     elif cls is not context["array_class"] and cls is not b.list and cls is not b.tuple:
