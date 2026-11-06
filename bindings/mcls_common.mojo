@@ -308,6 +308,10 @@ def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context
     var types = mc_types(labels)
     if mc_types_all(types, b.str):
         return Python.tuple(labels, PythonObject("string"))
+    if mc_types_all(types, b.int):
+        # every leaf is an exact Python int: `int(v)` is v itself, so the
+        # flattened list (a fresh list) is the converted one; no per-label call
+        return Python.tuple(labels, PythonObject("integer"))
     if mc_types_integral(types, context):
         var converted = Python.list()
         for index in range(mc_len(labels)):  # driver-loop: native integer boxing after exact type admission
@@ -435,6 +439,20 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject) raises 
         return McLabels("integer", Int(py=fast[2]), fast[0], fast[1])
     var listed = mc_label_list(values, name, False, context)
     var labels = listed[0]
+    if String(listed[1]) == "integer":
+        # The converted labels are exact Python ints (pandas, uint64 or
+        # nested inputs flattened above): within int64 they take the native
+        # encoder as one int64 store; an int outside int64 keeps the Python
+        # label step below.
+        var store = PythonObject(None)
+        try:
+            store = py_call(native_loaded_module("array").array, PythonObject("q"), labels)
+        except:
+            store = PythonObject(None)
+        if store is not None:
+            var count = mc_len(store)
+            var encoded = mc_encode_store(store, count, context)
+            return McLabels("integer", count, encoded[0], encoded[1])
     var classes = mc_sorted(mc_set(labels))
     var index = mc_index(classes)
     # cpu-route: str or Python int labels, the explicit label input step (dict lookups by builtins map)

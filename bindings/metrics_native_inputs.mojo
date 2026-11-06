@@ -49,13 +49,19 @@ def _metric_array_flat(value: PythonObject) raises -> PythonObject:
     if kind == "f":
         code = "e" if width == 2 else "f" if width == 4 else "d"
     var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))
+    # The shape and strides read once as native words, not per element per axis.
+    var sizes = List[Int](capacity=rank)
+    var steps = List[Int](capacity=rank)
+    for axis in range(rank):  # driver-loop: over the array's axes
+        sizes.append(Int(py=shape[axis]))
+        steps.append(Int(py=strides[axis]))
     for index in range(count):  # driver-loop: materialize explicit label scalars in logical C order
         var residual = index
         var offset = 0
         for reverse_axis in range(rank):  # driver-loop: actual array rank/strides, including Fortran and reversed views
             var axis = rank - 1 - reverse_axis
-            var size = Int(py=shape[axis])
-            offset += (residual % size) * Int(py=strides[axis])
+            var size = sizes[axis]
+            offset += (residual % size) * steps[axis]
             residual //= size
         var decoded = NativeScalarBuffer(native_scalar_real(data, offset, code, width, True),
                                          NativeRealBits(), False, False)
