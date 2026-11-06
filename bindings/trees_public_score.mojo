@@ -25,6 +25,7 @@
 # before. What is gone is the Python between predict and score and the
 # re-materialization of y and the prediction.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array
@@ -339,19 +340,28 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
         raise Error(name + " must contain at least one label")
     var all_str = True
     var all_int = True
+    # Builtins, bound methods and exact types read once, not per label; an
+    # exact str (int) is its own str() (int()) in CPython, so those calls are
+    # skipped for exact types only (lane perf-sweep-trees, 2026-11-05).
+    var isinstance_ = b.isinstance
+    var str_t = b.str
+    var int_t = b.int
     for i in range(n):  # cpu-route: the label types of user labels, the explicit label input step
         var v = labels[i]
-        var t = py_type(v)
-        all_str = all_str and Bool(py=py_call(b.isinstance, v, b.str))
+        if all_str:
+            all_str = py_type(v) is str_t or Bool(py=py_call(isinstance_, v, str_t))
         all_int = all_int and metric_is_integral(v, context)
     var out = Python.list()
+    var append = out.append
     if all_str:
         for i in range(n):  # cpu-route: str labels, the explicit label input step
-            _ = py_call(out.append, py_call(b.str, labels[i]))
+            var v = labels[i]
+            _ = py_call(append, v if py_type(v) is str_t else py_call(str_t, v))
         return ScoreLabels(False, PythonObject(None), PythonObject(None), out, n, "string")
     if all_int:
         for i in range(n):  # cpu-route: Python int labels, the explicit label input step
-            _ = py_call(out.append, py_call(b.int, labels[i]))
+            var v = labels[i]
+            _ = py_call(append, v if py_type(v) is int_t else py_call(int_t, v))
         return ScoreLabels(False, PythonObject(None), PythonObject(None), out, n, "integer")
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
@@ -393,8 +403,10 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
         return out
     var p = _I32P(unsafe_from_address=trees_address(out))
     _ = out  # keep the Python object alive through the native call above
+    var lookup = index.get  # read once, not per row
+    var missing = PythonObject(-1)
     for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step
-        p[i] = Int32(Int(py=py_get(index, labels.values[i], PythonObject(-1))))
+        p[i] = Int32(Int(py=py_call(lookup, labels.values[i], missing)))
         _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -444,8 +456,9 @@ struct _Program(Movable):
         if len(params) > _PARAMS:
             raise Error("x_metrics: too many stage parameters")
         var record = Python.list(PythonObject(op), PythonObject(total))
+        var append = record.append  # read once, not once per word
         for i in range(_PARAMS):  # small-loop(params): the fourteen fixed parameter words of one stage
-            _ = py_call(record.append, PythonObject(params[i] if i < len(params) else 0))
+            _ = py_call(append, PythonObject(params[i] if i < len(params) else 0))
         _ = py_call(self.stages.append, record)
 
     def group(mut self, key: Int, n: Int, m: Int, weights: Int) raises -> Tuple[Int, Int]:
@@ -470,7 +483,7 @@ def _run(var program: _Program, mode: PythonObject, context: PythonObject) raise
     """`_run(prog, numeric_mode)`: the shared native program runner over a
     program object holding these fields. Returns the arena store."""
     var b = trees_builtins()
-    var sys = Python.import_module("sys")
+    var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "mojolearn._expansion_metrics")
     if module is None:
         raise Error("ImportError: mojolearn: the metrics programs are not connected")
