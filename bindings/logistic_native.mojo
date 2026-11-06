@@ -479,11 +479,43 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     return classical_decode_labels(fields["classes_"], codes, context)
 
 
+def _logistic_proba_fused(model: PythonObject, fields: PythonObject, mut entries: PythonObject,
+                          source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`predict_proba` through the binding's one-call `qn_proba` (decision
+    and link in one crossing, no Python scores array between them), with
+    `logistic_decision`'s checks in its order. None when the connected table
+    has no `qn_proba` (the two-entry path then runs)."""
+    if not py_contains(fields, "_w"):
+        raise Error("mojolearn LogisticRegression: call fit first")
+    var x = classical_host_f32(source, 2, "X", context)
+    var rows = Int(py=x.shape[0])
+    var cols = Int(py=x.shape[1])
+    if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
+        raise Error("mojolearn LogisticRegression feature count differs from fit")
+    var n_targets = _n_targets(model, fields)
+    if entries is None:
+        entries = _entries(model, fields, context)
+    var fused = py_get(entries, "qn_proba")
+    if fused is None:
+        return PythonObject(None)
+    var intercept = 1 if Bool(py=fields["fit_intercept"]) else 0
+    var out = labels_empty(Python.tuple(rows, 2 if n_targets == 1 else n_targets), "<f8", context)
+    _ = py_call_typed(fused, classical_address(x), classical_address(fields["_w"]), PythonObject(labels_address(out)),
+                      Python.list(rows, cols, intercept, n_targets))
+    _ = x  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = x^
+    return out
+
+
 def logistic_proba(model: PythonObject, fields: PythonObject, mut entries: PythonObject, source: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`predict_proba`: the sigmoid (two classes) or softmax (more) of the
     decision scores, in float64. One fields snapshot and one estimators
     table serve the decision and the link."""
+    var fused = _logistic_proba_fused(model, fields, entries, source, context)
+    if fused is not None:
+        return fused
     var scores = logistic_decision(model, fields, entries, source, context)
     var n_targets = _n_targets(model, fields)
     var rows = Int(py=scores.shape[0])

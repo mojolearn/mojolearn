@@ -1202,6 +1202,44 @@ def qn_decision_function_binding(
     return PythonObject(0)
 
 
+def qn_proba_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`predict_proba` in one call: `qn_decision_function` then the sigmoid
+    (n_classes < 3: out float64 (n_rows, 2)) or softmax (out float64
+    (n_rows, n_classes)) link, the same kernels and words as the two entries
+    called in turn, with the scores held in native scratch instead of a
+    Python array between two binding crossings. params: n_rows, n_features,
+    fit_intercept, n_classes. Returns 0."""
+    if len(params) != 4:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var fi = Int(py=params[2]) != 0
+    var nc = Int(py=params[3])
+    var nt = nc if nc > 2 else 1
+    var scores = List[Float32](length=max(nr * nt, 1), fill=0)
+    var sp = _f32_ptr(Int(scores.unsafe_ptr()))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        qn_decision_function_host(ctx, xp, cp, sp, nr, nf, fi, nt)
+        ctx.synchronize()
+        if nr > 0:
+            if nt == 1:
+                qn_sigmoid_device(ctx, sp, op, nr)
+            else:
+                qn_softmax_device(ctx, sp, op, nr, nt)
+        _ = ctx^
+    _ = scores^
+    return PythonObject(0)
+
+
 def qn_predict_binary_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -1565,6 +1603,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
+        m.def_function[qn_proba_binding]("qn_proba")
         m.def_function[ols_predict_wide_binding]("ols_predict_wide")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")

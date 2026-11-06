@@ -230,6 +230,23 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
         for i in range(rows):  # driver-loop: native completed class-code publication
             indices.append(Int(values[i]))
         _ = codes^
+    elif (operation == "host_infer_predict_proba" or operation == "host_infer_predict_log_proba") and py_get(
+            context["host_inference_entries"], "qn_proba") is not None:
+        # Decision and link in one native call (no Python scores array).
+        var probabilities = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
+        _ = py_call(_kernel_entry("qn_proba", context), classical_address(x), classical_address(weights),
+            classical_address(probabilities), Python.list(rows, features, Int(intercept), targets))
+        if operation == "host_infer_predict_log_proba":
+            var flags = 0
+            if py_get(context["host_inference_entries"], "py2mojo_linear_flags") is not None:
+                flags = Int(py=py_call(_kernel_entry("py2mojo_linear_flags", context)))
+            if (flags & 2) == 0:
+                raise Error("RuntimeError: this estimators binding predates py2mojo_rows; rebuild it")
+            out = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
+            _ = py_call(_kernel_entry("py2mojo_rows", context), 1, classical_address(probabilities), classical_address(out), Python.list(rows * count, 1))
+        else:
+            out = probabilities
+        _ = probabilities^
     else:
         scores = host_archive_typed(Python.tuple(rows) if targets == 1 else Python.tuple(rows, targets), "<f4", context["output_context"])
         _ = py_call(_kernel_entry("qn_decision_function", context), classical_address(x), classical_address(weights),

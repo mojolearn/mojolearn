@@ -1157,6 +1157,48 @@ def qn_decision_function_binding(
     return PythonObject(0)
 
 
+def qn_proba_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`predict_proba` in one call on the host: `qn_decision_function` then
+    the sigmoid (n_classes < 3: out float64 (n_rows, 2)) or softmax link,
+    the same restatements as the two entries called in turn, the scores in
+    native scratch. params: n_rows, n_features, fit_intercept, n_classes.
+    Returns 0."""
+    if len(params) != 4:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    var x_address = _index(x_addr)
+    var w_address = _index(coef_addr)
+    var op = f64_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var fi = _index(params[2]) != 0
+    var nc = _index(params[3])
+    var nt = nc if nc > 2 else 1
+    var scores = List[Float32](length=max(nr * nt, 1), fill=0)
+    var sp = f32_ptr(Int(scores.unsafe_ptr()))
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        if nt > 2:
+            host_qn_decision_multi_into(
+                f32_ptr(x_address), f32_ptr(w_address), sp, nr, nf, nt, fi,
+                host_predict_task_count(nr),
+            )
+            host_qn_softmax_into(sp, op, nr, nt, host_predict_task_count(nr))
+        else:
+            host_qn_decision_into(
+                f32_ptr(x_address), f32_ptr(w_address), sp, nr, nf, fi,
+                host_predict_task_count(nr),
+            )
+            host_qn_sigmoid_into(sp, op, nr, host_predict_task_count(nr))
+    _ = scores^
+    return PythonObject(0)
+
+
 def qn_predict_binary_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -1513,6 +1555,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")
+        module.def_function[qn_proba_binding]("qn_proba")
         module.def_function[ols_predict_wide_binding]("ols_predict_wide")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")
