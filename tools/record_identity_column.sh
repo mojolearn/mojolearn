@@ -87,6 +87,10 @@
 #                           same source). Needs PYTHON (the venv interpreter) and INSTALLED_WHEELS (a file of
 #                           "<wheel file name> <sha256>" lines the installer verified); the digests land in the
 #                           provenance as installed_wheels=. Lane reuse (the default selection) is unchanged.
+#   SELECT_ONLY=1           the default auto-reuse selection only: prints LANES-SELECTED <csv> (or
+#                           NOTHING-CHANGED) and records nothing
+#   LANE_SELECTION=auto-reuse-chunk  with LANES: this record is one chunk of a SELECT_ONLY selection
+#                           (tools/identity_wheel_record.py runs the chunks in parallel)
 #
 # Start ledger-managed release columns through release_identity_run.py after
 # reconciling retained evidence. Legacy per-run controllers remain supported.
@@ -298,6 +302,15 @@ if src:
         || die "could not list the ${SCOPE:-routine} lanes"
     # Nothing to reuse: an ordinary full column under its own label.
     [ "$AUTO_LANES" = "$ALL_LANES" ] || LANES=$AUTO_LANES
+    # SELECT_ONLY=1 (tools/identity_wheel_record.py): print the owed lanes and stop, so one selection by THIS
+    # rule feeds every parallel worker (each then records its chunk with LANES=... LANE_SELECTION=auto-reuse-chunk)
+    if [ "${SELECT_ONLY:-0}" = 1 ]; then echo "LANES-SELECTED $AUTO_LANES"; exit 0; fi
+fi
+[ "${SELECT_ONLY:-0}" = 0 ] || [ "$SELECTION" = auto-reuse ] || die "SELECT_ONLY=1 needs the default auto-reuse selection"
+if [ -n "${LANE_SELECTION:-}" ]; then
+    [ "$LANE_SELECTION" = auto-reuse-chunk ] && [ "$SELECTION" = explicit ] && [ -n "${LANES:-}" ] \
+        || die "LANE_SELECTION=auto-reuse-chunk names a chunk of a SELECT_ONLY selection given as LANES"
+    SELECTION=auto-reuse-chunk
 fi
 if [ -n "${ONLY_CHANGED:-}" ]; then
     SELECTION=only-changed-$ONLY_CHANGED

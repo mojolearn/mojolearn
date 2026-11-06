@@ -233,6 +233,11 @@ def runner(manifest, receipt, output):
     return save, run
 
 
+#: --no-identity-lanes: the jobs that execute identity lanes, dropped when the one column record ran them
+IDENTITY_LANE_JOBS = ("models", "extended", "self-test")
+IDENTITY_RECORDED_ONCE = "recorded-once"
+
+
 def qualify_jobs(run, save, manifest, python, work, output, models, scope, devices, version):
     """The smoke's jobs against an installed package: the same for a wheel
     installed here and for a package pip resolved from an index."""
@@ -250,6 +255,11 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
         "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "1", "--batch-checks", "--no-models"],
         "self-test": ["--self-test"],
     }
+    if manifest.get("identity_lanes") == IDENTITY_RECORDED_ONCE:
+        # ONE EXECUTION OF THE IDENTITY LANES PER DEVICE CLASS (Andrew 2026-11-05, release.py
+        # --identity-on-wheels): the column record of these exact installed wheels
+        # (tools/identity_wheel_record.py) ran every owed lane; these three re-ran a subset of them.
+        commands = {name: flags for name, flags in commands.items() if name not in IDENTITY_LANE_JOBS}
     if scope == 'cpu-only':
         commands = {name: flags for name, flags in commands.items() if name in ('coverage', 'models')}
     manifest['expanded'] = expanded_checks(run, python, work, output,
@@ -308,6 +318,7 @@ def qualify_installed(parser, args):
     if receipt.exists():
         parser.error("use a fresh output directory")
     manifest = dict(wheel=None, wheel_sha256=None, status="INCOMPLETE", jobs=[], scope=args.scope,
+                    **({"identity_lanes": IDENTITY_RECORDED_ONCE} if args.no_identity_lanes else {}),
                     source_commit=None, release_qualified=False, expanded=None,
                     require_ptx=args.require_ptx,
                     installed_from=dict(python=python, expected_version=args.expected_version))
@@ -373,6 +384,9 @@ def main():
     parser.add_argument('--installed-python', type=Path,
                         help='qualify the mojolearn already installed for this interpreter (no wheel, no install)')
     parser.add_argument('--expected-version', help='with --installed-python: the version that must be installed')
+    parser.add_argument('--no-identity-lanes', action='store_true',
+                        help='drop the models, extended and self-test jobs: the one identity column record of '
+                             'these wheels ran their lanes (release.py --identity-on-wheels)')
     args = parser.parse_args()
     if args.require_ptx and args.scope != 'expanded':
         parser.error('--require-ptx needs expanded GPU scope')
@@ -418,6 +432,7 @@ def main():
     if len({p["distribution"] for p in plugins}) != len(plugins):
         parser.error("one --plugin per distribution")
     manifest = dict(wheel=str(wheel), wheel_sha256=digest, status="INCOMPLETE", jobs=[],
+                    **({"identity_lanes": IDENTITY_RECORDED_ONCE} if args.no_identity_lanes else {}),
                     scope=args.scope, source_commit=source_commit, release_qualified=False,
                     expanded=None, require_ptx=args.require_ptx)
     if plugins:
