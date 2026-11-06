@@ -8,6 +8,11 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
+
+
+comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"
 
 
 def native_release_weakrefs(value: PythonObject, context: PythonObject) raises:
@@ -97,22 +102,39 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
             native_release_admit(pairs[i][1],context,depth+1)
         return
     if cls is context["array_class"]:
-        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
-        if len(ancestry) != 2 or ancestry[1] is not b["object"]:
-            raise Error("TypeError: native owner reinitialization cannot inherit Array lifecycle hooks")
-        var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
-        var keys = py_call(b["list"],mapping)
-        for i in range(len(keys)):  # driver-loop: over native Array class keys before class-owner lookup
-            if py_type(keys[i]) is not b["str"]:
-                raise Error("TypeError: native owner reinitialization requires native Array class keys")
-        if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
-            raise Error("TypeError: native owner reinitialization cannot invoke Array lifecycle hooks")
-        var owners = py_call(b["list"],context["owner_array_slots"])
+        var slots = context["owner_array_slots"]
+        var owners = py_call(b["list"],slots)
+        # The Array class admission (ancestry, exact keys, no lifecycle hooks,
+        # connected slot descriptors) depends only on the class rows and the
+        # import-time slot table: once per class state, not once per Array.
+        var mods = NativeModules()
+        var record = class_record(mods, _ARRAY_CLASS_SLOT, cls)
+        var admitted = record is not None and record[0] is slots and Int(py=record[1]) == len(owners)
+        if admitted:
+            for i in range(len(owners)):  # driver-loop: over the admitted slot descriptors
+                if record[2][i] is not slots[owners[i]]:
+                    admitted = False
+                    break
+        if not admitted:
+            var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+            if len(ancestry) != 2 or ancestry[1] is not b["object"]:
+                raise Error("TypeError: native owner reinitialization cannot inherit Array lifecycle hooks")
+            var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
+            var keys = py_call(b["list"],mapping)
+            for i in range(len(keys)):  # driver-loop: over native Array class keys before class-owner lookup
+                if py_type(keys[i]) is not b["str"]:
+                    raise Error("TypeError: native owner reinitialization requires native Array class keys")
+            if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
+                raise Error("TypeError: native owner reinitialization cannot invoke Array lifecycle hooks")
+            var descriptors = Python.list()
+            for i in range(len(owners)):  # driver-loop: over all retained Array slot owners, including otherwise unused metadata
+                var descriptor = slots[owners[i]]
+                if py_get(mapping,owners[i]) is not descriptor:
+                    raise Error("TypeError: native owner reinitialization requires native Array owner slots")
+                _ = py_call(descriptors.append,descriptor)
+            class_admit(mods, _ARRAY_CLASS_SLOT, cls, Python.tuple(slots, PythonObject(len(owners)), py_call(b["tuple"],descriptors)))
         for i in range(len(owners)):  # driver-loop: over all retained Array slot owners, including otherwise unused metadata
-            var descriptor = context["owner_array_slots"][owners[i]]
-            if py_get(mapping,owners[i]) is not descriptor:
-                raise Error("TypeError: native owner reinitialization requires native Array owner slots")
-            native_release_admit(py_call(descriptor.__get__,value,cls),context,depth+1)
+            native_release_admit(py_call(slots[owners[i]].__get__,value,cls),context,depth+1)
         return
     if cls is b["memoryview"]:
         native_release_admit(value.obj,context,depth+1)

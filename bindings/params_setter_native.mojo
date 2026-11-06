@@ -58,6 +58,14 @@ def _release_admit(value: PythonObject, context: PythonObject, seen: PythonObjec
     while cursor < len(todo):  # driver-loop: iterative ownership walk, including deeply nested/cyclic native data
         var item = todo[cursor]
         cursor += 1
+        # Exact immutable scalar leaves own nothing, take no weak references
+        # and have no Python finalizer: native_release_admit accepts them
+        # unconditionally. Skip the identity record, weakref probe and MRO
+        # finalizer walk for each of them.
+        var leaf = py_type(item)
+        if (item is None or leaf is b.str or leaf is b.int or leaf is b.float or leaf is b.bool
+                or leaf is b.bytes or leaf is b.complex):
+            continue
         # builtin id() emits an audit event and can run a Python audit hook.
         # Native pointer identity provides the same cycle key without it.
         var identity = PythonObject(Int(item._obj_ptr))
