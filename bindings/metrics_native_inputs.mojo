@@ -12,6 +12,14 @@ from core.native_scalar_decode import NativeRealBits, native_scalar_real
 
 def metric_shape(value: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_admit_value(value, context)
+    return metric_shape_admitted(value, context)
+
+
+def metric_shape_admitted(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`metric_shape` of a value the caller already admitted
+    (`classical_admit_value`) in the same native call, so a label list is not
+    walked again. A pandas value's stored block is a new object and is
+    still admitted."""
     var cls = py_type(value)
     if cls is py_type(Python.list()) or cls is py_type(Python.tuple()):
         var count = len(value)
@@ -72,6 +80,13 @@ def _metric_array_flat(value: PythonObject) raises -> PythonObject:
 
 def metric_flatten(value: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_admit_value(value, context)
+    return metric_flatten_admitted(value, context)
+
+
+def metric_flatten_admitted(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`metric_flatten` of a value the caller already admitted in the same
+    native call. The list a buffer's `tolist` makes is new and is still
+    admitted below."""
     var item = value
     var list_type = py_type(Python.list())
     var tuple_type = py_type(Python.tuple())

@@ -23,7 +23,7 @@ from core.metrics_program_plan import MetricProgramPlan
 from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
-from bindings.metrics_native_inputs import metric_shape, metric_flatten
+from bindings.metrics_native_inputs import metric_shape, metric_flatten, metric_flatten_admitted
 from bindings.classical_pandas import classical_admit_value
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -190,6 +190,11 @@ def mc_buffer_format(obj: PythonObject, context: PythonObject) raises -> String:
     its byte-order prefix stripped; MC_NO_FORMAT for an object without a
     buffer (a list, a scalar)."""
     classical_admit_value(obj, context)
+    return mc_buffer_format_admitted(obj, context)
+
+
+def mc_buffer_format_admitted(obj: PythonObject, context: PythonObject) raises -> String:
+    """`mc_buffer_format` of a value already admitted in this native call."""
     if classical_is_array(obj, context):
         var dtype = String(obj.dtype)
         if dtype == "<f4":
@@ -254,10 +259,12 @@ def mc_types_integral(types: PythonObject, context: PythonObject) raises -> Bool
 def mc_is_integer_labels(obj: PythonObject, context: PythonObject) raises -> Bool:
     """`linear_model._is_integer_labels`: an integer buffer format (bools
     are not integers), or a list whose every leaf is an exact int."""
-    var fmt = mc_buffer_format(obj, context)
+    # One admission walk for the format probe and the flatten below.
+    classical_admit_value(obj, context)
+    var fmt = mc_buffer_format_admitted(obj, context)
     if fmt != MC_NO_FORMAT:
         return fmt.byte_length() == 1 and String("bBhHiIlLqQnN").find(fmt) >= 0
-    var leaves = mc_flatten(obj, context)
+    var leaves = metric_flatten_admitted(obj, context)
     if mc_len(leaves) == 0:
         return False
     var types = mc_types(leaves)
@@ -267,10 +274,11 @@ def mc_is_integer_labels(obj: PythonObject, context: PythonObject) raises -> Boo
 def mc_is_float64(obj: PythonObject, context: PythonObject) raises -> Bool:
     """`_metrics_impl._is_float64`: a buffer of format 'd', or a list with a
     Python float among its leaves."""
-    var fmt = mc_buffer_format(obj, context)
+    classical_admit_value(obj, context)
+    var fmt = mc_buffer_format_admitted(obj, context)
     if fmt != MC_NO_FORMAT:
         return fmt == "d"
-    return py_contains(mc_types(mc_flatten(obj, context)), mc_b().float)
+    return py_contains(mc_types(metric_flatten_admitted(obj, context)), mc_b().float)
 
 
 # ------------------------------------------------------------------- labels
@@ -301,7 +309,7 @@ def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context
     var source = values
     if family_isinstance(source, Python.tuple(b.str, b.bytes)):
         raise Error("mojolearn: y must be a sequence of labels")
-    var labels = mc_flatten(source, context)
+    var labels = metric_flatten_admitted(source, context)  # admitted by mc_shape_of above
     var size = mc_len(labels)
     if not allow_empty and size == 0:
         raise Error(name + " must contain at least one label")
@@ -565,7 +573,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
     var count: Int
     if mc_is_list_like(x):
         # `as_i64_c` of a list: its exact Python ints (a column list flattened)
-        var flat = mc_flatten(x, context)
+        var flat = metric_flatten_admitted(x, context)  # admitted by mc_is_integer_labels above
         store = family_call(native_loaded_module("array").array, PythonObject("q"), flat)
         count = mc_len(store)
     else:

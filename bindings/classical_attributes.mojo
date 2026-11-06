@@ -195,11 +195,45 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     return member
 
 
+def _connect_probe(mapping: PythonObject, key: StaticString) raises -> Int:
+    # One native dictionary probe for the connected-NumPy fast path, in place
+    # of a bound `mapping.get` lookup plus a Python call. Returns 1 when the
+    # exact dict holds a non-None value at `key`, 0 when it holds None or
+    # nothing, and -1 when `mapping` is not an exact dict (the caller then
+    # keeps the general `py_get` path). The connected contexts are package
+    # dictionaries keyed by exact str names; the result is borrowed and only
+    # compared against None, so no reference escapes.
+    ref cpy = Python().cpython()
+    if py_type(mapping) is not py_type(Python.dict()):
+        return -1
+    var name = PythonObject(String(key))
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")(mapping._obj_ptr, name._obj_ptr)
+    if not raw:
+        if cpy.PyErr_Occurred():
+            raise cpy.unsafe_get_error()
+        return 0
+    var none = PythonObject(None)
+    var found = 0 if raw == none._obj_ptr else 1
+    _ = mapping
+    _ = name
+    return found
+
+
 def classical_connect_numpy(context: PythonObject) raises:
-    """Connect loaded NumPy's native types without a Python setup callback."""
-    if py_get(context, "ndarray") is not None:
+    """Connect loaded NumPy's native types without a Python setup callback.
+
+    Idempotent and cheap after the first connection: neural scalar admission
+    calls this per value, so the connected case is one native dict probe."""
+    var connected = _connect_probe(context, "ndarray")
+    if connected == 1:
         return
-    var numpy = py_get(context["modules"], "numpy")
+    if connected == -1 and py_get(context, "ndarray") is not None:
+        return
+    # NumPy not loaded: the modules table probe is also native when exact.
+    var modules = context["modules"]
+    if _connect_probe(modules, "numpy") == 0:
+        return
+    var numpy = py_get(modules, "numpy")
     if numpy is None:
         return
     if py_type(numpy) is not context["native_module_type"]:
