@@ -13,11 +13,11 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_transport import (
     transport_initialize, transport_listen, transport_accept, transport_port, transport_timeout,
-    transport_connect, transport_send, transport_receive, transport_close,
+    transport_connect, transport_send, transport_send_parts, transport_receive, transport_receive_owned, transport_close,
     transport_spawn, transport_wait, transport_terminate, transport_clock,
     transport_sleep, _transport_json,
 )
-from bindings.native_codec import codec_pack, codec_unpack
+from bindings.native_codec import codec_pack_owned, codec_unpack
 from bindings.native_json import native_json_parse
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 
@@ -165,22 +165,22 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
 
 def process_send(socket: PythonObject, kind: String, sequence: Int, value: PythonObject) raises:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
-    var packed = codec_pack(value, PROCESS_MAX_BYTES)
+    var packed = codec_pack_owned(value, PROCESS_MAX_BYTES)
     var description = py_call(PythonObject(_transport_json(packed[0])).encode, "ascii")
     var header = p[].bi.dict()
     py_setitem(header, "kind", kind)
     py_setitem(header, "sequence", sequence)
     py_setitem(header, "description_bytes", len(description))
     # Descriptors travel in the binary frame so tensor registries do not
-    # inherit the transport's small control-header size limit.
-    var body = py_call(p[].bi.bytearray, description)
-    _ = py_call(body.extend, packed[1])
-    transport_send(socket, header, body)
+    # inherit the transport's small control-header size limit. The frame
+    # payload is the descriptor then the codec bytes, written from the two
+    # buffers (no joined copy of the payload).
+    transport_send_parts(socket, header, description, packed[1])
 
 
 def process_receive(socket: PythonObject) raises -> PythonObject:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
-    var frame = transport_receive(socket, PROCESS_MAX_BYTES)
+    var frame = transport_receive_owned(socket, PROCESS_MAX_BYTES)
     var header = frame[0]
     var body = frame[1]
     var raw = py_get(header, "description_bytes")
@@ -190,7 +190,10 @@ def process_receive(socket: PythonObject) raises -> PythonObject:
     if length <= 0 or length > len(body):
         raise Error("process: structural descriptor outside frame")
     var descriptor = native_json_parse(body[py_call(p[].bi.slice, 0, length)])
-    var decoded = codec_unpack(descriptor, body[py_call(p[].bi.slice, length, len(body))], PROCESS_MAX_BYTES)
+    # A zero-copy window onto the received bytearray past the descriptor.
+    var window = py_call(p[].bi.memoryview, body)[py_call(p[].bi.slice, length, len(body))]
+    var decoded = codec_unpack(descriptor, window, PROCESS_MAX_BYTES)
+    _ = window
     var result = p[].bi.list()
     _ = py_call(result.append, header)
     _ = py_call(result.append, decoded)
