@@ -744,8 +744,29 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
     buffers, a pandas Series, a matrix, an empty vector)."""
     var b = trees_builtins()
     var cls = py_type(y)
-    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or native_pandas_exact(y):
+    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes:
         return None
+    if native_pandas_exact(y):
+        # An exact pandas Series over one plain NumPy integer, unsigned,
+        # bool or float block (lane perf2-trees, 2026-11-06): its `tolist()`
+        # lists exactly that block's values as Python ints, bools or floats,
+        # which the label input step then encoded through the same native
+        # `prepare_targets` (ints, floats) or sorted to the same bool classes
+        # (`bool_source`). The block is read in place instead of listed and
+        # walked per label. Nullable, categorical, string, object and any
+        # other storage keep the walk. Same classes and codes: no bits change.
+        var values = PythonObject(None)
+        try:
+            values = _pandas_values(y)
+        except:
+            return None
+        var ndarray = py_get(context, "ndarray")
+        if ndarray is None or py_type(values) is not ndarray or Int(py=values.ndim) != 1:
+            return None
+        var kind = String(values.dtype.kind)
+        if not (kind == "i" or kind == "u" or kind == "b" or kind == "f"):
+            return None
+        return _numeric_label_view(values, context, bool_source)
     var found: Optional[TreesView] = None
     try:
         if cls is context["array_class"]:
