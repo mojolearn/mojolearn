@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native standalone block construction, state allocation and sequence execution."""
+from bindings.native_class_admission import class_record, class_admit
 from std.python import Python, PythonObject
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from std.python._cpython import PyObjectPtr, GILReleased
@@ -11,7 +12,7 @@ from bindings.neural_block_admission import (
     neural_plain_value, neural_array_snapshot, neural_array_slots, neural_admit_weights,
     neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
 )
-from bindings.mode_metadata_native import _fields
+from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_identity_key import NativeIdentityKey
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_fields, prepared_key_same
@@ -505,16 +506,21 @@ def _neural_state_capture(mut mods: NativeModules, owner: NativeBlockExecution, 
     # union once, avoiding repeated dictionary/MRO capture while still checking
     # every live field before any scalar or buffer access.
     var fields = neural_record_fields(mods, state, plan.state_fields)
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
-    from bindings.mode_metadata_native import _class_fields
-    for i in range(len(ancestry)):  # small-loop(passive state access protocol)
-        var row = _class_fields(mods, ancestry[i])
-        if py_contains(row, "__getattr__"):
-            raise Error("TypeError: neural state attribute hooks are not supported")
-        for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
-            var hook = py_get(row, PythonObject(name))
-            if hook is not None and hook is not bi.object.__dict__[name]:
+    # The attribute-hook refusal reads only the state class rows: kept per
+    # class (native_class_admission; re-run when the class or an ancestor
+    # changes, every call on Python < 3.12), not an MRO walk per step (lane
+    # p3-neural-blocks).
+    if class_record(mods, _NEURAL_STATE_HOOKS_SLOT, cls) is None:
+        var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+        for i in range(len(ancestry)):  # small-loop(passive state access protocol)
+            var row = _class_fields(mods, ancestry[i])
+            if py_contains(row, "__getattr__"):
                 raise Error("TypeError: neural state attribute hooks are not supported")
+            for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
+                var hook = py_get(row, PythonObject(name))
+                if hook is not None and hook is not bi.object.__dict__[name]:
+                    raise Error("TypeError: neural state attribute hooks are not supported")
+        class_admit(mods, _NEURAL_STATE_HOOKS_SLOT, cls, PythonObject(True))
     var copied = py_call(bi.dict, fields)
     for i in range(len(scalars)):  # small-loop(capture native state words before conversion)
         if py_contains(fields, scalars[i]):
@@ -578,6 +584,9 @@ def _neural_state_capture(mut mods: NativeModules, owner: NativeBlockExecution, 
     var snapshot = py_call(bi.object.__new__, cls)
     _ = py_call(_fields(mods, snapshot).update, copied)
     return snapshot
+
+
+comptime _NEURAL_STATE_HOOKS_SLOT = "neural_state_hooks_class_v1"
 
 
 def _neural_publish_state(state: PythonObject, captured: PythonObject) raises:
