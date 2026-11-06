@@ -3921,8 +3921,10 @@ PUBLIC_PENDING_LANES = {
     "gbdt-pair-logit-pointwise": "unwatched",
     "gbdt-yeti-rank-pointwise": "unwatched",
     # New configuration-specific lane. The existing gbdt-query-rmse lane
-    # remains the greedy-searcher reference and is unchanged.
-    "gbdt-query-rmse-pointwise": "no reference",
+    # remains the greedy-searcher reference and is unchanged. Its "no reference"
+    # (2026-10-28) is gone: the 2026-11-05 records admitted it on every column
+    # (table.json records 358-362), so the verifier compares it like its siblings.
+    "gbdt-query-rmse-pointwise": "unwatched",
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
     # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
