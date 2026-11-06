@@ -163,8 +163,8 @@ def test_gate_job_stages_candidate_wheels_and_builds_the_eight_binaries_in_the_j
                    prior=directory, prior_files=RG.prior_files(directory, 'nvidia'))
     uploads = plan.uploads()
     # two wheels (the NVIDIA wheel carries its PTX set), the job script, the retained set
-    # (eight binaries + receipt) and gate.env
-    assert len(uploads) == 2+1+8+1+1
+    # (eight binaries + receipt), the measurement smoke's data plan and gate.env
+    assert len(uploads) == 2+1+8+1+1+1
     assert len([r for _, r, _ in uploads if '/autograd-prior/' in r]) == 9
     assert all(x for _, r, x in uploads if '/autograd-prior/' in r and not r.endswith('.json'))
     assert plan.gate.count('--candidate-wheel') == 2

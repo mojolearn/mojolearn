@@ -716,12 +716,11 @@ class Runner:
                 say(f"runtime unit receipts to reuse: {sum(1 for _ in plan.runtime_prior.rglob('*.json'))} "
                     f"from {plan.runtime_prior}")
             # the measurement smoke's data plan: one presigned GET per file the plan reads (the R2 secret stays here)
-            got = subprocess.run([sys.executable, str(ROOT / "tools/release_measurement_smoke.py"), "data-plan",
-                                  "--vendor", a.vendor, "--out", str(plan.staged / MEASURE_SMOKE_DATA)],
-                                 capture_output=True, text=True)
-            if got.returncode:
-                raise SystemExit("release-gate: the measurement smoke's data plan failed: " + (got.stderr or got.stdout)[-600:])
-            say(got.stdout.strip())
+            import release_measurement_smoke as MS
+            files = MS.write_data_plan(a.vendor, plan.staged / MEASURE_SMOKE_DATA, presign=lambda key, secs: (self.call(
+                ["sh", ROOT / "tools/dataset_store.sh", "presign", key, secs]).stdout or "").strip())
+            say(f"measurement smoke data plan: {len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.2f} GB "
+                f"(presigned GETs; files already at their pins on the box are kept)")
             (plan.staged / "gate.env").write_text(plan.env_text())
             self.stage(plan)
             record = dict(key=key, plan_tag=tag, vendor=a.vendor, launched_at=dt.datetime.now(

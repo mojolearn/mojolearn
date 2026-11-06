@@ -169,7 +169,7 @@ def test_the_box_job_runs_it_unconditionally_and_it_decides_the_verdict():
     assert depth == 0
     assert "tools/logical_shard_identity.py" in job and '[ "$grc" != 0 ] || grc=$src' in job
     # its record comes home with the job's reports
-    assert '"shardcheck")' in (ROOT / "tools" / "ops" / "release_gate.py").read_text()
+    assert '"shardcheck",' in (ROOT / "tools" / "ops" / "release_gate.py").read_text()
 
 
 def test_the_box_runs_the_macs_copy_of_the_tool_right_after_the_overlay():

@@ -513,25 +513,35 @@ def pins(root=ROOT):
     return out
 
 
-def cmd_data_plan(args):
-    """On the Mac: the keys, their pins and one presigned GET each (tools/dataset_store.sh presign; the R2 secret stays
-    on the Mac). Written 0600: the URLs are short-lived read grants."""
+def presign_get(key, seconds):
+    """One presigned GET minted here (tools/dataset_store.sh presign; the R2 secret never leaves this machine)."""
+    got = subprocess.run(["sh", str(HERE / "dataset_store.sh"), "presign", key, str(seconds)],
+                         capture_output=True, text=True)
+    return got.stdout.strip() if got.returncode == 0 else ""
+
+
+def write_data_plan(vendor, out, presign=presign_get, seconds=86400):
+    """The data plan the box stages: each file the smoke plan reads, its pin and one presigned GET (presign=None: keys
+    and pins only). Written 0600: the URLs are short-lived read grants. Returns the entries."""
     pinned = pins()
     entries = []
-    for key, rel in data_keys(args.vendor).items():
+    for key, rel in data_keys(vendor).items():
         if key not in pinned:
             raise SystemExit("measuresmoke: %s has no pin in bench/results/dataset_store/manifest.tsv" % key)
         url = None
-        if not args.no_urls:
-            got = subprocess.run(["sh", str(HERE / "dataset_store.sh"), "presign", key, str(args.seconds)],
-                                 capture_output=True, text=True)
-            url = got.stdout.strip()
-            if got.returncode or not url.startswith("https://"):
-                raise SystemExit("measuresmoke: presign %s failed (rc %d)" % (key, got.returncode))
+        if presign is not None:
+            url = presign(key, seconds)
+            if not str(url).startswith("https://"):
+                raise SystemExit("measuresmoke: presigning %s failed" % key)
         entries.append(dict(key=key, path=rel, bytes=pinned[key][0], sha256=pinned[key][1], url=url))
-    out = Path(args.out)
-    out.write_text(json.dumps(dict(schema=SCHEMA + "/data", vendor=args.vendor, files=entries), indent=1) + "\n")
+    out = Path(out)
+    out.write_text(json.dumps(dict(schema=SCHEMA + "/data", vendor=vendor, files=entries), indent=1) + "\n")
     os.chmod(out, 0o600)
+    return entries
+
+
+def cmd_data_plan(args):
+    entries = write_data_plan(args.vendor, args.out, None if args.no_urls else presign_get, args.seconds)
     print("MEASURESMOKE data-plan %d files, %.2f GB" % (len(entries), sum(e["bytes"] for e in entries) / 1e9))
     return 0
 
