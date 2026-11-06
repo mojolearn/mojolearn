@@ -5,7 +5,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.trees_boost_admission import boost_admit, boost_tree_admit
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.trees_public_boost import _clone, _seed, _sub_seed
+from bindings.trees_public_boost import _clone_from, _seed, _sub_seed
+from bindings.trees_public_forest import forest_get_params
 from bindings.trees_public_forest import forest_refresh, forest_capture_mode, forest_kind
 from bindings.trees_public_meta import _copy_block
 from bindings.trees_public_auxiliary import _model_buffers
@@ -38,24 +39,39 @@ def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> Pyt
     var offsets = gp_label_list(ff["_offsets"], context)
     var seed = _seed(fields["random_state"], context)
     var result = Python.list()
+    # The forest's arrays and scalars, read once (lane perf-trees-owed,
+    # 2026-11-06: re-read from the forest's fields for every tree), and the
+    # members' kind once: every member is a clone of `base`, so of its class.
+    var colid = ff["_colid"]
+    var quesval = ff["_quesval"]
+    var left = ff["_left_child"]
+    var leaves = ff["_leaves"]
+    var n_features = ff["n_features_in_"]
+    var classified = py_contains(ff, "classes_")
+    var classes = ff["classes_"] if classified else PythonObject(None)
+    var n_classes = ff["n_classes_"] if classified else PythonObject(None)
+    var one = PythonObject(1)
+    var width = PythonObject(outputs)
+    var kind = forest_kind(base, context)
+    var template = forest_get_params(base, context) if count > 0 else PythonObject(None)
     for t in range(count):  # driver-loop: one fitted member per native forest tree
         var lo = Int(py=offsets[t])
         var hi = Int(py=offsets[t + 1])
-        var member = _clone(base, _sub_seed(seed, t), context)
+        var member = _clone_from(base, template, _sub_seed(seed, t), context)
         var mf = py_fields(member)
-        _ = forest_refresh(member, forest_kind(member, context), context)
+        _ = forest_refresh(member, kind, context)
         _ = forest_capture_mode(mf, context)
         py_setitem(mf, "_offsets", classical_wrap_array(native_array_from_values("i", Python.list(0, hi - lo)), Python.tuple(2), "<i4", "C", context))
-        py_setitem(mf, "_colid", _copy_block(ff["_colid"], lo, hi, "<i4", context))
-        py_setitem(mf, "_quesval", _copy_block(ff["_quesval"], lo, hi, "<f4", context))
-        py_setitem(mf, "_left_child", _copy_block(ff["_left_child"], lo, hi, "<i4", context))
-        py_setitem(mf, "_leaves", _copy_block(ff["_leaves"], lo * outputs, hi * outputs, "<f4", context))
-        py_setitem(mf, "_n_trees", PythonObject(1))
-        py_setitem(mf, "_num_outputs", PythonObject(outputs))
-        py_setitem(mf, "n_features_in_", ff["n_features_in_"])
-        if py_contains(ff, "classes_"):
-            py_setitem(mf, "classes_", ff["classes_"])
-            py_setitem(mf, "n_classes_", ff["n_classes_"])
+        py_setitem(mf, "_colid", _copy_block(colid, lo, hi, "<i4", context))
+        py_setitem(mf, "_quesval", _copy_block(quesval, lo, hi, "<f4", context))
+        py_setitem(mf, "_left_child", _copy_block(left, lo, hi, "<i4", context))
+        py_setitem(mf, "_leaves", _copy_block(leaves, lo * outputs, hi * outputs, "<f4", context))
+        py_setitem(mf, "_n_trees", one)
+        py_setitem(mf, "_num_outputs", width)
+        py_setitem(mf, "n_features_in_", n_features)
+        if classified:
+            py_setitem(mf, "classes_", classes)
+            py_setitem(mf, "n_classes_", n_classes)
         _ = py_call(result.append, member)
     _ = storage
     if not slice_only:
