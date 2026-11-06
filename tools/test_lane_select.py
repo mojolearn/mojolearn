@@ -442,6 +442,11 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
         for rel in sources[lane]:
             if rel in sinks and rel.endswith(".py"):
                 resolved |= set(lane_select.sink_region_loads(rel, None)[0])
+        # ...or a sink that is the lane's own seed, read as its door
+        # (`door_sinks_of` in lane_sources, 2026-11-05)
+        symbols = lane_select._python_symbols(lane_select._python_files())
+        own = {rel for name in why[lane]["symbols"] for rel in symbols.get(name, ())} & sinks
+        resolved |= lane_select.resolved_bindings(lane_select._followed_seeds(own))
         for binding in why[lane]["bindings"]:
             assert binding in resolved, \
                 f"{lane} carries {binding} but no door of its own resolves it"

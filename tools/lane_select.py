@@ -4233,6 +4233,12 @@ def sink_region_loads(rel, wanted):
     key = (rel, None if wanted is None else frozenset(wanted))
     if key in _SINK_LOADS:
         return _SINK_LOADS[key]
+    if _parse(rel) is None:
+        # Unreadable: every binding its text names, the wide answer.
+        loads = {b for b in set(_BINDING_RE.findall(_read(rel)))
+                 if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+        hit = _SINK_LOADS[key] = (frozenset(loads), frozenset())
+        return hit
     nodes = _region_nodes(rel, None if wanted is None else frozenset(wanted))
     loads = set()
 
@@ -4978,6 +4984,26 @@ def lane_sources():
     ubiquitous_ops = set().union(*[_import_time_names(rel, operations=True)
                                    for rel in ubiquitous_py if rel.endswith(".py")])
 
+    def door_sinks_of(lane):
+        """The sinks that are this lane's OWN door: a followed seed
+        (`_followed_seeds`) that not every lane reaches. Read as a door (its
+        syntax bindings, its names, "no export named" wide for a seed), the
+        treatment `neighbors.py` and `_hierarchy_impl.py` had before the
+        four-binding cap made them sinks. Their literal loads beyond that
+        syntax (`connect_bindings`) stay narrow. 2026-11-05: taking those
+        loads WIDE instead handed the k-NN and agglomerative lanes the whole
+        core and x_cluster host closures, and with them
+        cluster/host/kmeans_oracle.mojo (102 of 513 lanes on the CPU leg)."""
+        return (_followed_seeds(seeds_of[lane]) & sinks) - ubiquitous_py
+
+    for lane in reach:
+        own_doors = door_sinks_of(lane)
+        if own_doors:
+            matched, files, doors, bindings = reach[lane]
+            extra = door_bindings(own_doors)
+            reach[lane] = (matched, files, doors, bindings | extra)
+            syntax_of[lane] |= {b for rel in own_doors for b in _binding_names(rel)} & extra
+
     connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
     for binding in tuple(connected_names):
         connected_names.update(routed.get(binding, ()))
@@ -5018,7 +5044,11 @@ def lane_sources():
             walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py,
                              follow=_followed_seeds(seeds_of[lane]), seed_names=seed_members[lane])
             declared, whole, used = set(), set(), set()
-            regions = {rel: _region_nodes(rel, wanted) for rel, wanted in walk.items() if rel not in sinks}
+            # A SINK THAT IS THIS LANE'S OWN DOOR is read as the door it is
+            # (`_door_sinks`), never through its loads alone.
+            own_doors = door_sinks_of(lane)
+            regions = {rel: _region_nodes(rel, wanted) for rel, wanted in walk.items()
+                       if rel not in sinks or rel in own_doors}
             deferred, live = set(), set()
             for rel, nodes in regions.items():
                 candidates, consumed = _deferred_factory_calls(rel, nodes, walk[rel])
@@ -5027,7 +5057,11 @@ def lane_sources():
             deferred -= live
             limitations = {}
             for rel, wanted in walk.items():
-                if rel in sinks:
+                if rel in own_doors:
+                    # its literal loads (`connect_bindings` included) join as
+                    # narrow bindings; the door rule below decides the rest
+                    declared |= sink_region_loads(rel, wanted)[0]
+                if rel in sinks and rel not in own_doors:
                     # A sink is entered, not read as a door; what its region
                     # LOADS by a literal, and the exports of exactly those
                     # loads that region reads, are the lane's own
@@ -5039,12 +5073,6 @@ def lane_sources():
                         # (the rule `binding_seeds` keeps for a binding every
                         # lane reaches): its loads stay the source alone
                         used |= names
-                    if rel in seeds_of[lane] and rel not in ubiquitous_py:
-                        # the lane's own door (`_followed_seeds`): "no export
-                        # named" stays wide for what it loads, as for any seed
-                        # (`_backend.py`, seeded by every lane that calls
-                        # `ml.vendor()`, is every lane's: narrow, as above)
-                        whole |= loads
                     continue
                 nodes = regions[rel]
                 found = _binding_names_in(rel, nodes)
