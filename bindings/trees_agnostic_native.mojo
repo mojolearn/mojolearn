@@ -6,6 +6,7 @@
 # model-selection plan (bindings/prep_native_estimator.mojo; never its Python
 # predict), drives the chunk loops and returns the shaped float64 values.
 # A Python callable model is refused: native code never calls back into it.
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields, _mode
@@ -588,8 +589,9 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
             var front = trees_vector(nv * d, "<f4", context)
             var src = _F32(unsafe_from_address=trees_address(syn))
             var dst = _F32(unsafe_from_address=trees_address(front))
-            for i in range(nv * d):  # driver-loop: contiguous prefix byte copy
-                dst[i] = src[i]
+            if nv * d > 0:
+                memcpy(dest=dst, src=src, count=nv * d)  # one block copy, not one per element
+            _ = syn  # keep the source alive through the copy above
             var out = _model_rows(s, front, nv, context)
             _ = front
             _ = _call(s.table, "x_trees_pshap_dvalues", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
