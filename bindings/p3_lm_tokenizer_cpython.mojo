@@ -80,3 +80,26 @@ comptime P3_LM_TOKENIZER_CPYTHON_TABLE = _Global[
 def lm_cpython_table() raises -> UnsafePointer[P3LmTokenizerCPythonTable, MutAnyOrigin]:
     """The process-wide table, filled at first use."""
     return P3_LM_TOKENIZER_CPYTHON_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def lm_try_index(value: PythonObject, mut word: Int) raises -> Bool:
+    """`operator.index(value)` as a 64-bit word through the table: True and
+    `word` set on success. False (with no Python error pending) for the bool
+    singletons and for any value that is not an index or does not fit, so
+    the caller runs its original admission path and keeps its wording."""
+    if value is PythonObject(True) or value is PythonObject(False):
+        return False
+    var table = lm_cpython_table()
+    var indexed = table[].PyNumber_Index(value._obj_ptr)
+    if not indexed:
+        ref cpy = Python().cpython()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return False
+    var owned = PythonObject(from_owned=indexed)
+    var result = table[].PyLong_AsLongLong(owned._obj_ptr)
+    if result == -1 and table[].PyErr_Occurred():
+        ref cpy = Python().cpython()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return False
+    word = Int(result)
+    return True
