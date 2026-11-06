@@ -176,7 +176,16 @@ def neural_descriptor_entry(module: PythonObject, name: String, required: Bool =
     var bi = native_loaded_module("builtins")
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: native provider requires an exact compiled module")
-    var entry = py_get(_neural_descriptor_module_fields_once(module, bi), name)
+    # One borrowed keyed read of the admitted namespace (every key an exact
+    # str, so no caller hash or equality hook runs), not a bound `dict.get`
+    # method call per primitive operation (lane perf-provider-cache).
+    var fields = _neural_descriptor_module_fields_once(module, bi)
+    var key = PythonObject(name)
+    ref cpy = Python().cpython()
+    var raw = cpy.PyDict_GetItemWithError(fields._obj_ptr, key._obj_ptr)
+    if not raw and cpy.PyErr_Occurred():
+        raise cpy.unsafe_get_error()
+    var entry = PythonObject(from_borrowed=raw) if raw else PythonObject(None)
     if entry is None and not required:
         return entry
     if entry is None or py_type(entry) is not py_type(bi.len) or _neural_descriptor_function_owner(entry) != module._obj_ptr:
@@ -202,6 +211,73 @@ def neural_descriptor_connect(factory: PythonObject, var name: String, operation
     # neural_descriptor_reuse. A global weak-key record containing this
     # provider would retain factory through provider.factory and never expire.
     return _neural_descriptor_connect_new(factory, module, name, operation_count)
+
+
+struct NeuralDescriptorConnections(Defaultable, Movable):
+    # Providers connected once per process (lane perf-provider-cache,
+    # 2026-11-06), keyed by (module, factory entry, ABI name, operation
+    # count). Each record holds its module, factory and provider strongly: a
+    # loaded extension module is never unloaded, so the retention costs
+    # nothing, and holding them makes the identity compare sound. A replaced
+    # factory entry (read from the live module namespace on every call) or a
+    # replaced module misses and connects again, with the same refusals.
+    var modules: List[PythonObject]
+    var factories: List[PythonObject]
+    var names: List[String]
+    var counts: List[Int]
+    var providers: List[PythonObject]
+
+    def __init__(out self):
+        self.modules = List[PythonObject]()
+        self.factories = List[PythonObject]()
+        self.names = List[String]()
+        self.counts = List[Int]()
+        self.providers = List[PythonObject]()
+
+
+# The named global may be shared by every Mojo extension in the process:
+# bump the name's version whenever NeuralDescriptorConnections' layout changes.
+comptime NEURAL_DESCRIPTOR_CONNECTIONS = _Global[StorageType=NeuralDescriptorConnections,
+    name="MojolearnNeuralDescriptorConnectionsV1", init_fn=NeuralDescriptorConnections.__init__]
+
+
+def neural_descriptor_connect_once(module: PythonObject, factory_name: String, var name: String,
+                                   operation_count: Int = 6) raises -> PythonObject:
+    """The provider of `module`'s compiled factory `factory_name` for ABI
+    `name`, connected on first use and reused while the module's live
+    namespace still holds the same factory entry. The entry read
+    (`neural_descriptor_entry`) runs every call, so a replaced entry or module
+    reconnects and refuses exactly as `neural_descriptor_connect` does."""
+    if operation_count < 1:
+        raise Error("native provider: operation_count must be positive")
+    var factory = neural_descriptor_entry(module, factory_name)
+    var g = NEURAL_DESCRIPTOR_CONNECTIONS.get_or_create_ptr()
+    for i in range(len(g[].modules)):  # small-loop(connected providers): a few compiled extension modules per process, never data
+        if (g[].modules[i] is module and g[].factories[i] is factory and g[].names[i] == name
+                and g[].counts[i] == operation_count):
+            return g[].providers[i]
+    var provider = neural_descriptor_connect(factory, name, operation_count)
+    var slot = -1
+    for i in range(len(g[].modules)):  # small-loop(connected providers): replace a stale record of the same module/ABI
+        if g[].modules[i] is module and g[].names[i] == name and g[].counts[i] == operation_count:
+            slot = i
+            break
+    if slot >= 0:
+        g[].factories[slot] = factory
+        g[].providers[slot] = provider
+        return provider
+    if len(g[].modules) >= 64:
+        g[].modules.clear()
+        g[].factories.clear()
+        g[].names.clear()
+        g[].counts.clear()
+        g[].providers.clear()
+    g[].modules.append(module)
+    g[].factories.append(factory)
+    g[].names.append(name)
+    g[].counts.append(operation_count)
+    g[].providers.append(provider)
+    return provider
 
 
 def _neural_descriptor_connect_new(factory: PythonObject, module: PythonObject, var name: String, operation_count: Int) raises -> PythonObject:
