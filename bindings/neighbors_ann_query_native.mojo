@@ -11,6 +11,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.mode_metadata_native import _fields
+from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.classical_pandas import classical_admit_value
@@ -255,6 +256,8 @@ def _export_codes(fields: PythonObject, cached: PythonObject, n: Int, pq_dim: In
                 cached[1], address, n * pq_dim)
     py_setitem(fields, "codes_", codes)
     _ = py_call(fields.pop, "_device_codes", PythonObject(None))
+    # The resident handle keeps these codes on the device (hazard class A).
+    _ = fitted_freeze(codes, context)
     # Known allocation metadata; do not rediscover shape/dtype from output.
     return _StoredArray(codes, codes, [n, pq_dim], address)
 
@@ -307,6 +310,21 @@ def _handle(fields: PythonObject, kind: Int, binding: PythonObject,
         key = _key(arrays, False, binding)
     if prepare is None:
         return PythonObject(None)
+    # p3-neighbors-cluster (hazard class A): the key holds identity, address
+    # and shape, never values, so the fitted arrays become read-only when the
+    # device copy is taken; storage that cannot be frozen (a caller-assigned
+    # ndarray) keeps the per-call search (bindings/p3nc_fitted_freeze.mojo).
+    for i in range(len(arrays)):  # small-loop(fixed saved-array schema)
+        if not fitted_is_freezable(arrays[i].value, context):
+            if cached is not None:
+                _ = py_call(fields.pop, "_resident", PythonObject(None))
+                try:
+                    _ = py_call(neural_descriptor_entry(cached[2], "x_ann_index_release"), cached[1])
+                except:
+                    pass  # Preserve the previous best-effort old-handle release.
+            return PythonObject(None)
+    for i in range(len(arrays)):  # small-loop(fixed saved-array schema)
+        _ = fitted_freeze(arrays[i].value, context)
     if cached is not None:
         _ = py_call(fields.pop, "_resident", PythonObject(None))
         try:

@@ -26,6 +26,7 @@ from core.neighbors_ann_impl import ann_candidates_i32
 from bindings.parallel_public_result import parallel_public_result
 from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_materialize, ann_stored_drop
 from bindings.mode_metadata_native import _fields
+from bindings.p3nc_fitted_freeze import fitted_freeze
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
 from providers.python.neighbors_public_lifecycle_pyapi import (
     NeighborPublicCall, _target, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal,
@@ -285,6 +286,13 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         var key = Python.tuple(arrays, fields["n_rows_"], fields["n_features_in_"], fields["n_lists_"],
                                fields["metric_code_"], PythonObject(False), py_call(b.id, binding))
         py_setitem(fields, "_resident", Python.tuple(key, handle, binding))
+        # p3-neighbors-cluster (hazard class A): the handle's key holds
+        # identity, address and shape only, so the fresh fitted Arrays are
+        # read-only from here on (bindings/p3nc_fitted_freeze.mojo).
+        _ = fitted_freeze(fields["centers_"], context)
+        _ = fitted_freeze(fields["center_norms_"], context)
+        _ = fitted_freeze(fields["list_offsets_"], context)
+        _ = fitted_freeze(fields["list_indices_"], context)
         return model
     var data = _ann_empty(n * dim, "<f4", context)
     var build = neural_descriptor_entry(binding, "ivf_flat_build", False)
@@ -391,6 +399,11 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                                   _ann_key_entry(fields, "codes_"))
         var key = Python.tuple(arrays, py_call(b.id, binding))
         py_setitem(fields, "_resident", Python.tuple(key, handle, binding))
+        # p3-neighbors-cluster (hazard class A): read-only fitted Arrays.
+        _ = fitted_freeze(fields["centers_"], context)
+        _ = fitted_freeze(fields["list_offsets_"], context)
+        _ = fitted_freeze(fields["list_indices_"], context)
+        _ = fitted_freeze(fields["codebooks_"], context)
         return model
     var codes = _ann_empty(n * pq_dim, "<i4", context)
     var build = _ann_entry(binding, "x_ann_ivf_pq_build")

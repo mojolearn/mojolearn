@@ -222,6 +222,8 @@ def _ivf_materialize(fields: PythonObject, context: PythonObject) raises:
     var dim = Int(py=fields["n_features_in_"])
     var data = family_array(Python.tuple(n, dim), "<f4", context)
     _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1], classical_address(data), PythonObject(n * dim))
+    # The resident handle keeps this data on the device (hazard class A).
+    _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
     _ = py_call(fields.pop, "_device_list_data")
     # Export changes only the device-data marker. Preserve every other saved
@@ -437,6 +439,8 @@ def _ivf_snapshot_materialize(fields: PythonObject, mut snapshots: List[ArrayMet
     var output = array_metadata_once(data, [n, dim], "list_data_", context)
     _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1],
                     PythonObject(output.source.addr), PythonObject(n * dim))
+    # The resident handle keeps this data on the device (hazard class A).
+    _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
     _ = py_call(fields.pop, "_device_list_data")
     # Only replace the device marker, preserving stale keys for other arrays
