@@ -412,23 +412,6 @@ def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
     return py_call_typed(b.list, value)
 
 
-def _id_word(addr: Int, typestr: String, i: Int) -> Int:
-    """Element `i` of a contiguous little-endian integer id vector."""
-    if typestr == "<i8":
-        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if typestr == "<i4":
-        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if typestr == "<u4":
-        return Int(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if typestr == "<i2":
-        return Int(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if typestr == "<u2":
-        return Int(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if typestr == "|i1" or typestr == "<i1":
-        return Int(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    return Int(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-
-
 def _id_code(typestr: String) -> Int:
     """The id vector's element kind as one word, chosen once per vector."""
     if typestr == "<i8":
