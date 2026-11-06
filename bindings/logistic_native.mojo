@@ -239,6 +239,21 @@ def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight:
 # ------------------------------------------------------------ fit
 
 
+def _logistic_buffer_column(y: PythonObject, shape: List[Int], context: PythonObject) raises -> Bool:
+    """True for an exact ndarray or native Array of shape (n, 1): the public
+    fit door keeps such a column (after its column warning) instead of
+    flattening it into a Python list, and the label encoder reads it in C
+    order, which for one column is the flattened order (perf3-label-doors)."""
+    if len(shape) != 2 or shape[1] != 1:
+        return False
+    var cls = py_type(y)
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is not None and cls is ndarray:
+        return True
+    var array_class = py_get(context, "array_class")
+    return array_class is not None and cls is array_class
+
+
 def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _builtins()
     var fields = logistic_fields(model, context, False)
@@ -249,7 +264,8 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     var y = args[1]
-    if len(labels_shape_of(y, context)) != 1:
+    var y_shape = labels_shape_of(y, context)
+    if len(y_shape) != 1 and not _logistic_buffer_column(y, y_shape, context):
         raise Error("mojolearn LogisticRegression requires a 1-D y")
     var labels = classical_encode_labels(y, context)
     py_setitem(fields, "classes_", labels.classes)
@@ -570,7 +586,11 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             var target = classifier_label_list(args[1], context)
             lda_native_labels(target, context, True, "LogisticRegression")
             var shape = labels_shape_of(target, context)
-            if len(shape) == 2 and shape[1] == 1:
+            # perf3-label-doors: an exact ndarray / Array (n, 1) column stays
+            # a column; the label encoder reads it natively in C order (the
+            # flatten order), with the classes and codes of the flattened
+            # list. Other columns (nested lists, torch) are still flattened.
+            if len(shape) == 2 and shape[1] == 1 and not _logistic_buffer_column(target, shape, context):
                 target = _flatten_labels(target, context)
             classical_admit_value(mods, args[2], context)
             result = logistic_fit(model, Python.tuple(args[0], target, args[2]), context)
