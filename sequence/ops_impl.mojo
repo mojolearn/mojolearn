@@ -8,6 +8,7 @@ returns the count the door hands back. `fptr`, `ival` and `fval` here read
 those lists with the door's null and range checks. No Python here."""
 from std.math import sqrt
 from std.memory import bitcast, memcpy
+from sequence.perf3_seq_resident_words import seq_resident_words
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
 from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
@@ -150,10 +151,12 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
 
 
 def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
-    """addrs = [X, params, out, seq (ignored unless want_seq)];
+    """addrs = [X, params, out, seq (ignored unless want_seq)], optionally
+    followed by the resident-block words (sequence/perf3_seq_resident_words.mojo);
     ip = [cell, D, H, L, O, task, N, T, chunk, want_seq]."""
-    if len(addrs) != 4 or len(ip) != 10:
+    if len(ip) != 10:
         raise Error("rnn_predict: requires 4 addresses and 10 integer parameters")
+    var resident = seq_resident_words(addrs, 4, "rnn_predict")
     var x_addr = addrs[0]
     var p_addr = addrs[1]
     var out_addr = addrs[2]
@@ -168,7 +171,7 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
         raise Error("rnn_predict: N, T and chunk must be >= 1 and N < 2^24")
     var seq = fptr(seq_addr, "seq") if want else fptr(out_addr, "out")
     rnn_predict(ex, net, task, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"),
-                fptr(out_addr, "out"), seq, want, chunk)
+                fptr(out_addr, "out"), seq, want, chunk, resident)
     return N * net.O
 
 
@@ -751,8 +754,9 @@ def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
 def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
     """addrs = [X (N, D), params, out (N, O)]; ip = [N, D, O, act, out_act,
     chunk, n_hidden, h_1, ..., h_n]."""
-    if len(addrs) != 3 or len(ip) < 7:
+    if len(ip) < 7:
         raise Error("mlp_predict: requires 3 addresses and >= 7 integer parameters")
+    var resident = seq_resident_words(addrs, 3, "mlp_predict")
     var N = ival(ip, 0)
     var D = ival(ip, 1)
     var O = ival(ip, 2)
@@ -767,9 +771,10 @@ def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     comptime if AUTOGRAD_PREDICT:
         # -D MOJOLEARN_AUTOGRAD_PREDICT: the tape's forward in inference mode
         mlp_predict_autograd(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"),
-                             chunk, proba2)
+                             chunk, proba2, resident)
     else:
-        mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2)
+        mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2,
+                    resident)
     if proba2:
         return N * 2
     return N * O

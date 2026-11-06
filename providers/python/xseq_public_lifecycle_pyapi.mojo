@@ -4,7 +4,9 @@
 # dtype while calling the existing xseq native owners directly.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_identity_key import NativeIdentityKey
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.mode_metadata_native import _fields
@@ -23,7 +25,57 @@ from core.classical_ridge_impl import classical_widen_f32_f64
 from core.host_inference_impl import host_inference_nd_finite
 
 
-def xseq_public_owner(model: PythonObject, context: PythonObject) raises -> PythonObject:
+# perf3-seq-neural (2026-11-06): the admitted-fields record. A predict on a
+# model whose instance fields are the very objects the last full admission
+# saw (same names, same objects, same items of exact list/tuple/dict fields,
+# same class) skips the per-field admission of every constructor parameter
+# and fitted attribute below. The record is native, in the prepared registry
+# (weak on the model, outside its `__dict__`: pickling, cloning and the
+# scikit-learn dict checks see nothing). It is dropped at every fit and
+# written by the first predict after one; any added, removed or replaced
+# field (set_params, setattr, refit, unpickling) misses the compare and takes
+# the full admission, which writes a new record. The constructor plan, the
+# class metadata and `lr_schedule` are still checked on every call. Not
+# noticed: attribute edits inside a field object that keeps its identity
+# (an ndarray's header reassigned in place, `est.coefs_[0].shape = ...`).
+comptime _OWNER_SLOT = "perf3_xseq_owner_fields_v1"
+
+
+def _owner_record_hit(mut mods: NativeModules, model: PythonObject, fields: PythonObject) raises -> Bool:
+    var record = prepared_get(mods, _OWNER_SLOT, model)
+    if record is None:
+        return False
+    var key = record.downcast_value_ptr[NativeIdentityKey]()
+    var offset = 0
+    var same = False
+    try:
+        same = key[].matches_identity(py_type(model), offset)
+        same = same and key[].matches_fields(fields, List[String](), offset)
+        same = same and key[].complete(offset)
+    except:
+        same = False
+    if not same:
+        prepared_drop(mods, _OWNER_SLOT, model)
+    return same
+
+
+def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: PythonObject) raises:
+    var key = NativeIdentityKey(mods)
+    key.add_identity(py_type(model))
+    key.fields(fields, List[String]())
+    if key.retains(model):
+        return  # a self-referential field must not keep its weak owner alive
+    # A defaultdict can change its own factory in place (the admission
+    # checks it), so a model holding one is admitted in full on every call,
+    # as bindings/sequential_admission.mojo does.
+    var defaultdict = mods.module("collections").defaultdict
+    for k in range(len(key.objects)):  # driver-loop: over captured field ownership references
+        if py_type(key.objects[k]) is defaultdict:
+            return
+    prepared_put(mods, _OWNER_SLOT, model, PythonObject(alloc=key^))
+
+
+def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool = True) raises -> PythonObject:
     # Reuse the connected constructor's native storage/ancestry contract, not
     # its execution: methods must reject replaced hooks before any field read.
     var owner_context = context["xseq_owner_context"]
@@ -38,6 +90,19 @@ def xseq_public_owner(model: PythonObject, context: PythonObject) raises -> Pyth
     var lifecycle = context["xseq_lifecycle_context"]
     classical_connect_numpy(lifecycle)
     var names = plan["names"]
+    var mods = NativeModules()
+    if fitting:
+        prepared_drop(mods, _OWNER_SLOT, model)  # the fit replaces the fields
+    elif _owner_record_hit(mods, model, fields):
+        # Every field is the object admitted before. A schedule object can
+        # change its own fields in place, so it is admitted again.
+        for i in range(len(names)):  # driver-loop: native constructor parameter names
+            if String(names[i]) == "lr_schedule":
+                var value = py_get(fields, names[i])
+                if value is not None:
+                    _ = _fields(value)
+                opt_schedule(value, context["optimizer_context"])
+        return fields
     for i in range(len(names)):  # driver-loop: native constructor parameters before operation coercion
         var value = py_get(fields, names[i])
         if String(names[i]) == "lr_schedule":
@@ -51,6 +116,8 @@ def xseq_public_owner(model: PythonObject, context: PythonObject) raises -> Pyth
                  "intercepts_", "n_iter_", "loss_curve_", "loss_", "best_loss_", "t_", "feature_names_in_"]:
         if py_contains(fields, name):
             classical_admit_value(fields[PythonObject(name)], lifecycle)
+    if not fitting:
+        _owner_record_put(mods, model, fields)
     return fields
 
 
@@ -130,7 +197,7 @@ struct XseqPublicLifecycle(Movable):
 
     def __init__(out self, model: PythonObject, operation: String, args: PythonObject,
                  context: PythonObject) raises:
-        var fields = xseq_public_owner(model, context)
+        var fields = xseq_public_owner(model, context, operation.endswith("_fit"))
         self.source = args[0]
         self.original_arguments = args  # retain every original owner through finish
         self.arguments = args

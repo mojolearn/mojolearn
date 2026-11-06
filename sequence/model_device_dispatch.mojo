@@ -8,7 +8,8 @@ from autograd.program_host_request import program_host_request
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
-from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, RNN_PREDICT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.perf3_seq_resident import seq_resident_resolve
 from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
 from sequence.exec_device import DeviceExec
@@ -73,6 +74,13 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             elif op >= MODEL_ARGMAX:
                 value = model_output_device(ex, op, auxiliary)
             else:
+                # perf3-seq-neural: a predict that names its fitted block
+                # reads the block's resident device copy (uploaded on the
+                # model's first predict) instead of uploading it per call.
+                if op == RNN_PREDICT:
+                    seq_resident_resolve(ex, auxiliary.addresses, 4)
+                elif op == MLP_PREDICT:
+                    seq_resident_resolve(ex, auxiliary.addresses, 3)
                 value = neural_model_execute(ex, op, auxiliary)
         else:
             var request = NativeModelRequest(op, aa, na, pp, np, ff, nf)

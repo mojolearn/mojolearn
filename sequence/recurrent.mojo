@@ -639,22 +639,32 @@ def rnn_fit[E: Exec, //, S: RnnStep](
 
 def rnn_predict[E: Exec](
     mut ex: E, net: Net, task: Int, X: FP, N: Int, T: Int, Pin: FP,
-    dst: FP, seq: FP, want_seq: Bool, chunk: Int,
+    dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool = False,
 ) raises:
     """dst [N, O]: the head's output (task MSE) or its softmax (task CE);
-    with want_seq, seq [N, T, H] is the top layer's h_1..h_T batch-first."""
+    with want_seq, seq [N, T, H] is the top layer's h_1..h_T batch-first.
+    `resident` (perf3-seq-neural): `Pin` is already this executor's memory
+    (the model's resident fitted block, sequence/perf3_seq_resident.mojo),
+    read in place: no per-call allocation and upload of the parameters."""
     var np_ = net.n_params()
     var H = net.H
     var bmax = chunk if chunk < N else N
     var dX = ex.alloc(N * T * net.D)
     ex.upload(dX, X, N * T * net.D)
-    var idx = List[Float32]()
-    for i in range(N):
-        idx.append(Float32(i))
+    # perf3-seq-neural: the identity row order is built on the executor
+    # (OP_SEQ_IOTA, the fit's unshuffled order: p0[t] = t, exact below 2^24,
+    # N < 2^24 is admitted by rnn_predict_impl), not by a host loop over the
+    # rows and an upload. The same float32 words.
     var didx = ex.alloc(N)
-    ex.upload(didx, FP(unsafe_from_address=Int(idx.unsafe_ptr())), N)
-    var P = ex.alloc(np_)
-    ex.upload(P, Pin, np_)
+    var ia = Args()
+    ia.p0 = didx
+    ex.launch[OP_SEQ_IOTA](ia, N)
+    var P: FP
+    if resident:
+        P = Pin
+    else:
+        P = ex.alloc(np_)
+        ex.upload(P, Pin, np_)
     var dout = ex.alloc(N * net.O)
     var dseq = ex.alloc(N * T * H if want_seq else 1)
     var w = Work(ex, net, T, bmax, False)
@@ -684,4 +694,3 @@ def rnn_predict[E: Exec](
     ex.download(dst, dout, N * net.O)
     if want_seq:
         ex.download(seq, dseq, N * T * H)
-    _ = idx^
