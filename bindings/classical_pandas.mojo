@@ -261,8 +261,9 @@ def _pd_cell_bits(raw: PyObjectPtr, int_word: Int, float_word: Int, bool_word: I
     var word = p3_type_word(raw)
     if word == int_word or word == float_word or word == bool_word:
         var number = p3_table()[].float_as(raw)
-        if number == -1.0 and p3_table()[].err_occurred():
-            raise cpy.unsafe_get_error()
+        if number == -1.0:
+            if p3_table()[].err_occurred():
+                raise cpy.unsafe_get_error()
         return f64_to_f32_bits(bitcast[DType.uint64](number))
     return _pd_object_bits(PythonObject(from_borrowed=raw), context)
 

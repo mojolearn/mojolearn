@@ -155,7 +155,7 @@ def p3_call_object(entry: PythonObject, args: PythonObject) raises -> PythonObje
     return PythonObject(from_owned=result)
 
 
-def p3_type_word(raw: PyObjectPtr) -> Int:
+def p3_type_word(raw: PyObjectPtr) raises -> Int:
     """The class pointer of a live object as a word (the reference
     PyObject_Type returns is dropped at once; the object keeps its class
     alive)."""
@@ -529,8 +529,9 @@ def p3_dict_codes(index: PythonObject, values: PythonObject, address: Int, missi
             out[i] = Int32(missing)
         else:
             var code = t[].long_as(hit)
-            if code == -1 and t[].err_occurred():
-                raise cpy.unsafe_get_error()
+            if code == -1:
+                if t[].err_occurred():
+                    raise cpy.unsafe_get_error()
             out[i] = Int32(code)
     _ = index
     _ = values
