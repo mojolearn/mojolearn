@@ -170,8 +170,10 @@ struct HostIvfRegistry(Movable):
 comptime HOST_IVF_REGISTRY = _Global[
     StorageType=HostIvfRegistry,
     name=(
-        "MojoIvfFlatHostResidentIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoIvfFlatHostResidentFast"
+        # V2: the entry layout changed (p3-neighbors-cluster); a process-wide
+        # global name is shared by every extension that registers it.
+        "MojoIvfFlatHostResidentIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
+        "MojoIvfFlatHostResidentFastV2"
     ),
     init_fn=HostIvfRegistry.__init__,
 ]
