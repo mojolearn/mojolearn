@@ -12,6 +12,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from bindings.classical_labels import _flatten_labels, labels_shape_of
 from bindings.label_integer_storage import labels_integer_storage
+from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage
 from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_exceptions import classical_require_fitted
@@ -113,12 +114,23 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
     # (about 2.3 s per 20000-label fit); it cannot refuse an integer label and
     # yields the same Python-int classes and codes, so no bits change. Bool,
     # float, 2-D, list, torch and object targets keep the snapshot.
-    if labels_integer_storage(source, context, False):
-        var target_shape = labels_shape_of(source, context)
+    # perf3-label-doors: a numpy-backed pandas Series takes the same door
+    # through its stored exact ndarray (the labels its snapshot lists, in the
+    # same order), which the encoder then reads natively.
+    var stored = labels_storage_source(source, context)
+    if stored is not None and labels_integer_storage(stored, context, False):
+        var target_shape = labels_shape_of(stored, context)
         if len(target_shape) == 1:
             if target_shape[0] != rows:
                 raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(target_shape[0]) + "]")
-            return source
+            return stored
+    # An exact flat list / tuple of exact ints (bools keep the snapshot): the
+    # snapshot admits every label and lists the same ints; one native list
+    # copy (no per-label call) stands in for its flattened list.
+    if labels_list_integer_storage(source, False):
+        if len(source) != rows:
+            raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(len(source)) + "]")
+        return py_call(b.list, source)
     # A single native container snapshot retains label identities and integer
     # precision. All following shape/finite/integral checks use that snapshot;
     # the numerical owner sees the finished native list, never the user input.
