@@ -397,10 +397,12 @@ def _f32_input(source: PythonObject, name: String, ndim: Int, context: PythonObj
         return decomp_input(source, name, context)
     var view = classical_view(source, context, name)
     var nd = Int(py=view.ndim)
-    var shape = String(py=py_call(Python.import_module("builtins").repr, view.shape))
+    # The shape's repr names a refusal only; built on that path alone.
     if nd != 1:
-        raise Error("mojolearn: " + name + " must be 1-D, got " + String(nd) + "-D shape " + shape)
+        raise Error("mojolearn: " + name + " must be 1-D, got " + String(nd) + "-D shape "
+                    + String(py=py_call(Python.import_module("builtins").repr, view.shape)))
     if Int(py=view.shape[0]) == 0:
+        var shape = String(py=py_call(Python.import_module("builtins").repr, view.shape))
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 sample(s) (shape="
                     + shape + ") while a minimum of 1 is required.")
     try:
