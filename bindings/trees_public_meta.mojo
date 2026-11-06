@@ -1248,10 +1248,20 @@ def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, contex
         if len(lists[j]) > 0 and not Bool(py=py_call(b.isinstance, lists[j][0], b.int)):
             ints = False
     var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
+    # Pack exact int/float/bool label objects (bool classes) into one numeric
+    # store as before. Any other label object (str, mixed) cannot live in a
+    # numeric Array: native_array_from_values refuses it, which made every
+    # string-label multi-output predict raise. Those outputs are returned as
+    # the per-row label lists (one list of m labels per row), the same label
+    # objects the single-output classifiers return for str classes.
     var flat = Python.list()
     for i in range(len(zipped)):  # driver-loop: completed output labels
         _ = py_call(flat.extend, zipped[i])
-    var store = native_array_from_values("q" if ints else "d", flat)
+    var store: PythonObject
+    try:
+        store = native_array_from_values("q" if ints else "d", flat)
+    except:
+        return zipped
     return classical_wrap_array(store, Python.tuple(len(zipped), len(cols)), "<i8" if ints else "<f8", "C", context)
 
 
