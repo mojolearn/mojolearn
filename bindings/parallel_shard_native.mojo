@@ -29,7 +29,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
@@ -45,7 +45,7 @@ from bindings.native_process_pool import (
 from bindings.native_transport import transport_close
 from bindings.native_codec import codec_initialize
 from bindings.native_loaded_module import NativeModules
-from bindings.native_prepared_owner import prepared_key_add, prepared_key_same, prepared_get, prepared_put, prepared_drop
+from bindings.native_prepared_owner import prepared_key_fields, prepared_key_same, prepared_get, prepared_put, prepared_drop
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
     shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
@@ -897,6 +897,25 @@ comptime _QUERY_RESIDENT_SLOT = "parallel_query_resident_v1"
 comptime _QUERY_TOKENS_SLOT = "parallel_query_tokens_v1"
 
 
+def _freeze_carried(value: PythonObject, context: PythonObject, depth: Int) raises:
+    """Mark every native Array inside a carried worker state read-only
+    (`_readonly`, the flag the Array's write paths and its NumPy interface
+    honour). The arrays are the estimator's own fitted snapshots."""
+    var b = shard_b()
+    if depth > 8:
+        return
+    var cls = py_type(value)
+    if cls is context["array_class"]:
+        py_setattr(value, "_readonly", PythonObject(True))
+    elif cls is b.tuple or cls is b.list:
+        for i in range(len(value)):  # driver-loop: over a carried field's entries
+            _freeze_carried(value[i], context, depth + 1)
+    elif cls is b.dict:
+        var values = py_call(b.list, py_call(value.values))
+        for i in range(len(values)):  # driver-loop: over a carried field's entries
+            _freeze_carried(values[i], context, depth + 1)
+
+
 def _parallel_queries(args: PythonObject) raises -> PythonObject:
     """args (queries object, X, method, kwargs): `ParallelQueries.query`.
     Every worker stores one snapshot of the estimator under the holder's
@@ -940,7 +959,6 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         ranges.append(0)
         ranges.append(0)
     var state = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder")), context)
-    py_setitem(state, "numeric_mode", "identical")
     var devices = pool["devices"]
     var workers = len(devices)
     var name = py_type(model).__name__
@@ -950,11 +968,16 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     # containers included) or the pool's worker processes changed. The old
     # code stored and released the full fitted index on every worker for
     # every query call.
+    # The key holds the carried field NAMES and VALUES (the estimator's own
+    # objects), never the state dict itself nor the "identical" str set
+    # below: both are new objects on every call, so a key holding them could
+    # never match and every query re-sent the whole index (pass 3, rank 317).
     var mods = NativeModules()
     var key = b.list()
     _ = py_call(key.append, model)
     _ = py_call(key.append, name)
-    prepared_key_add(mods, key, state)
+    prepared_key_fields(mods, key, state, List[String]())
+    py_setitem(state, "numeric_mode", "identical")
     # The resident claim and the token counter live in the native prepared
     # registry, weakly keyed by the driver object (outside its `__dict__`;
     # never pickled or copied).
@@ -972,6 +995,12 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         var counter = (Int(py=last_token) if last_token is not None else 0) + 1
         prepared_put(mods, _QUERY_TOKENS_SLOT, driver, PythonObject(counter))
         token = String("nq-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
+        # The key notices replaced attributes by identity only. A carried Array
+        # written in place would leave the workers' copy stale, so every
+        # carried Array is made read-only now (the forests' `trees_freeze`
+        # scheme): an in-place write raises; replacing the attribute or a
+        # refit is noticed and re-sent. No per-call content hash.
+        _freeze_carried(state, context, 0)
         var stores = b.list()
         for i in range(workers):  # driver-loop: one snapshot request per worker
             _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
