@@ -2,7 +2,8 @@
 # Complete AutoARIMA construction and forecast operation boundaries. Search and
 # fitting remain separate owners; this provider never calls their Python methods.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
@@ -17,22 +18,41 @@ comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _REFUSE_DOUBLE = "TypeError: AutoARIMA: float64 is refused; pass float32 (no float64 on the device)"
 
 
+comptime _FIELDS_ROW_SLOT = "xseq_fields_row_v1"  # p3-cnn-sequence-tsa class record
+
+
 def _fields(model: PythonObject, cls: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(model) is not cls or py_type(cls) is not b.type:
         raise Error("TypeError: AutoARIMA requires its connected native model classes")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(mro)):  # driver-loop: over native instance dictionary descriptors
+    # p3-cnn-sequence-tsa: the MRO row whose `__dict__` descriptor serves the
+    # instance storage is kept per class under the type watcher, and the
+    # instance keys are re-checked only after the dict changed (dictionary
+    # watcher). Python 3.10/3.11 keep the full walk on every call.
+    var mods = NativeModules()
+    var kept = class_record(mods, _FIELDS_ROW_SLOT, cls)
+    var start = 0
+    var stop = len(mro)
+    if kept is not None:
+        start = Int(py=kept)
+        stop = start + 1
+    for i in range(start, stop):  # driver-loop: over native instance dictionary descriptors
         var own = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
         var descriptor = py_get(own, "__dict__")
         if descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
             var fields = py_call(descriptor.__get__, model)
             if py_type(fields) is not b.dict:
                 raise Error("TypeError: AutoARIMA state requires an exact dictionary")
+            if kept is None:
+                class_admit(mods, _FIELDS_ROW_SLOT, cls, PythonObject(i))
+            if dict_keys_admitted(fields):
+                return fields
             var keys = py_call(b.list, fields)
             for j in range(len(keys)):  # driver-loop: over passive instance keys before hash lookup
                 if py_type(keys[j]) is not b.str:
                     raise Error("TypeError: AutoARIMA state keys require exact strings")
+            dict_keys_admit(fields)
             return fields
     raise Error("TypeError: AutoARIMA requires native instance storage")
 

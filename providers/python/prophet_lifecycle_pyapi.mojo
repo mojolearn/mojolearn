@@ -2,7 +2,8 @@
 # Prophet constructor and custom-seasonality operations, including admission
 # and owner release. The public shells perform one compiled binding call.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_connect_numpy
@@ -10,6 +11,9 @@ from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
 from providers.python.forecast_initialize_pyapi import _scalar
 from providers.python.forecast_owner_pyapi import forecast_commit
+
+
+comptime _PROPHET_LAYOUT_SLOT = "xseq_prophet_layout_v1"  # p3-cnn-sequence-tsa class record
 
 
 def prophet_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -20,6 +24,11 @@ def prophet_fields(model: PythonObject, context: PythonObject) raises -> PythonO
     var cls = context["xseq_prophet_class"]
     if py_type(cls) is not b.type or py_type(model) is not cls:
         raise Error("TypeError: ProphetForecaster requires its connected native class")
+    # p3-cnn-sequence-tsa: the layout verdict is kept per class under the
+    # type watcher (an edit of the class or an ancestor misses)
+    var mods = NativeModules()
+    if class_record(mods, _PROPHET_LAYOUT_SLOT, cls) is not None:
+        return _fields(model, cls)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var layouts = context["xseq_prophet_layouts"]
     if len(mro) != len(layouts):
@@ -32,6 +41,7 @@ def prophet_fields(model: PythonObject, context: PythonObject) raises -> PythonO
         for j in range(len(hooks)):  # driver-loop: native descriptor identities, never user hooks
             if py_get(namespace, hooks[j][0]) is not hooks[j][1]:
                 raise Error("TypeError: ProphetForecaster methods or storage hooks changed")
+    class_admit(mods, _PROPHET_LAYOUT_SLOT, cls, PythonObject(True))
     return _fields(model, cls)
 
 
