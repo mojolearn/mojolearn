@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native buffer preparation and launch ownership for existing Generator draws."""
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -12,7 +13,7 @@ from bindings.generation_buffers import generation_initialize_binding
 
 
 def _generator_shape(shape: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = _builtins()
     var scalar = PythonObject(None)
     try:
         scalar = py_call(context["generator_index"], shape)
@@ -30,8 +31,34 @@ def _generator_shape(shape: PythonObject, context: PythonObject) raises -> Pytho
     return Python.tuple(py_call(bi.tuple, dims), count)
 
 
+struct GeneratorDrawBoundary(Defaultable, Movable):
+    # The builtins module (a process constant) and the last admitted RNG
+    # binding: its dict, the two read-back entries, the mode and the
+    # selected vendor object. A draw with the same identities reuses the
+    # vendor/mode admission instead of calling both read-back entries.
+    var builtins: PythonObject
+    var admitted: PythonObject
+
+    def __init__(out self):
+        self.builtins = PythonObject(None)
+        self.admitted = PythonObject(None)
+
+
+comptime GENERATOR_DRAW_BOUNDARY = _Global[
+    StorageType=GeneratorDrawBoundary, name="MojolearnGeneratorDrawBoundaryV1",
+    init_fn=GeneratorDrawBoundary.__init__,
+]
+
+
+def _builtins() raises -> PythonObject:
+    var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
+    if g[].builtins is None:
+        g[].builtins = Python.import_module("builtins")
+    return g[].builtins
+
+
 def _generator_binding(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = _builtins()
     var mode = generator_fields(owner)["numeric_mode"]
     if not Bool(py=mode):
         mode = context["generator_backend"]._DEFAULT_MODE
@@ -39,12 +66,20 @@ def _generator_binding(owner: PythonObject, context: PythonObject) raises -> Pyt
     var connected = py_get(context["generator_bindings"], mode)
     if connected is None or py_type(connected) is bi.str:
         raise Error("Generator: native RNG binding is unavailable for numeric_mode=" + String(mode))
-    var vendor = String(connected["training_vendor"]())
-    var compiled = Int(py=connected["training_numeric_mode"]())
     var selected = context["vendor"]
-    var expected = "cpu" if selected is None else String(selected)
-    if vendor != expected or compiled != (1 if String(mode) == "identical" else 0):
-        raise Error("ImportError: Generator native RNG vendor or numeric mode differs from the selected route")
+    var vendor_entry = connected["training_vendor"]
+    var mode_entry = connected["training_numeric_mode"]
+    var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
+    var held = g[].admitted
+    var reused = (held is not None and held[0] is connected and held[1] is vendor_entry and held[2] is mode_entry
+                  and held[3] is selected and String(held[4]) == String(mode))
+    if not reused:
+        var vendor = String(vendor_entry())
+        var compiled = Int(py=mode_entry())
+        var expected = "cpu" if selected is None else String(selected)
+        if vendor != expected or compiled != (1 if String(mode) == "identical" else 0):
+            raise Error("ImportError: Generator native RNG vendor or numeric mode differs from the selected route")
+        g[].admitted = Python.tuple(connected, vendor_entry, mode_entry, selected, py_call(bi.str, mode))
     var entry = connected["neural_rng"]
     if py_type(entry) is not py_type(bi.len):
         raise Error("Generator: RNG entry must be a compiled native function")
@@ -52,7 +87,7 @@ def _generator_binding(owner: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _generator_f32(value: PythonObject) raises -> Float32:
-    return Float32(Float64(py=py_call(Python.import_module("builtins").float, value)))
+    return Float32(Float64(py=py_call(_builtins().float, value)))
 
 
 def _generator_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -67,7 +102,7 @@ def _generator_input(value: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def _generator_sqrt(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = _builtins()
     var x = py_call(bi.float, value)
     if Bool(py=x < 0):
         raise Error("Generator initializer: math domain error")
@@ -91,7 +126,7 @@ def _generator_run(entry: PythonObject, shape: PythonObject, count: PythonObject
                    kind: Int, offset: PythonObject, seed: PythonObject,
                    stream: PythonObject, a: PythonObject, b: PythonObject,
                    input: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = _builtins()
     var out = checkpoint_array(py_call(bi.bytes, count * PythonObject(4)), shape, "f", context["neural"]["array_class"])
     var source = input
     if source is None:
@@ -114,7 +149,7 @@ def _generator_run(entry: PythonObject, shape: PythonObject, count: PythonObject
 def _dropout_key_field(key: PythonObject, name: String, integer: Bool) raises -> PythonObject:
     """One field of a dropout key, refused by name when it is missing or not
     the exact builtin type `dropout` stored (an int, or a float)."""
-    var bi = Python.import_module("builtins")
+    var bi = _builtins()
     var value = py_get(key, PythonObject(name))
     if value is None:
         raise Error("ValueError: Generator.dropout_backward: key is missing '" + name + "'; pass the key dropout returned")
@@ -127,7 +162,7 @@ def _dropout_key_field(key: PythonObject, name: String, integer: Bool) raises ->
 
 def _dropout_key(key: PythonObject) raises -> PythonObject:
     """The key `dropout` returned, checked field by field before any draw."""
-    var bi = Python.import_module("builtins")
+    var bi = _builtins()
     if py_type(key) is not bi.dict:
         raise Error("TypeError: Generator.dropout_backward: key must be the dict dropout returned")
     _ = _dropout_key_field(key, "seed", True)
@@ -139,7 +174,7 @@ def _dropout_key(key: PythonObject) raises -> PythonObject:
 
 
 def generator_draw(operation: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = _builtins()
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var owner = values[0]
     var fields = generator_fields(owner)
