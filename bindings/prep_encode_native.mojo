@@ -1259,7 +1259,7 @@ def _category_record(owner: PythonObject, categories: PythonObject, context: Pyt
 
 
 def _category_block(mut p: EncProg, categories: PythonObject, context: PythonObject,
-                    owner: PythonObject = PythonObject(None)) raises -> Tuple[Int, Int]:
+                    owner: PythonObject) raises -> Tuple[Int, Int]:
     # `_category_block`: every column's categories in one (d, kmax) block.
     var record = _category_record(owner, categories, context)
     return (p.put(record[2], Int(py=record[6])), Int(py=record[3]))
@@ -1301,8 +1301,8 @@ def _record_sizes(record: PythonObject) raises -> List[Int]:
     return out^
 
 
-def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, context: PythonObject, device_only: Bool = False,
-           owner: PythonObject = PythonObject(None)) raises -> Tuple[Int, Int]:
+def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, context: PythonObject, device_only: Bool,
+           owner: PythonObject) raises -> Tuple[Int, Int]:
     """`_codes`: each element's category index (or -1) and, unless
     device_only, each column's unknown count. Returns (codes, neg).
     `owner`: the fitted model whose `categories_` these are (its category
@@ -1370,7 +1370,7 @@ def _given_categories(categories: PythonObject, values: PythonObject, mode: Pyth
         _ = py_call(out.append, _f32_array(canon, context))
     if check_unknown:
         var p = EncProg()
-        var staged = _codes(p, values, out, context)
+        var staged = _codes(p, values, out, context, False, PythonObject(None))
         var ran = p.run(entries, context)
         var bad = _unknown_columns(ran, staged[1], d)
         if len(bad) > 0:
@@ -1541,7 +1541,7 @@ def _remap(mut p: EncProg, codes: Int, n: Int, d: Int, table: Tuple[Int, Int, In
 
 
 def _gather_categories(mut p: EncProg, codes: Int, n: Int, d: Int, categories: PythonObject, context: PythonObject,
-                       owner: PythonObject = PythonObject(None)) raises -> Int:
+                       owner: PythonObject) raises -> Int:
     var block = _category_block(p, categories, context, owner)
     var out = p.alloc(n * d)
     _stage(p.program, OP_CAT_GATHER, n * d, codes, n, d, block[0], block[1], out)
@@ -1714,8 +1714,7 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
 
 
 # ---------------------------------------------------------------- OneHotEncoder
-def _grouped_sizes(fields: PythonObject, owner: PythonObject = PythonObject(None),
-                   context: PythonObject = PythonObject(None)) raises -> List[Int]:
+def _grouped_sizes(fields: PythonObject, owner: PythonObject, context: PythonObject) raises -> List[Int]:
     # With an `owner` (a fitted model), the sizes come from its category record.
     var sizes = _sizes(fields["categories_"]) if owner is None else _record_sizes(_category_record(owner, fields["categories_"], context))
     var groups = fields["_grouping"]
@@ -1731,7 +1730,7 @@ def _set_drop_idx(model: PythonObject, context: PythonObject) raises:
     indices (None, or one int or None per column)."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var sizes = _grouped_sizes(fields)
+    var sizes = _grouped_sizes(fields, model, context)
     var d = len(sizes)
     var groups = fields["_grouping"]
     var drop = fields["drop"]
@@ -1817,7 +1816,7 @@ def _onehot_drops(fields: PythonObject) raises -> List[Int]:
 
 def _onehot_widths(fields: PythonObject) raises -> List[Int]:
     # `_widths`: per-column one-hot block widths.
-    return _onehot_widths_of(_grouped_sizes(fields), _onehot_drops(fields))
+    return _onehot_widths_of(_grouped_sizes(fields, PythonObject(None), PythonObject(None)), _onehot_drops(fields))
 
 
 def _onehot_widths_of(sizes: List[Int], drops: List[Int]) -> List[Int]:
@@ -2547,7 +2546,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
     var scratch = _target_scratch(mode, entries)
     var codes = 0
     if inverse is None:
-        codes = _codes(p, values, cats, context, scratch)[0]
+        codes = _codes(p, values, cats, context, scratch, PythonObject(None))[0]
     else:
         codes = p.put_array2(inverse)
     var yo = 0
