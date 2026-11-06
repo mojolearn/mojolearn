@@ -18,6 +18,7 @@
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from std.memory import bitcast
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -125,9 +126,26 @@ def _semi_fast_tier(binding: PythonObject, context: PythonObject) -> Bool:
         return False
 
 
-def _semi_kfeat_flags(binding: PythonObject, context: PythonObject) raises -> Int:
-    """`_kfeat_flags`: the chi2 samplers' FAST + Apple fit entries compiled
-    into the bound binary; 0 off the FAST tier or without the read-back."""
+# Perf (perf3-nbr-msel-trees): the flags are a property of the loaded
+# compiled module (its numeric-mode read-back and its kfeat entry), so they
+# are read once per module and mode table, not by a getattr chain per fit.
+# The cache retains the module and table, so their identities are not reused.
+struct _SemiKfeatCache(Defaultable, Movable):
+    var module: PythonObject
+    var table: PythonObject
+    var flags: Int
+
+    def __init__(out self):
+        self.module = PythonObject(None)
+        self.table = PythonObject(None)
+        self.flags = 0
+
+
+comptime _SEMI_KFEAT_CACHE = _Global[StorageType=_SemiKfeatCache, name="MojolearnSemiKfeatFlagsV1",
+    init_fn=_SemiKfeatCache.__init__]
+
+
+def _semi_kfeat_flags_read(binding: PythonObject, context: PythonObject) raises -> Int:
     if not _semi_fast_tier(binding, context):
         return 0
     var b = _semi_b()
@@ -135,6 +153,23 @@ def _semi_kfeat_flags(binding: PythonObject, context: PythonObject) raises -> In
     if fn_obj is None:
         return 0
     return _semi_int(family_call(fn_obj))
+
+
+def _semi_kfeat_flags(binding: PythonObject, context: PythonObject) raises -> Int:
+    """`_kfeat_flags`: the chi2 samplers' FAST + Apple fit entries compiled
+    into the bound binary; 0 off the FAST tier or without the read-back."""
+    if not xn_is_module(binding):
+        return _semi_kfeat_flags_read(binding, context)
+    var module = xn_module(binding)
+    var table = context["backend_fields"]["_CODE_MODE"]
+    var cache = _SEMI_KFEAT_CACHE.get_or_create_ptr()
+    if cache[].module is not None and cache[].module is module and cache[].table is table:
+        return cache[].flags
+    var flags = _semi_kfeat_flags_read(binding, context)
+    cache[].module = module
+    cache[].table = table
+    cache[].flags = flags
+    return flags
 
 
 def _semi_seed(seed: PythonObject) raises -> PythonObject:
