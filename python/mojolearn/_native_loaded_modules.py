@@ -100,7 +100,7 @@ connect_module('types', types, ('ModuleType', 'SimpleNamespace', 'MemberDescript
 connect_module('warnings', warnings, ())  # warning filters are mutable native configuration, validated by their owner
 # TargetEncoder's user-cv test reads numbers.Integral through this connection
 # instead of importing the module on every fit_transform.
-connect_module('numbers', numbers, ('Integral',))
+connect_module('numbers', numbers, ('Integral', 'Real'))  # Real: user-object kinds (bindings/user_objects_native.mojo)
 
 
 # glue: exact standard path identities, connected before any product operation.
