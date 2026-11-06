@@ -13,7 +13,8 @@
 # fit_transform projects the X the fit converted (tsvd_transform), with no
 # second conversion and no Python between the two.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -43,23 +44,38 @@ def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         return False
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        if mro[k] is context["tsvd_class"]:
-            return True
-    return False
+    var target = context["tsvd_class"]
+    if py_type(target) is not b.type:
+        return False
+    # CPython's own subtype test walks the same tp_mro by identity in one
+    # native call (no MRO tuple fetch or per-row Python indexing).
+    ref cpy = Python().cpython()
+    return cpy.lib.get_function[Int32]("PyType_IsSubtype")(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def _host_only(model: PythonObject) raises -> Bool:
     # An explicit host inference class (`_HOST_INFERENCE_ONLY` in its class
     # dictionaries) transforms a saved model; it never fits.
+    # Depends only on the class rows: resolved once per class state
+    # (native_class_admission re-checks after any class modification).
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var record = class_record(mods, _HOST_ONLY_SLOT, cls)
+    if record is not None:
+        return Bool(py=record)
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var found = False
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var class_fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
         if py_get(class_fields, "_HOST_INFERENCE_ONLY") is not None:
-            return True
-    return False
+            found = True
+            break
+    class_admit(mods, _HOST_ONLY_SLOT, cls, PythonObject(found))
+    return found
+
+
+comptime _HOST_ONLY_SLOT = "tsvd_host_inference_only_v1"
 
 
 def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:

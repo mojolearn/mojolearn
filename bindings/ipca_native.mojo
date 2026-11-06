@@ -31,11 +31,13 @@ def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         return False
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        if mro[k] is context["ipca_class"]:
-            return True
-    return False
+    var target = context["ipca_class"]
+    if py_type(target) is not b.type:
+        return False
+    # CPython's own subtype test walks the same tp_mro by identity in one
+    # native call (no MRO tuple fetch or per-row Python indexing).
+    ref cpy = Python().cpython()
+    return cpy.lib.get_function[Int32]("PyType_IsSubtype")(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def _int(value: PythonObject) raises -> Int:

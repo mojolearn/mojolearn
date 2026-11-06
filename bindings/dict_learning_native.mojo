@@ -71,6 +71,11 @@ def _fit_index(fit_algorithm: PythonObject) raises -> Int:
 def _is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
     # The model's class MRO, read through type's own descriptor, holds cls.
     var b = native_loaded_module("builtins")
+    if py_type(cls) is b.type:
+        # CPython's own subtype test walks the same tp_mro by identity in one
+        # native call (no MRO tuple fetch or per-row Python indexing).
+        ref cpy = Python().cpython()
+        return cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(model)._obj_ptr, cls._obj_ptr) != 0
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         if mro[k] is cls:
