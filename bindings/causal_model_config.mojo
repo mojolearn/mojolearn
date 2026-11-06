@@ -298,8 +298,12 @@ def model_plan_init_binding(mut mods: NativeModules, plan: PythonObject, input: 
 
 
 def _model_layer_weights(mut mods: NativeModules, fields: PythonObject, layer: Int) raises -> PythonObject:
-    var bi = mods.module("builtins")
     var entries = model_plain(mods, native_instance_item(fields, PythonObject("_layer_map")))
+    return _model_layer_weights_plain(mods, entries, layer)
+
+
+def _model_layer_weights_plain(mut mods: NativeModules, entries: PythonObject, layer: Int) raises -> PythonObject:
+    # `entries` is an already captured (model_plain) layer map.
     model_sequence(mods, entries)
     var out = Python.list()
     for j in range(len(entries)):  # driver-loop: expand admitted checkpoint names for one model layer
@@ -334,13 +338,16 @@ def model_checkpoint_names_snapshot(mut mods: NativeModules, fields: PythonObjec
             _ = py_call(names.append, name)
     var layers = model_integer(mods, native_instance_item(fields, PythonObject("n_layers")))
     # Capture the mutable layer map once for the whole enumeration.
-    var captured = Python.dict()
-    py_setitem(captured, "_layer_map", model_plain(mods, native_instance_item(fields, PythonObject("_layer_map"))))
+    # Expand every layer from this one captured copy (no deep copy per layer)
+    # and de-duplicate through a set (exact strs) instead of a list scan.
+    var captured_map = model_plain(mods, native_instance_item(fields, PythonObject("_layer_map")))
+    var seen = py_call(mods.module("builtins").set, names)
     for i in range(layers):  # driver-loop: enumerate complete model checkpoint names
-        var layer = _model_layer_weights(mods, captured, i)
+        var layer = _model_layer_weights_plain(mods, captured_map, i)
         for j in range(len(layer)):  # driver-loop: deduplicate native checkpoint names in insertion order
             var name = layer[j][1]
-            if not py_contains(names, name):
+            if not py_contains(seen, name):
+                _ = py_call(seen.add, name)
                 _ = py_call(names.append, name)
     return names
 
