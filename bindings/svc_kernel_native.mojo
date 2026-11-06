@@ -47,7 +47,7 @@ from core.scale_gamma_exact import scale_gamma_from_limbs
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64,
-    svc_read_f32, svc_read_i32, svc_f32, svc_snapshot, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_decode,
+    svc_read_f32, svc_read_i32, svc_f32, svc_snapshot, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_encode_1d, svc_decode,
     svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
 )
 
@@ -378,8 +378,9 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var cwa = PythonObject(None)
     var n_classes = 0
     if class_weight is not None:
-        var labels = svc_labels_1d(y, context)[0]
-        var encoded = svc_sorted_classes(labels, context)
+        var encoded = svc_encode_1d(y, context)
+        if encoded[0] is None:
+            raise Error("mojolearn " + who + ": y must be 1-D")
         var classes = encoded[0]
         codes = encoded[1]
         n_classes = len(classes)
@@ -590,18 +591,16 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_svm_impl._as_labels`: (float32 labels or None, classes, the label
     pair or the int32 codes when more than two classes)."""
     var b = svc_builtins()
-    var pair = svc_labels_1d(y, context)
-    var labels = pair[0]
-    if labels is None:
-        var shape = pair[1]
-        raise Error("mojolearn SVC: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
     var encoded = PythonObject(None)
     try:
-        encoded = svc_sorted_classes(labels, context)
+        encoded = svc_encode_1d(y, context)
     except error:
         if String(error).find("NaN label") < 0:
             raise error
         raise Error(_DEV636_Y)
+    if encoded[0] is None:
+        var shape = encoded[2]
+        raise Error("mojolearn SVC: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
     var classes = encoded[0]
     var codes = encoded[1]
     if len(classes) < 2:

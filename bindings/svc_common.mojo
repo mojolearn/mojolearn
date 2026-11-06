@@ -25,6 +25,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_pandas import _pd_class
 from bindings.classical_labels import _pandas_values, labels_type_name
 from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
+from bindings.classical_labels import labels_encode_labels
 from bindings.label_admission_native import classifier_label_list
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
@@ -208,6 +209,27 @@ def svc_labels_1d(y: PythonObject, context: PythonObject) raises -> PythonObject
     if len(shape) != 1:
         return Python.tuple(PythonObject(None), shape)
     return Python.tuple(svc_flatten_labels(y, context), shape)
+
+
+def svc_encode_1d(y: PythonObject, context: PythonObject) raises -> PythonObject:
+    """(classes, int32 codes, n) of a 1-D label vector, or (None, None, shape)
+    when y is not 1-D. A numeric label buffer is validated (NaN refusal
+    included) and encoded straight from its storage by the shared encoder's
+    one `prepare_targets` call; lists, str and object labels take the label
+    input step (flatten, then the ORDER RULE)."""
+    # Perf (lane perf-svm-and-msel): SVC/NuSVC/LinearSVC fit flattened y into
+    # Python objects (svc_labels_1d) and then sorted and dict-coded them
+    # (svc_sorted_classes): two Python passes per label. Numeric classes are
+    # the same sorted values and codes either way.
+    var shape = svc_shape_of(y, context)
+    if len(shape) != 1:
+        return Python.tuple(PythonObject(None), PythonObject(None), shape)
+    if py_get(context, "labels_helpers") is not None:
+        var encoded = labels_encode_labels(y, context)
+        return Python.tuple(encoded.classes, encoded.codes, PythonObject(encoded.n))
+    var labels = svc_flatten_labels(y, context)
+    var sorted = _sorted_classes(labels, context)
+    return Python.tuple(sorted.classes, sorted.codes, PythonObject(sorted.n))
 
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
