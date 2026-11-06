@@ -201,7 +201,14 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     # KDE retains its borrowing/copy-report contract; its repeated metadata
     # capture remains explicitly pending until its dense helper takes snapshots.
     if not operation.startswith("family_xn_kde_"):
-        py_setitem(values, PythonObject(first), family_owned_snapshot(snapshot, context))
+        # Perf: a query (predict/transform/score/kneighbors) only reads X, so
+        # an exact C-order float32 input that is not readonly is handed over
+        # as admitted, without a per-call copy. A fit (the model retains X),
+        # the imputer (writes into its X buffer) and a readonly view still get
+        # the owned copy.
+        var borrow = (not fitting and not operation.startswith("family_xn_loc_imp_")
+                      and not snapshot.readonly and snapshot.f32_c())
+        py_setitem(values, PythonObject(first), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
     if fitting and Int(py=depth) == 0:
         var target_index = 2
         if operation == "family_xn_knn_nn_fit":
