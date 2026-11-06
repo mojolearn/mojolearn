@@ -10,7 +10,7 @@ from bindings.xcnn_common import (
     xcnn_builtins, xcnn_tensor, xcnn_tensor_slot, xcnn_tensor_set, xcnn_tensor_admit,
     xcnn_shape, xcnn_size, xcnn_tuple, xcnn_new, xcnn_out_new, xcnn_wrap,
     xcnn_host_of, xcnn_f32, xcnn_entries, xcnn_module_entries, xcnn_device_io_off,
-    xcnn_is_t, xcnn_reshape_t,
+    xcnn_is_t, xcnn_reshape_t, xcnn_tensor_layout, _xcnn_set_raw, _xcnn_slot_raw,
 )
 from bindings.py_typed_call import py_call_typed
 
@@ -63,23 +63,27 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
             sequential_admit_value(args[3], context)
         if args[4] is not None and not xcnn_is_t(args[4], context):
             raise Error("TypeError: CNN tensor base requires an exact native tensor")
-        xcnn_tensor_set(owner, "b", entries["module"], context)
-        xcnn_tensor_set(owner, "shape", xcnn_tuple(shape), context)
-        xcnn_tensor_set(owner, "h", args[2], context)
-        xcnn_tensor_set(owner, "_host", args[3], context)
-        xcnn_tensor_set(owner, "_base", args[4], context)
+        # One layout check for the five slot writes (it ran once per slot).
+        xcnn_tensor_layout(context)
+        _xcnn_set_raw(owner, "b", entries["module"], context)
+        _xcnn_set_raw(owner, "shape", xcnn_tuple(shape), context)
+        _xcnn_set_raw(owner, "h", args[2], context)
+        _xcnn_set_raw(owner, "_host", args[3], context)
+        _xcnn_set_raw(owner, "_base", args[4], context)
         return PythonObject(None)
     if operation == "tensor_finalize":
         # Partially initialized objects and interpreter shutdown are legal.
         # Suppression lives in native code, with handles cleared before free.
         try:
-            var handle = xcnn_tensor_slot(owner, "h", context)
-            var base = xcnn_tensor_slot(owner, "_base", context)
+            # One layout check for the three reads and the write.
+            xcnn_tensor_layout(context)
+            var handle = _xcnn_slot_raw(owner, "h", context)
+            var base = _xcnn_slot_raw(owner, "_base", context)
             if base is None and handle is not None:
                 if py_type(handle) is not b.int or Int(py=handle) < 1:
                     return PythonObject(None)
-                var entries = xcnn_module_entries(xcnn_tensor_slot(owner, "b", context), context)
-                xcnn_tensor_set(owner, "h", PythonObject(None), context)
+                var entries = xcnn_module_entries(_xcnn_slot_raw(owner, "b", context), context)
+                _xcnn_set_raw(owner, "h", PythonObject(None), context)
                 _ = py_call_typed(entries["symbols"]["x_cnn_res_free"], handle)
         except:
             pass
