@@ -1012,8 +1012,8 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
         _ = py_call(sized.append, PythonObject(Int(py=train.size)))
         _ = py_call(sized.append, PythonObject(Int(py=test.size)))
         _ = py_call(sizes.append, sized)
-        trains.append(train)
-        tests.append(test)
+        trains.append(train^)
+        tests.append(test^)
     if len(trains) == 0:
         raise Error("cv must produce at least one fold")
     var descriptor = Python.dict()
