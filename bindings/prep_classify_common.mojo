@@ -557,6 +557,14 @@ def partial_walk(fields: PythonObject, y: PythonObject, n: Int, context: PythonO
     if len(bad) > 0:
         var named = py_call(b.sorted, py_call(b.set, bad))
         raise Error("mojolearn: The target label(s) " + cls_str(named) + " in y do not exist in the initial classes " + cls_str(classes))
+    # The batch named every class in order (the common case): its codes are
+    # already the codes among classes_, no remap pass (p3-prep).
+    var identity = len(remap) == len(classes)
+    for k in range(len(remap)):  # driver-loop: over the batch's distinct labels (classes-sized)
+        if remap[k] != k:
+            identity = False
+    if identity and classical_is_array(labels.codes, context) and String(labels.codes.dtype) == "<i4" and n > 0:
+        return labels.codes
     var out = i32_array(n, context)
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
