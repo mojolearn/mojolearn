@@ -61,17 +61,17 @@ def _ivf_host_search_arrays(
     var queries = read_f32(Int(py=addrs[5]), m * arrays.dim)
     var index = IvfHostIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
-        arrays.list_indices.copy(), arrays.list_data.copy(),
+        arrays.centers^, arrays.center_norms^, arrays.offsets^,
+        arrays.list_indices^, arrays.list_data^,
     )
     var dist = List[Float32]()
     var idx = List[UInt32]()
     var cand = List[Int32]()
     with GILReleased(Python()):
         var r = host_ivf_search(index, queries, m, k, n_probes, partial_storage, keep)
-        dist = r.distances.copy()
-        idx = r.indices.copy()
-        cand = r.n_candidates.copy()
+        dist = r.distances^
+        idx = r.indices^
+        cand = r.n_candidates^
     ivf_write_search_result(addrs, dist, idx, cand, m, k)
     return PythonObject(0)
 
@@ -116,8 +116,8 @@ def ivf_flat_extend_binding(
     var new_x = read_f32(Int(py=addrs[5]), n_new * arrays.dim)
     var index = IvfHostIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
-        arrays.list_indices.copy(), arrays.list_data.copy(),
+        arrays.centers^, arrays.center_norms^, arrays.offsets^,
+        arrays.list_indices^, arrays.list_data^,
     )
     var labels = List[UInt32]()
     var out = host_ivf_extend(index, new_x, n_new, labels)
@@ -173,8 +173,8 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
     )
     var index = IvfHostIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
-        arrays.list_indices.copy(), arrays.list_data.copy(),
+        arrays.centers^, arrays.center_norms^, arrays.offsets^,
+        arrays.list_indices^, arrays.list_data^,
     )
     var state = HOST_IVF_REGISTRY.get_or_create_ptr()
     if state[].next_id == 9223372036854775807:
@@ -213,9 +213,9 @@ def ivf_flat_index_search_binding(
     var cand = List[Int32]()
     with GILReleased(Python()):
         var r = host_ivf_search(e.index, queries, m, k, n_probes, partial, keep)
-        dist = r.distances.copy()
-        idx = r.indices.copy()
-        cand = r.n_candidates.copy()
+        dist = r.distances^
+        idx = r.indices^
+        cand = r.n_candidates^
     ivf_write_resident_result(addrs, dist, idx, cand, m, k)
     return PythonObject(0)
 
