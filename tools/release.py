@@ -1206,6 +1206,38 @@ DEVICE_LANE_STEPS = ("macos-smoke", "gpu-column-nvidia", "gpu-column-nvidia-hopp
 for _publish in PUBLISH_STEPS:
     AFTER[_publish] = list(dict.fromkeys(AFTER.get(_publish, []) + list(DEVICE_LANE_STEPS)))
 
+# THE TESTPYPI REHEARSAL (lane release-testpypi-rehearsal, Andrew 2026-11-06: everything that can be checked
+# before the real publish is checked before it). Inside --publish pypi, testpypi-rehearsal runs after every check
+# a publish needs or waits for (the gates, the one verification round) and BEFORE the first publish step; every
+# publish step needs it. It uploads the exact gated wheels to TestPyPI, resolves every package set there with our
+# project names pinned to TestPyPI (tools/release_testpypi_rehearsal.py), compares every file's sha256 with the
+# gated wheel's and installs and imports the macOS wheel on this Mac. Any failure stops the release before the
+# real PyPI sees anything. It needs what EVERY publish needs (both gates) and waits for the rest to settle, so a
+# failed macOS pipeline still lets the Linux packages rehearse and publish (each publish then checks that the
+# rehearsal covered its own bytes: Release.publish).
+REHEARSAL_STEP = "testpypi-rehearsal"
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == PUBLISH_STEPS[0])),
+                  (REHEARSAL_STEP, "finish", [], "dispatch"))
+
+
+def wire_rehearsal(needs, after):
+    """(needs, after) with testpypi-rehearsal needing what every publish needs, waiting for everything else a
+    publish needs or waits for, and every publish needing it. Idempotent: rerun after the per-run graph changes
+    (--identity-on-wheels, a held Hopper box)."""
+    publishes = [s for s in PUBLISH_STEPS if s in needs]
+    def own(p):
+        return [d for d in needs[p] if d not in PUBLISH_STEPS and d != REHEARSAL_STEP]
+    common = [d for d in own(publishes[0]) if all(d in own(p) for p in publishes)]
+    settle = list(dict.fromkeys(d for p in publishes for d in own(p) + list(after.get(p, ()))
+                                if d not in PUBLISH_STEPS and d != REHEARSAL_STEP and d not in common))
+    needs = dict(needs, **{REHEARSAL_STEP: common},
+                 **{p: needs[p] + ([] if REHEARSAL_STEP in needs[p] else [REHEARSAL_STEP]) for p in publishes})
+    return needs, dict(after, **{REHEARSAL_STEP: settle})
+
+
+_needs, AFTER = wire_rehearsal({s: n for s, _, n, _ in STEP_TABLE}, AFTER)
+STEP_TABLE = [(name, pipeline, _needs[name], resource) for name, pipeline, _, resource in STEP_TABLE]
+
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
 RESOURCE = {s: r for s, _, _, r in STEP_TABLE}
@@ -1408,6 +1440,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if self.hopper_required():
             # a held Hopper box (or the rented route): its column gates publish-nvidia as before
             self.NEEDS = dict(NEEDS, **{"publish-nvidia": NEEDS["publish-nvidia"] + ["gpu-column-nvidia-hopper"]})
+        # the rehearsal follows the per-run graph: it waits for whatever a publish needs or waits for
+        self.NEEDS, self.AFTER = wire_rehearsal(self.NEEDS, self.AFTER)
         self.runner = runner
         self._linux_merged = None
         if getattr(args, "build_backend", None) is None:
@@ -3892,6 +3926,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
+        # testpypi-rehearsal uploads through this same path with the target set to TestPyPI for its thread
+        rehearsing = getattr(self._tl, "publish_target", None) == "testpypi"
+        if rehearsing:
+            target = "testpypi"
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         # --identity-on-wheels: the core and macOS wheels ship repacked with the admitted table (data only)
         wheel = self.shipped_wheel(platform, wheel) if not self.dry else wheel
@@ -3900,9 +3938,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                              f"{self.commit}")
         # A FILE ALREADY ON PYPI IS DONE (lane release-no-hands): checked before the pre-publication gate,
         # which only decides whether to upload; it never refuses what the index already serves.
-        if not self.dry and wheel and self.on_pypi(wheel):
+        if not rehearsing and not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
-        if not self.dry and wheel and platform in SPLIT_PACKAGES and platform != "linux":
+        if not rehearsing and not self.dry and wheel and platform in SPLIT_PACKAGES and platform != "linux":
             published = self.published_marker(wheel)
             # 0.8.37 (2026-10-10): a refreeze after a plugin published rebuilds that plugin with new bytes
             # (LINUX_PAYLOAD.json names the source commit), and PyPI never takes a filename twice. The loader
@@ -3913,6 +3951,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     raise StepFailed(f"PyPI already has {wheel.name} with a different gpu_plugin.json; "
                                      "a new version is needed")
                 return "already on PyPI (published from an earlier freeze; gpu_plugin.json equal)"
+        # NOTHING REACHES PyPI UNREHEARSED (Andrew 2026-11-06): the TestPyPI rehearsal passed for these exact bytes
+        if target == "pypi" and not rehearsing and not self.dry and wheel:
+            covered = ((self.recorded(REHEARSAL_STEP) or {}).get("wheels") or {}).get(platform)
+            if covered != sha256(wheel):
+                raise StepFailed(f"the TestPyPI rehearsal has not passed for {wheel.name} (sha256 {sha256(wheel)[:12]}); "
+                                 f"run {REHEARSAL_STEP} first; nothing went to PyPI")
         if not self.dry:
             held = self.plan_blocks_publication()
             if held:
@@ -3933,7 +3977,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         day = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
         tag = f"alpha-api-{self.version}-{platform}-{day}"
-        work = self.rel / f"publish-{platform}"
+        work = self.rel / (f"{REHEARSAL_STEP}/publish-{platform}" if rehearsing else f"publish-{platform}")
         env = dict(MOJOLEARN_ARTIFACT_SOURCE_COMMIT=self.commit,
                    MOJOLEARN_REQUIREMENTS_LEDGER=str(self.readiness().path))
         if getattr(self.args, "owner_waiver", None):
@@ -3949,8 +3993,248 @@ class Release(release_identity_wheels.IdentityOnWheels):
         route = ["--light-smoke", smoke] if self.gpu_smoke() and smoke is not None else ["--preverified"]
         self.must(["bash", "tools/release_linux_publish.sh", wheel or f"<{platform} wheel>", tag, target, work,
                    *route], env=env,
-                  log=self.rel / f"publish-{platform}.log", what=f"publish {platform}")
+                  log=work.parent / f"publish-{platform}.log", what=f"publish {platform} to {target}")
         return f"{target} via {tag} (source {self.commit[:12]}, tooling {self.tooling_commit[:12]})"
+
+    # ------------------------------------------------------------ testpypi-rehearsal (before the first publish)
+    #: platform -> its publish step; the order TestPyPI takes them in (the core first, the vendors, the Linux
+    #: mojolearn once all three are there, the macOS wheel), as the real publish does
+    REHEARSAL_ORDER = ("linux", "nvidia", "amd", "linux-meta", "macos")
+    #: pip resolution attempts while TestPyPI's simple pages catch up with an upload (30 s apart)
+    REHEARSAL_ATTEMPTS = 6
+
+    def platform_publish(self):
+        return {p["platform"]: p["publish"] for p in self.PIPELINES.values()}
+
+    def rehearsal_ready(self):
+        """The platforms whose publish step could run now except for the rehearsal: every check it needs done,
+        and every package it requires on the index ready too (in REHEARSAL_ORDER)."""
+        by_step = {step: platform for platform, step in self.platform_publish().items()}
+        ready = []
+        for platform in self.REHEARSAL_ORDER:
+            step = self.platform_publish().get(platform)
+            if step is None:
+                continue
+            needs = self.NEEDS.get(step, [])
+            own = [d for d in needs if d not in PUBLISH_STEPS and d != REHEARSAL_STEP]
+            deps = [by_step[d] for d in needs if d in PUBLISH_STEPS]
+            if all(self.recorded(d) for d in own) and all(d in ready for d in deps):
+                ready.append(platform)
+        return ready
+
+    def rehearsal_wheel(self, platform):
+        """The bytes the publish of PLATFORM ships (the gated wheel; under --identity-on-wheels its data-only repack)."""
+        wheel = self.macos_wheel() if platform == "macos" else self.split_final(platform)
+        return self.shipped_wheel(platform, wheel) if wheel else None
+
+    @staticmethod
+    def rehearsal_requires(platform):
+        """The other platforms whose package PLATFORM's package requires on the index."""
+        return tuple(d for d in LINUX_RESOLVES.get(platform, ()) if d != platform) if platform != "macos" else ()
+
+    def rehearsal_upload(self, platform, wheel):
+        """Put PLATFORM's gated wheel on TestPyPI through the release's own publisher, unless TestPyPI already
+        holds exactly these bytes. Other bytes under the same file name FAIL: TestPyPI never takes a name twice."""
+        import release_testpypi_rehearsal as TR
+        project, digest = TR.wheel_project(wheel), sha256(wheel)
+        try:
+            state, served = TR.testpypi_file_state(project, self.version, wheel.name, digest)
+        except Exception as error:   # noqa: BLE001 - any read failure stops before PyPI
+            raise StepFailed(f"cannot read TestPyPI for {wheel.name}: {error}") from error
+        if state == "same":
+            return f"{wheel.name}: already on TestPyPI with the gated sha256 (not uploaded again)"
+        if state == "different":
+            raise StepFailed(TR.different_bytes_reason(wheel.name, served, digest, self.version))
+        step = self.platform_publish()[platform]
+        self._tl.publish_target = "testpypi"
+        try:
+            out = getattr(self, "step_" + step.replace("-", "_"))()
+        finally:
+            self._tl.publish_target = None
+        result = out[0] if isinstance(out, tuple) else out
+        for attempt in range(1, self.REHEARSAL_ATTEMPTS + 1):
+            state, served = TR.testpypi_file_state(project, self.version, wheel.name, digest)
+            if state == "same":
+                return f"{wheel.name}: uploaded to TestPyPI ({result})"
+            if state == "different":
+                raise StepFailed(TR.different_bytes_reason(wheel.name, served, digest, self.version))
+            self.say(f"  TestPyPI does not list {wheel.name} yet (attempt {attempt}/{self.REHEARSAL_ATTEMPTS})")
+            self.sleep(30)
+        raise StepFailed(f"{wheel.name} was dispatched to TestPyPI ({result}) but TestPyPI does not serve it")
+
+    def rehearsal_checks(self, ready, wheels, local, out, index):
+        """(problems, rows): (a) every package set resolved through INDEX (our names from TestPyPI only) for each
+        platform tag and Python version the wheels declare, against the expected set and the gated sha256;
+        (b) each rehearsed file downloaded and hashed; (c) the macOS wheel installed into a fresh venv and
+        imported. LOCAL: platforms whose upload was skipped (their gated file is offered from out/local)."""
+        import concurrent.futures
+        import release_testpypi_rehearsal as TR
+        pip_venv = out / "pip-venv"
+        if pip_venv.exists():
+            shutil.rmtree(pip_venv)
+        self.must([self.smoke_python(), "-m", "venv", pip_venv], what="the rehearsal's pip venv")
+        pip_python = pip_venv / "bin" / "python"
+        links = None
+        if local:
+            links = out / "local"
+            links.mkdir(parents=True, exist_ok=True)
+            for platform in local:
+                shutil.copy2(wheels[platform], links / wheels[platform].name)
+        local_projects = {TR.wheel_project(wheels[p]) for p in local}
+        expect = {p: (wheels[p].name, sha256(wheels[p])) for p in ready}
+        # (a) the package sets: root project, the platforms it installs, its own wheel (extras, tags, Pythons)
+        sets = [(SPLIT_PACKAGES[k][0], LINUX_RESOLVES[k], wheels[k]) for k in LINUX_RESOLVES
+                if k in ready and all(d in ready for d in LINUX_RESOLVES[k])]
+        if "macos" in ready:
+            sets.append((TR.wheel_project(wheels["macos"]), ("macos",), wheels["macos"]))
+        jobs = []
+        for project, members, own in sets:
+            meta = TR.wheel_metadata(own)
+            want = {TR.wheel_project(wheels[m]): expect[m] for m in members}
+            for root in [project] + [f"{project}[{e}]" for e in meta["extras"]]:
+                for python in TR.python_versions(meta):
+                    jobs.append((root, TR.wheel_platform(own), python, want))
+        rows, problems = [], []
+
+        def resolve(job):
+            root, plat, python, want = job
+            slug = re.sub(r"[^A-Za-z0-9.]+", "_", f"{root}-{plat}-py{python}")
+            report = out / "resolve" / f"{slug}.json"
+            report.parent.mkdir(parents=True, exist_ok=True)
+            for attempt in range(1, self.REHEARSAL_ATTEMPTS + 1):
+                if report.exists():
+                    report.unlink()
+                rc = self.run(TR.resolve_command(pip_python, index.url, f"{root}=={self.version}", plat, python,
+                                                 report, links), log=out / "resolve" / f"{slug}.log")
+                if rc == 0:
+                    break
+                self.sleep(30)
+            label = f"pip install {root}=={self.version} on {plat} py{python}"
+            if rc != 0:
+                return label, [f"pip could not resolve it (exit {rc}; {out / 'resolve' / (slug + '.log')})"]
+            return label, TR.judge_resolution(read_json(report), want, self.version, index.served, local_projects)
+
+        def download(platform):
+            wheel = wheels[platform]
+            dest = out / "bytes" / platform
+            if dest.exists():
+                shutil.rmtree(dest)
+            for attempt in range(1, self.REHEARSAL_ATTEMPTS + 1):
+                rc = self.run(TR.download_command(pip_python, index.url, TR.wheel_project(wheel), self.version,
+                                                  TR.wheel_platform(wheel), dest), log=out / "bytes" / f"{platform}.log")
+                if rc == 0:
+                    break
+                self.sleep(30)
+            got = sorted(dest.glob("*.whl")) if dest.exists() else []
+            label = f"TestPyPI bytes of {wheel.name}"
+            if rc != 0 or len(got) != 1:
+                return label, [f"pip download did not fetch exactly one file (exit {rc}, {[g.name for g in got]})"]
+            if got[0].name != wheel.name or sha256(got[0]) != sha256(wheel):
+                return label, [f"TestPyPI served {got[0].name} sha256 {sha256(got[0])}, gated {sha256(wheel)}"]
+            return label, []
+
+        # every resolution and download is independent: all at once, one worker per core
+        units = [(resolve, job) for job in jobs] + [(download, p) for p in ready if p not in local]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(len(units), os.cpu_count() or 1))) as pool:
+            done = list(pool.map(lambda unit: unit[0](unit[1]), units))
+        for label, found in done:
+            rows.append(dict(check=label, problems=found))
+            problems += [f"{label}: {p}" for p in found]
+        # (c) the macOS wheel from TestPyPI, pinned to the gated sha256, into a fresh venv; import only
+        if "macos" in ready:
+            wheel = wheels["macos"]
+            venv = out / "macos-venv"
+            if venv.exists():
+                shutil.rmtree(venv)
+            req = out / "macos-requirements.txt"
+            req.write_text(TR.requirements_text(TR.wheel_project(wheel), self.version, sha256(wheel)))
+            self.must([self.smoke_python(), "-m", "venv", venv], what="the rehearsal's macOS venv")
+            label = f"pip install {wheel.name} from TestPyPI into a fresh venv and import"
+            install = TR.install_command(venv, index.url, req) + (["--find-links", str(links)] if links else [])
+            found = []
+            for attempt in range(1, self.REHEARSAL_ATTEMPTS + 1):
+                rc = self.run(install, log=out / "macos-install.log")
+                if rc == 0:
+                    break
+                self.sleep(30)
+            if rc != 0:
+                found.append(f"pip install exited {rc} ({out / 'macos-install.log'})")
+            else:
+                rc = self.run(TR.import_command(venv, self.version), log=out / "macos-import.log", cwd=out)
+                if rc != 0:
+                    found.append(f"import mojolearn exited {rc} ({out / 'macos-import.log'})")
+            rows.append(dict(check=label, problems=found))
+            problems += [f"{label}: {p}" for p in found]
+        return problems, rows
+
+    def have_testpypi_rehearsal(self, rec):
+        """Done when the recorded rehearsal covered every platform ready now, with the bytes they ship now."""
+        if self.args.publish != "pypi" or "wheels" not in rec:
+            return None
+        ready = self.rehearsal_ready()
+        wheels = rec.get("wheels") or {}
+        if not ready or any(p not in wheels or wheels[p] != sha256(self.rehearsal_wheel(p)) for p in ready):
+            return None
+        return "have the TestPyPI rehearsal of " + ", ".join(ready)
+
+    def step_testpypi_rehearsal(self):
+        """THE TESTPYPI REHEARSAL (Andrew 2026-11-06), before the first real publish: the gated wheels uploaded
+        to TestPyPI, every package set resolved there (our names from TestPyPI only), every file's sha256 equal to
+        the gated wheel's, the macOS wheel installed and imported on this Mac. Any failure stops here: the real
+        PyPI has seen nothing (tools/release_testpypi_rehearsal.py)."""
+        import release_testpypi_rehearsal as TR
+        if self.args.publish != "pypi":
+            return f"skipped (--publish {self.args.publish}: the TestPyPI rehearsal runs inside --publish pypi)"
+        ready = self.rehearsal_ready()
+        if self.dry:
+            self.say("  would upload to TestPyPI (same bytes already there: not again), resolve every package set "
+                     "with our names from TestPyPI only, compare every sha256 and install + import the macOS wheel: "
+                     + (", ".join(ready) or "nothing ready yet"))
+            return "pending: would rehearse on TestPyPI"
+        if not ready:
+            return "nothing is ready to publish", dict(platforms=[], wheels={})
+        wheels = {p: self.rehearsal_wheel(p) for p in ready}
+        missing = [p for p, w in wheels.items() if w is None]
+        if missing:
+            raise StepFailed("TestPyPI rehearsal: no gated wheel for " + ", ".join(missing))
+        out = self.rel / REHEARSAL_STEP
+        out.mkdir(parents=True, exist_ok=True)
+        uploads, owed, local = {}, [], []
+        for platform in ready:
+            wheel = wheels[platform]
+            project = TR.wheel_project(wheel)
+            limit = TR.testpypi_file_limit(project)
+            blocked = [d for d in self.rehearsal_requires(platform) if d in local]
+            if wheel.stat().st_size > limit:
+                owed.append(f"{wheel.name} is {wheel.stat().st_size} bytes, over TestPyPI's {limit}-byte limit for "
+                            f"{project}: OWED, ask TestPyPI for the limit PyPI granted (pypi/support, naming "
+                            f"test.pypi.org); not uploaded, checked from the local gated file")
+                local.append(platform)
+            elif blocked:
+                owed.append(f"{wheel.name} not uploaded: it requires {', '.join(blocked)} on the index, which TestPyPI "
+                            f"could not take; checked from the local gated file")
+                local.append(platform)
+            else:
+                uploads[platform] = self.rehearsal_upload(platform, wheel)
+                self.say("  " + uploads[platform])
+        for line in owed:
+            self.say("  SKIPPED UPLOAD: " + line)
+        with TR.RoutingIndex() as index:
+            problems, rows = self.rehearsal_checks(ready, wheels, local, out, index)
+            routed = sorted(set(index.requests))
+        write_json(out / "rehearsal.json", dict(
+            schema="mojolearn.release-testpypi-rehearsal.v1", version=self.version, commit=self.commit,
+            platforms=ready, wheels={p: dict(file=w.name, sha256=sha256(w)) for p, w in wheels.items()},
+            uploads=uploads, owed=owed, local=local, checks=rows, routed=routed, problems=problems))
+        if problems:
+            raise StepFailed(f"TestPyPI rehearsal: {problems[0]}"
+                             + (f" (+{len(problems) - 1} more)" if len(problems) > 1 else "")
+                             + f"; nothing went to PyPI ({out / 'rehearsal.json'})")
+        checked = sum(1 for r in rows if r["check"].startswith("pip install ") and " on " in r["check"])
+        return (f"TestPyPI rehearsal PASSED for {', '.join(ready)}: {checked} resolutions, "
+                f"{len(ready) - len(local)} files' sha256, macOS install+import "
+                + ("OK" if "macos" in ready else "not ready") + (f"; OWED: {'; '.join(owed)}" if owed else ""),
+                dict(platforms=ready, wheels={p: sha256(w) for p, w in wheels.items()}, owed=owed, local=local))
 
     def smoke_notes(self, platform):
         """{native set: smoke line} for the alpha manifest of a vendor wheel
@@ -4159,86 +4443,42 @@ class Release(release_identity_wheels.IdentityOnWheels):
             raise StepFailed(f"no PASSED macOS smoke receipt for this wheel ({smoke}); run macos-smoke")
         return self.publish("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")
 
-    def finish_macos(self, venv):
-        pip = venv / "bin" / "pip"
-        for attempt in range(1, 7):
-            rc = self.run([pip, "install", "--no-cache-dir", f"mojolearn=={self.version}"],
-                          log=self.rel / f"finish-pip-{attempt}.log")
-            if rc == 0:
-                break
-            self.say(f"  pip install failed (attempt {attempt}/6; the index may still be propagating)")
-            self.sleep(30)
-        else:
-            raise StepFailed("pip install mojolearn==" + self.version + " failed six times")
-        self.must([venv / "bin" / "python", "-c",
-                   f"import mojolearn; assert mojolearn.__version__ == {self.version!r}; "
-                   "print(mojolearn.__version__, mojolearn.vendor())"], what="import")
-        return f"macOS: pip install mojolearn=={self.version} on this Mac: OK"
-
-    def finish_linux(self, venv, package="linux"):
-        """The Linux wheel cannot install on this Mac: pip resolves and
-        downloads it for its platform, and its bytes must be the published ones.
-        `package` is linux (mojolearn-core), a plugin or linux-meta (mojolearn)."""
-        project, prefix = SPLIT_PACKAGES[package]
-        final = self.split_final(package)
-        plat = final.name[:-4].split("-")[-1] if final else "manylinux_2_35_x86_64"
-        dest = self.rel / ("finish-linux" if package == "linux" else f"finish-{package}")
-        label = project
+    def finish_bytes(self, platform):
+        """THE FINISH LINE, HASH ONLY (lane release-testpypi-rehearsal, Andrew 2026-11-06): what the real PyPI
+        serves for PLATFORM is the shipped bytes. `pip download --no-deps` from https://pypi.org/simple for the
+        wheel's own platform tag, sha256 compared; nothing is installed or run. The install, the import and the
+        package-set resolution ran before the first publish, in testpypi-rehearsal, against the same bytes."""
+        import release_testpypi_rehearsal as TR
+        final = self.rehearsal_wheel(platform) if not self.dry else None
+        project = SPLIT_PACKAGES[platform][0] if platform in SPLIT_PACKAGES else "mojolearn"
+        plat = TR.wheel_platform(final) if final else ("macosx_11_0_arm64" if platform == "macos"
+                                                       else "manylinux_2_35_x86_64")
+        dest = self.rel / ("finish-linux" if platform == "linux" else f"finish-{platform}")
         for attempt in range(1, 7):
             if dest.exists() and not self.dry:
                 shutil.rmtree(dest)
-            rc = self.run([venv / "bin" / "pip", "download", "--no-cache-dir", "--no-deps", "--only-binary=:all:",
-                           "--platform", plat, "--python-version", "3.12", "-d", dest,
-                           f"{project}=={self.version}"], log=self.rel / f"finish-{package}-{attempt}.log")
-            got = sorted(dest.glob(f"{prefix}-*.whl")) if not self.dry else []
-            if self.dry or (rc == 0 and final and len(got) == 1 and sha256(got[0]) == sha256(final)):
-                return f"{label}: pip resolves {project}=={self.version} for {plat}; bytes are the published wheel's"
-            self.say(f"  pip download failed or differs (attempt {attempt}/6)")
+            rc = self.run(TR.pip_base(self.smoke_python() if not self.dry else "python3.12") + [
+                "download", "--no-deps", "--no-cache-dir", "--only-binary=:all:", "--platform", plat,
+                "--implementation", "cp", "--index-url", TR.PYPI_SIMPLE, "--dest", dest,
+                f"{project}=={self.version}"], log=self.rel / f"finish-{platform}-{attempt}.log")
+            got = sorted(dest.glob("*.whl")) if not self.dry and dest.exists() else []
+            if self.dry or (rc == 0 and final and len(got) == 1 and got[0].name == final.name
+                            and sha256(got[0]) == sha256(final)):
+                return f"{project}: PyPI serves {final.name if final else project} with the shipped sha256"
+            self.say(f"  pip download failed or differs (attempt {attempt}/6; the index may still be propagating)")
             self.sleep(30)
-        raise StepFailed(f"pip download {project}=={self.version} for {plat} failed or differs six times")
-
-    def finish_resolve(self, venv, package):
-        """`pip install <project>==<v>` on Linux resolves exactly the split
-        packages LINUX_RESOLVES names, each the published bytes: `mojolearn`
-        all of them, `mojolearn-nvidia` the core, NVIDIA and its PTX package,
-        `mojolearn-amd` the core and AMD (2026-10-20). Resolved from this Mac
-        with pip download for the Linux platform (the core requires nothing
-        else, so only mojolearn wheels are fetched)."""
-        project, _ = SPLIT_PACKAGES[package]
-        final = self.split_final(package)
-        plat = final.name[:-4].split("-")[-1] if final else "manylinux_2_35_x86_64"
-        want = {SPLIT_PACKAGES[k][1]: self.split_final(k) for k in LINUX_RESOLVES[package]}
-        dest = self.rel / f"finish-resolve-{package}"
-        for attempt in range(1, 7):
-            if dest.exists() and not self.dry:
-                shutil.rmtree(dest)
-            rc = self.run([venv / "bin" / "pip", "download", "--no-cache-dir", "--only-binary=:all:",
-                           "--platform", plat, "--python-version", "3.12", "-d", dest,
-                           f"{project}=={self.version}"], log=self.rel / f"finish-resolve-{package}-{attempt}.log")
-            got = {w.name.split("-")[0]: w for w in sorted(dest.glob("*.whl"))} if not self.dry else {}
-            if self.dry or (rc == 0 and set(got) == set(want) and all(
-                    want[k] and sha256(got[k]) == sha256(want[k]) for k in want)):
-                return (f"pip install {project}=={self.version} on {plat} resolves "
-                        + ", ".join(SPLIT_PACKAGES[k][0] for k in LINUX_RESOLVES[package]))
-            self.say(f"  {project}: pip resolved {sorted(got)}, want {sorted(want)} (attempt {attempt}/6)")
-            self.sleep(30)
-        raise StepFailed(f"pip install {project}=={self.version} for {plat} does not resolve exactly "
-                         f"{', '.join(SPLIT_PACKAGES[k][0] for k in LINUX_RESOLVES[package])} at the published bytes")
+        raise StepFailed(f"PyPI does not serve {project}=={self.version} for {plat} with the shipped sha256 "
+                         "(six attempts)")
 
     def step_finish_line(self):
+        """Hash-only: every published file on the real PyPI is the shipped bytes. Nothing after the first publish
+        installs or runs anything; testpypi-rehearsal installed, imported and resolved before it."""
         if self.args.publish != "pypi":
             return "skipped (not published to PyPI)"
         published = self.published_platforms()
         if not published:
             return "nothing published yet", dict(platforms=[])
-        venv = self.rel / "finish-venv"
-        if venv.exists() and not self.dry:
-            shutil.rmtree(venv)
-        self.must([self.smoke_python() if not self.dry else "python3.12", "-m", "venv", venv], what="venv")
-        done = [self.finish_macos(venv) if p == "macos" else self.finish_linux(venv, p) for p in published]
-        # the Linux package sets, once everything each one requires is published
-        done += [self.finish_resolve(venv, k) for k in LINUX_RESOLVES
-                 if all(d in published for d in LINUX_RESOLVES[k])]
+        done = [self.finish_bytes(p) for p in published]
         pending = [self.PIPELINES[p]["platform"] for p in self.PIPELINES
                    if self.PIPELINES[p]["platform"] not in published]
         return "; ".join(done) + (f"; not yet published: {', '.join(pending)}" if pending else ""), \
@@ -5388,6 +5628,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         "gpu-column-amd": ("numerical", "amd"),
         "published-apple": ("package", None), "published-nvidia": ("package", None),
         "published-amd": ("package", None), "identity-at-freeze": ("metadata", None),
+        "testpypi-rehearsal": ("package", None),
         "identity-cpu": ("numerical", None), "identity-admit": ("package", None),
     }
     #: identity column -> the box its record runs on (Apple records on this Mac: never rented)
