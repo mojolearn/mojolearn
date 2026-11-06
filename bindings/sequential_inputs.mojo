@@ -2,11 +2,12 @@
 # Native array-like admission preserving ndarray, standard buffer, and
 # rectangular scalar/array sequence inputs. Container traversal and scalar
 # serialization are host ABI work; existing kernels still own model math.
-from bindings.native_array_storage import native_array_empty, native_array_from_values, native_array_zeros
+from bindings.native_array_storage import native_array_from_values, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view
+from bindings.arena_buffer_copy import buffer_copy_to_array
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.py_balanced import py_call, py_type, py_get
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
@@ -120,8 +121,8 @@ def _array_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut 
     var incoming = String(dtype.kind)
     var width = Int(py=dtype.itemsize)
     _promote(kind, size, incoming, width)
-    var packed = native_array_empty(String(context["buffer_codes"][Python.tuple(incoming, width)]))
-    py_call(packed.frombytes, py_call(view.tobytes, "C"))
+    # One native C-order copy into the owned store (was tobytes then frombytes).
+    var packed = buffer_copy_to_array(String(context["buffer_codes"][Python.tuple(incoming, width)]), view)
     if not Bool(py=dtype.isnative) and width > 1:
         packed.byteswap()
     if incoming == "f" and width == 2:
