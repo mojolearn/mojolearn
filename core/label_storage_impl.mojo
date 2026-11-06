@@ -16,11 +16,14 @@ comptime LABELS_FLOAT_NONFINITE = 1
 comptime LABELS_FLOAT_CONTINUOUS = 2
 
 
-def label_float_target_refusal(address: Int, wide: Bool, shape: List[Int], strides: List[Int]) -> Int:
-    """LABELS_FLOAT_OK when every element is finite and integral; otherwise
-    the refusal of the first refused element in C order (the order `tolist`
-    and the flattened label walk visit). `wide` reads float64, else float32;
-    `strides` are in bytes and may be negative. Rank >= 1."""
+def label_float_target_refusal(address: Int, wide: Bool, shape: List[Int], strides: List[Int],
+                               integral: Bool = True) -> Int:
+    """LABELS_FLOAT_OK when every element is finite and (when `integral`, the
+    classifier target) integral; otherwise the refusal of the first refused
+    element in C order (the order `tolist` and the flattened label walk
+    visit). `wide` reads float64, else float32; `strides` are in bytes and
+    may be negative. Rank >= 1. A regressor target passes integral=False:
+    only the finite test applies."""
     var rank = len(shape)
     var total = 1
     for k in range(rank):
@@ -37,7 +40,7 @@ def label_float_target_refusal(address: Int, wide: Bool, shape: List[Int], strid
             number = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address + offset)[0])
         if not isfinite(number):
             return LABELS_FLOAT_NONFINITE
-        if floor(number) != number:
+        if integral and floor(number) != number:
             return LABELS_FLOAT_CONTINUOUS
         var axis = rank - 1
         while axis >= 0:
