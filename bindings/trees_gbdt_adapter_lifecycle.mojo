@@ -20,6 +20,8 @@ from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from bindings.trees_constructor_native import tree_parameter_storage
 from bindings.trees_public_state import _release_tree_values, tree_is_fitted
 from bindings.trees_public_inputs import trees_view, trees_check_rank, trees_f32_view
+from bindings.native_loaded_module import NativeModules
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_fields
 from bindings.trees_public_gbdt_fit import adapter_classifier_fit, adapter_regressor_fit, _adapter_eval
 from bindings.trees_public_gbdt_fit import gbdt_fit, _tables as _gbdt_tables, _in as _gbdt_in
 from bindings.trees_public_gbdt import adapter_decision_function, adapter_predict, adapter_predict_proba
@@ -60,10 +62,58 @@ def _learner_state(learner: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: GBDT fitted model text must be an exact string")
 
 
+comptime _STATE_SLOT = "trees_gbdt_adapter_state_v1"
+
+
+def _state_key(fields: PythonObject) raises -> PythonObject:
+    """The identities the state admission below reads: the adapter's stored
+    fields and, when present, its learner's class and stored fields. None
+    when the learner has no ordinary field dictionary (the full admission
+    refuses it)."""
+    var mods = NativeModules()
+    var b = mods.module("builtins")
+    var key = Python.list()
+    trees_key_fields(mods, key, fields)
+    var learner = py_get(fields, "_learner_")
+    if learner is not None:
+        _ = py_call(key.append, py_type(learner))
+        var learner_fields = PythonObject(None)
+        try:
+            learner_fields = _fields(learner)
+        except:
+            return PythonObject(None)
+        if py_type(learner_fields) is not b.dict:
+            return PythonObject(None)
+        trees_key_fields(mods, key, learner_fields)
+    return key
+
+
 def _adapter_state(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     classical_check_layout(model, context)
     var fields = _fields(model)
+    # Once per stored state (lane perf-trees-owed, 2026-11-06): every public
+    # call admitted every adapter field and every learner field (about 60)
+    # again. The identity key of both field dictionaries is kept in the
+    # native side table; while it matches, the admission below would accept
+    # again. The model's own layout check above still runs on every call, and
+    # so does the learner's (class-cached) layout check.
+    var key = _state_key(fields)
+    if key is not None:
+        var held = trees_side_get(_STATE_SLOT, model)
+        if held is not None and trees_key_same(held, key):
+            var learner = py_get(fields, "_learner_")
+            if learner is not None:
+                classical_check_layout(learner, context["trees_state_layouts"][py_type(learner)])
+            return fields
+    _adapter_admit(model, fields, context)
+    if key is not None:
+        _ = trees_side_put(_STATE_SLOT, model, key)
+    return fields
+
+
+def _adapter_admit(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
+    var b = native_loaded_module("builtins")
     var names = Python.tuple("numeric_mode", "numeric_mode_", "model_", "n_features_in_", "n_classes_",
                              "_label_kind_", "_mojolearn_fitting", "_mojolearn_fitted")
     tree_parameter_storage(model, py_call(b.list, names))
@@ -77,7 +127,6 @@ def _adapter_state(model: PythonObject, context: PythonObject) raises -> PythonO
     var learner = py_get(fields, "_learner_")
     if learner is not None:
         _learner_state(learner, context)
-    return fields
 
 
 def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -100,6 +149,9 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     if operation == "trees_public_gbdt_adapter_is_fitted":
         return tree_is_fitted(model, False)
     var fitting = operation.endswith("_fit")
+    if fitting:
+        # A refit replaces the state the record holds: forget it now.
+        trees_side_drop(_STATE_SLOT, model)
     var method = String("fit")
     if not fitting:
         method = "score" if operation.endswith("_score") else ("decision_function" if operation.endswith("_decision") else ("predict_proba" if operation.endswith("_proba") else "predict"))
