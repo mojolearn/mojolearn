@@ -13,6 +13,7 @@ outputs), so the two columns run the same loops."""
 from core.py2mojo_cluster_est_impl import dbscan_core_count, dbscan_core_gather
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.py_balanced import py_call
 
 # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_estimators.patch
@@ -20,8 +21,11 @@ from bindings.native_loaded_module import native_loaded_module
 
 def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> PythonObject:
     """An `array.array(code)` of `nbytes` zero bytes."""
-    var zero = native_loaded_module("builtins").bytes(nbytes)
-    return arr.array(PythonObject(code), zero)
+    # p3-neighbors-cluster: ONE allocation of the final array (a one-item
+    # array repeated), not a zero bytes object copied into a second buffer.
+    var one = py_call(arr.array, PythonObject(code), Python.list(PythonObject(0)))
+    var item = Int(py=one.itemsize)
+    return py_call(one.__mul__, PythonObject(nbytes // item))
 
 
 def _array_addr(a: PythonObject) raises -> Int:
