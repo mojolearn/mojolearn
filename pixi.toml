@@ -1802,6 +1802,9 @@ tqdm = ">=4.70.0,<5"
 python = "3.14.*"
 numpy = "*"
 pytest = ">=8"
+# packaging/linux/test_ptx_dependency.py runs `python -m pip download`; no environment declared pip, so
+# those five tests failed wherever the suite ran (found on a RunPod CPU pod, 2026-11-05).
+pip = "*"
 # lane/lowbit-default (2026-09-29): the whole suite imports both. Without
 # them 24 files skipped and 3 (test_resample_bca, test_resample_options,
 # test_x_metrics_sanity) failed at collection, which stopped the run
