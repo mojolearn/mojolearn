@@ -109,11 +109,14 @@ def hdbscan_membership_vector_binding(
             "hdbscan_membership_vector: addrs must contain 12 addresses, got "
             + String(len(addrs))
         )
-    if len(params) != 8:
+    # p3-neighbors-cluster: an optional 9th word (the public batch size)
+    # is accepted for the GPU binding's contract; the host run takes every
+    # query in one pass (each row is independent of the batch split).
+    if len(params) != 8 and len(params) != 9:
         raise Error(
             "hdbscan_membership_vector: params must contain 8 values (m, d,"
             " n_edges, n_clusters, n_selected, n_exemplars, nq, min_samples),"
-            " got " + String(len(params))
+            " plus an optional query batch size, got " + String(len(params))
         )
     var m = Int(py=params[0])
     var d = Int(py=params[1])
@@ -154,11 +157,14 @@ def hdbscan_all_points_membership_vectors_binding(
             "hdbscan_all_points_membership_vectors: addrs must contain 9"
             " addresses, got " + String(len(addrs))
         )
-    if len(params) != 8:
+    # p3-neighbors-cluster: an optional 9th word (the public batch size) is
+    # accepted for the GPU binding's contract; the host run takes every row
+    # in one pass (each row is independent of the batch split).
+    if len(params) != 8 and len(params) != 9:
         raise Error(
             "hdbscan_all_points_membership_vectors: params must contain 8"
             " values (m, d, n_edges, n_clusters, n_selected, n_exemplars,"
-            " row0, count), got " + String(len(params))
+            " row0, count), plus an optional row batch size, got " + String(len(params))
         )
     var m = Int(py=params[0])
     var d = Int(py=params[1])
