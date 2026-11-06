@@ -18,7 +18,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.prep_native_estimator import prep_native_split, prep_entry_call
@@ -1193,11 +1193,33 @@ def _f32_array(values: List[Float32], context: PythonObject) raises -> PythonObj
 # its `__dict__` (perf2-prep). The record is valid while `categories_` is the
 # same object holding the same column objects (identity compares, no Python
 # protocol runs); a refit, set_params + fit, a reassignment or an item
-# replacement misses and rebuilds. Not noticed: a value written in place
-# into a fitted category array (the category arrays are fitted state the
-# encoder alone writes). A copied or unpickled model has no record and
-# builds one on first use. Same float32 words as before: no bit change.
+# replacement misses and rebuilds. In-place writes (hazard class A, p3-prep):
+# the record is only kept when every column is an exact mojolearn Array, and
+# those Arrays are made read-only at fit and when the record is taken
+# (`_category_freeze`), so `enc.categories_[0][1] = 9.0` through the public
+# NumPy view raises NumPy's read-only error instead of silently diverging
+# from the record. A column that cannot be frozen (a NumPy array or a list
+# assigned by the user) keeps no record: the block is rebuilt per call. A
+# copied or unpickled model has no record and builds one on first use
+# (pickle keeps the read-only flag). Same float32 words as before.
 comptime _CAT_SLOT = "prep_encode_category_block_v1"
+
+
+def _category_freeze(categories: PythonObject, context: PythonObject) raises -> Bool:
+    """Marks every fitted category column read-only; False (nothing kept)
+    when a column is not an exact mojolearn Array (its writes cannot be
+    refused, so no copy of it may be served later)."""
+    var b = native_loaded_module("builtins")
+    var kind = py_type(categories)
+    if kind is not b.list and kind is not b.tuple:
+        return False
+    var d = len(categories)
+    for j in range(d):  # driver-loop: type check of the per-column category arrays
+        if py_type(categories[j]) is not context["array_class"]:
+            return False
+    for j in range(d):  # driver-loop: freezes the per-column category arrays
+        py_setattr(categories[j], "_readonly", PythonObject(True))
+    return True
 
 
 def _category_build(categories: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1254,7 +1276,10 @@ def _category_record(owner: PythonObject, categories: PythonObject, context: Pyt
     if _category_same(record, categories):
         return record
     record = _category_build(categories, context)
-    prepared_put(mods, _CAT_SLOT, owner, record)
+    if _category_freeze(categories, context):
+        prepared_put(mods, _CAT_SLOT, owner, record)
+    else:
+        prepared_put(mods, _CAT_SLOT, owner, PythonObject(None))
     return record
 
 
@@ -1589,6 +1614,7 @@ def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, conte
     else:
         py_setitem(fields, "categories_", _given_categories(fields["categories"], values, mode, entries, handle_text == "error", "OrdinalEncoder", context))
     var cats = fields["categories_"]
+    _ = _category_freeze(cats, context)  # hazard A: fitted categories are read-only (p3-prep)
     var missing = List[Int]()
     var any_missing = False
     for j in range(len(cats)):  # driver-loop: per-column NaN category slot (fitted per-column category arrays)
@@ -1852,6 +1878,7 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
         py_setitem(fields, "categories_", _fit_categories(values, mode, entries, context))
     else:
         py_setitem(fields, "categories_", _given_categories(fields["categories"], values, mode, entries, handle_text == "error", "OneHotEncoder", context))
+    _ = _category_freeze(fields["categories_"], context)  # hazard A: fitted categories are read-only (p3-prep)
     py_setitem(fields, "_infrequent", PythonObject(None))
     py_setitem(fields, "_grouping", PythonObject(None))
     if grouping:
@@ -2624,6 +2651,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         raise Error("mojolearn: n_splits=" + String(F) + " cannot be greater than the number of members in "
                     + "each class")
     py_setitem(fields, "categories_", cats)
+    _ = _category_freeze(cats, context)  # hazard A: fitted categories are read-only (p3-prep)
     py_setitem(fields, "target_type_", PythonObject(info.kind))
     py_setitem(fields, "numeric_mode_", mode)
     py_setitem(fields, "n_features_in_", d)
