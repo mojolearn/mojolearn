@@ -125,6 +125,28 @@ def test_the_real_manifold_bridge_loads_the_manifold_owner():
     assert "manifold_native_call" in names, names
 
 
+def test_a_sink_that_is_a_lanes_seed_is_followed():
+    """`neighbors.py` defines the k-NN classes the knn lanes call and is a
+    sink by the enumerator cap; as a seed its imports are walked."""
+    door = os.path.join(ls.PKG, "neighbors.py")
+    init = os.path.join(ls.PKG, "__init__.py")
+    sinks = ls.enumerator_files() | ls._reexport_registries()
+    assert door in sinks, "neighbors.py is no longer a sink; this case no longer exercises the rule"
+    follow = ls._followed_seeds({door, init})
+    assert door in follow and init not in follow, follow
+    imported = os.path.join(ls.PKG, "_native_neighbor_queries.py")
+    assert imported in ls._region_closure([door], sinks, follow=follow)
+    # THE ARM THAT MUST FAIL: entered only, as before, the import is lost.
+    assert imported not in ls._region_closure([door], sinks)
+
+
+def test_the_package_init_is_still_entered_only():
+    init = os.path.join(ls.PKG, "__init__.py")
+    sinks = ls.enumerator_files() | ls._reexport_registries()
+    assert ls._region_closure([init], sinks, follow=ls._followed_seeds({init})) \
+        == ls._region_closure([init], sinks)
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):
