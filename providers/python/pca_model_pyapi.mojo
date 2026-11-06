@@ -248,10 +248,11 @@ def pca_query_admitted(model: PythonObject, context: PythonObject, operation: St
         var flagged = Bool(py=py_get(fields, "_mojolearn_fitted", False)) or Bool(py=py_get(fields, "_mojolearn_fitting", False))
         if flagged:
             var overlay = Python.dict()
-            for name in ["_mojolearn_fitted", "_mojolearn_fitting", "n_samples_", "n_features_in_",
-                         "n_components_", "whiten", "numeric_mode", "_pca_query_scalar_owners"]:  # small-loop(decoded query fields)
-                if py_contains(fields, name):
-                    py_setitem(overlay, name, fields[name])
+            var decoded = Python.tuple("_mojolearn_fitted", "_mojolearn_fitting", "n_samples_", "n_features_in_",
+                                       "n_components_", "whiten", "numeric_mode", "_pca_query_scalar_owners")
+            for index in range(len(decoded)):  # small-loop(eight decoded query field names)
+                if py_contains(fields, decoded[index]):
+                    py_setitem(overlay, decoded[index], fields[decoded[index]])
             var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
             prepared_put(mods, _PCA_QUERY_SLOT, model,
                          Python.tuple(key, overlay, mode, _pca_entries_key(context, mode), entries))
