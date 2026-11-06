@@ -39,7 +39,16 @@ def _fitted_key(mut mods: NativeModules, fields: PythonObject, key: PythonObject
             var cls = py_type(m)
             _ = py_call(key.append, m)
             _ = py_call(key.append, cls)
-            trees_key_fields(mods, key, py_fields(m))
+            var member_fields = PythonObject(None)
+            try:
+                member_fields = py_fields(m)
+            except:
+                # Not an instance with stored fields: the full admission
+                # refuses it with its own wording.
+                return False
+            if py_type(member_fields) is not b.dict:
+                return False
+            trees_key_fields(mods, key, member_fields)
             var seen = False
             for j in range(len(classes)):  # small-loop(classes: distinct member classes, usually one)
                 if classes[j] is cls:
