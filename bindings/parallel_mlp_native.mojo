@@ -297,8 +297,14 @@ def _mlp_fused_gradients(checked: PythonObject, x: PythonObject, y: PythonObject
 
 
 def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
+    return mlp_gradients_from_checked(mlp_validate_state(state), inputs, targets)
+
+
+def mlp_gradients_from_checked(checked: PythonObject, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
+    """`mlp_gradients_from_state` on a state `mlp_validate_state` already
+    returned (read only here). A worker validates its resident state once
+    per committed version, not once per shard request."""
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var checked = mlp_validate_state(state)
     var x = mlp_batch(inputs)
     var rows = Int(py=x.shape[0])
     var y = mlp_targets(targets, rows)

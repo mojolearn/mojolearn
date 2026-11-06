@@ -9,7 +9,7 @@ from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy
 from bindings.parallel_byte_native import _parallel_int, _parallel_view
 from bindings.parallel_mlp_native import (
-    mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state,
+    mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state, mlp_gradients_from_checked, mlp_validate_state,
     mlp_apply_from_state, mlp_batch, mlp_targets, neural_ordered_sum,
     neural_cooperative_admit,
 )
@@ -476,7 +476,17 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var state = request[1]
     var args = request[2]
     if operation == "mlp_gradient_cached":
-        return mlp_gradients_from_state(_worker_model(state, False)["state"], args[0], args[1])
+        # The worker's resident state is replaced (never edited in place) when
+        # a full state or a committed delta arrives: validate each resident
+        # state object once and reuse the checked copy for every shard.
+        var cache = _worker_model(state, False)
+        var resident = cache["state"]
+        var checked = py_get(cache, "checked")
+        if checked is None or py_get(cache, "checked_of") is not resident:
+            checked = mlp_validate_state(resident)
+            py_setitem(cache, "checked", checked)
+            py_setitem(cache, "checked_of", resident)
+        return mlp_gradients_from_checked(checked, args[0], args[1])
     if operation == "samba_gradient_cached":
         var cache = _worker_model(state, True)
         var values = _neural_values(cache["model"])
