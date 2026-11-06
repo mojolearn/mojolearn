@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Typed native matrix/device lifetimes. No Python _M attribute hook or _DevBuf
 # finalizer participates in a manifold operation, including temporary cleanup.
-from std.ffi import _Global
+from std.ffi import _Global, c_int
 from std.python import Python, PythonObject
 from std.python._cpython import ExternalFunction, PyObjectPtr
 
@@ -12,20 +12,39 @@ from std.python._cpython import ExternalFunction, PyObjectPtr
 # this symbol, so this lane-local table holds it.
 comptime _PyObject_CallOneArg = ExternalFunction[
     "PyObject_CallOneArg", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyList_New(Py_ssize_t len)  (new ref)
+comptime _PyList_New = ExternalFunction["PyList_New", def(Int) thin abi("C") -> PyObjectPtr]
+# PyObject *PyLong_FromLongLong(long long v)  (new ref)
+comptime _PyLong_FromLongLong = ExternalFunction["PyLong_FromLongLong", def(Int64) thin abi("C") -> PyObjectPtr]
+# int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item)  (steals item)
+comptime _PyList_SetItem = ExternalFunction[
+    "PyList_SetItem", def(PyObjectPtr, Int, PyObjectPtr) thin abi("C") -> c_int]
 
 
-struct _ManifoldCalls(Movable):
+struct ManifoldCalls(Movable):
     var PyObject_CallOneArg: _PyObject_CallOneArg.type
+    var PyList_New: _PyList_New.type
+    var PyLong_FromLongLong: _PyLong_FromLongLong.type
+    var PyList_SetItem: _PyList_SetItem.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
-        self.PyObject_CallOneArg = _PyObject_CallOneArg.load(cpy.lib.borrow())
+        var lib = cpy.lib.borrow()
+        self.PyObject_CallOneArg = _PyObject_CallOneArg.load(lib)
+        self.PyList_New = _PyList_New.load(lib)
+        self.PyLong_FromLongLong = _PyLong_FromLongLong.load(lib)
+        self.PyList_SetItem = _PyList_SetItem.load(lib)
 
 
 comptime _MANIFOLD_CALLS = _Global[
-    StorageType=_ManifoldCalls, name="MojolearnManifoldCallsV1",
-    init_fn=_ManifoldCalls.__init__,
+    StorageType=ManifoldCalls, name="MojolearnManifoldCallsV1",
+    init_fn=ManifoldCalls.__init__,
 ]
+
+
+def manifold_calls() raises -> UnsafePointer[ManifoldCalls, MutAnyOrigin]:
+    """The process-wide manifold call table, filled at first use."""
+    return _MANIFOLD_CALLS.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 struct ManifoldDevice(Movable, Writable):
@@ -68,7 +87,7 @@ struct ManifoldDevice(Movable, Writable):
         # unraisable hook, a Python __del__, or mutable module attributes.
         try:
             ref cpy = Python().cpython()
-            var calls = _MANIFOLD_CALLS.get_or_create_ptr()
+            var calls = manifold_calls()
             var pending = cpy.PyErr_FetchTriple()
             var result = calls[].PyObject_CallOneArg(self.release._obj_ptr, self.identifier._obj_ptr)
             if result:

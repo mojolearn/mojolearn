@@ -19,7 +19,7 @@ from bindings.manifold_storage_native import (
     ManifoldMatrix, ManifoldDevice, matrix_rows, matrix_cols, matrix_store, matrix_device,
     matrix_set_store, matrix_set_device, device_binding, device_identifier,
     device_alloc, device_release, device_upload, device_download, device_move,
-    words_new, words_count, words_address,
+    words_new, words_count, words_address, manifold_calls,
 )
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address
@@ -67,21 +67,22 @@ def mk_ints(values: List[Int]) raises -> PythonObject:
     one pass through the CPython C API (PyList_New, PyLong_FromLongLong,
     PyList_SetItem) with no `list.append` call per value. It stays a list:
     a few callers append further words (mk_append)."""
+    # The three C functions come from the process-wide manifold call table
+    # (resolved once; they were three by-name lookups per call, p3 rank 416).
     ref cpy = Python().cpython()
+    var calls = manifold_calls()
     var count = len(values)
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    var raw = calls[].PyList_New(count)
     if not raw:
         raise cpy.unsafe_get_error()
     # The list owns itself at once; unset NULL slots are safe to destroy.
     var out = PythonObject(from_owned=raw)
-    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     for i in range(count):  # small-loop(params: one entry's parameter list): bounded by the call site
-        var item = box_int(Int64(values[i]))
+        var item = calls[].PyLong_FromLongLong(Int64(values[i]))
         if not item:
             raise cpy.unsafe_get_error()
         # SetItem steals the new reference on success and failure.
-        if set_item(out._obj_ptr, i, item) != 0:
+        if calls[].PyList_SetItem(out._obj_ptr, i, item) != 0:
             raise cpy.unsafe_get_error()
     return out
 
