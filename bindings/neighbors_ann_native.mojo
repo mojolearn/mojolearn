@@ -24,7 +24,7 @@ from bindings.family_common import (
 )
 from core.neighbors_ann_impl import ann_candidates_i32
 from bindings.parallel_public_result import parallel_public_result
-from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_materialize
+from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_materialize, ann_stored_drop
 from bindings.mode_metadata_native import _fields
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
 from providers.python.neighbors_public_lifecycle_pyapi import (
@@ -327,6 +327,9 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var b = native_loaded_module("builtins")
     var binding = args[0]
     var fields = _fields(model)
+    # A refit replaces the fitted arrays: drop the search's stored-array
+    # stamp (and the arrays it retains) now, not at the next search.
+    ann_stored_drop(model)
     # `self._NAME`, the class's name in `_p`'s refusals (read off the class).
     var owner = String("IVFPQIndex")
     _ = py_call(fields.pop, PythonObject("_device_codes"), PythonObject(None))
@@ -428,6 +431,9 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     """`IVFSQIndex.fit(X)` through `x_ann_ivf_sq_build`."""
     var binding = args[0]
     var fields = _fields(model)
+    # A refit replaces the fitted arrays: drop the search's stored-array
+    # stamp (and the arrays it retains) now, not at the next search.
+    ann_stored_drop(model)
     var owner = String("IVFSQIndex")
     _ann_release(fields, "x_ann_index_release")
     var x = x_snapshot.keep
@@ -485,6 +491,9 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     """`IVFRaBitQIndex.fit(X)` through `x_ann_ivf_rabitq_build`."""
     var binding = args[0]
     var fields = _fields(model)
+    # A refit replaces the fitted arrays: drop the search's stored-array
+    # stamp (and the arrays it retains) now, not at the next search.
+    ann_stored_drop(model)
     var owner = String("IVFRaBitQIndex")
     _ann_release(fields, "x_ann_index_release")
     var x = x_snapshot.keep
@@ -540,6 +549,9 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     """`CagraIndex.fit(X)` through `x_ann_cagra_build`; the index keeps X."""
     var binding = args[0]
     var fields = _fields(model)
+    # A refit replaces the fitted arrays: drop the search's stored-array
+    # stamp (and the arrays it retains) now, not at the next search.
+    ann_stored_drop(model)
     var owner = String("CagraIndex")
     _ann_release(fields, "x_ann_index_release")
     var x = x_snapshot.keep
