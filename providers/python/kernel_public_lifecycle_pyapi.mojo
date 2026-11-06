@@ -27,7 +27,7 @@ from core.family_cast_impl import family_all_finite_f32, family_cast_rows_f64
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from bindings.native_class_admission import class_record, class_admit
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_same
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same
 from bindings.gp_svm_records import gpsvm_key_value
 
 
@@ -122,6 +122,9 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
     # Every non-fit call used to look up and admit ~26 parameters and learned
     # fields; a per-model identity record skips them while nothing they read
     # changed (bindings/gp_svm_records.mojo). Fit always admits in full.
+    if fitting:
+        # A refit replaces the learned fields: release the record now.
+        trees_side_drop(_KM_ADMIT_SLOT, model)
     if fitting or not _km_admitted(modules, model, fields, parameters, learned, plan.plan, attributes, context):
         var direct = not fitting
         for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names
