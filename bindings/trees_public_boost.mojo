@@ -30,7 +30,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
-from bindings.trees_staged_input import trees_stage_members, trees_unstage
+from bindings.trees_staged_input import trees_stage_members, trees_stage_rounds, trees_unstage
 from bindings.native_loaded_module import NativeModules
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
@@ -1045,6 +1045,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
         var template = forest_get_params(base, context) if m > 0 else Python.dict()
+        # Every round's member predicts the same training X: staged on the
+        # device once, after the first member is fitted (trees_stage_rounds).
+        var rounds_staged = Python.list()
         try:
             for it in range(m):  # driver-loop: over the boosting rounds (one member each)
                 var member = _clone_from(base, template, _sub_seed(seed, it), context)
@@ -1052,6 +1055,8 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                     _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
                 else:
                     _member_fit(member, xa, codes, _w32(xt, w, n, context), context)
+                if it == 0 and m > 1:
+                    rounds_staged = trees_stage_rounds(member, trees_address(xa), n, d, context)
                 var pred = _member_codes(member, xa, context)
                 _ = py_call_typed(_x(xt, "x_trees_samme_step"), _A(w), _A(pred), _A(codes), _A(stats),
                                   Python.list(_P(n), _P(k), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
@@ -1074,7 +1079,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                 if it < m - 1:
                     _scale(xt, w, total)
         finally:
+            trees_unstage(rounds_staged)
             session.close()
+        _ = xa  # the staged rows stay alive until they are unstaged above
         py_setitem(fields, "n_features_in_", _P(d))
         return model
     var y32 = trees_f32(args[1], 1, "C", "y", context)
@@ -1107,6 +1114,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     var loss = Int(py=context["trees_ada_losses"][fields["loss"]])
     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
     var y_array = _as_array(y32, Python.tuple(n), context)
+    var rounds_staged = Python.list()
     try:
         for it in range(m):  # driver-loop: over the boosting rounds (one member each)
             var rows = trees_vector(n, "<i4", context)
@@ -1123,6 +1131,8 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                 _member_fit(member, _gather(xt, x.addr, n, d, rows, cols, context), yr, PythonObject(None), context)
                 _ = y32  # keep the Python object alive through the native call above
                 _ = x  # keep the Python object alive through the native call above
+            if it == 0 and m > 1:
+                rounds_staged = trees_stage_rounds(member, trees_address(xa), n, d, context)
             var pred = _f32_vector(_member_predict(member, xa, context), context)
             _ = py_call_typed(_x(xt, "x_trees_r2_step"), _A(w), _P(pred.addr), _A(y_array), _A(stats),
                               Python.list(_P(n), _P(loss), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
@@ -1146,7 +1156,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             if it < m - 1:
                 _scale(xt, w, total)
     finally:
+        trees_unstage(rounds_staged)
         session.close()
+    _ = xa  # the staged rows stay alive until they are unstaged above
     py_setitem(fields, "n_features_in_", _P(d))
     return model
 
