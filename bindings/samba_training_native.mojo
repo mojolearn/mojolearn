@@ -10,6 +10,7 @@ from providers.python.samba_execution_pyapi import samba_provider_gradients
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_from_state
+from bindings.byte_perf_helpers import byte_view_bytes
 from bindings.neural_prefill_native import neural_prefill_forward, neural_prefill_backward, neural_prefill_close
 from bindings.neural_block_public import neural_block_backward_binding
 from bindings.causal_lm_public import _native_function
@@ -28,13 +29,15 @@ def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObj
     var fmt = String(py_call(view.format.lstrip, "=@<"))
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("Samba: token ids must be native-endian integer buffers")
-    var packed = py_call(g[].arrays, fmt)
-    _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+    # One native C-order copy of the ids under a buffer pin (formerly
+    # view.tobytes then array.frombytes: two Python copies per call).
+    var item = Int(py=view.itemsize)
+    var packed = byte_view_bytes(view, b * l * item)
     var column_major = own and String(value.order) == "F"
     var result = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=result._addr))
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
-    samba_training_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l,
+    samba_training_ids_into(Int(packed.unsafe_ptr()), item, signed, b, l,
                             column_major, vocab, targets, dst)
     _ = packed^
     return result

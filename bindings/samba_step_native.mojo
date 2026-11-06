@@ -70,11 +70,12 @@ def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: Pyt
     py_setitem(opt, "_host_fresh", True)
 
 
-def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObject) raises -> PythonObject:
+def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObject, schedule: PythonObject) raises -> PythonObject:
+    # `schedule` is the snapshot samba_train_step admitted at its start; the
+    # step never changes opt["lr_schedule"], so it is not taken a second time.
     var step = Int(py=opt["t"])
     if step < 0 or step >= 2147483647:
         raise Error("Samba: optimizer step exceeds signed 32-bit indexing")
-    var schedule = samba_schedule_snapshot(opt["lr_schedule"], context)
     if schedule is not None:
         py_setitem(opt, "lr", samba_schedule_rate(schedule, step + 1, context))
     var max_norm = 0.0 if fields["max_norm"] is None else Float64(py=fields["max_norm"])
@@ -111,17 +112,21 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
 
 
 def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
-                         device_plan: DevicePlan, accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
+                         device_plan: DevicePlan, schedule: PythonObject, accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     var config = samba_fields(fields["config"])
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)
     var provider = samba_resident_provider(fields, entries)
-    var enabled = True
-    for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
-        enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
-    if not enabled:
-        return PythonObject(None)
+    # The resident ABI of one connected entry namespace is fixed: probe it once
+    # per entries object, not with four hasattr calls on every step.
+    if py_get(fields, "_resident_abi_entries") is not entries:
+        var enabled = True
+        for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
+            enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
+        if not enabled:
+            return PythonObject(None)
+        py_setitem(fields, "_resident_abi_entries", entries)
     if (provider is None and not Bool(py=_native_function(entries, "samba_resident_enabled")())) or (provider is not None and neural_descriptor_execute(provider, 24, [], [], [], False) == 0):
         return PythonObject(None)
     if accumulation > 1 and not Bool(py=py_call(bi.hasattr, entries, "samba_resident_accumulated_step")):
@@ -146,7 +151,7 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
         _ = py_call(params.append, fields["n_total"])
         session = py_call(_native_function(entries, "samba_resident_open"), kinds, params, fields["flat"]._addr)
         py_setitem(fields, "_resident_handle", session)
-    var plan = _samba_step_plan(fields, opt, context)
+    var plan = _samba_step_plan(fields, opt, context, schedule)
     var args = Python.list(ids.shape[0], ids.shape[1])
     if accumulation > 1:
         # the microbatch walk as one resident program: the a gradients are
@@ -242,7 +247,7 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     var opt = samba_fields(fields["optimizer"])
     var entries = samba_entries(context, fields["numeric_mode"])
     # Admit the built-in schedule before consuming a stream or changing state.
-    _ = samba_schedule_snapshot(opt["lr_schedule"], context)
+    var schedule = samba_schedule_snapshot(opt["lr_schedule"], context)
     var ids = samba_ids(inputs, Int(py=config["vocab"]), False, context)
     var y = samba_ids(targets, Int(py=config["vocab"]), True, context)
     if Bool(py=ids.shape != y.shape):
@@ -255,12 +260,12 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     if a > 1 and not microbatch_split_is_identical(b * length, a):
         raise Error("Samba: MISALIGNED microbatch split; optimizer contract clause 9.2")
     if a == 1:
-        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan)
+        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan, schedule)
         if resident is not None:
             return resident
     var count = _samba_count(y, context)
     if a > 1:
-        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan, a, count)
+        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan, schedule, a, count)
         if resident is not None:
             return resident
     var provider = samba_resident_provider(fields, entries)
@@ -335,7 +340,7 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     if not device_parameters:
         parameter_owner = _samba_parameter_pack(fields, opt, context)
         parameter_buffer = parameter_owner[0]
-    var plan = _samba_step_plan(fields, opt, context)
+    var plan = _samba_step_plan(fields, opt, context, schedule)
     if not device_parameters:
         py_setitem(opt, "packed_", True)
     var info = generation_array([3])
