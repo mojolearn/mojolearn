@@ -94,6 +94,7 @@ from bindings.msel_host import (
 )
 from std.os import abort
 from bindings.native_loaded_module import native_loaded_module
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
@@ -207,7 +208,37 @@ from core.core_host_impl import (
 comptime CORE_HOST_SABOTAGE_DEFINE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
+struct _CoreHostIntType(Defaultable, Movable):
+    # Address of CPython's int type (static, immortal), 0 until read.
+    var address: Int
+
+    def __init__(out self):
+        self.address = 0
+
+
+comptime _CORE_HOST_INT_TYPE = _Global[
+    StorageType=_CoreHostIntType, name="MojolearnCoreHostIntTypeV1",
+    init_fn=_CoreHostIntType.__init__,
+]
+
+
 def _index(value: PythonObject) raises -> Int:
+    # Exact Python int (every address and params word the wrappers pass):
+    # one type-pointer compare and the integer read; no class-name String,
+    # module stamp or operator.index call. bool is its own type, so it never
+    # takes this path. Anything else keeps the full rule below.
+    ref cpy = Python().cpython()
+    var g = _CORE_HOST_INT_TYPE.get_or_create_ptr()
+    if g[].address == 0:
+        var sample = PythonObject(0)
+        var int_type = cpy.PyObject_Type(sample._obj_ptr)
+        g[].address = Int(int_type)
+        cpy.Py_DecRef(int_type)
+    var cls = cpy.PyObject_Type(value._obj_ptr)
+    var exact_int = Int(cls) == g[].address
+    cpy.Py_DecRef(cls)
+    if exact_int:
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("core host: integers expected, not booleans")
