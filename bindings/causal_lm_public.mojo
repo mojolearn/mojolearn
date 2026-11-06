@@ -1290,7 +1290,6 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
     var v = Int(py=model.vocab_size)
     var int15 = model._head_int15 is not None
     var keep = List[PythonObject]()
-    var copies = List[PythonObject]()
     var held = Bool(read_plan) and read_plan.value().resident_active
     if held and not _legacy_resident_valid(read_plan.value()):
         # A supported parameters() call may expose/invalidate the model while
@@ -1370,24 +1369,22 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
             mods.released()
         _ = out  # keep the Python object alive through the native call above
-        for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-            var blk = _block_at(mods, model, blocks, i)
-            var st = state.layers[i]
-            var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
-            var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
-            var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
-            var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
-            # `provider` is the entry read once above the loop.
-            if provider is not None:
-                _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
-                mods.released()
-            else:
-                _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
-                mods.released()
-            _resident_publish_profile(blk, st)
-            py_setattr(st, "cached_tokens", cached)
-            _ = out  # keep the Python object alive through the native call above
-        _writeback(copies)
+        if retain:
+            # The read keeps these sessions for its next forward, which skips
+            # the upload, and nothing reads the host caches between tokens of
+            # one read (the stream is busy). Export the device KV once, when
+            # the read publishes or cancels its sessions, instead of after
+            # every token: the final host bytes are those of the last
+            # per-token export (same layers, same order).
+            read_plan.value().export_owed = True
+            read_plan.value().export_state = state
+            read_plan.value().export_batch = b
+            for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+                var st = state.layers[i]
+                _resident_publish_profile(_block_at(mods, model, blocks, i), st)
+                py_setattr(st, "cached_tokens", cached)
+        else:
+            _resident_export_states(mods, model, e, provider, sessions, state, blocks, b, cached)
     except error:
         mods.released()
         if retain:
@@ -1401,8 +1398,8 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             mods.released()
         raise error
     if retain:
-        # Export/writeback above is still per successful forward, before host
-        # selection. Only the upload and cache-owner publication are deferred.
+        # The upload, the KV export and the cache-owner publication are
+        # deferred to the read's finish (or cancel).
         _ = read_plan
     elif persist:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
@@ -1522,6 +1519,10 @@ struct LegacyGenerationReadPlan(Movable):
     # The read's admitted layer fields (resident route), filled once by the
     # resident check or the first resident forward; cleared with the loan.
     var blocks: List[PythonObject]
+    # A retained read defers the per-token KV export to its finish/cancel.
+    var export_owed: Bool
+    var export_state: PythonObject
+    var export_batch: Int
 
     def __init__(out self, model: PythonObject, state: PythonObject, batch: Int, resident: Bool) raises:
         self.resident = resident
@@ -1541,6 +1542,9 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
         self.blocks = List[PythonObject]()
+        self.export_owed = False
+        self.export_state = PythonObject(None)
+        self.export_batch = 0
 
     def clear_resident(mut self):
         self.resident_active = False
@@ -1549,6 +1553,8 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
         self.blocks.clear()
+        self.export_owed = False
+        self.export_state = PythonObject(None)
 
     def positions(self, state: PythonObject, batch: Int, length: Int) raises:
         # Position/capacity checks retain their per-step execution point, before
@@ -1562,6 +1568,43 @@ struct LegacyGenerationReadPlan(Movable):
             raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
         if have + length > self.capacity:
             raise Error("CausalLM: sequence exceeds allocated state capacity")
+
+
+def _resident_export_states(mut mods: NativeModules, model: PythonObject, e: PythonObject, provider: PythonObject,
+                            sessions: PythonObject, state: PythonObject, blocks: List[PythonObject], b: Int,
+                            cached: PythonObject) raises:
+    # Device KV of every layer session into the state's host caches (op 22).
+    # `cached` None leaves cached_tokens and the profile as they are.
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+        var blk = _block_at(mods, model, blocks, i)
+        var st = state.layers[i]
+        var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
+        var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
+        var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
+        var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
+        if provider is not None:
+            _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
+            mods.released()
+        else:
+            _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
+            mods.released()
+        if cached is not None:
+            _resident_publish_profile(blk, st)
+            py_setattr(st, "cached_tokens", cached)
+    _writeback(copies)
+    _ = keep^
+
+
+def _legacy_resident_export(mut mods: NativeModules, model: PythonObject, mut plan: LegacyGenerationReadPlan) raises:
+    # The one deferred KV export of a read that kept its sessions.
+    if not plan.export_owed:
+        return
+    plan.export_owed = False
+    var e = model._native_entries
+    _resident_export_states(mods, model, e, py_get(e, "native_block_operations"), plan.resident_sessions,
+                            plan.export_state, plan.blocks, plan.export_batch, PythonObject(None))
 
 
 def _legacy_resident_valid(mut plan: LegacyGenerationReadPlan) raises -> Bool:
@@ -1586,6 +1629,12 @@ def _legacy_resident_cancel(mut mods: NativeModules, model: PythonObject, mut pl
     var sessions = plan.resident_sessions
     plan.resident_active = False
     try:
+        # Bring the deferred device KV home before the sessions close, so a
+        # fresh open (or a checkpoint) sees the advanced caches.
+        _legacy_resident_export(mods, model, plan)
+    except:
+        mods.released()
+    try:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
     except:
         mods.released()
@@ -1609,6 +1658,7 @@ def _legacy_resident_finish(mut mods: NativeModules, model: PythonObject, mut re
         if not _legacy_resident_valid(plan):
             _legacy_resident_cancel(mods, model, plan)
             return
+        _legacy_resident_export(mods, model, plan)
         causal_model_cache_set(mods, model, plan.resident_fields, "_resident_sessions",
             Python.tuple(plan.resident_key, plan.resident_lm, plan.resident_sessions))
         causal_model_cache_set(mods, model, plan.resident_fields, "_resident_busy", False)
