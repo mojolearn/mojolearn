@@ -16,7 +16,10 @@
 #   autograd   tools/autograd_smoke.py run --vendor cpu (the Python entries through the host bindings; the
 #              compiled device-check executables stay on the GPU box);
 #   adapters   tools/adapter_gate.py's smoke with --device cpu (torch and MAX on the CPU).
-# Exit 0 only when every check passed. Every check runs even after one failed (one pass, all reports).
+# CHECKS (comma list of correctness, runtime, autograd, adapters; default all) names the groups whose units are
+# owed (tools/release_check_units.py plan on the Mac); AUTOGRAD_ENTRIES the owed autograd entries (empty: every CPU
+# entry). install always runs: every other check uses its venv. A group not named is reused, not run.
+# Exit 0 only when every check run passed. Every named check runs even after one failed (one pass, all reports).
 set -uo pipefail
 [ $# -ge 4 ] || { echo "usage: cpu_wheel_checks.sh WHEEL SHA256 SOURCE_COMMIT OUT [RUNTIME_PRIOR_DIR]" >&2; exit 2; }
 WHEEL=$1; WANT=$2; COMMIT=$3; OUT=$4; PRIOR=${5:-}
@@ -42,24 +45,28 @@ assert mojolearn.vendor() == "cpu", mojolearn.vendor()
 c = (pathlib.Path(mojolearn.__file__).parent / "identity_columns" / "COMMIT").read_text().strip()
 assert c == sys.argv[1], (c, sys.argv[1]); print("INSTALLED", mojolearn.__version__, c)' "$COMMIT"
 }
+CHECKS=${CHECKS:-correctness,runtime,autograd,adapters}
+want() { case ",$CHECKS," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 check install install
 version=$("$venv/bin/python" -c 'import mojolearn; print(mojolearn.__version__)' 2>/dev/null || echo unknown)
-check correctness "$PY" tools/qualify_verifier_wheel.py --installed-python "$venv/bin/python" \
+want correctness && check correctness "$PY" tools/qualify_verifier_wheel.py --installed-python "$venv/bin/python" \
     --expected-version "$version" --expected-source-commit "$COMMIT" --scope cpu-only --no-identity-lanes \
     --output "$OUT/correctness/report"
 prior=(); [ -n "$PRIOR" ] && [ -d "$PRIOR" ] && prior=(--prior-units "$PRIOR")
-check runtime "$PY" tools/release_runtime_installed.py run --vendor cpu --source-root "$ROOT" \
+want runtime && check runtime "$PY" tools/release_runtime_installed.py run --vendor cpu --source-root "$ROOT" \
     --source-commit "$COMMIT" --wheel "$WHEEL" --device-class "cpu-linux-$(uname -m)" \
     --unit-store "$OUT/runtime/units" ${prior[@]+"${prior[@]}"} --out "$OUT/runtime/report"
-check autograd "$PY" tools/autograd_smoke.py run --vendor cpu --bin-dir "$OUT/autograd/none" \
-    --python "$venv/bin/python" --out "$OUT/autograd/autograd-smoke.json"
-check adapters "$PY" -c 'import sys; sys.path.insert(0, "tools"); import adapter_gate as AG
+entries=(); [ -n "${AUTOGRAD_ENTRIES:-}" ] && entries=(--entries "$AUTOGRAD_ENTRIES")
+want autograd && check autograd "$PY" tools/autograd_smoke.py run --vendor cpu --bin-dir "$OUT/autograd/none" \
+    --python "$venv/bin/python" --out "$OUT/autograd/autograd-smoke.json" ${entries[@]+"${entries[@]}"}
+want adapters && check adapters "$PY" -c 'import sys; sys.path.insert(0, "tools"); import adapter_gate as AG
 rec = AG.run("cpu", sys.argv[1], sys.argv[2], [sys.argv[3]])
 print(rec.get("status"), rec.get("why", "")); sys.exit(0 if rec.get("ok") else 1)' "$PY" "$OUT/adapters/smoke" "$WHEEL"
 
 ok=1
 { printf '{"schema":"mojolearn.cpu-wheel-checks.v1","source_commit":"%s","wheel_sha256":"%s","checks":{' "$COMMIT" "$WANT"
-  sep=""; for n in install correctness runtime autograd adapters; do printf '%s"%s":%d' "$sep" "$n" "${RC[$n]}"; sep=,
+  sep=""; for n in install correctness runtime autograd adapters; do [ -n "${RC[$n]+x}" ] || continue
+      printf '%s"%s":%d' "$sep" "$n" "${RC[$n]}"; sep=,
       [ "${RC[$n]}" = 0 ] || ok=0; done
   printf '}}\n'; } > "$OUT/checks.json"
 [ "$ok" = 1 ] && echo "cpu-checks: PASSED" || echo "cpu-checks: FAILED (see $OUT/checks.json)"

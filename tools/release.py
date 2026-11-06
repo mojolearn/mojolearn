@@ -4094,8 +4094,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
         """The Apple adapter smoke (when adapters ship) and runtime-apple, the installed-runtime qualifier; with
         --identity-on-wheels first the Apple identity column from the installed macOS wheel (one pass)."""
         identity = self.apple_identity_gate()
-        adapters = self.apple_adapter_gate()
-        runtime = self.apple_runtime_gate()
+        # --identity-on-wheels: the adapter smoke and runtime-apple under the unit rule; an unchanged Apple column
+        # runs nothing on this Mac (release_identity_wheels.apple_units_gate)
+        adapters = self.apple_adapter_unit_gate() if self.single() else self.apple_adapter_gate()
+        runtime = self.apple_runtime_reused() if self.single() else None
+        runtime = runtime or self.apple_runtime_gate()
         return "; ".join(str(part) for part in (identity, adapters, runtime) if part) or None
 
     def apple_adapter_gate(self):
@@ -4129,7 +4132,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
 
     def step_publish_macos(self):
         AG = adapter_gate_module()
-        if AG.enabled() and not self.dry and not self.apple_adapters_ok()[0]:
+        if AG.enabled() and not self.dry and not self.apple_adapters_ok()[0] and not (
+                self.single() and self.apple_adapter_unit_ok()):
             raise StepFailed(f"no PASSED adapter smoke for this macOS wheel ({self.apple_adapters_ok()[1]}); "
                              "run gate-apple")
         # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
