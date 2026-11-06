@@ -9,7 +9,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_loaded_module import NativeModules
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 
 
 comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"
@@ -104,6 +104,25 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
     if cls is context["array_class"]:
         var slots = context["owner_array_slots"]
         var owners = py_call(b["list"],slots)
+        if not class_watch_ready():
+            # No class record can be kept (Python 3.10/3.11): the single
+            # admit-and-release loop, without building a record payload.
+            var plain_ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+            if len(plain_ancestry) != 2 or plain_ancestry[1] is not b["object"]:
+                raise Error("TypeError: native owner reinitialization cannot inherit Array lifecycle hooks")
+            var plain_mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
+            var plain_keys = py_call(b["list"],plain_mapping)
+            for i in range(len(plain_keys)):  # driver-loop: over native Array class keys before class-owner lookup
+                if py_type(plain_keys[i]) is not b["str"]:
+                    raise Error("TypeError: native owner reinitialization requires native Array class keys")
+            if py_get(plain_mapping,"__del__") is not None or py_get(plain_mapping,"__getattribute__") is not None:
+                raise Error("TypeError: native owner reinitialization cannot invoke Array lifecycle hooks")
+            for i in range(len(owners)):  # driver-loop: over all retained Array slot owners, including otherwise unused metadata
+                var plain_descriptor = slots[owners[i]]
+                if py_get(plain_mapping,owners[i]) is not plain_descriptor:
+                    raise Error("TypeError: native owner reinitialization requires native Array owner slots")
+                native_release_admit(py_call(plain_descriptor.__get__,value,cls),context,depth+1)
+            return
         # The Array class admission (ancestry, exact keys, no lifecycle hooks,
         # connected slot descriptors) depends only on the class rows and the
         # import-time slot table: once per class state, not once per Array.
