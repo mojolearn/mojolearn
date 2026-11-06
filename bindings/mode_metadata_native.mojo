@@ -92,6 +92,16 @@ def _instance_fields(b: PythonObject, model: PythonObject) raises -> PythonObjec
 
 
 def _truth(value: PythonObject) raises -> Bool:
+    # None and the two bool singletons are answered by identity: no module
+    # view, no Python protocol (they were the common flags; each used to
+    # stamp the builtins connection and read builtins.bool). Every other
+    # value takes the admitted type check below, unchanged.
+    if value is None:
+        return False
+    if value is PythonObject(True):
+        return True
+    if value is PythonObject(False):
+        return False
     var mods = NativeModules()
     return _truth(mods, value)
 

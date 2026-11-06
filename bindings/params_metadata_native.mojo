@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
+from bindings.cpython_table import cpython_table
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -46,7 +47,12 @@ def _has_getter(mut mods: NativeModules, kind: PythonObject, missing: PythonObje
 
 
 def _connected_plan(cls: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    var mods = NativeModules()
+    return _connected_plan(mods, cls, context)
+
+
+def _connected_plan(mut mods: NativeModules, cls: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: find the connected base without calling a Python subclass protocol
         var plan = py_get(context["plans"], ancestry[i])
@@ -85,7 +91,7 @@ def _plan_reused(mut mods: NativeModules, cls: PythonObject, context: PythonObje
         return PythonObject(None)
     if record[1] is not context["plans"] or record[2] is not context["missing"]:
         return PythonObject(None)
-    var plan = _connected_plan(cls, context)
+    var plan = _connected_plan(mods, cls, context)
     if plan is not record[0] or plan["pinned"] is not record[3] or len(record[3]) != Int(py=record[4]):
         return PythonObject(None)
     return plan
@@ -93,13 +99,19 @@ def _plan_reused(mut mods: NativeModules, cls: PythonObject, context: PythonObje
 
 def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var mods = NativeModules()
+    return _plan(mods, model, fields, context)
+
+
+def _plan(mut mods: NativeModules, model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `mods`: the get_params read's admitted module view (no GIL release
+    # window inside a parameter read), shared by every helper below.
     var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameters refuse Python metaclass protocols")
     var plan = _plan_reused(mods, cls, context)
     if plan is None:
-        plan = _connected_plan(cls, context)
+        plan = _connected_plan(mods, cls, context)
         if plan is None:
             if py_contains(context["pending"], cls):
                 raise Error("RuntimeError: " + String(context["pending"][cls]))
@@ -119,11 +131,16 @@ def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) rais
 def _value(model: PythonObject, fields: PythonObject, name: PythonObject,
            context: PythonObject, missing_error: String) raises -> PythonObject:
     var mods = NativeModules()
+    return _value(mods, model, fields, name, context, missing_error)
+
+
+def _value(mut mods: NativeModules, model: PythonObject, fields: PythonObject, name: PythonObject,
+           context: PythonObject, missing_error: String) raises -> PythonObject:
     var cls = py_type(model)
     var value = _resolved(mods, cls, name, context["missing"])
     if value is not context["missing"]:
         var kind = py_type(value)
-        if kind is native_loaded_module("types").MemberDescriptorType:
+        if kind is mods.module("types").MemberDescriptorType:
             # Exact CPython member descriptors read native slot storage only.
             var getter = value.__get__
             var args = Python.tuple(model, cls)
@@ -144,18 +161,25 @@ def _value(model: PythonObject, fields: PythonObject, name: PythonObject,
 
 
 def _nested(value: PythonObject, context: PythonObject) raises -> Bool:
-    var b = native_loaded_module("builtins")
+    var mods = NativeModules()
+    return _nested(mods, value, context)
+
+
+def _nested(mut mods: NativeModules, value: PythonObject, context: PythonObject) raises -> Bool:
+    # One admitted module view and the process-wide C-API table for the whole
+    # test (it used five fresh module views and two dlsym lookups per value).
+    var b = mods.module("builtins")
     var kind = py_type(value)
     # A class is a parameter value, never an estimator instance to expand.
-    ref cpy = Python().cpython()
-    if cpy.lib.get_function[Int32]("PyType_IsSubtype")(kind._obj_ptr, b.type._obj_ptr) != 0:
+    var t = cpython_table()
+    if t[].PyType_IsSubtype(kind._obj_ptr, b.type._obj_ptr) != 0:
         return False
-    var connected = _connected_plan(kind, context) is not None
-    var getter = _resolved(kind, PythonObject("get_params"), context["missing"])
+    var connected = _connected_plan(mods, kind, context) is not None
+    var getter = _resolved(mods, kind, PythonObject("get_params"), context["missing"])
     if (getter is not context["missing"] and not connected
-            and _resolved(py_type(getter), "__get__", context["missing"]) is not context["missing"]):
+            and _resolved(mods, py_type(getter), "__get__", context["missing"]) is not context["missing"]):
         raise Error("TypeError: native parameters cannot invoke unconnected parameter descriptors")
-    var missing_hook = _resolved(kind, PythonObject("__getattr__"), context["missing"])
+    var missing_hook = _resolved(mods, kind, PythonObject("__getattr__"), context["missing"])
     if missing_hook is not context["missing"] and not connected:
         # Exact pandas storage objects are data parameters. Their column/index
         # fallback is not an estimator protocol: keep the object without
@@ -164,9 +188,9 @@ def _nested(value: PythonObject, context: PythonObject) raises -> Bool:
         # checked above/below, before any invocation.
         var series = _loaded_data_class("pandas.core.series", "Series")
         if ((kind is not _loaded_data_class("pandas.core.frame", "DataFrame") and kind is not series) or series is None
-                or _resolved(series, "__call__", context["missing"]) is not context["missing"]):
+                or _resolved(mods, series, "__call__", context["missing"]) is not context["missing"]):
             raise Error("TypeError: native parameters cannot probe Python attribute hooks")
-    var lookup = _resolved(kind, PythonObject("__getattribute__"), context["missing"])
+    var lookup = _resolved(mods, kind, PythonObject("__getattribute__"), context["missing"])
     if (lookup is not context["missing"]
             and py_type(lookup) is not py_type(b.object.__dict__["__getattribute__"])
             and not connected):
@@ -174,26 +198,29 @@ def _nested(value: PythonObject, context: PythonObject) raises -> Bool:
     # A plain object's instance get_params override must not silently become
     # a native protocol. Scalar/array native types without dictionaries never
     # receive arbitrary Python attribute lookup here.
-    var dictionary = _resolved(kind, PythonObject("__dict__"), context["missing"])
+    var dictionary = _resolved(mods, kind, PythonObject("__dict__"), context["missing"])
     if dictionary is not context["missing"]:
-        var fields = _fields(value)
+        var fields = _fields(mods, value)
         if py_contains(fields, "get_params"):
             getter = fields["get_params"]
     if getter is context["missing"] or getter is None:
         return False
-    return cpy.lib.get_function[Int32]("PyCallable_Check")(getter._obj_ptr) != 0
+    return t[].PyCallable_Check(getter._obj_ptr) != 0
 
 
 def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
           ancestors: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    # One admitted module view for this estimator's whole parameter read: no
+    # GIL release window runs inside it (member descriptors are C slots).
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     for i in range(len(ancestors)):  # driver-loop: preserve cycle refusal without unbounded native recursion
         if model is ancestors[i]:
             raise Error("RecursionError: cyclic estimator parameter graph")
     var path = py_call(b.list, ancestors)
     _ = py_call(path.append, model)
-    var fields = _fields(model)
-    var plan = _plan(model, fields, context)
+    var fields = _fields(mods, model)
+    var plan = _plan(mods, model, fields, context)
     var kind = String(plan["kind"])
     var out = Python.dict()
     if kind == "splitter":
@@ -203,9 +230,9 @@ def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
                 py_setitem(out, names[i], fields[names[i]])
         return out
     if kind == "repeated":
-        py_setitem(out, "n_repeats", _value(model, fields, "n_repeats", context, "AttributeError"))
-        py_setitem(out, "random_state", _value(model, fields, "random_state", context, "AttributeError"))
-        var values = _value(model, fields, "cvargs", context, "AttributeError")
+        py_setitem(out, "n_repeats", _value(mods, model, fields, "n_repeats", context, "AttributeError"))
+        py_setitem(out, "random_state", _value(mods, model, fields, "random_state", context, "AttributeError"))
+        var values = _value(mods, model, fields, "cvargs", context, "AttributeError")
         if py_type(values) is not b.dict:
             raise Error("TypeError: native repeated-splitter options require an ordinary dict")
         var names = py_call(b.list, values.keys())
@@ -219,10 +246,10 @@ def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
     if kind == "forest":
         var has = py_get(fields, "_has_constructor_parameters")
         if has is None:
-            has = _resolved(py_type(model), "_has_constructor_parameters", PythonObject(False))
-        if not _truth(has):
+            has = _resolved(mods, py_type(model), "_has_constructor_parameters", PythonObject(False))
+        if not _truth(mods, has):
             raise Error("Exception: This inference-only forest archive has no constructor parameters; construct a new estimator for cloning/refitting")
-    if kind == "gbdt" and _resolved(py_type(model), "__init__", context["missing"]) is not plan["gbdt_init"]:
+    if kind == "gbdt" and _resolved(mods, py_type(model), "__init__", context["missing"]) is not plan["gbdt_init"]:
         raise Error("TypeError: GBDT adapter subclasses with custom constructors need their own parameter protocol")
     var names = plan["names"]
     var expand = deep and Bool(py=plan["recurse"])
@@ -235,8 +262,8 @@ def _read_inner(model: PythonObject, deep: Bool, context: PythonObject,
                 raise Error(String(plan["missing_error"]) + ": " + String(field))
             value = fields[field]
         else:
-            value = _value(model, fields, field, context, String(plan["missing_error"]))
-        if expand and _nested(value, context):
+            value = _value(mods, model, fields, field, context, String(plan["missing_error"]))
+        if expand and _nested(mods, value, context):
             var nested = _read(value, True, context, path)
             var keys = py_call(b.list, nested.keys())
             for j in range(len(keys)):  # driver-loop: flatten supported nested estimator names, retaining the same values
