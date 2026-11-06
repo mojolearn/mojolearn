@@ -8,4 +8,4 @@ def resample_store_indices(op: MutPointer[Int32, MutUntrackedOrigin], idx: List[
     # p3-cnn-sequence-tsa: one memcpy of the drawn indices into the caller's
     # int32 buffer (it was a serial one-element-per-iteration host loop)
     if count > 0:
-        memcpy(dest=op, src=idx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), count=count)
+        memcpy(dest=op, src=idx.unsafe_ptr(), count=count)
