@@ -203,13 +203,20 @@ def _ids(value: PythonObject, context: PythonObject) raises -> PythonObject:
         code = 7 if layout.itemsize == 1 else (9 if layout.itemsize == 2 else (2 if layout.itemsize == 4 else 3))
     else:
         code = 5 if layout.itemsize == 1 else (6 if layout.itemsize == 2 else (4 if layout.itemsize == 4 else 10))
-    var packed = embedding_pack(layout.address, layout.shape, layout.strides, layout.itemsize, swapped, code, layout.count)
+    # A C-contiguous native-order buffer already holds exactly the bytes the
+    # pack would produce: the caster reads it in place (the pin retains its
+    # storage through the call). int16 (promoted to int32) and uint64 (range
+    # checked while packing), byte-swapped and strided ids still pack.
+    var direct = not swapped and code != 9 and code != 10 and layout.contiguous()
+    var packed = List[UInt8]()
+    if not direct:
+        packed = embedding_pack(layout.address, layout.shape, layout.strides, layout.itemsize, swapped, code, layout.count)
     code = 2 if code == 9 else (3 if code == 10 else code)
     var out = new_array([layout.count], "<i4")
     var entry = context["embedding_index_cast"]
     if py_type(entry) is not context["device_finalizer_types"][2]:
         raise Error("TypeError: Embedding requires its compiled index caster")
-    var address = Int(packed.unsafe_ptr())
+    var address = layout.address if direct else Int(packed.unsafe_ptr())
     if Int(py=py_call_typed(entry, PythonObject(address), PythonObject(code), out._addr, PythonObject(2), PythonObject(layout.count))) != 0:
         embedding_cast_refusal(address, code, layout.count)
     _ = packed^
