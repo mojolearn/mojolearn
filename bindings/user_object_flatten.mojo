@@ -139,7 +139,7 @@ struct UserObjectFlatten(Movable):
         var raw = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
         if not raw:
             if cpython_table()[].PyErr_ExceptionMatches(self.b.AttributeError._obj_ptr) != 0:
-                cpy.PyErr_Clear()
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return  # A slots-only/native leaf need not have a dictionary.
             raise cpy.unsafe_get_error()
         var fields = PythonObject(from_owned=raw)

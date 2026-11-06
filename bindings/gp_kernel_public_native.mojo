@@ -348,6 +348,9 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
     finally:
         if acquired:
             cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(exported)
     _ = owner
     _ = view
     return result^

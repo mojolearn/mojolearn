@@ -10,7 +10,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
 from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _class_fields, _truth, _instance_fields
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
 from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -165,6 +165,9 @@ def _plan_admit(mut mods: NativeModules, model: PythonObject, admission: _Attrib
     # the class itself; a connected class reachable through context["plans"]
     # is already retained by that import-time context for the process.
     if admission.storage_admitted:
+        return
+    # Not built where no record can be kept (Python 3.10/3.11).
+    if not class_watch_ready():
         return
     class_admit(mods, _ATTRIBUTE_CLASS_SLOT, py_type(model),
                 Python.tuple(admission.plan, context["missing"], context["descriptor"], context["plans"],

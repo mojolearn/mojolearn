@@ -72,7 +72,7 @@ def sequence_string_missing(dtype: PythonObject, context: PythonObject) raises -
     if result:
         return PythonObject(from_owned=result)
     if cpy.lib.get_function[c_int]("PyErr_ExceptionMatches")(context["sequence_attribute_error"]._obj_ptr) != 0:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return PythonObject(None)
     raise cpy.unsafe_get_error()
 
@@ -234,6 +234,9 @@ def sequence_string_nan_info(dtype: PythonObject, classes: PythonObject, context
             for component in range(components):  # driver-loop: inspect one real or two complex native scalar words
                 info |= sequence_string_nan_raw(view[0] + component * width, width)
             cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+            # Keep the Py_buffer storage alive past the release (ASAP
+            # destruction could free it before PyBuffer_Release reads it).
+            _ = view^
             _ = owner^
             return info
     return 0

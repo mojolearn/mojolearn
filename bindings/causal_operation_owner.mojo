@@ -412,13 +412,13 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
             return False
         var iterator_raw = cpy.PyObject_GetIter(row._obj_ptr)
         if not iterator_raw:
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
             return False
         var iterator = PythonObject(from_owned=iterator_raw)
         for j in range(count):  # driver-loop: over live class namespace key identities before lookup
             var key_raw = cpy.PyIter_Next(iterator._obj_ptr)
             if not key_raw:
-                cpy.PyErr_Clear()
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return False
             var key = PythonObject(from_owned=key_raw)
             if key is not keys[j]:
@@ -426,7 +426,7 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
         for j in range(count):  # driver-loop: over retained class namespace values
             var raw = table[].PyObject_GetItem(row._obj_ptr, keys[j]._obj_ptr)
             if not raw:
-                cpy.PyErr_Clear()
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return False
             var current = PythonObject(from_owned=raw)
             if current is not values[j]:

@@ -79,6 +79,9 @@ def manifold_buffer_bytes(value: PythonObject) raises -> PythonObject:
             raise error^
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(words)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
     return result
 
 

@@ -229,7 +229,7 @@ def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: P
                 var value = cpy.PyObject_Call(getter._obj_ptr, args._obj_ptr, PyObjectPtr())
                 if not value:
                     if cpython_table()[].PyErr_ExceptionMatches(b.AttributeError._obj_ptr) != 0:
-                        cpy.PyErr_Clear()
+                        cpy.lib.get_function[NoneType]("PyErr_Clear")()
                         return PythonObject(None)
                     var failure = stash_python_error()
                     raise failure^
