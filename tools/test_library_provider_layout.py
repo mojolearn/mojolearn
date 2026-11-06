@@ -34,7 +34,7 @@ def test_all_forty_three_boundary_bodies_are_unchanged_except_import_paths():
 def test_guard_rejects_python_import_in_non_neural_family(tmp_path):
     (tmp_path / 'svm').mkdir()
     (tmp_path / 'svm/native.mojo').write_text('from std.python import PythonObject\n')
-    _, _, problems = check(tmp_path)
+    _, _, problems = check(tmp_path, require_native_only=True)
     assert any(reason == 'provider/Python dependency' for _, reason in problems)
 
 
@@ -43,7 +43,7 @@ def test_guard_follows_family_dependencies_into_a_hidden_provider(tmp_path):
     (tmp_path / 'outside').mkdir()
     (tmp_path / 'x_decomp/native.mojo').write_text('from outside.bridge import run\n')
     (tmp_path / 'outside/bridge.mojo').write_text('from providers.python.hidden_pyapi import run\n')
-    _, _, problems = check(tmp_path)
+    _, _, problems = check(tmp_path, require_native_only=True)
     assert (('x_decomp.native', 'outside.bridge', 'providers.python.hidden_pyapi'), 'provider/Python dependency') in problems
 
 

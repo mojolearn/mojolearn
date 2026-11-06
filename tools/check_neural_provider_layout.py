@@ -22,9 +22,12 @@ def native_roots(root=ROOT):
                  if path.relative_to(root).as_posix() not in TEST_FIXTURES)
 
 
-def check(root=ROOT):
+def check(root=ROOT, *, require_native_only=False):
+    # The default is the owner's 2026-10-28 inventory (missing sources and
+    # explicit interpreter execution); require_native_only adds the opt-in
+    # import-purity assertion of check_generation_native_boundary.audit.
     roots = native_roots(root)
-    seen, problems = audit(root, roots)
+    seen, problems = audit(root, roots, require_native_only=require_native_only)
     return roots, seen, problems
 
 
