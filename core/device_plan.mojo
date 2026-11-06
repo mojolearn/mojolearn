@@ -143,6 +143,16 @@ struct _DevicePlanTable(Defaultable, Movable):
     var log: List[Int64]
     var log_used: List[Int64]
     var log_lock: List[Int64]
+    # used[r]: 1 once an owner loop opened the device of rank r under a bound
+    # plan (`DevicePlan.device`, `device_plan_device`) since the last
+    # `device_plan_ranks_take`. Every owner loop asks for a rank's device
+    # exactly where it opens that rank's DeviceContext for its shard, so the
+    # number of set words is the number of ranks (logical or physical
+    # devices) that received work. Read by the one-GPU multi-device gate
+    # (tools/logical_shard_identity.py) through `device_plan_log`; it fails a
+    # 2- or 3-device arm that ran on fewer than two ranks (lane
+    # perf3-cluster-gp-gate). Integer flags only.
+    var used: List[Int64]
 
     def __init__(out self):
         self.owners = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
@@ -154,11 +164,14 @@ struct _DevicePlanTable(Defaultable, Movable):
         self.log = List[Int64](length=DEVICE_PLAN_LOG_WORDS, fill=Int64(0))
         self.log_used = List[Int64](length=1, fill=Int64(0))
         self.log_lock = List[Int64](length=1, fill=Int64(0))
+        self.used = List[Int64](length=DEVICE_PLAN_MAX_DEVICES, fill=Int64(0))
 
 
 comptime _DEVICE_PLAN_TABLE = _Global[
     StorageType=_DevicePlanTable,
-    name=("MojoDevicePlanIdentical" if GLOBAL_NUMERIC_MODE == 1 else "MojoDevicePlanOther"),
+    # V2: the table gained `used` (lane perf3-cluster-gp-gate); a new name so
+    # a DSO built with the old layout never shares storage with this one.
+    name=("MojoDevicePlanIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojoDevicePlanOtherV2"),
     init_fn=_DevicePlanTable.__init__,
 ]
 
@@ -286,18 +299,47 @@ def device_plan_size() raises -> Int:
     return Int(_words(table[].counts)[slot])
 
 
-def device_plan_device(rank: Int) raises -> Int:
-    """The physical device of owner `rank`: the plan's entry while a plan is
-    bound to the calling thread, else `rank` (the worker-process meaning,
-    where the visibility mask made rank r the r-th selected device)."""
-    var slot = _own_slot()
-    if slot < 0:
-        return rank
+def _mark_rank(rank: Int) raises:
+    """Record that an owner loop opened rank `rank`'s device (see `used`)."""
+    if rank < 0 or rank >= DEVICE_PLAN_MAX_DEVICES:
+        return
+    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    Atomic.store[ordering=Ordering.RELEASE](_words(table[].used) + rank, Int64(1))
+
+
+def device_plan_ranks_take() raises -> Int:
+    """The number of distinct ranks whose device an owner loop opened under a
+    bound plan since the last take, and a cleared record."""
+    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var used = _words(table[].used)
+    var ranks = 0
+    for r in range(DEVICE_PLAN_MAX_DEVICES):  # driver-loop: over the fixed rank flags
+        if Atomic.load[ordering=Ordering.ACQUIRE](used + r) != 0:
+            ranks += 1
+        Atomic.store[ordering=Ordering.RELEASE](used + r, Int64(0))
+    return ranks
+
+
+def _plan_device(slot: Int, rank: Int) raises -> Int:
+    """The physical device of owner `rank` in the bound plan of `slot`."""
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
     var count = Int(_words(table[].counts)[slot])
     if rank < 0 or rank >= count:
         raise Error("device plan: owner rank " + String(rank) + " outside a plan of " + String(count) + " devices")
     return Int(_words(table[].ids)[slot * DEVICE_PLAN_MAX_DEVICES + rank])
+
+
+def device_plan_device(rank: Int) raises -> Int:
+    """The physical device of owner `rank`: the plan's entry while a plan is
+    bound to the calling thread, else `rank` (the worker-process meaning,
+    where the visibility mask made rank r the r-th selected device). Under a
+    bound plan the rank is recorded as having received work (`used`)."""
+    var slot = _own_slot()
+    if slot < 0:
+        return rank
+    var device = _plan_device(slot, rank)
+    _mark_rank(rank)
+    return device
 
 
 def device_plan_root() raises -> Int:
@@ -366,6 +408,9 @@ struct DevicePlan(Copyable, Movable):
         var count = len(self.devices)
         if rank < 0 or rank >= count:
             raise Error("device plan: owner rank " + String(rank) + " outside a plan of " + String(count) + " devices")
+        # Every owner loop asks here where it opens this rank's context for
+        # its shard: record the rank as having received work (`used`).
+        _mark_rank(rank)
         return self.devices[rank]
 
 
@@ -396,8 +441,11 @@ def device_plan_current(name: String, default: String = "") raises -> DevicePlan
     var size = device_plan_size()
     var devices = List[Int]()
     if size > 0:
+        # Read the ids without recording work (`_plan_device`, not
+        # `device_plan_device`): building the value opens no rank.
+        var slot = _own_slot()
         for r in range(size):  # driver-loop: over the plan's ranks
-            devices.append(device_plan_device(r))
+            devices.append(_plan_device(slot, r))
     else:
         for r in range(count):  # driver-loop: over the plan's ranks
             devices.append(r)
