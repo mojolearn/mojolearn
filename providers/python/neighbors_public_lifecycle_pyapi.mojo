@@ -61,6 +61,45 @@ def _method(operation: String) raises -> String:
     raise Error("RuntimeError: unknown native neighbor lifecycle operation " + operation)
 
 
+def _float_vector_target(source: PythonObject, name: String, classifier: Bool,
+                         context: PythonObject) raises -> Bool:
+    """True after checking an exact C-contiguous float32/float64 ndarray or
+    Array vector from its buffer (raising the target walk's refusals); False
+    for anything else, which the element walk reads."""
+    var typestr: String
+    var ndarray = py_get(context, "ndarray")
+    var array_class = py_get(context, "array_class")
+    if ndarray is not None and py_type(source) is ndarray:
+        typestr = String(source.dtype.str)
+        if Int(py=source.ndim) != 1 or not Bool(py=source.flags.c_contiguous):
+            return False
+    elif array_class is not None and py_type(source) is array_class:
+        typestr = String(py=source.dtype)
+        if Int(py=source.ndim) != 1:
+            return False
+    else:
+        return False
+    if typestr != "<f4" and typestr != "<f8":
+        return False
+    var n = Int(py=source.size)
+    if n == 0:
+        return True
+    var address = Int(py=classical_address(source))
+    var wide = typestr == "<f8"
+    for i in range(n):  # driver-loop: public finite target validation over the admitted buffer
+        var number: Float64
+        if wide:
+            number = FAMILY_F64P(unsafe_from_address=address)[i]
+        else:
+            number = Float64(FAMILY_F32P(unsafe_from_address=address)[i])
+        if not isfinite(number):
+            raise Error("Input y contains NaN or infinity (" + name + ").")
+        if classifier and floor(number) != number:
+            raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+    _ = source  # keep the Python owner alive through the native reads above
+    return True
+
+
 def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, required: Bool,
             multioutput: Bool, context: PythonObject) raises -> PythonObject:
     if source is None:
@@ -86,6 +125,14 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     # walk below cannot refuse it and the vector is returned unchanged either
     # way: admit it from its dtype metadata instead of label by label.
     if len(shape) == 1 and labels_integer_storage(source, context):
+        return source
+    # Perf (lane perf-svm-and-msel): an exact C-contiguous float32/float64
+    # ndarray or Array vector holds only real floats, so the element walk
+    # below reduces to its finite (and, for a classifier, integral) test.
+    # Run that test over the buffer, refusing at the first refused element
+    # in order with the same wording, instead of one Python float and three
+    # scalar checks per label (LinearSVR, SVGP and the other family fits).
+    if len(shape) == 1 and _float_vector_target(source, name, classifier, context):
         return source
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)

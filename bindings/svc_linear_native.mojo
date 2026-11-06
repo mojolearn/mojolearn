@@ -25,7 +25,7 @@ from bindings.classical_labels import labels_real_type, labels_bool_type, labels
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_base, svc_mode, svc_binding, svc_zero_division, svc_f32, svc_shape_of, svc_labels_1d,
-    svc_sorted_classes, svc_decode, svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
+    svc_sorted_classes, svc_encode_1d, svc_decode, svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
 )
 
 comptime _PY2MOJO_ROWS = 2
@@ -352,12 +352,11 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var x = xc[0]
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    var labels = svc_labels_1d(args[2], context)[0]
-    if labels is None:
+    var encoded = svc_encode_1d(args[2], context)
+    if encoded[0] is None:
         raise Error("mojolearn LinearSVC requires a 1-D y")
-    if len(labels) != rows:
+    if Int(py=encoded[2]) != rows:
         raise Error("mojolearn LinearSVC X and y lengths differ")
-    var encoded = svc_sorted_classes(labels, context)
     var classes = encoded[0]
     var codes = encoded[1]
     py_setitem(fields, PythonObject("classes_"), classes)

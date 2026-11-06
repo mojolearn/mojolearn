@@ -229,6 +229,34 @@ def _msel_admit_labels(values: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: model-selection labels must be native numbers or strings")
 
 
+def _msel_direct_typestr(typestr: String) -> Bool:
+    """The numeric label dtypes the shared encoder reads from their buffer
+    with the same classes the flattened Python numbers encode to."""
+    return (typestr == "<i4" or typestr == "<i8" or typestr == "<u4"
+            or typestr == "<f4" or typestr == "<f8")
+
+
+def msel_numeric_vector(value: PythonObject, column: Bool, context: PythonObject) raises -> Bool:
+    """A non-empty exact ndarray (C-contiguous) or native Array label vector
+    of a dtype `_msel_direct_typestr` accepts: labels the shared encoder
+    reads from the buffer, with no Python leaf to admit. `column` also
+    accepts an (n, 1) Array."""
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is not None and py_type(value) is ndarray:
+        msel_admit(value, context)
+        var typestr = String(value.dtype.str)
+        return (Int(py=value.ndim) == 1 and Int(py=value.size) > 0 and Bool(py=value.flags.c_contiguous)
+                and _msel_direct_typestr(typestr))
+    var array_class = py_get(context, "array_class")
+    if array_class is not None and py_type(value) is array_class:
+        msel_admit(value, context)
+        var typestr = String(py=value.dtype)
+        var ndim = Int(py=value.ndim)
+        var vector = ndim == 1 or (column and ndim == 2 and Int(py=value.shape[1]) == 1)
+        return vector and Int(py=value.size) > 0 and _msel_direct_typestr(typestr)
+    return False
+
+
 def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.encode_labels(value)`: (classes, int32 codes)."""
     # A C-contiguous int32/int64/uint32 ndarray vector is encoded straight from
@@ -237,13 +265,15 @@ def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObje
     # rebuilt the same int64 vector (_list_labels) for the same encoder: same
     # Python-int classes and codes, so no bits change. Every other input keeps
     # the label input step below.
-    var direct = False
-    var ndarray = py_get(context, "ndarray")
-    if ndarray is not None and py_type(value) is ndarray:
-        msel_admit(value, context)
-        var typestr = String(value.dtype.str)
-        direct = (Int(py=value.ndim) == 1 and Int(py=value.size) > 0 and Bool(py=value.flags.c_contiguous)
-                  and (typestr == "<i4" or typestr == "<i8" or typestr == "<u4"))
+    #
+    # Perf (lane perf-svm-and-msel): the same holds for float32/float64
+    # vectors (the flattened Python floats went through _list_labels' float64
+    # encode: the same values, the same prepare_targets order and NaN
+    # refusal) and for the native Array msel_try_materialize returns
+    # (msel_discrete_codes: default folds of cross_validate, check_cv and
+    # the stratified splitters), whose C-order storage is its logical order,
+    # a column vector included.
+    var direct = msel_numeric_vector(value, True, context)
     var flat = value
     if not direct:
         flat = msel_flatten(value, context)
