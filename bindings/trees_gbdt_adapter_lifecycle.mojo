@@ -187,7 +187,8 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
                 var pair = _adapter_eval(args[3])
                 lda_native_labels(pair[1], native)
         else:
-            y = classical_check_y(y, x.rows, name, native)
+            # `args` (y among them) was admitted above: no second admission walk.
+            y = classical_check_y(y, x.rows, name, native, True)
         var saved = py_get(fields, "_mojolearn_fitting", PythonObject(0))
         if py_type(saved) is not b.int:
             raise Error("TypeError: native GBDT fit depth must be an exact integer")
