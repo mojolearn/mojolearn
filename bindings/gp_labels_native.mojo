@@ -16,9 +16,10 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.family_common import (
-    family_call, family_is_str, family_array, FAMILY_F32P, FAMILY_F64P, FAMILY_I64P,
+    family_call, family_is_str, family_array, FAMILY_F64P, FAMILY_I64P,
 )
 from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer_address
+from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.archive_schema_native import _schema_label_store
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import _flatten_labels
@@ -146,23 +147,8 @@ def _gp_float_storage_labels(y: PythonObject, base: PythonObject, context: Pytho
     if total == 0:
         return PythonObject(None)
     var store = family_array(Python.tuple(total), "<f8", context)
-    var out = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(store)))
-    var index = List[Int](length=rank, fill=0)
-    var offset = 0
-    for i in range(total):  # native copy of the label buffer in C order (strides in bytes, may be negative)
-        if wide:
-            out[i] = FAMILY_F64P(unsafe_from_address=address + offset)[0]
-        else:
-            out[i] = Float64(FAMILY_F32P(unsafe_from_address=address + offset)[0])
-        var axis = rank - 1
-        while axis >= 0:
-            index[axis] += 1
-            offset += strides[axis]
-            if index[axis] < shape[axis]:
-                break
-            offset -= strides[axis] * shape[axis]
-            index[axis] = 0
-            axis -= 1
+    # The caller's target owns the buffer read here; `store` is new storage.
+    label_float_gather_f64(address, wide, shape, strides, Int(py=classical_address(store)))
     _ = y  # the caller's target owns the buffer read above
     var result = _gp_prepare(Int(py=classical_address(store)), 1, total, False, base, context)
     _ = store^
