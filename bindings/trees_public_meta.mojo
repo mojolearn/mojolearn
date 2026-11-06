@@ -1708,11 +1708,22 @@ def _fit_params_weight(fit_params: PythonObject) raises -> PythonObject:
 
 def meta_operation(model: PythonObject, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
-    """The meta-estimators' public methods (`trees_meta_*`)."""
+    """The meta-estimators' methods (`trees_meta_*`) reached directly (a
+    composed estimator's plan, cross-validation): admit, then run."""
     prep_estimator_admit(model, "native meta-estimator", context)
     _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
     msel_admit(args, prep_native_context(context))
-    var kind = meta_kind(model, context)
+    return meta_admitted_operation(model, meta_kind(model, context), operation, args, context)
+
+
+def meta_admitted_operation(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    """`meta_operation` after its admission. The public door
+    (bindings/trees_public_meta_lifecycle.mojo) has already admitted the
+    model, its constructor configuration (a native clone of the meta-estimator
+    and every member) and the arguments, and read `kind`; it calls this
+    directly (lane perf-meta-estimators, 2026-11-05: every public call used
+    to pay that admission twice, the second time inside meta_operation)."""
     if operation == "trees_meta_fit":
         return _meta_fit(model, kind, args[0], args[1], args[2], context)
     if operation == "trees_meta_predict":
