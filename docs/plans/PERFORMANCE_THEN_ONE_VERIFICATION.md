@@ -61,6 +61,22 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 Briefs for all of these: `~/mojolearn-evidence/briefs-20261105/`. CPU pod test results and scripts:
 `~/mojolearn-evidence/integ-tooling-20261105b/` (`run-leg*.sh`, `leg*/remote/leg_out/`; main's result is `leg13`).
 
+## Regressions since 0.8.55 and the fix lanes (started 2026-11-06 ~04:30Z)
+
+Report: `~/mojolearn-evidence/regressions-since-0855.md` (reader: `tools/identity_timing_compare.py` on
+`lane/regressions-since-0855`). Same lanes, same fixtures, stored identity timings: NVIDIA 424 -> 806 s (1.4x; hardware
+label uncertain), AMD 415 -> 696 s (1.5x; MI325X -> MI300X), Apple 1242 -> 1715 s (1.6x; part is Mac load), CPU
+485 -> 1455 s (2.8x, stops at Oct 25). Regressed lanes: 111 / 88 / 156 / 298. Only 2c61cfe498 is confirmed by records;
+the other commits are candidates by window and path. Behind most lanes is a fixed extra cost per public
+predict/transform call (~20 ms on CPU, 1-2 ms on GPU).
+
+Base for all product fixes: `integ/perf-20261105` (main + boost fix + per-element loop fixes + pool fix + the timing
+reader). Six Opus fix lanes branch from it; brief `~/mojolearn-evidence/briefs-20261105/perf-fix-lanes.md`:
+`lane/perf-public-call-cost`, `lane/perf-labels-buffer-read`, `lane/perf-neighbors-resident`,
+`lane/perf-meta-estimators`, `lane/perf-svm-and-msel`, `lane/perf-trees-misc`. None compiles or runs anything. When
+they report: merge into `integ/perf-20261105`, then the ONE compile and the ONE timing pass (step 3-4 below), on
+Andrew's go.
+
 ## Known product defects found tonight, not yet assigned
 
 - Isolation forest on CPU refits the whole forest on every score call (`bindings/trees_public_iforest.mojo:198-212`).
