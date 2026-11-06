@@ -50,7 +50,7 @@ where cuVS takes it. `ivf/checks/ivf_check.mojo::check_l2_sqrt_is_the_root_of_l2
 searches the metric; the identity_break lane is `ivf-euclidean`.
 """
 from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
+from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
 
@@ -437,18 +437,10 @@ class IVFIndex(NumericModeMixin):
     def _clone(self):
         """A new instance holding copies of this index's arrays (cuVS
         `ivf_flat::clone`'s role), so an extend on it leaves this one as it
-        was."""
-        if not self._is_built():
-            raise ValueError("mojolearn IVFIndex: call fit (or load) before _clone")
-        c = type(self)(n_lists=self.n_lists, n_probes=self.n_probes, n_neighbors=self.n_neighbors,
-                       kmeans_n_iters=self.kmeans_n_iters, metric=self.metric, random_state=self.random_state)
-        c.numeric_mode = getattr(self, "numeric_mode", None)
-        for name, dtype in _INDEX_ARRAYS:  # glue: the five index array names
-            a = getattr(self, name)
-            setattr(c, name, frombytes(a.tobytes(), dtype, tuple(a.shape)))
-        c.n_features_in_, c.n_rows_, c.n_lists_, c.metric_code_ = (
-            self.n_features_in_, self.n_rows_, self.n_lists_, self.metric_code_)
-        return c
+        was. One native operation (`_ivf_clone` in
+        bindings/neighbor_query_native.mojo): stamped admission, one memcpy
+        per array, no hooked attribute reads."""
+        return _NATIVE_QUERY(self, "clone", (), _QUERY_CONTEXT)
 
     # -- saved indexes (lane/inference-embedding-ivf-cholesky, 2026-09-15) --
 

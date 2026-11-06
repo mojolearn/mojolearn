@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete standalone queries, sharing the worker's native search ownership.
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -16,7 +17,7 @@ from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_input, sequential_sequence
-from bindings.family_common import family_array, family_as_f32, family_entry, family_call
+from bindings.family_common import family_array, family_as_f32, family_entry, family_call, family_call_kw
 from bindings.family_common import family_f32_snapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
@@ -528,11 +529,71 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
     return model
 
 
+def _ivf_clone(model: PythonObject, kind: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`IVFIndex._clone` (cuVS `ivf_flat::clone`'s role): a new instance of
+    the model's class holding copies of the five index arrays, so an extend
+    on it leaves this one as it was.
+
+    Perf (perf2-neighbors): formerly Python glue making about 18 hooked
+    attribute reads, five `tobytes`/`frombytes` round trips and an
+    admission per array on every call. Now the fitted state is admitted
+    through the IVF prepared-registry stamp (one compare while unchanged),
+    each array is captured once and copied with one `memcpy` into a new
+    Array, and the clone's `__dict__` gets the same keys, in the same order,
+    as the Python version produced (constructor parameters, `numeric_mode`,
+    the five arrays, then `n_features_in_`, `n_rows_`, `n_lists_`,
+    `metric_code_`). A resident build's device-only list vectors are
+    exported into this index first, as the former `getattr(self,
+    "list_data_")` did."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
+        raise Error("ValueError: mojolearn IVFIndex: call fit (or load) before _clone")
+    var admitted = _admit_state(model, kind, context)
+    var device = py_contains(fields, "_device_list_data")
+    if device:
+        _ivf_materialize(fields, context)
+    var b = native_loaded_module("builtins")
+    var counts = Python.tuple("n_features_in_", "n_rows_", "n_lists_", "metric_code_")
+    for i in range(len(counts)):  # small-loop(four fitted integer parameters)
+        if py_type(py_get(fields, counts[i])) is not b.int:
+            raise Error("TypeError: " + String(counts[i]) + " must be an exact native integer")
+    var fitted = List[Int]([Int(py=fields["n_rows_"]), Int(py=fields["n_features_in_"]),
+                           Int(py=fields["n_lists_"]), Int(py=fields["metric_code_"])])
+    # The freshly exported `list_data_` is not covered by the stamp: admit
+    # every array again in that (first-clone-only) case.
+    var snapshots = _ivf_search_snapshots(fields, fitted, admitted and not device, context)
+    if len(snapshots) != 5:
+        raise Error("RuntimeError: fitted IVF vector storage is unavailable")
+    var keywords = Python.dict()
+    var params = Python.tuple("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "metric", "random_state")
+    for i in range(len(params)):  # small-loop(six constructor parameters)
+        py_setitem(keywords, params[i], py_get(fields, params[i]))
+    # The class's own constructor (constructor-time parameter handling).
+    var clone = family_call_kw(py_type(model), keywords)
+    var target = py_fields(clone)
+    py_setitem(target, "numeric_mode", py_get(fields, "numeric_mode"))
+    var names = Python.tuple("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
+    var dtypes: List[String] = ["<f4", "<f4", "<i4", "<i4", "<f4"]
+    for i in range(len(snapshots)):  # small-loop(five fitted index arrays, one memcpy each)
+        var copy = family_array(snapshots[i].python_shape(), dtypes[i], context)
+        if snapshots[i].count > 0:
+            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(copy))),
+                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=snapshots[i].source.addr),
+                   count=snapshots[i].count * 4)
+        py_setitem(target, names[i], copy)
+    _ = snapshots
+    for i in range(len(counts)):  # small-loop(four fitted integer parameters)
+        py_setitem(target, counts[i], fields[counts[i]])
+    return clone
+
+
 def neighbor_query(model: PythonObject, op: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var kind = _query_kind(model, context)
     if op == "extend" and String(kind[0]) == "ivf":
         return _ivf_extend(model, kind, args, context)
+    if op == "clone" and String(kind[0]) == "ivf":
+        return _ivf_clone(model, kind, context)
     var admitted = _admit_state(model, kind, context)
     if op == "getstate" and String(kind[0]) == "ivf":
         var fields = py_fields(model)
