@@ -734,7 +734,7 @@ def _flatten_labels(var y: PythonObject, context: PythonObject) raises -> Python
     return out
 
 
-def _flatten_into(item: PythonObject, out: PythonObject, list_word: Int, tuple_word: Int,
+def _flatten_into(item: PythonObject, out_list: PythonObject, list_word: Int, tuple_word: Int,
                   context: PythonObject, mut kinds: LabelTypeKinds, depth: Int = 0) raises:
     # p3-labels-metrics: items are read borrowed from the exact container's C
     # storage and their classes compared by pointer; a container holding no
@@ -756,22 +756,22 @@ def _flatten_into(item: PythonObject, out: PythonObject, list_word: Int, tuple_w
         if not nested:
             for k in range(n):  # driver-loop: exact native container slots, one memoized class admission per label
                 _ = kinds.admit_raw(p3_item(item, k, is_tuple), context)
-            _ = py_call(out.extend, item)
+            _ = py_call(out_list.extend, item)
             return
         ref cpy = Python().cpython()
         for k in range(n):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
             var raw = p3_item(item, k, is_tuple)
             var child = p3_type_word(raw)
             if child == list_word or child == tuple_word:
-                _flatten_into(PythonObject(from_borrowed=raw), out, list_word, tuple_word, context, kinds, depth + 1)
+                _flatten_into(PythonObject(from_borrowed=raw), out_list, list_word, tuple_word, context, kinds, depth + 1)
             else:
                 _ = kinds.admit_raw(raw, context)
-                if Int(p3_table()[].list_append(out._obj_ptr, raw)) != 0:
+                if Int(p3_table()[].list_append(out_list._obj_ptr, raw)) != 0:
                     raise cpy.unsafe_get_error()
         _ = item
         return
     _ = kinds.admit(item, context)
-    _ = py_call(out.append, item)
+    _ = py_call(out_list.append, item)
 
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
