@@ -14,6 +14,12 @@
 #   gpu      the box's GPU is GATE_TARGET (sm_89 / gfx942), the target the autograd checks compile for;
 #   runtime  AMD with adapters: the ROCm 7.2.3 runtime the ROCm torch build needs
 #            (tools/amd_box_runtime_setup.sh, when /opt/rocm-7.2.3/lib is missing); python3 venv support;
+#   identity when GATE_IDENTITY_COLUMNS is set (tools/release.py --identity-on-wheels, Andrew 2026-11-05: ONE
+#            execution of the identity lanes per device class, on the built wheels): tools/identity_wheel_record.py
+#            installs the exact wheels (sha256 against GATE_IDENTITY_SHA256), selects the owed lanes by the
+#            recorder's reuse rule and records them, every column on its own GPU(s) when the box has several,
+#            into out/identity/ (identity-wheels.json + the column records); the gate below then runs with
+#            --no-identity-lanes, so no lane runs twice;
 #   pixi     the tree's locked default environment (the Mojo compiler the builder records);
 #   build    the eight autograd executables: tools/gate_autograd_artifacts.py build (BUILD_ARGV; with a
 #            retained set it reuses each proven-unchanged binary; a refused reuse falls back to a fresh
@@ -21,14 +27,9 @@
 #   overlay  when GATE_OVERLAY_SHA256 is set: the gate runner overlay (route-overlay.tgz, only GATE_OVERLAY
 #            files) over the tree, AFTER the build (which reads the clean tree) and BEFORE the gate; every
 #            file's sha256 before and after in out/route-overlay.txt; the files are restored on exit;
-#   identity when GATE_IDENTITY_COLUMNS is set (tools/release.py --identity-on-wheels, Andrew 2026-11-05: ONE
-#            execution of the identity lanes per device class, on the built wheels): tools/identity_wheel_record.py
-#            installs the exact wheels (sha256 against GATE_IDENTITY_SHA256), selects the owed lanes by the
-#            recorder's reuse rule and records them, every column on its own GPU(s) when the box has several,
-#            into out/identity/ (identity-wheels.json + the column records); the gate below then runs with
-#            --no-identity-lanes, so no lane runs twice;
-#   shardcheck  ALWAYS (no change detection): tools/logical_shard_identity.py, the one-GPU multi-device gate
-#            (1, 2 and 3 logical devices on this card, same digests) on the exact wheels, into out/shardcheck/;
+#   shardcheck  ALWAYS (no change detection), right after the overlay (the tool is a GATE_OVERLAY file):
+#            tools/logical_shard_identity.py, the one-GPU multi-device gate (1, 2 and 3 logical devices on this
+#            card, same digests) on the exact wheels (+ numpy for the harness), into out/shardcheck/;
 #   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged;
 #   runtime-qualify  tools/release_runtime_installed.py run against GATE_WHEELS (runtime-<vendor> ledger
 #            evidence, per unit: runtime-units-<class>/ receipts, earlier receipts from runtime-units-prior.tgz),
@@ -171,33 +172,6 @@ if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
     say "identity record exited $irc"
 fi
 
-PHASE=shardcheck
-# THE ONE-GPU MULTI-DEVICE GATE (tools/logical_shard_identity.py, Andrew 2026-11-06). UNCONDITIONAL: it runs in
-# every release gate job, whatever changed; no change detection, selector or reuse decides whether it runs. The
-# fixed lane list runs the public multi-device entries with 1, 2 and 3 logical devices on this one card against
-# the exact wheel bytes (the identity venv when the identity phase installed them, else a fresh venv of
-# GATE_WHEELS) and records out/shardcheck/shardcheck.json; any lane not MATCH fails the job. It is not the real
-# two-GPU check: that stays tools/two_device_checks.sh.
-src=0
-shpy="$GATE_WORK/identity-venv/bin/python"
-if [ ! -x "$shpy" ]; then
-    shpy="$GATE_WORK/shard-venv/bin/python"
-    if [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
-        { python3 -m venv "$GATE_WORK/shard-venv" \
-          && "$shpy" -m pip install -q --no-cache-dir "${GATE_WHEELS[@]}"; } > "$J/shard-venv.log" 2>&1 || src=$?
-    else
-        say "shardcheck: no wheels to install (GATE_WHEELS is empty): FAIL"
-        src=2
-    fi
-fi
-if [ "$src" = 0 ]; then
-    mkdir -p "$GATE_WORK/out/shardcheck"
-    python3 tools/logical_shard_identity.py --python "$shpy" --vendor "$GATE_VENDOR" \
-        --out "$GATE_WORK/out/shardcheck" > "$J/shardcheck.log" 2>&1 || src=$?
-    grep -E '^SHARDCHECK' "$J/shardcheck.log" | head -n 16 || true
-fi
-say "shardcheck exited $src"
-
 PHASE=pixi
 PIXI=$(command -v pixi || echo /root/.pixi/bin/pixi)
 [ -x "$PIXI" ] || { curl -fsSL https://pixi.sh/install.sh | bash > "$J/pixi-install.log" 2>&1; PIXI=/root/.pixi/bin/pixi; }
@@ -248,6 +222,43 @@ if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
     cp "$IN/route-overlay.json" "$GATE_WORK/out/route-overlay.json"
     say "gate runner overlay applied: $(echo $files)"
 fi
+
+PHASE=shardcheck
+# THE ONE-GPU MULTI-DEVICE GATE (tools/logical_shard_identity.py, Andrew 2026-11-06). UNCONDITIONAL: it runs in
+# every release gate job, whatever changed; no change detection, selector or reuse decides whether it runs. The
+# fixed lane list runs the public multi-device entries with 1, 2 and 3 logical devices on this one card against
+# the exact wheel bytes (the identity venv when the identity phase installed them, else a fresh venv of
+# GATE_WHEELS) and records out/shardcheck/shardcheck.json; any lane not MATCH fails the job. It is not the real
+# two-GPU check: that stays tools/two_device_checks.sh.
+# It runs AFTER the overlay phase: the tool is a GATE_OVERLAY file (tools/ops/release_gate.py), so the box runs the
+# same LANES / COUNTS / SCHEMA the Mac judges with (tools/release_identity_wheels.py imports the Mac's copy), and a
+# tool fix after the freeze reaches the box without a refreeze.
+# NumPy: the wheels declare no dependencies (python/pyproject.toml; numpy is the `numpy`/`verify` extra) and the
+# tool's worker builds its fixtures and the verifier digest with NumPy (harness only, never the runtime), so the
+# chosen venv always gets it; the identity venv's later users (tools/release_check_units.py) are unaffected by it.
+src=0
+shpy="$GATE_WORK/identity-venv/bin/python"
+if [ ! -x "$shpy" ]; then
+    shpy="$GATE_WORK/shard-venv/bin/python"
+    if [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
+        { python3 -m venv "$GATE_WORK/shard-venv" \
+          && "$shpy" -m pip install -q --no-cache-dir "${GATE_WHEELS[@]}"; } > "$J/shard-venv.log" 2>&1 || src=$?
+    else
+        say "shardcheck: no wheels to install (GATE_WHEELS is empty): FAIL"
+        src=2
+    fi
+fi
+if [ "$src" = 0 ]; then
+    "$shpy" -m pip install -q --no-cache-dir 'numpy>=1.26.4' >> "$J/shard-venv.log" 2>&1 || src=$?
+    [ "$src" = 0 ] || say "shardcheck: installing numpy into $shpy exited $src (see shard-venv.log): FAIL"
+fi
+if [ "$src" = 0 ]; then
+    mkdir -p "$GATE_WORK/out/shardcheck"
+    python3 tools/logical_shard_identity.py --python "$shpy" --vendor "$GATE_VENDOR" \
+        --out "$GATE_WORK/out/shardcheck" > "$J/shardcheck.log" 2>&1 || src=$?
+    grep -E '^SHARDCHECK' "$J/shardcheck.log" | head -n 16 || true
+fi
+say "shardcheck exited $src"
 
 PHASE=gate
 grc=0
