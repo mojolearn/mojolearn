@@ -947,8 +947,13 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var keep = List[Int]()
     var flags = List[Int]()
     var all_valid = True
+    var true_word = PythonObject(True)
     for f in range(d):  # driver-loop: over the d feature columns (the fit's column masks, read once)
-        if _truth(valid[f]):
+        # Perf (perf2-neighbors): fit stores exact bools; read those by
+        # identity instead of one Python `bool()` call per feature.
+        var item = valid[f]
+        var present = (item is true_word) if py_type(item) is b.bool else _truth(item)
+        if present:
             keep.append(f)
             flags.append(0)
         else:
