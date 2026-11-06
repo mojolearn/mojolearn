@@ -7,6 +7,7 @@
 # codes. Every stage group stages the words, operands and order the Python
 # helper of the same name staged.
 from std.os import getenv
+from std.memory import memcpy
 from bindings.native_array_storage import native_array_empty
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -217,12 +218,24 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
     var out = i32_array(n, context)
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
-    var raw = native_array_empty(String("q") if typestr == "<i8" else String("i"))
-    if typestr == "<i4" or typestr == "<i8":
-        _ = py_call(raw.frombytes, classical_c_bytes(view, name, context))
-    else:
+    if typestr != "<i4" and typestr != "<i8":
         raise Error("TypeError: " + name + " must hold int32 or int64 indices")
-    var src = Int(py=py_call(raw.buffer_info)[0])
+    # A C-contiguous index buffer is read in place (p3-prep): int32 words are
+    # one memcpy, int64 words one range-checked narrowing pass. Only a
+    # strided view still takes the bytes copy first.
+    var raw = PythonObject(None)
+    var src = 0
+    if n > 0 and classical_c_order(view, context):
+        src = Int(py=classical_address(view))
+        if typestr == "<i4":
+            memcpy(dest=dest, src=I32P(unsafe_from_address=src), count=n)
+            _ = view  # keep the Python object alive through the copy above
+            _ = out  # keep the Python object alive through the copy above
+            return out
+    else:
+        raw = native_array_empty(String("q") if typestr == "<i8" else String("i"))
+        _ = py_call(raw.frombytes, classical_c_bytes(view, name, context))
+        src = Int(py=py_call(raw.buffer_info)[0])
     for i in range(n):  # cpu-route: the CSR index words narrowed to int32 once at input, as _as_typed did
         var v = Int(I64P(unsafe_from_address=src)[i]) if typestr == "<i8" else Int(I32P(unsafe_from_address=src)[i])
         if v > INT32_MAX or v < -INT32_MAX - 1:
@@ -230,6 +243,7 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
         dest[i] = Int32(v)
         _ = out  # keep the Python object alive through the native call above
     _ = raw^
+    _ = view  # keep the Python object alive through the reads above
     if n == 0:
         return classical_wrap_array(native_array_empty("i"), Python.tuple(0), "<i4", "C", context["output_context"])
     return out
