@@ -31,6 +31,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_staged_input import trees_stage_members, trees_unstage
+from bindings.native_loaded_module import NativeModules
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_need,
@@ -1477,6 +1479,8 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
 def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     """DARTRegressor / DARTClassifier `fit`."""
     var fields = py_fields(model)
+    # The previous fit's cached address lists hold its trees: drop them now.
+    trees_side_drop(_DART_SLOT, model)
     var x = _x_f32(args[0], context)
     if not classifier:
         var y32 = trees_f32(args[1], 1, "C", "y", context)
@@ -1500,21 +1504,44 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     return _keep_ret_codes^
 
 
-def _dart_raw(fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_DARTBase._raw`: class-major raw scores (K * n) float64 from ONE
-    native walk of every row through every tree."""
-    if not py_contains(fields, "trees_"):
-        raise Error("RuntimeError: this estimator is not fitted yet")
-    var x = _x_f32(X, context)
-    var fitted = Int(py=_int(fields["n_features_in_"]))
-    if x.cols != fitted:
-        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
-    var n = x.rows
-    var d = x.cols
-    var K = Int(py=_int(py_get(fields, "n_classes_", _P(1))))
-    var score = trees_vector(K * n, "<f8", context)
-    if n == 0:
-        return score
+comptime _DART_SLOT = "trees_dart_forest_v1"
+
+
+def _dart_key(fields: PythonObject, K: Int) raises -> PythonObject:
+    """The identities `_dart_forest` reads: the three per-tree sequences and
+    `init_score_` (with their items), and each tree's four model arrays."""
+    var mods = NativeModules()
+    var trees = fields["trees_"]
+    var values = fields["tree_values_"]
+    var tree_coefs = fields["tree_coefs_"]
+    var key = Python.list(PythonObject(K))
+    trees_key_shallow(mods, key, values, 3)
+    trees_key_shallow(mods, key, tree_coefs, 3)
+    trees_key_shallow(mods, key, fields["init_score_"], 3)
+    trees_key_shallow(mods, key, trees, 3)
+    var count = min(len(trees), min(len(values), len(tree_coefs)))
+    for i in range(count):  # driver-loop: over the T fitted trees (identity of their model arrays)
+        var tf = py_fields(trees[i])
+        _ = py_call(key.append, tf["_offsets"])
+        _ = py_call(key.append, tf["_colid"])
+        _ = py_call(key.append, tf["_quesval"])
+        _ = py_call(key.append, tf["_left_child"])
+    return key
+
+
+def _dart_forest(model: PythonObject, fields: PythonObject, K: Int) raises -> PythonObject:
+    """`(key, [cols, ques, lefts, vals], sizes, coefs, starts)`: the per-tree
+    address lists `x_trees_dart_predict` reads, built once per fitted state
+    and kept in the native side table (lane perf-trees-owed, 2026-11-06;
+    every predict rebuilt them, about 30 Python calls per tree). The key
+    holds the arrays, so the cached addresses stay valid; a replaced tree,
+    array or sequence item changes the key and the lists are rebuilt. The
+    addresses and values are the ones the per-call build produced, so the
+    launch and its bits are unchanged."""
+    var key = _dart_key(fields, K)
+    var held = trees_side_get(_DART_SLOT, model)
+    if held is not None and trees_key_same(held[0], key):
+        return held
     var b = trees_builtins()
     var cols = Python.list()
     var ques = Python.list()
@@ -1537,18 +1564,39 @@ def _dart_raw(fields: PythonObject, X: PythonObject, context: PythonObject) rais
         _ = py_call(coefs.append, _float(tree_coefs[i]))
     var init = fields["init_score_"]
     var starts = Python.list(_float(init)) if K == 1 else py_call(b.list, py_call(b.map, b.float, init))
+    var record = Python.list(key, Python.list(cols, ques, lefts, vals), sizes, coefs, starts)
+    _ = trees_side_put(_DART_SLOT, model, record)
+    return record
+
+
+def _dart_raw(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_DARTBase._raw`: class-major raw scores (K * n) float64 from ONE
+    native walk of every row through every tree."""
+    if not py_contains(fields, "trees_"):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    var x = _x_f32(X, context)
+    var fitted = Int(py=_int(fields["n_features_in_"]))
+    if x.cols != fitted:
+        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    var n = x.rows
+    var d = x.cols
+    var K = Int(py=_int(py_get(fields, "n_classes_", _P(1))))
+    var score = trees_vector(K * n, "<f8", context)
+    if n == 0:
+        return score
+    var forest = _dart_forest(model, fields, K)
     var xt = _xt(fields, context)
-    _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), Python.list(cols, ques, lefts, vals), sizes, coefs,
-                      starts, _A(score), Python.list(_P(n), _P(d), _P(K)))
+    _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), forest[1], forest[2], forest[3],
+                      forest[4], _A(score), Python.list(_P(n), _P(d), _P(K)))
     _ = x  # keep the Python object alive through the native call above
     _ = score  # keep the Python object alive through the native call above
     _ = x^
     return score
 
 
-def _dart_raw_rows(fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+def _dart_raw_rows(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_DARTBase._raw_rows`: (n, K) row-major raw scores."""
-    var raw = _dart_raw(fields, X, context)
+    var raw = _dart_raw(model, fields, X, context)
     var K = Int(py=_int(fields["n_classes_"]))
     var n = Int(py=raw.size) // K
     var out = trees_vector(n * K, "<f8", context)
@@ -1565,14 +1613,14 @@ def _multiclass(fields: PythonObject) raises -> Bool:
 def dart_predict(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if not classifier:
-        return _dart_raw(fields, args[0], context)
+        return _dart_raw(model, fields, args[0], context)
     var xt = _xt(fields, context)
     if _multiclass(fields):
-        var acc = _dart_raw_rows(fields, args[0], context)
+        var acc = _dart_raw_rows(model, fields, args[0], context)
         var n = Int(py=acc.shape[0])
         var K = Int(py=acc.shape[1])
         return trees_decode_labels(fields["classes_"], _argmax(xt, acc, n, K, context), context)
-    var raw = _dart_raw(fields, args[0], context)
+    var raw = _dart_raw(model, fields, args[0], context)
     var n = Int(py=raw.size)
     var codes = trees_vector(n, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_positive_codes"), _A(raw), _A(codes), Python.list(_P(n)))
@@ -1584,22 +1632,22 @@ def dart_predict(model: PythonObject, args: PythonObject, classifier: Bool, cont
 def dart_decision_function(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if _multiclass(fields):
-        return _dart_raw_rows(fields, args[0], context)
-    return _dart_raw(fields, args[0], context)
+        return _dart_raw_rows(model, fields, args[0], context)
+    return _dart_raw(model, fields, args[0], context)
 
 
 def dart_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var xt = _xt(fields, context)
     if _multiclass(fields):
-        var acc = _dart_raw_rows(fields, args[0], context)
+        var acc = _dart_raw_rows(model, fields, args[0], context)
         var n = Int(py=acc.shape[0])
         var K = Int(py=acc.shape[1])
         var flat = trees_reshape(acc, Python.tuple(n * K), context)
         _ = py_call_typed(_x(xt, "x_trees_softmax_rows"), _A(flat), Python.list(_P(n), _P(K)))
         _ = flat  # keep the Python object alive through the native call above
         return trees_reshape(flat, Python.tuple(n, K), context)
-    var raw = _dart_raw(fields, args[0], context)
+    var raw = _dart_raw(model, fields, args[0], context)
     var n = Int(py=raw.size)
     var acc = trees_vector(2 * n, "<f8", context)
     var zero = trees_vector(n, "<f8", context)
