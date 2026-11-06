@@ -159,10 +159,12 @@ def _ivf_search_arrays(
     # `labels` is build workspace the search never reads (cpu2-l6-bindings:
     # no longer restored by a host scatter over every row; left empty).
     var labels = List[UInt32]()
+    # p3-neighbors-cluster: the admitted arrays move into the index (as the
+    # host binding does); they were copied a second time on every call.
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
-        arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
+        arrays.centers^, arrays.center_norms^, arrays.offsets^,
+        arrays.list_indices^, arrays.list_data^, labels^,
     )
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes, partial_storage=partial_storage, keep=keep)
@@ -414,10 +416,12 @@ def ivf_flat_extend_binding(
     # the old assignment is not restored by a host scatter (left empty);
     # `ivf_flat_extend_host` appends the new labels after it.
     var labels = List[UInt32]()
+    # p3-neighbors-cluster: the admitted arrays move into the index (as the
+    # host binding does); they were copied a second time on every call.
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
-        arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
+        arrays.centers^, arrays.center_norms^, arrays.offsets^,
+        arrays.list_indices^, arrays.list_data^, labels^,
     )
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = ivf_flat_extend_host(ctx, index, new_x, n_new)
