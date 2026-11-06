@@ -154,9 +154,17 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
     var sparse = host_sparse_format(source)
     if sparse_allowed:
         if sparse.byte_length() > 0:
-            if not py_contains(context, "output_context"):
+            # The densifier reads `output_context`; a self-reference left in
+            # the per-call context made it a cycle only the collector frees
+            # (p3 rank 945), so the entry added here is removed after use.
+            var added = not py_contains(context, "output_context")
+            if added:
                 py_setitem(context, "output_context", context)
-            prepared = host_sparse_dense(source, sparse, context)
+            try:
+                prepared = host_sparse_dense(source, sparse, context)
+            finally:
+                if added:
+                    _ = py_call(context.pop, PythonObject("output_context"), PythonObject(None))
     elif sparse.byte_length() > 0:
         # Identity-based sparse admission precedes all source/type attributes;
         # a foreign metaclass must not execute from the sparse refusal itself.
@@ -170,19 +178,23 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
     # well as the provider's immediate storage owner, including after casts.
     snapshot.owner = Python.tuple(source, prepared, snapshot.owner)
     var nd = len(snapshot.shape)
-    var text = family_repr(snapshot.python_shape())
     if _complex_dtype(snapshot.dtype_number):
         raise Error("Complex data not supported: " + name + " got a complex X.")
+    # The shape text names a refusal only; it is built on those paths alone
+    # (it went through Python's repr on every call; p3 rank 417).
     if _numeric_dtype(snapshot.dtype_number):
         if nd < 2:
-            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + text + "). " + RESHAPE_HINT)
+            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape="
+                        + family_repr(snapshot.python_shape()) + "). " + RESHAPE_HINT)
         if nd == 2 and snapshot.shape[0] == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + text + ") while a minimum of 1 is required by " + name + ".")
+            raise Error("Found array with 0 sample(s) (shape=" + family_repr(snapshot.python_shape())
+                        + ") while a minimum of 1 is required by " + name + ".")
         if nd == 2 and snapshot.shape[1] == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + text + ") while a minimum of 1 is required by " + name + ".")
+            raise Error("Found array with 0 feature(s) (shape=" + family_repr(snapshot.python_shape())
+                        + ") while a minimum of 1 is required by " + name + ".")
     if nd != 2:
         var hint = String(". ") + RESHAPE_HINT if nd < 2 else String("")
-        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + text + hint)
+        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + family_repr(snapshot.python_shape()) + hint)
     var result = _cast(snapshot^, "X", context)
     _ = view
     _ = prepared
