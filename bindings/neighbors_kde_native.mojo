@@ -27,7 +27,8 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields, py_type
 from bindings.classical_arrays import classical_address
@@ -45,28 +46,56 @@ from bindings.neighbors_knn_native import knn_door
 from core.family_cast_impl import family_all_finite_f32
 
 
-def _kde_admit_state(model: PythonObject, context: PythonObject) raises:
+comptime _KDE_STATE_SLOT = "neighbors_kde_state_v1"
+
+
+def _kde_admit_state(model: PythonObject, context: PythonObject, fitting: Bool = False) raises:
+    # Perf (perf2-neighbors): the admitted state's identity stamp (every slot
+    # object and, for the exact `metric_params` dict, its items) lives in the
+    # native prepared registry, outside `__dict__`, weakly keyed by the model,
+    # as `_admit_local_state` (bindings/neighbors_local_native.mojo) does:
+    # while it is unchanged a query skips the re-admission of the ten
+    # settings, the metric parameters and `_x`/`_w`. Fit drops it.
     classical_check_layout(model, context)
     var fields = py_fields(model)
     var names = Python.tuple("bandwidth", "algorithm", "kernel", "metric", "atol", "rtol", "breadth_first",
         "leaf_size", "n_features_in_", "n_samples_fit_")
-    for i in range(len(names)):  # small-loop(fixed KDE settings and fitted metadata)
-        var value = py_get(fields, names[i])
-        if value is not None:
-            host_inference_scalar(value, context, True)
-    var params = py_get(fields, "metric_params")
-    if params is not None:
-        if py_type(params) is not native_loaded_module("builtins").dict:
-            raise Error("TypeError: KernelDensity metric_params must be an exact native dictionary")
-        classical_admit_value(params, context)
-        var values = py_call(native_loaded_module("builtins").tuple, params.values())
-        for i in range(len(values)):  # driver-loop: admitted metric-parameter scalar values
-            host_inference_scalar(values[i], context)
     var arrays = Python.tuple("_x", "_w")
+    var mods = NativeModules()
+    var stamp = Python.list()
+    for i in range(len(names)):  # small-loop(fixed KDE settings and fitted metadata)
+        prepared_key_add(mods, stamp, py_get(fields, names[i]))
+    prepared_key_add(mods, stamp, py_get(fields, "metric_params"))
     for i in range(len(arrays)):  # small-loop(fitted KDE buffer owners)
-        var value = py_get(fields, arrays[i])
-        if value is not None:
-            classical_admit_value(value, context)
+        prepared_key_add(mods, stamp, py_get(fields, arrays[i]))
+    var record = prepared_get(mods, _KDE_STATE_SLOT, model)
+    var hit = record is not None and prepared_key_same(record, stamp)
+    if not hit:
+        for i in range(len(names)):  # small-loop(fixed KDE settings and fitted metadata)
+            var value = py_get(fields, names[i])
+            if value is not None:
+                host_inference_scalar(value, context, True)
+        var params = py_get(fields, "metric_params")
+        if params is not None:
+            if py_type(params) is not native_loaded_module("builtins").dict:
+                raise Error("TypeError: KernelDensity metric_params must be an exact native dictionary")
+            classical_admit_value(params, context)
+            var values = py_call(native_loaded_module("builtins").tuple, params.values())
+            for i in range(len(values)):  # driver-loop: admitted metric-parameter scalar values
+                host_inference_scalar(values[i], context)
+        for i in range(len(arrays)):  # small-loop(fitted KDE buffer owners)
+            var value = py_get(fields, arrays[i])
+            if value is not None:
+                classical_admit_value(value, context)
+    if fitting:
+        # Fit replaces the fitted slots: never retain the old arrays.
+        prepared_drop(mods, _KDE_STATE_SLOT, model)
+        return
+    if not hit:
+        for i in range(len(stamp)):  # driver-loop: over the stamp objects, refusing a self-reference
+            if stamp[i] is model:
+                return
+        prepared_put(mods, _KDE_STATE_SLOT, model, stamp)
 
 
 def _kde_sparse_f32(source: PythonObject, format: String) raises -> Bool:
@@ -211,6 +240,22 @@ def _kde_release(fields: PythonObject) raises:
         pass
 
 
+def _kde_key_same(previous: PythonObject, key: PythonObject) raises -> Bool:
+    """`previous == key` for a resident key: `previous` has passed the exact
+    word-type check in `_kde_handle`; when `key` holds the same exact native
+    words the comparison is native, else it is the former `operator.eq`."""
+    var b = native_loaded_module("builtins")
+    var words = (py_type(key[0]) is b.int and py_type(key[1]) is b.tuple and len(key[1]) == 2
+                 and py_type(key[1][0]) is b.int and py_type(key[1][1]) is b.int and py_type(key[2]) is b.int
+                 and py_type(key[3]) is b.str and py_type(key[4]) is b.str and py_type(key[5]) is b.float)
+    if not words:
+        return _kde_truth(family_call(native_loaded_module("operator").eq, previous, key))
+    return (Int(py=previous[0]) == Int(py=key[0]) and Int(py=previous[1][0]) == Int(py=key[1][0])
+            and Int(py=previous[1][1]) == Int(py=key[1][1]) and Int(py=previous[2]) == Int(py=key[2])
+            and String(py=previous[3]) == String(py=key[3]) and String(py=previous[4]) == String(py=key[4])
+            and Float64(py=previous[5]) == Float64(py=key[5]))
+
+
 def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`KernelDensity._resident_fit_handle(binding)`: the handle of the
     device-resident fit set, prepared on the first call and reused while the
@@ -218,7 +263,6 @@ def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObje
     bandwidth) is unchanged; None where the binding has no
     `kde_fit_prepare`."""
     var b = native_loaded_module("builtins")
-    var op = native_loaded_module("operator")
     var prepare = knn_door(binding, "kde_fit_prepare")
     if prepare is None:
         return PythonObject(None)
@@ -227,10 +271,15 @@ def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObje
     var w_address = PythonObject(0)
     if w is not None:
         w_address = classical_address(w)
+    # Perf (perf2-neighbors): `str()` of an exact str and `float()` of an
+    # exact float return the object itself, so those calls are skipped.
+    var kernel = family_field(fields, "kernel")
+    var metric = family_field(fields, "metric")
+    var bandwidth = family_field(fields, "bandwidth")
     var key = Python.tuple(classical_address(x), py_call(b.tuple, x.shape), w_address,
-                           family_call(b.str, family_field(fields, "kernel")),
-                           family_call(b.str, family_field(fields, "metric")),
-                           family_call(b.float, family_field(fields, "bandwidth")))
+                           kernel if py_type(kernel) is b.str else family_call(b.str, kernel),
+                           metric if py_type(metric) is b.str else family_call(b.str, metric),
+                           bandwidth if py_type(bandwidth) is b.float else family_call(b.float, bandwidth))
     var cached = py_get(fields, PythonObject("_resident"), PythonObject(None))
     if cached is not None:
         if py_type(cached) is not b.tuple or len(cached) != 3 or py_type(cached[1]) is not b.int:
@@ -243,7 +292,7 @@ def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObje
                 or py_type(previous[4]) is not b.str or py_type(previous[5]) is not b.float):
             raise Error("TypeError: KDE resident key must contain native address, shape and setting words")
         _ = knn_door(cached[2], "kde_fit_release")
-    if cached is not None and _kde_truth(family_call(op.eq, cached[0], key)):
+    if cached is not None and _kde_key_same(cached[0], key):
         return cached[1]
     if cached is not None:
         _kde_validate(fields)
@@ -367,7 +416,7 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
 def _neighbors_kde_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    _kde_admit_state(model, context)
+    _kde_admit_state(model, context, operation == "family_xn_kde_fit")
     for i in range(1, len(args)):  # small-loop(public input owners before sparse/native preparation)
         if host_sparse_format(args[i]).byte_length() == 0:
             classical_admit_value(args[i], context)
