@@ -16,6 +16,7 @@ from providers.python.estimator_lifecycle_pyapi import estimator_feature_check, 
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 from providers.python.gp_public_lifecycle_pyapi import _gp_classifier_target
 from bindings.prep_lda_admission import lda_native_labels
+from bindings.label_input_sources import labels_storage_source
 
 
 def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
@@ -34,7 +35,14 @@ def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
     regressors unchanged) since 2c61cfe498 moved the boost lifecycle here.
     The labels' values and order are the same either way (the four lanes'
     output hashes are equal across those two records), so no bits change."""
-    var cls = py_type(source)
+    # A numpy-backed pandas Series is read through its stored exact ndarray
+    # (perf3-label-doors; bindings/label_input_sources.mojo): the same labels
+    # in the same order, so it takes the same door as that ndarray and the
+    # encoder reads the ndarray, never a per-label snapshot. The Series itself
+    # is still admitted by lda_native_labels.
+    var stored = labels_storage_source(source, context)
+    var target = stored if stored is not None else source
+    var cls = py_type(target)
     var fast = False
     var ndarray = py_get(context, "ndarray")
     # A rank-1 <f4/<f8 ndarray or Array takes the same door: lda_native_labels
@@ -50,25 +58,25 @@ def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
     # snapshot's list of Python bools sorts to (`_sorted_classes`). No bits
     # change; the per-label snapshot walk is gone for bool targets.
     if ndarray is not None and cls is ndarray:
-        var kind = String(source.dtype.kind)
-        var typestr = String(source.dtype.str)
-        fast = Int(py=source.ndim) == 1 and (kind == "i" or kind == "u" or kind == "b"
+        var kind = String(target.dtype.kind)
+        var typestr = String(target.dtype.str)
+        fast = Int(py=target.ndim) == 1 and (kind == "i" or kind == "u" or kind == "b"
                                              or typestr == "<f4" or typestr == "<f8")
     elif cls is context["array_class"]:
-        var typestr = String(source.dtype)
-        fast = Int(py=source.ndim) == 1 and (typestr.startswith("<i") or typestr.startswith("<u")
+        var typestr = String(target.dtype)
+        fast = Int(py=target.ndim) == 1 and (typestr.startswith("<i") or typestr.startswith("<u")
                                              or typestr.startswith("|i") or typestr.startswith("|u")
                                              or typestr == "|b1" or typestr == "<f4" or typestr == "<f8")
     if not fast:
         return _gp_classifier_target(source, rows, name, context)
     lda_native_labels(source, context, True, name)
-    var target_shape = labels_shape_of(source, context)
+    var target_shape = labels_shape_of(target, context)
     if len(target_shape) == 0:
         raise Error("mojolearn: y must be a sequence of labels")
     if target_shape[0] != rows:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", "
                     + String(target_shape[0]) + "]")
-    return source
+    return target
 
 
 def tree_boost_public_operation(model: PythonObject, operation: String, args: PythonObject,
