@@ -172,6 +172,13 @@ def _class_fields(mut mods: NativeModules, cls: PythonObject) raises -> PythonOb
     return fields
 
 
+def _plan(model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Old-arity callers (gp_common_native, gp_public_lifecycle_pyapi) build
+    # their own module view, as _fields / _truth / _class_fields do.
+    var mods = NativeModules()
+    return _plan(mods, model, state, context)
+
+
 def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = mods.module("builtins")
     var cls = py_type(model)
@@ -200,6 +207,12 @@ def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, con
     return plan
 
 
+def _mode(value: PythonObject) raises -> String:
+    # Old-arity callers (trees_agnostic_native, trees_explainer_native).
+    var mods = NativeModules()
+    return _mode(mods, value)
+
+
 def _mode(mut mods: NativeModules, value: PythonObject) raises -> String:
     if py_type(value) is not mods.module("builtins").str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
@@ -207,6 +220,13 @@ def _mode(mut mods: NativeModules, value: PythonObject) raises -> String:
     if result != "identical" and result != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     return result
+
+
+def _configuration_value(model: PythonObject, fields: PythonObject,
+                         name: String) raises -> PythonObject:
+    # Old-arity caller (gp_public_lifecycle_pyapi).
+    var mods = NativeModules()
+    return _configuration_value(mods, model, fields, name)
 
 
 def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: PythonObject,
