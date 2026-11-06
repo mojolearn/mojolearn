@@ -16,7 +16,8 @@ def main():
         if 'norm' in row['name'] and row['name'].endswith('_w'):
             values.fill(1)
         parameters[row['name']] = values.reshape(row['shape'])
-    trainer = SmallByteLanguageModelTrainer(parameters, data_schedule={'fixture': 'installed-one-step-v1'})
+    trainer = SmallByteLanguageModelTrainer(parameters, data_schedule={'fixture': 'installed-one-step-v1'},
+                                            step_result='full')
     metadata = trainer.run_metadata()
     assert metadata['native_vendor'] == os.environ['MOJOLEARN_EXPECT_VENDOR']
     assert metadata['native_numeric_mode'] == 1

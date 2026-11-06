@@ -149,12 +149,13 @@ available through `parameter_registry()`. Its profile fixes batch 2, context
 32, width 32, two decoder blocks, four query heads, two KV heads, feed-forward
 width 64 and byte vocabulary 256. `train_step(ids)` takes actual int32 shape
 `(2, 33)`, predicts the next byte at 32 positions per row, and returns mean
-loss, pre-update gradients and the completed-step cursor. `evaluate(ids)`
+loss, the completed-step cursor and flags (with `step_result='full'` also the
+pre-update gradients). `evaluate(ids)`
 computes loss while requiring the complete training state to remain unchanged.
 It also exposes complete state/checkpoint methods and `run_metadata()`.
 With `resident=True` the trainer keeps parameters, moments and the gradient
 on the device between calls and `train_step` returns only loss, step and
-flags (`step_result='lean'`, the resident default since 2026-09-11);
+flags (`step_result='lean'`, the default unless `resident=False`);
 `export_state()`, `export_gradients()` and `export_checkpoint()` copy them
 out on demand with the same validation, `step_result='full'` restores the
 complete dict, and a failed step rolls the device state back to the last

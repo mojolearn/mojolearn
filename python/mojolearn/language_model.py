@@ -3,9 +3,9 @@
 
 - :class:`LanguageModelConfig`: the model and batch dimensions.
 - :class:`LanguageModelTrainer`: AdamW training on the GPU. By default the
-  training state stays on the device between steps (``resident=True``);
-  ``train_step`` returns the full result dict, or with ``step_result="lean"``
-  only the loss, step counters and flags. ``export_state()``,
+  training state stays on the device between steps (``resident=True``) and
+  ``train_step`` returns the loss, step counters and flags; pass
+  ``step_result="full"`` to also receive the gradients. ``export_state()``,
   ``export_gradients()`` and ``export_checkpoint()`` copy the state out on
   demand.
 - :class:`LanguageModelInference`: the same model's forward pass on the CPU,

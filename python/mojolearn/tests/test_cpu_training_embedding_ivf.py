@@ -326,7 +326,7 @@ def test_byte_lm_trainer_runs_on_the_host_when_built():
     flat = rng.uniform(-0.125, 0.125, shape.n_total).astype(np.float32)
     ids = rng.integers(0, 256, (6, shape.length + 1)).astype(np.int32)
     schedule = {"dataset": "test"}
-    s = mojolearn.SmallByteLanguageModelTrainer(flat, data_schedule=schedule)
+    s = mojolearn.SmallByteLanguageModelTrainer(flat, data_schedule=schedule, step_result="full")
     r = mojolearn.SmallByteLanguageModelTrainer(flat, data_schedule=schedule, resident=True)
     for k in range(3):
         a = s.train_step(ids[2 * k:2 * k + 2])

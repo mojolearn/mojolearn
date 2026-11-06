@@ -345,7 +345,7 @@ def test_registry_and_named_parameter_packing(host):
 
 def test_train_copies_inputs_and_returns_all_preupdate_gradients(host):
     source = initial()
-    model = SmallByteLanguageModelTrainer(source, data_schedule={'dataset': 'test'})
+    model = SmallByteLanguageModelTrainer(source, data_schedule={'dataset': 'test'}, step_result='full')
     source[:] = 999
     tokens = ids()
     tokens.setflags(write=False)

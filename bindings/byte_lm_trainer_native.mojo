@@ -623,8 +623,43 @@ def _run_stateless(mut mods: NativeModules, fields: PythonObject, tokens: Python
     py_setitem(result, "step", expected)
     py_setitem(result, "completed_steps", expected)
     py_setitem(result, "next_batch_index", expected)
-    py_setitem(result, "flat_gradients", flat)
-    py_setitem(result, "gradients", by_name)
+    if String(py=fields["_step_result"]) == "lean":
+        # The resident lean keys; the gradient stays with the trainer for
+        # export_gradients() (same bytes as the full result's).
+        py_setitem(result, "flags", _copy_i32(out_flags, shape.n_tensors(), context))
+        py_setitem(fields, "_stateless_gradients", Python.tuple(flat, by_name, committed))
+        py_setitem(fields, "_grad_step", expected)
+    else:
+        py_setitem(fields, "_stateless_gradients", PythonObject(None))
+        py_setitem(result, "flat_gradients", flat)
+        py_setitem(result, "gradients", by_name)
+    return result
+
+
+def _stateless_export(mut mods: NativeModules, fields: PythonObject, shape: _Shape, state: PythonObject,
+                      named: Bool, context: PythonObject) raises -> PythonObject:
+    # export_gradients() after a lean step that ran on the stateless route:
+    # owned copies of the gradient that step returned to the trainer (the
+    # record is valid only while the trainer still holds that step's state).
+    var record = py_get(fields, "_stateless_gradients")
+    if record is None:
+        raise Error("RuntimeError: Byte-LM export_gradients requires an open resident session; the stateless train_step returns its gradients")
+    if record[2] is not fields["_state"] or Int(py=fields["_grad_step"]) != Int(py=state["completed_steps"]):
+        raise Error("RuntimeError: Byte-LM has no gradient to export: no step has completed since open, restore, import or rollback")
+    var grads = _gradient_outputs(mods, shape, named, context)
+    memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(grads[0]))),
+           src=_F32P(unsafe_from_address=Int(py=classical_address(record[0]))), count=shape.n_total())
+    var result = _b(mods).dict()
+    py_setitem(result, "flat_gradients", grads[0])
+    if named:
+        var keys = py_call(_b(mods).list, grads[1])
+        for i in range(len(keys)):  # driver-loop: one copy per model parameter tensor
+            var target = grads[1][keys[i]]
+            var source = record[1][keys[i]]
+            memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(target))),
+                   src=_F32P(unsafe_from_address=Int(py=classical_address(source))), count=Int(py=target.size))
+        py_setitem(result, "gradients", grads[1])
+    _ = record
     return result
 
 
@@ -670,12 +705,20 @@ def _construction_options(mut mods: NativeModules, resident: PythonObject, var s
     var bi = _b(mods)
     if resident is not None and py_type(resident) is not bi.bool:
         raise Error("TypeError: resident must be a bool")
+    # Default (Andrew, 2026-11-06): 'lean' for every trainer that is not
+    # explicitly stateless, so a resident step copies only the loss and the
+    # flags to the host; the gradient is exported on request. The same
+    # default holds on every vendor and on the CPU column. An explicitly
+    # stateless trainer (resident=False) keeps 'full'. A trainer whose
+    # automatic choice resolves to the stateless route under 'lean' returns
+    # the same lean keys and keeps the step's gradient for export_gradients().
+    var explicit_stateless = resident is not None and not Bool(py=resident)
     if step_result is None:
-        step_result = PythonObject("lean" if resident is not None and Bool(py=resident) else "full")
+        step_result = PythonObject("full" if explicit_stateless else "lean")
     if py_type(step_result) is not bi.str or (String(py=step_result) != "full" and String(py=step_result) != "lean"):
         raise Error("ValueError: step_result must be 'full' or 'lean'")
-    if String(py=step_result) == "lean" and (resident is None or not Bool(py=resident)):
-        raise Error("ValueError: step_result='lean' requires resident=True: the stateless path destroys its context before returning, so there is nothing to export from")
+    if String(py=step_result) == "lean" and explicit_stateless:
+        raise Error("ValueError: step_result='lean' requires a resident session; resident=False returns the full result")
     return step_result
 
 
@@ -1512,7 +1555,9 @@ def byte_lm_consume(mut mods: NativeModules, trainer: PythonObject, operation: S
             if fields["_lost_at"] is not None:
                 raise Error("RuntimeError: Byte-LM session lost; restore state before exporting gradients")
             if not Bool(py=fields["_session_open"]):
-                raise Error("RuntimeError: Byte-LM export_gradients requires an open resident session; the stateless train_step returns its gradients")
+                result = _stateless_export(mods, fields, shape, state, Bool(py=args[0]), context)
+                _ = py_call(lock.release)
+                return result
             var completed = Int(py=state["completed_steps"])
             if Int(py=fields["_grad_step"]) != completed:
                 raise Error("RuntimeError: Byte-LM has no gradient to export: no step has completed since open, restore, import or rollback")

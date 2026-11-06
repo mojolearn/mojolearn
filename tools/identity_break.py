@@ -4620,7 +4620,7 @@ def _(ml, X, yc, yr, Xh=None):
     # named, never a quiet hash.
     s = ml.SmallByteLanguageModelTrainer(_byte_lm_params(shape)[0],
                                          data_schedule={"dataset": "identity_break", "order": "sequential"},
-                                         shape=shape)
+                                         shape=shape, step_result="full")
     for k in range(steps):
         stateless = s.train_step(ids[2 * k:2 * k + 2])
     _same_bytes("resident export_gradients()['flat_gradients']", flat,
