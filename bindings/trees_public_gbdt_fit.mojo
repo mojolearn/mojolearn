@@ -502,9 +502,30 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     var sizes = List[Int]()
     var seen = py_call(b.set)
     var last = PythonObject(None)
+    # Keyed once per run, as 0.8.55's `itertools.groupby` keyed it (lane
+    # perf2-trees, 2026-11-06): an id that is the previous id's object, or an
+    # exact int/str/bytes equal to a previous id of the same exact type, has
+    # the previous id's key (`_group_key` is a function of the value for
+    # these exact types) and was already admitted, so it extends the run
+    # without the per-row isinstance checks, formatting and encoding. Any
+    # other id is keyed and checked as before; same runs, same refusals.
+    var last_value = PythonObject(None)
+    var int_t = b.int
+    var str_t = b.str
+    var bytes_t = b.bytes
     for i in range(n_rows):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
         var value = ids[i]
+        if i > 0:
+            var same = value is last_value
+            if not same:
+                var t = py_type(value)
+                same = (t is py_type(last_value) and (t is int_t or t is str_t or t is bytes_t)
+                        and Bool(py=value == last_value))
+            if same:
+                sizes[len(sizes) - 1] += 1
+                continue
         var key = _group_key(value, i, context)
+        last_value = value
         if i > 0 and Bool(py=key == last):
             sizes[len(sizes) - 1] += 1
             continue
