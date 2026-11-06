@@ -110,6 +110,28 @@ def _target_finite(snapshot: ArrayMetadata) raises -> Bool:
         raise Error("TypeError: target strides must match its captured shape")
     var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
     var mask = UInt64(0x7F800000) if width == 4 else UInt64(0x7FF0000000000000)
+    # A C-contiguous native-order target (the common ndarray / Array / list
+    # case) is one typed scan over its words (p3 rank 12): no per-element
+    # odometer or byte assembly.
+    var contiguous = snapshot.native_byte_order
+    var expected = width
+    for k in range(len(snapshot.shape)):  # small-loop(rank: target metadata axes)
+        var axis = len(snapshot.shape) - 1 - k
+        if snapshot.shape[axis] > 1 and snapshot.strides[axis] != expected:
+            contiguous = False
+        expected *= snapshot.shape[axis]
+    if contiguous:
+        if width == 4:
+            var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
+            for i in range(snapshot.count):  # cpu-route: ignored-target finiteness over contiguous native words
+                if (UInt64(words[i]) & mask) == mask:
+                    return False
+            return True
+        var wide = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
+        for i in range(snapshot.count):  # cpu-route: ignored-target finiteness over contiguous native words
+            if (wide[i] & mask) == mask:
+                return False
+        return True
     for linear in range(snapshot.count):  # cpu-route: ignored-target finiteness over captured native strides
         var remainder = linear
         var offset = 0
@@ -187,7 +209,9 @@ def _target_leaves(mut mods: NativeModules, b: PythonObject, seq: _SequentialVal
         for i in range(len(value)):  # driver-loop: ignored target references, never conversion hooks
             _target_leaves(mods, b, seq, kinds, value[i], context, depth + 1)
         return
-    if cls is b.complex or cls is b.bytes:
+    if cls is b.complex or cls is b.bytes or cls is b.int or cls is b.float or cls is b.bool:
+        # An exact builtin number is admitted by sequential admission as is;
+        # skip the per-leaf admission call for it (p3 rank 12).
         return
     _classical_admit(mods, seq, kinds, value, context, 0)
 
