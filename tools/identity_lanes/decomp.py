@@ -257,12 +257,18 @@ def _(ml, X, yc, yr, Xh=None):
     S = X[:160]
     iso = ml.Isomap(n_neighbors=8, n_components=3).fit(S)
     cm = ml.ClassicalMDS(n_components=2).fit(S)
-    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=40, random_state=0)
+    # 2026-11-05 lane/slow-verification-lanes: SMACOF iterations halved
+    # (40 -> 20, 30 -> 15, nonmetric 25 -> 12; each iteration is the same
+    # Guttman step) and the shift-invert LLE at 240 rows (was 300; the
+    # 'auto' rule takes it past 200 rows, python/mojolearn/_expansion_decomp.py:4385).
+    # Every other size is kept: each fit's eigh stays on its side of n = 64
+    # and the radius Isomap's graph keeps the radius it was built for.
+    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=20, random_state=0)
     emb = md.fit_transform(S[:100])
-    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=30).fit(S[:100])
+    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=15).fit(S[:100])
     lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
     # past 200 rows: the shift-invert subspace iteration (eigen_solver='auto')
-    li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:300])
+    li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:240])
     lt = ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80])
     he = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="hessian").fit(S[:80])
     mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
@@ -270,7 +276,7 @@ def _(ml, X, yc, yr, Xh=None):
     # identical output, one exact float64 product)
     rad = float(np.asarray(iso.dist_matrix_).max()) * 0.25
     ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
-    nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=25, random_state=1)
+    nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=12, random_state=1)
     nemb = nm.fit_transform(S[:60])
     im = ml.Isomap(n_neighbors=8, n_components=2, metric="manhattan").fit(S[:100])
     ic = ml.Isomap(n_neighbors=8, n_components=2, metric="cosine").fit(S[:100])
@@ -356,30 +362,35 @@ def _(ml, X, yc, yr, Xh=None):
     'pca' and an array; the kNN metrics (manhattan, cosine, minkowski p);
     local_connectivity != 1 (DEVIATION 5323); n_components 1 and 5 (the
     run-time-dimension optimizer, DEVIATION 5322); a and b given; supervised
-    categorical and continuous targets (DEVIATION 5324). 384 rows of eight
-    columns, eight epochs, as small as the umap lane."""
-    Z = X[:384, :8]
-    lab = (yc[:384] % 3).astype(np.int64)
-    arr = np.asarray(ml.UMAP(n_neighbors=6, n_epochs=4, init="random", random_state=1).fit(Z).embedding_)
+    categorical and continuous targets (DEVIATION 5324). 192 rows of eight
+    columns, four epochs."""
+    # 2026-11-05 lane/slow-verification-lanes: 192 rows (was 384) and 4 epochs
+    # (was 8). Every option is a per-fit setting with no row threshold in
+    # umap/: spectral init needs n >= 2 n_components + 4 = 14
+    # (umap/spectral_init.mojo:206), the kNN needs n > n_neighbors = 8, and
+    # 4 epochs still run each epoch's edge and negative-sample steps.
+    Z = X[:192, :8]
+    lab = (yc[:192] % 3).astype(np.int64)
+    arr = np.asarray(ml.UMAP(n_neighbors=6, n_epochs=2, init="random", random_state=1).fit(Z).embedding_)
     runs = dict(
-        rnd=ml.UMAP(n_neighbors=8, n_epochs=8, init="random", random_state=3).fit(Z),
-        pca=ml.UMAP(n_neighbors=8, n_epochs=8, init="pca", random_state=3).fit(Z),
-        arr=ml.UMAP(n_neighbors=8, n_epochs=8, init=arr, random_state=3).fit(Z),
-        man=ml.UMAP(n_neighbors=8, n_epochs=8, metric="manhattan", random_state=3).fit(Z),
-        cos=ml.UMAP(n_neighbors=8, n_epochs=8, metric="cosine", random_state=3).fit(Z),
-        mink=ml.UMAP(n_neighbors=8, n_epochs=8, metric="minkowski", metric_kwds={"p": 3.0},
+        rnd=ml.UMAP(n_neighbors=8, n_epochs=4, init="random", random_state=3).fit(Z),
+        pca=ml.UMAP(n_neighbors=8, n_epochs=4, init="pca", random_state=3).fit(Z),
+        arr=ml.UMAP(n_neighbors=8, n_epochs=4, init=arr, random_state=3).fit(Z),
+        man=ml.UMAP(n_neighbors=8, n_epochs=4, metric="manhattan", random_state=3).fit(Z),
+        cos=ml.UMAP(n_neighbors=8, n_epochs=4, metric="cosine", random_state=3).fit(Z),
+        mink=ml.UMAP(n_neighbors=8, n_epochs=4, metric="minkowski", metric_kwds={"p": 3.0},
                      random_state=3).fit(Z),
-        lc=ml.UMAP(n_neighbors=8, n_epochs=8, local_connectivity=1.5, random_state=3).fit(Z),
-        c1=ml.UMAP(n_neighbors=8, n_components=1, n_epochs=8, random_state=3).fit(Z),
-        c5=ml.UMAP(n_neighbors=8, n_components=5, n_epochs=8, random_state=3).fit(Z),
-        ab=ml.UMAP(n_neighbors=8, n_epochs=8, a=1.2, b=0.9, random_state=3).fit(Z),
-        cat=ml.UMAP(n_neighbors=8, n_epochs=8, random_state=3).fit(Z, lab),
-        cont=ml.UMAP(n_neighbors=8, n_epochs=8, target_metric="l2", target_weight=0.3,
-                     random_state=3).fit(Z, yr[:384].astype(np.float32)),
+        lc=ml.UMAP(n_neighbors=8, n_epochs=4, local_connectivity=1.5, random_state=3).fit(Z),
+        c1=ml.UMAP(n_neighbors=8, n_components=1, n_epochs=4, random_state=3).fit(Z),
+        c5=ml.UMAP(n_neighbors=8, n_components=5, n_epochs=4, random_state=3).fit(Z),
+        ab=ml.UMAP(n_neighbors=8, n_epochs=4, a=1.2, b=0.9, random_state=3).fit(Z),
+        cat=ml.UMAP(n_neighbors=8, n_epochs=4, random_state=3).fit(Z, lab),
+        cont=ml.UMAP(n_neighbors=8, n_epochs=4, target_metric="l2", target_weight=0.3,
+                     random_state=3).fit(Z, yr[:192].astype(np.float32)),
     )
     parts = {k: _h(v.embedding_) for k, v in runs.items()}
-    parts["t_man"] = _h(runs["man"].transform(X[384:448, :8]))
-    parts["t_c5"] = _h(runs["c5"].transform(X[384:448, :8]))
+    parts["t_man"] = _h(runs["man"].transform(X[192:256, :8]))
+    parts["t_c5"] = _h(runs["c5"].transform(X[192:256, :8]))
     return _fit(parts, runs["c5"], lambda e: (e.transform(Xh[:64, :8]),))
 
 _batch_decl(_batch_umap, "x-decomp-umap-options", revision="expansion-batch-2026-09-28-v1")
@@ -442,6 +453,21 @@ _batch_decl(_decomp_batch_als, "x-decomp-als", revision="expansion-batch-2026-09
 # arithmetic, so every box hands the solver the same matrix.
 _decomp_eigh_widths = (72, 128)
 
+# THE LEAN WIDTHS (lane/slow-verification-lanes, 2026-11-05: "fixtures should
+# be small"). Read against x_decomp/eigh_tridiag_host.mojo: the blocked
+# reduction runs over nref = n - 1 columns in panels of TD_NB = 32
+# (`cnt = min(TD_NB, nref - k)`), so 128 (nref 127 = 3 x 32 + 31) has a
+# partial last panel exactly like 72 (nref 71 = 2 x 32 + 7); it is NOT the
+# exact-multiple arm the note above claims. Every per-column kernel grid is
+# ceil((n - j - 1) / TD_TPB = 256) = one block at both widths, the one-launch
+# small Jacobi stops at IDN_EIGH_SMALL_N = 32 and the block Jacobi is opt-in
+# (RB_MIN_N 512), so no default branch selects 128 over 72. 65 does select
+# arms 72 lacks: nref 64 = 2 x 32 exactly (no partial panel), and an odd n
+# pads the round-robin Jacobi (`m = n + (n % 2)`, x_decomp/device.mojo) on a
+# refusal. Its eigh costs ~(65/128)^3 = 1/8 of 128's. The kpca lane (outside
+# this change) keeps `_decomp_eigh_widths`.
+_decomp_eigh_widths_lean = (72, 65)
+
 
 def _decomp_eigh_wide(A, rows, width, start=0):
     """Test input only: A's values from flat offset `start`, re-cut to
@@ -456,13 +482,13 @@ def _decomp_eigh_wide(A, rows, width, start=0):
 
 @lane("x-decomp-eigh-wide-linalg")
 def _(ml, X, yc, yr, Xh=None):
-    """`linalg.eigh` (x_decomp's kit eigh) at n = 72 and 128. Three parts a
+    """`linalg.eigh` (x_decomp's kit eigh) at n = 72 and 65. Three parts a
     width: a Gram of 2n rows (full rank, separated spectrum: the
     tridiagonal solve), a non-symmetric square read through each triangle
     (L and U: the mirror before the solve), and a diagonal with a repeated
     eigenvalue block (the refusal, so the Jacobi fallback at n >= 64)."""
     out = {}
-    for w in _decomp_eigh_widths:
+    for w in _decomp_eigh_widths_lean:
         gram = _fixture_gram(_decomp_eigh_wide(X, 2 * w, w))
         ns = _decomp_eigh_wide(X, w, w, start=2 * w * w)
         d = np.arange(1, w + 1, dtype=np.float32)
@@ -476,13 +502,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-eigh-wide-fastica")
 def _(ml, X, yc, yr, Xh=None):
-    """FastICA at d = 72 and 128 with n_components = d: the whitening eigh of
+    """FastICA at d = 72 and 65 with n_components = d: the whitening eigh of
     the d x d Gram and, every iteration, the parallel decorrelation's eigh of
     W W^T (n_components x n_components), both from n = 64. 4d rows."""
     out, first = {}, None
-    for w in _decomp_eigh_widths:
+    for w in _decomp_eigh_widths_lean:
         S = _decomp_eigh_wide(X, 4 * w, w)
-        m = ml.FastICA(n_components=w, random_state=2, max_iter=8)
+        # 4 iterations (was 8, 2026-11-05 lane/slow-verification-lanes): every
+        # iteration takes the same decorrelation eigh, so 4 still repeats it
+        m = ml.FastICA(n_components=w, random_state=2, max_iter=4)
         src = m.fit_transform(S)
         out[f"fit{w}"] = _h(src, m.components_, m.mixing_, m.whitening_, np.int32(m.n_iter_))
         out[f"inv{w}"] = _h(m.inverse_transform(src[:32]))
@@ -492,15 +520,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-eigh-wide-rotation")
 def _(ml, X, yc, yr, Xh=None):
-    """FactorAnalysis rotations with n_components = 72 (varimax) and 128
+    """FactorAnalysis rotations with n_components = 72 (varimax) and 65
     (quartimax): `_polar`'s eigh of A^T A is n_components x n_components,
     every rotation step. d = n_components + 8 (so the fit has spare
-    features), 4d rows (the n >= d EM branch), a short EM."""
+    features), 2d rows (the n >= d EM branch), a short EM."""
     out, first = {}, None
-    for nc, method in ((72, "varimax"), (128, "quartimax")):
+    # 2026-11-05 lane/slow-verification-lanes: quartimax at 65 (was 128, see
+    # `_decomp_eigh_widths_lean`); 2d rows (was 4d; n >= d still holds, rows
+    # only feed the one QR); 3 EM steps (was 5). The rotation's own up to
+    # _ROT_MAX_ITER = 100 eigh steps (x_decomp/fa_owner.mojo:37) are fixed by
+    # the product, so they, not the EM, carry this lane's cost.
+    for nc, method in ((72, "varimax"), (65, "quartimax")):
         d = nc + 8
-        S = _decomp_eigh_wide(X, 4 * d, d)
-        m = ml.FactorAnalysis(n_components=nc, rotation=method, max_iter=5).fit(S)
+        S = _decomp_eigh_wide(X, 2 * d, d)
+        m = ml.FactorAnalysis(n_components=nc, rotation=method, max_iter=3).fit(S)
         out[f"{method}{nc}"] = _h(m.components_, m.noise_variance_, m.transform(S[:64]))
         first = m if first is None else first
     return _fit(out, first, lambda e: (e.transform(_decomp_eigh_wide(Xh, 256, 80)),))
@@ -509,13 +542,15 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("x-decomp-eigh-wide-factor-analysis")
 def _(ml, X, yc, yr, Xh=None):
     """FactorAnalysis with fewer rows than features (the n < d EM branch,
-    every iteration an eigh of the d x d scaled Gram) at d = 72 and 128.
+    every iteration an eigh of the d x d scaled Gram) at d = 72 and 65.
     n = d - 1: one null direction, a single isolated zero eigenvalue rather
     than a cluster, so the tridiagonal solve is taken."""
     out, first = {}, None
-    for w in _decomp_eigh_widths:
+    for w in _decomp_eigh_widths_lean:
         S = _decomp_eigh_wide(X, w - 1, w)
-        m = ml.FactorAnalysis(n_components=4, max_iter=10).fit(S)
+        # 4 EM steps (was 10, 2026-11-05 lane/slow-verification-lanes): each
+        # step takes the same d x d eigh, so 4 still repeats it
+        m = ml.FactorAnalysis(n_components=4, max_iter=4).fit(S)
         out[f"fit{w}"] = _h(m.components_, m.noise_variance_, np.asarray(m.loglike_, dtype=np.float64), np.int32(m.n_iter_))
         out[f"T{w}"] = _h(m.transform(S[:32]), m.score_samples(S[:32]))
         out[f"cov{w}"] = _h(m.get_covariance(), m.get_precision())
@@ -526,11 +561,11 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("x-decomp-eigh-wide-mincovdet")
 def _(ml, X, yc, yr, Xh=None):
-    """MinCovDet at d = 72 and 128, 3d rows: precision_ is the pseudo-inverse
+    """MinCovDet at d = 72 and 65, 3d rows: precision_ is the pseudo-inverse
     of the reweighted d x d covariance through eigh (and a C-step whose
     Cholesky stops falls back to the same pinvh)."""
     out, first = {}, None
-    for w in _decomp_eigh_widths:
+    for w in _decomp_eigh_widths_lean:
         S = _decomp_eigh_wide(X, 3 * w, w)
         m = ml.MinCovDet(random_state=0).fit(S)
         out[f"fit{w}"] = _h(m.location_, m.covariance_, m.precision_, np.asarray(m.support_, dtype=np.int8),
