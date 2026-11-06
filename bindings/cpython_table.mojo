@@ -61,6 +61,13 @@ comptime _PyList_SetItem = ExternalFunction[
 # PyObject *PyObject_GetItem(PyObject *o, PyObject *key)  (new, NULL on error)
 comptime _PyObject_GetItem = ExternalFunction[
     "PyObject_GetItem", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b)  (lane perf3-prep-shared:
+# asked by the perf2 PCA/decomp table, pca_native.mojo, tsvd/ipca/params metadata)
+comptime _PyType_IsSubtype = ExternalFunction[
+    "PyType_IsSubtype", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
+# int PyCallable_Check(PyObject *o)
+comptime _PyCallable_Check = ExternalFunction[
+    "PyCallable_Check", def(PyObjectPtr) thin abi("C") -> c_int]
 
 
 struct CPythonTable(Movable):
@@ -77,6 +84,8 @@ struct CPythonTable(Movable):
     var PyBuffer_Release: _PyBuffer_Release.type
     var PyList_SetItem: _PyList_SetItem.type
     var PyObject_GetItem: _PyObject_GetItem.type
+    var PyType_IsSubtype: _PyType_IsSubtype.type
+    var PyCallable_Check: _PyCallable_Check.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -94,13 +103,15 @@ struct CPythonTable(Movable):
         self.PyBuffer_Release = _PyBuffer_Release.load(lib)
         self.PyList_SetItem = _PyList_SetItem.load(lib)
         self.PyObject_GetItem = _PyObject_GetItem.load(lib)
+        self.PyType_IsSubtype = _PyType_IsSubtype.load(lib)
+        self.PyCallable_Check = _PyCallable_Check.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
 # them load the same interpreter library). Bump the name's version whenever a
 # field is added, removed or reordered.
 comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name="MojolearnCPythonTableV2",
+    StorageType=CPythonTable, name="MojolearnCPythonTableV3",
     init_fn=CPythonTable.__init__,
 ]
 
