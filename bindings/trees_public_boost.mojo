@@ -30,7 +30,10 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
-from bindings.trees_staged_input import trees_stage_members, trees_unstage
+from bindings.trees_staged_input import trees_stage_members, trees_stage_rounds, trees_unstage
+from bindings.native_loaded_module import NativeModules
+from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_need,
@@ -39,7 +42,7 @@ from bindings.trees_public_inputs import (
     trees_weighted_rows, trees_call,
 )
 from bindings.trees_public_forest import (
-    ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh,
+    ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
     forest_capture_mode, forest_effective_mode, forest_export, forest_fit_arrays, forest_kind,
     _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
     _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
@@ -346,6 +349,49 @@ def _member_fit(member: PythonObject, X: PythonObject, y: PythonObject, sample_w
 
 def _member_predict(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     return forest_predict(member, Python.tuple(X), context)
+
+
+def _member_codes(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`as_i32_c(member.predict(X))` of an AdaBoost member, whose classes are
+    the ensemble's codes, without decoding and re-encoding (lane
+    perf-trees-owed, 2026-11-06): the member's own class codes (int32, or
+    int64 from the vote argmax) mapped through its classes. Classes 0..k-1
+    in order (the usual case: every round sees every class) map to
+    themselves: the codes are the answer (int64 narrowed once). Other exact
+    int classes in int32 range go through one int32 gather. Anything else
+    decodes as before. The int32 values are the decoded labels' in every case."""
+    var pair = forest_predict_codes(member, Python.tuple(X), context)
+    var codes = pair[1]
+    var labels = classifier_label_list(pair[0], context)
+    var k = len(labels)
+    var int_t = trees_builtins().int
+    var identity = k > 0
+    var table = trees_vector(max(k, 1), "<i4", context)
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
+    for c in range(k):  # driver-loop: over the member's k classes
+        var v = labels[c]
+        if py_type(v) is not int_t or Bool(py=v < PythonObject(0)) or Bool(py=v > PythonObject(2147483647)):
+            _ = table
+            return _i32_codes(trees_decode_labels(pair[0], codes, context), context)
+        var code = Int(py=v)
+        t[c] = Int32(code)
+        identity = identity and code == c
+    _ = table  # keep the table alive through the writes above
+    var n = Int(py=codes.size)
+    var narrow = codes
+    if String(codes.dtype) != "<i4":
+        narrow = trees_vector(n, "<i4", context)
+        trees_cast(trees_address(codes), String(codes.dtype), trees_address(narrow), "<i4", n, context)
+        _ = narrow  # keep the Python object alive through the native call above
+    if identity:
+        return narrow
+    var out = trees_vector(n, "<i4", context)
+    _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)), PythonObject(k),
+                      PythonObject(trees_address(narrow)), PythonObject(n), PythonObject(trees_address(out)))
+    _ = table  # keep the Python object alive through the native call above
+    _ = narrow  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    return out
 
 
 def _member_proba(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -999,6 +1045,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
         var template = forest_get_params(base, context) if m > 0 else Python.dict()
+        # Every round's member predicts the same training X: staged on the
+        # device once, after the first member is fitted (trees_stage_rounds).
+        var rounds_staged = Python.list()
         try:
             for it in range(m):  # driver-loop: over the boosting rounds (one member each)
                 var member = _clone_from(base, template, _sub_seed(seed, it), context)
@@ -1006,7 +1055,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                     _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
                 else:
                     _member_fit(member, xa, codes, _w32(xt, w, n, context), context)
-                var pred = _i32_codes(_member_predict(member, xa, context), context)
+                if it == 0 and m > 1:
+                    rounds_staged = trees_stage_rounds(member, trees_address(xa), n, d, context)
+                var pred = _member_codes(member, xa, context)
                 _ = py_call_typed(_x(xt, "x_trees_samme_step"), _A(w), _A(pred), _A(codes), _A(stats),
                                   Python.list(_P(n), _P(k), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
                 _ = pred  # keep the Python object alive through the native call above
@@ -1028,7 +1079,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                 if it < m - 1:
                     _scale(xt, w, total)
         finally:
+            trees_unstage(rounds_staged)
             session.close()
+        _ = xa  # the staged rows stay alive until they are unstaged above
         py_setitem(fields, "n_features_in_", _P(d))
         return model
     var y32 = trees_f32(args[1], 1, "C", "y", context)
@@ -1061,6 +1114,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     var loss = Int(py=context["trees_ada_losses"][fields["loss"]])
     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
     var y_array = _as_array(y32, Python.tuple(n), context)
+    var rounds_staged = Python.list()
     try:
         for it in range(m):  # driver-loop: over the boosting rounds (one member each)
             var rows = trees_vector(n, "<i4", context)
@@ -1077,6 +1131,8 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                 _member_fit(member, _gather(xt, x.addr, n, d, rows, cols, context), yr, PythonObject(None), context)
                 _ = y32  # keep the Python object alive through the native call above
                 _ = x  # keep the Python object alive through the native call above
+            if it == 0 and m > 1:
+                rounds_staged = trees_stage_rounds(member, trees_address(xa), n, d, context)
             var pred = _f32_vector(_member_predict(member, xa, context), context)
             _ = py_call_typed(_x(xt, "x_trees_r2_step"), _A(w), _P(pred.addr), _A(y_array), _A(stats),
                               Python.list(_P(n), _P(loss), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
@@ -1100,7 +1156,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             if it < m - 1:
                 _scale(xt, w, total)
     finally:
+        trees_unstage(rounds_staged)
         session.close()
+    _ = xa  # the staged rows stay alive until they are unstaged above
     py_setitem(fields, "n_features_in_", _P(d))
     return model
 
@@ -1137,7 +1195,7 @@ def _ada_decision(fields: PythonObject, x: TreesMatrix, xt: PythonObject, contex
     var wp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(weights.buffer_info)[0]))
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
-            var pred = _i32_codes(_member_predict(members[i], xa, context), context)
+            var pred = _member_codes(members[i], xa, context)
             var a = wp[unsafe_offset=i]
             _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
     finally:
@@ -1477,6 +1535,8 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
 def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     """DARTRegressor / DARTClassifier `fit`."""
     var fields = py_fields(model)
+    # The previous fit's cached address lists hold its trees: drop them now.
+    trees_side_drop(_DART_SLOT, model)
     var x = _x_f32(args[0], context)
     if not classifier:
         var y32 = trees_f32(args[1], 1, "C", "y", context)
@@ -1500,21 +1560,44 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     return _keep_ret_codes^
 
 
-def _dart_raw(fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_DARTBase._raw`: class-major raw scores (K * n) float64 from ONE
-    native walk of every row through every tree."""
-    if not py_contains(fields, "trees_"):
-        raise Error("RuntimeError: this estimator is not fitted yet")
-    var x = _x_f32(X, context)
-    var fitted = Int(py=_int(fields["n_features_in_"]))
-    if x.cols != fitted:
-        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
-    var n = x.rows
-    var d = x.cols
-    var K = Int(py=_int(py_get(fields, "n_classes_", _P(1))))
-    var score = trees_vector(K * n, "<f8", context)
-    if n == 0:
-        return score
+comptime _DART_SLOT = "trees_dart_forest_v1"
+
+
+def _dart_key(fields: PythonObject, K: Int) raises -> PythonObject:
+    """The identities `_dart_forest` reads: the three per-tree sequences and
+    `init_score_` (with their items), and each tree's four model arrays."""
+    var mods = NativeModules()
+    var trees = fields["trees_"]
+    var values = fields["tree_values_"]
+    var tree_coefs = fields["tree_coefs_"]
+    var key = Python.list(PythonObject(K))
+    trees_key_shallow(mods, key, values, 3)
+    trees_key_shallow(mods, key, tree_coefs, 3)
+    trees_key_shallow(mods, key, fields["init_score_"], 3)
+    trees_key_shallow(mods, key, trees, 3)
+    var count = min(len(trees), min(len(values), len(tree_coefs)))
+    for i in range(count):  # driver-loop: over the T fitted trees (identity of their model arrays)
+        var tf = py_fields(trees[i])
+        _ = py_call(key.append, tf["_offsets"])
+        _ = py_call(key.append, tf["_colid"])
+        _ = py_call(key.append, tf["_quesval"])
+        _ = py_call(key.append, tf["_left_child"])
+    return key
+
+
+def _dart_forest(model: PythonObject, fields: PythonObject, K: Int) raises -> PythonObject:
+    """`(key, [cols, ques, lefts, vals], sizes, coefs, starts)`: the per-tree
+    address lists `x_trees_dart_predict` reads, built once per fitted state
+    and kept in the native side table (lane perf-trees-owed, 2026-11-06;
+    every predict rebuilt them, about 30 Python calls per tree). The key
+    holds the arrays, so the cached addresses stay valid; a replaced tree,
+    array or sequence item changes the key and the lists are rebuilt. The
+    addresses and values are the ones the per-call build produced, so the
+    launch and its bits are unchanged."""
+    var key = _dart_key(fields, K)
+    var held = trees_side_get(_DART_SLOT, model)
+    if held is not None and trees_key_same(held[0], key):
+        return held
     var b = trees_builtins()
     var cols = Python.list()
     var ques = Python.list()
@@ -1537,18 +1620,39 @@ def _dart_raw(fields: PythonObject, X: PythonObject, context: PythonObject) rais
         _ = py_call(coefs.append, _float(tree_coefs[i]))
     var init = fields["init_score_"]
     var starts = Python.list(_float(init)) if K == 1 else py_call(b.list, py_call(b.map, b.float, init))
+    var record = Python.list(key, Python.list(cols, ques, lefts, vals), sizes, coefs, starts)
+    _ = trees_side_put(_DART_SLOT, model, record)
+    return record
+
+
+def _dart_raw(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_DARTBase._raw`: class-major raw scores (K * n) float64 from ONE
+    native walk of every row through every tree."""
+    if not py_contains(fields, "trees_"):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    var x = _x_f32(X, context)
+    var fitted = Int(py=_int(fields["n_features_in_"]))
+    if x.cols != fitted:
+        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    var n = x.rows
+    var d = x.cols
+    var K = Int(py=_int(py_get(fields, "n_classes_", _P(1))))
+    var score = trees_vector(K * n, "<f8", context)
+    if n == 0:
+        return score
+    var forest = _dart_forest(model, fields, K)
     var xt = _xt(fields, context)
-    _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), Python.list(cols, ques, lefts, vals), sizes, coefs,
-                      starts, _A(score), Python.list(_P(n), _P(d), _P(K)))
+    _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), forest[1], forest[2], forest[3],
+                      forest[4], _A(score), Python.list(_P(n), _P(d), _P(K)))
     _ = x  # keep the Python object alive through the native call above
     _ = score  # keep the Python object alive through the native call above
     _ = x^
     return score
 
 
-def _dart_raw_rows(fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+def _dart_raw_rows(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_DARTBase._raw_rows`: (n, K) row-major raw scores."""
-    var raw = _dart_raw(fields, X, context)
+    var raw = _dart_raw(model, fields, X, context)
     var K = Int(py=_int(fields["n_classes_"]))
     var n = Int(py=raw.size) // K
     var out = trees_vector(n * K, "<f8", context)
@@ -1565,14 +1669,14 @@ def _multiclass(fields: PythonObject) raises -> Bool:
 def dart_predict(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if not classifier:
-        return _dart_raw(fields, args[0], context)
+        return _dart_raw(model, fields, args[0], context)
     var xt = _xt(fields, context)
     if _multiclass(fields):
-        var acc = _dart_raw_rows(fields, args[0], context)
+        var acc = _dart_raw_rows(model, fields, args[0], context)
         var n = Int(py=acc.shape[0])
         var K = Int(py=acc.shape[1])
         return trees_decode_labels(fields["classes_"], _argmax(xt, acc, n, K, context), context)
-    var raw = _dart_raw(fields, args[0], context)
+    var raw = _dart_raw(model, fields, args[0], context)
     var n = Int(py=raw.size)
     var codes = trees_vector(n, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_positive_codes"), _A(raw), _A(codes), Python.list(_P(n)))
@@ -1584,22 +1688,22 @@ def dart_predict(model: PythonObject, args: PythonObject, classifier: Bool, cont
 def dart_decision_function(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if _multiclass(fields):
-        return _dart_raw_rows(fields, args[0], context)
-    return _dart_raw(fields, args[0], context)
+        return _dart_raw_rows(model, fields, args[0], context)
+    return _dart_raw(model, fields, args[0], context)
 
 
 def dart_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var xt = _xt(fields, context)
     if _multiclass(fields):
-        var acc = _dart_raw_rows(fields, args[0], context)
+        var acc = _dart_raw_rows(model, fields, args[0], context)
         var n = Int(py=acc.shape[0])
         var K = Int(py=acc.shape[1])
         var flat = trees_reshape(acc, Python.tuple(n * K), context)
         _ = py_call_typed(_x(xt, "x_trees_softmax_rows"), _A(flat), Python.list(_P(n), _P(K)))
         _ = flat  # keep the Python object alive through the native call above
         return trees_reshape(flat, Python.tuple(n, K), context)
-    var raw = _dart_raw(fields, args[0], context)
+    var raw = _dart_raw(model, fields, args[0], context)
     var n = Int(py=raw.size)
     var acc = trees_vector(2 * n, "<f8", context)
     var zero = trees_vector(n, "<f8", context)

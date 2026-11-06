@@ -619,9 +619,16 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var permutation = args[2]
     var bijection = String("mojolearn: permutation must be an integer bijection of row ids")
     if py_type(permutation) is b.list or py_type(permutation) is b.tuple:
+        # An exact int is integral and not a bool: only other items take the
+        # isinstance checks (lane perf-trees-owed; the connected integral
+        # type was also looked up in the context once per item).
+        var int_t = b.int
+        var integral = context["trees_integral_type"]
         for i in range(len(permutation)):  # cpu-route: user permutation Python list type check [py-data-loop]
             var v = permutation[i]
-            if _is_bool(v) or not _isinstance(v, context["trees_integral_type"]):
+            if py_type(v) is int_t:
+                continue
+            if _is_bool(v) or not _isinstance(v, integral):
                 raise Error(bijection)
     elif py_type(permutation) is context["array_class"]:
         var letter = String(String(permutation.dtype)[byte=1:2])

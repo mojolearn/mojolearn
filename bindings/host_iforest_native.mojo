@@ -14,6 +14,10 @@ from bindings.host_sparse_native import host_sparse_format
 from bindings.host_tree_native import host_tree_wide
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.classical_pandas import classical_admit_value
+from bindings.trees_lifetime import trees_resident_new
+from bindings.trees_side_records import trees_side_get, trees_side_put
+
+comptime _HOST_TOKEN_SLOT = "trees_iforest_host_resident_v1"
 
 
 def host_iforest_admit_option(value: PythonObject, context: PythonObject) raises:
@@ -187,15 +191,24 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     # param, the token: 0 fits once and keeps the forest; a live token whose
     # key (training buffer address and shape, every resolved control) is
     # unchanged scores with no fit. The forest is a pure function of the seed
-    # and the X bits, so the scores are the refit's bit for bit. CPU fit pops
-    # `_if_token` (bindings/host_iforest_fit_native.mojo), so a refit always
-    # mints a fresh forest; `__getstate__` drops it too.
+    # and the X bits, so the scores are the refit's bit for bit.
+    # Lane perf-trees-owed (2026-11-06): the token is a native side record of
+    # the estimator (bindings/trees_side_records.mojo): (token, the fitted
+    # `_x` it was minted for, its lifetime). Scoring no longer writes
+    # `_if_token` into `__dict__` (scikit-learn's checks require predict and
+    # score to leave it unchanged) and no pickle or copy carries the handle.
+    # A refit stores a new `_x`, so the held token no longer applies and a
+    # fresh forest is minted; the replaced record's lifetime releases the old
+    # one, and the last one is released when the estimator goes.
     var resident = _host_resident_entries(entry, context)
     var held = 0
+    var record = PythonObject(None)
+    var same_train = False
     if resident is not None:
-        var stored = py_get(fields, "_if_token", PythonObject(0))
-        if py_type(stored) is py_type(PythonObject(0)):
-            held = Int(py=stored)
+        record = trees_side_get(_HOST_TOKEN_SLOT, model)
+        same_train = record is not None and record[1] is fields["_x"]
+        if same_train:
+            held = Int(py=record[0])
         _ = py_call(params.append, PythonObject(held))
     var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", context["output_context"])
     try:
@@ -213,15 +226,14 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     py_setitem(fields, "max_samples_", Int(classical_f64(info, 1)))
     if resident is not None:
         var token = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(info)))[3])
-        if token != held:
-            # A fresh forest replaced the held one: drop the old entry now
-            # (the store also evicts past its cap).
-            if held > 0:
-                try:
-                    _ = py_call(resident[0], PythonObject(held))
-                except:
-                    pass
-            py_setitem(fields, "_if_token", PythonObject(token))
+        if token != held or not same_train:
+            # A fresh forest replaced the held one (the store also evicts
+            # past its cap). Replacing the record drops the old lifetime,
+            # which releases the old token; a reissued equal token keeps its
+            # lifetime. A model without weak references keeps no record, so
+            # its token is released at once.
+            var lifetime = record[2] if record is not None and token == Int(py=record[0]) else trees_resident_new(resident[0], token)
+            _ = trees_side_put(_HOST_TOKEN_SLOT, model, Python.list(PythonObject(token), fields["_x"], lifetime))
     _ = info^
     if want != 2 and public:
         out = host_tree_wide(out, context)

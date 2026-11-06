@@ -16,11 +16,12 @@ from bindings.prep_lda_admission import lda_native_labels
 from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_lifecycle_pyapi import estimator_outside as _outside, estimator_feature_check as _feature_check
 from bindings.sequential_inputs import sequential_input
-from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_kind, forest_get_params, forest_check_fit_device
-from bindings.trees_public_score import forest_score
-from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast
+from bindings.trees_public_forest import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
+from bindings.trees_public_score import forest_score_public
+from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast, trees_f32
 from bindings.trees_public_auxiliary import forest_auxiliary, forest_shape
 from bindings.trees_public_state import forest_restore_state, tree_is_fitted
+from bindings.trees_side_records import trees_admit_parameters, trees_finite_mark, trees_finite_clear
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -68,10 +69,10 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         return forest_auxiliary(model, method, args, context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var names = py_type(model)._parameter_names
-    for i in range(len(names)):  # driver-loop: stored constructor arguments before native conversions
-        if py_contains(fields, names[i]):
-            classical_admit_value(fields[names[i]], context)
+    # Once per configuration, not per call (lane perf-trees-owed): the
+    # identity record of the stored constructor arguments lives in the
+    # native side table (bindings/trees_side_records.mojo).
+    trees_admit_parameters(model, fields, py_type(model)._parameter_names, context)
     var fitting = operation == "trees_public_forest_fit"
     if fitting:
         # Parameter validation precedes input admission and conversion.
@@ -81,14 +82,28 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     if not fitting:
         classical_require_fitted(model, False, "score" if operation.endswith("score") else "predict", context)
     var x = classical_check_x(args[0], name, context)
+    var kind = forest_kind(model, context)
+    var classifier = kind.endswith("_classifier")
+    var result = PythonObject(None)
+    if not fitting:
+        # classical_check_x returned C-order float32 X: view it once here and
+        # hand that view to the predict (lane perf-trees-owed, 2026-11-06;
+        # the forest re-viewed X and re-checked the fitted state and width).
+        var matrix = trees_f32(x, 2, "C", "X", context)
+        classical_check_width(matrix.cols, Int(py=fields["n_features_in_"]), name)
+        _feature_check(model, fields, args[0], context)
+        if operation == "trees_public_forest_predict":
+            result = forest_public_predict(model, kind, matrix, False, False, context)
+        elif operation == "trees_public_forest_proba":
+            result = forest_public_predict(model, kind, matrix, True, False, context)
+        elif operation == "trees_public_forest_score":
+            return forest_score_public(model, kind, matrix, args[1], args[2], context)
+        else:
+            raise Error("unknown native public forest operation " + operation)
+        _ = matrix^
+        return _public_result(result, operation, classifier, context)
     var shape = labels_shape_of(x, context)
     var rows = shape[0]
-    var cols = shape[1]
-    var classifier = forest_kind(model, context).endswith("_classifier")
-    if not fitting:
-        classical_check_width(cols, Int(py=fields["n_features_in_"]), name)
-        _feature_check(model, fields, args[0], context)
-    var result = PythonObject(None)
     if fitting:
         var y = args[1]
         if classifier:
@@ -103,9 +118,13 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             raise Error("TypeError: native forest fit depth must be an exact integer")
         var depth = Int(py=depth_object)
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+        # classical_check_x refused NaN and infinity in x: the fit skips its
+        # second scan of it (trees_side_records `trees_finite_known`).
+        trees_finite_mark(x)
         try:
             result = forest_fit(model, Python.tuple(x, y, args[2], args[3], args[4]), context)
         finally:
+            trees_finite_clear()
             fields = py_fields(model)
             if depth > 0:
                 py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
@@ -121,14 +140,11 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
                 py_setitem(fields, "feature_names_in_", feature_names)
             py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
         return result
-    if operation == "trees_public_forest_predict":
-        result = forest_predict(model, Python.tuple(x), context)
-    elif operation == "trees_public_forest_proba":
-        result = forest_predict_proba(model, Python.tuple(x), context)
-    elif operation == "trees_public_forest_score":
-        return forest_score(model, Python.tuple(x, args[1], args[2]), context)
-    else:
-        raise Error("unknown native public forest operation " + operation)
+    raise Error("unknown native public forest operation " + operation)
+
+
+def _public_result(var result: PythonObject, operation: String, classifier: Bool,
+                   context: PythonObject) raises -> PythonObject:
     if classical_is_array(result, context) and py_get(context, "ndarray") is not None and _outside():
         if operation == "trees_public_forest_predict" and not classifier and String(result.dtype) == "<f4":
             var wide = trees_empty(result.shape, "<f8", context)

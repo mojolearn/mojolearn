@@ -32,6 +32,7 @@ from bindings.trees_public_inputs import (
     trees_decode_labels, trees_argmax_rows, trees_class_rows_only, trees_weighted_rows, trees_cast,
     trees_view, trees_call,
 )
+from bindings.trees_side_records import trees_finite_known, trees_finite_mark
 from bindings.trees_lifetime import trees_resident_new
 from bindings.metrics_native_support import metric_is_integral, metric_warning_location
 from bindings.classical_warnings import classical_warning
@@ -750,13 +751,20 @@ def _y_rows_check(n: Int, rows: Int) raises:
 def _x_for(source: PythonObject, rowmajor: Bool, context: PythonObject) raises -> TreesMatrix:
     """`_fit_arrays`' X: the forest layout when the fit has a row-major
     entry, else the column-major float32 copy."""
-    if rowmajor:
-        return trees_forest_layout(source, "X", context)
-    return trees_f32(source, 2, "F", "X", context)
+    var x = trees_forest_layout(source, "X", context) if rowmajor else trees_f32(source, 2, "F", "X", context)
+    # A float32 copy of an input the public door admitted finite is finite.
+    if x.keep is not source and trees_finite_known(source):
+        trees_finite_mark(x.keep)
+    return x^
 
 
 def _finite_or_refuse(x: TreesMatrix, device_scan: Bool, context: PythonObject) raises:
-    if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
+    # The public door's classical_check_x already refused NaN and infinity
+    # in this X (trees_finite_known; lane perf-trees-owed, 2026-11-06): the
+    # second O(n d) scan is skipped for it, and kept for every other caller.
+    if device_scan or trees_finite_known(x.keep):
+        return
+    if not trees_all_finite(x.addr, x.rows * x.cols, False, context):
         raise Error(TREES_NONFINITE)
 
 
@@ -862,7 +870,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         if _truthy(cfg["oob_score"]):
             oob = trees_empty(Python.tuple(labels.n, k), "<f8", context)
             score = trees_vector(1, "<f8", context)
-        var x = trees_f32(X, 2, "F", "X", context)
+        var x = _x_for(X, False, context)
         var importance = trees_vector(x.cols, "<f4", context) if importances else PythonObject(None)
         var tail = Python.list(PythonObject(0 if not weights else weights.value().addr),
                                PythonObject(0 if oob is None else trees_address(oob)),
@@ -888,7 +896,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         if not _has(rf, "rf_classifier_fit_shard"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
         var tail = Python.list(tree_start, PythonObject(0 if not weights else weights.value().addr))
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y_addr, labels.n, k,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_shard", True, tail, False), None, rf, context)
         _ = labels  # retain shard labels through the address-only fit
         _ = weights^
@@ -897,7 +905,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         if not _has(rf, "rf_classifier_fit_weighted"):
             raise Error("RuntimeError: rebuild the RF binding for class_weight support")
         var tail = Python.list(PythonObject(weights.value().addr))
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y_addr, labels.n, k,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_weighted", True, tail, True), None, rf, context)
         _ = labels
         _ = weights^
@@ -970,7 +978,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = w  # keep the Python object alive through the native call above
         var tail = Python.list(PythonObject(w.addr), w_max)
         _ = w  # keep the Python object alive through the native call above
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y32.addr, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_weighted", True, tail, True), None, rf, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
@@ -987,7 +995,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         if _truthy(cfg["oob_score"]):
             oob = trees_vector(y32.rows, "<f8", context)
             score = trees_vector(1, "<f8", context)
-        var x = trees_f32(X, 2, "F", "X", context)
+        var x = _x_for(X, False, context)
         var importance = trees_vector(x.cols, "<f4", context) if importances else PythonObject(None)
         var tail = Python.list(PythonObject(0 if oob is None else trees_address(oob)),
                                PythonObject(0 if score is None else trees_address(score)),
@@ -1010,7 +1018,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
     if tree_start is not None:
         if not _has(rf, "rf_regressor_fit_shard"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
-        _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y32.addr, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_shard", True, Python.list(tree_start), False), None, rf, context)
         _ = y32^
         return model
@@ -1258,9 +1266,14 @@ def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, m
     the arrays, dimensions, mode and aggregation are the same. The snapshot
     is released when the holder drops it (a refit, a new snapshot, the
     model's end). Returns its handle."""
+    return _resident_with(model, fields, native, mode, _engine(fields, mode), _ordered_export(native), context)
+
+
+def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObject, mode: String, engine: String,
+                   ordered_export: Bool, context: PythonObject) raises -> Int:
+    """`_resident` with the engine and the ordered export its caller already
+    resolved (ForestInput: read once per predict)."""
     var b = trees_builtins()
-    var engine = _engine(fields, mode)
-    var ordered_export = _ordered_export(native)
     if engine != "parallel_groves" and not (engine == "sequential" and ordered_export):
         raise Error("resident forest preparation requires parallel_groves")
     if not py_contains(fields, "_offsets"):
@@ -1337,14 +1350,38 @@ def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, m
 
 
 struct ForestInput(Copyable, Movable):
+    """One predict's resolved state, read once (lane perf-trees-owed,
+    2026-11-06; `_int`, `_engine` and `_ordered_export` were re-read two or
+    three times per predict): X, the effective mode, the binding, the
+    engine, whether the binding has the ordered resident export, and the
+    fitted output width."""
     var x: TreesMatrix
     var mode: String
     var native: PythonObject
+    var engine: String
+    var ordered_export: Bool
+    var outputs: Int
 
-    def __init__(out self, var x: TreesMatrix, mode: String, native: PythonObject):
+    def __init__(out self, var x: TreesMatrix, mode: String, native: PythonObject, engine: String,
+                 ordered_export: Bool, outputs: Int):
         self.x = x^
         self.mode = mode
         self.native = native
+        self.engine = engine
+        self.ordered_export = ordered_export
+        self.outputs = outputs
+
+
+def _stage(fields: PythonObject, kind: String, var x: TreesMatrix, context: PythonObject) raises -> ForestInput:
+    """The resolved predict state of a fitted model over an admitted X."""
+    if not py_contains(fields, "_offsets"):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    var mode = forest_effective_mode(fields, context)
+    var native = trees_table(context, mode, "_mojolearn_trees" if _family(kind) == "et" else "_mojolearn_rf")
+    var engine = _engine(fields, mode)
+    var ordered_export = _ordered_export(native)
+    var outputs = Int(py=_int(fields["_num_outputs"]))
+    return ForestInput(x^, mode, native, engine, ordered_export, outputs)
 
 
 def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject,
@@ -1357,9 +1394,7 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
     var fitted = Int(py=_int(fields["n_features_in_"]))
     if x.cols != fitted:
         raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
-    var mode = forest_effective_mode(fields, context)
-    var native = trees_table(context, mode, "_mojolearn_trees" if _family(kind) == "et" else "_mojolearn_rf")
-    return ForestInput(x^, mode, native)
+    return _stage(fields, kind, x^, context)
 
 
 def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput, sequential_name: String,
@@ -1367,11 +1402,11 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
     """`ForestProtocol._predict_forest`: the rows' votes or values, flat
     float32, through the model's engine."""
     var rows = staged.x.rows
-    var outputs = Int(py=_int(fields["_num_outputs"]))
+    var outputs = staged.outputs
     var out = trees_vector(rows * outputs, "<f4", context)
-    var engine = _engine(fields, staged.mode)
+    var engine = staged.engine
     var wrote = PythonObject(None)
-    if engine == "sequential" and not _ordered_export(staged.native):
+    if engine == "sequential" and not staged.ordered_export:
         # The refusal's words are built only when the entry is missing.
         var function = trees_entry(staged.native, sequential_name)
         if function is None:
@@ -1395,7 +1430,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
         _ = out  # keep the Python object alive through the native call above
         _ = arrays^
     else:
-        var handle = _resident(model, fields, staged.native, staged.mode, context)
+        var handle = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
         wrote = py_call_typed(trees_entry(staged.native, "forest_predict_resident_reuse_gpu"), PythonObject(handle),
                               PythonObject(staged.x.addr), PythonObject(trees_address(out)),
                               Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(outputs)))
@@ -1408,12 +1443,12 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
 def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestInput, context: PythonObject) raises -> PythonObject:
     """`ForestProtocol._predict_forest_labels`: the resident classifier's
     int32 codes, or None where the fused label route does not apply."""
-    var engine = _engine(fields, staged.mode)
+    var engine = staged.engine
     var capability = trees_entry(staged.native, "forest_identical_fused_labels")
     if staged.mode == "identical":
         if capability is None or not _truthy(py_call_typed(capability)):
             return PythonObject(None)
-        if not (engine == "sequential" and _ordered_export(staged.native)) and engine != "parallel_groves":
+        if not (engine == "sequential" and staged.ordered_export) and engine != "parallel_groves":
             return PythonObject(None)
     elif staged.mode != "fast" or engine != "parallel_groves":
         return PythonObject(None)
@@ -1422,9 +1457,9 @@ def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestIn
         return PythonObject(None)
     var rows = staged.x.rows
     var out = trees_vector(rows, "<i4", context)
-    var handle = _resident(model, fields, staged.native, staged.mode, context)
+    var handle = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
     var wrote = py_call_typed(function, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
-                              Python.list(PythonObject(rows), PythonObject(staged.x.cols), _int(fields["_num_outputs"])))
+                              Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(staged.outputs)))
     _ = out  # keep the Python object alive through the native call above
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: forest label prediction wrote " + _str(wrote) + " of " + String(rows) + " rows")
@@ -1447,6 +1482,34 @@ def _inner(fields: PythonObject) raises -> PythonObject:
     return py_get(fields, "_random_inner")
 
 
+def _proba_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
+                  context: PythonObject) raises -> PythonObject:
+    var shape = Python.tuple(staged.x.rows, staged.outputs)
+    if _family(kind) == "et":
+        return _widen(_vote(model, fields, kind, staged, "et_predict", context), shape, context)
+    return trees_reshape(_vote(model, fields, kind, staged, "rf_predict_proba", context), shape, context)
+
+
+def _codes_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
+                  context: PythonObject) raises -> PythonObject:
+    """A classifier's undecoded class codes: the resident fused labels
+    (int32), else the first-max argmax of the vote (int64)."""
+    var codes = _resident_labels(model, fields, staged, context)
+    if codes is not None:
+        return codes
+    var vote = _vote(model, fields, kind, staged, "et_predict" if _family(kind) == "et" else "rf_predict_proba", context)
+    return trees_argmax_rows(vote, staged.x.rows, staged.outputs, False, context)
+
+
+def _predict_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput,
+                    context: PythonObject) raises -> PythonObject:
+    if _classifier(kind):
+        return trees_decode_labels(fields["classes_"], _codes_staged(model, fields, kind, staged, context), context)
+    if _family(kind) == "et":
+        return _widen(_vote(model, fields, kind, staged, "et_predict", context), Python.tuple(staged.x.rows), context)
+    return _vote(model, fields, kind, staged, "rf_predict_reg", context)
+
+
 def forest_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict_proba`: RF and DT the float32 vote fractions; ET the vote
     widened to float64; a random-splitter tree its inner forest's."""
@@ -1456,11 +1519,7 @@ def forest_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
     if inner is not None:
         return forest_predict_proba(inner, args, context)
     var staged = _predict_input(model, fields, kind, args[0], context)
-    var outputs = Int(py=_int(fields["_num_outputs"]))
-    var shape = Python.tuple(staged.x.rows, outputs)
-    if _family(kind) == "et":
-        return _widen(_vote(model, fields, kind, staged, "et_predict", context), shape, context)
-    return trees_reshape(_vote(model, fields, kind, staged, "rf_predict_proba", context), shape, context)
+    return _proba_staged(model, fields, kind, staged, context)
 
 
 def forest_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1473,15 +1532,53 @@ def forest_predict(model: PythonObject, args: PythonObject, context: PythonObjec
     if inner is not None:
         return forest_predict(inner, args, context)
     var staged = _predict_input(model, fields, kind, args[0], context)
-    var rows = staged.x.rows
-    if _classifier(kind):
-        var classes = fields["classes_"]
-        var codes = _resident_labels(model, fields, staged, context)
-        if codes is not None:
-            return trees_decode_labels(classes, codes, context)
-        var outputs = Int(py=_int(fields["_num_outputs"]))
-        var vote = _vote(model, fields, kind, staged, "et_predict" if _family(kind) == "et" else "rf_predict_proba", context)
-        return trees_decode_labels(classes, trees_argmax_rows(vote, rows, outputs, False, context), context)
-    if _family(kind) == "et":
-        return _widen(_vote(model, fields, kind, staged, "et_predict", context), Python.tuple(rows), context)
-    return _vote(model, fields, kind, staged, "rf_predict_reg", context)
+    return _predict_staged(model, fields, kind, staged, context)
+
+
+def forest_predict_codes(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A forest classifier's `predict` before its decode:
+    `(classes_, codes)`, the codes an int32 or int64 Array indexing
+    `classes_`. Internal callers that work in codes (AdaBoost's members,
+    the string-class accuracy of `score`) skip the decode and re-encode."""
+    var fields = py_fields(model)
+    var kind = forest_kind(model, context)
+    var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
+    if inner is not None:
+        return forest_predict_codes(inner, args, context)
+    if not _classifier(kind):
+        raise Error("TypeError: forest class codes require a classifier")
+    var staged = _predict_input(model, fields, kind, args[0], context)
+    return Python.tuple(fields["classes_"], _codes_staged(model, fields, kind, staged, context))
+
+
+def forest_public_predict(model: PythonObject, kind: String, x: TreesMatrix, proba: Bool, codes: Bool,
+                          context: PythonObject) raises -> PythonObject:
+    """The public door's predict over the X it already admitted and checked
+    (classical_check_x: C-order float32; its width against the fitted width;
+    the fitted check): no second conversion, view or width check (lane
+    perf-trees-owed, 2026-11-06; X was viewed and checked twice per call).
+    `codes` returns `(classes_, codes)` as forest_predict_codes does. A
+    random-splitter tree predicts through its inner forest, whose own width
+    and fitted state are checked as before."""
+    var fields = py_fields(model)
+    var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
+    if inner is not None:
+        var inner_fields = py_fields(inner)
+        var inner_kind = forest_kind(inner, context)
+        if not py_contains(inner_fields, "_offsets"):
+            raise Error("RuntimeError: this estimator is not fitted yet")
+        var fitted = Int(py=_int(inner_fields["n_features_in_"]))
+        if x.cols != fitted:
+            raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+        return _public_staged(inner, inner_fields, inner_kind, _stage(inner_fields, inner_kind, x.copy(), context),
+                              proba, codes, context)
+    return _public_staged(model, fields, kind, _stage(fields, kind, x.copy(), context), proba, codes, context)
+
+
+def _public_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput, proba: Bool,
+                   codes: Bool, context: PythonObject) raises -> PythonObject:
+    if proba:
+        return _proba_staged(model, fields, kind, staged, context)
+    if codes:
+        return Python.tuple(fields["classes_"], _codes_staged(model, fields, kind, staged, context))
+    return _predict_staged(model, fields, kind, staged, context)

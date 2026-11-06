@@ -98,11 +98,17 @@ def _snapshot(source: PythonObject, dtype: String, rank: Int, name: String,
         raw = trees_empty(shape, view.typestr, context)
         var dst = _U8(unsafe_from_address=trees_address(raw))
         var cols = view.shape[1] if rank == 2 else 1
-        for row in range(view.shape[0]):  # driver-loop: admitted buffer layout, no numerical algorithm
-            for col in range(cols):  # driver-loop: physical input strides
-                var offset = row * view.strides[0] + (col * view.strides[1] if rank == 2 else 0)
-                memcpy(dest=dst + (row * cols + col) * view.item,
-                       src=_U8(unsafe_from_address=view.addr + offset), count=view.item)
+        if view.c_order():
+            # The common C-contiguous buffer: one block copy (lane
+            # perf-trees-owed, 2026-11-06: one memcpy per element before).
+            if view.size() > 0:
+                memcpy(dest=dst, src=_U8(unsafe_from_address=view.addr), count=view.size() * view.item)
+        else:
+            for row in range(view.shape[0]):  # driver-loop: admitted buffer layout, no numerical algorithm
+                for col in range(cols):  # driver-loop: physical input strides
+                    var offset = row * view.strides[0] + (col * view.strides[1] if rank == 2 else 0)
+                    memcpy(dest=dst + (row * cols + col) * view.item,
+                           src=_U8(unsafe_from_address=view.addr + offset), count=view.item)
         py_setitem(snapshots, identity, Python.tuple(source, raw, owners))
         _ = owners
         _ = view

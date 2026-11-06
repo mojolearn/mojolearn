@@ -114,6 +114,40 @@ def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int
     return staged
 
 
+def trees_stage_rounds(member: PythonObject, x_addr: Int, rows: Int, cols: Int,
+                       context: PythonObject) raises -> PythonObject:
+    """Stage the rows at `x_addr` in the forest binary `member` predicts
+    through, for a caller that predicts those same rows through it once per
+    round with a new member each round (AdaBoost's fit loop: each round's
+    member predicts the training X; lane perf-trees-owed, 2026-11-06). The
+    staged rows serve every later member of that binary; one predicting
+    other rows unstages them, as in any staging. Returns the unstage entries
+    for `trees_unstage`; the rows must stay alive and unchanged until then."""
+    var staged = Python.list()
+    if rows < 1 or cols < 1:
+        return staged
+    var native = PythonObject(None)
+    try:
+        native = _member_table(member, cols, context)
+    except:
+        pass
+    if native is None:
+        return staged
+    var stage = trees_entry(native, "forest_stage_input_gpu")
+    var unstage = trees_entry(native, "forest_unstage_input_gpu")
+    if stage is None or unstage is None:
+        return staged
+    _ = py_call(staged.append, unstage)
+    try:
+        _ = py_call(stage, PythonObject(x_addr), Python.list(PythonObject(rows), PythonObject(cols)))
+    except:
+        try:
+            _ = py_call(unstage)
+        except:
+            pass
+    return staged
+
+
 def trees_unstage(staged: PythonObject):
     """End the staging `trees_stage_members` began (quiet: a binary torn
     down at interpreter exit has nothing left staged)."""

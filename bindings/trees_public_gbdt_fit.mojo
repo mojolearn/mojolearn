@@ -28,7 +28,7 @@ from bindings.host_archive_native import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.trees_public_inputs import (
-    TreesMatrix, TreesLabels, trees_builtins, trees_entry, trees_need, trees_helper, trees_vector, trees_address,
+    TreesMatrix, TreesLabels, TreesView, trees_builtins, trees_entry, trees_need, trees_helper, trees_vector, trees_address,
     trees_f32, trees_f32_view, trees_view, trees_check_rank, trees_forest_layout, trees_all_finite,
     trees_check_sample_weight, trees_call, trees_encode_labels,
 )
@@ -412,9 +412,79 @@ def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
     return py_call_typed(b.list, value)
 
 
+def _id_word(addr: Int, typestr: String, i: Int) -> Int:
+    """Element `i` of a contiguous little-endian integer id vector."""
+    if typestr == "<i8":
+        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if typestr == "<i4":
+        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if typestr == "<u4":
+        return Int(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if typestr == "<i2":
+        return Int(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if typestr == "<u2":
+        return Int(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if typestr == "|i1" or typestr == "<i1":
+        return Int(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    return Int(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+
+
+def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
+    """`_group_sizes` of an integer ndarray or Array id vector read from its
+    buffer in one native pass (lane perf-trees-owed, 2026-11-06: before, the
+    ids were listed, then each one type-checked, formatted to its decimal
+    bytes and looked up in a Python set). Two integer ids have equal keys
+    exactly when their values are equal, so the runs and the refusal are the
+    same. None when the ids are not such a vector (the general path below)."""
+    var cls = py_type(group_id)
+    var ndarray = py_get(context, "ndarray")
+    if not ((ndarray is not None and cls is ndarray) or cls is context["array_class"]):
+        return PythonObject(None)
+    var view: TreesView
+    try:
+        view = trees_view(group_id, "group_id", context)
+    except:
+        return PythonObject(None)
+    var t = view.typestr
+    if view.ndim() != 1 or not view.c_order() or not (t == "<i8" or t == "<i4" or t == "<u4" or t == "<i2"
+            or t == "<u2" or t == "|i1" or t == "<i1" or t == "|u1" or t == "<u1"):
+        return PythonObject(None)
+    var n = view.size()
+    if n != n_rows:
+        raise Error("mojolearn: Length of group_id=" + String(n) + " and length of "
+                    + "data=" + String(n_rows) + " are different.")
+    if n_rows > 0xFFFFFFFF:
+        raise Error("mojolearn: group_id needs at most 2**32 - 1 rows")
+    var sizes = List[Int]()
+    var seen = Dict[Int, Int]()
+    var last = 0
+    for i in range(n):  # cpu-route: group_id run lengths read natively from the id buffer (fit input step)
+        var value = _id_word(view.addr, t, i)
+        if i > 0 and value == last:
+            sizes[len(sizes) - 1] += 1
+            continue
+        if value in seen:
+            raise Error("mojolearn: group Ids are not consecutive: the rows of group "
+                        + String(value) + " are split into more than one run (row " + String(i) + "); "
+                        + "CatBoost requires every group's rows to be contiguous")
+        seen[value] = i
+        sizes.append(1)
+        last = value
+    _ = view.keep  # keep the id buffer alive through the reads above
+    var out = trees_vector(len(sizes), "<u4", context)
+    var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
+    for i in range(len(sizes)):  # cpu-route: group_id run lengths published from the label input step
+        p[i] = UInt32(sizes[i])
+    _ = out  # keep the Python object alive through the writes above
+    return out
+
+
 def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
     """`ensemble._group_sizes`: the run lengths of consecutive equal ids, a
     repeated id refused (their `adjacent_find`)."""
+    var fast = _group_sizes_native(group_id, n_rows, context)
+    if fast is not None:
+        return fast
     var b = _b()
     var ids = PythonObject(None)
     try:
