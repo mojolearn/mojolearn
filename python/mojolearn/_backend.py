@@ -2415,6 +2415,12 @@ def binding(name, mode=None):
     # extension) mode. Check the actual called module, including cached sets.
     getter_name = _vendor_fn(name).removesuffix("_vendor") + "_numeric_mode"
     getter = getattr(module, getter_name, None)
+    # The compiled mode of one loaded module is a compile-time constant: read
+    # it once per (set, module, getter) identity, not on every public call. A
+    # replaced module or getter is a new key and is read back again.
+    checked = _MODE_CHECKED.get(name)
+    if checked is not None and checked[0] is selected and checked[1] is module and checked[2] is getter:
+        return module
     if getter is not None:
         compiled = _CODE_MODE.get(getter(), "unknown")
         if compiled != selected.mode:
@@ -2422,7 +2428,13 @@ def binding(name, mode=None):
                 f"mojolearn: {name} was compiled for {compiled}, but this call "
                 f"requested {selected.mode}; rebuild the {selected.mode} binding"
             )
+    _MODE_CHECKED[name] = (selected, module, getter)
     return module
+
+
+#: binding(): the last (mode set, module, mode getter) whose compiled mode was
+#: read back and matched, per binding name.
+_MODE_CHECKED = {}
 
 
 
