@@ -53,6 +53,48 @@ def _read(rel):
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
+def _run_with_threads(threads, code):
+    """Run `code` in a fresh interpreter with MOJOLEARN_CPU_THREADS set to
+    `threads` (None: unset) and return its stdout lines. The host thread
+    policy is read once per process (core/host_predict_threads.mojo), so a
+    count set inside this process after the first host call changes
+    nothing; only a new process honours it. The child imports the same
+    mojolearn package this process holds."""
+    import subprocess
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    if threads is None:
+        env.pop("MOJOLEARN_CPU_THREADS", None)
+    else:
+        env["MOJOLEARN_CPU_THREADS"] = threads
+    pkg_parent = str(Path(mojolearn.__file__).resolve().parent.parent)
+    proc = subprocess.run(
+        [sys.executable, "-I", "-c",
+         "import sys; sys.path.insert(0, sys.argv.pop(1)); exec(sys.argv.pop(1))",
+         pkg_parent, code],
+        env=env, capture_output=True, text=True, timeout=900,
+    )
+    assert proc.returncode == 0, (threads, proc.stdout[-2000:], proc.stderr[-4000:])
+    return proc.stdout.strip().splitlines()
+
+
+#: The metrics host thread-count check, run once per thread count in its own
+#: process: the same draw as the test, the address entries, one line out.
+_METRICS_THREADS_CODE = """
+import numpy as np
+from mojolearn import _backend
+module = _backend.load_host_module("_mojolearn_metrics_host")
+rng = np.random.default_rng(1)
+x = rng.standard_normal((300, 3)).astype(np.float32)
+yt = (rng.integers(0, 3, 300)).astype(np.int32)
+yp = (yt + (rng.random(300) < 0.2)).astype(np.int32) % 3
+acc = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
+cm = np.empty(9, dtype=np.int64)
+module.confusion_matrix(yt.ctypes.data, yp.ctypes.data, cm.ctypes.data, [len(yt), 3, 0])
+print(repr(float(acc)), cm.tobytes().hex())
+"""
+
+
 def test_manifest_covers_kmeans():
     assert "kmeans" in host_surface.covered_lanes(), "kmeans is not a covered training lane"
     assert host_surface.TRAINING_LANE_NAMES["kmeans"] == "k-means"
@@ -324,34 +366,11 @@ def test_metrics_run_on_the_host_when_built():
     x = rng.standard_normal((300, 3)).astype(np.float32)
     yt = (rng.integers(0, 3, 300)).astype(np.int32)
     yp = (yt + (rng.random(300) < 0.2)).astype(np.int32) % 3
-    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
-    try:
-        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
-        serial = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
-        os.environ["MOJOLEARN_CPU_THREADS"] = "7"
-        parallel = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
-    finally:
-        if previous_threads is None:
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-        else:
-            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
-    assert serial == parallel
-    serial_cm = np.empty(9, dtype=np.int64)
-    parallel_cm = np.empty(9, dtype=np.int64)
-    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
-    try:
-        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
-        module.confusion_matrix(yt.ctypes.data, yp.ctypes.data,
-                                serial_cm.ctypes.data, [len(yt), 3, 0])
-        os.environ["MOJOLEARN_CPU_THREADS"] = "7"
-        module.confusion_matrix(yt.ctypes.data, yp.ctypes.data,
-                                parallel_cm.ctypes.data, [len(yt), 3, 0])
-    finally:
-        if previous_threads is None:
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-        else:
-            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
-    assert serial_cm.tobytes() == parallel_cm.tobytes()
+    # One and seven row tasks must give the same accuracy and confusion
+    # matrix bytes; each count runs in its own process (read once).
+    serial = _run_with_threads("1", _METRICS_THREADS_CODE)
+    parallel = _run_with_threads("7", _METRICS_THREADS_CODE)
+    assert serial and serial == parallel, (serial, parallel)
     got = [(mt.accuracy_score(yt, yp), mt.adjusted_rand_score(yt, yp), mt.v_measure_score(yt, yp),
             mt.r2_score(x[:, 0], x[:, 0] * np.float32(0.9)), mt.silhouette_score(x, yp))
            for _ in range(2)]

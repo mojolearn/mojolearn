@@ -152,6 +152,63 @@ def test_sabotage_define_moves_the_distance():
 
 
 
+def _run_with_threads(threads, code):
+    """Run `code` in a fresh interpreter with MOJOLEARN_CPU_THREADS set to
+    `threads` (None: unset) and return its stdout lines. The host thread
+    policy is read once per process (core/host_predict_threads.mojo), so a
+    count set inside this process after the first host call changes
+    nothing; only a new process honours it. The child imports the same
+    mojolearn package this process holds."""
+    import subprocess
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    if threads is None:
+        env.pop("MOJOLEARN_CPU_THREADS", None)
+    else:
+        env["MOJOLEARN_CPU_THREADS"] = threads
+    pkg_parent = str(Path(mojolearn.__file__).resolve().parent.parent)
+    proc = subprocess.run(
+        [sys.executable, "-I", "-c",
+         "import sys; sys.path.insert(0, sys.argv.pop(1)); exec(sys.argv.pop(1))",
+         pkg_parent, code],
+        env=env, capture_output=True, text=True, timeout=900,
+    )
+    assert proc.returncode == 0, (threads, proc.stdout[-2000:], proc.stderr[-4000:])
+    return proc.stdout.strip().splitlines()
+
+
+#: The GP thread-count check, run once per thread count in its own process:
+#: the test's draw and kernels, one sha256 line per kernel over L_, alpha_,
+#: the log marginal likelihood, the predicted mean and std.
+_GP_THREADS_CODE = """
+import hashlib
+import numpy as np
+import mojolearn
+rng = np.random.default_rng(0)
+x = rng.standard_normal((96, 4)).astype(np.float32)
+y = (x[:, 0] - 0.5 * x[:, 2]).astype(np.float32)
+xs = rng.standard_normal((16, 4)).astype(np.float32)
+kernels = (
+    lambda: mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0) + mojolearn.WhiteKernel(0.1),
+    lambda: mojolearn.ConstantKernel(1.0) * mojolearn.Matern(1.0, nu=0.5) + mojolearn.WhiteKernel(0.1),
+    lambda: mojolearn.ConstantKernel(1.0) * mojolearn.Matern(1.0, nu=1.5) + mojolearn.WhiteKernel(0.1),
+    lambda: mojolearn.ConstantKernel(1.0) * mojolearn.Matern([1.0, 2.0, 0.5, 4.0], nu=2.5)
+    + mojolearn.WhiteKernel(0.1),
+)
+for make in kernels:
+    m = mojolearn.GaussianProcessRegressor(kernel=make()).fit(x, y)
+    assert m.info_ == 0, m.info_
+    assert np.isfinite(m.log_marginal_likelihood_value_)
+    mean, std = m.predict(xs, return_std=True)
+    h = hashlib.sha256()
+    for part in (np.asarray(m.L_).tobytes(), np.asarray(m.alpha_).tobytes(),
+                 np.float64(m.log_marginal_likelihood_value_).tobytes(),
+                 np.asarray(mean).tobytes(), np.asarray(std).tobytes()):
+        h.update(part)
+    print(h.hexdigest())
+"""
+
+
 @reference_training()
 def test_gaussian_process_fits_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
@@ -163,37 +220,11 @@ def test_gaussian_process_fits_on_the_host_when_built():
     import numpy as np
     module = _backend.load_host_module("_mojolearn_gp_host")
     assert not bool(module.gp_host_sabotage()), "a sabotage build loaded outside the gate"
-    rng = np.random.default_rng(0)
-    x = rng.standard_normal((96, 4)).astype(np.float32)
-    y = (x[:, 0] - 0.5 * x[:, 2]).astype(np.float32)
-    xs = rng.standard_normal((16, 4)).astype(np.float32)
-    kernels = (
-        lambda: mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0) + mojolearn.WhiteKernel(0.1),
-        lambda: mojolearn.ConstantKernel(1.0) * mojolearn.Matern(1.0, nu=0.5) + mojolearn.WhiteKernel(0.1),
-        lambda: mojolearn.ConstantKernel(1.0) * mojolearn.Matern(1.0, nu=1.5) + mojolearn.WhiteKernel(0.1),
-        lambda: mojolearn.ConstantKernel(1.0) * mojolearn.Matern([1.0, 2.0, 0.5, 4.0], nu=2.5)
-        + mojolearn.WhiteKernel(0.1),
-    )
-    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
-    try:
-        for make in kernels:
-            outs = []
-            # One and several row tasks must be the same numerical path.
-            for threads in ("1", "4"):
-                os.environ["MOJOLEARN_CPU_THREADS"] = threads
-                m = mojolearn.GaussianProcessRegressor(kernel=make()).fit(x, y)
-                assert m.info_ == 0, m.info_
-                mean, std = m.predict(xs, return_std=True)
-                outs.append((np.asarray(m.L_).tobytes(), np.asarray(m.alpha_).tobytes(),
-                             np.float64(m.log_marginal_likelihood_value_).tobytes(),
-                             np.asarray(mean).tobytes(), np.asarray(std).tobytes()))
-                assert np.isfinite(m.log_marginal_likelihood_value_)
-            assert outs[0] == outs[1], "GP bytes moved with CPU row task count"
-    finally:
-        if previous_threads is None:
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-        else:
-            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
+    # One and several row tasks must be the same numerical path; each count
+    # runs in its own process (the thread policy is read once per process).
+    outs = [_run_with_threads(threads, _GP_THREADS_CODE) for threads in ("1", "4")]
+    assert len(outs[0]) == 4, outs[0]
+    assert outs[0] == outs[1], "GP bytes moved with CPU row task count"
 
 
 if __name__ == "__main__":
