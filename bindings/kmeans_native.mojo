@@ -380,7 +380,10 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     made, so the refusal fires for exactly the same inputs. The fitted
     centroids are admitted only when a device copy is minted or the binding
     has no resident door: a resident hit (same `cluster_centers_` object,
-    binding and shape) reuses the copy without reading them."""
+    binding and shape, and the same words by a native hash of the host
+    bytes) reuses the copy without uploading them. On the host column a
+    ready float32 C-order `cluster_centers_` is read in place after one
+    native finite scan."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
     var centers = py_get(fields, PythonObject("cluster_centers_"), PythonObject(None))
