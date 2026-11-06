@@ -71,7 +71,11 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    var key = PythonObject(String(mode).strip().lower())
+    # p3-cnn-sequence-tsa: an exact "identical" / "fast" is used as it is
+    var text = String(py=mode)
+    var key = mode
+    if text != "identical" and text != "fast":
+        key = PythonObject(String(mode).strip().lower())
     if String(py=key) != "identical" and String(py=key) != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     var entries = context["xcnn_bindings"][key]
@@ -89,9 +93,12 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         if previous is not None and current is None:
             raise Error("mojolearn: CNN numerical profile differs from this model's recorded "
                         + "profile; use a matching binding or a fresh model for the new version")
-        if current is not None:
+        if current is not None and previous is None:
+            # equal to `previous` otherwise (checked above): written once
             py_setitem(fields, "numerical_profile_", current)
-    py_setitem(fields, "numeric_mode_", key)
+    var recorded = py_get(fields, "numeric_mode_")
+    if recorded is None or py_type(recorded) is not b.str or String(py=recorded) != String(py=key):
+        py_setitem(fields, "numeric_mode_", key)
     return entries
 
 
