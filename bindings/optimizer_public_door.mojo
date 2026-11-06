@@ -431,12 +431,60 @@ def _release_buffer(mut view: List[Int]) raises:
     cpy.lib.get_function[NoneType]("PyBuffer_Release")(p)
 
 
+def _array_view(obj: PythonObject, context: PythonObject, mut v: TensorView) raises:
+    """`opt_value`'s Array admission and `tensor_view`'s Array facts from one
+    read of each retained native slot descriptor (same errors, same values)."""
+    var getters = context["array_getters"]
+    var shape = py_call(getters["shape"], obj)
+    var dtype = py_call(getters["dtype"], obj)
+    var addr = py_call(getters["_addr"], obj)
+    var readonly = py_call(getters["_readonly"], obj)
+    var nbytes = py_call(getters["nbytes"], obj)
+    var itemsize = py_call(getters["itemsize"], obj)
+    var strides = py_call(getters["strides"], obj)
+    opt_scalar(shape, context, 1)
+    opt_scalar(dtype, context, 1)
+    opt_scalar(py_call(getters["order"], obj), context, 1)
+    opt_scalar(addr, context, 1)
+    opt_scalar(readonly, context, 1)
+    opt_scalar(py_call(getters["ndim"], obj), context, 1)
+    opt_scalar(py_call(getters["size"], obj), context, 1)
+    opt_scalar(nbytes, context, 1)
+    opt_scalar(itemsize, context, 1)
+    opt_scalar(strides, context, 1)
+    var mv = py_call(getters["_mv"], obj)
+    if py_type(mv) is not context["container_types"][5]:
+        raise Error("TypeError: optimizer Array requires native memoryview storage")
+    opt_value(mv, context, 1)
+    v.is_array = True
+    v.addr = Int(py=addr)
+    v.nbytes = Int(py=nbytes)
+    v.itemsize = Int(py=itemsize)
+    v.readonly = Bool(py=py_call(context["scalar_types"][1], readonly))
+    var t = String(py=dtype)
+    v.fmt = _array_code(t)
+    for i in range(len(shape)):  # driver-loop: over shape words
+        v.shape.append(Int(py=shape[i]))
+    for i in range(len(strides)):  # driver-loop: over stride words
+        v.strides.append(Int(py=strides[i]))
+    v.has_strides = True
+    v.c_contig = _contiguous(v.shape, v.strides, True, v.itemsize)
+    v.dtype = dtype_name(obj, v.fmt, v.itemsize)
+
+
 def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
     """Fill `v` with `obj`'s buffer facts; False when `obj` is not a buffer
     (`_training_impl._is_buffer`). The export is released before this
     returns, as `probe` released it."""
     var d = OPT_DOOR.get_or_create_ptr()
     v = TensorView()
+    if py_type(obj) is d[].array_cls:
+        # An exact Array: admit its native slots (what opt_value's Array arm
+        # does) and read the facts off the same slot values, in one pass.
+        # Before, opt_value read all ten slots and this function then read
+        # seven of them again by attribute, plus a builtins.isinstance call.
+        _array_view(obj, d[].context, v)
+        return True
     opt_value(obj, d[].context)
     if is_instance(obj, d[].array_cls):
         # an Array is read off its own storage fields (`_buffer.Buf._from_array`)
@@ -559,10 +607,19 @@ def _not_covered(topic: String, where: String) raises -> Error:
 
 def as_seq(x: PythonObject, name: String, where: String) raises -> PythonObject:
     """`_as_seq`: one buffer, or an iterable of them, as a Python list."""
+    var views = List[TensorView]()
+    return as_seq_views(x, name, where, views)
+
+
+def as_seq_views(x: PythonObject, name: String, where: String, mut views: List[TensorView]) raises -> PythonObject:
+    """`as_seq`, keeping each element's view in `views` so `check_views`
+    checks the same facts without reading every buffer a second time."""
+    views = List[TensorView]()
     var v = TensorView()
     if tensor_view(x, v):
         var one = Python.list()
         _ = py_call(one.append, x)
+        views.append(v^)
         return one
     var out: PythonObject
     try:
@@ -579,11 +636,13 @@ def as_seq(x: PythonObject, name: String, where: String) raises -> PythonObject:
             + "empty parameter registry is refused rather than answered (training/estimator.mojo)"
         )
     for i in range(len(out)):  # driver-loop: over parameter buffers
-        if not tensor_view(out[i], v):
+        var item = TensorView()
+        if not tensor_view(out[i], item):
             raise Error(
                 "TypeError: mojolearn." + where + ": " + name + "[" + String(i) + "] is "
                 + type_name(out[i]) + ", not an array (it does not support the buffer protocol)"
             )
+        views.append(item^)
     return out
 
 
@@ -595,33 +654,45 @@ def check_tensors(seq: PythonObject, name: String, where: String, inplace: Bool)
         var v = TensorView()
         if not tensor_view(seq[i], v):
             raise Error("TypeError: mojolearn: object does not support the buffer protocol")
-        var code = base_format(v.fmt)
-        if code == "e" or v.dtype == "float16" or v.dtype == "bfloat16":
-            var refusal = _not_covered("mixed precision", where)
-            raise refusal^
-        if code != "f":
-            raise Error(
-                "TypeError: mojolearn." + where + ": " + name + "[" + String(i) + "] has dtype " + v.dtype
-                + "; this surface is float32 only (loss contract section 1, optimizer contract section "
-                + "1) and refuses rather than casts, because a cast changes which arithmetic answered "
-                + "and leaves the label unchanged" + _SRC
-            )
-        if v.count() < 1:
-            raise Error(
-                "ValueError: mojolearn." + where + ": " + name + "[" + String(i) + "] is empty, shape "
-                + shape_text(v.shape) + "; an empty tensor is REFUSED and not skipped -- the clip would "
-                + "fold a zero-length GEMM, which no gate in this tree has run (training/estimator.mojo)"
-            )
-        if inplace and (not v.c_contig or v.readonly):
-            raise Error(
-                "ValueError: mojolearn." + where + ": " + name + "[" + String(i) + "] must be "
-                + "C-contiguous and writable; it is written back IN PLACE (the torch.optim contract, the "
-                + "trailing underscore on clip_grad_norm_) and a strided or read-only buffer cannot be. "
-                + "Pass np.ascontiguousarray(...) of it, or a writable mojolearn.Array "
-                + "(python/mojolearn/_training_impl.py, DEVIATION 2403)"
-            )
+        _check_view(v, i, name, where, inplace)
         views.append(v^)
     return views^
+
+
+def check_views(views: List[TensorView], name: String, where: String, inplace: Bool) raises:
+    """`check_tensors` over views already read (by `as_seq_views` or
+    `_check_grads`), in the same order with the same messages."""
+    for i in range(len(views)):  # driver-loop: over parameter buffers
+        _check_view(views[i], i, name, where, inplace)
+
+
+def _check_view(v: TensorView, i: Int, name: String, where: String, inplace: Bool) raises:
+    """One tensor's `_check_dtype` refusals."""
+    var code = base_format(v.fmt)
+    if code == "e" or v.dtype == "float16" or v.dtype == "bfloat16":
+        var refusal = _not_covered("mixed precision", where)
+        raise refusal^
+    if code != "f":
+        raise Error(
+            "TypeError: mojolearn." + where + ": " + name + "[" + String(i) + "] has dtype " + v.dtype
+            + "; this surface is float32 only (loss contract section 1, optimizer contract section "
+            + "1) and refuses rather than casts, because a cast changes which arithmetic answered "
+            + "and leaves the label unchanged" + _SRC
+        )
+    if v.count() < 1:
+        raise Error(
+            "ValueError: mojolearn." + where + ": " + name + "[" + String(i) + "] is empty, shape "
+            + shape_text(v.shape) + "; an empty tensor is REFUSED and not skipped -- the clip would "
+            + "fold a zero-length GEMM, which no gate in this tree has run (training/estimator.mojo)"
+        )
+    if inplace and (not v.c_contig or v.readonly):
+        raise Error(
+            "ValueError: mojolearn." + where + ": " + name + "[" + String(i) + "] must be "
+            + "C-contiguous and writable; it is written back IN PLACE (the torch.optim contract, the "
+            + "trailing underscore on clip_grad_norm_) and a strided or read-only buffer cannot be. "
+            + "Pass np.ascontiguousarray(...) of it, or a writable mojolearn.Array "
+            + "(python/mojolearn/_training_impl.py, DEVIATION 2403)"
+        )
 
 
 def write_addr(obj: PythonObject, name: String) raises -> Int:
@@ -648,21 +719,35 @@ def _addrs_of(views: List[TensorView], mut addrs: List[Int], mut nbytes: List[In
         nbytes.append(views[j].nbytes)
 
 
-def _check_grads(params: PythonObject, gs: PythonObject, views: List[TensorView], owhere: String, where: String) raises:
-    """`_Optimizer._check_grads`: grads match params in count and shape."""
+def _check_grads(params: PythonObject, gs: PythonObject, views: List[TensorView], owhere: String, where: String,
+                 mut pviews: List[TensorView], mut have_pviews: Bool) raises:
+    """`_Optimizer._check_grads`: grads match params in count and shape.
+    The parameter views are read once per step into `pviews` and reused by
+    later microbatches and by the step's own parameter check."""
     if len(gs) != len(params):
         raise Error(
             "ValueError: mojolearn." + owhere + "." + where + ": " + String(len(gs)) + " gradients for "
             + String(len(params)) + " parameter tensors"
         )
+    if not have_pviews:
+        pviews = List[TensorView]()
+        for j in range(len(params)):  # driver-loop: over parameter buffers
+            var pv = TensorView()
+            if not tensor_view(params[j], pv):
+                raise Error("TypeError: mojolearn: object does not support the buffer protocol")
+            if not same_shape(pv.shape, views[j].shape):
+                raise Error(
+                    "ValueError: mojolearn." + owhere + "." + where + ": grads[" + String(j) + "] has shape "
+                    + shape_text(views[j].shape) + ", params[" + String(j) + "] has " + shape_text(pv.shape)
+                )
+            pviews.append(pv^)
+        have_pviews = True
+        return
     for j in range(len(params)):  # driver-loop: over parameter buffers
-        var pv = TensorView()
-        if not tensor_view(params[j], pv):
-            raise Error("TypeError: mojolearn: object does not support the buffer protocol")
-        if not same_shape(pv.shape, views[j].shape):
+        if not same_shape(pviews[j].shape, views[j].shape):
             raise Error(
                 "ValueError: mojolearn." + owhere + "." + where + ": grads[" + String(j) + "] has shape "
-                + shape_text(views[j].shape) + ", params[" + String(j) + "] has " + shape_text(pv.shape)
+                + shape_text(views[j].shape) + ", params[" + String(j) + "] has " + shape_text(pviews[j].shape)
             )
 
 
@@ -708,22 +793,26 @@ def _resident_word(value: PythonObject) raises -> Int:
 
 def _state_into(opt: PythonObject, mut req: PublicStep) raises:
     """`_state_words`: handle, resident, pristine and the mirrors' addresses."""
-    var res = py_fields(opt)["_res"]
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
+    var res = fields["_res"]
     req.handle = -1 if res is None else Int(py=res)
-    req.resident_wanted = _resident_word(py_fields(opt)["_resident_wanted"])
-    req.pristine = truth(py_fields(opt)["_pristine"])
-    var m = py_fields(opt)["_m"]
-    var v = py_fields(opt)["_v"]
+    req.resident_wanted = _resident_word(fields["_resident_wanted"])
+    req.pristine = truth(fields["_pristine"])
+    var m = fields["_m"]
+    var v = fields["_v"]
     req.m_addr = 0 if m is None else write_addr(m, "exp_avg")
     req.v_addr = 0 if v is None else write_addr(v, "exp_avg_sq")
 
 
 def host_moments(opt: PythonObject) raises:
     """`_host_moments`: the host mirrors, allocated (zero filled) on first need."""
-    var n = Int(py=py_fields(opt)["n_total"])
-    if py_fields(opt)["_m"] is None:
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
+    var n = Int(py=fields["n_total"])
+    if fields["_m"] is None:
         set_field(opt, "_m", new_array([n], "<f4"))
-    if py_fields(opt)["_v"] is None:
+    if fields["_v"] is None:
         set_field(opt, "_v", new_array([n], "<f4"))
 
 
@@ -738,16 +827,18 @@ def keep_slot(opt: PythonObject, handle: Int, module: PythonObject, on_host: Boo
 
 def _hyper(opt: PythonObject, maximize: Bool, max_norm: Float64) raises -> OptHyper:
     """`_config()` of SGD (kind 0) and Adam / AdamW, as the step's floats."""
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
     var kind = owner_kind(opt)
     if kind == 0:
         return OptHyper(
-            kind, 1 if truth(py_fields(opt)["nesterov"]) else 0, maximize, as_float(py_fields(opt)["lr"]), 0.9, 0.999, 1e-8,
-            as_float(py_fields(opt)["weight_decay"]), as_float(py_fields(opt)["momentum"]), as_float(py_fields(opt)["dampening"]), max_norm,
+            kind, 1 if truth(fields["nesterov"]) else 0, maximize, as_float(fields["lr"]), 0.9, 0.999, 1e-8,
+            as_float(fields["weight_decay"]), as_float(fields["momentum"]), as_float(fields["dampening"]), max_norm,
         )
-    var betas = py_fields(opt)["betas"]
+    var betas = fields["betas"]
     return OptHyper(
-        kind, 0, maximize, as_float(py_fields(opt)["lr"]), as_float(betas[0]), as_float(betas[1]), as_float(py_fields(opt)["eps"]),
-        as_float(py_fields(opt)["weight_decay"]), 0.0, 0.0, max_norm,
+        kind, 0, maximize, as_float(fields["lr"]), as_float(betas[0]), as_float(betas[1]), as_float(fields["eps"]),
+        as_float(fields["weight_decay"]), 0.0, 0.0, max_norm,
     )
 
 
@@ -788,9 +879,10 @@ def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
     var where = String(py=py_fields(opt)["_where"])
-    var seq = as_seq(params, "params", where)
+    var views = List[TensorView]()
+    var seq = as_seq_views(params, "params", where, views)
     set_field(opt, "params", seq)
-    var views = check_tensors(seq, "params", where, True)
+    check_views(views, "params", where, True)
     var j = len(seq)
     var nbytes = List[Int]()
     for k in range(j):  # driver-loop: over parameter buffers
@@ -820,9 +912,11 @@ def door_step[K: OptKernels](
     Returns the pre-clip total norm, or None."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
     var d = OPT_DOOR.get_or_create_ptr()
     var bi = d[].bi
-    var owhere = String(py=py_fields(opt)["_where"])
+    var owhere = String(py=fields["_where"])
     var where = String("step") if op == OP_STEP else (
         String("step_device") if op == OP_STEP_DEVICE else String("step_accumulated"))
     var p_dev = truth(getattr_or(opt, "_p_dev", PythonObject(False)))
@@ -834,7 +928,7 @@ def door_step[K: OptKernels](
     opt_scalar(tokens, d[].context)
     if op == OP_STEP_ACCUMULATED:
         parts = py_call(d[].context["container_types"][0], grads)
-        var want = Int(py=py_fields(opt)["accumulation_steps"])
+        var want = Int(py=fields["accumulation_steps"])
         if len(parts) != want:
             raise Error(
                 "ValueError: mojolearn." + owhere + ".step_accumulated: " + String(len(parts))
@@ -853,20 +947,23 @@ def door_step[K: OptKernels](
                 "ValueError: mojolearn." + owhere + "." + where + ": max_norm must be > 0 or None, got "
                 + py_repr(max_norm) + "; None is how 'no clipping' is spelled" + _SRC
             )
-    var params = py_fields(opt)["params"]
+    var params = fields["params"]
     var j = len(params)
-    var n_total = Int(py=py_fields(opt)["n_total"])
+    var n_total = Int(py=fields["n_total"])
     var req = PublicStep()
     var keep = List[List[Float32]]()
     req.g_mode = GRADS_HOST
     req.a_count = 1
+    var pviews = List[TensorView]()
+    var have_pviews = False
     if op == OP_STEP_ACCUMULATED:
         req.a_count = len(parts)
         for i in range(len(parts)):  # driver-loop: over microbatch arguments
             var label = "microbatch_grads[" + String(i) + "]"
-            var gs = as_seq(parts[i], label, owhere)
-            var views = check_tensors(gs, label, owhere, req.a_count == 1)
-            _check_grads(params, gs, views, owhere, where)
+            var views = List[TensorView]()
+            var gs = as_seq_views(parts[i], label, owhere, views)
+            check_views(views, label, owhere, req.a_count == 1)
+            _check_grads(params, gs, views, owhere, where, pviews, have_pviews)
             for k in range(len(views)):  # driver-loop: over parameter buffers
                 if req.a_count > 1:
                     # read-only inputs: strided buffers are made contiguous
@@ -900,37 +997,43 @@ def door_step[K: OptKernels](
     elif p_dev and grads is None:
         req.g_mode = GRADS_RESIDENT
     else:
-        var gs = as_seq(grads, "grads", owhere)
-        var views = check_tensors(gs, "grads", owhere, True)
+        var views = List[TensorView]()
+        var gs = as_seq_views(grads, "grads", owhere, views)
+        check_views(views, "grads", owhere, True)
         if p_dev and len(gs) != j:
             raise Error(
                 "ValueError: mojolearn." + owhere + ": grads does not match the optimizer's registry ("
                 + String(j) + " tensors, " + String(n_total) + " floats)"
             )
         if not p_dev:
-            _check_grads(params, gs, views, owhere, where)
+            _check_grads(params, gs, views, owhere, where, pviews, have_pviews)
         _addrs_of(views, req.g_addr, req.g_bytes)
     if not p_dev:
         # Re-read every parameter buffer's layout on EVERY step: a caller
         # can reshape or resize their own array between steps.
-        var pviews = check_tensors(params, "params", owhere, True)
+        if have_pviews:
+            # Read this step by _check_grads; the dtype/layout refusals run
+            # here in the same order without exporting each buffer again.
+            check_views(pviews, "params", owhere, True)
+        else:
+            pviews = check_tensors(params, "params", owhere, True)
         _addrs_of(pviews, req.p_addr, req.p_bytes)
-    var schedule = py_fields(opt)["lr_schedule"]
+    var schedule = fields["lr_schedule"]
     req.has_sched = False
     if not (schedule is None):
         req.has_sched = True
         req.sched = schedule_spec(schedule)
-    var resident = py_fields(opt)["_resident_wanted"]
+    var resident = fields["_resident_wanted"]
     if py_type(resident) is d[].context["scalar_types"][1] and not truth(resident):
         # `resident=False`: the state lives in these host arrays (no slot)
         host_moments(opt)
     var maximize = truth(getattr_or(opt, "maximize", PythonObject(False)))
     req.j = j
-    req.t = Int(py=py_fields(opt)["t"])
+    req.t = Int(py=fields["t"])
     req.hyper = _hyper(opt, maximize, mn)
     req.n_total = n_total
-    req.offsets = read_addr(py_fields(opt)["offsets"], "offsets")
-    req.init = write_addr(py_fields(opt)["buf_initialized"], "buf_initialized")
+    req.offsets = read_addr(fields["offsets"], "offsets")
+    req.init = write_addr(fields["buf_initialized"], "buf_initialized")
     req.tokens = t_tokens
     _state_into(opt, req)
     req.p_dev = p_dev
@@ -941,7 +1044,7 @@ def door_step[K: OptKernels](
     # the assignments of the native result
     set_field(opt, "t", PythonObject(out.t))
     keep_slot(opt, out.handle, module, not out.on_device)
-    set_field(opt, "_host_fresh", PythonObject(py_fields(opt)["_res"] is None))
+    set_field(opt, "_host_fresh", PythonObject(fields["_res"] is None))
     var total = PythonObject(None)
     if out.clip_ran:
         total = PythonObject(Float64(out.total_norm))
@@ -968,13 +1071,16 @@ def door_io[K: OptKernels](
     Returns the result word."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var owhere = String(py=py_fields(opt)["_where"])
-    var j = len(py_fields(opt)["params"])
-    var n_total = Int(py=py_fields(opt)["n_total"])
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
+    var owhere = String(py=fields["_where"])
+    var j = len(fields["params"])
+    var n_total = Int(py=fields["n_total"])
     var req = PublicStep()
     if not (tensors is None):
-        var seq = as_seq(tensors, name, owhere)
-        var views = check_tensors(seq, name, owhere, True)
+        var views = List[TensorView]()
+        var seq = as_seq_views(tensors, name, owhere, views)
+        check_views(views, name, owhere, True)
         if len(seq) != j:
             raise Error(
                 "ValueError: mojolearn." + owhere + ": " + name + " does not match the optimizer's registry ("
@@ -983,7 +1089,7 @@ def door_io[K: OptKernels](
         _addrs_of(views, req.g_addr, req.g_bytes)
     req.j = j
     req.n_total = n_total
-    req.offsets = read_addr(py_fields(opt)["offsets"], "offsets")
+    req.offsets = read_addr(fields["offsets"], "offsets")
     _state_into(opt, req)
     var r = K.io(req, op_code, tensor)
     try:
@@ -1005,8 +1111,9 @@ def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
     var owhere = String(py=py_fields(opt)["_where"])
-    var gs = as_seq(grads, "grads", owhere)
-    var views = check_tensors(gs, "grads", owhere, True)
+    var views = List[TensorView]()
+    _ = as_seq_views(grads, "grads", owhere, views)
+    check_views(views, "grads", owhere, True)
     var addrs = List[Int]()
     var nbytes = List[Int]()
     _addrs_of(views, addrs, nbytes)
@@ -1165,8 +1272,9 @@ def door_clip[K: OptKernels](
                     + _NORM_TYPE_REFUSAL)
     if not truth(error_if_nonfinite):
         raise Error("NotImplementedError: " + _NONFINITE_REFUSAL)
-    var gs = as_seq(grads, "grads", "clip_grad_norm_")
-    var views = check_tensors(gs, "grads", "clip_grad_norm_", True)
+    var views = List[TensorView]()
+    _ = as_seq_views(grads, "grads", "clip_grad_norm_", views)
+    check_views(views, "grads", "clip_grad_norm_", True)
     var mn = as_float(max_norm)
     if not (mn > 0.0):
         raise Error(
@@ -1194,11 +1302,13 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
     var first = TensorView()
     var single = tensor_view(parts[0], first)
     var seqs = Python.list()
-    for i in range(len(parts)):  # driver-loop: over microbatch arguments
-        _ = py_call(seqs.append, as_seq(parts[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads"))
     var probes = List[List[TensorView]]()
     for i in range(len(parts)):  # driver-loop: over microbatch arguments
-        probes.append(check_tensors(seqs[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", False))
+        var views = List[TensorView]()
+        _ = py_call(seqs.append, as_seq_views(parts[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", views))
+        probes.append(views^)
+    for i in range(len(parts)):  # driver-loop: over microbatch arguments
+        check_views(probes[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", False)
     var j0 = len(seqs[0])
     for i in range(len(parts)):  # driver-loop: over microbatch arguments
         var ji = len(seqs[i])
