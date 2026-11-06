@@ -24,7 +24,7 @@ must read a mismatch on every forecast and in-sample prediction. The GPU
 build scripts pass neither define.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_call as _balanced_call, py_type as _balanced_type
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr
@@ -39,6 +39,11 @@ from holtwinters.impl.tsa.holtwinters_params import (
 )
 
 def _hw_index(value: PythonObject) raises -> Int:
+    # An exact int is its own index: no class-name string, module lookup or
+    # Python call per scalar argument (bool and int subclasses take the
+    # checked route below, as before).
+    if _balanced_type(value) is _balanced_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("holtwinters host: integers expected, not booleans")
