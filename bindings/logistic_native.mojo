@@ -10,7 +10,7 @@
 # the decoded prediction is handed straight to the native accuracy program
 # (bindings/classical_labels.mojo `classical_accuracy`).
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -563,14 +563,16 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             return result.steal_data()
         if operation != "fit":
             classical_require_fitted(model, False, operation, context)
-        classical_admit_value(args[0], context)
+        # One module handle for this call's input admissions.
+        var mods = NativeModules()
+        classical_admit_value(mods, args[0], context)
         if operation == "fit":
             var target = classifier_label_list(args[1], context)
             lda_native_labels(target, context, True, "LogisticRegression")
             var shape = labels_shape_of(target, context)
             if len(shape) == 2 and shape[1] == 1:
                 target = _flatten_labels(target, context)
-            classical_admit_value(args[2], context)
+            classical_admit_value(mods, args[2], context)
             result = logistic_fit(model, Python.tuple(args[0], target, args[2]), context)
             classifier_after_fit(logistic_storage(model, context), args[0], context)
         # `fields` (above) is the one admitted snapshot of this call: the
