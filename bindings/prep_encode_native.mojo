@@ -3243,7 +3243,7 @@ def _encode_dispatch(model: PythonObject, kind: String, operation: String, args:
             var cv = py_fields(model)["cv"]
             var splits = PythonObject(None)
             if cv is not None and not Bool(py=py_call(native_loaded_module("builtins").isinstance, cv,
-                                                      Python.import_module("numbers").Integral)):
+                                                      native_loaded_module("numbers").Integral)):
                 splits = _target_splitter_folds(model, args[0], args[1], Int(py=values[3]), context)
             result = _target_fit_transform(model, values, args[1], splits, context)
         _ = values^
