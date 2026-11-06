@@ -27,6 +27,7 @@ matches. A record must not strongly retain the class it belongs to.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call
@@ -79,7 +80,7 @@ def _class_watcher() raises -> Int:
     if identifier < 0:
         # All interpreter watcher slots are taken: keep the full per-call
         # admission instead of failing the operation.
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         g[].watcher = -1
         return -1
     g[].watcher = Int(identifier)
@@ -185,7 +186,7 @@ def _dict_watcher() raises -> Int:
     ref cpy = Python().cpython()
     var identifier = cpy.lib.get_function[Int32]("PyDict_AddWatcher")(_dict_modified_c)
     if identifier < 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         g[].watcher = -1
         return -1
     g[].watcher = Int(identifier)
@@ -253,7 +254,7 @@ def static_builtin_type(module: String, name: String) raises -> PythonObject:
     var value = py_call(native_loaded_module("builtins").getattr, native_loaded_module(module), PythonObject(name))
     ref cpy = Python().cpython()
     # Py_TPFLAGS_HEAPTYPE (1 << 9): only immortal static types are cached.
-    if cpy.lib.get_function[UInt64]("PyType_GetFlags")(value._obj_ptr) & UInt64(1 << 9) != 0:
+    if cpython_table()[].PyType_GetFlags(value._obj_ptr) & UInt64(1 << 9) != 0:
         return value
     g[].types[key] = value
     return value

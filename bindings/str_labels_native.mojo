@@ -11,6 +11,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
 
@@ -47,7 +48,7 @@ struct StrTable(Movable):
 def _is_str(value: PythonObject) raises -> Bool:
     ref cpy = Python().cpython()
     var cls = py_type(value)
-    var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+    var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
     return (flags & UInt64(UNICODE_FLAG)) != 0
 
 

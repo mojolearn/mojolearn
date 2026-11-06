@@ -207,7 +207,7 @@ def _connect_probe(mapping: PythonObject, key: StaticString) raises -> Int:
     if py_type(mapping) is not py_type(Python.dict()):
         return -1
     var name = PythonObject(String(key))
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")(mapping._obj_ptr, name._obj_ptr)
+    var raw = cpy.PyDict_GetItemWithError(mapping._obj_ptr, name._obj_ptr)
     if not raw:
         if cpy.PyErr_Occurred():
             raise cpy.unsafe_get_error()

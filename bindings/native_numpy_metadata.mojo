@@ -12,7 +12,7 @@ def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
     # returns its actual dictionary without looking up mutable object or
     # invoking a module attribute hook.
     ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var pointer = cpy.PyModule_GetDict(module._obj_ptr)
     if not pointer:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_borrowed=pointer)

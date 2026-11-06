@@ -4,6 +4,7 @@
 # constructor checks does not require invoking UMAP._parameters or _extras.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_instance_item import native_instance_item
@@ -126,7 +127,7 @@ def umap_scalar(value: PythonObject, name: String, context: PythonObject) raises
 def umap_is_string(value: PythonObject) raises -> Bool:
     ref cpy = Python().cpython()
     var cls = py_type(value)
-    var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+    var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
     # Ordinary unicode and NumPy's static unicode scalar retain native string
     # storage. Heap subclasses can override comparison/format hooks.
     return (flags & UInt64(1 << 28)) != 0 and (flags & UInt64(1 << 9)) == 0

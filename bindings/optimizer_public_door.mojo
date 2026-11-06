@@ -429,7 +429,7 @@ def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var rc = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
     if rc != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return False
     return True
 

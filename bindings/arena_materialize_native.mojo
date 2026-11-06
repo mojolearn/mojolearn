@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from std.math import isinf, isnan
 from gemm.f16_widen import f16_bits_to_f32
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.arena_array_metadata import arena_array_metadata
@@ -249,7 +250,7 @@ def _objects(value: PythonObject, context: PythonObject) raises -> PythonObject:
             MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=address)[i] = Float64(py=scalar)
         else:
             var integer = cpy.lib.get_function[Int64]("PyLong_AsLongLong")(values[i]._obj_ptr)
-            if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+            if cpython_table()[].PyErr_Occurred():
                 _ = cpy.unsafe_get_error()
                 raise Error("TypeError: numeric object element exceeds the int64 storage range")
             MutPointer[Int64,MutUntrackedOrigin](unsafe_from_address=address)[i] = integer

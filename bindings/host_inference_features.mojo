@@ -5,6 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_warnings import classical_warning
 from bindings.native_caller_frame import native_frame_globals
@@ -27,7 +28,7 @@ def host_inference_feature_names(model: PythonObject, fields: PythonObject, cont
     pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(current._obj_ptr)
     _ = current^
     if not pointer:
-        if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+        if cpython_table()[].PyErr_Occurred():
             raise cpy.unsafe_get_error()
         raise Error("ValueError: call stack is not deep enough")
     var frame = PythonObject(from_owned=pointer)

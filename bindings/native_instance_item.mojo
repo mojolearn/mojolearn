@@ -33,7 +33,7 @@ def native_instance_item(fields: PythonObject, name: PythonObject) raises -> Pyt
     # Py_NewRef is available at our Python 3.10 floor (GetItemRef needs 3.13).
     # https://docs.python.org/3/c-api/dict.html#c.PyDict_GetItemWithError
     # https://docs.python.org/3/c-api/refcounting.html#c.Py_NewRef
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")(fields._obj_ptr, name._obj_ptr)
+    var raw = cpy.PyDict_GetItemWithError(fields._obj_ptr, name._obj_ptr)
     if not raw:
         if cpy.PyErr_Occurred():
             raise cpy.unsafe_get_error()
@@ -51,7 +51,7 @@ def native_instance_find_admitted(fields: PythonObject, name: PythonObject) rais
     # One dictionary probe replaces contains+getitem. A native Bool distinguishes
     # absence from an existing None; the native Tuple creates no Python wrapper.
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")(fields._obj_ptr, name._obj_ptr)
+    var raw = cpy.PyDict_GetItemWithError(fields._obj_ptr, name._obj_ptr)
     if not raw:
         if cpy.PyErr_Occurred():
             raise cpy.unsafe_get_error()

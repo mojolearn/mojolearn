@@ -44,7 +44,7 @@ def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonO
             raise error
         _ = optimizer_python_error(error)
         ref cpy = Python().cpython()
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return PythonObject(None)
 
 

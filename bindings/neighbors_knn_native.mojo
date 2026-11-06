@@ -34,6 +34,7 @@ from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -312,9 +313,9 @@ def _refuse_inert_p(cls_name: String, metric: PythonObject, p: PythonObject) rai
         _ = envelope^
         if result:
             is_default = Float64(py=PythonObject(from_owned=result)) == 2.0
-        elif (cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(type_error._obj_ptr) != 0
-                or cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(value_error._obj_ptr) != 0):
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        elif (cpython_table()[].PyErr_ExceptionMatches(type_error._obj_ptr) != 0
+                or cpython_table()[].PyErr_ExceptionMatches(value_error._obj_ptr) != 0):
+            cpy.PyErr_Clear()
         else:
             var failure = stash_python_error()
             raise failure^

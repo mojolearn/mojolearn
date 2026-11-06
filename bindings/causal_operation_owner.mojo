@@ -6,6 +6,7 @@ from std.collections import Dict
 from std.ffi import _Global
 from bindings.native_identity_key import NativeIdentityKey
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.causal_model_config import model_record_fields, model_plan_snapshot
@@ -41,7 +42,7 @@ def causal_snapshot_fields(mut mods: NativeModules, value: PythonObject) raises 
     if py_type(value) is not mods.module("types").SimpleNamespace:
         raise Error("TypeError: causal operation metadata requires its native namespace")
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr, PyObjectPtr())
+    var raw = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
     if not raw:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=raw)
@@ -140,7 +141,7 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
         var runtime = context["runtime"]
         if py_type(runtime) is not types.ModuleType:
             raise Error("TypeError: parallel execution requires its connected native runtime")
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(runtime._obj_ptr)
+        var raw = cpy.PyModule_GetDict(runtime._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         var connected = PythonObject(from_owned=cpy.Py_NewRef(raw))
@@ -410,13 +411,13 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
             return False
         var iterator_raw = get_iterator(row._obj_ptr)
         if not iterator_raw:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpy.PyErr_Clear()
             return False
         var iterator = PythonObject(from_owned=iterator_raw)
         for j in range(count):  # driver-loop: over live class namespace key identities before lookup
             var key_raw = next_key(iterator._obj_ptr)
             if not key_raw:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpy.PyErr_Clear()
                 return False
             var key = PythonObject(from_owned=key_raw)
             if key is not keys[j]:
@@ -424,7 +425,7 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
         for j in range(count):  # driver-loop: over retained class namespace values
             var raw = get_item(row._obj_ptr, keys[j]._obj_ptr)
             if not raw:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpy.PyErr_Clear()
                 return False
             var current = PythonObject(from_owned=raw)
             if current is not values[j]:

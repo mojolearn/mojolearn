@@ -4,6 +4,7 @@
 # validation point. These native records never escape through the Python ABI.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.native_loaded_module import native_loaded_module
 from bindings.sequential_admission import sequential_admit_value
@@ -53,7 +54,7 @@ def _pca_builtin_number(value: PythonObject, integer: Bool, context: PythonObjec
     ref cpy = Python().cpython()
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_Long" if integer else "PyNumber_Float")(value._obj_ptr)
     if not pointer:
-        if not integer and error_repr.byte_length() > 0 and cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(value_error._obj_ptr) != 0:
+        if not integer and error_repr.byte_length() > 0 and cpython_table()[].PyErr_ExceptionMatches(value_error._obj_ptr) != 0:
             # CPython floatobject.c uses the original object's repr for a
             # text parse refusal. A private memoryview has a different address;
             # preserve the exact native original repr captured before copying.

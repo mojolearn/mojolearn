@@ -6,6 +6,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type
 from bindings.py_slice_native import py_slice
 from bindings.optimizer_public_words import stash_python_error
@@ -162,8 +163,8 @@ def archive_literal(raw: PythonObject, context: PythonObject) raises -> PythonOb
             var result = cpy.PyObject_Call(lookup._obj_ptr, args._obj_ptr, PyObjectPtr())
             if not result:
                 var key_error = context["archive_unicode_key_error"]
-                if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(key_error._obj_ptr) != 0:
-                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                if cpython_table()[].PyErr_ExceptionMatches(key_error._obj_ptr) != 0:
+                    cpy.PyErr_Clear()
                     _archive_unicode_failure(raw, "unicodeescape", start, i, "unknown Unicode character name", context)
                 var failure = stash_python_error()
                 raise failure^

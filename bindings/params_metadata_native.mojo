@@ -62,7 +62,7 @@ def _loaded_data_class(module_name: String, name: String) raises -> PythonObject
     if module is None or py_type(module) is not py_type(sys):
         return PythonObject(None)
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var raw = cpy.PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_borrowed=raw)

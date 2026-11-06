@@ -4,6 +4,7 @@
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.py_typed_call import typed_python_error
 from bindings.sequential_admission import _one_of
@@ -34,7 +35,7 @@ def jl_scalar(value: PythonObject, epsilon: Bool, context: PythonObject) raises 
         if nonpositive != 0:
             raise Error(positive_error)
         var number = cpy.lib.get_function[Float64]("PyLong_AsDouble")(value._obj_ptr)
-        if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+        if cpython_table()[].PyErr_Occurred():
             raise typed_python_error()
         return number
     if cls is float_type:

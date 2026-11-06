@@ -3,6 +3,7 @@
 from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.native_array_snapshot import native_array_snapshot
 from bindings.mode_metadata_native import _class_fields
@@ -77,7 +78,7 @@ struct UserObjectFlatten(Movable):
             if py_type(module) is not py_type(sys):
                 raise Error("TypeError: user-object Array metadata requires its native module")
             ref cpy = Python().cpython()
-            var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+            var raw = cpy.PyModule_GetDict(module._obj_ptr)
             if not raw or not native_namespace_string_keys(raw, self.b.str):
                 raise Error("TypeError: user-object Array metadata requires native string fields")
             var fields = PythonObject(from_borrowed=raw)
@@ -101,7 +102,7 @@ struct UserObjectFlatten(Movable):
         var array_type = self.mods.module("array").array
         var supported = cls is array_type or cls is self.b.memoryview
         ref cpy = Python().cpython()
-        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+        var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
         if not supported and py_type(cls) is self.b.type and (flags & UInt64(512)) == 0:
             var module_name = py_call(self.b.type.__getattribute__, cls, "__module__")
             supported = py_type(module_name) is self.b.str and String(module_name) == "numpy"
@@ -135,10 +136,10 @@ struct UserObjectFlatten(Movable):
         ref cpy = Python().cpython()
         # This public generic dictionary getter reads actual instance storage,
         # bypassing overridden __dict__ properties and __getattribute__.
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr, PyObjectPtr())
+        var raw = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
         if not raw:
-            if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(self.b.AttributeError._obj_ptr) != 0:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            if cpython_table()[].PyErr_ExceptionMatches(self.b.AttributeError._obj_ptr) != 0:
+                cpy.PyErr_Clear()
                 return  # A slots-only/native leaf need not have a dictionary.
             raise cpy.unsafe_get_error()
         var fields = PythonObject(from_owned=raw)

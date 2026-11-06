@@ -43,7 +43,7 @@ def host_sparse_format(value: PythonObject) raises -> String:
         var module = py_get(modules, PythonObject("scipy.sparse._" + name))
         if module is None or py_type(module) is not module_type:
             continue
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+        var raw = cpy.PyModule_GetDict(module._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         var fields = PythonObject(from_borrowed=raw)

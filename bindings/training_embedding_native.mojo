@@ -24,7 +24,7 @@ def embedding_native_call(entry: PythonObject, args: PythonObject, list_store: B
         if list_store:
             # Array._from_flat wrapped native numeric storage construction
             # failures in TypeError. The admitted inputs have no hooks.
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpy.PyErr_Clear()
             raise Error("TypeError: cannot build an index Array from these native values")
         var failure = stash_python_error()
         raise failure^

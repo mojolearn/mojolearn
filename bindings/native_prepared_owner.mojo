@@ -27,6 +27,7 @@ Rules (shared by every site that uses it):
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -114,7 +115,7 @@ def _prepared_cleanup_function() raises -> PythonObject:
         module.def_py_c_function(_prepared_finalize_c, "release")
         var native_module = module.finalize()
         ref cpy = Python().cpython()
-        var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(native_module._obj_ptr)
+        var fields = cpy.PyModule_GetDict(native_module._obj_ptr)
         var name = String("release")
         var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemString")(fields, name.as_c_string_slice().unsafe_ptr())
         if not raw:
@@ -182,7 +183,7 @@ def prepared_put(mut mods: NativeModules, slot: String, owner: PythonObject, rec
     var callback = PythonObject(from_owned=raw_callback)
     var raw_weak = cpy.lib.get_function[PyObjectPtr]("PyWeakref_NewRef")(owner._obj_ptr, callback._obj_ptr)
     if not raw_weak:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return
     var weak = PythonObject(from_owned=raw_weak)
     var address = Int(owner._obj_ptr)
@@ -268,7 +269,7 @@ def prepared_class_stamp(mut mods: NativeModules, cls: PythonObject, extras: Pyt
         var row = ancestry[i]
         _ = py_call(stamp.append, row)
         # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
-        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(row._obj_ptr)
+        var flags = cpython_table()[].PyType_GetFlags(row._obj_ptr)
         if (flags & UInt64(1 << 8)) != 0:
             continue
         var items = py_call(bi.list, py_call(py_call(dict_get, row).items))
@@ -319,11 +320,11 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         var row = ancestry[i]
         if not _class_stamp_identity(stamp, row, offset):
             return False
-        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(row._obj_ptr)
+        var flags = cpython_table()[].PyType_GetFlags(row._obj_ptr)
         if (flags & UInt64(1 << 8)) != 0:
             continue
         var fields = py_call(dict_get, row)
-        var raw_iterator = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")(fields._obj_ptr)
+        var raw_iterator = cpy.PyObject_GetIter(fields._obj_ptr)
         if not raw_iterator:
             raise cpy.unsafe_get_error()
         var iterator = PythonObject(from_owned=raw_iterator)
@@ -334,7 +335,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         # key can collide with an earlier ordinary key, so interleaving the
         # two checks could invoke its __eq__ before reaching its own position.
         for field_index in range(field_count):  # small-loop(field_count: class fields): admit every namespace key first
-            var raw_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")(iterator._obj_ptr)
+            var raw_key = cpy.PyIter_Next(iterator._obj_ptr)
             if not raw_key:
                 if cpy.PyErr_Occurred():
                     raise cpy.unsafe_get_error()
