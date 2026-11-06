@@ -10,9 +10,16 @@
 # forest, the scores and the labels keep their bits.
 #
 # The resident forest's release (formerly `weakref.finalize` plus a Python
-# `__del__`) is a TreesResident lifetime held in the instance dictionary
-# (`_if_lifetime`): the binding's `iforest_resident_release` runs when the
-# estimator drops it (a refit, a new token, the estimator's end).
+# `__del__`) is a TreesResident lifetime: the binding's
+# `iforest_resident_release` runs when the estimator drops it (a refit, a new
+# token, the estimator's end). Lane perf-trees-owed (2026-11-06): the token,
+# the training matrix it was minted for and that lifetime are one native side
+# record of the estimator (bindings/trees_side_records.mojo), no longer the
+# `_if_token` / `_if_lifetime` fields: scoring leaves `__dict__` unchanged
+# (before, the first score after an unpickle or copy added the token), and a
+# pickle or copy never carries a process-local handle; it mints its own on
+# first use. The forest is a pure function of the seed and the X bits, so a
+# re-minted forest scores bit for bit as the one it replaces.
 #
 # Round trips removed against the Python path: one native call replaces each
 # method's Python sequence (validation, conversion, probes, buffers, launch,
@@ -28,6 +35,7 @@ from bindings.trees_public_inputs import (
     trees_all_finite, trees_call,
 )
 from bindings.trees_lifetime import trees_resident_new
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_is_integral, metric_is_bool
 
@@ -36,6 +44,7 @@ comptime _WANT_DECISION_FUNCTION = 1
 comptime _WANT_PREDICT = 2
 comptime _PREFIX = "mojolearn IsolationForest: "
 comptime _NONFINITE = "mojolearn IsolationForest: X contains NaN or infinity"
+comptime _TOKEN_SLOT = "trees_iforest_resident_v1"
 
 
 def _repr(value: PythonObject) raises -> String:
@@ -179,11 +188,15 @@ def _params(model: PythonObject, fields: PythonObject, n_train: Int, n_features:
     )
 
 
-def _release(fields: PythonObject) raises:
-    """`_release_resident()`: drop the resident forest's token and its
-    lifetime (which releases it in the binding)."""
-    _ = py_call(fields.pop, "_if_token", PythonObject(0))
-    _ = py_call(fields.pop, "_if_lifetime", PythonObject(None))
+def _release(model: PythonObject, fields: PythonObject) raises:
+    """`_release_resident()`: drop the resident forest's record (its
+    lifetime releases it in the binding). Fields an older build stored in
+    the instance dictionary are dropped too."""
+    trees_side_drop(_TOKEN_SLOT, model)
+    if py_contains(fields, "_if_token"):
+        _ = py_call(fields.pop, "_if_token", PythonObject(0))
+    if py_contains(fields, "_if_lifetime"):
+        _ = py_call(fields.pop, "_if_lifetime", PythonObject(None))
 
 
 def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: PythonObject, want: Int, fresh: Bool,
@@ -199,9 +212,13 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
     var resident = probe is not None and Int(py=py_call_typed(probe)) == 1
     var info = trees_vector(4 if resident else 3, "<f8", context)
     var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), n_query, want, context)
-    var current = py_get(fields, "_if_token", PythonObject(0))
+    # The held record: (token, the training matrix it was minted for, its
+    # lifetime). A record for another training matrix is not this forest's.
+    var held = trees_side_get(_TOKEN_SLOT, model) if resident else PythonObject(None)
+    var held_token = Int(py=held[0]) if held is not None else 0
+    var same_train = held is not None and held[1] is train
     if resident:
-        _ = py_call(params.append, PythonObject(0) if fresh else py_call(trees_builtins().int, current))
+        _ = py_call(params.append, PythonObject(0 if fresh or not same_train else held_token))
     var run = py_get(svm, "iforest_run")
     if run is None:
         raise Error("ImportError: mojolearn: the svm binding has no iforest_run")
@@ -222,12 +239,20 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
     if resident:
         var token = Int(words[3])
         _ = info  # keep the Python object alive through the native call above
-        if not Bool(py=PythonObject(token) == current):
-            _release(fields)
-            var release = py_get(svm, "iforest_resident_release")
-            if release is not None:
-                py_setitem(fields, "_if_lifetime", trees_resident_new(release, token))
-        py_setitem(fields, "_if_token", PythonObject(token))
+        if token != held_token or not same_train:
+            # The same token keeps its lifetime (no release of the live
+            # forest); a new token gets its own, and replacing the record
+            # releases the previous one.
+            var lifetime = PythonObject(None)
+            if token == held_token and held is not None:
+                lifetime = held[2]
+            else:
+                var release = py_get(svm, "iforest_resident_release")
+                if release is not None:
+                    lifetime = trees_resident_new(release, token)
+            # A model without weak references keeps no record: the record
+            # (and its lifetime) is dropped here, releasing the token.
+            _ = trees_side_put(_TOKEN_SLOT, model, Python.list(PythonObject(token), train, lifetime))
     _ = x.keep
     return labels if want == _WANT_PREDICT else values
 
@@ -296,7 +321,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal
         if py_contains(fields, kept[i]):
             py_setitem(had, kept[i], fields[kept[i]])
-    _release(fields)
+    _release(model, fields)
     var train = _as_array(x, context)
     py_setitem(fields, "_x", train)
     py_setitem(fields, "n_features_in_", PythonObject(x.cols))
