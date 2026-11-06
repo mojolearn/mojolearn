@@ -19,6 +19,18 @@
   produced. Change every vendor column and the host column together, then
   record the new reference in the release's one verification round.
 
+## Verify once, before the release, at the very end (Andrew, 2026-11-05)
+
+- Verification happens before a release only, once: one global verify of
+  every lane on every device, from the built wheels. Nothing is verified after
+  a release.
+- No same-bits checks during development. Do not queue or run identity (ID)
+  checks per lane, per fix or per merge. Fix everything in code first; the one
+  global verify at the very end is the only same-bits check.
+- A cross-vendor mismatch found by that verify is a bug to fix in code, then
+  the affected lanes run again. It is never a reason to add checks earlier.
+- This supersedes older instructions that ask a lane to queue ID checks.
+
 ## Peer communication only for execution (Andrew, 2026-10-29)
 
 - Contact peers or other agent threads only when necessary to execute the

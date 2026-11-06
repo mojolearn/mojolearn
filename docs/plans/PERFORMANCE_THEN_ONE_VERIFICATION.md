@@ -24,6 +24,8 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 7. CPU work runs free on GitHub runners (the repo is public): the CPU column and every check that needs no GPU.
 8. No users yet: no upgrade-path engineering; redoing work is fine.
 9. Performance fixes are implemented in Mojo. Python stays out of the runtime; the rule is kept.
+12. No same-bits (ID) checks during development; the one global verify at the very end is the only one. Bits may
+    change between versions; identity is only across GPU vendors within one version.
 10. Fix everything first, then build once and verify once. No compile or rental until the fixes are in and Andrew
     says go.
 11. Rented hosts run at full cores; the Mac is for Apple verification only; CPU work that can be handed off goes to

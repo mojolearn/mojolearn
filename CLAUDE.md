@@ -156,7 +156,12 @@ protocol-correctness checks and the no-callback requirement.
   step after the first publish runs a lane on any device.
 - Never plan a second identity run for one release. If a plan would run identity twice, say so up front and fix the
   order or the tool instead.
-- Good old runs are reused (next section); only lanes whose bits can have changed run.
+- No same-bits checks during development (Andrew, 2026-11-05): no `lq add ... ID` per lane, per fix or per merge.
+  Fix everything in code first; ONE global verify of every lane on every device at the very end is the only
+  same-bits check. This supersedes the "Same-bits checks use `lq add <box> ID`" instruction in the lane section.
+- Bits may change between versions; identity is only across GPU vendors within one version (see `AGENTS.md`).
+- Every release runs everything; reuse of old runs is an opt-in bonus, not the default
+  (`docs/plans/PERFORMANCE_THEN_ONE_VERIFICATION.md`).
 
 ## Reuse good old runs, automatically (Andrew, 2026-10-31)
 
