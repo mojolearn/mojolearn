@@ -258,7 +258,7 @@ def neural_rng_host(
     var _l1_a9 = b
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9}:
         neural_rng_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9)
-    host_launch(_launch_1, launch_count(((n + NRNG_TPB - 1) // NRNG_TPB, 1, 1), (NRNG_TPB, 1, 1)))
+    host_launch(_launch_1, launch_count(((n + NRNG_TPB - 1) // NRNG_TPB, 1, 1), (NRNG_TPB, 1, 1)), 0)
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out_buf)
     ctx.synchronize()

@@ -126,6 +126,7 @@ from mamba.host.gen.modeling_mamba import (
     MAMBA_POISON_OVERREAD,
     mamba_rms_norm,
     mamba_upload,
+    mamba_device_alloc,
     mamba_zeros,
     _refuse_nonfinite_named_host,
     residual_add_kernel,
@@ -224,6 +225,23 @@ struct Mamba2DeviceWeights(Movable):
         self.gnorm_w = mamba_upload(ctx, w.gnorm_w)
         self.w_out = mamba_upload(ctx, w.w_out)
 
+    def __init__(out self, ctx: DeviceContext, dims: Mamba2Dims) raises:
+        """Storage only for live public weights; caller refreshes every byte.
+        Preserve allocation poison/guard policy without temporary host Lists.
+        """
+        self.dims = dims.copy()
+        self.weights_checked = False
+        var sizes = _m2_weight_sizes(dims)
+        self.norm_w = mamba_device_alloc(ctx, max(1, sizes[0]))
+        self.w_in = mamba_device_alloc(ctx, max(1, sizes[1]))
+        self.conv_w = mamba_device_alloc(ctx, max(1, sizes[2]))
+        self.conv_b = mamba_device_alloc(ctx, max(1, sizes[3]))
+        self.dt_bias = mamba_device_alloc(ctx, max(1, sizes[4]))
+        self.a_log = mamba_device_alloc(ctx, max(1, sizes[5]))
+        self.d_skip = mamba_device_alloc(ctx, max(1, sizes[6]))
+        self.gnorm_w = mamba_device_alloc(ctx, max(1, sizes[7]))
+        self.w_out = mamba_device_alloc(ctx, max(1, sizes[8]))
+
     def __init__(
         out self, ctx: DeviceContext, dims: Mamba2Dims, mut arena: MambaArena
     ) raises:
@@ -297,9 +315,13 @@ def mamba2_arena_floats(b: Int, l: Int, q0: Int, dims: Mamba2Dims) -> Int:
     the input x (lane afn-mamba, MOJOLEARN_AFN_MAMBA_ARENA)."""
     var t = MambaArena.total(_m2_weight_sizes(dims), MAMBA_GUARD)
     t += MambaArena.total(_m2_state_sizes(b, dims), MAMBA_GUARD)
-    t += MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD)
-    t += MambaArena.slot(b * l * dims.d_model, MAMBA_GUARD)
-    return t
+    return t + mamba2_arena_work_floats(b, l, q0, dims)
+
+
+def mamba2_arena_work_floats(b: Int, l: Int, q0: Int, dims: Mamba2Dims) -> Int:
+    """Transient stage/input suffix; fixed weight/state views precede it."""
+    return (MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD)
+            + MambaArena.slot(b * l * dims.d_model, MAMBA_GUARD))
 
 
 struct Mamba2DeviceState(Movable):
@@ -1238,7 +1260,7 @@ def mamba2_block_forward(
     var _l1_a2 = Int32(nh)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2}:
         mamba_a_from_a_log_kernel(gid_, _l1_a0, _l1_a1, _l1_a2)
-    host_launch(_launch_1, launch_count((_grid(nh), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_1, launch_count((_grid(nh), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".A.out", stages.a_out, nh
@@ -1259,7 +1281,7 @@ def mamba2_block_forward(
         var _l2_a10 = Int32(dip)
         def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9, imm _l2_a10}:
             nn35_m2_pair_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9, _l2_a10)
-        host_launch(_launch_2, launch_count((_grid(b * ((l + 1) // 2) * cd), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_2, launch_count((_grid(b * ((l + 1) // 2) * cd), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     elif IDN_MAMBA_CONV_CELL:
         var _l3_a0 = stages.conv_out.unsafe_ptr()
         var _l3_a1 = stages.silu_out.unsafe_ptr()
@@ -1274,7 +1296,7 @@ def mamba2_block_forward(
         var _l3_a10 = Int32(dip)
         def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6, imm _l3_a7, imm _l3_a8, imm _l3_a9, imm _l3_a10}:
             m2_conv_cell_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6, _l3_a7, _l3_a8, _l3_a9, _l3_a10)
-        host_launch(_launch_3, launch_count((_grid(b * l * cd), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_3, launch_count((_grid(b * l * cd), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     else:
         var _l4_a0 = stages.conv_out.unsafe_ptr()
         var _l4_a1 = stages.silu_out.unsafe_ptr()
@@ -1289,7 +1311,7 @@ def mamba2_block_forward(
         var _l4_a10 = Int32(dip)
         def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7, imm _l4_a8, imm _l4_a9, imm _l4_a10}:
             m2_conv_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7, _l4_a8, _l4_a9, _l4_a10)
-        host_launch(_launch_4, launch_count((_grid(b * cd), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_4, launch_count((_grid(b * cd), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var _l5_a0 = stages.conv_win.unsafe_ptr()
     var _l5_a1 = stages.in_proj.unsafe_ptr()
     var _l5_a2 = state.conv_win.unsafe_ptr()
@@ -1300,7 +1322,7 @@ def mamba2_block_forward(
     var _l5_a7 = Int32(dip)
     def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7}:
         m2_conv_window_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7)
-    host_launch(_launch_5, launch_count((_grid(b * cd * M2_D_CONV), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_5, launch_count((_grid(b * cd * M2_D_CONV), 1, 1), (MAMBA2_TPB, 1, 1)), 22)
     _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".conv.out", stages.conv_out, m * cd
@@ -1325,7 +1347,7 @@ def mamba2_block_forward(
     var _l6_a7 = Int32(M2_CHUNK_SIZE)
     def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7}:
         m2_assemble_xbc_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7)
-    host_launch(_launch_6, launch_count((_grid(b * t_work * cd), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_6, launch_count((_grid(b * t_work * cd), 1, 1), (MAMBA2_TPB, 1, 1)), 22)
     var _l7_a0 = stages.dtraw_work.unsafe_ptr()
     var _l7_a1 = state.buf_dtraw.unsafe_ptr()
     var _l7_a2 = stages.in_proj.unsafe_ptr()
@@ -1339,7 +1361,7 @@ def mamba2_block_forward(
     var _l7_a10 = Int32(M2_CHUNK_SIZE)
     def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7, imm _l7_a8, imm _l7_a9, imm _l7_a10}:
         m2_assemble_dtraw_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7, _l7_a8, _l7_a9, _l7_a10)
-    host_launch(_launch_7, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_7, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA2_TPB, 1, 1)), 25)
     var _l8_a0 = stages.dt_work.unsafe_ptr()
     var _l8_a1 = stages.dtraw_work.unsafe_ptr()
     var _l8_a2 = w.dt_bias.unsafe_ptr()
@@ -1349,7 +1371,7 @@ def mamba2_block_forward(
     var _l8_a6 = dt_hi
     def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6}:
         m2_dt_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6)
-    host_launch(_launch_8, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_8, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA2_TPB, 1, 1)), 109)
     _m2_stage_sync(ctx, trace)
     _record_work_slice(
         ctx, trace, prefix + ".dt.out", stages.dt_work, b, l, q0, nh
@@ -1384,7 +1406,7 @@ def mamba2_block_forward(
             var _l9_a11 = Int32(dip)
             def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4, imm _l9_a5, imm _l9_a6, imm _l9_a7, imm _l9_a8, imm _l9_a9, imm _l9_a10, imm _l9_a11}:
                 m2_step_upstream_kernel(gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4, _l9_a5, _l9_a6, _l9_a7, _l9_a8, _l9_a9, _l9_a10, _l9_a11)
-            host_launch(_launch_9, launch_count((_grid(b * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1)))
+            host_launch(_launch_9, launch_count((_grid(b * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
             _m2_stage_sync(ctx, trace)
             # The card's SSD stages are not produced by this spelling;
             # record the working buffers as they stand (zeros) so the tag
@@ -1488,7 +1510,7 @@ def mamba2_block_forward(
             var _l10_a9 = Int32(M2_CHUNK_SIZE)
             def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4, imm _l10_a5, imm _l10_a6, imm _l10_a7, imm _l10_a8, imm _l10_a9}:
                 m2_buffer_update_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4, _l10_a5, _l10_a6, _l10_a7, _l10_a8, _l10_a9)
-            host_launch(_launch_10, launch_count((_grid(b * r * (cd + nh)), 1, 1), (MAMBA2_TPB, 1, 1)))
+            host_launch(_launch_10, launch_count((_grid(b * r * (cd + nh)), 1, 1), (MAMBA2_TPB, 1, 1)), 24)
             _m2_stage_sync(ctx, trace)
         state.buf_len = r
 
@@ -1506,7 +1528,7 @@ def mamba2_block_forward(
         var _l11_a8 = Int32(cd)
         def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2, imm _l11_a3, imm _l11_a4, imm _l11_a5, imm _l11_a6, imm _l11_a7, imm _l11_a8}:
             m2_skip_kernel(gid_, _l11_a0, _l11_a1, _l11_a2, _l11_a3, _l11_a4, _l11_a5, _l11_a6, _l11_a7, _l11_a8)
-        host_launch(_launch_11, launch_count((_grid(m * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_11, launch_count((_grid(m * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1)), 37)
         _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".skip.out", stages.skip_out, m * nh * p_dim
@@ -1536,7 +1558,7 @@ def mamba2_block_forward(
         var _l12_a5 = Int32(dip)
         def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3, imm _l12_a4, imm _l12_a5}:
             m2_gate_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3, _l12_a4, _l12_a5)
-        host_launch(_launch_12, launch_count((_grid(m * di), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_12, launch_count((_grid(m * di), 1, 1), (MAMBA2_TPB, 1, 1)), 51)
         _m2_stage_sync(ctx, trace)
     else:
         var _l13_a0 = stages.gnorm_gate.unsafe_ptr()
@@ -1547,7 +1569,7 @@ def mamba2_block_forward(
         var _l13_a5 = Int32(dip)
         def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3, imm _l13_a4, imm _l13_a5}:
             m2_gate_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3, _l13_a4, _l13_a5)
-        host_launch(_launch_13, launch_count((_grid(m * di), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_13, launch_count((_grid(m * di), 1, 1), (MAMBA2_TPB, 1, 1)), 51)
         _m2_stage_sync(ctx, trace)
         mamba_rms_norm(
             ctx,
@@ -1591,7 +1613,7 @@ def mamba2_block_forward(
             var _l14_a3 = Int32(m * dm)
             def _launch_14(gid_: Int) {imm _l14_a0, imm _l14_a1, imm _l14_a2, imm _l14_a3}:
                 residual_add_kernel(gid_, _l14_a0, _l14_a1, _l14_a2, _l14_a3)
-            host_launch(_launch_14, launch_count((_grid(m * dm), 1, 1), (MAMBA2_TPB, 1, 1)))
+            host_launch(_launch_14, launch_count((_grid(m * dm), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     else:
         mamba_proj_gemm(
             ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
@@ -1605,7 +1627,7 @@ def mamba2_block_forward(
         var _l15_a3 = Int32(m * dm)
         def _launch_15(gid_: Int) {imm _l15_a0, imm _l15_a1, imm _l15_a2, imm _l15_a3}:
             residual_add_kernel(gid_, _l15_a0, _l15_a1, _l15_a2, _l15_a3)
-        host_launch(_launch_15, launch_count((_grid(m * dm), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_15, launch_count((_grid(m * dm), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     _m2_stage_sync(ctx, trace)
     comptime if IDN_MAMBA_GEMM_WS:
         # lane fam-lm: the projection GEMMs no longer wait (idn_gemm_ws.mojo),

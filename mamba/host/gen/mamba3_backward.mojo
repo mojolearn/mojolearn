@@ -141,7 +141,7 @@ def mamba3_backward_gate_skip_into(
     var _l1_a14 = Int32(dims.d_inner)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10, imm _l1_a11, imm _l1_a12, imm _l1_a13, imm _l1_a14}:
         mamba3_gate_skip_backward_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10, _l1_a11, _l1_a12, _l1_a13, _l1_a14)
-    host_launch(_launch_1, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)))
+    host_launch(_launch_1, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)), 0)
 
 
 def mamba3_qkdot_backward_kernel(gid_: Int,
@@ -237,7 +237,7 @@ def mamba3_backward_qkdot_into(
     var _l2_a16 = Int32(dims.nheads)
     def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9, imm _l2_a10, imm _l2_a11, imm _l2_a12, imm _l2_a13, imm _l2_a14, imm _l2_a15, imm _l2_a16}:
         mamba3_qkdot_backward_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9, _l2_a10, _l2_a11, _l2_a12, _l2_a13, _l2_a14, _l2_a15, _l2_a16)
-    host_launch(_launch_2, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)))
+    host_launch(_launch_2, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)), 0)
 
 
 def mamba3_s16_qkv_backward_kernel(gid_: Int,
@@ -565,7 +565,7 @@ def mamba3_backward_s16_s15_into(
                 var _l3_a11 = Int32(qsize)
                 def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6, imm _l3_a7, imm _l3_a8, imm _l3_a9, imm _l3_a10, imm _l3_a11}:
                     mamba3_s16_qk_backward_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6, _l3_a7, _l3_a8, _l3_a9, _l3_a10, _l3_a11)
-                host_launch(_launch_3, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+                host_launch(_launch_3, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 0)
                 _s16_tick(ctx, ton, tk, "qk_naive")
             else:
                 if qsize > M3_S16_QK_MAXQ:
@@ -586,7 +586,7 @@ def mamba3_backward_s16_s15_into(
                         var _l4_a10 = Int32(qsize)
                         def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7, imm _l4_a8, imm _l4_a9, imm _l4_a10}:
                             mamba3_s16_qk_smem48_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7, _l4_a8, _l4_a9, _l4_a10)
-                        host_launch(_launch_4, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)))
+                        host_launch(_launch_4, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
                         _s16_tick(ctx, ton, tk, "qk_smem48")
                         took = True
                 comptime if M3_S16_QK_REGS2_FITS:
@@ -604,7 +604,7 @@ def mamba3_backward_s16_s15_into(
                         var _l5_a10 = Int32(qsize)
                         def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7, imm _l5_a8, imm _l5_a9, imm _l5_a10}:
                             mamba3_s16_qk_regs2_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7, _l5_a8, _l5_a9, _l5_a10)
-                        host_launch(_launch_5, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)))
+                        host_launch(_launch_5, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
                         _s16_tick(ctx, ton, tk, "qk_regs2")
                         took = True
                 comptime if M3_S16_QK_REGS2H_FITS:
@@ -622,7 +622,7 @@ def mamba3_backward_s16_s15_into(
                         var _l6_a10 = Int32(qsize)
                         def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7, imm _l6_a8, imm _l6_a9, imm _l6_a10}:
                             mamba3_s16_qk_regs2h_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7, _l6_a8, _l6_a9, _l6_a10)
-                        host_launch(_launch_6, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)))
+                        host_launch(_launch_6, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
                         _s16_tick(ctx, ton, tk, "qk_regs2h")
                         took = True
                 comptime if M3_S16_QK_REGSH_FITS:
@@ -640,7 +640,7 @@ def mamba3_backward_s16_s15_into(
                         var _l7_a10 = Int32(qsize)
                         def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7, imm _l7_a8, imm _l7_a9, imm _l7_a10}:
                             mamba3_s16_qk_regsh_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7, _l7_a8, _l7_a9, _l7_a10)
-                        host_launch(_launch_7, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)))
+                        host_launch(_launch_7, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
                         _s16_tick(ctx, ton, tk, "qk_regsh")
                         took = True
                 comptime if M3_S16_QK_PAGE_FITS:
@@ -659,7 +659,7 @@ def mamba3_backward_s16_s15_into(
                             var _l8_a10 = Int32(qsize)
                             def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7, imm _l8_a8, imm _l8_a9, imm _l8_a10}:
                                 mamba3_s16_qk_shared_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7, _l8_a8, _l8_a9, _l8_a10)
-                            host_launch(_launch_8, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)))
+                            host_launch(_launch_8, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
                             _s16_tick(ctx, ton, tk, "qk_shared")
                         else:
                             var _l9_a0 = d_q.unsafe_ptr()
@@ -675,7 +675,7 @@ def mamba3_backward_s16_s15_into(
                             var _l9_a10 = Int32(qsize)
                             def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4, imm _l9_a5, imm _l9_a6, imm _l9_a7, imm _l9_a8, imm _l9_a9, imm _l9_a10}:
                                 mamba3_s16_qk_regs_kernel(gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4, _l9_a5, _l9_a6, _l9_a7, _l9_a8, _l9_a9, _l9_a10)
-                            host_launch(_launch_9, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)))
+                            host_launch(_launch_9, launch_count((b*l*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
                             _s16_tick(ctx, ton, tk, "qk_regs")
                         took = True
                 if not took:
@@ -693,7 +693,7 @@ def mamba3_backward_s16_s15_into(
                     var _l10_a11 = Int32(qsize)
                     def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4, imm _l10_a5, imm _l10_a6, imm _l10_a7, imm _l10_a8, imm _l10_a9, imm _l10_a10, imm _l10_a11}:
                         mamba3_s16_qk_backward_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4, _l10_a5, _l10_a6, _l10_a7, _l10_a8, _l10_a9, _l10_a10, _l10_a11)
-                    host_launch(_launch_10, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+                    host_launch(_launch_10, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 0)
                     _s16_tick(ctx, ton, tk, "qk_naive_nofit")
         else:
             var _l11_a0 = d_q.unsafe_ptr()
@@ -710,7 +710,7 @@ def mamba3_backward_s16_s15_into(
             var _l11_a11 = Int32(qsize)
             def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2, imm _l11_a3, imm _l11_a4, imm _l11_a5, imm _l11_a6, imm _l11_a7, imm _l11_a8, imm _l11_a9, imm _l11_a10, imm _l11_a11}:
                 mamba3_s16_qk_backward_kernel(gid_, _l11_a0, _l11_a1, _l11_a2, _l11_a3, _l11_a4, _l11_a5, _l11_a6, _l11_a7, _l11_a8, _l11_a9, _l11_a10, _l11_a11)
-            host_launch(_launch_11, launch_count((_grid(qcells),1,1), (M3_BWD_TPB,1,1)))
+            host_launch(_launch_11, launch_count((_grid(qcells),1,1), (M3_BWD_TPB,1,1)), 0)
         var _l12_a0 = d_v.unsafe_ptr()
         var _l12_a1 = d_y.unsafe_ptr()
         var _l12_a2 = q.unsafe_ptr()
@@ -722,7 +722,7 @@ def mamba3_backward_s16_s15_into(
         var _l12_a8 = Int32(qsize)
         def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3, imm _l12_a4, imm _l12_a5, imm _l12_a6, imm _l12_a7, imm _l12_a8}:
             mamba3_s16_v_shared_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3, _l12_a4, _l12_a5, _l12_a6, _l12_a7, _l12_a8)
-        host_launch(_launch_12, launch_count((b*l*dims.nheads,1,1), (M3_HEADDIM,1,1)))
+        host_launch(_launch_12, launch_count((b*l*dims.nheads,1,1), (M3_HEADDIM,1,1)), 0)
         comptime if M3_S16_QK_SHARED:
             var tv = Int(perf_counter_ns())
             _s16_tick(ctx, String(getenv("MOJOLEARN_MAMBA_TIMING")) != "", tv, "v_shared")
@@ -736,7 +736,7 @@ def mamba3_backward_s16_s15_into(
     var _l13_a5 = Int32(b*l*dims.nheads)
     def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3, imm _l13_a4, imm _l13_a5}:
         mamba3_s15_backward_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3, _l13_a4, _l13_a5)
-    host_launch(_launch_13, launch_count((_grid(b*l*dims.nheads),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_13, launch_count((_grid(b*l*dims.nheads),1,1), (M3_BWD_TPB,1,1)), 0)
 
 
 def mamba3_join_value_scale_kernel(gid_: Int,
@@ -813,7 +813,7 @@ def mamba3_backward_join_rotary_into(
     var _l14_a7 = Int32(sc)
     def _launch_14(gid_: Int) {imm _l14_a0, imm _l14_a1, imm _l14_a2, imm _l14_a3, imm _l14_a4, imm _l14_a5, imm _l14_a6, imm _l14_a7}:
         mamba3_join_value_scale_kernel(gid_, _l14_a0, _l14_a1, _l14_a2, _l14_a3, _l14_a4, _l14_a5, _l14_a6, _l14_a7)
-    host_launch(_launch_14, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_14, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 15)
     var pairs=m*dims.nheads*(M3_D_STATE//2)
     var _l15_a0 = d_qraw.unsafe_ptr()
     var _l15_a1 = d_kraw.unsafe_ptr()
@@ -829,7 +829,7 @@ def mamba3_backward_join_rotary_into(
     var _l15_a11 = Int32(dims.nheads)
     def _launch_15(gid_: Int) {imm _l15_a0, imm _l15_a1, imm _l15_a2, imm _l15_a3, imm _l15_a4, imm _l15_a5, imm _l15_a6, imm _l15_a7, imm _l15_a8, imm _l15_a9, imm _l15_a10, imm _l15_a11}:
         mamba3_rotary_backward_kernel(gid_, _l15_a0, _l15_a1, _l15_a2, _l15_a3, _l15_a4, _l15_a5, _l15_a6, _l15_a7, _l15_a8, _l15_a9, _l15_a10, _l15_a11)
-    host_launch(_launch_15, launch_count((_grid(pairs),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_15, launch_count((_grid(pairs),1,1), (M3_BWD_TPB,1,1)), 225)
 
 
 def mamba3_join_bc_kernel(gid_: Int,
@@ -888,7 +888,7 @@ def mamba3_backward_join_current_into(
     var _l16_a6 = Int32(bc)
     def _launch_16(gid_: Int) {imm _l16_a0, imm _l16_a1, imm _l16_a2, imm _l16_a3, imm _l16_a4, imm _l16_a5, imm _l16_a6}:
         mamba3_join_bc_kernel(gid_, _l16_a0, _l16_a1, _l16_a2, _l16_a3, _l16_a4, _l16_a5, _l16_a6)
-    host_launch(_launch_16, launch_count((_grid(bc),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_16, launch_count((_grid(bc),1,1), (M3_BWD_TPB,1,1)), 16)
     var _l17_a0 = out_gamma.unsafe_ptr()
     var _l17_a1 = out_dt.unsafe_ptr()
     var _l17_a2 = out_trap.unsafe_ptr()
@@ -904,7 +904,7 @@ def mamba3_backward_join_current_into(
     var _l17_a12 = Int32(dims.nheads)
     def _launch_17(gid_: Int) {imm _l17_a0, imm _l17_a1, imm _l17_a2, imm _l17_a3, imm _l17_a4, imm _l17_a5, imm _l17_a6, imm _l17_a7, imm _l17_a8, imm _l17_a9, imm _l17_a10, imm _l17_a11, imm _l17_a12}:
         mamba3_beta_join_kernel(gid_, _l17_a0, _l17_a1, _l17_a2, _l17_a3, _l17_a4, _l17_a5, _l17_a6, _l17_a7, _l17_a8, _l17_a9, _l17_a10, _l17_a11, _l17_a12)
-    host_launch(_launch_17, launch_count((_grid(hs),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_17, launch_count((_grid(hs),1,1), (M3_BWD_TPB,1,1)), 82)
 
 
 def mamba3_theta_reverse_kernel(gid_: Int,
@@ -1152,7 +1152,7 @@ def mamba3_backward_angle_into(
         var _l18_a4 = Int32(dims.nheads)
         def _launch_18(gid_: Int) {imm _l18_a0, imm _l18_a1, imm _l18_a2, imm _l18_a3, imm _l18_a4}:
             mamba3_angle_chunk_sum_kernel(gid_, _l18_a0, _l18_a1, _l18_a2, _l18_a3, _l18_a4)
-        host_launch(_launch_18, launch_count((_grid(work),1,1), (M3_BWD_TPB,1,1)))
+        host_launch(_launch_18, launch_count((_grid(work),1,1), (M3_BWD_TPB,1,1)), 0)
         comptime if IDN_M3_ANGLE_CARRY_CACHE:
             var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
             var _l19_a0 = sums.unsafe_ptr()
@@ -1160,7 +1160,7 @@ def mamba3_backward_angle_into(
             var _l19_a2 = Int32(nk)
             def _launch_19(gid_: Int) {imm _l19_a0, imm _l19_a1, imm _l19_a2}:
                 nn38_angle_chunk_seeds_kernel(gid_, _l19_a0, _l19_a1, _l19_a2)
-            host_launch(_launch_19, launch_count((_grid(chains),1,1), (M3_BWD_TPB,1,1)))
+            host_launch(_launch_19, launch_count((_grid(chains),1,1), (M3_BWD_TPB,1,1)), 0)
         var _l20_a0 = d_rate.unsafe_ptr()
         var _l20_a1 = d_theta.unsafe_ptr()
         var _l20_a2 = sums.unsafe_ptr()
@@ -1169,7 +1169,7 @@ def mamba3_backward_angle_into(
         var _l20_a5 = Int32(dims.nheads)
         def _launch_20(gid_: Int) {imm _l20_a0, imm _l20_a1, imm _l20_a2, imm _l20_a3, imm _l20_a4, imm _l20_a5}:
             mamba3_angle_suffix_kernel(gid_, _l20_a0, _l20_a1, _l20_a2, _l20_a3, _l20_a4, _l20_a5)
-        host_launch(_launch_20, launch_count((_grid(work),1,1), (M3_BWD_TPB,1,1)))
+        host_launch(_launch_20, launch_count((_grid(work),1,1), (M3_BWD_TPB,1,1)), 0)
         var m=b*l
         var _l21_a0 = d_dt.unsafe_ptr()
         var _l21_a1 = d_rate.unsafe_ptr()
@@ -1181,7 +1181,7 @@ def mamba3_backward_angle_into(
         var _l21_a7 = Int32(dims.col_angle())
         def _launch_21(gid_: Int) {imm _l21_a0, imm _l21_a1, imm _l21_a2, imm _l21_a3, imm _l21_a4, imm _l21_a5, imm _l21_a6, imm _l21_a7}:
             mamba3_angle_suffix_dt_kernel(gid_, _l21_a0, _l21_a1, _l21_a2, _l21_a3, _l21_a4, _l21_a5, _l21_a6, _l21_a7)
-        host_launch(_launch_21, launch_count((_grid(m*dims.nheads),1,1), (M3_BWD_TPB,1,1)))
+        host_launch(_launch_21, launch_count((_grid(m*dims.nheads),1,1), (M3_BWD_TPB,1,1)), 0)
         # d_angle half only (do_dt = 0): it reads the finished d_rate.
         var _l22_a0 = d_angle.unsafe_ptr()
         var _l22_a1 = d_dt.unsafe_ptr()
@@ -1197,7 +1197,7 @@ def mamba3_backward_angle_into(
         var _l22_a11 = Int32(0)
         def _launch_22(gid_: Int) {imm _l22_a0, imm _l22_a1, imm _l22_a2, imm _l22_a3, imm _l22_a4, imm _l22_a5, imm _l22_a6, imm _l22_a7, imm _l22_a8, imm _l22_a9, imm _l22_a10, imm _l22_a11}:
             mamba3_angle_reduce_kernel(gid_, _l22_a0, _l22_a1, _l22_a2, _l22_a3, _l22_a4, _l22_a5, _l22_a6, _l22_a7, _l22_a8, _l22_a9, _l22_a10, _l22_a11)
-        host_launch(_launch_22, launch_count((_grid(m*M3_NUM_ROPE_ANGLES),1,1), (M3_BWD_TPB,1,1)))
+        host_launch(_launch_22, launch_count((_grid(m*M3_NUM_ROPE_ANGLES),1,1), (M3_BWD_TPB,1,1)), 0)
         return
     var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
     var _l23_a0 = d_rate.unsafe_ptr()
@@ -1208,7 +1208,7 @@ def mamba3_backward_angle_into(
     var _l23_a5 = Int32(dims.nheads)
     def _launch_23(gid_: Int) {imm _l23_a0, imm _l23_a1, imm _l23_a2, imm _l23_a3, imm _l23_a4, imm _l23_a5}:
         mamba3_theta_reverse_kernel(gid_, _l23_a0, _l23_a1, _l23_a2, _l23_a3, _l23_a4, _l23_a5)
-    host_launch(_launch_23, launch_count((_grid(chains),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_23, launch_count((_grid(chains),1,1), (M3_BWD_TPB,1,1)), 0)
     var m=b*l;var cells=m*M3_NUM_ROPE_ANGLES if m*M3_NUM_ROPE_ANGLES>m*dims.nheads else m*dims.nheads
     var dt_shared=False
     comptime if M3_ANGLE_DT_SHARED:
@@ -1227,7 +1227,7 @@ def mamba3_backward_angle_into(
     var _l24_a11 = Int32(0 if dt_shared else 1)
     def _launch_24(gid_: Int) {imm _l24_a0, imm _l24_a1, imm _l24_a2, imm _l24_a3, imm _l24_a4, imm _l24_a5, imm _l24_a6, imm _l24_a7, imm _l24_a8, imm _l24_a9, imm _l24_a10, imm _l24_a11}:
         mamba3_angle_reduce_kernel(gid_, _l24_a0, _l24_a1, _l24_a2, _l24_a3, _l24_a4, _l24_a5, _l24_a6, _l24_a7, _l24_a8, _l24_a9, _l24_a10, _l24_a11)
-    host_launch(_launch_24, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_24, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 0)
     if dt_shared:
         var _l25_a0 = d_dt.unsafe_ptr()
         var _l25_a1 = d_theta.unsafe_ptr()
@@ -1239,7 +1239,7 @@ def mamba3_backward_angle_into(
         var _l25_a7 = Int32(dims.col_angle())
         def _launch_25(gid_: Int) {imm _l25_a0, imm _l25_a1, imm _l25_a2, imm _l25_a3, imm _l25_a4, imm _l25_a5, imm _l25_a6, imm _l25_a7}:
             mamba3_angle_dt_shared_kernel(gid_, _l25_a0, _l25_a1, _l25_a2, _l25_a3, _l25_a4, _l25_a5, _l25_a6, _l25_a7)
-        host_launch(_launch_25, launch_count((b*dims.nheads,1,1), (M3_ANGLE_DT_TPB,1,1)))
+        host_launch(_launch_25, launch_count((b*dims.nheads,1,1), (M3_ANGLE_DT_TPB,1,1)), 0)
 
 
 # ===========================================================================
@@ -1387,7 +1387,7 @@ def mamba3_afn_backward_angle_into(
     var _l26_a4 = Int32(dims.nheads)
     def _launch_26(gid_: Int) {imm _l26_a0, imm _l26_a1, imm _l26_a2, imm _l26_a3, imm _l26_a4}:
         afn_m3_theta_chunk_sum_kernel(gid_, _l26_a0, _l26_a1, _l26_a2, _l26_a3, _l26_a4)
-    host_launch(_launch_26, launch_count((_grid(cells1), 1, 1), (M3_BWD_TPB, 1, 1)))
+    host_launch(_launch_26, launch_count((_grid(cells1), 1, 1), (M3_BWD_TPB, 1, 1)), 0)
     var _l27_a0 = d_rate.unsafe_ptr()
     var _l27_a1 = d_theta.unsafe_ptr()
     var _l27_a2 = dt.unsafe_ptr()
@@ -1397,7 +1397,7 @@ def mamba3_afn_backward_angle_into(
     var _l27_a6 = Int32(dims.nheads)
     def _launch_27(gid_: Int) {imm _l27_a0, imm _l27_a1, imm _l27_a2, imm _l27_a3, imm _l27_a4, imm _l27_a5, imm _l27_a6}:
         afn_m3_theta_chunk_apply_kernel(gid_, _l27_a0, _l27_a1, _l27_a2, _l27_a3, _l27_a4, _l27_a5, _l27_a6)
-    host_launch(_launch_27, launch_count((_grid(cells1), 1, 1), (M3_BWD_TPB, 1, 1)))
+    host_launch(_launch_27, launch_count((_grid(cells1), 1, 1), (M3_BWD_TPB, 1, 1)), 0)
     var m = b * l
     var cells = m * M3_NUM_ROPE_ANGLES
     if m * dims.nheads > cells:
@@ -1417,7 +1417,7 @@ def mamba3_afn_backward_angle_into(
     var _l28_a11 = Int32(0 if dt_scan else 1)
     def _launch_28(gid_: Int) {imm _l28_a0, imm _l28_a1, imm _l28_a2, imm _l28_a3, imm _l28_a4, imm _l28_a5, imm _l28_a6, imm _l28_a7, imm _l28_a8, imm _l28_a9, imm _l28_a10, imm _l28_a11}:
         mamba3_angle_reduce_kernel(gid_, _l28_a0, _l28_a1, _l28_a2, _l28_a3, _l28_a4, _l28_a5, _l28_a6, _l28_a7, _l28_a8, _l28_a9, _l28_a10, _l28_a11)
-    host_launch(_launch_28, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)))
+    host_launch(_launch_28, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)), 0)
     if dt_scan:
         var _l29_a0 = d_dt.unsafe_ptr()
         var _l29_a1 = d_theta.unsafe_ptr()
@@ -1429,7 +1429,7 @@ def mamba3_afn_backward_angle_into(
         var _l29_a7 = Int32(dims.col_angle())
         def _launch_29(gid_: Int) {imm _l29_a0, imm _l29_a1, imm _l29_a2, imm _l29_a3, imm _l29_a4, imm _l29_a5, imm _l29_a6, imm _l29_a7}:
             afn_m3_angle_dt_scan_kernel(gid_, _l29_a0, _l29_a1, _l29_a2, _l29_a3, _l29_a4, _l29_a5, _l29_a6, _l29_a7)
-        host_launch(_launch_29, launch_count((b * dims.nheads, 1, 1), (M3_ANGLE_DT_TPB, 1, 1)))
+        host_launch(_launch_29, launch_count((b * dims.nheads, 1, 1), (M3_ANGLE_DT_TPB, 1, 1)), 0)
 
 
 def mamba3_dt_softplus_partial_kernel(gid_: Int,
@@ -1481,7 +1481,7 @@ def mamba3_backward_dt_partial_into(
     var _l30_a10 = Int32(dims.col_dt())
     def _launch_30(gid_: Int) {imm _l30_a0, imm _l30_a1, imm _l30_a2, imm _l30_a3, imm _l30_a4, imm _l30_a5, imm _l30_a6, imm _l30_a7, imm _l30_a8, imm _l30_a9, imm _l30_a10}:
         mamba3_dt_softplus_partial_kernel(gid_, _l30_a0, _l30_a1, _l30_a2, _l30_a3, _l30_a4, _l30_a5, _l30_a6, _l30_a7, _l30_a8, _l30_a9, _l30_a10)
-    host_launch(_launch_30, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_30, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 55)
 
 
 def mamba3_s16_dseg_kernel(gid_: Int,
@@ -1539,7 +1539,7 @@ def mamba3_backward_seg_adt_into(
     var _l31_a8 = Int32(qs)
     def _launch_31(gid_: Int) {imm _l31_a0, imm _l31_a1, imm _l31_a2, imm _l31_a3, imm _l31_a4, imm _l31_a5, imm _l31_a6, imm _l31_a7, imm _l31_a8}:
         mamba3_s16_dseg_kernel(gid_, _l31_a0, _l31_a1, _l31_a2, _l31_a3, _l31_a4, _l31_a5, _l31_a6, _l31_a7, _l31_a8)
-    host_launch(_launch_31, launch_count((_grid(segcells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_31, launch_count((_grid(segcells),1,1), (M3_BWD_TPB,1,1)), 0)
     var _l32_a0 = d_adt.unsafe_ptr()
     var _l32_a1 = d_seg.unsafe_ptr()
     var _l32_a2 = seg.unsafe_ptr()
@@ -1549,7 +1549,7 @@ def mamba3_backward_seg_adt_into(
     var _l32_a6 = Int32(qs)
     def _launch_32(gid_: Int) {imm _l32_a0, imm _l32_a1, imm _l32_a2, imm _l32_a3, imm _l32_a4, imm _l32_a5, imm _l32_a6}:
         mamba3_seg_to_adt_kernel(gid_, _l32_a0, _l32_a1, _l32_a2, _l32_a3, _l32_a4, _l32_a5, _l32_a6)
-    host_launch(_launch_32, launch_count((_grid(hcells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_32, launch_count((_grid(hcells),1,1), (M3_BWD_TPB,1,1)), 0)
 
 
 def mamba3_adt_product_backward_kernel(gid_: Int,
@@ -1580,7 +1580,7 @@ def mamba3_backward_adt_product_into(
     var _l33_a7 = Int32(cells)
     def _launch_33(gid_: Int) {imm _l33_a0, imm _l33_a1, imm _l33_a2, imm _l33_a3, imm _l33_a4, imm _l33_a5, imm _l33_a6, imm _l33_a7}:
         mamba3_adt_product_backward_kernel(gid_, _l33_a0, _l33_a1, _l33_a2, _l33_a3, _l33_a4, _l33_a5, _l33_a6, _l33_a7)
-    host_launch(_launch_33, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_33, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 24)
 
 
 def mamba3_a_heavy_tail_backward_kernel(gid_: Int, d_raw:MutPointer[Float32,MutAnyOrigin],d_a:MutPointer[Float32,MutAnyOrigin],in_proj:MutPointer[Float32,MutAnyOrigin],cells_in:Int32,nh_in:Int32,dip_in:Int32,col_a_in:Int32):
@@ -1609,7 +1609,7 @@ def mamba3_backward_a_heavy_tail_into(ctx:DeviceContext,mut d_raw:DeviceBuffer[D
     var _l34_a6 = Int32(dims.col_a())
     def _launch_34(gid_: Int) {imm _l34_a0, imm _l34_a1, imm _l34_a2, imm _l34_a3, imm _l34_a4, imm _l34_a5, imm _l34_a6}:
         mamba3_a_heavy_tail_backward_kernel(gid_, _l34_a0, _l34_a1, _l34_a2, _l34_a3, _l34_a4, _l34_a5, _l34_a6)
-    host_launch(_launch_34, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_34, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 35)
 
 
 def mamba3_bcnorm_backward_kernel(gid_: Int, dx:MutPointer[Float32,MutAnyOrigin],dwrow:MutPointer[Float32,MutAnyOrigin],dy:MutPointer[Float32,MutAnyOrigin],raw:MutPointer[Float32,MutAnyOrigin],weight:MutPointer[Float32,MutAnyOrigin],m_in:Int32,nh_in:Int32,dip_in:Int32,col_in:Int32):
@@ -1644,7 +1644,7 @@ def mamba3_backward_bcnorm_into(ctx:DeviceContext,mut dx:DeviceBuffer[DType.floa
     var _l35_a8 = Int32(col)
     def _launch_35(gid_: Int) {imm _l35_a0, imm _l35_a1, imm _l35_a2, imm _l35_a3, imm _l35_a4, imm _l35_a5, imm _l35_a6, imm _l35_a7, imm _l35_a8}:
         mamba3_bcnorm_backward_kernel(gid_, _l35_a0, _l35_a1, _l35_a2, _l35_a3, _l35_a4, _l35_a5, _l35_a6, _l35_a7, _l35_a8)
-    host_launch(_launch_35, launch_count((_grid(m),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_35, launch_count((_grid(m),1,1), (M3_BWD_TPB,1,1)), 0)
 
 
 def mamba3_pack_in_proj_backward_kernel(gid_: Int,
@@ -1724,7 +1724,7 @@ def mamba3_backward_pack_in_proj_into(
     var _l36_a12 = Int32(dims.d_in_proj())
     def _launch_36(gid_: Int) {imm _l36_a0, imm _l36_a1, imm _l36_a2, imm _l36_a3, imm _l36_a4, imm _l36_a5, imm _l36_a6, imm _l36_a7, imm _l36_a8, imm _l36_a9, imm _l36_a10, imm _l36_a11, imm _l36_a12}:
         mamba3_pack_in_proj_backward_kernel(gid_, _l36_a0, _l36_a1, _l36_a2, _l36_a3, _l36_a4, _l36_a5, _l36_a6, _l36_a7, _l36_a8, _l36_a9, _l36_a10, _l36_a11, _l36_a12)
-    host_launch(_launch_36, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)))
+    host_launch(_launch_36, launch_count((_grid(cells), 1, 1), (M3_BWD_TPB, 1, 1)), 31)
 
 
 def mamba3_block_norm_backward_kernel(gid_: Int,
@@ -1855,13 +1855,13 @@ def mamba3_backward_block_norm_into(
         var _l37_a5 = Int32(dims.d_model)
         def _launch_37(gid_: Int) {imm _l37_a0, imm _l37_a1, imm _l37_a2, imm _l37_a3, imm _l37_a4, imm _l37_a5}:
             mamba_bwd_rowdot_lane_kernel(gid_, _l37_a0, _l37_a1, _l37_a2, _l37_a3, _l37_a4, _l37_a5)
-        host_launch(_launch_37, launch_count((mamba_bwd_fold_grid(off), 1, 1), (MAMBA_BWD_FOLD_TPB, 1, 1)))
+        host_launch(_launch_37, launch_count((mamba_bwd_fold_grid(off), 1, 1), (MAMBA_BWD_FOLD_TPB, 1, 1)), 0)
         var _l38_a0 = fold.unsafe_ptr()
         var _l38_a1 = Int32(m)
         var _l38_a2 = Int32(off)
         def _launch_38(gid_: Int) {imm _l38_a0, imm _l38_a1, imm _l38_a2}:
             mamba_bwd_rowdot_tree_kernel(gid_, _l38_a0, _l38_a1, _l38_a2)
-        host_launch(_launch_38, launch_count((mamba_bwd_fold_grid(m), 1, 1), (MAMBA_BWD_FOLD_TPB, 1, 1)))
+        host_launch(_launch_38, launch_count((mamba_bwd_fold_grid(m), 1, 1), (MAMBA_BWD_FOLD_TPB, 1, 1)), 0)
         var _l39_a0 = dx.unsafe_ptr()
         var _l39_a1 = dw_rows.unsafe_ptr()
         var _l39_a2 = dy.unsafe_ptr()
@@ -1874,7 +1874,7 @@ def mamba3_backward_block_norm_into(
         var _l39_a9 = Int32(dims.d_model)
         def _launch_39(gid_: Int) {imm _l39_a0, imm _l39_a1, imm _l39_a2, imm _l39_a3, imm _l39_a4, imm _l39_a5, imm _l39_a6, imm _l39_a7, imm _l39_a8, imm _l39_a9}:
             mamba3_block_norm_backward_cell_kernel(gid_, _l39_a0, _l39_a1, _l39_a2, _l39_a3, _l39_a4, _l39_a5, _l39_a6, _l39_a7, _l39_a8, _l39_a9)
-        host_launch(_launch_39, launch_count((mamba_bwd_fold_grid(m * dims.d_model), 1, 1), (MAMBA_BWD_FOLD_TPB, 1, 1)))
+        host_launch(_launch_39, launch_count((mamba_bwd_fold_grid(m * dims.d_model), 1, 1), (MAMBA_BWD_FOLD_TPB, 1, 1)), 101)
         ctx.synchronize()
         _ = fold^
     else:
@@ -1888,13 +1888,13 @@ def mamba3_backward_block_norm_into(
         var _l40_a7 = Int32(dims.d_model)
         def _launch_40(gid_: Int) {imm _l40_a0, imm _l40_a1, imm _l40_a2, imm _l40_a3, imm _l40_a4, imm _l40_a5, imm _l40_a6, imm _l40_a7}:
             mamba3_block_norm_backward_kernel(gid_, _l40_a0, _l40_a1, _l40_a2, _l40_a3, _l40_a4, _l40_a5, _l40_a6, _l40_a7)
-        host_launch(_launch_40, launch_count((_grid(m), 1, 1), (M3_BWD_TPB, 1, 1)))
+        host_launch(_launch_40, launch_count((_grid(m), 1, 1), (M3_BWD_TPB, 1, 1)), 0)
     var _l41_a0 = dx.unsafe_ptr()
     var _l41_a1 = residual_cotangent.unsafe_ptr()
     var _l41_a2 = Int32(m * dims.d_model)
     def _launch_41(gid_: Int) {imm _l41_a0, imm _l41_a1, imm _l41_a2}:
         mamba3_residual_join_kernel(gid_, _l41_a0, _l41_a1, _l41_a2)
-    host_launch(_launch_41, launch_count((_grid(m * dims.d_model), 1, 1), (M3_BWD_TPB, 1, 1)))
+    host_launch(_launch_41, launch_count((_grid(m * dims.d_model), 1, 1), (M3_BWD_TPB, 1, 1)), 12)
 
 
 def mamba3_s17_reverse_state_kernel(gid_: Int,
@@ -2114,7 +2114,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
         var _l42_a15 = Int32(qs)
         def _launch_42(gid_: Int) {imm _l42_a0, imm _l42_a1, imm _l42_a2, imm _l42_a3, imm _l42_a4, imm _l42_a5, imm _l42_a6, imm _l42_a7, imm _l42_a8, imm _l42_a9, imm _l42_a10, imm _l42_a11, imm _l42_a12, imm _l42_a13, imm _l42_a14, imm _l42_a15}:
             mamba3_s17_operands_shared_kernel(gid_, _l42_a0, _l42_a1, _l42_a2, _l42_a3, _l42_a4, _l42_a5, _l42_a6, _l42_a7, _l42_a8, _l42_a9, _l42_a10, _l42_a11, _l42_a12, _l42_a13, _l42_a14, _l42_a15)
-        host_launch(_launch_42, launch_count((cells,1,1), (M3_D_STATE,1,1)))
+        host_launch(_launch_42, launch_count((cells,1,1), (M3_D_STATE,1,1)), 0)
     else:
         comptime if M3_S17_OPERANDS_HALF:
             var _l43_a0 = dq.unsafe_ptr()
@@ -2135,7 +2135,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             var _l43_a15 = Int32(qs)
             def _launch_43(gid_: Int) {imm _l43_a0, imm _l43_a1, imm _l43_a2, imm _l43_a3, imm _l43_a4, imm _l43_a5, imm _l43_a6, imm _l43_a7, imm _l43_a8, imm _l43_a9, imm _l43_a10, imm _l43_a11, imm _l43_a12, imm _l43_a13, imm _l43_a14, imm _l43_a15}:
                 mamba3_s17_operands_half_kernel(gid_, _l43_a0, _l43_a1, _l43_a2, _l43_a3, _l43_a4, _l43_a5, _l43_a6, _l43_a7, _l43_a8, _l43_a9, _l43_a10, _l43_a11, _l43_a12, _l43_a13, _l43_a14, _l43_a15)
-            host_launch(_launch_43, launch_count((cells,1,1), (M3_D_STATE,1,1)))
+            host_launch(_launch_43, launch_count((cells,1,1), (M3_D_STATE,1,1)), 0)
         else:
             var _l44_a0 = dq.unsafe_ptr()
             var _l44_a1 = ddr.unsafe_ptr()
@@ -2155,7 +2155,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             var _l44_a15 = Int32(qs)
             def _launch_44(gid_: Int) {imm _l44_a0, imm _l44_a1, imm _l44_a2, imm _l44_a3, imm _l44_a4, imm _l44_a5, imm _l44_a6, imm _l44_a7, imm _l44_a8, imm _l44_a9, imm _l44_a10, imm _l44_a11, imm _l44_a12, imm _l44_a13, imm _l44_a14, imm _l44_a15}:
                 mamba3_s17_operands_kernel(gid_, _l44_a0, _l44_a1, _l44_a2, _l44_a3, _l44_a4, _l44_a5, _l44_a6, _l44_a7, _l44_a8, _l44_a9, _l44_a10, _l44_a11, _l44_a12, _l44_a13, _l44_a14, _l44_a15)
-            host_launch(_launch_44, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+            host_launch(_launch_44, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 0)
     comptime if M3_S17_TAIL_SHARED:
         var nc=(l+qs-1)//qs
         # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
@@ -2173,7 +2173,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             var _l45_a9 = Int32(qs)
             def _launch_45(gid_: Int) {imm _l45_a0, imm _l45_a1, imm _l45_a2, imm _l45_a3, imm _l45_a4, imm _l45_a5, imm _l45_a6, imm _l45_a7, imm _l45_a8, imm _l45_a9}:
                 mamba3_s17_tail_pipe_kernel(gid_, _l45_a0, _l45_a1, _l45_a2, _l45_a3, _l45_a4, _l45_a5, _l45_a6, _l45_a7, _l45_a8, _l45_a9)
-            host_launch(_launch_45, launch_count((b*nc*dims.nheads,1,1), (M3_D_STATE,1,1)))
+            host_launch(_launch_45, launch_count((b*nc*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
         else:
             var _l46_a0 = ddc.unsafe_ptr()
             var _l46_a1 = k.unsafe_ptr()
@@ -2187,7 +2187,7 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             var _l46_a9 = Int32(qs)
             def _launch_46(gid_: Int) {imm _l46_a0, imm _l46_a1, imm _l46_a2, imm _l46_a3, imm _l46_a4, imm _l46_a5, imm _l46_a6, imm _l46_a7, imm _l46_a8, imm _l46_a9}:
                 mamba3_s17_tail_shared_kernel(gid_, _l46_a0, _l46_a1, _l46_a2, _l46_a3, _l46_a4, _l46_a5, _l46_a6, _l46_a7, _l46_a8, _l46_a9)
-            host_launch(_launch_46, launch_count((b*nc*dims.nheads,1,1), (M3_D_STATE,1,1)))
+            host_launch(_launch_46, launch_count((b*nc*dims.nheads,1,1), (M3_D_STATE,1,1)), 0)
 
 
 def mamba3_join_two_kernel(gid_: Int, dst:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Float32,MutAnyOrigin],b:MutPointer[Float32,MutAnyOrigin],n_in:Int32):
@@ -2218,7 +2218,7 @@ def mamba3_backward_dacs_to_adt_into(ctx:DeviceContext,mut d_adt:DeviceBuffer[DT
     var _l47_a5 = Int32(qs)
     def _launch_47(gid_: Int) {imm _l47_a0, imm _l47_a1, imm _l47_a2, imm _l47_a3, imm _l47_a4, imm _l47_a5}:
         mamba3_dacs_reverse_kernel(gid_, _l47_a0, _l47_a1, _l47_a2, _l47_a3, _l47_a4, _l47_a5)
-    host_launch(_launch_47, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_47, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 0)
 
 
 def mamba3_backward_join_two_into(ctx:DeviceContext,mut dst:DeviceBuffer[DType.float32],mut a:DeviceBuffer[DType.float32],mut b:DeviceBuffer[DType.float32],cells:Int) raises:
@@ -2228,7 +2228,7 @@ def mamba3_backward_join_two_into(ctx:DeviceContext,mut dst:DeviceBuffer[DType.f
     var _l48_a3 = Int32(cells)
     def _launch_48(gid_: Int) {imm _l48_a0, imm _l48_a1, imm _l48_a2, imm _l48_a3}:
         mamba3_join_two_kernel(gid_, _l48_a0, _l48_a1, _l48_a2, _l48_a3)
-    host_launch(_launch_48, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_48, launch_count((_grid(cells),1,1), (M3_BWD_TPB,1,1)), 8)
 
 
 def mamba3_backward_join_s16_s17_into(ctx:DeviceContext,mut qout:DeviceBuffer[DType.float32],mut kout:DeviceBuffer[DType.float32],mut vout:DeviceBuffer[DType.float32],mut dout:DeviceBuffer[DType.float32],mut q16:DeviceBuffer[DType.float32],mut q17:DeviceBuffer[DType.float32],mut k16:DeviceBuffer[DType.float32],mut k17:DeviceBuffer[DType.float32],mut vold:DeviceBuffer[DType.float32],mut v17:DeviceBuffer[DType.float32],mut dr:DeviceBuffer[DType.float32],mut dc:DeviceBuffer[DType.float32],state_cells:Int,value_cells:Int,head_cells:Int) raises:
@@ -2238,28 +2238,28 @@ def mamba3_backward_join_s16_s17_into(ctx:DeviceContext,mut qout:DeviceBuffer[DT
     var _l49_a3 = Int32(state_cells)
     def _launch_49(gid_: Int) {imm _l49_a0, imm _l49_a1, imm _l49_a2, imm _l49_a3}:
         mamba3_join_two_kernel(gid_, _l49_a0, _l49_a1, _l49_a2, _l49_a3)
-    host_launch(_launch_49, launch_count((_grid(state_cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_49, launch_count((_grid(state_cells),1,1), (M3_BWD_TPB,1,1)), 8)
     var _l50_a0 = kout.unsafe_ptr()
     var _l50_a1 = k16.unsafe_ptr()
     var _l50_a2 = k17.unsafe_ptr()
     var _l50_a3 = Int32(state_cells)
     def _launch_50(gid_: Int) {imm _l50_a0, imm _l50_a1, imm _l50_a2, imm _l50_a3}:
         mamba3_join_two_kernel(gid_, _l50_a0, _l50_a1, _l50_a2, _l50_a3)
-    host_launch(_launch_50, launch_count((_grid(state_cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_50, launch_count((_grid(state_cells),1,1), (M3_BWD_TPB,1,1)), 8)
     var _l51_a0 = vout.unsafe_ptr()
     var _l51_a1 = vold.unsafe_ptr()
     var _l51_a2 = v17.unsafe_ptr()
     var _l51_a3 = Int32(value_cells)
     def _launch_51(gid_: Int) {imm _l51_a0, imm _l51_a1, imm _l51_a2, imm _l51_a3}:
         mamba3_join_two_kernel(gid_, _l51_a0, _l51_a1, _l51_a2, _l51_a3)
-    host_launch(_launch_51, launch_count((_grid(value_cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_51, launch_count((_grid(value_cells),1,1), (M3_BWD_TPB,1,1)), 8)
     var _l52_a0 = dout.unsafe_ptr()
     var _l52_a1 = dr.unsafe_ptr()
     var _l52_a2 = dc.unsafe_ptr()
     var _l52_a3 = Int32(head_cells)
     def _launch_52(gid_: Int) {imm _l52_a0, imm _l52_a1, imm _l52_a2, imm _l52_a3}:
         mamba3_join_two_kernel(gid_, _l52_a0, _l52_a1, _l52_a2, _l52_a3)
-    host_launch(_launch_52, launch_count((_grid(head_cells),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_52, launch_count((_grid(head_cells),1,1), (M3_BWD_TPB,1,1)), 8)
 
 
 def mamba3_backward_s15_only_into(ctx:DeviceContext,mut d_krot:DeviceBuffer[DType.float32],mut d_scale:DeviceBuffer[DType.float32],mut d_kscaled:DeviceBuffer[DType.float32],mut krot:DeviceBuffer[DType.float32],mut scale:DeviceBuffer[DType.float32],rows:Int) raises:
@@ -2271,7 +2271,7 @@ def mamba3_backward_s15_only_into(ctx:DeviceContext,mut d_krot:DeviceBuffer[DTyp
     var _l53_a5 = Int32(rows)
     def _launch_53(gid_: Int) {imm _l53_a0, imm _l53_a1, imm _l53_a2, imm _l53_a3, imm _l53_a4, imm _l53_a5}:
         mamba3_s15_backward_kernel(gid_, _l53_a0, _l53_a1, _l53_a2, _l53_a3, _l53_a4, _l53_a5)
-    host_launch(_launch_53, launch_count((_grid(rows),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_53, launch_count((_grid(rows),1,1), (M3_BWD_TPB,1,1)), 0)
 
 
 def mamba3_backward_rotary_only_into(ctx:DeviceContext,mut dqraw:DeviceBuffer[DType.float32],mut dkraw:DeviceBuffer[DType.float32],mut dtheta:DeviceBuffer[DType.float32],mut dqrot:DeviceBuffer[DType.float32],mut dkrot:DeviceBuffer[DType.float32],mut bcb:DeviceBuffer[DType.float32],mut bcc:DeviceBuffer[DType.float32],mut bbias:DeviceBuffer[DType.float32],mut cbias:DeviceBuffer[DType.float32],mut theta:DeviceBuffer[DType.float32],pairs:Int,nh:Int) raises:
@@ -2289,4 +2289,4 @@ def mamba3_backward_rotary_only_into(ctx:DeviceContext,mut dqraw:DeviceBuffer[DT
     var _l54_a11 = Int32(nh)
     def _launch_54(gid_: Int) {imm _l54_a0, imm _l54_a1, imm _l54_a2, imm _l54_a3, imm _l54_a4, imm _l54_a5, imm _l54_a6, imm _l54_a7, imm _l54_a8, imm _l54_a9, imm _l54_a10, imm _l54_a11}:
         mamba3_rotary_backward_kernel(gid_, _l54_a0, _l54_a1, _l54_a2, _l54_a3, _l54_a4, _l54_a5, _l54_a6, _l54_a7, _l54_a8, _l54_a9, _l54_a10, _l54_a11)
-    host_launch(_launch_54, launch_count((_grid(pairs),1,1), (M3_BWD_TPB,1,1)))
+    host_launch(_launch_54, launch_count((_grid(pairs),1,1), (M3_BWD_TPB,1,1)), 225)

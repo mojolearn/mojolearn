@@ -1501,7 +1501,7 @@ def mamba3_block_forward(
         var _l1_a10 = -M3_A_FLOOR
         def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10}:
             m3_a_dt_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10)
-        host_launch(_launch_1, launch_count((_grid(m * nh), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_1, launch_count((_grid(m * nh), 1, 1), (MAMBA3_TPB, 1, 1)), 90)
     else:
         # ONE launch: S5 + S6 + the working-row copies (dt, ADT, sigma) +
         # the new rows' raw v. The core then skips its m3_pre_kernel.
@@ -1541,7 +1541,7 @@ def mamba3_block_forward(
     var _l2_a9 = M3_RMS_EPS
     def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9}:
         m3_bcnorm_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9)
-    host_launch(_launch_2, launch_count((_grid(m), 1, 1), (MAMBA3_TPB, 1, 1)))
+    host_launch(_launch_2, launch_count((_grid(m), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
 
     # ---- working-sequence assembly (copies).
     if q0 > 0:
@@ -1564,7 +1564,7 @@ def mamba3_block_forward(
         var _l3_a16 = Int32(M3_CHUNK_SIZE)
         def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6, imm _l3_a7, imm _l3_a8, imm _l3_a9, imm _l3_a10, imm _l3_a11, imm _l3_a12, imm _l3_a13, imm _l3_a14, imm _l3_a15, imm _l3_a16}:
             m3_assemble_buf_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6, _l3_a7, _l3_a8, _l3_a9, _l3_a10, _l3_a11, _l3_a12, _l3_a13, _l3_a14, _l3_a15, _l3_a16)
-        host_launch(_launch_3, launch_count(( _grid(b * q0 * nh * (2 * n_state + p_dim + 3)), 1, 1, ), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_3, launch_count(( _grid(b * q0 * nh * (2 * n_state + p_dim + 3)), 1, 1, ), (MAMBA3_TPB, 1, 1)), 40)
     comptime if not AFN_MAMBA3_SISO_FUSED:
         var _l4_a0 = stages.v_work.unsafe_ptr()
         var _l4_a1 = stages.in_proj.unsafe_ptr()
@@ -1576,7 +1576,7 @@ def mamba3_block_forward(
         var _l4_a7 = Int32(dims.col_x())
         def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7}:
             m3_assemble_vnew_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7)
-        host_launch(_launch_4, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_4, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)), 19)
     _m3_stage_sync(ctx, trace)
 
     m3_phase_tick(ctx, phase_tick, String("block.assembly"))
@@ -1599,7 +1599,7 @@ def mamba3_block_forward(
             var _l5_a6 = Int32(dims.col_angle())
             def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6}:
                 m3_step_angle_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6)
-            host_launch(_launch_5, launch_count((_grid(b * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_5, launch_count((_grid(b * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
             ctx.synchronize()
             var _l6_a0 = stages.skip_out.unsafe_ptr()
             var _l6_a1 = stages.gate_out.unsafe_ptr()
@@ -1623,7 +1623,7 @@ def mamba3_block_forward(
             var _l6_a19 = Int32(dims.col_trap())
             def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7, imm _l6_a8, imm _l6_a9, imm _l6_a10, imm _l6_a11, imm _l6_a12, imm _l6_a13, imm _l6_a14, imm _l6_a15, imm _l6_a16, imm _l6_a17, imm _l6_a18, imm _l6_a19}:
                 m3_step_core_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7, _l6_a8, _l6_a9, _l6_a10, _l6_a11, _l6_a12, _l6_a13, _l6_a14, _l6_a15, _l6_a16, _l6_a17, _l6_a18, _l6_a19)
-            host_launch(_launch_6, launch_count((_grid(b * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_6, launch_count((_grid(b * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
             ctx.synchronize()
             var _l7_a0 = state.pend_k.unsafe_ptr()
             var _l7_a1 = state.pend_v.unsafe_ptr()
@@ -1637,7 +1637,7 @@ def mamba3_block_forward(
             var _l7_a9 = Int32(dims.col_x())
             def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7, imm _l7_a8, imm _l7_a9}:
                 m3_step_state_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7, _l7_a8, _l7_a9)
-            host_launch(_launch_7, launch_count((_grid(b * nh * (n_state + p_dim)), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_7, launch_count((_grid(b * nh * (n_state + p_dim)), 1, 1), (MAMBA3_TPB, 1, 1)), 162)
             ctx.synchronize()
             # The card's core stages are not produced by this spelling;
             # they are recorded as they stand (zeros) so the tag list
@@ -1723,7 +1723,7 @@ def mamba3_block_forward(
         var _l8_a16 = Int32(M3_CHUNK_SIZE)
         def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7, imm _l8_a8, imm _l8_a9, imm _l8_a10, imm _l8_a11, imm _l8_a12, imm _l8_a13, imm _l8_a14, imm _l8_a15, imm _l8_a16}:
             m3_buffer_update_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7, _l8_a8, _l8_a9, _l8_a10, _l8_a11, _l8_a12, _l8_a13, _l8_a14, _l8_a15, _l8_a16)
-        host_launch(_launch_8, launch_count(( _grid(b * r * nh * (2 * n_state + p_dim + 3)), 1, 1, ), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_8, launch_count(( _grid(b * r * nh * (2 * n_state + p_dim + 3)), 1, 1, ), (MAMBA3_TPB, 1, 1)), 40)
         _m3_stage_sync(ctx, trace)
         state.buf_len = r
 
@@ -1750,7 +1750,7 @@ def mamba3_block_forward(
             var _l9_a3 = Int32(m * dm)
             def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3}:
                 residual_add_kernel(gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3)
-            host_launch(_launch_9, launch_count((_grid(m * dm), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_9, launch_count((_grid(m * dm), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
         else:
             m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
     else:
@@ -1765,7 +1765,7 @@ def mamba3_block_forward(
         var _l10_a3 = Int32(m * dm)
         def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3}:
             residual_add_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3)
-        host_launch(_launch_10, launch_count((_grid(m * dm), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_10, launch_count((_grid(m * dm), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
     _m3_final_sync(ctx, trace)
 
     # ---- the card, contract section 7's order (input.x recorded above).

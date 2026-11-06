@@ -1244,7 +1244,7 @@ def ssd_forward(
         var _l1_a7 = Int32(cd)
         def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7}:
             m2_discretize_cell_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7)
-        host_launch(_launch_1, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_1, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 31)
     else:
         var _l2_a0 = xd.unsafe_ptr()
         var _l2_a1 = da.unsafe_ptr()
@@ -1256,7 +1256,7 @@ def ssd_forward(
         var _l2_a7 = Int32(cd)
         def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7}:
             m2_discretize_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7)
-        host_launch(_launch_2, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_2, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var _l3_a0 = dacs.unsafe_ptr()
     var _l3_a1 = da.unsafe_ptr()
     var _l3_a2 = Int32(b)
@@ -1266,7 +1266,7 @@ def ssd_forward(
     var _l3_a6 = Int32(qv)
     def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6}:
         m2_chunk_cumsum_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6)
-    host_launch(_launch_3, launch_count((_grid(b * nh * nc), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_3, launch_count((_grid(b * nh * nc), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var _l4_a0 = seg_l.unsafe_ptr()
     var _l4_a1 = da.unsafe_ptr()
     var _l4_a2 = Int32(b)
@@ -1276,7 +1276,7 @@ def ssd_forward(
     var _l4_a6 = Int32(qv)
     def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6}:
         m2_seg_l_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6)
-    host_launch(_launch_4, launch_count((_grid(b * nc * nh * qv), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_4, launch_count((_grid(b * nc * nh * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var mma = False
     comptime if AFN_MAMBA2_SSD_MMA:
         mma = afn_ssd_mma_applies(qv)
@@ -1296,7 +1296,7 @@ def ssd_forward(
             var _l5_a7 = Int32(qv)
             def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7}:
                 nn37_m2_cb_triangle_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7)
-            host_launch(_launch_5, launch_count((_grid(b * nc * (qv * (qv + 1) // 2)), 1, 1), (MAMBA2_TPB, 1, 1)))
+            host_launch(_launch_5, launch_count((_grid(b * nc * (qv * (qv + 1) // 2)), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
         elif M2_OCC_CB:
             var cb_nt = (qv + M2_CB_T - 1) // M2_CB_T
             var _l6_a0 = cb_g.unsafe_ptr()
@@ -1309,7 +1309,7 @@ def ssd_forward(
             var _l6_a7 = Int32(qv)
             def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7}:
                 m2_cb_g_tile_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7)
-            host_launch(_launch_6, launch_count((b * nc * cb_nt * cb_nt, 1, 1), (M2_CB_T * M2_CB_T, 1, 1)))
+            host_launch(_launch_6, launch_count((b * nc * cb_nt * cb_nt, 1, 1), (M2_CB_T * M2_CB_T, 1, 1)), 0)
         else:
             var _l7_a0 = cb_g.unsafe_ptr()
             var _l7_a1 = xbc_work.unsafe_ptr()
@@ -1321,7 +1321,7 @@ def ssd_forward(
             var _l7_a7 = Int32(qv)
             def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7}:
                 m2_cb_g_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7)
-            host_launch(_launch_7, launch_count((_grid(b * nc * qv * qv), 1, 1), (MAMBA2_TPB, 1, 1)))
+            host_launch(_launch_7, launch_count((_grid(b * nc * qv * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
         comptime if M2_SSD_TILED:
             var n_it = (qv + M2_YD_ROWS - 1) // M2_YD_ROWS
             var use_retained = False
@@ -1340,7 +1340,7 @@ def ssd_forward(
                 var _l8_a7 = Int32(qv)
                 def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7}:
                     m2_retained_gl_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7)
-                host_launch(_launch_8, launch_count((_grid(cells),1,1), (MAMBA2_TPB,1,1)))
+                host_launch(_launch_8, launch_count((_grid(cells),1,1), (MAMBA2_TPB,1,1)), 23)
                 var _l9_a0 = ydiag.unsafe_ptr()
                 var _l9_a1 = retained[0].unsafe_ptr()
                 var _l9_a2 = seg_l.unsafe_ptr()
@@ -1352,7 +1352,7 @@ def ssd_forward(
                 var _l9_a8 = Int32(qv)
                 def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4, imm _l9_a5, imm _l9_a6, imm _l9_a7, imm _l9_a8}:
                     m2_ydiag_tile_kernel[True](gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4, _l9_a5, _l9_a6, _l9_a7, _l9_a8)
-                host_launch(_launch_9, launch_count((b*nc*nh*n_it,1,1), (M2_YD_THREADS,1,1)))
+                host_launch(_launch_9, launch_count((b*nc*nh*n_it,1,1), (M2_YD_THREADS,1,1)), 0)
             else:
                 var _l10_a0 = ydiag.unsafe_ptr()
                 var _l10_a1 = cb_g.unsafe_ptr()
@@ -1365,7 +1365,7 @@ def ssd_forward(
                 var _l10_a8 = Int32(qv)
                 def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4, imm _l10_a5, imm _l10_a6, imm _l10_a7, imm _l10_a8}:
                     m2_ydiag_tile_kernel[False](gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4, _l10_a5, _l10_a6, _l10_a7, _l10_a8)
-                host_launch(_launch_10, launch_count((b * nc * nh * n_it, 1, 1), (M2_YD_THREADS, 1, 1)))
+                host_launch(_launch_10, launch_count((b * nc * nh * n_it, 1, 1), (M2_YD_THREADS, 1, 1)), 0)
         else:
             var _l11_a0 = ydiag.unsafe_ptr()
             var _l11_a1 = cb_g.unsafe_ptr()
@@ -1379,14 +1379,14 @@ def ssd_forward(
             var _l11_a9 = Int32(qv)
             def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2, imm _l11_a3, imm _l11_a4, imm _l11_a5, imm _l11_a6, imm _l11_a7, imm _l11_a8, imm _l11_a9}:
                 m2_ydiag_kernel(gid_, _l11_a0, _l11_a1, _l11_a2, _l11_a3, _l11_a4, _l11_a5, _l11_a6, _l11_a7, _l11_a8, _l11_a9)
-            host_launch(_launch_11, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)))
+            host_launch(_launch_11, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var _l12_a0 = decay.unsafe_ptr()
     var _l12_a1 = dacs.unsafe_ptr()
     var _l12_a2 = Int32(b * nh * nc * qv)
     var _l12_a3 = Int32(qv)
     def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3}:
         m2_decay_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3)
-    host_launch(_launch_12, launch_count((_grid(b * nh * nc * qv), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_12, launch_count((_grid(b * nh * nc * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 41)
     if mma:
         afn_m2_cstate_mma(
             ctx, cstate, xbc_work, decay, xd, b, t_work, nh, di, cd, nc, qv
@@ -1406,7 +1406,7 @@ def ssd_forward(
             var _l13_a10 = Int32(qv)
             def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3, imm _l13_a4, imm _l13_a5, imm _l13_a6, imm _l13_a7, imm _l13_a8, imm _l13_a9, imm _l13_a10}:
                 m2_cstate_tile_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3, _l13_a4, _l13_a5, _l13_a6, _l13_a7, _l13_a8, _l13_a9, _l13_a10)
-            host_launch(_launch_13, launch_count((b * nc * nh * (M2_HEADDIM // M2_CS_PT), 1, 1), (M2_D_STATE, 1, 1)))
+            host_launch(_launch_13, launch_count((b * nc * nh * (M2_HEADDIM // M2_CS_PT), 1, 1), (M2_D_STATE, 1, 1)), 0)
         else:
             var _l14_a0 = cstate.unsafe_ptr()
             var _l14_a1 = xbc_work.unsafe_ptr()
@@ -1422,7 +1422,7 @@ def ssd_forward(
             var _l14_a11 = Int32(qv)
             def _launch_14(gid_: Int) {imm _l14_a0, imm _l14_a1, imm _l14_a2, imm _l14_a3, imm _l14_a4, imm _l14_a5, imm _l14_a6, imm _l14_a7, imm _l14_a8, imm _l14_a9, imm _l14_a10, imm _l14_a11}:
                 m2_cstate_kernel(gid_, _l14_a0, _l14_a1, _l14_a2, _l14_a3, _l14_a4, _l14_a5, _l14_a6, _l14_a7, _l14_a8, _l14_a9, _l14_a10, _l14_a11)
-            host_launch(_launch_14, launch_count((_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)))
+            host_launch(_launch_14, launch_count((_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     var _l15_a0 = pass_states.unsafe_ptr()
     var _l15_a1 = h_last.unsafe_ptr()
     var _l15_a2 = h_state.unsafe_ptr()
@@ -1435,7 +1435,7 @@ def ssd_forward(
     var _l15_a9 = Int32(n_completed)
     def _launch_15(gid_: Int) {imm _l15_a0, imm _l15_a1, imm _l15_a2, imm _l15_a3, imm _l15_a4, imm _l15_a5, imm _l15_a6, imm _l15_a7, imm _l15_a8, imm _l15_a9}:
         m2_statepass_kernel(gid_, _l15_a0, _l15_a1, _l15_a2, _l15_a3, _l15_a4, _l15_a5, _l15_a6, _l15_a7, _l15_a8, _l15_a9)
-    host_launch(_launch_15, launch_count((_grid(b * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)))
+    host_launch(_launch_15, launch_count((_grid(b * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     comptime if NN36_SHARED_DECAY:
         var _l16_a0 = yoff.unsafe_ptr()
         var _l16_a1 = y_out.unsafe_ptr()
@@ -1452,7 +1452,7 @@ def ssd_forward(
         var _l16_a12 = Int32(qv)
         def _launch_16(gid_: Int) {imm _l16_a0, imm _l16_a1, imm _l16_a2, imm _l16_a3, imm _l16_a4, imm _l16_a5, imm _l16_a6, imm _l16_a7, imm _l16_a8, imm _l16_a9, imm _l16_a10, imm _l16_a11, imm _l16_a12}:
             nn36_m2_yoff_shared_exp_kernel(gid_, _l16_a0, _l16_a1, _l16_a2, _l16_a3, _l16_a4, _l16_a5, _l16_a6, _l16_a7, _l16_a8, _l16_a9, _l16_a10, _l16_a11, _l16_a12)
-        host_launch(_launch_16, launch_count((b * t_work * nh, 1, 1), (M2_HEADDIM, 1, 1)))
+        host_launch(_launch_16, launch_count((b * t_work * nh, 1, 1), (M2_HEADDIM, 1, 1)), 0)
     elif IDN_M2_YOFF_EXP_CACHE:
         var cache_index = len(retained)
         var cache_cells = b * nh * nc * qv
@@ -1462,7 +1462,7 @@ def ssd_forward(
         var _l17_a2 = Int32(cache_cells)
         def _launch_17(gid_: Int) {imm _l17_a0, imm _l17_a1, imm _l17_a2}:
             m2_yoff_exp_cache_kernel(gid_, _l17_a0, _l17_a1, _l17_a2)
-        host_launch(_launch_17, launch_count((_grid(cache_cells), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_17, launch_count((_grid(cache_cells), 1, 1), (MAMBA2_TPB, 1, 1)), 31)
         var _l18_a0 = yoff.unsafe_ptr()
         var _l18_a1 = y_out.unsafe_ptr()
         var _l18_a2 = ydiag.unsafe_ptr()
@@ -1478,7 +1478,7 @@ def ssd_forward(
         var _l18_a12 = Int32(qv)
         def _launch_18(gid_: Int) {imm _l18_a0, imm _l18_a1, imm _l18_a2, imm _l18_a3, imm _l18_a4, imm _l18_a5, imm _l18_a6, imm _l18_a7, imm _l18_a8, imm _l18_a9, imm _l18_a10, imm _l18_a11, imm _l18_a12}:
             m2_yoff_y_kernel[True](gid_, _l18_a0, _l18_a1, _l18_a2, _l18_a3, _l18_a4, _l18_a5, _l18_a6, _l18_a7, _l18_a8, _l18_a9, _l18_a10, _l18_a11, _l18_a12)
-        host_launch(_launch_18, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_18, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     elif M2_OCC_YOFF:
         var _l19_a0 = yoff.unsafe_ptr()
         var _l19_a1 = y_out.unsafe_ptr()
@@ -1495,7 +1495,7 @@ def ssd_forward(
         var _l19_a12 = Int32(qv)
         def _launch_19(gid_: Int) {imm _l19_a0, imm _l19_a1, imm _l19_a2, imm _l19_a3, imm _l19_a4, imm _l19_a5, imm _l19_a6, imm _l19_a7, imm _l19_a8, imm _l19_a9, imm _l19_a10, imm _l19_a11, imm _l19_a12}:
             m2_yoff_tile_kernel(gid_, _l19_a0, _l19_a1, _l19_a2, _l19_a3, _l19_a4, _l19_a5, _l19_a6, _l19_a7, _l19_a8, _l19_a9, _l19_a10, _l19_a11, _l19_a12)
-        host_launch(_launch_19, launch_count((b * nc * nh * ((qv + M2_YO_ROWS - 1) // M2_YO_ROWS), 1, 1), (M2_YO_THREADS, 1, 1)))
+        host_launch(_launch_19, launch_count((b * nc * nh * ((qv + M2_YO_ROWS - 1) // M2_YO_ROWS), 1, 1), (M2_YO_THREADS, 1, 1)), 0)
     else:
         var _l20_a0 = yoff.unsafe_ptr()
         var _l20_a1 = y_out.unsafe_ptr()
@@ -1512,7 +1512,7 @@ def ssd_forward(
         var _l20_a12 = Int32(qv)
         def _launch_20(gid_: Int) {imm _l20_a0, imm _l20_a1, imm _l20_a2, imm _l20_a3, imm _l20_a4, imm _l20_a5, imm _l20_a6, imm _l20_a7, imm _l20_a8, imm _l20_a9, imm _l20_a10, imm _l20_a11, imm _l20_a12}:
             m2_yoff_y_kernel[False](gid_, _l20_a0, _l20_a1, _l20_a2, _l20_a3, _l20_a4, _l20_a5, _l20_a6, _l20_a7, _l20_a8, _l20_a9, _l20_a10, _l20_a11, _l20_a12)
-        host_launch(_launch_20, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)))
+        host_launch(_launch_20, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     # Materialization is a lifetime experiment: its buffer cannot be
     # released before the consumer drains, even on the otherwise async
     # production block path. Count this additional wait in whole-op timing.

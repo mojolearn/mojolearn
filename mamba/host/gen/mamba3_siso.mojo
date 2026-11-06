@@ -1812,7 +1812,7 @@ def m3_siso_forward(
         var _l1_a11 = Int32(c_trap)
         def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10, imm _l1_a11}:
             m3_pre_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10, _l1_a11)
-        host_launch(_launch_1, launch_count((_grid(b * l * nh), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_1, launch_count((_grid(b * l * nh), 1, 1), (MAMBA3_TPB, 1, 1)), 66)
         m3_phase_tick(ctx, phase_tick, String("m3_pre_kernel"))
         var _l2_a0 = gamma_work.unsafe_ptr()
         var _l2_a1 = betap_work.unsafe_ptr()
@@ -1824,7 +1824,7 @@ def m3_siso_forward(
         var _l2_a7 = Int32(nh)
         def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7}:
             m3_scale_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7)
-        host_launch(_launch_2, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_2, launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA3_TPB, 1, 1)), 47)
         m3_phase_tick(ctx, phase_tick, String("m3_scale_kernel"))
         comptime if M3_PARALLEL_ANGLE_INCREMENT:
             var _l3_a0 = theta_out.unsafe_ptr()
@@ -1838,7 +1838,7 @@ def m3_siso_forward(
             var _l3_a8 = Int32(c_ang)
             def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6, imm _l3_a7, imm _l3_a8}:
                 m3_angle_increment_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6, _l3_a7, _l3_a8)
-            host_launch(_launch_3, launch_count((_grid(b * l * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_3, launch_count((_grid(b * l * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)), 52)
             m3_phase_tick(ctx, phase_tick, String("m3_angle_increment_kernel"))
     var angle_serial = True
     comptime if M3_ANGLE_PARALLEL:
@@ -1854,7 +1854,7 @@ def m3_siso_forward(
             var _l4_a3 = Int32(nh)
             def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3}:
                 m3_angle_q_block_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3)
-            host_launch(_launch_4, launch_count((_grid(b * nh * r_ang * angle_nblk), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_4, launch_count((_grid(b * nh * r_ang * angle_nblk), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
             var _l5_a0 = theta_out.unsafe_ptr()
             var _l5_a1 = theta_state.unsafe_ptr()
             var _l5_a2 = Int32(b)
@@ -1862,7 +1862,7 @@ def m3_siso_forward(
             var _l5_a4 = Int32(nh)
             def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4}:
                 m3_angle_q_chain_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4)
-            host_launch(_launch_5, launch_count((_grid(b * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_5, launch_count((_grid(b * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
             var _l6_a0 = theta_out.unsafe_ptr()
             var _l6_a1 = theta_state.unsafe_ptr()
             var _l6_a2 = Int32(b)
@@ -1870,7 +1870,7 @@ def m3_siso_forward(
             var _l6_a4 = Int32(nh)
             def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4}:
                 m3_angle_q_finish_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4)
-            host_launch(_launch_6, launch_count((_grid(b * nh * r_ang * angle_nblk), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_6, launch_count((_grid(b * nh * r_ang * angle_nblk), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
             var _l7_a0 = theta_out.unsafe_ptr()
             var _l7_a1 = theta_state.unsafe_ptr()
             var _l7_a2 = theta_last.unsafe_ptr()
@@ -1879,7 +1879,7 @@ def m3_siso_forward(
             var _l7_a5 = Int32(nh)
             def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5}:
                 m3_angle_q_last_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5)
-            host_launch(_launch_7, launch_count((_grid(b * nh * r_ang * angle_nblk), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_7, launch_count((_grid(b * nh * r_ang * angle_nblk), 1, 1), (MAMBA3_TPB, 1, 1)), 30)
             m3_phase_tick(ctx, phase_tick, String("m3_angle_q_kernels"))
     if angle_serial:
         var _l8_a0 = theta_out.unsafe_ptr()
@@ -1895,7 +1895,7 @@ def m3_siso_forward(
         var _l8_a10 = Int32(c_ang)
         def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7, imm _l8_a8, imm _l8_a9, imm _l8_a10}:
             m3_angle_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7, _l8_a8, _l8_a9, _l8_a10)
-        host_launch(_launch_8, launch_count((_grid(b * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_8, launch_count((_grid(b * nh * r_ang), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
         m3_phase_tick(ctx, phase_tick, String("m3_angle_kernel"))
     comptime if AFN_MAMBA3_SISO_FUSED:
         # ONE launch: the rotation of the new rows, the K scaling of every
@@ -1920,7 +1920,7 @@ def m3_siso_forward(
         var _l9_a10 = Int32(nh)
         def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4, imm _l9_a5, imm _l9_a6, imm _l9_a7, imm _l9_a8, imm _l9_a9, imm _l9_a10}:
             m3_rot_kernel(gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4, _l9_a5, _l9_a6, _l9_a7, _l9_a8, _l9_a9, _l9_a10)
-        host_launch(_launch_9, launch_count((_grid(b * l * nh * (n_state // 2)), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_9, launch_count((_grid(b * l * nh * (n_state // 2)), 1, 1), (MAMBA3_TPB, 1, 1)), 205)
         m3_phase_tick(ctx, phase_tick, String("m3_rot_kernel"))
     var _l10_a0 = qkdot.unsafe_ptr()
     var _l10_a1 = bcb.unsafe_ptr()
@@ -1934,7 +1934,7 @@ def m3_siso_forward(
     var _l10_a9 = Int32(nh)
     def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4, imm _l10_a5, imm _l10_a6, imm _l10_a7, imm _l10_a8, imm _l10_a9}:
         m3_qkdot_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4, _l10_a5, _l10_a6, _l10_a7, _l10_a8, _l10_a9)
-    host_launch(_launch_10, launch_count((_grid(b * l * nh), 1, 1), (MAMBA3_TPB, 1, 1)))
+    host_launch(_launch_10, launch_count((_grid(b * l * nh), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
     m3_phase_tick(ctx, phase_tick, String("m3_qkdot_kernel"))
     comptime if AFN_MAMBA3_SISO_FUSED:
         # ONE launch: the per-chunk ADT cumsum and the state-pass decays
@@ -1949,7 +1949,7 @@ def m3_siso_forward(
         var _l11_a4 = Int32(b * t_work * nh * n_state)
         def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2, imm _l11_a3, imm _l11_a4}:
             m3_kscale_kernel(gid_, _l11_a0, _l11_a1, _l11_a2, _l11_a3, _l11_a4)
-        host_launch(_launch_11, launch_count((_grid(b * t_work * nh * n_state), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_11, launch_count((_grid(b * t_work * nh * n_state), 1, 1), (MAMBA3_TPB, 1, 1)), 20)
         m3_phase_tick(ctx, phase_tick, String("m3_kscale_kernel"))
         var _l12_a0 = dacs.unsafe_ptr()
         var _l12_a1 = adt_work.unsafe_ptr()
@@ -1960,7 +1960,7 @@ def m3_siso_forward(
         var _l12_a6 = Int32(qv)
         def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3, imm _l12_a4, imm _l12_a5, imm _l12_a6}:
             m3_dacs_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3, _l12_a4, _l12_a5, _l12_a6)
-        host_launch(_launch_12, launch_count((_grid(b * nh * nc), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_12, launch_count((_grid(b * nh * nc), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
         m3_phase_tick(ctx, phase_tick, String("m3_dacs_kernel"))
     var _l13_a0 = seg_l.unsafe_ptr()
     var _l13_a1 = adt_work.unsafe_ptr()
@@ -1971,7 +1971,7 @@ def m3_siso_forward(
     var _l13_a6 = Int32(qv)
     def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3, imm _l13_a4, imm _l13_a5, imm _l13_a6}:
         m3_seg_l_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3, _l13_a4, _l13_a5, _l13_a6)
-    host_launch(_launch_13, launch_count((_grid(b * nc * nh * qv), 1, 1), (MAMBA3_TPB, 1, 1)))
+    host_launch(_launch_13, launch_count((_grid(b * nc * nh * qv), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
     m3_phase_tick(ctx, phase_tick, String("m3_seg_l_kernel"))
     if apply_resume:
         var _l14_a0 = h_state.unsafe_ptr()
@@ -1984,7 +1984,7 @@ def m3_siso_forward(
         var _l14_a7 = Int32(nh)
         def _launch_14(gid_: Int) {imm _l14_a0, imm _l14_a1, imm _l14_a2, imm _l14_a3, imm _l14_a4, imm _l14_a5, imm _l14_a6, imm _l14_a7}:
             m3_resume_kernel(gid_, _l14_a0, _l14_a1, _l14_a2, _l14_a3, _l14_a4, _l14_a5, _l14_a6, _l14_a7)
-        host_launch(_launch_14, launch_count((_grid(b * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_14, launch_count((_grid(b * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)), 66)
         m3_phase_tick(ctx, phase_tick, String("m3_resume_kernel"))
     comptime if M3_LEGACY_STATEPASS:
         var _l15_a0 = pass_states.unsafe_ptr()
@@ -2000,7 +2000,7 @@ def m3_siso_forward(
         var _l15_a10 = Int32(qv)
         def _launch_15(gid_: Int) {imm _l15_a0, imm _l15_a1, imm _l15_a2, imm _l15_a3, imm _l15_a4, imm _l15_a5, imm _l15_a6, imm _l15_a7, imm _l15_a8, imm _l15_a9, imm _l15_a10}:
             m3_statepass_kernel(gid_, _l15_a0, _l15_a1, _l15_a2, _l15_a3, _l15_a4, _l15_a5, _l15_a6, _l15_a7, _l15_a8, _l15_a9, _l15_a10)
-        host_launch(_launch_15, launch_count((_grid(b * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_15, launch_count((_grid(b * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
         m3_phase_tick(ctx, phase_tick, String("m3_statepass_kernel"))
     else:
         # qk_s has B*C*H*Q*Q cells; Q>=32, so Q+1 decay entries fit.
@@ -2012,7 +2012,7 @@ def m3_siso_forward(
             var _l16_a3 = Int32(qv)
             def _launch_16(gid_: Int) {imm _l16_a0, imm _l16_a1, imm _l16_a2, imm _l16_a3}:
                 m3_state_decay_kernel(gid_, _l16_a0, _l16_a1, _l16_a2, _l16_a3)
-            host_launch(_launch_16, launch_count((_grid(b * nh * nc * (qv + 1)), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_16, launch_count((_grid(b * nh * nc * (qv + 1)), 1, 1), (MAMBA3_TPB, 1, 1)), 43)
             m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
         # One million increment cells provides ample independent tile work.
         # Only tiny and original large grid cases have been priced; the cutoff
@@ -2041,7 +2041,7 @@ def m3_siso_forward(
                 var _l17_a8 = Int32(qv)
                 def _launch_17(gid_: Int) {imm _l17_a0, imm _l17_a1, imm _l17_a2, imm _l17_a3, imm _l17_a4, imm _l17_a5, imm _l17_a6, imm _l17_a7, imm _l17_a8}:
                     m3_state_increment_tiled_kernel[16, 16](gid_, _l17_a0, _l17_a1, _l17_a2, _l17_a3, _l17_a4, _l17_a5, _l17_a6, _l17_a7, _l17_a8)
-                host_launch(_launch_17, launch_count((b * nc * nh * 32, 1, 1), (256, 1, 1)))
+                host_launch(_launch_17, launch_count((b * nc * nh * 32, 1, 1), (256, 1, 1)), 0)
             else:
                 var _l18_a0 = pass_states.unsafe_ptr()
                 var _l18_a1 = kscale_work.unsafe_ptr()
@@ -2054,7 +2054,7 @@ def m3_siso_forward(
                 var _l18_a8 = Int32(qv)
                 def _launch_18(gid_: Int) {imm _l18_a0, imm _l18_a1, imm _l18_a2, imm _l18_a3, imm _l18_a4, imm _l18_a5, imm _l18_a6, imm _l18_a7, imm _l18_a8}:
                     m3_state_increment_tiled_kernel[8, 32](gid_, _l18_a0, _l18_a1, _l18_a2, _l18_a3, _l18_a4, _l18_a5, _l18_a6, _l18_a7, _l18_a8)
-                host_launch(_launch_18, launch_count((b * nc * nh * 32, 1, 1), (256, 1, 1)))
+                host_launch(_launch_18, launch_count((b * nc * nh * 32, 1, 1), (256, 1, 1)), 0)
         elif not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V"]() and False:
             var _l19_a0 = pass_states.unsafe_ptr()
             var _l19_a1 = kscale_work.unsafe_ptr()
@@ -2067,7 +2067,7 @@ def m3_siso_forward(
             var _l19_a8 = Int32(qv)
             def _launch_19(gid_: Int) {imm _l19_a0, imm _l19_a1, imm _l19_a2, imm _l19_a3, imm _l19_a4, imm _l19_a5, imm _l19_a6, imm _l19_a7, imm _l19_a8}:
                 m3_state_increment_shared_v_kernel(gid_, _l19_a0, _l19_a1, _l19_a2, _l19_a3, _l19_a4, _l19_a5, _l19_a6, _l19_a7, _l19_a8)
-            host_launch(_launch_19, launch_count(((b * nc * nh * p_dim * n_state + 255) // 256, 1, 1), (256, 1, 1)))
+            host_launch(_launch_19, launch_count(((b * nc * nh * p_dim * n_state + 255) // 256, 1, 1), (256, 1, 1)), 0)
         else:
             var _l20_a0 = pass_states.unsafe_ptr()
             var _l20_a1 = kscale_work.unsafe_ptr()
@@ -2080,7 +2080,7 @@ def m3_siso_forward(
             var _l20_a8 = Int32(qv)
             def _launch_20(gid_: Int) {imm _l20_a0, imm _l20_a1, imm _l20_a2, imm _l20_a3, imm _l20_a4, imm _l20_a5, imm _l20_a6, imm _l20_a7, imm _l20_a8}:
                 m3_state_increment_kernel(gid_, _l20_a0, _l20_a1, _l20_a2, _l20_a3, _l20_a4, _l20_a5, _l20_a6, _l20_a7, _l20_a8)
-            host_launch(_launch_20, launch_count((_grid(b * nc * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)))
+            host_launch(_launch_20, launch_count((_grid(b * nc * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
         m3_phase_tick(ctx, phase_tick, String("m3_state_increment_kernel"))
         var _l21_a0 = pass_states.unsafe_ptr()
         var _l21_a1 = h_last.unsafe_ptr()
@@ -2092,7 +2092,7 @@ def m3_siso_forward(
         var _l21_a7 = Int32(qv)
         def _launch_21(gid_: Int) {imm _l21_a0, imm _l21_a1, imm _l21_a2, imm _l21_a3, imm _l21_a4, imm _l21_a5, imm _l21_a6, imm _l21_a7}:
             m3_state_scan_kernel(gid_, _l21_a0, _l21_a1, _l21_a2, _l21_a3, _l21_a4, _l21_a5, _l21_a6, _l21_a7)
-        host_launch(_launch_21, launch_count((_grid(b * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_21, launch_count((_grid(b * nh * p_dim * n_state), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
         m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
     comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_QKS"]() and False:
         var _l22_a0 = qk_s.unsafe_ptr()
@@ -2105,7 +2105,7 @@ def m3_siso_forward(
         var _l22_a7 = Int32(qv)
         def _launch_22(gid_: Int) {imm _l22_a0, imm _l22_a1, imm _l22_a2, imm _l22_a3, imm _l22_a4, imm _l22_a5, imm _l22_a6, imm _l22_a7}:
             m3_qk_s_tiled_kernel(gid_, _l22_a0, _l22_a1, _l22_a2, _l22_a3, _l22_a4, _l22_a5, _l22_a6, _l22_a7)
-        host_launch(_launch_22, launch_count((b * nc * nh * (qv // 8) * (qv // 32), 1, 1), (256, 1, 1)))
+        host_launch(_launch_22, launch_count((b * nc * nh * (qv // 8) * (qv // 32), 1, 1), (256, 1, 1)), 0)
     else:
         var _l23_a0 = qk_s.unsafe_ptr()
         var _l23_a1 = rotq_work.unsafe_ptr()
@@ -2117,7 +2117,7 @@ def m3_siso_forward(
         var _l23_a7 = Int32(qv)
         def _launch_23(gid_: Int) {imm _l23_a0, imm _l23_a1, imm _l23_a2, imm _l23_a3, imm _l23_a4, imm _l23_a5, imm _l23_a6, imm _l23_a7}:
             m3_qk_s_kernel(gid_, _l23_a0, _l23_a1, _l23_a2, _l23_a3, _l23_a4, _l23_a5, _l23_a6, _l23_a7)
-        host_launch(_launch_23, launch_count((_grid(b * nc * nh * qv * qv), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_23, launch_count((_grid(b * nc * nh * qv * qv), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
     m3_phase_tick(ctx, phase_tick, String("m3_qk_s_kernel"))
     # Keep tiny and unpriced columns on their existing launch. The group
     # threshold supplies ample tile work; it is not an intermediate-size tune.
@@ -2151,7 +2151,7 @@ def m3_siso_forward(
         var _l24_a9 = Int32(qv)
         def _launch_24(gid_: Int) {imm _l24_a0, imm _l24_a1, imm _l24_a2, imm _l24_a3, imm _l24_a4, imm _l24_a5, imm _l24_a6, imm _l24_a7, imm _l24_a8, imm _l24_a9}:
             m3_yintra_tiled_kernel(gid_, _l24_a0, _l24_a1, _l24_a2, _l24_a3, _l24_a4, _l24_a5, _l24_a6, _l24_a7, _l24_a8, _l24_a9)
-        host_launch(_launch_24, launch_count((b * nh * ((q0 + l + 7) // 8) * 2, 1, 1), (256, 1, 1)))
+        host_launch(_launch_24, launch_count((b * nh * ((q0 + l + 7) // 8) * 2, 1, 1), (256, 1, 1)), 0)
     else:
         var _l25_a0 = yintra.unsafe_ptr()
         var _l25_a1 = qk_s.unsafe_ptr()
@@ -2165,7 +2165,7 @@ def m3_siso_forward(
         var _l25_a9 = Int32(qv)
         def _launch_25(gid_: Int) {imm _l25_a0, imm _l25_a1, imm _l25_a2, imm _l25_a3, imm _l25_a4, imm _l25_a5, imm _l25_a6, imm _l25_a7, imm _l25_a8, imm _l25_a9}:
             m3_yintra_kernel(gid_, _l25_a0, _l25_a1, _l25_a2, _l25_a3, _l25_a4, _l25_a5, _l25_a6, _l25_a7, _l25_a8, _l25_a9)
-        host_launch(_launch_25, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_25, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
     m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
     comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"]() and False:
         var _l26_a0 = ystate.unsafe_ptr()
@@ -2180,7 +2180,7 @@ def m3_siso_forward(
         var _l26_a9 = Int32(qv)
         def _launch_26(gid_: Int) {imm _l26_a0, imm _l26_a1, imm _l26_a2, imm _l26_a3, imm _l26_a4, imm _l26_a5, imm _l26_a6, imm _l26_a7, imm _l26_a8, imm _l26_a9}:
             m3_ystate_tiled_kernel(gid_, _l26_a0, _l26_a1, _l26_a2, _l26_a3, _l26_a4, _l26_a5, _l26_a6, _l26_a7, _l26_a8, _l26_a9)
-        host_launch(_launch_26, launch_count((b * nh * ((q0 + l + 7) // 8) * 2, 1, 1), (256, 1, 1)))
+        host_launch(_launch_26, launch_count((b * nh * ((q0 + l + 7) // 8) * 2, 1, 1), (256, 1, 1)), 0)
     else:
         var _l27_a0 = ystate.unsafe_ptr()
         var _l27_a1 = rotq_work.unsafe_ptr()
@@ -2194,7 +2194,7 @@ def m3_siso_forward(
         var _l27_a9 = Int32(qv)
         def _launch_27(gid_: Int) {imm _l27_a0, imm _l27_a1, imm _l27_a2, imm _l27_a3, imm _l27_a4, imm _l27_a5, imm _l27_a6, imm _l27_a7, imm _l27_a8, imm _l27_a9}:
             m3_ystate_kernel(gid_, _l27_a0, _l27_a1, _l27_a2, _l27_a3, _l27_a4, _l27_a5, _l27_a6, _l27_a7, _l27_a8, _l27_a9)
-        host_launch(_launch_27, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_27, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
     m3_phase_tick(ctx, phase_tick, String("m3_ystate_kernel"))
     var _l28_a0 = skip_out.unsafe_ptr()
     var _l28_a1 = gate_out.unsafe_ptr()
@@ -2220,7 +2220,7 @@ def m3_siso_forward(
     var _l28_a21 = Int32(c_z)
     def _launch_28(gid_: Int) {imm _l28_a0, imm _l28_a1, imm _l28_a2, imm _l28_a3, imm _l28_a4, imm _l28_a5, imm _l28_a6, imm _l28_a7, imm _l28_a8, imm _l28_a9, imm _l28_a10, imm _l28_a11, imm _l28_a12, imm _l28_a13, imm _l28_a14, imm _l28_a15, imm _l28_a16, imm _l28_a17, imm _l28_a18, imm _l28_a19, imm _l28_a20, imm _l28_a21}:
         m3_skip_gate_kernel(gid_, _l28_a0, _l28_a1, _l28_a2, _l28_a3, _l28_a4, _l28_a5, _l28_a6, _l28_a7, _l28_a8, _l28_a9, _l28_a10, _l28_a11, _l28_a12, _l28_a13, _l28_a14, _l28_a15, _l28_a16, _l28_a17, _l28_a18, _l28_a19, _l28_a20, _l28_a21)
-    host_launch(_launch_28, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)))
+    host_launch(_launch_28, launch_count((_grid(b * l * nh * p_dim), 1, 1), (MAMBA3_TPB, 1, 1)), 0)
     m3_phase_tick(ctx, phase_tick, String("m3_skip_gate_kernel"))
     comptime if not AFN_MAMBA3_SISO_FUSED:
         var _l29_a0 = k_last.unsafe_ptr()
@@ -2232,7 +2232,7 @@ def m3_siso_forward(
         var _l29_a6 = Int32(nh)
         def _launch_29(gid_: Int) {imm _l29_a0, imm _l29_a1, imm _l29_a2, imm _l29_a3, imm _l29_a4, imm _l29_a5, imm _l29_a6}:
             m3_reports_kernel(gid_, _l29_a0, _l29_a1, _l29_a2, _l29_a3, _l29_a4, _l29_a5, _l29_a6)
-        host_launch(_launch_29, launch_count((_grid(b * nh * (n_state + p_dim)), 1, 1), (MAMBA3_TPB, 1, 1)))
+        host_launch(_launch_29, launch_count((_grid(b * nh * (n_state + p_dim)), 1, 1), (MAMBA3_TPB, 1, 1)), 24)
         m3_phase_tick(ctx, phase_tick, String("m3_reports_kernel"))
         # The fused build's launches share one in-order queue; its caller
         # waits once at the end of the call.
