@@ -59,6 +59,7 @@ struct LinKit(Movable):
     var matrices: List[KitMatrix]
     var allocations: List[Int]
     var resident: Bool
+    var handles: Dict[String, PythonObject]  # entry handles resolved by this kit
 
     def __init__(out self, binding: PythonObject, context: PythonObject) raises:
         if py_type(binding) is not py_type(native_loaded_module("builtins")):
@@ -67,11 +68,22 @@ struct LinKit(Movable):
         self.context = context
         self.matrices = List[KitMatrix]()
         self.allocations = List[Int]()
+        self.handles = Dict[String, PythonObject]()
         # `_Kit._res`: the binding has the resident entries (a GPU binding)
         self.resident = neural_descriptor_entry(binding, "x_decomp_dev_ew", False) is not None
 
     def entry(self, name: String) raises -> PythonObject:
         return neural_descriptor_entry(self.b, name)
+
+    def _hot(mut self, name: String) raises -> PythonObject:
+        # The kit's own kernel ops resolve each binding entry once per kit
+        # (one descriptor admission), not once per op; a refusal is raised at
+        # first use exactly as `entry` raises it.
+        if name in self.handles:
+            return self.handles[name]
+        var handle = neural_descriptor_entry(self.b, name)
+        self.handles[name] = handle
+        return handle
 
     def has(self, name: String) raises -> Bool:
         """`_Kit._opt_dev(name)`."""
@@ -81,7 +93,7 @@ struct LinKit(Movable):
         """Return every device buffer this call allocated to the pool."""
         for i in range(len(self.allocations) - 1, -1, -1):  # driver-loop: over native matrix allocation handles
             try:
-                _ = family_call(self.entry("x_decomp_dev_free"), PythonObject(self.allocations[i]))
+                _ = family_call(self._hot("x_decomp_dev_free"), PythonObject(self.allocations[i]))
             except:
                 pass
         self.allocations.clear()
@@ -119,7 +131,7 @@ struct LinKit(Movable):
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
         """`_Kit._dout`."""
-        var handle = Int(py=family_call(self.entry("x_decomp_dev_alloc"), PythonObject(max(rows * cols, 1))))
+        var handle = Int(py=family_call(self._hot("x_decomp_dev_alloc"), PythonObject(max(rows * cols, 1))))
         self.allocations.append(handle)
         return self.add(PythonObject(None), rows, cols, handle)
 
@@ -129,7 +141,7 @@ struct LinKit(Movable):
             var count = self.n(a)
             var result = lin_array([max(count, 1)], "<f4", self.context)
             if count:
-                _ = family_call(self.entry("x_decomp_dev_download"), PythonObject(self.matrices[a].device),
+                _ = family_call(self._hot("x_decomp_dev_download"), PythonObject(self.matrices[a].device),
                                 classical_address(result), PythonObject(count))
                 _ = result  # keep the Python object alive through the native call above
             self.matrices[a].host = result
@@ -155,10 +167,10 @@ struct LinKit(Movable):
         if self.matrices[a].device < 0:
             var count = self.n(a)
             var owner = self.host(a)
-            var handle = Int(py=family_call(self.entry("x_decomp_dev_alloc"), PythonObject(max(count, 1))))
+            var handle = Int(py=family_call(self._hot("x_decomp_dev_alloc"), PythonObject(max(count, 1))))
             self.allocations.append(handle)
             if count:
-                _ = family_call(self.entry("x_decomp_dev_upload"), PythonObject(handle), classical_address(owner),
+                _ = family_call(self._hot("x_decomp_dev_upload"), PythonObject(handle), classical_address(owner),
                                 PythonObject(count))
                 _ = owner  # keep the Python object alive through the native call above
             self.matrices[a].device = handle
@@ -230,12 +242,12 @@ struct LinKit(Movable):
             var da = self.device(a)
             var db = self.device(ib)
             var dc = self.device(ic)
-            _ = family_call(self.entry("x_decomp_dev_ew"), PythonObject(da), PythonObject(db), PythonObject(dc),
+            _ = family_call(self._hot("x_decomp_dev_ew"), PythonObject(da), PythonObject(db), PythonObject(dc),
                             PythonObject(self.matrices[out].device), params, PythonObject(scalar))
             return out
         var out = self.zeros(rows, cols)
         if rows * cols:
-            _ = family_call(self.entry("x_decomp_ew"), self.address(a), self.address(ib), self.address(ic),
+            _ = family_call(self._hot("x_decomp_ew"), self.address(a), self.address(ib), self.address(ic),
                             self.address(out), params, PythonObject(scalar))
             _ = ic  # keep the Python object alive through the native call above
             _ = ib  # keep the Python object alive through the native call above
@@ -255,12 +267,12 @@ struct LinKit(Movable):
             var out = self.device_output(m, n)
             var da = self.device(a)
             var db = self.device(b)
-            _ = family_call(self.entry("x_decomp_dev_gemm"), PythonObject(da), PythonObject(db),
+            _ = family_call(self._hot("x_decomp_dev_gemm"), PythonObject(da), PythonObject(db),
                             PythonObject(self.matrices[out].device), params)
             return out
         var out = self.zeros(m, n)
         if m * n:
-            _ = family_call(self.entry("x_decomp_gemm"), self.address(a), self.address(b), self.address(out), params)
+            _ = family_call(self._hot("x_decomp_gemm"), self.address(a), self.address(b), self.address(out), params)
             _ = out  # keep the Python object alive through the native call above
         return out
 
@@ -275,10 +287,10 @@ struct LinKit(Movable):
         if rows * cols and self.resident:
             var out = self.device_output(nr, nc)
             var da = self.device(a)
-            _ = family_call(self.entry("x_decomp_dev_" + name), PythonObject(da), PythonObject(self.matrices[out].device), params)
+            _ = family_call(self._hot("x_decomp_dev_" + name), PythonObject(da), PythonObject(self.matrices[out].device), params)
             return out
         var out = self.zeros(nr, nc)
-        _ = family_call(self.entry("x_decomp_" + name), self.address(a), self.address(out), params)
+        _ = family_call(self._hot("x_decomp_" + name), self.address(a), self.address(out), params)
         _ = out  # keep the Python object alive through the native call above
         return out
 
@@ -297,12 +309,12 @@ struct LinKit(Movable):
             var out = self.device_output(rows, cols)
             var da = self.device(a)
             var di = self.device(idx)
-            _ = family_call(self.entry("x_decomp_dev_move"), PythonObject(da), PythonObject(di),
+            _ = family_call(self._hot("x_decomp_dev_move"), PythonObject(da), PythonObject(di),
                             PythonObject(self.matrices[out].device), params)
             return out
         var out = self.zeros(rows, cols)
         if rows * cols:
-            _ = family_call(self.entry("x_decomp_move"), self.address(a), self.address(idx), self.address(out), params)
+            _ = family_call(self._hot("x_decomp_move"), self.address(a), self.address(idx), self.address(out), params)
             _ = out  # keep the Python object alive through the native call above
         return out
 
@@ -354,12 +366,12 @@ struct LinKit(Movable):
             # the index operand is unused: the source's own id stands in
             var da = self.device(a)
             var out = self.device_output(cols, rows)
-            _ = family_call(self.entry("x_decomp_dev_move"), PythonObject(da), PythonObject(da),
+            _ = family_call(self._hot("x_decomp_dev_move"), PythonObject(da), PythonObject(da),
                             PythonObject(self.matrices[out].device), params)
             return out
         var out = self.zeros(cols, rows)
         if count:
-            _ = family_call(self.entry("x_decomp_move"), self.address(a), self.address(one), self.address(out), params)
+            _ = family_call(self._hot("x_decomp_move"), self.address(a), self.address(one), self.address(out), params)
             _ = out  # keep the Python object alive through the native call above
             _ = one  # keep the Python object alive through the native call above
         return out
@@ -393,20 +405,20 @@ struct LinKit(Movable):
             # `_refuse_nan`: the max is NaN when any value is
             var maximum = self.device_output(1, 1)
             var da = self.device(a)
-            _ = family_call(self.entry("x_decomp_dev_reduce"), PythonObject(da), PythonObject(self.matrices[maximum].device),
+            _ = family_call(self._hot("x_decomp_dev_reduce"), PythonObject(da), PythonObject(self.matrices[maximum].device),
                             Python.list(PythonObject(n), PythonObject(1)))
             var v = self.word(maximum)
             if v != v:
                 raise Error("x_decomp: a NaN has no order (refused)")
             var out = self.device_output(n, 1)
             var count = self.device_output(1, 1)
-            _ = family_call(self.entry("x_decomp_dev_order_f"), PythonObject(da), PythonObject(da),
+            _ = family_call(self._hot("x_decomp_dev_order_f"), PythonObject(da), PythonObject(da),
                             PythonObject(self.matrices[out].device), PythonObject(self.matrices[count].device),
                             Python.list(PythonObject(n), PythonObject(0), PythonObject(0)))
             return out
         var out = self.zeros(n, 1)
         if n:
-            _ = family_call(self.entry("x_decomp_order_f"), self.address(a), PythonObject(n), self.address(out))
+            _ = family_call(self._hot("x_decomp_order_f"), self.address(a), PythonObject(n), self.address(out))
             _ = out  # keep the Python object alive through the native call above
         return out
 
@@ -416,12 +428,12 @@ struct LinKit(Movable):
         if n and self.resident:
             var out = self.device_output(n, 1)
             var da = self.device(a)
-            _ = family_call(self.entry("x_decomp_dev_order_small"), PythonObject(da),
+            _ = family_call(self._hot("x_decomp_dev_order_small"), PythonObject(da),
                             PythonObject(self.matrices[out].device), Python.list(PythonObject(n)))
             return out
         var out = self.zeros(n, 1)
         if n:
-            _ = family_call(self.entry("x_decomp_order_small"), self.address(a), self.address(out), Python.list(PythonObject(n)))
+            _ = family_call(self._hot("x_decomp_order_small"), self.address(a), self.address(out), Python.list(PythonObject(n)))
             _ = out  # keep the Python object alive through the native call above
         return out
 
@@ -451,10 +463,10 @@ struct LinKit(Movable):
                 if resident:
                     var ds = self.device(source)
                     var di = self.device(one)
-                    _ = family_call(self.entry("x_decomp_dev_move"), PythonObject(ds), PythonObject(di),
+                    _ = family_call(self._hot("x_decomp_dev_move"), PythonObject(ds), PythonObject(di),
                                     PythonObject(self.matrices[out].device), params)
                 else:
-                    _ = family_call(self.entry("x_decomp_move"), self.address(source), self.address(one),
+                    _ = family_call(self._hot("x_decomp_move"), self.address(source), self.address(one),
                                     self.address(out), params)
                     _ = one  # keep the Python object alive through the native call above
                     _ = source  # keep the Python object alive through the native call above
@@ -484,7 +496,7 @@ struct LinKit(Movable):
         var h = self.copy(a)
         var kk = min(self.r(a), self.c(a))
         tau = self.zeros(1, kk)
-        _ = family_call(self.entry("x_decomp_geqrf"), self.address(h), self.address(tau),
+        _ = family_call(self._hot("x_decomp_geqrf"), self.address(h), self.address(tau),
                         Python.list(PythonObject(self.r(a)), PythonObject(self.c(a))))
         _ = h  # keep the Python object alive through the native call above
         return h
@@ -492,7 +504,7 @@ struct LinKit(Movable):
     def orgqr(mut self, h: Int, tau: Int, qc: Int) raises -> Int:
         """`_Kit.orgqr(h, tau, qc)`."""
         var q = self.zeros(self.r(h), qc)
-        _ = family_call(self.entry("x_decomp_orgqr"), self.address(h), self.address(tau), self.address(q),
+        _ = family_call(self._hot("x_decomp_orgqr"), self.address(h), self.address(tau), self.address(q),
                         Python.list(PythonObject(self.r(h)), PythonObject(self.c(h)), PythonObject(self.c(tau)), PythonObject(qc)))
         _ = q  # keep the Python object alive through the native call above
         return q
@@ -504,11 +516,11 @@ struct LinKit(Movable):
         v = self.zeros(n, n)
         var params = Python.list(PythonObject(n), PythonObject(uplo))
         if n >= 1 and self.c(a) == n and self.on_device(a) and self.has("x_decomp_dev_eigh"):
-            _ = family_call(self.entry("x_decomp_dev_eigh"), PythonObject(self.matrices[a].device), self.address(w),
+            _ = family_call(self._hot("x_decomp_dev_eigh"), PythonObject(self.matrices[a].device), self.address(w),
                             self.address(v), params)
             _ = w  # keep the Python object alive through the native call above
             return w
-        _ = family_call(self.entry("x_decomp_eigh"), self.address(a), self.address(w), self.address(v), params)
+        _ = family_call(self._hot("x_decomp_eigh"), self.address(a), self.address(w), self.address(v), params)
         _ = w  # keep the Python object alive through the native call above
         return w
 
@@ -521,11 +533,11 @@ struct LinKit(Movable):
         var params = Python.list(PythonObject(m), PythonObject(n))
         if m >= n and n >= 1 and self.has("x_decomp_dev_svd") and self.resident:
             var da = self.device(a)
-            _ = family_call(self.entry("x_decomp_dev_svd"), PythonObject(da), self.address(s), self.address(v), params)
+            _ = family_call(self._hot("x_decomp_dev_svd"), PythonObject(da), self.address(s), self.address(v), params)
             _ = v  # keep the Python object alive through the native call above
             _ = s  # keep the Python object alive through the native call above
         else:
-            _ = family_call(self.entry("x_decomp_svd"), self.address(a), self.address(s), self.address(v), params)
+            _ = family_call(self._hot("x_decomp_svd"), self.address(a), self.address(s), self.address(v), params)
             _ = v  # keep the Python object alive through the native call above
             _ = s  # keep the Python object alive through the native call above
         # descending, ties to the lower index: the stable ascending order of -s
@@ -547,11 +559,11 @@ struct LinKit(Movable):
         if rows * cols and self.resident:
             var q = self.device_output(rows, cols)
             var da = self.device(a)
-            _ = family_call(self.entry("x_decomp_dev_orth_diag"), PythonObject(da), PythonObject(self.matrices[q].device),
+            _ = family_call(self._hot("x_decomp_dev_orth_diag"), PythonObject(da), PythonObject(self.matrices[q].device),
                             self.address(diag), params)
             return q
         var q = self.copy(a)
-        _ = family_call(self.entry("x_decomp_orth_diag"), self.address(q), self.address(diag), params)
+        _ = family_call(self._hot("x_decomp_orth_diag"), self.address(q), self.address(diag), params)
         _ = q  # keep the Python object alive through the native call above
         return q
 
