@@ -416,7 +416,8 @@ def _label_codes(mut p: EncProg, words: List[Float64], cats: PythonObject, conte
     float32. Returns (codes, unknown count)."""
     var n = len(words)
     var arr = _f32_matrix(words, n, 1, context)
-    return _codes(p, Python.tuple(0, arr, PythonObject(None), n, 1), Python.list(cats), context)
+    return _codes(p, Python.tuple(0, arr, PythonObject(None), n, 1), Python.list(cats), context, False,
+                  PythonObject(None))
 
 
 def _object_index(classes: PythonObject) raises -> PythonObject:

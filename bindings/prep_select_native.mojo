@@ -530,7 +530,7 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
                 if kx[c] == n:
                     raise Error("mojolearn: mutual_info: discrete feature " + String(disc[c]) + " has one sample per "
                                 + "value (the reference's neighbour search finds 0 samples)")
-        var coded = _codes(p, xd, cats, context)
+        var coded = _codes(p, xd, cats, context, False, PythonObject(None))
         var xc = coded[0]
         outd = p.alloc(dd)
         if discrete_target:
