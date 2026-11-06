@@ -10,6 +10,15 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _schema_dict(tree):
+    # The fixed getter table is the dict literal that `_schemas()` returns
+    # (connect_classes caches it in the context since b2133a4744).
+    function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_schemas')
+    returned = [n.value for n in ast.walk(function) if isinstance(n, ast.Return)]
+    assert len(returned) == 1 and isinstance(returned[0], ast.Dict), '_schemas must return one dict literal'
+    return returned[0]
+
+
 class NativeParamsConnection(unittest.TestCase):
     def test_getter_is_one_connected_native_call(self):
         tree = ast.parse((ROOT / 'python/mojolearn/_mode.py').read_text())
@@ -23,8 +32,7 @@ class NativeParamsConnection(unittest.TestCase):
 
     def test_every_declared_builtin_getter_has_an_explicit_schema(self):
         tree = ast.parse((ROOT / 'python/mojolearn/_native_params_metadata.py').read_text())
-        schema = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)
-                      and any(isinstance(t, ast.Name) and t.id == 'schemas' for t in n.targets))
+        schema = _schema_dict(tree)
         covered = {ast.unparse(key) for key in schema.keys}
         actual = set()
         for path in (ROOT / 'python/mojolearn').glob('*.py'):
@@ -41,8 +49,7 @@ class NativeParamsConnection(unittest.TestCase):
         # product module import, native operation, or constructor is executed.
         text = (ROOT / 'python/mojolearn/_native_params_metadata.py').read_text()
         tree = ast.parse(text)
-        schema = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)
-                      and any(isinstance(t, ast.Name) and t.id == 'schemas' for t in n.targets))
+        schema = _schema_dict(tree)
         package = ModuleType('_params_connection_fixture')
         package.__path__ = []
         modules = {package.__name__: package}
