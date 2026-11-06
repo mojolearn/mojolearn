@@ -179,7 +179,12 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
         # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
         if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, bp, Int32(0x38)) == 0:
             if buffer[2] == rows * columns * item:
-                samba_ids_into(buffer[0], item, signed, rows, columns, column_major, dst)
+                try:
+                    samba_ids_into(buffer[0], item, signed, rows, columns, column_major, dst)
+                except error:
+                    # release the export before the refusal propagates
+                    cpython_table()[].PyBuffer_Release(bp)
+                    raise error^
                 done = True
             cpython_table()[].PyBuffer_Release(bp)
             _ = buffer^  # the Py_buffer words stay alive through the release above

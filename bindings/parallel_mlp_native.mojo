@@ -224,7 +224,12 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
         # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
         if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, bp, Int32(0x38)) == 0:
             if buffer[2] == rows * item:
-                mlp_targets_into(buffer[0], item, signed, rows, ids)
+                try:
+                    mlp_targets_into(buffer[0], item, signed, rows, ids)
+                except error:
+                    # release the export before the refusal propagates
+                    cpython_table()[].PyBuffer_Release(bp)
+                    raise error^
                 done = True
             cpython_table()[].PyBuffer_Release(bp)
             _ = buffer^  # the Py_buffer words stay alive through the release above
