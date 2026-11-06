@@ -49,7 +49,7 @@ def archive_utf8(raw: PythonObject, context: PythonObject) raises -> PythonObjec
     var octets = _archive_bytes(raw)
     var i = 0
     var count = len(octets)
-    while i < count:
+    while i < count:  # driver-loop: strict UTF-8 archive filename validation
         var first = Int(octets[i])
         if first < 128:
             i += 1
@@ -82,7 +82,7 @@ def archive_utf32_decode(raw: PythonObject, context: PythonObject) raises -> Pyt
     var octets = _archive_bytes(raw)
     var count = len(octets)
     var i = 0
-    while i + 4 <= count:
+    while i + 4 <= count:  # driver-loop: strict little-endian NPY Unicode words
         var word = UInt32(0)
         for k in range(4):  # driver-loop: fixed UTF-32 word bytes
             word |= UInt32(octets[i + k]) << UInt32(8 * k)
@@ -119,7 +119,7 @@ def archive_literal(raw: PythonObject, context: PythonObject) raises -> PythonOb
     var octets = _archive_bytes(raw)
     var count = len(octets)
     var i = 0
-    while i < count:
+    while i < count:  # driver-loop: Unicode-escape metadata error validation
         if Int(octets[i]) != 92:
             i += 1
             continue

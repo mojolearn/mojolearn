@@ -184,7 +184,7 @@ def _schema_dictionary(value: PythonObject) raises:
     var key = PyObjectPtr()
     var item = PyObjectPtr()
     var admitted = True
-    while next(value._obj_ptr, MutPointer(to=position), MutPointer(to=key), MutPointer(to=item)) != 0:
+    while next(value._obj_ptr, MutPointer(to=position), MutPointer(to=key), MutPointer(to=item)) != 0:  # driver-loop: exact metadata keys before any dictionary lookup
         var key_type = cpy.PyObject_Type(key)
         admitted = key_type == str_class._obj_ptr or key_type == int_class._obj_ptr
         cpy.Py_DecRef(key_type)
