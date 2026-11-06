@@ -21,7 +21,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_host_f32, classical_kind
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
@@ -196,6 +196,18 @@ def decomp_shape(source: PythonObject, name: String, context: PythonObject) rais
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
                     + " (shape=" + shape + ") while a minimum of 1 is required.")
     return (rows, cols)
+
+
+def decomp_freeze_array(array: PythonObject) raises:
+    """Make an owned mojolearn Array read-only at the buffer level: its
+    `_readonly` flag and a read-only memoryview (`memoryview.toreadonly()`),
+    so NumPy views made from it from now on are writeable=False and cannot
+    be turned writable again. Native kernels still write by address."""
+    var view = array._mv
+    if not Bool(py=view.readonly):
+        py_setattr(array, "_mv", py_call(view.toreadonly))
+    if not Bool(py=array._readonly):
+        py_setattr(array, "_readonly", PythonObject(True))
 
 
 # Device-resident fitted operands of a query model (lane perf2-pca-decomp):
@@ -512,13 +524,7 @@ struct DecompKit(Movable):
             return False
         if source._base is not None:
             return False
-        var view = source._mv
-        if not Bool(py=view.readonly):
-            # `memoryview.toreadonly()`: NumPy views made from it from now on
-            # are writeable=False and cannot be turned writable again.
-            py_setattr(source, "_mv", py_call(view.toreadonly))
-        if not Bool(py=source._readonly):
-            py_setattr(source, "_readonly", PythonObject(True))
+        decomp_freeze_array(source)
         return True
 
     def const(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:

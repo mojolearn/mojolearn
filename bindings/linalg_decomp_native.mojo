@@ -22,7 +22,7 @@ from bindings.classical_validate import classical_view
 from core.decomp_native_impl import decomp_piv_valid
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
-    decomp_input, XD_ABS, XD_ADDS, XD_SCALE, XD_GTS, XD_MUL, XD_ADD, XD_SUB, XD_SQ, XD_SELECT, XD_RECIP,
+    decomp_input, decomp_freeze_array, XD_ABS, XD_ADDS, XD_SCALE, XD_GTS, XD_MUL, XD_ADD, XD_SUB, XD_SQ, XD_SELECT, XD_RECIP,
 )
 
 
@@ -564,6 +564,12 @@ def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonOb
                 # the device buffers return to the pool with their holders
                 _singular_warning(singular, 2)
                 return Python.tuple(lu_array, piv_array)
+            # Hazard class A (p3 brief): lu_solve serves the device factor
+            # while the pair holds these same objects, so they are read-only
+            # (an in-place edit raises instead of diverging from the device
+            # words; a pair rebuilt from edited copies misses by identity).
+            decomp_freeze_array(lu_array)
+            decomp_freeze_array(piv_array)
             return _lu_pair(lu_array, piv_array, PythonObject(None),
                             Python.tuple(da, dlu, dp, lu_array, piv_array), context)
         var a = _matrix(kit, a_source, "a", context)
