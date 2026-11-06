@@ -12,6 +12,8 @@ from std.python._cpython import PyObjectPtr
 from std.os import getenv
 from std.math import isfinite
 from core.sha256 import Sha256, sha256_hex_addr
+from core.sha256_file import sha256_file
+from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path, native_json_parse
 from bindings.mode_metadata_native import _class_fields
@@ -257,7 +259,7 @@ def corpus_hash_bytes(data: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var address: Int
     if py_type(data) is bi.bytes:
-        address = Int(cpy.lib.get_function[UnsafePointer[Int8, MutExternalOrigin]]("PyBytes_AsString")(data._obj_ptr))
+        address = lm_cpython_table()[].PyBytes_AsString(data._obj_ptr)
     else:
         address = Int(cpy.lib.get_function[UnsafePointer[Int8, MutExternalOrigin]]("PyByteArray_AsString")(data._obj_ptr))
     var digest = sha256_hex_addr(address, len(data))
@@ -266,17 +268,25 @@ def corpus_hash_bytes(data: PythonObject) raises -> PythonObject:
 
 
 def corpus_hash_file(path: PythonObject) raises -> PythonObject:
+    # Native streamed digest (core/sha256_file.mojo): the file is read in
+    # native chunks straight into the hasher, with no Python bytes object or
+    # symbol lookup per chunk. Same bytes, same order, same digest. A failure
+    # (missing or unreadable file) falls through to the posix route below,
+    # which raises the original Python error.
+    var text = _file_string(path)
+    try:
+        return PythonObject(sha256_file(String(py=text)))
+    except:
+        pass
     var f = _file_entries()
     var fd = py_call(f["open"], _file_string(path), f["O_RDONLY"])
     var hash = Sha256()
-    ref cpy = Python().cpython()
     try:
         while True:  # driver-loop: retain bounded native hash chunks for a potentially large token file
             var part = py_call(f["read"], fd, 1 << 22)
             if len(part) == 0:
                 break
-            var pointer = cpy.lib.get_function[UnsafePointer[Int8, MutExternalOrigin]]("PyBytes_AsString")(part._obj_ptr)
-            hash.update(Int(pointer), len(part))
+            hash.update(lm_cpython_table()[].PyBytes_AsString(part._obj_ptr), len(part))
             _ = part
     finally:
         py_call(f["close"], fd)
