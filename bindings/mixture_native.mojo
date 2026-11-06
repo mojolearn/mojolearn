@@ -410,7 +410,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
 
 
 def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject, name: String, what: String,
-                    out_buf: PythonObject, context: PythonObject, key: PythonObject = PythonObject(None)) raises:
+                    out_buf: PythonObject, context: PythonObject, key: PythonObject) raises:
     """`_model_lists` then the scoring entry `name` writing `out`: the
     fitted check, the feature count, the mode check and the call.
 
@@ -633,8 +633,8 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
 
 
 def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObject,
-                 context: PythonObject, admitted: Bool = False,
-                 key: PythonObject = PythonObject(None)) raises -> List[Float64]:
+                 context: PythonObject, admitted: Bool,
+                 key: PythonObject) raises -> List[Float64]:
     """`GaussianMixture._score_bic_aic`: (score, bic, aic). `admitted`:
     `source` is the X the public door admitted (classical_check_x: 2-D,
     non-empty, finite, float32 in C order), used as is (lane perf2-cluster:
@@ -687,8 +687,8 @@ def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObjec
 
 
 def _gmm_infer(model: PythonObject, binding: PythonObject, source: PythonObject, which: Int,
-               context: PythonObject, admitted: Bool = False,
-               key: PythonObject = PythonObject(None)) raises -> PythonObject:
+               context: PythonObject, admitted: Bool,
+               key: PythonObject) raises -> PythonObject:
     """score_samples (0), predict_proba (1) or predict (2). `admitted` and
     `key` as in `_gmm_bic_aic`."""
     var ext = _get_or(model, "_ext", PythonObject(None))
@@ -711,7 +711,7 @@ def _gmm_ext_labels(model: PythonObject, x: PythonObject, which: Int, context: P
 
 
 def _gmm_default_infer(model: PythonObject, binding: PythonObject, x: PythonObject, which: Int,
-                       context: PythonObject, key: PythonObject = PythonObject(None)) raises -> PythonObject:
+                       context: PythonObject, key: PythonObject) raises -> PythonObject:
     var n = Int(py=x.shape[0])
     if which == 0:
         var out = family_array(Python.tuple(n), "<f4", context)
@@ -918,19 +918,19 @@ def mixture_operation(model: PythonObject, operation: String, args: PythonObject
         var x = _gmm_fit(model, args, context)
         if _get_or(model, "_ext", PythonObject(None)) is not None:
             return _gmm_ext_labels(model, x, 2, context)
-        return _gmm_default_infer(model, args[0], x, 2, context)
+        return _gmm_default_infer(model, args[0], x, 2, context, PythonObject(None))
     if operation == "family_mix_gmm_score_samples":
-        return _gmm_infer(model, args[0], args[1], 0, context)
+        return _gmm_infer(model, args[0], args[1], 0, context, False, PythonObject(None))
     if operation == "family_mix_gmm_predict_proba":
-        return _gmm_infer(model, args[0], args[1], 1, context)
+        return _gmm_infer(model, args[0], args[1], 1, context, False, PythonObject(None))
     if operation == "family_mix_gmm_predict":
-        return _gmm_infer(model, args[0], args[1], 2, context)
+        return _gmm_infer(model, args[0], args[1], 2, context, False, PythonObject(None))
     if operation == "family_mix_gmm_score":
-        return PythonObject(_gmm_bic_aic(model, args[0], args[1], context)[0])
+        return PythonObject(_gmm_bic_aic(model, args[0], args[1], context, False, PythonObject(None))[0])
     if operation == "family_mix_gmm_bic":
-        return PythonObject(_gmm_bic_aic(model, args[0], args[1], context)[1])
+        return PythonObject(_gmm_bic_aic(model, args[0], args[1], context, False, PythonObject(None))[1])
     if operation == "family_mix_gmm_aic":
-        return PythonObject(_gmm_bic_aic(model, args[0], args[1], context)[2])
+        return PythonObject(_gmm_bic_aic(model, args[0], args[1], context, False, PythonObject(None))[2])
     if operation == "family_mix_bgmm_fit":
         _ = _bgmm_fit(model, args[0], args[1], context)
         return model
