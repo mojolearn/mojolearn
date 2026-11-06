@@ -197,35 +197,90 @@ def process_receive(socket: PythonObject) raises -> PythonObject:
     return py_call(p[].bi.tuple, result)
 
 
-def _process_reap(pid: Int) raises:
-    var status = transport_wait(pid, True)
-    if status != -1:
-        return
+struct ReapOutcome(Movable):
+    """Per worker, in pool order: the reap's error ("" when reaped), the
+    seconds from the start of the reap to it, and the signal it needed."""
+    var errors: List[String]
+    var seconds: List[Float64]
+    var signal: List[Int]
+
+    def __init__(out self, n: Int):
+        self.errors = List[String](length=n, fill=String())
+        self.seconds = List[Float64](length=n, fill=0.0)
+        self.signal = List[Int](length=n, fill=0)
+
+
+def _reap_poll(pids: List[Int], mut done: List[Bool], mut outcome: ReapOutcome, start: Float64, window: Float64, level: Int) raises:
+    """Nonblocking reaps of every open worker until all are reaped, failed,
+    or `window` seconds pass (one shared window for the whole group)."""
+    var deadline = transport_clock() + window
+    while True:  # driver-loop: over graceful native child completion status
+        var waiting = False
+        for i in range(len(pids)):  # driver-loop: over owned worker process IDs
+            if done[i]:
+                continue
+            try:
+                if transport_wait(pids[i], True) != -1:
+                    done[i] = True
+                    outcome.seconds[i] = transport_clock() - start
+                    outcome.signal[i] = level
+                else:
+                    waiting = True
+            except error:
+                done[i] = True
+                outcome.errors[i] = String(error)
+        if not waiting or transport_clock() >= deadline:
+            return
+        transport_sleep(0.01)
+
+
+def _reap_signal(pids: List[Int], mut done: List[Bool], mut outcome: ReapOutcome, start: Float64, signal: Int) raises:
+    for i in range(len(pids)):  # driver-loop: signal every still-running owned worker
+        if done[i]:
+            continue
+        try:
+            transport_terminate(pids[i], signal)
+        except error:
+            # An already-exited child cannot be signalled; reap it instead.
+            try:
+                if transport_wait(pids[i], True) != -1:
+                    done[i] = True
+                    outcome.seconds[i] = transport_clock() - start
+                    outcome.signal[i] = 0
+                else:
+                    done[i] = True
+                    outcome.errors[i] = String(error)
+            except wait_error:
+                done[i] = True
+                outcome.errors[i] = String(wait_error)
+
+
+def _process_reap_group(pids: List[Int]) raises -> ReapOutcome:
+    """Reap every worker of a closing pool with the existing escalation per
+    worker (one second to exit on its own, SIGTERM, four more seconds,
+    SIGKILL, then a blocking wait), but with each window shared by the whole
+    group instead of spent once per worker in turn."""
+    var out = ReapOutcome(len(pids))
+    var done = List[Bool](length=len(pids), fill=False)
+    var start = transport_clock()
     # Completed native workers return before forced shutdown. Verification
     # children also flush their complete-operation audit after that return.
-    var deadline = transport_clock() + 1.0
-    while transport_clock() < deadline:  # driver-loop: over graceful native child completion status
-        if transport_wait(pid, True) != -1:
-            return
-        transport_sleep(0.01)
-    try:
-        transport_terminate(pid)
-    except:
-        if transport_wait(pid, True) != -1:
-            return
-        raise
-    deadline = transport_clock() + 4.0
-    while transport_clock() < deadline:  # driver-loop: over termination status within the existing total five-second grace interval
-        if transport_wait(pid, True) != -1:
-            return
-        transport_sleep(0.01)
-    try:
-        transport_terminate(pid, 9)
-    except:
-        if transport_wait(pid, True) != -1:
-            return
-        raise
-    _ = transport_wait(pid)
+    _reap_poll(pids, done, out, start, 1.0, 0)
+    _reap_signal(pids, done, out, start, 15)
+    # Termination status within the existing total five-second grace interval.
+    _reap_poll(pids, done, out, start, 4.0, 15)
+    _reap_signal(pids, done, out, start, 9)
+    for i in range(len(pids)):  # driver-loop: blocking reap of every killed owned worker
+        if done[i]:
+            continue
+        try:
+            _ = transport_wait(pids[i])
+            out.seconds[i] = transport_clock() - start
+            out.signal[i] = 9
+        except error:
+            out.errors[i] = String(error)
+        done[i] = True
+    return out^
 
 
 def process_pool_close(pool: PythonObject) raises:
@@ -246,6 +301,12 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
                 transport_terminate(Int(py=workers[i]["pid"]))
             except:
                 pass  # Reap below distinguishes an already-exited child.
+    # Every worker is told to close and its socket closed before any reap, and
+    # the reap's grace windows are shared by the whole group: the workers'
+    # exits overlap, so a k-worker close waits about one worker's exit, not k
+    # (each worker was closed and reaped in turn, up to five seconds each,
+    # before 2026-11-05). The per-worker escalation is unchanged.
+    var pids = List[Int]()
     for i in range(len(workers)):  # driver-loop: over owned worker sockets and process IDs
         var worker = workers[i]
         if worker["socket"] is not None and not abort:
@@ -263,13 +324,24 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
         except error:
             if failure == "":
                 failure = String(error)
-        try:
-            _process_reap(Int(py=worker["pid"]))
-        except error:
+        pids.append(Int(py=worker["pid"]))
+    var reaped = _process_reap_group(pids)
+    var close_seconds = bi.list()
+    var close_signal = bi.list()
+    for i in range(len(workers)):  # driver-loop: over owned worker reap outcomes
+        _ = py_call(close_seconds.append, PythonObject(reaped.seconds[i]))
+        _ = py_call(close_signal.append, PythonObject(reaped.signal[i]))
+        if reaped.errors[i] != "":
             # A failed reap remains owned and can be retried by close().
-            _ = py_call(pool["workers"].append, worker)
+            _ = py_call(pool["workers"].append, workers[i])
             if failure == "":
-                failure = String(error)
+                failure = reaped.errors[i]
+    # Seconds from the close request to each worker's reap, and the signal
+    # its reap needed (0: none, 15: SIGTERM, 9: SIGKILL).
+    var timing = py_get(pool, "timing", PythonObject(None))
+    if timing is not None and len(workers) > 0:
+        py_setitem(timing, "close_seconds", close_seconds)
+        py_setitem(timing, "close_signal", close_signal)
     if failure != "":
         raise Error(failure)
 
@@ -288,8 +360,21 @@ def process_pool_start(pool: PythonObject) raises:
     var server = transport_listen("127.0.0.1", 0, 120.0)
     var port = transport_port(server)
     var groups = 1 if cooperative else len(devices)
+    # Every worker is spawned before the first handshake, so the workers'
+    # interpreter start, package import and binding connection overlap: a
+    # k-device pool starts in about one worker's start-up, not k of them
+    # (they were spawned and authenticated one after another before
+    # 2026-11-05). Each worker keeps its own single-use token; a hello is
+    # matched to its worker by that token and must carry that worker's pid,
+    # so authentication is as strict as the serial order was. `workers`
+    # stays in spawn (device) order, whatever order the workers connect in.
+    var pending = bi.dict()
+    var timing = bi.dict()
+    var started = bi.list()
+    py_setitem(timing, "start_seconds", started)
+    py_setitem(pool, "timing", timing)
     try:
-        for i in range(groups):  # driver-loop: over native worker process groups
+        for i in range(groups):  # driver-loop: over native worker process groups (spawn all first)
             var group = bi.list()
             if cooperative:
                 group = py_call(bi.list, devices)
@@ -303,24 +388,49 @@ def process_pool_start(pool: PythonObject) raises:
             argv.append(String(pool["module"]))
             argv.append(String(port))
             argv.append(String(token))
+            var spawned = transport_clock()
             var pid = transport_spawn(p[].executable, argv, env)
             var worker = bi.dict()
             py_setitem(worker, "pid", pid)
             py_setitem(worker, "socket", PythonObject(None))
             py_setitem(worker, "devices", py_call(bi.tuple, group))
             _ = py_call(pool["workers"].append, worker)
+            _ = py_call(started.append, PythonObject(None))
+            var entry = bi.list()
+            _ = py_call(entry.append, worker)
+            _ = py_call(entry.append, PythonObject(i))
+            _ = py_call(entry.append, PythonObject(spawned))
+            py_setitem(pending, PythonObject(token), entry)
+        for _ in range(groups):  # driver-loop: authenticate each spawned worker as it connects
             var connection = transport_accept(server, 120.0)
-            py_setitem(worker, "socket", connection)
-            var hello = transport_receive(connection, 0)[0]
-            if String(py_get(hello, "kind", "")) != "hello" or String(py_get(hello, "token", "")) != token or Int(py=py_get(hello, "pid", -1)) != pid:
-                raise Error("process: child authentication or process identity mismatch")
-            if String(py_get(hello, "vendor", "")) != p[].vendor:
-                raise Error("process: child vendor differs from the parent native route")
-            # Existing local model workers have no training-operation timeout.
-            # Keep only the connection handshake bounded; large supported
-            # model steps must not acquire a new two-minute runtime limit.
-            transport_timeout(connection, -1.0)
-            py_setitem(worker, "identity", hello)
+            var attached = False
+            try:
+                var hello = transport_receive(connection, 0)[0]
+                var claimed = PythonObject(String(py_get(hello, "token", "")))
+                var entry = py_get(pending, claimed, PythonObject(None))
+                if String(py_get(hello, "kind", "")) != "hello" or entry is None or Int(py=py_get(hello, "pid", -1)) != Int(py=entry[0]["pid"]):
+                    raise Error("process: child authentication or process identity mismatch")
+                _ = py_call(pending.pop, claimed)  # a token authenticates one connection only
+                var worker = entry[0]
+                py_setitem(worker, "socket", connection)
+                attached = True
+                if String(py_get(hello, "vendor", "")) != p[].vendor:
+                    raise Error("process: child vendor differs from the parent native route")
+                # Existing local model workers have no training-operation timeout.
+                # Keep only the connection handshake bounded; large supported
+                # model steps must not acquire a new two-minute runtime limit.
+                transport_timeout(connection, -1.0)
+                py_setitem(worker, "identity", hello)
+                # Seconds from this worker's spawn to its authenticated hello
+                # (interpreter start, package import, binding connection).
+                py_setitem(started, entry[1], PythonObject(transport_clock() - Float64(py=entry[2])))
+            except error:
+                if not attached:
+                    try:
+                        transport_close(connection)
+                    except:
+                        pass  # The handshake failure below is the reported error.
+                raise error^
     except error:
         transport_close(server)
         try:
