@@ -24,6 +24,7 @@ from bindings.family_common import (
 from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32, HP_I64
 from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
+from bindings.gp_svm_records import gp_kernel_arrays_reused, gp_x_known
 from bindings.mcls_classify import mcls_accuracy_fraction
 from bindings.mcls_common import mc_shape_of
 from bindings.host_inference_scalars import host_inference_scalar
@@ -289,7 +290,9 @@ def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject
     """`_query(X)`."""
     if not py_contains(fields, PythonObject("estimators_")):
         raise Error(String(_NAME) + ": call fit() or load() first")
-    var q = family_as_f32(source, 2, "X", context)
+    # The public door already admitted this X as C-order float32 and
+    # registered it (bindings/gp_svm_records.mojo): no second snapshot.
+    var q = source if gp_x_known(source, context) else family_as_f32(source, 2, "X", context)
     var d = Int(py=q.shape[1])
     var fitted = Int(py=fields["n_features_in_"])
     if d != fitted:
@@ -380,14 +383,15 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
 
 
 def _gpc_predict_all(ext: PythonObject, fields: PythonObject, q: PythonObject, out_kind: Int,
-                     context: PythonObject) raises -> PythonObject:
+                     context: PythonObject, kernel_arrays: PythonObject) raises -> PythonObject:
     """`_predict_all`: every binary fit against one cross kernel in one
-    `gpc_predict_all` session; int64 codes (1) or float64 rows (2)."""
+    `gpc_predict_all` session; int64 codes (1) or float64 rows (2).
+    `kernel_arrays`: `gp_kernel_arrays(fields["_kernel"])`."""
     var n_star = Int(py=q.shape[0])
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var n_features = Int(py=xt.shape[1])
-    var arrays = gp_kernel_arrays(fields["_kernel"], context)
+    var arrays = kernel_arrays
     var fits = fields["estimators_"]
     var k = len(fits)
     var out: PythonObject
@@ -439,12 +443,14 @@ def _gpc_ovr_combine(ext: PythonObject, cols: PythonObject, n_star: Int, context
     return Python.tuple(proba, codes)
 
 
-def _gpc_columns(ext: PythonObject, fields: PythonObject, q: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The per-class probability columns (`_latent(...)[2]` per fit)."""
+def _gpc_columns(ext: PythonObject, fields: PythonObject, q: PythonObject, context: PythonObject,
+                 kernel_arrays: PythonObject) raises -> PythonObject:
+    """The per-class probability columns (`_latent(...)[2]` per fit), every
+    fit reading the one packed kernel."""
     var cols = Python.list()
     var fits = fields["estimators_"]
     for i in range(len(fits)):  # driver-loop: one latent column per class
-        _ = py_call(cols.append, _gpc_latent(ext, fields, fits[i], q, True, 0, context)[2])
+        _ = py_call(cols.append, _gpc_latent(ext, fields, fits[i], q, True, 0, context, kernel_arrays)[2])
     return cols
 
 
@@ -454,12 +460,14 @@ def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
     var fields = py_fields(model)
     var q = _gpc_query(fields, args[1], context)
     var ext = _gpc_ext(model, args[0], context)
+    # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
+    var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
     if (gp_caps(ext) & 1) == 1:
-        return _gpc_predict_all(ext, fields, q, 2, context)
+        return _gpc_predict_all(ext, fields, q, 2, context, arrays)
     if Int(py=fields["n_classes_"]) == 2:
         # `[1 - p, p]` from the binding (`gpc_binary_out`)
-        return _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 2, context)[3]
-    var cols = _gpc_columns(ext, fields, q, context)
+        return _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 2, context, arrays)[3]
+    var cols = _gpc_columns(ext, fields, q, context, arrays)
     return _gpc_ovr_combine(ext, cols, Int(py=q.shape[0]), context)[0]
 
 
@@ -469,22 +477,25 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var fields = py_fields(model)
     var q = _gpc_query(fields, args[2], context)
     var ext = _gpc_ext(model, args[0], context)
+    # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
+    var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
     var codes: PythonObject
     if (gp_caps(ext) & 1) == 1:
-        codes = _gpc_predict_all(ext, fields, q, 1, context)
+        codes = _gpc_predict_all(ext, fields, q, 1, context, arrays)
     elif Int(py=fields["n_classes_"]) == 2:
         # `mean > 0` codes from the binding (`gpc_binary_out`)
-        codes = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context)[3]
+        codes = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays)[3]
     else:
         var n_star = Int(py=q.shape[0])
-        var cols = _gpc_columns(ext, fields, q, context)
+        var cols = _gpc_columns(ext, fields, q, context, arrays)
         var codes32 = _gpc_ovr_combine(ext, cols, n_star, context)[1]
         # `codes32.astype("<i8")`: the exact widening
         codes = family_array(Python.tuple(n_star), "<i8", context)
         _ = cast_elements(Int(py=classical_address(codes32)), HP_I32, Int(py=classical_address(codes)), HP_I64, n_star)
         _ = codes32  # keep the Python object alive through the native call above
         _ = codes32^
-    return gp_decode_labels(fields["classes_"], codes, args[1], context)
+    # The class table is built once per class list of this model.
+    return gp_decode_labels(model, fields["classes_"], codes, args[1], context)
 
 
 def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -498,7 +509,8 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, conte
                     + "only supported for binary classification, received "
                     + String(n_classes) + " classes.")
     var ext = _gpc_ext(model, args[0], context)
-    var latent = _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 0, context)
+    var latent = _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 0, context,
+                             gp_kernel_arrays_reused(model, fields["_kernel"], context))
     return Python.tuple(latent[0], latent[1])
 
 
