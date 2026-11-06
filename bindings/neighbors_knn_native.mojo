@@ -912,6 +912,18 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     _ = proba  # keep the Python object alive through the native call above
     _ = uniq  # keep the Python object alive through the native call above
     _report(fields, "used_query_tile_", used)
+    # p3-neighbors-cluster: `uniq` is the kernel's class set of the fitted
+    # `_y_cols`, the same for every query, so POLICY 7's check runs once per
+    # fitted state: skipped while `_y_cols` and `_classes_list` are the objects
+    # it passed for and the class lists' admission record still holds.
+    var class_holder = py_get(fields, "_resident_holder")
+    if class_holder is not None and py_type(class_holder) is b.dict:
+        var checked = py_get(class_holder, "class_set_checked")
+        if (checked is not None and py_type(checked) is b.tuple and len(checked) == 2
+                and checked[0] is y_cols and checked[1] is classes_list
+                and _knn_lists_unchanged(fields, Python.tuple("_classes_list", "_label_names"),
+                                         py_get(class_holder, "admitted_lists"))):
+            return Python.tuple(labels, proba, n_classes)
     # POLICY 7: the implementation's class set against ours, made visible:
     # `uniq` split at the running class counts.
     var flat = py_call(native_buffer_view(uniq._mv).tolist)
@@ -928,6 +940,8 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
                         + "classes " + family_str(py_call(list_item, found, eight)) + "..., the host sort found "
                         + family_str(family_call(py_call(b.getattr, expected, PythonObject("__getitem__")), eight))
                         + "...; the two class sets disagree")
+    if class_holder is not None and py_type(class_holder) is b.dict:
+        py_setitem(class_holder, "class_set_checked", Python.tuple(y_cols, classes_list))
     return Python.tuple(labels, proba, n_classes)
 
 
