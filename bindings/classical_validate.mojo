@@ -26,10 +26,15 @@ def classical_estimator_name(model: PythonObject) raises -> String:
     return String(cls.__name__)
 
 
-def classical_view(source: PythonObject, context: PythonObject, name: String = "input") raises -> PythonObject:
+def classical_view(source: PythonObject, context: PythonObject, name: String = "input",
+                   admitted: Bool = False) raises -> PythonObject:
     """An array view of an admitted input (pandas and Torch storage read
     natively), before any cast: an ndarray with NumPy, an Array without."""
-    classical_admit_value(source, context)
+    # `admitted`: the caller's native entry already ran classical_admit_value
+    # over this very argument (classical_c admits every operation argument
+    # before dispatch), so the walk is not repeated; storage is still read.
+    if not admitted:
+        classical_admit_value(source, context)
     var prepared = source
     if native_pandas_exact(source):
         prepared = native_pandas_f32(source, context)
@@ -58,18 +63,19 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject) raises -> Py
     if not _numeric(view, context):
         raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(native_loaded_module("builtins").memoryview, view).format) + ", which is not a numeric array")
     try:
-        return classical_host_f32(view, 2, "X", context)
+        return classical_host_f32(view, 2, "X", context, admitted=True)
     except error:
         if String(error) == "Input X contains NaN or infinity":
             raise Error("Input X contains NaN or infinity (" + est + ").")
         raise Error(String(error))
 
 
-def classical_check_x(source: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
+def classical_check_x(source: PythonObject, est: String, context: PythonObject,
+                      admitted: Bool = False) raises -> PythonObject:
     """X for fit, predict or score: refused with scikit-learn's wording, then
     cast to C-ordered float32 (the input itself when it already is one)."""
     classical_refuse_sparse(source, est)
-    var view = classical_view(source, context, "X")
+    var view = classical_view(source, context, "X", admitted)
     var kind = classical_kind(view, context)
     if kind == "c":
         raise Error("Complex data not supported: " + est + " got a complex X.")
@@ -86,13 +92,14 @@ def classical_check_x(source: PythonObject, est: String, context: PythonObject) 
     return x
 
 
-def classical_check_y(source: PythonObject, rows: Int, est: String, context: PythonObject) raises -> PythonObject:
+def classical_check_y(source: PythonObject, rows: Int, est: String, context: PythonObject,
+                      admitted: Bool = False) raises -> PythonObject:
     """The fit target: present, real, one column (a column vector warns and is
     raveled), finite and as long as X."""
     if source is None:
         raise Error(est + " requires y to be passed, but the target y is None.")
     var b = native_loaded_module("builtins")
-    var view = classical_view(source, context, "y")
+    var view = classical_view(source, context, "y", admitted)
     if classical_kind(view, context) == "c":
         raise Error("Complex data not supported: " + est + " got a complex y.")
     var nd = Int(py=view.ndim)
@@ -100,7 +107,7 @@ def classical_check_y(source: PythonObject, rows: Int, est: String, context: Pyt
     var y = PythonObject(None)
     if nd == 1 or column:
         try:
-            y = classical_host_f32(view, 1, "y", context, column_target=column)
+            y = classical_host_f32(view, 1, "y", context, column_target=column, admitted=True)
         except error:
             if String(error) == "Input y contains NaN or infinity":
                 raise Error("Input y contains NaN or infinity (" + est + ").")
@@ -128,14 +135,15 @@ def classical_weight_refusal(source: PythonObject, error: Error) raises -> Error
     return Error(String(error))
 
 
-def classical_check_weights_input(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
+def classical_check_weights_input(source: PythonObject, rows: Int, context: PythonObject,
+                                  admitted: Bool = False) raises -> PythonObject:
     """sample_weight as rows float32 words: None stays None, a scalar fills
     every row; scikit-learn's shape, finiteness, sign and all-zero refusals."""
     if source is None:
         return PythonObject(None)
     var view = PythonObject(None)
     try:
-        view = classical_view(source, context, "sample_weight")
+        view = classical_view(source, context, "sample_weight", admitted)
     except error:
         var refusal = classical_weight_refusal(source, error)
         raise refusal
@@ -147,7 +155,7 @@ def classical_check_weights_input(source: PythonObject, rows: Int, context: Pyth
         raise Error("sample_weight.shape == (" + String(Int(py=view.shape[0])) + ",), expected (" + String(rows) + ",)!")
     var value = PythonObject(None)
     try:
-        value = classical_host_f32(view, 0 if scalar else 1, "sample_weight", context)
+        value = classical_host_f32(view, 0 if scalar else 1, "sample_weight", context, admitted=True)
     except error:
         if String(error) == "Input sample_weight contains NaN or infinity":
             raise Error("Input sample_weight contains NaN or infinity.")

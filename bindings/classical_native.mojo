@@ -4,7 +4,6 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.classical_error_boundary import classical_python_error
-from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_description import sequential_fields
 from bindings.classical_ridge import classical_ridge_fit, classical_ridge_parameters, classical_linear_predict, classical_linear_predict_public
 from bindings.classical_ols import classical_ols_fit
@@ -28,7 +27,7 @@ from bindings.host_density_constructor_native import host_density_initialize
 from bindings.host_density_archive_native import host_density_save
 from bindings.host_density_hash_native import host_density_hash
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
-from bindings.classical_pandas import classical_admit_value
+from bindings.classical_pandas import classical_admit_value, classical_admit_fields
 from bindings.classical_tags import classical_tags
 from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
@@ -194,7 +193,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if not class_operation:
             classical_check_layout(model, context)
         if operation == "getattribute":
-            var attribute = classical_getattribute(model, args[0], context)
+            var attribute = classical_getattribute(model, args[0], context, layout_checked=True)
             return attribute.steal_data()
         if loading:
             var loaded = classical_archive_load(model, args[0], ridge, context)
@@ -216,10 +215,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         elif operation != "save":
             classical_admit_value(args, context)
         var fields = sequential_fields(model)
-        var names = context["classical_fields"]
-        for k in range(len(names)):  # driver-loop: over connected estimator metadata fields
-            if py_contains(fields, names[k]):
-                sequential_admit_value(fields[names[k]], context)
+        # One admission pass with one set of type vectors for every field.
+        classical_admit_fields(fields, context["classical_fields"], context)
         var result = PythonObject(None)
         if operation == "initialize":
             result = classical_initialize(model, args, ridge, context)

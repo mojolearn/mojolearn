@@ -263,14 +263,20 @@ def classical_f64(value: PythonObject, index: Int) raises -> Float64:
     return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))[index]
 
 
-def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False) raises -> PythonObject:
-    classical_admit_value(source, context)
+def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
+                       admitted: Bool = False) raises -> PythonObject:
+    # `admitted`: `source` is an array view classical_view returned in the
+    # same native call (an ndarray, or an Array without NumPy). It was
+    # admitted and its pandas/Torch storage read there, so the admission walk
+    # and the two storage tests are not repeated for the same value.
     var b = native_loaded_module("builtins")
     var prepared = source
-    if native_pandas_exact(source):
-        prepared = native_pandas_f32(source, context)
-    elif _ordinary_torch(py_type(source), context):
-        prepared = native_torch_numpy(source)
+    if not admitted:
+        classical_admit_value(source, context)
+        if native_pandas_exact(source):
+            prepared = native_pandas_f32(source, context)
+        elif _ordinary_torch(py_type(source), context):
+            prepared = native_torch_numpy(source)
     var value = classical_input(prepared, context, name)
     var nd = Int(py=value.ndim)
     var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview

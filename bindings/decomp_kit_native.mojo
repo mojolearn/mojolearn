@@ -156,7 +156,7 @@ def decomp_input(source: PythonObject, name: String, context: PythonObject) rais
     if kind != "b" and kind != "i" and kind != "u" and kind != "f":
         raise Error("TypeError: mojolearn: " + name + " has a non-numeric dtype")
     try:
-        return classical_host_f32(view, 2, name, context)
+        return classical_host_f32(view, 2, name, context, admitted=True)
     except error:
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")

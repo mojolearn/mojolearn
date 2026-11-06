@@ -240,7 +240,7 @@ def _resident_solve(mut kit: DecompKit, handles: List[Int], n: Int, b: PythonObj
         if n == 0:
             return PythonObject(None)
         try:
-            array = classical_host_f32(view, 1, "b", context)
+            array = classical_host_f32(view, 1, "b", context, admitted=True)
         except error:
             if String(error) == "Input b contains NaN or infinity":
                 raise Error("b: input must be finite; NaN/inf are unsupported")
@@ -404,7 +404,7 @@ def _f32_input(source: PythonObject, name: String, ndim: Int, context: PythonObj
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 sample(s) (shape="
                     + shape + ") while a minimum of 1 is required.")
     try:
-        return classical_host_f32(view, 1, name, context)
+        return classical_host_f32(view, 1, name, context, admitted=True)
     except error:
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")

@@ -145,11 +145,16 @@ def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: P
     return PythonObject(from_owned=result)
 
 
-def classical_getattribute(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
+def classical_getattribute(model: PythonObject, name: PythonObject, context: PythonObject,
+                           layout_checked: Bool = False) raises -> PythonObject:
+    # `layout_checked`: the caller ran classical_check_layout on this model in
+    # the same native call (classical_c does, before every instance
+    # operation), so the class and instance-key admission is not repeated.
     var b = native_loaded_module("builtins")
     if py_type(name) is not b.str:
         raise Error("TypeError: native model attribute name must be an exact string")
-    classical_check_layout(model, context)
+    if not layout_checked:
+        classical_check_layout(model, context)
     var plan = _public_plan(model, context)
     var cls = py_type(model)
     var member = PythonObject(None)
