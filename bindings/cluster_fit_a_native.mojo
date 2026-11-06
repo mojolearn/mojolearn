@@ -31,6 +31,7 @@ from bindings.family_common import (
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from bindings.cluster_native import cluster_operation, xc_call_floats, _xc_array
+from providers.python.estimator_binding_pyapi import _estimator_mode_word
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
 comptime _E_MINIBATCH = 2
@@ -698,7 +699,11 @@ def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObj
         want = context["backend_fields"]["_DEFAULT_MODE"]
     var getter = neural_descriptor_entry(binding, "hdbscan_numeric_mode", False)
     if getter is not None:
-        var got = Int(py=_int(family_call(getter)))
+        # Perf (lane perf3-cluster-gp-gate): the compiled mode word is a
+        # constant of the loaded binary, read once per (module, getter) for
+        # the process, as GaussianMixture's _check_mode reads it
+        # (bindings/mixture_native.mojo), not called on every fit and query.
+        var got = _estimator_mode_word(binding, getter)
         var wanted = py_get(context["family_cfa_hdbscan_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
             raise Error("RuntimeError: mojolearn HDBSCAN: numeric_mode=" + family_repr(want) + " was requested but "
