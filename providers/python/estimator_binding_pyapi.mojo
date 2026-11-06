@@ -2,6 +2,7 @@
 # Shared import-connected binding admission for estimator frontends. The caller
 # enters compiled code once; runtime selection reads current mode/registry data
 # and never invokes Python _bind/load_set/_ModeSet.__getattr__ callbacks.
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
@@ -31,8 +32,10 @@ def estimator_binding_mode(requested: PythonObject, name: String, context: Pytho
         mode = backend["_DEFAULT_MODE"]
     if py_type(mode) is not bi.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    mode = mode.strip().lower()
-    var selected_mode = String(mode)
+    var selected_mode = String(py=mode)
+    if selected_mode != "identical" and selected_mode != "fast":
+        # Only a non-canonical spelling pays the two str method calls.
+        selected_mode = String(py=mode.strip().lower())
     if selected_mode != "identical" and selected_mode != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var record = context["family_binding_connections"][name][selected_mode]
@@ -78,6 +81,47 @@ def estimator_binding_mode(requested: PythonObject, name: String, context: Pytho
     return estimator_checked_mode(module, reader, name, selected_mode) if check_mode else module
 
 
+struct EstimatorModeWords(Defaultable, Movable):
+    # Compiled numeric-mode words read once per (module, getter entry) for the
+    # process (lane perf-provider-cache, 2026-11-06). A mode getter returns a
+    # compile-time constant of its loaded image; calling it on every public
+    # operation repeated the same native round trip. The getter is still read
+    # from the module's live namespace every call (neural_descriptor_entry),
+    # so a replaced entry or module is a different object, misses here and is
+    # called again. Module and getter are held strongly (a loaded extension
+    # is never unloaded), which keeps the identity compare sound.
+    var modules: List[PythonObject]
+    var getters: List[PythonObject]
+    var words: List[Int]
+
+    def __init__(out self):
+        self.modules = List[PythonObject]()
+        self.getters = List[PythonObject]()
+        self.words = List[Int]()
+
+
+# The named global may be shared by every Mojo extension in the process:
+# bump the name's version whenever EstimatorModeWords' layout changes.
+comptime ESTIMATOR_MODE_WORDS = _Global[StorageType=EstimatorModeWords,
+    name="MojolearnEstimatorModeWordsV1", init_fn=EstimatorModeWords.__init__]
+
+
+def _estimator_mode_word(module: PythonObject, getter: PythonObject) raises -> Int:
+    var g = ESTIMATOR_MODE_WORDS.get_or_create_ptr()
+    for i in range(len(g[].modules)):  # small-loop(admitted mode getters): a few compiled extension modules per process, never data
+        if g[].modules[i] is module and g[].getters[i] is getter:
+            return g[].words[i]
+    var got = Int(py=py_call(getter))
+    if len(g[].modules) >= 128:
+        g[].modules.clear()
+        g[].getters.clear()
+        g[].words.clear()
+    g[].modules.append(module)
+    g[].getters.append(getter)
+    g[].words.append(got)
+    return got
+
+
 def estimator_checked_mode(module: PythonObject, reader: String, name: String,
                            requested: String) raises -> PythonObject:
     # XN identical estimators read mode/capabilities from their native table
@@ -99,7 +143,7 @@ def estimator_checked_mode(module: PythonObject, reader: String, name: String,
         return module
     var getter = neural_descriptor_entry(module, reader, False)
     if getter is not None:
-        var got = Int(py=py_call(getter))
+        var got = _estimator_mode_word(module, getter)
         var expected = 1 if requested == "identical" else 0
         if got != expected:
             var compiled = String("identical") if got == 1 else (String("fast") if got == 0 else String("unknown"))
