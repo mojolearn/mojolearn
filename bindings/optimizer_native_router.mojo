@@ -10,7 +10,7 @@ from bindings.training_extra_native import training_chunked_lm_head, training_ml
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
-from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
+from bindings.optimizer_admission import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
@@ -274,7 +274,15 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return optimizer_construct(owner, values, mode, context)
     var selected_mode = mode
     if owner is not None:
-        opt_owner(owner, context)
+        if operation == "step" or operation == "state" or operation == "zero":
+            # These go straight to a compiled door entry whose first step is
+            # the full `opt_owner` walk (the door is a public module entry,
+            # so it must admit by itself; the two binaries share no trusted
+            # word). Here only what this router reads is admitted: the exact
+            # class, string field names and `numeric_mode`.
+            opt_owner_mode(owner, context)
+        else:
+            opt_owner(owner, context)
         selected_mode = py_get(py_fields(owner), "numeric_mode")
     if operation == "get_params":
         opt_scalar(values[0], context)
