@@ -19,6 +19,7 @@ from training.optimizer_device_plan import optimizer_device_plan
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_copy, py_ints
 from bindings.causal_lm_construct import _model_f32, _model_shape, _model_block, _model_bindings, _model_native_buffer
 from bindings.causal_lm_public import _native_function
+from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_MODE, SAMBA_CAP_VENDOR
 from bindings.samba_config_native import samba_config_dict, samba_config_from_dict, samba_registry, samba_block_shapes
 
 
@@ -32,7 +33,11 @@ def samba_entries(context: PythonObject, mode: PythonObject) raises -> PythonObj
     if Bool(py=selected != context["mode"]):
         raise Error("Samba: requested numeric mode differs from the connected native mode")
     var want = 1 if String(selected) == "identical" else 0
-    if Int(py=_native_function(entries, "training_numeric_mode")()) != want or Bool(py=_native_function(entries, "training_vendor")() != context["vendor"]):
+    # The binding's numeric mode and vendor words are fixed per compiled
+    # module: read them once per binding (bindings/p3_samba_caps.mojo), not
+    # with two binding crossings on every operation.
+    var caps = samba_caps(entries)
+    if Int(py=caps[SAMBA_CAP_MODE]) != want or Bool(py=caps[SAMBA_CAP_VENDOR] != context["vendor"]):
         raise Error("Samba: native training mode/vendor admission mismatch")
     return entries
 
