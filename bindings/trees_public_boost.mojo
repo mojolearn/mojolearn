@@ -318,7 +318,15 @@ def _new_member(cls: PythonObject, settings: PythonObject, context: PythonObject
 
 def _clone(base: PythonObject, seed: Int, context: PythonObject) raises -> PythonObject:
     """`_trees_clone(base, random_state=seed)`."""
-    var params = forest_get_params(base, context)
+    return _clone_from(base, forest_get_params(base, context), seed, context)
+
+
+def _clone_from(base: PythonObject, template: PythonObject, seed: Int, context: PythonObject) raises -> PythonObject:
+    """`_clone` from `template`, the base's `forest_get_params` read once
+    before a member loop (lane perf-sweep-trees, 2026-11-05: every round
+    re-read the unchanged base's parameters). get_params maps names to the
+    stored values by identity, so a shallow copy is the same dictionary."""
+    var params = py_call(template.copy)
     if py_contains(params, "random_state"):
         py_setitem(params, "random_state", _P(seed))
     return _new_member(py_type(base), params, context)
@@ -635,6 +643,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var all_rows = n_rows == n and not bootstrap
     var all_cols = n_feat == d and not bootstrap_features
     var count = Int(py=_int(fields["n_estimators"]))
+    var template = forest_get_params(base, context) if count > 0 else Python.dict()
     for k in range(count):  # driver-loop: over the member estimators
         var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
         var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
@@ -643,7 +652,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         var ys = y_all
         if not all_rows:
             ys = _gather_codes(xt, y_all, rows, context) if classifier else _gather_vec(xt, trees_address(y_all), n, rows, context)
-        var member = _clone(base, _sub_seed(seed, k), context)
+        var member = _clone_from(base, template, _sub_seed(seed, k), context)
         var weights = PythonObject(None)
         if sw:
             # every row: the weights as given (the member's own check reads
@@ -989,9 +998,10 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             session = _member_session(base, cm, False, True, _ada_session_default(fields, xt, context), context)
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
+        var template = forest_get_params(base, context) if m > 0 else Python.dict()
         try:
             for it in range(m):  # driver-loop: over the boosting rounds (one member each)
-                var member = _clone(base, _sub_seed(seed, it), context)
+                var member = _clone_from(base, template, _sub_seed(seed, it), context)
                 if xcm:
                     _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
                 else:
