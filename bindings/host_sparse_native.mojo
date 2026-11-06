@@ -34,9 +34,18 @@ def host_sparse_format(value: PythonObject) raises -> String:
     ref cpy = Python().cpython()
     var cls = py_type(value)
     var b = native_loaded_module("builtins")
+    # p3-array-arena: the common dense arguments return at once; no sparse
+    # class can be a builtin container or number.
+    if cls is b.list or cls is b.tuple or cls is b.int or cls is b.float or cls is b.bool:
+        return ""
     var sys = native_loaded_module("sys")
     var module_type = py_type(sys)
     var modules = sys.modules
+    # A loaded scipy.sparse._<fmt> module implies its loaded parent package:
+    # without it, no supported sparse class exists in this process.
+    var parent = py_get(modules, PythonObject("scipy.sparse"))
+    if parent is None or py_type(parent) is not module_type:
+        return ""
     var abc_read = False
     var abc_meta = PythonObject(None)
     var formats: List[String] = ["csr", "csc", "coo", "bsr", "dia", "dok", "lil"]
