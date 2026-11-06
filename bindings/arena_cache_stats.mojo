@@ -101,20 +101,49 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
     return default
 
 
+struct HashKeyTypes(Movable):
+    """The admitted key types of one cache operation, read once for all the
+    keys it walks: the builtin hashing types, the tuple type and (on first
+    need) the two NumPy string scalar types."""
+    var types: List[PythonObject]
+    var tuple_type: PythonObject
+    var strings_ready: Bool
+    var strings: List[PythonObject]
+
+    def __init__(out self, context: PythonObject) raises:
+        self.types = List[PythonObject]()
+        var types = context["cache_hash_types"]
+        for i in range(len(types)):  # driver-loop: exact immutable builtin hashing and equality slots, read once
+            self.types.append(types[i])
+        self.tuple_type = context["arena_native_types"]["tuple"]
+        self.strings_ready = False
+        self.strings = List[PythonObject]()
+
+
 def _hash_key(value: PythonObject, context: PythonObject) raises:
+    var types = HashKeyTypes(context)
+    _hash_key(value, context, types)
+
+
+def _hash_key(value: PythonObject, context: PythonObject, mut known: HashKeyTypes) raises:
     # Exact tuples cannot form a cycle without a non-tuple container. Walk
     # them iteratively so admission does not impose an arbitrary depth limit
     # before CPython performs the actual native hashing/equality operation.
     var pending = List[PythonObject]()
     pending.append(value)
-    var types = context["cache_hash_types"]
     while len(pending):  # driver-loop: explicit native work stack over immutable key metadata
         var item = pending.pop()
         var cls = py_type(item)
         var native = False
-        for i in range(len(types)):  # driver-loop: exact immutable builtin hashing and equality slots
-            native = native or cls is types[i]
+        for i in range(len(known.types)):  # driver-loop: exact immutable builtin hashing and equality slots
+            native = native or cls is known.types[i]
         if native:
+            continue
+        if cls is known.tuple_type:
+            # A tuple is never one of the two NumPy string scalar types below;
+            # walk it without building their descriptors for every node.
+            for i in range(len(item)):  # driver-loop: tuple hashing must not dispatch to an application key
+                pending.append(item[i])
             continue
         # The earlier read-only owner admitted exact NumPy byte/unicode
         # scalar prefixes. Preserve that surface when get/stats share this
@@ -122,16 +151,18 @@ def _hash_key(value: PythonObject, context: PythonObject) raises:
         # application's __hash__ or __eq__. Creating the native descriptor
         # validates NumPy's connected dtype entry without importing NumPy or
         # constructing/converting the caller's scalar. Subclasses stay out.
-        var scalar = context["cache_scalar_context"]
-        if py_get(scalar["modules"], "numpy") is not None:
-            for code in ["S", "U"]:  # driver-loop: the two supported immutable NumPy string scalar identities
-                native = native or cls is sequence_dtype_create(PythonObject(code), scalar).type
+        # The two descriptors are created once per operation, on first need.
+        if not known.strings_ready:
+            var scalar = context["cache_scalar_context"]
+            if py_get(scalar["modules"], "numpy") is not None:
+                for code in ["S", "U"]:  # driver-loop: the two supported immutable NumPy string scalar identities
+                    known.strings.append(sequence_dtype_create(PythonObject(code), scalar).type)
+            known.strings_ready = True
+        for i in range(len(known.strings)):  # small-loop(two NumPy string scalar identities)
+            native = native or cls is known.strings[i]
         if native:
             continue
-        if cls is not context["arena_native_types"]["tuple"]:
-            raise Error("TypeError: cache keys require native immutable values without Python equality or hash hooks")
-        for i in range(len(item)):  # driver-loop: tuple hashing must not dispatch to an application key
-            pending.append(item[i])
+        raise Error("TypeError: cache keys require native immutable values without Python equality or hash hooks")
 
 
 def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject,
@@ -155,6 +186,7 @@ def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject
             raise Error("TypeError: resident cache registry requires a native dictionary")
         var pairs = py_call(b["list"],py_call(caches.items))
         var result = Python.dict()
+        var key_types = HashKeyTypes(context)
         for i in range(len(pairs)):  # driver-loop: materialize current-thread counters in registry order
             var pair = pairs[i]
             var key = pair[0]
@@ -168,7 +200,7 @@ def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject
                 if count > 2:
                     raise Error("ValueError: too many values to unpack (expected 2)")
             var prefix = key[1]
-            _hash_key(prefix,context)
+            _hash_key(prefix,context,key_types)
             var uploads = _attribute(entry[0],"uploads",PythonObject(None),True,context)
             var hits = _attribute(entry[0],"hits",PythonObject(None),True,context)
             py_setitem(result,prefix,py_call(b["tuple"],Python.list(uploads,hits)))
