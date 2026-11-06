@@ -163,15 +163,34 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("mojolearn.SambaStack: inputs and targets must be native integer buffers")
     var packed = py_call(g[].arrays, fmt)
-    _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+    var item = Int(py=packed.itemsize)
     var out = generation_array([rows, columns], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-    _ = out  # keep the Python object alive through the native call above
     var column_major = own and String(value.order) == "F"
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
-    samba_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, columns, column_major, dst)
+    # A native-order C-contiguous export whose item size matches the packing
+    # array's is already the packed buffer tobytes + frombytes would build:
+    # widen from it in place while the export is held. Other layouts keep the
+    # packing copy.
+    var done = False
+    if Int(py=view.itemsize) == item and Bool(py=view.c_contiguous):
+        var buffer = List[Int](length=10, fill=0)
+        var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+        # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
+        if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, bp, Int32(0x38)) == 0:
+            if buffer[2] == rows * columns * item:
+                samba_ids_into(buffer[0], item, signed, rows, columns, column_major, dst)
+                done = True
+            cpython_table()[].PyBuffer_Release(bp)
+            _ = buffer^  # the Py_buffer words stay alive through the release above
+        else:
+            ref cpy = Python().cpython()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    if not done:
+        _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+        samba_ids_into(Int(py=packed.buffer_info()[0]), item, signed, rows, columns, column_major, dst)
+    _ = view  # the exporter stays alive through the reads above
     _ = out  # keep the Python object alive through the native call above
-    _ = packed  # keep the Python object alive through the native call above
     _ = packed^
     return out
 

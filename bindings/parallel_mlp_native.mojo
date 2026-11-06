@@ -16,6 +16,7 @@ from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
+from bindings.cpython_table import cpython_table
 from bindings.parallel_byte_native import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
 from bindings.native_transport import _transport_json
 from bindings.native_json import native_json_parse
@@ -208,11 +209,33 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("TypeError: SmallMLPTrainer targets must be a native integer array")
     var packed = py_call(g[].arrays, fmt)
-    _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+    var item = Int(py=packed.itemsize)
     var output = generation_array([rows], "i")
     var ids = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
-    mlp_targets_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, ids)
+    # A native-order C-contiguous export whose item size matches the packing
+    # array's is already the packed buffer tobytes + frombytes would build:
+    # widen from it in place while the export is held. Other layouts keep the
+    # packing copy.
+    var done = False
+    if Int(py=view.itemsize) == item and Bool(py=view.c_contiguous):
+        var buffer = List[Int](length=10, fill=0)
+        var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+        # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
+        if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, bp, Int32(0x38)) == 0:
+            if buffer[2] == rows * item:
+                mlp_targets_into(buffer[0], item, signed, rows, ids)
+                done = True
+            cpython_table()[].PyBuffer_Release(bp)
+            _ = buffer^  # the Py_buffer words stay alive through the release above
+        else:
+            ref cpy = Python().cpython()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    if not done:
+        _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+        mlp_targets_into(Int(py=packed.buffer_info()[0]), item, signed, rows, ids)
+    _ = view  # the exporter stays alive through the reads above
+    _ = output  # keep the Python object alive through the native call above
     _ = packed^
     return output
 
