@@ -49,7 +49,7 @@ the wrapper holds the caller's arrays for the length of the call.
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.device_plan import DevicePlan, device_plan_current
-from bindings.py_lists import py_list_int
+from bindings.py_lists import py_list_int, py_list_f64
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
 from std.os import abort
 from std.memory import bitcast
@@ -90,11 +90,103 @@ from checks.numerics import (
     identical_exp64,
 )
 from gbdt.resident_model import (
+    GBDT_MODEL_REGISTRY,
+    ResidentGbdtModel,
     gbdt_resident_info,
     gbdt_resident_predict,
-    gbdt_resident_prepare,
     gbdt_resident_release,
 )
+from std.ffi import _Global
+from std.atomic import Atomic, Ordering
+
+
+# Hazard B (p3-trees): GBDT_MODEL_REGISTRY is one process-wide Dict, and
+# gbdt_resident_predict holds an element of it while the GIL is released. A
+# prepare on another thread (Dict insert may rehash and move every entry) or
+# a release (pop) would move or destroy the entry under the running predict.
+# Every registry step of these bindings now takes this lock word (the
+# cluster/resident_centers.mojo pattern): prepare builds and uploads the
+# entry outside the lock and only inserts under it; predict holds the lock
+# for its whole call, so two threads never run predict_into (which mutates
+# the entry's workspace) on the same registry at once. The spin runs with the
+# GIL released, so a waiting thread never blocks the holder or other Python
+# threads.
+struct _GbdtRegistryLock(Movable):
+    var word: List[Int64]
+
+    def __init__(out self):
+        self.word = List[Int64](length=1, fill=Int64(0))
+
+
+comptime _GBDT_REGISTRY_LOCK = _Global[
+    StorageType=_GbdtRegistryLock,
+    name=(
+        "MojoGbdtResidentLockIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else
+        "MojoGbdtResidentLockFast"
+    ),
+    init_fn=_GbdtRegistryLock.__init__,
+]
+
+
+def _gbdt_lock_word() raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    var state = _GBDT_REGISTRY_LOCK.get_or_create_ptr()
+    return rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].word.unsafe_ptr())
+
+
+def _gbdt_lock(word: MutPointer[Int64, MutUntrackedOrigin]):
+    while True:  # driver-loop: spin on the GBDT registry lock word (GIL released)
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, Int64(1)):
+            return
+
+
+def _gbdt_unlock(word: MutPointer[Int64, MutUntrackedOrigin]):
+    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
+
+
+def _gbdt_locked_insert(var entry: ResidentGbdtModel) raises -> Int:
+    """`gbdt_resident_prepare`'s registry step, under the lock word."""
+    var word = _gbdt_lock_word()
+    with GILReleased(Python()):
+        _gbdt_lock(word)
+    try:
+        var state = GBDT_MODEL_REGISTRY.get_or_create_ptr()
+        if state[].next_id == 9223372036854775807:
+            raise Error("resident GBDT model handle space exhausted")
+        var handle = state[].next_id
+        state[].next_id += 1
+        state[].entries[handle] = entry^
+        _gbdt_unlock(word)
+        return handle
+    except error:
+        _gbdt_unlock(word)
+        raise error^
+
+
+def _gbdt_locked_predict(
+    handle: Int,
+    x: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    out_f32: MutPointer[Float32, MutUntrackedOrigin],
+    out_f64: MutPointer[Float64, MutUntrackedOrigin],
+    out_i64: MutPointer[Int64, MutUntrackedOrigin],
+    mode: Int,
+    row_major: Bool,
+) raises -> Int:
+    """`gbdt_resident_predict` under the lock word. Called with the GIL
+    released."""
+    var word = _gbdt_lock_word()
+    _gbdt_lock(word)
+    try:
+        var width = gbdt_resident_predict(handle, x, n_rows, out_f32, out_f64, out_i64, mode, row_major)
+        _gbdt_unlock(word)
+        return width
+    except error:
+        _gbdt_unlock(word)
+        raise error^
 
 
 def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
@@ -526,12 +618,10 @@ def _gbdt_fit_impl(
         )
         ctx.synchronize()
 
-    var learn = Python.list()
-    for i in range(len(result.learn_losses)):  # small-loop(learn_losses: one loss per boosting iteration): result glue to Python, no compute
-        learn.append(PythonObject(result.learn_losses[i]))
-    var test = Python.list()
-    for i in range(len(result.test_losses)):  # small-loop(test_losses: one loss per boosting iteration): result glue to Python, no compute
-        test.append(PythonObject(result.test_losses[i]))
+    # One PyList_New per curve filled slot by slot (bindings/py_lists.mojo),
+    # not one bound append per boosting iteration (p3-trees).
+    var learn = py_list_f64(result.learn_losses)
+    var test = py_list_f64(result.test_losses)
 
     var out = Python.list()
     out.append(PythonObject(result.text))
@@ -680,24 +770,46 @@ def gbdt_resident_prepare_binding(model: PythonObject) raises -> PythonObject:
     The wrapper keeps the handle on the instance beside the sha256 of the
     text it was prepared from, releases it on refit and never pickles it.
     The GIL is held around the registry and released for the parse and
-    the uploads, as `gbdt_predict` releases it for its work."""
+    the uploads, as `gbdt_predict` releases it for its work. Every
+    registry step takes the registry lock word (see `_GbdtRegistryLock`)."""
     var text = String(py=model)
-    var handle: Int
+    # Parse, pack and upload with the GIL released and outside the registry
+    # lock; only the insert is locked (hazard B note above).
+    var entry: ResidentGbdtModel
     with GILReleased(Python()):
-        handle = gbdt_resident_prepare(text)
-    return PythonObject(handle)
+        entry = ResidentGbdtModel(text)
+    return PythonObject(_gbdt_locked_insert(entry^))
 
 
 def gbdt_resident_release_binding(handle: PythonObject) raises -> PythonObject:
     """Drop a prepared model. A released or unknown handle raises."""
-    gbdt_resident_release(Int(py=handle))
+    var h = Int(py=handle)
+    var word = _gbdt_lock_word()
+    with GILReleased(Python()):
+        _gbdt_lock(word)
+    try:
+        gbdt_resident_release(h)
+    except error:
+        _gbdt_unlock(word)
+        raise error^
+    _gbdt_unlock(word)
     return PythonObject(None)
 
 
 def gbdt_resident_info_binding(handle: PythonObject) raises -> PythonObject:
     """`[approx_dim, n_input_features, workspace_rows, oblivious, n_trees]`
     of a live handle."""
-    var info = gbdt_resident_info(Int(py=handle))
+    var h = Int(py=handle)
+    var word = _gbdt_lock_word()
+    with GILReleased(Python()):
+        _gbdt_lock(word)
+    var info: List[Int]
+    try:
+        info = gbdt_resident_info(h)
+    except error:
+        _gbdt_unlock(word)
+        raise error^
+    _gbdt_unlock(word)
     return py_list_int(info)
 
 
@@ -739,7 +851,7 @@ def gbdt_resident_predict_binding(
     var op64i = _i64_ptr(addr)
     var width: Int
     with GILReleased(Python()):
-        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, op64i, mode, row_major)
+        width = _gbdt_locked_predict(h, xp, n_rows, op32, op64, op64i, mode, row_major)
     return PythonObject(width)
 
 
@@ -762,7 +874,7 @@ def gbdt_resident_binary_classes_binding(
     var op64i = _i64_ptr(out_address)
     var width: Int
     with GILReleased(Python()):
-        width = gbdt_resident_predict(
+        width = _gbdt_locked_predict(
             h, xp, n_rows, op32, op64, op64i, 4, row_major
         )
     if width != 1:

@@ -151,8 +151,17 @@ def trees_stage_rounds(member: PythonObject, x_addr: Int, rows: Int, cols: Int,
 def trees_unstage(staged: PythonObject):
     """End the staging `trees_stage_members` began (quiet: a binary torn
     down at interpreter exit has nothing left staged)."""
+    # Each binary is unstaged in its own try: one failed unstage must never
+    # skip the next binary's, which would leave its staged mark (keyed on the
+    # host address and count only) set for a later call over other bytes at
+    # the same address (hazard, p3-trees row 954).
+    var n = 0
     try:
-        for i in range(len(staged)):  # small-loop(staged): at most the two forest binaries per mode
-            _ = py_call(staged[i])
+        n = len(staged)
     except:
-        pass
+        return
+    for i in range(n):  # small-loop(staged): at most the two forest binaries per mode
+        try:
+            _ = py_call(staged[i])
+        except:
+            pass

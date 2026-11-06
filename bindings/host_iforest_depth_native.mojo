@@ -22,14 +22,37 @@ def _depth_dtype(value: PythonObject, context: PythonObject) raises -> PythonObj
     var array = cls is context["ndarray"]
     if array and Int(py=value.size) != 1:
         raise Error("TypeError: scalar model state requires a scalar or zero-dimensional numeric array")
-    var constructor = native_numpy_dtype(context)
-    for code in ["?","b","B","h","H","i","I","l","L","q","Q","e","f","d","g","F","D","G"]:  # driver-loop: exact primitive native scalar identities, including distinct aliases
-        var dtype = py_call(constructor,code)
-        if array and py_type(value.dtype) is py_type(dtype):
+    var held = _depth_dtypes(context)
+    var dtypes = held[1]
+    var types = held[2]
+    var value_dtype_type = py_type(value.dtype) if array else PythonObject(None)
+    for i in range(len(dtypes)):  # driver-loop: exact primitive native scalar identities, including distinct aliases
+        var dtype = dtypes[i]
+        if array and value_dtype_type is py_type(dtype):
             return value.dtype
-        if cls is dtype.type:
+        if cls is types[i]:
             return dtype
     return PythonObject(None)
+
+
+def _depth_dtypes(context: PythonObject) raises -> PythonObject:
+    """`(dtype constructor, the 18 primitive dtypes, their scalar types)`,
+    built once per connected NumPy dtype constructor and kept in the context
+    (p3-trees: up to 18 np.dtype() calls ran 4-5 times per fit). NumPy
+    dtype objects of these primitive codes are immutable singletons."""
+    var constructor = native_numpy_dtype(context)
+    var held = py_get(context, "_host_depth_dtypes")
+    if held is not None and held[0] is constructor:
+        return held
+    var dtypes = Python.list()
+    var types = Python.list()
+    for code in ["?","b","B","h","H","i","I","l","L","q","Q","e","f","d","g","F","D","G"]:  # driver-loop: exact primitive native scalar identities, including distinct aliases
+        var dtype = py_call(constructor, code)
+        _ = py_call(dtypes.append, dtype)
+        _ = py_call(types.append, dtype.type)
+    var record = Python.tuple(constructor, dtypes, types)
+    py_setitem(context, "_host_depth_dtypes", record)
+    return record
 
 
 def _depth_builtin_admit(value: PythonObject, context: PythonObject) raises:

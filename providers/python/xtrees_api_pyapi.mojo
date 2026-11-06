@@ -503,10 +503,10 @@ def gradients_binding(
     if kind == 2:
         _need(params, 3, "x_trees_gradients")
         k = _i(params, 2)
-    elif len(params) != 2:
-        raise Error("x_trees_gradients: only multiclass takes k")
         if k < 2:
             raise Error("x_trees_gradients: multiclass needs k >= 2")
+    elif len(params) != 2:
+        raise Error("x_trees_gradients: only multiclass takes k")
     if n > 0:
         comptime if XTREES_DEVICE_OPS:
             boost_dev.gradients_device(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)),

@@ -8,7 +8,7 @@ from bindings.py_attr import py_attr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields, _mode
 from bindings.native_instance_item import native_instance_item
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
@@ -20,6 +20,13 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 comptime _I32 = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _U8 = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+def _tree_mode(value: PythonObject) raises -> String:
+    # mode_metadata_native._mode now takes the operation's NativeModules view;
+    # these explainer doors resolve one mode string per call, so one view here.
+    var mods = NativeModules()
+    return _mode(mods, value)
 
 
 def _get(fields: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
@@ -255,9 +262,20 @@ struct TreeShapOwner(Movable, Writable):
                 pass
 
 
+def _is_owner(value: PythonObject) -> Bool:
+    """`type(value)` is the bound TreeShapOwner type. The binding's own type
+    check (downcast_value_ptr compares the registered type object) replaces
+    allocating a throwaway owner on every call only to read its type
+    (p3-trees)."""
+    try:
+        _ = value.downcast_value_ptr[TreeShapOwner]()
+        return True
+    except:
+        return False
+
+
 def _admit_owner(owner: PythonObject) raises:
-    var prototype = PythonObject(alloc=TreeShapOwner(PythonObject(None), PythonObject(None), 0))
-    if py_type(owner) is not py_type(prototype):
+    if not _is_owner(owner):
         raise Error("TypeError: TreeExplainer requires its native cache owner")
     if py_contains(_class_fields(py_type(owner)), "__del__"):
         raise Error("TypeError: TreeExplainer refuses injected Python finalizers")
@@ -285,8 +303,7 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
             kept = kept or value is changes[names[i]]
         if kept:
             continue
-        var prototype = PythonObject(alloc=TreeShapOwner(PythonObject(None), PythonObject(None), 0))
-        if py_type(value) is py_type(prototype):
+        if _is_owner(value):
             native_release_weakrefs(value, context)
             _admit_owner(value)
             var previous_owner = value.downcast_value_ptr[TreeShapOwner]()
@@ -337,9 +354,9 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
     var snapshots = Python.dict()
     var state = _capture(model, context, captures)
     var requested = args[4] if args[4] is not None else _get(state, "numeric_mode")
-    var mode = _mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
+    var mode = _tree_mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
     var captured_mode = _get(state, "_fit_numeric_mode")
-    if captured_mode is not None and _mode(captured_mode) != mode:
+    if captured_mode is not None and _tree_mode(captured_mode) != mode:
         raise Error("ValueError: TreeExplainer numeric_mode differs from the fitted model")
     var table = trees_table(context, mode, "_mojolearn_x_trees")
     var bg = _snapshot(data, "<f4", 2, "data", context, snapshots)
@@ -440,7 +457,7 @@ def trees_explainer_operation(model: PythonObject, operation: String, args: Pyth
         raise Error("RuntimeError: this TreeExplainer has been closed")
     var state = held[].state
     var requested = _get(fields, "numeric_mode")
-    if requested is not None and _mode(requested) != String(state[8]):
+    if requested is not None and _tree_mode(requested) != String(state[8]):
         raise Error("ValueError: TreeExplainer numeric_mode changed after preparation")
     var snapshots = Python.dict()
     var x = _snapshot(args[0], "<f4", 2, "X", context, snapshots)

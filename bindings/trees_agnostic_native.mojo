@@ -9,7 +9,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.mode_metadata_native import _fields, _class_fields, _mode
+from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_check_layout
 from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_has, prep_estimator_call
@@ -17,7 +17,7 @@ from bindings.trees_public_inputs import trees_table, trees_call, trees_view, tr
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_public_forest import forest_effective_mode, _engine, _ordered_export, _resident, _family
 from bindings.trees_public_boost import _seed
-from bindings.trees_explainer_native import _get, _int, _entry, _snapshot, _replace
+from bindings.trees_explainer_native import _get, _int, _entry, _snapshot, _replace, _tree_mode
 
 comptime _I64 = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
@@ -221,7 +221,7 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     var model_fields = _fields(model)
     if requested is None:
         requested = _get(model_fields, "numeric_mode")
-    var mode = _mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
+    var mode = _tree_mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
     var table = trees_table(context, mode, "_mojolearn_x_trees")
     var method = _method(model, context)
     var bg = _snapshot(data, "<f4", 2, "data", context, Python.dict())
@@ -289,7 +289,7 @@ def _state(fields: PythonObject, name: String, context: PythonObject) raises -> 
     if bg is None or method is None:
         raise Error("RuntimeError: " + name + " has not been initialized by the native owner")
     var requested = _get(fields, "numeric_mode")
-    var mode = _mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
+    var mode = _tree_mode(requested if requested is not None else context["backend_fields"]["_DEFAULT_MODE"])
     var table = trees_table(context, mode, "_mojolearn_x_trees")
     var model = _get(fields, "model")
     prep_estimator_admit(model, name, context)

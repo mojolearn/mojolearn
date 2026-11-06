@@ -580,21 +580,19 @@ def _accuracy_encoded(true: ScoreLabels, pred: ScoreLabels, sample_weight: Pytho
     if weighted:
         w_array = w.value().keep if py_type(w.value().keep) is context["array_class"] else _owned_f32(w.value(), context)
         W = prog.put(w_array, n)
-    var g0 = prog.group(matched, n, L, W)
-    var g1 = prog.group(a, n, L, W)
-    var g2 = prog.group(bb, n, L, W)
-    if weighted:
-        # every row in group 0: the total weight grouping
-        var zero = prog.scratch(n)
-        prog.stage(_OP_PAIR_KEY, n, [a, a, zero, 1, 2])
-        _ = prog.group(zero, n, 1, W)
+    # The COUNT epilogue (x_metrics/cm_epi.mojo `_count`) reads only the
+    # matched grouping's counts when unweighted, and only the folded wsum
+    # slot when weighted (TP is not read). The y_true and y_pred groupings,
+    # their counts and the weighted total grouping were queued and never
+    # read: two to four O(n) device sorts per score (p3-trees). Only the
+    # grouping the epilogue reads is queued; the result is the same.
+    var tp = matched
     if not weighted:
+        var g0 = prog.group(matched, n, L, W)
         _ = prog.counts(g0[0], L)
-        _ = prog.counts(g1[0], L)
-        _ = prog.counts(g2[0], L)
+        tp = g0[0]
     # `_cm_stage(prog, groups, w, n, L, _CM_COUNT, 11)`.
     var out = prog.alloc(11)
-    var tp = g0[1] if weighted else g0[0]
     var tot = n
     if weighted:
         # `_wsum_sf64(prog, L)`: the soft binary64 hit and weight total.

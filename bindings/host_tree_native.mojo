@@ -2,6 +2,10 @@
 # Whole-operation CPU tree inference: native input admission, saved-state
 # validation, buffer ownership, kernel calls and completed output publication.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import NativeModules
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_value, trees_key_same
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
@@ -66,6 +70,9 @@ def host_tree_array(fields: PythonObject, name: String, dtype: String, context: 
     return value
 
 
+comptime _HOST_TREE_FIELDS_SLOT = "host_tree_fields_v1"
+
+
 def host_tree_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
     host_archive_check_layout(py_type(model), context)
     var b = native_loaded_module("builtins")
@@ -77,12 +84,36 @@ def host_tree_fields(model: PythonObject, context: PythonObject) raises -> Pytho
         raise Error("TypeError: this operation requires a connected CPU tree model")
     var fields = sequential_fields(model)
     var keys = py_call(b.list, fields.keys())
+    # p3-trees: the stored values are admitted once per stored state. The
+    # identities an admission reads (exact scalars, exact containers item by
+    # item) are recorded in the native side table; while they match, only
+    # values whose admission depends on more than identity (Arrays,
+    # ndarrays, other objects: the residual) are admitted again. Any
+    # assignment, added or removed field or exact-container edit changes the
+    # key and the full admission runs in its original order.
+    var mods = NativeModules()
+    var record = Python.list()
+    var residual = Python.list()
+    var recordable = True
     for i in range(len(keys)):  # driver-loop: stored native tree state names
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: tree state names must be native strings")
         var key = String(keys[i])
-        if key != "_binding" and key != "_groves":
-            classical_admit_value(fields[key], context)
+        _ = py_call(record.append, keys[i])
+        if key != "_binding" and key != "_groves" and recordable:
+            if not trees_key_value(mods, record, residual, fields[key], 0):
+                recordable = False
+    var held = trees_side_get(_HOST_TREE_FIELDS_SLOT, model) if recordable else PythonObject(None)
+    if held is not None and trees_key_same(held, record):
+        for i in range(len(residual)):  # driver-loop: stored values admitted by more than identity
+            classical_admit_value(residual[i][0], context, Int(py=residual[i][1]))
+    else:
+        for i in range(len(keys)):  # driver-loop: stored native tree state names
+            var key = String(keys[i])
+            if key != "_binding" and key != "_groves":
+                classical_admit_value(fields[key], context)
+        if recordable:
+            _ = trees_side_put(_HOST_TREE_FIELDS_SLOT, model, record)
     if fields["_binding"] is not context["host_archive_forest_binding"]:
         raise Error("TypeError: tree state must retain its connected CPU binding")
     return fields
@@ -207,9 +238,26 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
             host_label_gather_f64(indices, words_f, Int(py=classical_address(out)))
         _ = out  # keep the Python object alive through the native gather above
         return out
-    var out = Python.list()
+    # p3-trees: the k saved class objects are read once and the n output
+    # slots filled in one PyList_New(n) (PyList_SetItem with a new
+    # reference), not one Python index and one bound append per row.
+    var k = len(classes)
+    var labels = List[PythonObject]()
+    for c in range(k):  # driver-loop: over the saved class labels (model structure)
+        labels.append(classes[c])
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(rows)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var out = PythonObject(from_owned=raw)
+    var table = cpython_table()
     for i in range(rows):  # driver-loop: publish completed native string/bool/large-integer labels
-        _ = py_call(out.append, classes[indices[i]])
+        var code = indices[i]
+        if code < 0 or code >= k:
+            raise Error("IndexError: list index out of range")
+        if table[].PyList_SetItem(out._obj_ptr, i, cpy.Py_NewRef(labels[code]._obj_ptr)) != 0:
+            raise cpy.unsafe_get_error()
+    _ = labels^
     return out
 
 
@@ -406,7 +454,12 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     # NumPy string/byte labels also expose native scalar slots. Connect their
     # exact loaded types without a Python setup callback or ndarray iteration.
     var numpy = py_get(context["modules"], "numpy")
-    if numpy is not None and py_type(numpy) is context["native_module_type"]:
+    # p3-trees: once connected, the scalar type tuple this wrote is recorded
+    # in the context; while context["scalar_types"] is still that tuple, the
+    # list copy, the two np.dtype() calls and the context write are skipped.
+    var connected = py_get(context, "_host_tree_scalar_types")
+    if numpy is not None and py_type(numpy) is context["native_module_type"] and not (
+            connected is not None and connected is context["scalar_types"]):
         var scalars = py_call(native_loaded_module("builtins").list, context["scalar_types"])
         var dtype_class = native_numpy_dtype(context)
         var codes = Python.tuple("U", "S")
@@ -414,7 +467,9 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
             var cls = py_call(dtype_class, codes[i]).type
             if not _one_of(cls, context["scalar_types"]):
                 _ = py_call(scalars.append, cls)
-        py_setitem(context, "scalar_types", py_call(native_loaded_module("builtins").tuple, scalars))
+        var connected_types = py_call(native_loaded_module("builtins").tuple, scalars)
+        py_setitem(context, "scalar_types", connected_types)
+        py_setitem(context, "_host_tree_scalar_types", connected_types)
     classical_admit_value(args, context)
     if operation == "host_tree_init_forest":
         host_tree_initialize_forest(model, args, context)

@@ -412,19 +412,38 @@ def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
     return py_call_typed(b.list, value)
 
 
-def _id_word(addr: Int, typestr: String, i: Int) -> Int:
-    """Element `i` of a contiguous little-endian integer id vector."""
+def _id_code(typestr: String) -> Int:
+    """The id vector's element kind as one word, chosen once per vector."""
     if typestr == "<i8":
-        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+        return 0
     if typestr == "<i4":
-        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+        return 1
     if typestr == "<u4":
-        return Int(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+        return 2
     if typestr == "<i2":
-        return Int(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+        return 3
     if typestr == "<u2":
-        return Int(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+        return 4
     if typestr == "|i1" or typestr == "<i1":
+        return 5
+    return 6
+
+
+@always_inline
+def _id_word_coded(addr: Int, code: Int, i: Int) -> Int:
+    """`_id_word` with the element kind decided once by `_id_code` (p3-trees:
+    up to seven String comparisons ran for every element)."""
+    if code == 0:
+        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if code == 1:
+        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if code == 2:
+        return Int(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if code == 3:
+        return Int(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if code == 4:
+        return Int(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+    if code == 5:
         return Int(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
     return Int(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
 
@@ -458,8 +477,9 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
     var sizes = List[Int]()
     var seen = Dict[Int, Int]()
     var last = 0
+    var code = _id_code(t)
     for i in range(n):  # cpu-route: group_id run lengths read natively from the id buffer (fit input step)
-        var value = _id_word(view.addr, t, i)
+        var value = _id_word_coded(view.addr, code, i)
         if i > 0 and value == last:
             sizes[len(sizes) - 1] += 1
             continue

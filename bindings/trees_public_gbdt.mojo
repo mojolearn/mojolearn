@@ -18,6 +18,7 @@
 # binary fallback keeps the raw scores in the call and widens them for
 # `gbdt_sigmoid_pair` without a Python `astype`; the adapters' margins go
 # from the predict entry to the binary output kernel without a Python step.
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native import _resolved
@@ -57,6 +58,12 @@ def gbdt_mode(fields: PythonObject, context: PythonObject) raises -> String:
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(mode) is b.str:
+        # Already clean (the usual case): no isinstance/strip/lower calls
+        # (p3-trees).
+        var exact = String(py=mode)
+        if exact == "fast" or exact == "identical":
+            return exact
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
     var clean = String(py_call(py_call(mode.strip).lower))
@@ -69,12 +76,38 @@ def gbdt_table(fields: PythonObject, context: PythonObject) raises -> PythonObje
     return trees_table(context, gbdt_mode(fields, context), "_mojolearn_gbdt")
 
 
+struct _GbdtBinaryFacts(Movable):
+    """Compile-time answers of a loaded GBDT binary (its vendor and numeric
+    mode), keyed on the address of the compiled entry that gives them. The
+    entries are bound functions a connected binding table holds for the
+    life of the process (an extension module is never unloaded), so the
+    address names one binary. p3-trees: every predict called the compiled
+    entry (and str()) again for the same constant."""
+    var vendor: Dict[Int, String]
+    var mode: Dict[Int, String]
+
+    def __init__(out self):
+        self.vendor = Dict[Int, String]()
+        self.mode = Dict[Int, String]()
+
+
+comptime _GBDT_BINARY_FACTS = _Global[
+    StorageType=_GbdtBinaryFacts, name="MojoTreesGbdtBinaryFacts", init_fn=_GbdtBinaryFacts.__init__,
+]
+
+
 def gbdt_vendor(table: PythonObject) raises -> String:
     """`ensemble._binding_vendor`: the binding's vendor answer, or ''."""
     var entry = trees_entry(table, "gbdt_vendor")
     if entry is None:
         return ""
-    return String(py_call(trees_builtins().str, py_call_typed(entry)))
+    var key = Int(entry._obj_ptr)
+    var facts = _GBDT_BINARY_FACTS.get_or_create_ptr()
+    if key in facts[].vendor:
+        return facts[].vendor[key]
+    var answer = String(py_call(trees_builtins().str, py_call_typed(entry)))
+    facts[].vendor[key] = answer
+    return answer
 
 
 def gbdt_has_ctr(text: PythonObject) raises -> Bool:
@@ -312,10 +345,17 @@ def _numeric_mode_used(table: PythonObject) raises -> String:
     var getter = trees_entry(table, "gbdt_numeric_mode")
     if getter is None:
         raise Error("RuntimeError: mojolearn: _mojolearn_gbdt has no gbdt_numeric_mode")
+    # The binary's compiled mode, asked once per binary (see _GbdtBinaryFacts).
+    var key = Int(getter._obj_ptr)
+    var facts = _GBDT_BINARY_FACTS.get_or_create_ptr()
+    if key in facts[].mode:
+        return facts[].mode[key]
     var code = _int(py_call_typed(getter))
     if code == 0:
+        facts[].mode[key] = "fast"
         return "fast"
     if code == 1:
+        facts[].mode[key] = "identical"
         return "identical"
     raise Error("RuntimeError: mojolearn: _mojolearn_gbdt returned unknown numeric mode " + String(code))
 

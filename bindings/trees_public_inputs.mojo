@@ -14,7 +14,7 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points connected at import (python/mojolearn/_native_trees_bridge.py)
 # and C builtins.
-from std.ffi import _Global
+from std.ffi import _Global, c_int
 from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
@@ -24,6 +24,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
+from bindings.cpython_table import cpython_table
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
@@ -107,7 +108,9 @@ def trees_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     arguments, keeping the class of a refusal the entry raises."""
     ref cpy = Python().cpython()
     var envelope = py_call(trees_builtins().tuple, args)
-    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallObject")(entry._obj_ptr, envelope._obj_ptr)
+    # The interpreter's own PyObject_Call entry (no by-name symbol lookup per
+    # call, p3-trees); the same call as PyObject_CallObject with a tuple.
+    var result = cpy.PyObject_Call(entry._obj_ptr, envelope._obj_ptr, PyObjectPtr())
     if not result:
         raise typed_python_error()
     return PythonObject(from_owned=result)
@@ -139,9 +142,12 @@ def trees_empty(shape: PythonObject, typestr: String, context: PythonObject, ord
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
-    var width = trees_itemsize(typestr)
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)),
-                        py_call(context["native_bytes_type"], count * width))
+    # One zero-filled store: `array(code, [0]) * count` (p3-trees: a
+    # zero-filled bytes object of the full size was allocated first and then
+    # copied into the array, two allocations and two passes).
+    _ = trees_itemsize(typestr)  # refuses a non-Array dtype as before
+    var seed = py_call(context["array_type"], PythonObject(_store_code(typestr)), Python.list(PythonObject(0)))
+    var store = py_call(py_attr(seed, "__mul__"), PythonObject(count))
     return classical_wrap_array(store, shape, typestr, order, context)
 
 
@@ -262,10 +268,12 @@ def _any_contiguous_address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var storage = List[Int](length=10, fill=0)
     var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x9C)) != 0:
+    # The process-wide C-API table (no by-name symbol lookup per call).
+    var table = cpython_table()
+    if table[].PyObject_GetBuffer(value._obj_ptr, pointer, c_int(0x9C)) != 0:
         raise cpy.unsafe_get_error()
     var address = storage[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    table[].PyBuffer_Release(pointer)
     _ = storage^
     return address
 
@@ -1040,25 +1048,34 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
             _ = out  # keep the Python object alive through the native call above
             _ = wide_codes  # keep the Python object alive through the native call above
             return out
-    var values = Python.list()
     var p = _I64P(unsafe_from_address=trees_address(wide_codes))
     _ = wide_codes  # keep the Python object alive through the native call above
-    # The k class objects and the list's `append` read once (lane
-    # perf-sweep-trees, 2026-11-05: an attribute lookup and a Python index
-    # per row before). A code indexes as the Python list did: a negative code
-    # counts from the end, any other out-of-range code is refused.
+    # The k class objects read once (lane perf-sweep-trees, 2026-11-05). A
+    # code indexes as the Python list did: a negative code counts from the
+    # end, any other out-of-range code is refused. p3-trees: the output is
+    # one PyList_New(n) filled slot by slot (PyList_SetItem with a new
+    # reference), not one bound `append` call per row.
     var labels = List[PythonObject]()
     for c in range(k):  # driver-loop: over the k class objects
         labels.append(classes[c])
-    var append = values.append
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # Owns the NULL-filled list: a refusal below releases the filled slots.
+    var values = PythonObject(from_owned=raw)
+    var table = cpython_table()
     for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
         var code = Int(p[i])
         if code < 0:
             code += k
         if code < 0 or code >= k:
             raise Error("IndexError: list index out of range")
-        _ = py_call(append, labels[code])
+        # SetItem steals the new reference on success and failure alike.
+        if table[].PyList_SetItem(values._obj_ptr, i, cpy.Py_NewRef(labels[code]._obj_ptr)) != 0:
+            raise cpy.unsafe_get_error()
     _ = wide_codes  # keep the Python object alive through the reads above
+    _ = labels^
     return values
 
 
