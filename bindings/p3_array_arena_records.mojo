@@ -44,6 +44,7 @@ comptime P3_CACHE_KEY_LAYOUT = 6      # arena_cache_get.arena_cache_key model cl
 comptime P3_FROM_BUFFER_LAYOUT = 7    # array_from_buffer_native class slots
 comptime P3_ARRAY_DOOR_LAYOUT = 8     # array_native._admit
 comptime P3_STATS_LAYOUT = 9          # arena_cache_stats class walks
+comptime P3_ROWS_EXACT_LAYOUT = 10    # x_prep_native_inputs._rows_fields (exact DeviceRows class)
 
 
 struct P3LayoutRecords(Defaultable, Movable):
