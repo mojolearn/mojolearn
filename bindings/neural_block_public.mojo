@@ -819,11 +819,14 @@ def neural_training_entries(mut mods: NativeModules, fields: PythonObject, conte
     neural_plain_value(mods, mode, 0, context)
     if mode is None:
         mode = _neural_default_mode(mods, context)
-    else:
+    elif String(py=mode) != "identical" and String(py=mode) != "fast":
+        # Stored modes are already normalized; only another spelling pays
+        # the two Python string calls (lane p3-neural-blocks).
         mode = mode.strip().lower()
-    if String(mode) != "identical" and String(mode) != "fast":
+    var mode_text = String(py=mode)
+    if mode_text != "identical" and mode_text != "fast":
         raise Error("NotImplementedError: neural backward requires identical or fast mode")
-    var key = fields["_native_route"] + PythonObject(":") + mode
+    var key = PythonObject(String(py=fields["_native_route"]) + ":" + mode_text)
     var selected = py_get(context["training_bindings"], key)
     if selected is None:
         raise Error("NotImplementedError: native training bindings unavailable for " + String(key))
@@ -835,24 +838,36 @@ def neural_training_entries(mut mods: NativeModules, fields: PythonObject, conte
     # module object: ask them once per binding object (weakref-guarded
     # prepared slot, keyed by the entries object and the family), not on
     # every forward/backward/step of every block.
+    # The transformer arithmetic profile and its changed flag are answers of
+    # the compiled module too: they join the cached verdict (lane
+    # p3-neural-blocks; they were two binding crossings per step).
     var vendor: String
     var code: Int
+    var profile = PythonObject(None)
+    var profile_changed = PythonObject(None)
     var verdict = PythonObject(None)
     try:
         verdict = prepared_get(mods, String(_NEURAL_TRAINING_VERDICT_SLOT) + String(family), entries)
     except:
         verdict = PythonObject(None)
-    if verdict is not None:
+    if verdict is not None and len(verdict) == 4:
         vendor = String(py=verdict[0])
         code = Int(py=verdict[1])
+        profile = verdict[2]
+        profile_changed = verdict[3]
     else:
         vendor = String(_native_function(mods, entries, family + "_vendor")())
         mods.released()
         code = Int(py=_native_function(mods, entries, family + "_numeric_mode")())
         mods.released()
+        if family == "transformer" and _native_has_entry(mods, entries, "transformer_arithmetic_profile"):
+            profile = _native_function(mods, entries, "transformer_arithmetic_profile")()
+            mods.released()
+            profile_changed = PythonObject(Bool(py=_native_function(mods, entries, "transformer_arithmetic_profile_changed")()))
+            mods.released()
         try:
             prepared_put(mods, String(_NEURAL_TRAINING_VERDICT_SLOT) + String(family), entries,
-                         Python.tuple(PythonObject(vendor), PythonObject(code)))
+                         Python.tuple(PythonObject(vendor), PythonObject(code), profile, profile_changed))
         except:
             # An entries object without weak references keeps the per-call
             # queries; the verdict is never cached for it.
@@ -864,16 +879,13 @@ def neural_training_entries(mut mods: NativeModules, fields: PythonObject, conte
             raise Error("RuntimeError: CPU backward requires native CPU kernels")
     elif vendor != "metal" and vendor != "cuda" and vendor != "hip":
         raise Error("RuntimeError: GPU backward requires native GPU kernels")
-    if family == "transformer" and _native_has_entry(mods, entries, "transformer_arithmetic_profile"):
-        var profile = _native_function(mods, entries, "transformer_arithmetic_profile")()
-        mods.released()
+    if family == "transformer" and profile_changed is not None:
         var saved = py_get(fields, "_arithmetic_profile")
         if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == mode) and not Bool(py=saved == profile):
             raise Error("RuntimeError: saved transformer arithmetic profile differs from training binding")
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
-        py_setitem(fields, "_arithmetic_profile_changed", PythonObject(Bool(py=_native_function(mods, entries, "transformer_arithmetic_profile_changed")())))
-        mods.released()
+        py_setitem(fields, "_arithmetic_profile_changed", profile_changed)
     if family == "transformer":
         var native = PythonObject(None)
         if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
