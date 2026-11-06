@@ -107,6 +107,14 @@ def byte_state_admit(mut mods: NativeModules, trainer: PythonObject, state: Pyth
                 var name = PythonObject(steps[i])
                 if py_contains(state, name):
                     _ = py_call(values.append, state[name])
+            # The small scalar dictionaries are read as plain values on every
+            # step (_native_plan converts the optimizer scalars), so they are
+            # re-admitted on every call: an in-place element replacement at an
+            # unchanged size must not reach the optimizer unadmitted.
+            for small in [String("config"), String("model_shape")]:  # small-loop(the two scalar dictionaries)
+                var name = PythonObject(small)
+                if py_contains(state, name):
+                    _ = py_call(values.append, state[name])
             classical_admit_value(values, context)
             return
     classical_admit_value(state, context)
