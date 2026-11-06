@@ -45,8 +45,10 @@ def connect_warnings():
         raise TypeError("warning constructors must be native")
     if any(type(entry) is not WrapperDescriptorType for entry in warning_init):  # glue: native initializer identity admission at import
         raise TypeError("warning initializers must be native")
-    guarded = next(code for code in _mode._guard_cpu_training.__code__.co_consts if type(code) is CodeType and code.co_name == "guarded")  # glue: retain the established warning location from the legacy wrapper code
-    location_line = max(line for _, _, line in guarded.co_lines() if line is not None)  # glue: native warning location is the wrapper's final call line
+    # glue: the warning location stays in _mode.py. _guard_cpu_training returns the method unchanged since
+    # 2026-11-06 (no per-fit wrapper), so the anchor is that function's own final line, not a nested wrapper's.
+    guarded = _mode._guard_cpu_training.__code__
+    location_line = max(line for _, _, line in guarded.co_lines() if line is not None)  # glue: native warning location is the guard's final line
     context = module_fields.get("_Context")
     global_context = module_fields.get("_global_context")
     context_descriptor = None if context is None else vars(context).get("__dict__")
