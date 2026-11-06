@@ -180,7 +180,7 @@ def prepared_put(mut mods: NativeModules, slot: String, owner: PythonObject, rec
     var callback = PythonObject(from_owned=raw_callback)
     var raw_weak = table[].PyWeakref_NewRef(owner._obj_ptr, callback._obj_ptr)
     if not raw_weak:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return
     var weak = PythonObject(from_owned=raw_weak)
     var address = Int(owner._obj_ptr)

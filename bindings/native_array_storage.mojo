@@ -31,7 +31,7 @@ def _storage_type(metadata: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var owner = cpy.lib.get_function[PyObjectPtr]("PyType_GetModule")(cls._obj_ptr)
     if not owner:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         raise Error("TypeError: native array storage requires its extension type")
     if owner != module._obj_ptr:
         raise Error("TypeError: native array storage type has a different extension owner")

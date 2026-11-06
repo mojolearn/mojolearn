@@ -72,7 +72,7 @@ def sequence_string_missing(dtype: PythonObject, context: PythonObject) raises -
     if result:
         return PythonObject(from_owned=result)
     if cpy.lib.get_function[c_int]("PyErr_ExceptionMatches")(context["sequence_attribute_error"]._obj_ptr) != 0:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return PythonObject(None)
     raise cpy.unsafe_get_error()
 

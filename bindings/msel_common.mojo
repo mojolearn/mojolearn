@@ -70,7 +70,7 @@ def msel_try(callable: PythonObject, args: PythonObject, classes: PythonObject,
     if result:
         return PythonObject(from_owned=result)
     if cpython_table()[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return context["family_msel_miss"]
     var failure = stash_python_error()
     raise failure^
@@ -113,7 +113,7 @@ def msel_catch(error: Error, classes: PythonObject) raises -> Bool:
         _ = _restore_python_error()
         ref cpy = Python().cpython()
         if cpython_table()[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
             return True
         _ = stash_python_error()
         return False

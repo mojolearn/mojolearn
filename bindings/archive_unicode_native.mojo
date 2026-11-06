@@ -164,7 +164,7 @@ def archive_literal(raw: PythonObject, context: PythonObject) raises -> PythonOb
             if not result:
                 var key_error = context["archive_unicode_key_error"]
                 if cpython_table()[].PyErr_ExceptionMatches(key_error._obj_ptr) != 0:
-                    cpy.PyErr_Clear()
+                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
                     _archive_unicode_failure(raw, "unicodeescape", start, i, "unknown Unicode character name", context)
                 var failure = stash_python_error()
                 raise failure^

@@ -45,7 +45,7 @@ def family_raw_get_or(model: PythonObject, name: String, default: PythonObject) 
     var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
     if not result:
         if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
             return default
         var failure = stash_python_error()
         raise failure^
