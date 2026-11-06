@@ -995,8 +995,14 @@ def test_the_six_lanes_the_report_named_are_attributed():
                  "samba", "samba-untied-dropout-accum",
                  "mlp", "transformer", "transformer-window"):
         assert lane in got, f"neural_inference.py serves {lane} and the map does not say so"
-    assert len(got) < len(sources) // 2, \
-        f"neural_inference.py now claims {len(got)} of {len(sources)} lanes; the edge is too wide"
+    # BOUND DROPPED 2026-11-05 (was `len(got) < len(sources) // 2`). The file's
+    # IMPORT-TIME code runs in every lane: `import mojolearn` imports
+    # `_samba_impl.py` (__init__.py), whose module level calls
+    # `_native_samba_bridge.connect`, whose `_connect_admission` imports
+    # `SambaInference` from this file. The map (427 of 513 on the 2026-11-05
+    # CPU leg, through `_training_impl.py` -> `_native_samba_bridge`) is
+    # below the truth, not above it; a function-body edit is narrowed per
+    # definition by `python_edit_lanes`, not by this file's map.
 
 
 def test_a_base_everything_inherits_is_not_evidence():
