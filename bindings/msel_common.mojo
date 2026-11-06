@@ -154,7 +154,22 @@ def msel_is_real(value: PythonObject, context: PythonObject) raises -> Bool:
             or (_one_of(cls, context["scalar_types"]) and not msel_is_bool(value, context)))
 
 
+def _msel_exact_type(value: PythonObject, sample: PythonObject) -> Bool:
+    """`type(value) is type(sample)` by object-header pointer (no call)."""
+    ref cpy = Python().cpython()
+    var t = cpy.PyObject_Type(value._obj_ptr)
+    var s = cpy.PyObject_Type(sample._obj_ptr)
+    var same = t == s
+    cpy.Py_DecRef(t)
+    cpy.Py_DecRef(s)
+    return same
+
+
 def msel_int(value: PythonObject) raises -> Int:
+    # pass 3 (rank 202): an exact int is `int(value)` itself; read it
+    # natively instead of admitting builtins and calling int() per value.
+    if _msel_exact_type(value, PythonObject(0)):
+        return Int(py=value)
     return Int(py=family_call(msel_b().int, value))
 
 
@@ -162,8 +177,47 @@ def msel_op(name: String) raises -> PythonObject:
     return py_call(msel_b().getattr, native_loaded_module("operator"), PythonObject(name))
 
 
+def _msel_cmp_ints(name: String, x: Int, y: Int) -> Bool:
+    if name == "eq":
+        return x == y
+    if name == "ne":
+        return x != y
+    if name == "lt":
+        return x < y
+    if name == "le":
+        return x <= y
+    if name == "gt":
+        return x > y
+    return x >= y
+
+
 def msel_cmp(name: String, a: PythonObject, b: PythonObject) raises -> Bool:
     """`operator.<name>(a, b)` as a truth value (the Python comparison)."""
+    # pass 3 (rank 202): two exact ints that fit a machine word, and eq/ne of
+    # two exact strs, compare natively with Python's result; every other
+    # pair (bools, floats, subclasses, rich-comparison hooks) keeps the
+    # Python comparison.
+    var known = name == "eq" or name == "ne" or name == "lt" or name == "le" or name == "gt" or name == "ge"
+    if known and _msel_exact_type(a, PythonObject(0)) and _msel_exact_type(b, PythonObject(0)):
+        var fits = True
+        var x = 0
+        var y = 0
+        try:
+            x = Int(py=a)
+            y = Int(py=b)
+        except:
+            fits = False
+        if fits:
+            return _msel_cmp_ints(name, x, y)
+    if ((name == "eq" or name == "ne") and _msel_exact_type(a, PythonObject("")) and _msel_exact_type(b, PythonObject(""))):
+        var decoded = True
+        var same = False
+        try:
+            same = String(py=a) == String(py=b)
+        except:
+            decoded = False  # a str UTF-8 cannot hold (lone surrogate): Python compares it
+        if decoded:
+            return same if name == "eq" else not same
     return Bool(py=family_call(msel_b().bool, family_call(msel_op(name), a, b)))
 
 
@@ -232,6 +286,37 @@ def _msel_admit_labels(values: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: model-selection labels must be native numbers or strings")
 
 
+def _msel_exact_str_items(value: PythonObject) raises -> Bool:
+    """True for an exact nonempty list or tuple whose every item is exactly a
+    str: one pass over the container's C storage comparing item classes by
+    pointer (no Python call per label), stopping at the first other item."""
+    var b = msel_b()
+    var cls = py_type(value)
+    var is_tuple = cls is b.tuple
+    if cls is not b.list and not is_tuple:
+        return False
+    var n = len(value)
+    if n == 0:
+        return False
+    ref cpy = Python().cpython()
+    var get_item = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem" if is_tuple else "PyList_GetItem")
+    var str_type = b.str
+    var exact = True
+    for i in range(n):  # driver-loop: exact list/tuple item classes by pointer, one C read per label
+        var raw = get_item(value._obj_ptr, i)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        var item_type = cpy.PyObject_Type(raw)
+        var same = item_type == str_type._obj_ptr
+        cpy.Py_DecRef(item_type)
+        if not same:
+            exact = False
+            break
+    _ = value  # keep the container alive through the borrowed item reads above
+    _ = str_type
+    return exact
+
+
 def _msel_direct_typestr(typestr: String) -> Bool:
     """The numeric label dtypes the shared encoder reads from their buffer
     with the same classes the flattened Python numbers encode to."""
@@ -286,6 +371,12 @@ def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObje
     # `_msel_admit_labels`), without those two per-label walks.
     if not direct:
         if labels_list_scalar_kind(value) != LABELS_LIST_OTHER:
+            direct = True
+        elif _msel_exact_str_items(value):
+            # pass 3 (rank 37): an exact flat list or tuple of exact str. Its
+            # flatten is the same items in the same order and every item
+            # passes `_msel_admit_labels` (exact str), so the shared encoder
+            # gets what the two per-label Python walks gave it.
             direct = True
         elif labels_text_storage(value, context):
             msel_admit(value, context)

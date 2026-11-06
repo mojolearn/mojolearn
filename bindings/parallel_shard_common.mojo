@@ -106,7 +106,7 @@ comptime SHARD_TRACE = _Global[StorageType=ShardTrace, name="MojoParallelShardTr
 
 
 struct ShardIdle(Defaultable, Movable):
-    #: {(child module, devices tuple): [pool, parent environment snapshot]}
+    #: {(child module, devices tuple): [pool, parent environment snapshot, owner pid]}
     var pools: PythonObject
 
     def __init__(out self):
@@ -205,7 +205,7 @@ def _numerical(name: String) -> Bool:
             or name == "gpc_class_predict" or name == "ivf_search" or name == "rbf_rows"
             or name == "scaler_fit" or name == "scaler_transform" or name == "forest_fit"
             or name == "arima_fit_shard" or name == "hw_fit_shard" or name == "reference_shard"
-            or name == "query_rows")
+            or name == "reference_query" or name == "query_rows")
 
 
 def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
@@ -255,23 +255,28 @@ def shard_run(requests: PythonObject, devices: PythonObject, child: String) rais
         idle[].pools = b.dict()
     var key = Python.tuple(PythonObject(child), py_call(b.tuple, devices))
     var environ = py_call(b.dict, PROCESS_BOUNDARY.get_or_create_ptr()[].environ)
+    var pid = Int(external_call["getpid", Int32]())
     var reused = PythonObject(None)
     var held = py_call(idle[].pools.pop, key, PythonObject(None))
     if held is not None:
-        if (Bool(py=held[1] == environ) and not Bool(py=held[0]["closed"])
+        if Int(py=held[2]) != pid:
+            # Inherited across os.fork: the pool's workers and sockets belong
+            # to the parent process. Drop the record without closing (a close
+            # here would end the parent's workers on the shared sockets).
+            pass
+        elif (Bool(py=held[1] == environ) and not Bool(py=held[0]["closed"])
                 and len(held[0]["workers"]) == len(devices)):
             try:
                 reused = _shard_admit(held[0], devices)
-            except error:
+            except:
                 # a worker that died while idle: the identity round closed
                 # the pool; a fresh one is opened below
-                _ = error
                 reused = PythonObject(None)
         else:
             try:
                 process_pool_close(held[0])
-            except error:
-                _ = error
+            except:
+                pass
     if reused is None:
         var pool = shard_open(devices, child)
         reused = pool
@@ -285,12 +290,13 @@ def shard_run(requests: PythonObject, devices: PythonObject, child: String) rais
         process_pool_close(reused)
         raise Error("ValueError: shard workers returned an incomplete batch")
     var other = py_call(idle[].pools.pop, key, PythonObject(None))
-    if other is not None:  # another thread kept a pool under this key meanwhile
+    if other is not None and Int(py=other[2]) == pid:  # another thread kept a pool under this key meanwhile
         try:
             process_pool_close(other[0])
-        except error:
-            _ = error
-    py_setitem(idle[].pools, key, Python.list(reused, environ))
+        except:
+            pass
+    # [pool, parent environment snapshot, owning process id]
+    py_setitem(idle[].pools, key, Python.list(reused, environ, PythonObject(pid)))
     return results
 
 

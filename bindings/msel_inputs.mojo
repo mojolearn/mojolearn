@@ -4,6 +4,7 @@
 from bindings.native_array_storage import native_array_from_bytes, native_array_from_values
 from bindings.native_loaded_module import native_loaded_module
 from std.memory import memcpy
+from core.msel_column_rows import msel_block_columns_to_rows
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_attr import py_attr
@@ -191,17 +192,19 @@ def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context
         if String(_slot(block, "dtype", rows_context)) != dtype:
             block = _cast(block, dtype, rows_context)
         var source = Int(py=_slot(block, "_addr", rows_context))
+        var dests = List[Int]()
         for col in range(len(positions[k])):  # driver-loop: the block's native column placement
             var dest = Int(py=positions[k][col])
             if dest < 0 or dest >= ncols or seen[dest]:
                 raise Error("ValueError: pandas columns overlap or exceed their matrix")
             seen[dest] = True
-            for row in range(nrows):  # driver-loop: storage copy only, preserving every promoted element's bits
-                var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source + (col * nrows + row) * item)
-                var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=out_address + (row * ncols + dest) * item)
-                memcpy(dest=dst, src=src, count=item)
-                _ = block
-                _ = output
+            dests.append(dest)
+        # pass 3 (rank 106): one typed strided copy of the whole block, row
+        # ranges split across cores, instead of one memcpy call per element.
+        # Storage moves only: every promoted element keeps its bits.
+        msel_block_columns_to_rows(source, out_address, nrows, ncols, dests^, item)
+        _ = block
+        _ = output
         _ = block^
     return output
 

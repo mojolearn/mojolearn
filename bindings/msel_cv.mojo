@@ -13,6 +13,9 @@
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
+from bindings.optimizer_public_words import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
@@ -769,6 +772,32 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
     return Python.tuple(values, width)
 
 
+def _place_label_rows(rows: PythonObject, vals: PythonObject, test: PythonObject, n: Int) raises:
+    """`for i, v in zip(test, vals): rows[i] = v` over the C storage: the
+    fold's int64 test indices read through their pointer and each label
+    reference copied with PyList_SetItem (pass 3, rank 38: no boxed index
+    and no Python setitem call per row). `rows` and `vals` are exact lists."""
+    ref cpy = Python().cpython()
+    var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
+    var count = min(Int(py=test.size), len(vals))
+    var words = msel_p64(test)
+    for j in range(count):  # driver-loop: native equivalent of the existing zip placement
+        var index = Int(words[j])
+        if index < 0:
+            index += n
+        if index < 0 or index >= n:
+            raise Error("IndexError: list assignment index out of range")
+        var label = get_item(vals._obj_ptr, j)
+        if not label:
+            var failure = stash_python_error()
+            raise failure^
+        if cpython_table()[].PyList_SetItem(rows._obj_ptr, index, cpy.Py_NewRef(label)) != 0:
+            var failure = stash_python_error()
+            raise failure^
+    _ = vals  # borrowed labels stay owned through the increfs above
+    _ = test  # keep the index storage alive through the pointer reads above
+
+
 def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
     """`_cross_val_predict_place`: each fold's predictions put back in row
     order on the device (`msel_scatter_rows` into one resident block), or
@@ -829,9 +858,7 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
     for f in range(count):  # driver-loop: fold outputs placed in original row order
         var converted = _prediction_list(preds[f], context)
         var vals = converted[0]
-        var indices = tests[f]._mv
-        for j in range(min(len(indices), len(vals))):  # driver-loop: native equivalent of the existing zip placement
-            py_setitem(rows, indices[j], vals[j])
+        _place_label_rows(rows, vals, tests[f], n)
         last_width = converted[1]
     if len(last_width) > 0:
         var flat = Python.list()
@@ -968,9 +995,25 @@ def _order_digest(value: PythonObject, name: String, context: PythonObject) rais
     if py_type(value) is b.list:
         return _digest(Python.tuple(_ascii("list"), _canonical(value, context)))
     var arr = msel_materialize(value, name, context)
-    var raw = py_call(b.bytes, arr._mv)
-    return _digest(Python.tuple(_ascii("array"), py_call(arr.dtype.encode, PythonObject("ascii")),
-                                _canonical(py_call(b.list, arr.shape), context), raw))
+    # pass 3 (rank 580): the values are hashed in place from the admitted
+    # C-order storage (the same bytes `bytes(arr._mv)` held, after the same
+    # 8-byte little-endian length prefix), not copied into a Python bytes
+    # object and then into the hasher's store.
+    var hasher = Sha256()
+    var head = Python.tuple(_ascii("array"), py_call(arr.dtype.encode, PythonObject("ascii")),
+                            _canonical(py_call(b.list, arr.shape), context))
+    for i in range(len(head)):  # small-loop(three descriptor chunks)
+        sha256_update(hasher, py_call(PythonObject(len(head[i])).to_bytes, 8, "little"))
+        sha256_update(hasher, head[i])
+    var nbytes = Int(py=arr._mv.nbytes)
+    var prefix = List[UInt8](length=8, fill=0)
+    for k in range(8):  # small-loop(eight length bytes, little-endian)
+        prefix[k] = UInt8((nbytes >> (8 * k)) & 0xFF)
+    hasher.update_list(prefix)
+    if nbytes > 0:
+        hasher.update(msel_addr(arr), nbytes)
+    _ = arr  # keep the storage alive through the hash above
+    return PythonObject(hasher.hexdigest())
 
 
 def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> PythonObject:

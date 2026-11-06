@@ -29,7 +29,7 @@ covers the protected-name refusal.
 """
 from std.ffi import _Global
 from std.python import PythonObject
-from bindings.native_class_admission import DICT_WATCH, _dict_epoch, dict_keys_admit
+from bindings.native_class_admission import DICT_WATCH, _dict_epoch, dict_keys_admit, dict_keys_admitted
 
 
 struct MselFieldsRecords(Defaultable, Movable):
@@ -48,6 +48,12 @@ comptime MSEL_FIELDS_RECORDS = _Global[
 
 #: The class-record slot of native_class_admission for the class rows check.
 comptime MSEL_PLAN_CLASS_SLOT = "msel_estimator_plan_class_v1"
+
+#: Bound on the records kept. A record is never removed when its dictionary
+#: dies (the dead address only fails the epoch test), so without a bound the
+#: map grows by one entry per model ever admitted. The records are an
+#: optimization only: dropping them all just re-runs the full check once.
+comptime _MSEL_FIELDS_RECORDS_MAX = 4096
 
 
 def msel_fields_admitted(fields: PythonObject, plan: PythonObject) raises -> Bool:
@@ -74,7 +80,19 @@ def msel_fields_admit(fields: PythonObject, plan: PythonObject) raises:
     var watch = DICT_WATCH.get_or_create_ptr()
     if watch[].watcher < 0:
         return
+    # `dict_keys_admit` returns silently when PyDict_Watch refuses this
+    # dictionary (for example a watcher id registered by another
+    # interpreter). An unwatched dictionary never bumps its epoch, so a
+    # record written for it would stay valid after `est.predict = hook` and
+    # skip the protected-name refusal. Write the record only when the key
+    # admission (made just now) is held, which happens only when the watch
+    # was accepted.
+    if not dict_keys_admitted(fields):
+        return
     var address = Int(fields._obj_ptr)
     var g = MSEL_FIELDS_RECORDS.get_or_create_ptr()
+    if address not in g[].epochs and len(g[].epochs) >= _MSEL_FIELDS_RECORDS_MAX:
+        g[].epochs.clear()
+        g[].plans.clear()
     g[].epochs[address] = _dict_epoch(address)
     g[].plans[address] = Int(plan._obj_ptr)

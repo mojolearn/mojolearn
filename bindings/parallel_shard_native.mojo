@@ -29,7 +29,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
@@ -45,7 +45,7 @@ from bindings.native_process_pool import (
 from bindings.native_transport import transport_close
 from bindings.native_codec import codec_initialize
 from bindings.native_loaded_module import NativeModules
-from bindings.native_prepared_owner import prepared_key_add, prepared_key_same, prepared_get, prepared_put, prepared_drop
+from bindings.native_prepared_owner import prepared_key_fields, prepared_key_same, prepared_get, prepared_put, prepared_drop
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
     shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
@@ -763,49 +763,71 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
         var start = ranges[2 * r]
         var shift = shard_read_shift(r, start, n_devices)
         _ = py_call(blocks.append, shard_rows(index, start - shift, ranges[2 * r + 1] - shift, context))
+    # pass 3 (rank 108): each reference block is sent to and fitted on its
+    # worker (block r on worker r % len(devices), the map's placement) ONCE
+    # per call under a token, then every query row block sends only its
+    # query rows. The old request carried the block and the worker fitted
+    # (uploaded) and released a fresh model for every query row block. The
+    # tokens are released when the call ends, failed or not.
+    var tokens = b.list()
+    var token_base = (String("rs-") + String(external_call["getpid", Int32]()) + "-"
+                      + String(Int(py=py_call(b.id, blocks))) + "-")
+    for r in range(n_ranges):  # driver-loop: one token per reference block
+        _ = py_call(tokens.append, PythonObject(token_base + String(r)))
     var outputs = b.list()
     var diagnostics = b.list()
     var first = 0
-    while first < rows:  # driver-loop: over the query row blocks
-        var end = min(rows, first + step)
-        var query = shard_rows(data, first, end, context)
-        var parts = b.list()
-        var wave = 0
-        while wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
-            var requests = b.list()
-            for r in range(wave, min(wave + n_devices, n_ranges)):  # driver-loop: one request per reference block
-                var start = ranges[2 * r]
-                var stop = ranges[2 * r + 1]
-                _ = py_call(requests.append, _native_request("reference_shard", Python.tuple(
-                    params, blocks[r], query, min(k, stop - start))))
-            _ = py_call(parts.extend, _map(pool, requests))
-            wave += n_devices
-        var merge = _t("reference_merge")
-        if py_type(merge) is b.str:
-            raise Error("ImportError: " + String(merge))
-        var merged = _merge_candidates(parts, ranges, end - first, k, merge, context)
-        var output = PythonObject(None)
-        if method == "kneighbors":
-            var wide = shard_array("<i8", Python.tuple(end - first, k), (end - first) * k, context)
-            _ = cast_elements(Int(py=classical_address(merged[1])), HP_U32, Int(py=classical_address(wide)), HP_I64,
-                              (end - first) * k)
-            _ = wide  # keep the Python object alive through the native call above
-            output = Python.tuple(merged[0], wide) if Bool(py=args[4]) else wide
-        else:
-            var vote = Python.list(_native_request("reference_vote", Python.tuple(cls.__name__, vote_state, merged[0],
-                                                                               merged[1], method)))
-            output = _map(pool, vote)[0]
-        _ = py_call(outputs.append, output)
-        for r in range(n_ranges):  # driver-loop: one diagnostic record per reference block
-            var record = b.dict()
-            py_setitem(record, "query_start", first)
-            py_setitem(record, "query_end", end)
-            py_setitem(record, "reference_start", ranges[2 * r])
-            py_setitem(record, "reference_end", ranges[2 * r + 1])
-            py_setitem(record, "reference_bytes", (ranges[2 * r + 1] - ranges[2 * r]) * d * 4)
-            py_setitem(record, "device", devices[r % n_devices])
-            _ = py_call(diagnostics.append, record)
-        first = end
+    try:
+        var store_wave = 0
+        while store_wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
+            var stores = b.list()
+            for r in range(store_wave, min(store_wave + n_devices, n_ranges)):  # driver-loop: one store per reference block
+                _ = py_call(stores.append, _native_request("reference_store", Python.tuple(tokens[r], params, blocks[r])))
+            _ = _map(pool, stores)
+            store_wave += n_devices
+        while first < rows:  # driver-loop: over the query row blocks
+            var end = min(rows, first + step)
+            var query = shard_rows(data, first, end, context)
+            var parts = b.list()
+            var wave = 0
+            while wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
+                var requests = b.list()
+                for r in range(wave, min(wave + n_devices, n_ranges)):  # driver-loop: one request per reference block
+                    var start = ranges[2 * r]
+                    var stop = ranges[2 * r + 1]
+                    _ = py_call(requests.append, _native_request("reference_query", Python.tuple(
+                        tokens[r], query, min(k, stop - start))))
+                _ = py_call(parts.extend, _map(pool, requests))
+                wave += n_devices
+
+            var merge = _t("reference_merge")
+            if py_type(merge) is b.str:
+                raise Error("ImportError: " + String(merge))
+            var merged = _merge_candidates(parts, ranges, end - first, k, merge, context)
+            var output = PythonObject(None)
+            if method == "kneighbors":
+                var wide = shard_array("<i8", Python.tuple(end - first, k), (end - first) * k, context)
+                _ = cast_elements(Int(py=classical_address(merged[1])), HP_U32, Int(py=classical_address(wide)), HP_I64,
+                                  (end - first) * k)
+                _ = wide  # keep the Python object alive through the native call above
+                output = Python.tuple(merged[0], wide) if Bool(py=args[4]) else wide
+            else:
+                var vote = Python.list(_native_request("reference_vote", Python.tuple(cls.__name__, vote_state, merged[0],
+                                                                                   merged[1], method)))
+                output = _map(pool, vote)[0]
+            _ = py_call(outputs.append, output)
+            for r in range(n_ranges):  # driver-loop: one diagnostic record per reference block
+                var record = b.dict()
+                py_setitem(record, "query_start", first)
+                py_setitem(record, "query_end", end)
+                py_setitem(record, "reference_start", ranges[2 * r])
+                py_setitem(record, "reference_end", ranges[2 * r + 1])
+                py_setitem(record, "reference_bytes", (ranges[2 * r + 1] - ranges[2 * r]) * d * 4)
+                py_setitem(record, "device", devices[r % n_devices])
+                _ = py_call(diagnostics.append, record)
+            first = end
+    finally:
+        _release_reference(pool, tokens, n_devices)
     var result = _join(outputs, False, context)
     py_setitem(holder, "last_shards_", diagnostics)
     var kind = PythonObject("regressor") if cls is _t("knr_class") else PythonObject(None)
@@ -857,6 +879,25 @@ def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k:
     return Python.tuple(distances, indices)
 
 
+def _release_reference(pool: PythonObject, tokens: PythonObject, workers: Int) raises:
+    """Best-effort release of a call's stored reference blocks (token r on
+    worker r % workers, where it was stored); a failed release closes the
+    pool, as `_release_query_state` does."""
+    if Bool(py=pool["closed"]):
+        return
+    var b = shard_b()
+    try:
+        var wave = 0
+        while wave < len(tokens):  # driver-loop: over waves of len(devices) stored blocks
+            var releases = b.list()
+            for r in range(wave, min(wave + workers, len(tokens))):  # driver-loop: one release per stored block
+                _ = py_call(releases.append, _native_request("release", Python.tuple(tokens[r])))
+            _ = _map(pool, releases)
+            wave += workers
+    except:
+        process_pool_close(pool)
+
+
 def _pool_pids(pool: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var pids = b.list()
@@ -895,6 +936,25 @@ def _release_query_state(pool: PythonObject, token: String, name: PythonObject, 
 # snapshot claim (token, pool, worker ids, state key, name) and its token counter.
 comptime _QUERY_RESIDENT_SLOT = "parallel_query_resident_v1"
 comptime _QUERY_TOKENS_SLOT = "parallel_query_tokens_v1"
+
+
+def _freeze_carried(value: PythonObject, context: PythonObject, depth: Int) raises:
+    """Mark every native Array inside a carried worker state read-only
+    (`_readonly`, the flag the Array's write paths and its NumPy interface
+    honour). The arrays are the estimator's own fitted snapshots."""
+    var b = shard_b()
+    if depth > 8:
+        return
+    var cls = py_type(value)
+    if cls is context["array_class"]:
+        py_setattr(value, "_readonly", PythonObject(True))
+    elif cls is b.tuple or cls is b.list:
+        for i in range(len(value)):  # driver-loop: over a carried field's entries
+            _freeze_carried(value[i], context, depth + 1)
+    elif cls is b.dict:
+        var values = py_call(b.list, py_call(value.values))
+        for i in range(len(values)):  # driver-loop: over a carried field's entries
+            _freeze_carried(values[i], context, depth + 1)
 
 
 def _parallel_queries(args: PythonObject) raises -> PythonObject:
@@ -940,7 +1000,6 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         ranges.append(0)
         ranges.append(0)
     var state = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder")), context)
-    py_setitem(state, "numeric_mode", "identical")
     var devices = pool["devices"]
     var workers = len(devices)
     var name = py_type(model).__name__
@@ -950,11 +1009,16 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     # containers included) or the pool's worker processes changed. The old
     # code stored and released the full fitted index on every worker for
     # every query call.
+    # The key holds the carried field NAMES and VALUES (the estimator's own
+    # objects), never the state dict itself nor the "identical" str set
+    # below: both are new objects on every call, so a key holding them could
+    # never match and every query re-sent the whole index (pass 3, rank 317).
     var mods = NativeModules()
     var key = b.list()
     _ = py_call(key.append, model)
     _ = py_call(key.append, name)
-    prepared_key_add(mods, key, state)
+    prepared_key_fields(mods, key, state, List[String]())
+    py_setitem(state, "numeric_mode", "identical")
     # The resident claim and the token counter live in the native prepared
     # registry, weakly keyed by the driver object (outside its `__dict__`;
     # never pickled or copied).
@@ -972,6 +1036,12 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         var counter = (Int(py=last_token) if last_token is not None else 0) + 1
         prepared_put(mods, _QUERY_TOKENS_SLOT, driver, PythonObject(counter))
         token = String("nq-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
+        # The key notices replaced attributes by identity only. A carried Array
+        # written in place would leave the workers' copy stale, so every
+        # carried Array is made read-only now (the forests' `trees_freeze`
+        # scheme): an in-place write raises; replacing the attribute or a
+        # refit is noticed and re-sent. No per-call content hash.
+        _freeze_carried(state, context, 0)
         var stores = b.list()
         for i in range(workers):  # driver-loop: one snapshot request per worker
             _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
@@ -1245,7 +1315,8 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         if labels is not None:
             py_setitem(fields, "classes_", classifier_label_list(labels, _t("trees_context")))
         return shard_state(fields, b.frozenset(), context)
-    if (operation == "reference_shard" or operation == "reference_vote" or operation == "query_state"
+    if (operation == "reference_shard" or operation == "reference_store" or operation == "reference_query"
+            or operation == "reference_vote" or operation == "query_state"
             or operation == "query_rows" or operation == "ivf_store" or operation == "ivf_search" or operation == "release"):
         return parallel_neighbor_worker(operation, args, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
     raise Error("parallel shards: unsupported worker operation " + operation)

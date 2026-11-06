@@ -507,10 +507,18 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     # perf-sweep-msel-nbr-svc); the same scorer object scores every fold.
     var sc = msel_get_scorer(scoring, context)
     try:
+        # pass 3 (rank 863): each fold's test rows of X and y are gathered
+        # once for every train size (they were gathered and downloaded again
+        # per size); the same rows, in the same order, score every size.
+        var x_tests = Python.list()
+        var y_tests = Python.list()
+        for f in range(nf):  # driver-loop: over folds
+            var test = folds[f][1]
+            _ = py_call(x_tests.append, _take(res, x, test, context))
+            _ = py_call(y_tests.append, _take(res, y, test, context))
         for si in range(len(sizes)):  # driver-loop: over train sizes
             var a = sizes[si]
             for f in range(nf):  # driver-loop: over folds
-                var test = folds[f][1]
                 var sub = msel_slice_i64(orders[f], 0, a, context)
                 var cloned = msel_native_clone_planned(estimator, context)
                 var est = cloned[0]
@@ -530,7 +538,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                         fitted = False
                 var t1 = msel_seconds()
                 tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)) if fitted else msel_error_value(error_score))
-                te_s.append(Float64(py=msel_score(est, _take(res, x, test, context), _take(res, y, test, context), sc, context))
+                te_s.append(Float64(py=msel_score(est, x_tests[f], y_tests[f], sc, context))
                             if fitted else msel_error_value(error_score))
                 res.release(sub)
                 ft.append(t1 - t0)
@@ -780,7 +788,21 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
                 perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, context))
             else:
                 var folds = msel_cv_folds(estimator, x, yp, cv, groups, False, context)[2]
-                perm_scores.append(_mean_own(estimator, x, yp, folds, sc, device, context))
+                # pass 3 (rank 107): the permutation's folds run on rows0 (X
+                # stored once for the whole call), as the reused folds do;
+                # only the fold index sets change. `_mean_own` built a new
+                # MselFoldRows, so X was copied and stored again and freed
+                # for every permutation. The permutation's index entries are
+                # released after its scores (release ignores an index the
+                # store never held).
+                rows0.folds = folds
+                try:
+                    perm_scores.append(_mean_test(estimator, x, yp, folds, sc, rows0, context))
+                finally:
+                    rows0.folds = folds0
+                    for f in range(len(folds)):  # driver-loop: over this permutation's folds
+                        rows0.resident_release(folds[f][0], context)
+                        rows0.resident_release(folds[f][1], context)
     finally:
         rows0.close(context)
     return Python.tuple(PythonObject(score), msel_f64_list(perm_scores, context),

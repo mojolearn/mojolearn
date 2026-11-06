@@ -14,6 +14,7 @@
 # `split` stays a generator shell that `yield from`s the result, so its
 # refusals are still raised at the first `next`.
 from std.memory import memcpy
+from std.builtin.sort import sort
 from std.os import getenv
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
@@ -36,6 +37,7 @@ from bindings.msel_common import (
     msel_p64, msel_p32, msel_new, msel_new2, msel_i64_list, msel_i32_list, msel_read_i64, msel_slice_i64,
     msel_arange, msel_range_index, msel_split_mask, msel_split_indices, msel_index_copy, msel_as_index,
     MselGroups, MselRng, msel_mix_seed, msel_shuffle_sizes, msel_take_any, msel_lazy, msel_index_i64,
+    msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
 )
 
 
@@ -483,14 +485,23 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
                         PythonObject(msel_addr(gc.codes)), PythonObject(n), PythonObject(gc.m),
                         PythonObject(msel_addr(first)))
         _ = first  # keep the Python object alive through the native call above
-        var keys = py_call(b.list, first._mv)
-        var keywords = Python.dict()
-        py_setitem(keywords, "key", py_call(b.getattr, keys, PythonObject("__getitem__")))
-        var order = family_call_kw(b.sorted, keywords, py_call(b.range, PythonObject(gc.m)))
+        # pass 3 (rank 367): the classes ordered by their first row natively.
+        # Every class's first row is distinct, so sorting the first rows and
+        # mapping each back to its class is `sorted(range(m), key=first)`
+        # exactly (no ties), without a Python list, key callable and sort.
+        var fp = msel_p64(first)
+        var rows_sorted = List[Int](capacity=gc.m)
+        var class_of = Dict[Int, Int]()
+        for c in range(gc.m):  # driver-loop: over classes (one first-row word each)
+            var r = Int(fp[c])
+            rows_sorted.append(r)
+            class_of[r] = c
+        _ = first  # keep the storage alive through the reads above
+        sort(rows_sorted)
         var table = List[Int](length=gc.m, fill=0)
         var counts = Python.list()
         for rank in range(gc.m):  # driver-loop: over classes (first-seen order)
-            var c = Int(py=order[rank])
+            var c = class_of[rows_sorted[rank]]
             table[c] = rank
             _ = py_call(counts.append, PythonObject(gc.counts[c]))
         var words = gc.mapped(table, context)
@@ -1381,6 +1392,19 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
         test = split[1]
     var out = Python.list()
     for i in range(len(prepared)):  # driver-loop: gather train/test from the same retained input snapshot
-        _ = py_call(out.append, msel_take_any(prepared[i], train, context))
-        _ = py_call(out.append, msel_take_any(prepared[i], test, context))
+        var value = prepared[i]
+        if py_type(value) is b.list or py_type(value) is b.tuple:
+            _ = py_call(out.append, msel_take_labels(value, train, context))
+            _ = py_call(out.append, msel_take_labels(value, test, context))
+            continue
+        # pass 3 (rank 316): the input prepared above is stored once in one
+        # resident entry and both sides gathered from it (msel_take_any
+        # re-materialized it and opened, uploaded and closed a resident per
+        # side: three host copies and two uploads per input).
+        var res = msel_resident_new(context)
+        try:
+            _ = py_call(out.append, msel_resident_take(res, value, train, context))
+            _ = py_call(out.append, msel_resident_take(res, value, test, context))
+        finally:
+            msel_resident_close(res, context)
     return out
