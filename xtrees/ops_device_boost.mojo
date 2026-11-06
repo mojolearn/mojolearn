@@ -37,7 +37,8 @@ from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
-from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys import is_defined
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import identical_exp64, identical_log64, identical_mul64
 from checks.soft_f64 import (
     SF64_ONE, SF64_SIGN, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_from_int, sf64_is_nan, sf64_log, sf64_lt,
@@ -727,32 +728,34 @@ def platt_count_kernel(y: MutPointer[Int32, MutAnyOrigin], n: Int64, m: Int64, p
         c += stride
 
 
-def platt_value_kernel(
+#: TREES_PLATT_ONE_READ (lane perf-meta-estimators, 2026-11-05): Platt's
+#: Newton on a GPU is bound by round trips, not arithmetic (a calibration
+#: fold holds a few thousand scores, about ten chunk partials). Each sums call
+#: was one chunk launch, the tree passes, a FRESH pinned host buffer and a
+#: wait, and every iteration paid one call for the gradient plus one per
+#: line-search trial. One launch now folds the objective and the five
+#: gradient sums together (six fields; every field keeps its own kernel's
+#: per-element order and the field-by-field tree, so the words are the ones
+#: the two kernels made), the six words come back through one pinned buffer
+#: kept for the whole fit, and `grad` at the point the last `value` folded is
+#: served from those words: one round trip per objective evaluation instead
+#: of (1 + trials) per iteration. Bits unchanged on every column.
+#: `-D MOJOLEARN_TREES_PLATT_ONE_READ_OFF` refolds for every `grad` (the
+#: previous round-trip count) for the A/B on trees-calibrated `train`.
+comptime PLATT_ONE_READ = not is_defined["MOJOLEARN_TREES_PLATT_ONE_READ_OFF"]()
+comptime PLATT_FIELDS = 6
+
+
+def platt_sums_kernel(
     f: MutPointer[UInt64, MutAnyOrigin], y: MutPointer[Int32, MutAnyOrigin], n: Int64, m: Int64, hi: UInt64,
     lo: UInt64, a: UInt64, b: UInt64, p: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """One thread per chunk: `ops.PlattHost.value`'s chunk loop."""
+    """One thread per chunk: `ops.PlattHost.value`'s chunk loop (field 0) and
+    `ops.PlattHost.grad`'s (fields 1-5), each accumulated in its own order."""
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while c < Int(m):
         var run = SF64_ZERO
-        for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, Int(n))):
-            var t = hi if y.unsafe_load(i) > 0 else lo
-            var z = sf64_add(sf64_mul(f.unsafe_load(i), a), b)
-            run = sf64_add(
-                sf64_add(run, sf64_mul(t, _log1pexp(z))), sf64_mul(sf64_sub(SF64_ONE, t), _log1pexp(sf64_neg(z))))
-        p.unsafe_store(c, run)
-        c += stride
-
-
-def platt_grad_kernel(
-    f: MutPointer[UInt64, MutAnyOrigin], y: MutPointer[Int32, MutAnyOrigin], n: Int64, m: Int64, hi: UInt64,
-    lo: UInt64, a: UInt64, b: UInt64, p: MutPointer[UInt64, MutAnyOrigin],
-):
-    """One thread per chunk: `ops.PlattHost.grad`'s chunk loop (5 fields)."""
-    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(grid_dim.x) * Int(block_dim.x)
-    while c < Int(m):
         var s0 = SF64_ZERO
         var s1 = SF64_ZERO
         var s2 = SF64_ZERO
@@ -760,7 +763,10 @@ def platt_grad_kernel(
         var s4 = SF64_ZERO
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, Int(n))):
             var fi = f.unsafe_load(i)
+            var t = hi if y.unsafe_load(i) > 0 else lo
             var z = sf64_add(sf64_mul(fi, a), b)
+            run = sf64_add(
+                sf64_add(run, sf64_mul(t, _log1pexp(z))), sf64_mul(sf64_sub(SF64_ONE, t), _log1pexp(sf64_neg(z))))
             var pp: UInt64
             var q: UInt64
             if _ge64(z, SF64_ZERO):
@@ -772,64 +778,84 @@ def platt_grad_kernel(
                 pp = sf64_div(SF64_ONE, sf64_add(SF64_ONE, e))
                 q = sf64_div(e, sf64_add(SF64_ONE, e))
             var d2 = sf64_mul(pp, q)
-            var t = hi if y.unsafe_load(i) > 0 else lo
             var d1 = sf64_sub(t, pp)
             s0 = sf64_add(s0, sf64_mul(sf64_mul(fi, fi), d2))
             s1 = sf64_add(s1, d2)
             s2 = sf64_add(s2, sf64_mul(fi, d2))
             s3 = sf64_add(s3, sf64_mul(fi, d1))
             s4 = sf64_add(s4, d1)
-        p.unsafe_store(5 * c, s0)
-        p.unsafe_store(5 * c + 1, s1)
-        p.unsafe_store(5 * c + 2, s2)
-        p.unsafe_store(5 * c + 3, s3)
-        p.unsafe_store(5 * c + 4, s4)
+        var o = PLATT_FIELDS * c
+        p.unsafe_store(o, run)
+        p.unsafe_store(o + 1, s0)
+        p.unsafe_store(o + 2, s1)
+        p.unsafe_store(o + 3, s2)
+        p.unsafe_store(o + 4, s3)
+        p.unsafe_store(o + 5, s4)
         c += stride
 
 
 struct PlattDevice(PlattSums):
     """Platt's sums with f and y resident on the device for the whole fit:
-    each call is one chunk launch, the pairwise tree and a read of the 1 or
-    5 folded words."""
+    each fold is one chunk launch, the pairwise tree and one read of the six
+    folded words into the fit's one pinned buffer (`PLATT_ONE_READ`)."""
     var ctx: DeviceContext
     var d_f: DeviceBuffer[DType.uint64]
     var d_y: DeviceBuffer[DType.int32]
     var d_p: DeviceBuffer[DType.uint64]
+    var h: HostBuffer[DType.uint64]
     var n: Int
     var m: Int
     var hi: UInt64
     var lo: UInt64
+    # The point the six words in `h` were folded at (`have` once one was).
+    var at_a: UInt64
+    var at_b: UInt64
+    var have: Bool
 
     def __init__(
         out self, ctx: DeviceContext, var d_f: DeviceBuffer[DType.uint64], var d_y: DeviceBuffer[DType.int32],
         var d_p: DeviceBuffer[DType.uint64], n: Int, hi: Float64, lo: Float64,
-    ):
+    ) raises:
         self.ctx = ctx.copy()
         self.d_f = d_f^
         self.d_y = d_y^
         self.d_p = d_p^
+        self.h = ctx.enqueue_create_host_buffer[DType.uint64](PLATT_FIELDS)
         self.n = n
         self.m = fold_chunks(n)
         self.hi = _w(hi)
         self.lo = _w(lo)
+        self.at_a = 0
+        self.at_b = 0
+        self.have = False
+
+    def _fold(mut self, a: Float64, b: Float64) raises:
+        """The six sums at (a, b) into `h`, synchronized."""
+        self.ctx.enqueue_function[platt_sums_kernel](
+            self.d_f.unsafe_ptr(), self.d_y.unsafe_ptr(), Int64(self.n), Int64(self.m), self.hi, self.lo, _w(a), _w(b),
+            self.d_p.unsafe_ptr(), grid_dim=_blocks(self.m), block_dim=OPS_TPB,
+        )
+        fold_tree_device(self.ctx, self.d_p, self.m, PLATT_FIELDS)
+        var head = self.d_p.create_sub_buffer[DType.uint64](0, PLATT_FIELDS)
+        self.ctx.enqueue_copy(dst_buf=self.h, src_buf=head)
+        self.ctx.synchronize()
+        _ = head^
+        self.at_a = _w(a)
+        self.at_b = _w(b)
+        self.have = True
 
     def value(mut self, a: Float64, b: Float64) raises -> Float64:
-        self.ctx.enqueue_function[platt_value_kernel](
-            self.d_f.unsafe_ptr(), self.d_y.unsafe_ptr(), Int64(self.n), Int64(self.m), self.hi, self.lo, _w(a), _w(b),
-            self.d_p.unsafe_ptr(), grid_dim=_blocks(self.m), block_dim=OPS_TPB,
-        )
-        fold_tree_device(self.ctx, self.d_p, self.m, 1)
-        return _f(_head_u64(self.ctx, self.d_p, 1)[0])
+        self._fold(a, b)
+        return _f(self.h.unsafe_ptr().unsafe_load(0))
 
     def grad(mut self, a: Float64, b: Float64, mut output: List[Float64]) raises:
-        self.ctx.enqueue_function[platt_grad_kernel](
-            self.d_f.unsafe_ptr(), self.d_y.unsafe_ptr(), Int64(self.n), Int64(self.m), self.hi, self.lo, _w(a), _w(b),
-            self.d_p.unsafe_ptr(), grid_dim=_blocks(self.m), block_dim=OPS_TPB,
-        )
-        fold_tree_device(self.ctx, self.d_p, self.m, 5)
-        var r = _head_u64(self.ctx, self.d_p, 5)
-        for q in range(5):
-            output[q] = _f(r[q])
+        var reuse = self.have and self.at_a == _w(a) and self.at_b == _w(b)
+        comptime if not PLATT_ONE_READ:
+            reuse = False
+        if not reuse:
+            self._fold(a, b)
+        for q in range(5):  # small-loop(5: the folded gradient / Hessian words)
+            output[q] = _f(self.h.unsafe_ptr().unsafe_load(q + 1))
 
 
 def platt_fit_device(
@@ -850,7 +876,7 @@ def platt_fit_device(
     )
     var cnt = _read_i32(ctx, d_c, 1)[0]
     var pr = platt_targets(cnt, n)
-    var d_p = ctx.enqueue_create_buffer[DType.uint64](5 * m)
+    var d_p = ctx.enqueue_create_buffer[DType.uint64](PLATT_FIELDS * m)
     var sums = PlattDevice(ctx, d_f^, d_y^, d_p^, n, pr[1], pr[2])
     var res = platt_drive(sums, pr[0], n)
     ab[unsafe_offset=0] = res[0]
