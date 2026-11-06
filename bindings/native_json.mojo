@@ -158,10 +158,10 @@ struct NativeJSON(Movable):
         # The admitted ASCII number text, NUL-terminated, parsed by the same
         # CPython conversions float(bytes) and int(bytes) use (no slice
         # object or bytes copy per number).
-        var digits = List[UInt8](capacity=self.at - start + 1)
-        for i in range(start, self.at):  # small-loop(the bytes of one JSON number)
-            digits.append(self.buf[i])
-        digits.append(0)
+        var count = self.at - start
+        var digits = List[UInt8](unsafe_uninit_length=count + 1)
+        memcpy(dest=digits.unsafe_ptr(), src=self.buf.unsafe_ptr() + start, count=count)
+        digits[count] = 0
         ref cpy = Python().cpython()
         var raw = PyObjectPtr()
         if floating:
