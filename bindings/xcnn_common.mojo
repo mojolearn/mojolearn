@@ -19,7 +19,8 @@ from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.xseq_native_common import xseq_f32
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_numpy_metadata import native_numpy_type
@@ -189,8 +190,18 @@ def xcnn_is_t(value: PythonObject, context: PythonObject) raises -> Bool:
     return True
 
 
+comptime _XCNN_TENSOR_LAYOUT_SLOT = "xcnn_tensor_layout_v1"
+
+
 def xcnn_tensor_layout(context: PythonObject) raises:
     var cls = context["xcnn_tensor_class"]
+    # p3-cnn-sequence-tsa: the verdict is kept per class under a type watcher
+    # (`class_record`; any edit of the class or an ancestor misses), so the
+    # MRO / namespace / slot walk runs once, not 3-8 times per layer call.
+    # Python 3.10/3.11 keep the full walk on every call.
+    var mods = NativeModules()
+    if class_record(mods, _XCNN_TENSOR_LAYOUT_SLOT, cls) is not None:
+        return
     var b = xcnn_builtins()
     if py_type(cls) is not b.type:
         raise Error("TypeError: CNN tensor refuses Python metaclass hooks")
@@ -211,6 +222,7 @@ def xcnn_tensor_layout(context: PythonObject) raises:
     for name in ["b", "shape", "h", "_host", "_base"]:  # driver-loop: native connected tensor member descriptors
         if py_get(namespace, PythonObject(name)) is not slots[PythonObject(name)]:
             raise Error("TypeError: CNN tensor storage descriptors changed")
+    class_admit(mods, _XCNN_TENSOR_LAYOUT_SLOT, cls, PythonObject(True))
 
 
 def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
