@@ -50,6 +50,7 @@ from bindings.native_array_storage import native_array_from_values
 from bindings.msel_inputs import msel_admit, msel_input_count
 from bindings.trees_meta_admission import meta_admit_configuration
 from bindings.trees_staged_input import trees_stage_members, trees_unstage
+from bindings.trees_side_records import trees_side_get, trees_side_put
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -173,20 +174,54 @@ def _codes_array(var values: PythonObject, context: PythonObject) raises -> Pyth
     return classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
 
 
+comptime _MEMBER_CODES_SLOT = "trees_meta_member_codes_v1"
+
+
+def _member_class_codes(member: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`(classes_, listed classes, int32 code Array, index of 1 or -1)` of a
+    fitted member, kept per member in the native side table (lane
+    perf2-trees, 2026-11-06: every soft-vote, stacking, multi-output and
+    calibrated predict rebuilt the int32 Array, one `int()` per class plus an
+    `array('i')`, for every member on every call). The record is reused while
+    the member's `classes_` is the recorded object and its listed labels are
+    the recorded objects one by one (identity only), so a refit, a replaced
+    or an in-place edited `classes_` rebuilds it. The Array is only read by
+    the glue kernels (`x_trees_accumulate_cols`, the calibrated fusion), never
+    written. Same values as before: no bits change."""
+    var b = trees_builtins()
+    var classes = _attr(member, "classes_", PythonObject(None))
+    var values = classifier_label_list(classes, context)
+    var listed = values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context)
+    var held = trees_side_get(_MEMBER_CODES_SLOT, member)
+    if held is not None and held[0] is classes and len(held[1]) == len(listed):
+        var same = True
+        for i in range(len(listed)):  # driver-loop: over the member's fitted classes (identity only)
+            if not (held[1][i] is listed[i]):
+                same = False
+                break
+        if same:
+            return held
+    var subs = _int_list(listed)
+    var store = py_call(context["array_type"], PythonObject("i"), subs)
+    var array = classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
+    var at = -1
+    for i in range(len(subs)):  # driver-loop: over the member's fitted classes
+        if Int(py=subs[i]) == 1:
+            at = i
+            break
+    var record = Python.tuple(classes, py_call(b.list, listed), array, PythonObject(at))
+    _ = trees_side_put(_MEMBER_CODES_SLOT, member, record)
+    return record
+
+
 def _sub_cols(member: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_trees_sub_cols`: a member's classes (the ensemble's codes) as int32."""
-    return _codes_array(_attr(member, "classes_", PythonObject(None)), context)
+    return _member_class_codes(member, context)[2]
 
 
 def _index_of_one(member: PythonObject, context: PythonObject) raises -> Int:
     """`[int(c) for c in member.classes_].index(1)`, or -1 when 1 is absent."""
-    var b = trees_builtins()
-    var values = classifier_label_list(_attr(member, "classes_", PythonObject(None)), context)
-    var subs = _int_list(values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context))
-    for i in range(len(subs)):  # driver-loop: over the member's fitted classes
-        if Int(py=subs[i]) == 1:
-            return i
-    return -1
+    return Int(py=_member_class_codes(member, context)[3])
 
 
 def _one_col(xt: PythonObject, p: TreesMatrix, j: Int, context: PythonObject) raises -> PythonObject:
