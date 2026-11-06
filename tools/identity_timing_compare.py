@@ -29,6 +29,15 @@ by `CellTimer` in tools/identity_break.py); it runs nothing and changes nothing.
   (its fixture, vocabulary or arithmetic moved, tools/identity_break.py
   LANE_REVISIONS) or when a common fixture's data hash differs. A lane whose
   `batch_revisions` entry differs is compared and marked `batch-rev`.
+* THE HARNESS TIMING MARKER (2026-11-06). `timing_env.harness_timing` says
+  which harness clock a record's stages were taken with: 1 (absent: every
+  record before 2026-11-06), whose `batch` and `batchscale` stages also held
+  the harness's own per-row Python over each result, or 2, which books that
+  work, now whole-array, to `<stage>-harness` stages. Those stages are never
+  summed into a bucket. A lane whose two sides were timed under different
+  markers is SKIPPED (a break in the series, not a speed change), and a
+  `series` point whose marker differs from its column's newest point is
+  marked `^`.
 * Every table header names the commit (and its date) each side read, and the
   machine (vendor label, CPU model). Mixing hardware or commits on one side is
   reported, never hidden.
@@ -54,6 +63,10 @@ import sys
 from pathlib import Path
 
 BUCKETS = ("train", "infer", "other")
+#: identity_break.HARNESS_STAGE_SUFFIX and HARNESS_TIMING_VERSION's meaning:
+#: a record without the marker is version 1
+HARNESS_STAGE_SUFFIX = "-harness"
+HARNESS_TIMING_DEFAULT = 1
 STAGES = {
     "all": BUCKETS,
     "non-train": ("infer", "other"),
@@ -121,9 +134,12 @@ def _date_of(commit):
 
 
 def bucket(stage):
-    """`repeat=1/train` -> train; None for another repeat."""
+    """`repeat=1/train` -> train; None for another repeat and for the
+    harness's own work (`repeat=1/batch-harness`), which is not lane time."""
     prefix, _, name = stage.rpartition("/")
     if prefix and prefix != "repeat=1":
+        return None
+    if name.endswith(HARNESS_STAGE_SUFFIX):
         return None
     if name == "train":
         return "train"
@@ -153,6 +169,13 @@ def ran(cell):
     failed) or one carrying an `error` stops early, so its time is not the
     lane's time and is never compared."""
     return str(cell.get("verdict") or "").upper() != "REFUSED" and "error" not in cell
+
+
+def harness_timing(data):
+    """The record's harness timing marker (1 when it states none)."""
+    env = data.get("timing_env") if isinstance(data.get("timing_env"), dict) else {}
+    value = env.get("harness_timing")
+    return value if isinstance(value, int) and not isinstance(value, bool) else HARNESS_TIMING_DEFAULT
 
 
 def record_host(data):
@@ -205,7 +228,7 @@ def load_side(paths):
         fixtures = data.get("fixtures") or {}
         meta = dict(path=str(path), vendor=str(data.get("vendor")), column=column_of(data.get("vendor")),
                     commit=str(data.get("commit") or ""), repeats=data.get("repeats"), timed=0,
-                    host=record_host(data))
+                    host=record_host(data), harness_timing=harness_timing(data))
         for key, cell in data["cells"].items():
             lane, _, fixture = key.partition("/")
             if not isinstance(cell, dict) or not ran(cell):
@@ -218,7 +241,7 @@ def load_side(paths):
             fx = fixtures.get(fixture)
             cells[(lane, fixture)] = dict(sec=sec, rev=revs.get(lane), brev=brevs.get(lane),
                                           fx=json.dumps(fx, sort_keys=True) if fx is not None else None,
-                                          src=str(path), commit=meta["commit"])
+                                          src=str(path), commit=meta["commit"], ht=meta["harness_timing"])
         records.append(meta)
     return cells, records
 
@@ -264,6 +287,10 @@ def compare(before_paths, after_paths, min_ratio=1.5, min_seconds=0.5):
             continue
         if b["fx"] is not None and a["fx"] is not None and b["fx"] != a["fx"]:
             skipped[lane] = f"fixture {fixture} data changed"
+            continue
+        if b["ht"] != a["ht"]:
+            skipped[lane] = (f"harness timing {b['ht']} -> {a['ht']} (series break: the harness's per-row "
+                             f"work left the stage clock)")
             continue
         e = lanes.setdefault(lane, dict(lane=lane, fixtures=0, batch_rev_changed=False,
                                         before=dict.fromkeys(BUCKETS, 0.0), after=dict.fromkeys(BUCKETS, 0.0),
@@ -442,14 +469,17 @@ def series(paths, lanes, stage="non-train", commits=None, common_only=False, col
             continue
         common = set.intersection(*(set(v["fx"]) for v in pts.values()))
         # Each column's newest point sets that column's lane revision.
-        newest = {}
+        newest, newest_ht = {}, {}
         for k in pts:  # keys are oldest first
             newest[k[0]] = pts[k]["rev"]
+            newest_ht[k[0]] = pts[k]["ht"]
         points = {}
         for k, v in pts.items():
             sec = sum(v["fx"][f][b] for f in common for b in buckets)
             points[f"{k[0]}@{k[1][:10]}"] = dict(column=k[0], commit=k[1][:10], seconds=sec,
-                                                 revision=v["rev"], revision_differs=v["rev"] != newest[k[0]])
+                                                 revision=v["rev"], revision_differs=v["rev"] != newest[k[0]],
+                                                 harness_timing=v["ht"],
+                                                 harness_differs=v["ht"] != newest_ht[k[0]])
         out["lanes"][lane] = dict(fixtures=sorted(common), points=points)
     return out
 
@@ -468,6 +498,7 @@ def load_side_grouped(paths):
             continue
         key = (column_of(data.get("vendor")), str(data.get("commit") or ""))
         revs = data.get("lane_revisions") or {}
+        ht = harness_timing(data)
         timed = 0
         for name, cell in data["cells"].items():
             lane, _, fixture = name.partition("/")
@@ -477,9 +508,10 @@ def load_side_grouped(paths):
             if sec is None:
                 continue
             timed += 1
-            e = cells.setdefault(key, {}).setdefault(lane, dict(fx={}, rev=revs.get(lane)))
+            e = cells.setdefault(key, {}).setdefault(lane, dict(fx={}, rev=revs.get(lane), ht=ht))
             e["fx"][fixture] = sec
             e["rev"] = revs.get(lane)
+            e["ht"] = ht
         if timed:
             r = records.setdefault(key, dict(vendors=set(), cpu_models=set()))
             r["vendors"].add(str(data.get("vendor")))
@@ -540,7 +572,7 @@ def _print_text(rep, top):
         t = rep["totals"][side]
         print(f"TOTAL {side}: " + " ".join(f"{k}={t[k]:.1f}" for k in BUCKETS) + f" all={sum(t.values()):.1f} s")
     print(f"lanes compared {len(rep['rows'])}; regressed {len(rep['regressed'])} ({len(rep['outliers'])} above the host factor too); improved {len(rep['improved'])}; "
-          f"skipped (revision/fixture) {len(rep['skipped'])}; only before {len(rep['only_before'])}; "
+          f"skipped (revision/fixture/harness timing) {len(rep['skipped'])}; only before {len(rep['only_before'])}; "
           f"only after {len(rep['only_after'])}")
 
 
@@ -602,7 +634,8 @@ def _print_series(res):
             vals = []
             for c in res["commits"]:
                 p = e["points"].get(f"{col}@{c['commit']}")
-                vals.append("-" if p is None else (f"{p['seconds']:.2f}" + ("*" if p["revision_differs"] else "")))
+                vals.append("-" if p is None else (f"{p['seconds']:.2f}" + ("*" if p["revision_differs"] else "")
+                                                   + ("^" if p["harness_differs"] else "")))
             if all(v == "-" for v in vals):
                 continue
             print(f"| {lane if first else ''} | {col} | " + " | ".join(vals) + " |")
@@ -610,6 +643,8 @@ def _print_series(res):
         if first:
             print(f"| {lane} | - | " + " | ".join("-" for _ in res["commits"]) + " |")
     print("\n* = lane revision differs from the column's newest point (fixture or arithmetic moved).")
+    print("^ = harness timing marker differs from the column's newest point (a break in the series: "
+          "the harness's own per-row work was inside the stage before marker 2).")
     print("hosts: " + "; ".join(f"{k} {','.join(v['vendors'])}" + (f" [{','.join(v['cpu_models'])}]" if v["cpu_models"] else "")
                                 for k, v in res["hosts"].items()))
 

@@ -8097,7 +8097,7 @@ def _digest_rows(digest, rows):
                 digest.update(f"{dt}{shape}".encode())
                 digest.update(b)
         return
-    if rows.n == 0:
+    if rows.n == 0 or not rows.outs:
         return
     blocks = []
     for o in rows.outs:

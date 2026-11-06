@@ -278,3 +278,50 @@ def test_cli_cross(tmp_path, monkeypatch, capsys):
     assert "CROSS-COLUMN: NOT COMPARABLE (after commits differ)" in out
     assert itc.main(["cross", "--before", f"cpu={cb}", "--after", f"cpu={ca}", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["pairing"]["comparable"] is True
+
+
+# ---------------------------------------------------------------- harness timing marker (2026-11-06)
+
+def _with_env(path, harness=None):
+    data = json.loads(Path(path).read_text())
+    if harness is not None:
+        data["timing_env"] = dict(schema=1, harness_timing=harness)
+    Path(path).write_text(json.dumps(data))
+    return path
+
+
+def test_harness_stages_are_not_lane_time():
+    cell = _cell(1.0, infer=0.5, batch=0.25)
+    cell["timing"]["stages"]["repeat=1/batch-harness"] = 9.0
+    assert itc.bucket("repeat=1/batch-harness") is None
+    assert itc.cell_seconds(cell["timing"]) == dict(train=1.0, infer=0.5, other=0.25)
+
+
+def test_a_harness_timing_change_breaks_the_series(tmp_path):
+    # before: no marker (version 1); after: marker 2 on one record, 1 stated on the other
+    before = _record(tmp_path / "b.json", {"a/base": _cell(1.0, batch=3.0), "b/base": _cell(1.0, batch=3.0)})
+    after2 = _with_env(_record(tmp_path / "a2.json", {"a/base": _cell(1.0, batch=0.5)}), harness=2)
+    after1 = _with_env(_record(tmp_path / "a1.json", {"b/base": _cell(1.0, batch=0.5)}), harness=1)
+    rep = itc.compare([before], [after1, after2])
+    assert set(rep["skipped"]) == {"a"} and "harness timing 1 -> 2" in rep["skipped"]["a"]
+    assert [r["lane"] for r in rep["rows"]] == ["b"]
+    # the same marker on both sides compares as before
+    before2 = _with_env(_record(tmp_path / "b2.json", {"a/base": _cell(1.0, batch=0.4)}), harness=2)
+    assert [r["lane"] for r in itc.compare([before2], [after2])["rows"]] == ["a"]
+
+
+def test_series_marks_a_point_under_another_harness_timing(tmp_path, monkeypatch, capsys):
+    _seed_dates(monkeypatch)
+
+    def rec(name, commit, harness):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(dict(vendor="amd-x", commit=commit, repeats=1, lane_revisions={},
+                                        fixtures={"base": {}}, cells={"nc/base": _cell(1.0, batch=2.0)})))
+        return _with_env(str(path), harness)
+
+    paths = [rec("a1", C_OCT25, None), rec("a2", C_NOV05, 2)]
+    pts = itc.series(paths, ["nc"], "non-train")["lanes"]["nc"]["points"]
+    assert pts["amd@b25df4e213"]["harness_differs"] and pts["amd@b25df4e213"]["harness_timing"] == 1
+    assert not pts["amd@84da9f145c"]["harness_differs"]
+    assert itc.main(["series", "--lane", "nc"] + paths) == 0
+    assert "| nc | amd | 2.00^ | 2.00 |" in capsys.readouterr().out
