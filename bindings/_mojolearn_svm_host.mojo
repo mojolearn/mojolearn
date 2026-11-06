@@ -71,12 +71,14 @@ from isolation_forest.checks.if_oracle import (
     oracle_scores,
 )
 from isolation_forest.estimator import (
+    IFResidentKey,
     IF_WANT_DECISION_FUNCTION,
     IF_WANT_PREDICT,
     IF_WANT_SCORE_SAMPLES,
     percentile_linear_host,
 )
 from isolation_forest.impl.isolation_forest import (
+    IDN_IF_RESIDENT,
     IF_params,
     check_finite_by_name_host,
 )
@@ -113,7 +115,12 @@ from svm.host.finite_scan import check_finite_ptr
 from std.memory import memcpy
 from svm.host.svm_host_impl import (
     IForestHostRun,
+    if_host_resident_new_token,
+    if_host_resident_put,
+    if_host_resident_release,
+    if_host_resident_take,
     iforest_run_host,
+    iforest_run_host_resident,
     svc_fit_host,
     svc_predict_host,
     svr_fit_host,
@@ -484,8 +491,20 @@ def iforest_run_binding(
     `decision_function = score_samples - Float32(offset_)`, `predict =
     -(paper > Float32(-offset_) ? 1 : -1)`, `offset_` the contamination
     quantile through `percentile_linear_host` over the training scores or -0.5.
+
+    `IDN_IF_RESIDENT` (lane perf-trees-misc, 2026-11-05): the GPU binding's
+    resident form on the host. A binary whose `iforest_resident()` is 1
+    takes SEVENTEEN params (slot 16 the token: 0 fits a fresh forest and
+    keeps it; a live token with an equal key scores with NO fit) and FOUR
+    info slots (slot 3 the token after the call). Before it the public owner
+    (`bindings/trees_public_iforest.mojo::_run`) found no `iforest_resident`
+    here and the CPU column refit the whole forest on every scoring call.
+    Sixteen params is the refit-per-call form, unchanged.
     """
-    if len(params) != 16:
+    var resident = False
+    comptime if IDN_IF_RESIDENT:
+        resident = len(params) == 17
+    if len(params) != 16 and not resident:
         raise Error(
             "iforest_run: params must contain 16 values, got " + String(len(params))
         )
@@ -517,6 +536,44 @@ def iforest_run_binding(
     else:
         out_f32_address = _index(out_f32_addr)
     var run = IForestHostRun(List[Float32](), List[Int32](), Float64(-0.5), 0)
+    comptime if IDN_IF_RESIDENT:
+        if resident:
+            # The take and the put run under the GIL; the fit (on a miss) and
+            # the scoring run with it released, on an entry no other thread
+            # can reach while it is out of the store.
+            var token = _index(params[16])
+            var key = IFResidentKey(
+                train_address, n_train, n_features, n_estimators, max_samples_mode,
+                max_samples_int, max_samples_frac, max_depth, max_features_mode,
+                max_features_int, max_features_frac, bootstrap, random_state,
+                contamination_auto, contamination,
+            )
+            var held = if_host_resident_take(token, key)
+            var new_token = 0
+            if len(held) == 0:
+                new_token = if_host_resident_new_token()
+            try:
+                with GILReleased(Python()):
+                    run = iforest_run_host_resident(
+                        held, key, new_token, query_address, n_query, want,
+                    )
+            except e:
+                # Keep a caller-owned forest after a refused query; a new
+                # token has not reached Python yet, so it is not cached.
+                if new_token == 0:
+                    if_host_resident_put(held)
+                raise e
+            var held_token = held[0].token
+            if_host_resident_put(held)
+            if want == IF_WANT_PREDICT:
+                memcpy(dest=i32_ptr(out_i32_address), src=run.labels.unsafe_ptr(), count=n_query)
+            else:
+                memcpy(dest=f32_ptr(out_f32_address), src=run.values.unsafe_ptr(), count=n_query)
+            ip[0] = run.offset_
+            ip[1] = Float64(run.max_samples_)
+            ip[2] = Float64(n_features)
+            ip[3] = Float64(held_token)
+            return PythonObject(n_query)
     with GILReleased(Python()):
         run = iforest_run_host(
             train_address, query_address, n_train, n_features, n_query, n_estimators,
@@ -534,6 +591,23 @@ def iforest_run_binding(
     ip[1] = Float64(run.max_samples_)
     ip[2] = Float64(n_features)
     return PythonObject(n_query)
+
+
+def iforest_resident_binding() raises -> PythonObject:
+    """1 when this binary keeps the fitted host forest resident between
+    calls (`IDN_IF_RESIDENT`) and `iforest_run` takes the 17-value params
+    with a token; 0 otherwise (the refit per call)."""
+    comptime if IDN_IF_RESIDENT:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
+    """Drop the resident host forest `token` names (the estimator was
+    refitted or collected). A token nobody holds is a no-op. Returns 0."""
+    comptime if IDN_IF_RESIDENT:
+        if_host_resident_release(_index(token))
+    return PythonObject(0)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_svm_host.mojo
@@ -565,6 +639,8 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[svr_fit_binding]("svr_fit")
         module.def_function[svr_predict_binding]("svr_predict")
         module.def_function[iforest_run_binding]("iforest_run")
+        module.def_function[iforest_resident_binding]("iforest_resident")
+        module.def_function[iforest_resident_release_binding]("iforest_resident_release")
         module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[svc_ovo_layout_host_binding]("svc_ovo_layout")

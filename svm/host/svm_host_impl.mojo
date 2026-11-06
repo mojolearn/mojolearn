@@ -5,11 +5,13 @@ fits and predictions over the SMO oracle and the isolation forest run, with
 no Python import. The binding unpacks its PythonObject arguments, calls one
 function here and converts the result back (lane thin-core, 2026-10-21: the
 bodies moved word for word, no bit change)."""
+from std.ffi import _Global
 from std.math import isnan
+from std.time import perf_counter_ns
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from core.host_predict_threads import host_predict_task_count
-from checks.numerics import ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from isolation_forest.checks.if_oracle import (
     OracleForest,
     oracle_fit,
@@ -17,6 +19,8 @@ from isolation_forest.checks.if_oracle import (
     oracle_scores,
 )
 from isolation_forest.estimator import (
+    IF_RESIDENT_CAP,
+    IFResidentKey,
     IF_WANT_DECISION_FUNCTION,
     IF_WANT_PREDICT,
     IF_WANT_SCORE_SAMPLES,
@@ -328,27 +332,27 @@ struct IForestHostRun(Movable):
     var max_samples_: Int
 
 
-def iforest_run_host(
-    train_address: Int, query_address: Int, n_train: Int, n_features: Int,
-    n_query: Int, n_estimators: Int, max_samples_mode: Int, max_samples_int: Int,
-    max_samples_frac: Float64, max_depth: Int, max_features_mode: Int,
-    max_features_int: Int, max_features_frac: Float64, bootstrap: Bool,
-    random_state: Int, contamination_auto: Bool, contamination: Float64, want: Int,
-) raises -> IForestHostRun:
-    """`IsolationForest.fit` plus ONE of `score_samples`, `decision_function`
-    or `predict` on the host (the binding `iforest_run`'s contract)."""
-    var values = List[Float32]()
-    var labels = List[Int32]()
+@fieldwise_init
+struct IForestHostFitted(Movable):
+    """The host forest `_iforest_host_fit` builds: the oracle forest, its
+    `offset_` and the resolved `max_samples_`."""
+    var forest: OracleForest
+    var offset_: Float64
+    var max_samples_: Int
+
+
+def _iforest_host_fit(
+    train_address: Int, n_train: Int, n_features: Int, n_estimators: Int,
+    max_samples_mode: Int, max_samples_int: Int, max_samples_frac: Float64,
+    max_depth: Int, max_features_mode: Int, max_features_int: Int,
+    max_features_frac: Float64, bootstrap: Bool, random_state: Int,
+    contamination_auto: Bool, contamination: Float64,
+) raises -> IForestHostFitted:
+    """`IsolationForest.fit` on the host: the flushed training matrix, the
+    parameter resolution, the finite scan, the oracle fit and the
+    contamination quantile (the first half of `iforest_run_host`)."""
     var offset_ = Float64(-0.5)
-    var max_samples_ = 0
-    # `iforest_run_host`'s remaining guard.
-    if want < IF_WANT_SCORE_SAMPLES or want > IF_WANT_PREDICT:
-        raise Error(
-            "iforest_run_host: want=" + String(want) + " is not one of 0"
-            " (score_samples), 1 (decision_function), 2 (predict)"
-        )
     var train = read_f32(train_address, n_train * n_features)
-    var query = read_f32(query_address, n_query * n_features)
     # THE DEVICE STAGES EVERY INPUT CELL THROUGH `ftz` AT UPLOAD
     # (`_upload_f32`, `_upload_rowmajor_as_colmajor` in
     # `isolation_forest/impl/isolation_forest.mojo`; DEVIATION 1942 row),
@@ -361,8 +365,6 @@ def iforest_run_host(
     # eight fixtures identical.
     for i in range(n_train * n_features):
         train[i] = ftz(train[i])
-    for i in range(n_query * n_features):
-        query[i] = ftz(query[i])
     # `IsolationForestEstimator.fit` (`:616-712`), in its order.
     var actual_max_features: Int
     if max_features_mode == 1:
@@ -401,7 +403,6 @@ def iforest_run_host(
             raise Error(
                 "max_samples resolves to 0 samples; increase max_samples or the number of rows."
             )
-    max_samples_ = actual_max_samples
     if random_state < 0 or random_state >= 4294967296:
         raise Error(
             "Expected `0 <= random_state <= 2**32 - 1`, got " + String(random_state)
@@ -429,9 +430,23 @@ def iforest_run_host(
         for i in range(n_train):
             training_scores.append(-paper_train[i])
         offset_ = percentile_linear_host(training_scores, 100.0 * contamination)
-    else:
-        offset_ = -0.5
-    var paper = _iforest_host_scores(forest, query, n_query, n_features)
+    _ = tables^
+    return IForestHostFitted(forest^, offset_, actual_max_samples)
+
+
+def _iforest_host_query(
+    fitted: IForestHostFitted, query_address: Int, n_query: Int, n_features: Int, want: Int,
+) raises -> IForestHostRun:
+    """ONE of `score_samples`, `decision_function` or `predict` over a
+    fitted host forest (the second half of `iforest_run_host`): the flushed
+    query, the oracle scores and the estimator's epilogue."""
+    var values = List[Float32]()
+    var labels = List[Int32]()
+    var query = read_f32(query_address, n_query * n_features)
+    for i in range(n_query * n_features):
+        query[i] = ftz(query[i])
+    var paper = _iforest_host_scores(fitted.forest, query, n_query, n_features)
+    var offset_ = fitted.offset_
     if want == IF_WANT_PREDICT:
         var threshold = Float32(-offset_)
         for i in range(n_query):
@@ -444,5 +459,161 @@ def iforest_run_host(
     else:
         for i in range(n_query):
             values.append(-paper[i])
-    _ = tables^
-    return IForestHostRun(values^, labels^, offset_, max_samples_)
+    return IForestHostRun(values^, labels^, offset_, fitted.max_samples_)
+
+
+def _iforest_host_want(want: Int) raises:
+    """`iforest_run_host`'s remaining guard."""
+    if want < IF_WANT_SCORE_SAMPLES or want > IF_WANT_PREDICT:
+        raise Error(
+            "iforest_run_host: want=" + String(want) + " is not one of 0"
+            " (score_samples), 1 (decision_function), 2 (predict)"
+        )
+
+
+def iforest_run_host(
+    train_address: Int, query_address: Int, n_train: Int, n_features: Int,
+    n_query: Int, n_estimators: Int, max_samples_mode: Int, max_samples_int: Int,
+    max_samples_frac: Float64, max_depth: Int, max_features_mode: Int,
+    max_features_int: Int, max_features_frac: Float64, bootstrap: Bool,
+    random_state: Int, contamination_auto: Bool, contamination: Float64, want: Int,
+) raises -> IForestHostRun:
+    """`IsolationForest.fit` plus ONE of `score_samples`, `decision_function`
+    or `predict` on the host (the binding `iforest_run`'s contract)."""
+    _iforest_host_want(want)
+    var fitted = _iforest_host_fit(
+        train_address, n_train, n_features, n_estimators, max_samples_mode,
+        max_samples_int, max_samples_frac, max_depth, max_features_mode,
+        max_features_int, max_features_frac, bootstrap, random_state,
+        contamination_auto, contamination,
+    )
+    return _iforest_host_query(fitted, query_address, n_query, n_features, want)
+
+
+# ===========================================================================
+# THE HOST RESIDENT ENTRY (lane perf-trees-misc, 2026-11-05; the host twin of
+# `isolation_forest/estimator.mojo` "THE RESIDENT ENTRY", same define
+# `IDN_IF_RESIDENT`, same token protocol, same key).
+#
+# Before it the host binding had no `iforest_resident` entry, so the public
+# owner (`bindings/trees_public_iforest.mojo::_run`) took DEVIATION 874's
+# sixteen-slot form and the CPU column rebuilt the whole oracle forest (and
+# the contamination quantile over every training row) on EVERY
+# score_samples / decision_function / predict call. The resident forest is
+# the one `fit` built, and the oracle forest is a pure function of the seed
+# and the X bits, so the scores are the refit's bit for bit.
+# ===========================================================================
+
+
+struct IForestHostEntry(Movable):
+    """One resident host forest under its token and key."""
+
+    var token: Int
+    var key: IFResidentKey
+    var fitted: IForestHostFitted
+
+    def __init__(out self, token: Int, key: IFResidentKey, var fitted: IForestHostFitted):
+        self.token = token
+        self.key = key.copy()
+        self.fitted = fitted^
+
+
+struct _IForestHostStore(Defaultable, Movable):
+    var entries: List[IForestHostEntry]
+    var next: Int
+    var nonce: Int
+
+    def __init__(out self):
+        self.entries = List[IForestHostEntry]()
+        self.next = 0
+        self.nonce = 0
+
+
+comptime _IF_HOST_RESIDENT_SLOT = "MojoIForestHostResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoIForestHostResidentOther"
+
+comptime IF_HOST_RESIDENT_STORE = _Global[
+    StorageType=_IForestHostStore, name=_IF_HOST_RESIDENT_SLOT, init_fn=_IForestHostStore.__init__
+]
+
+
+def if_host_resident_new_token() raises -> Int:
+    """`if_resident_new_token`'s rule on the host store: never 0, below 2^51
+    (exact in the float64 `info` slot), a per-process nonce. Call under the
+    GIL."""
+    var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    if p[].nonce == 0:
+        p[].nonce = ((Int(perf_counter_ns()) & 0x3FFFFFF) + 1) << 24
+    p[].next = (p[].next % 0xFFFFFF) + 1
+    return p[].nonce + p[].next
+
+
+def if_host_resident_take(token: Int, key: IFResidentKey) raises -> List[IForestHostEntry]:
+    """The entry `token` names, REMOVED from the store, as a list of one;
+    empty when there is none or its key differs (a stale entry under that
+    token is dropped). Call under the GIL."""
+    var held = List[IForestHostEntry]()
+    if token == 0:
+        return held^
+    var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    var found = -1
+    for i in range(len(p[].entries)):  # small-loop(p[].entries: resident forests held): a token lookup over live entries
+        if p[].entries[i].token == token:
+            found = i
+            break
+    if found >= 0:
+        var entry = p[].entries.pop(found)
+        if entry.key.same(key):
+            held.append(entry^)
+        else:
+            _ = entry^
+    return held^
+
+
+def if_host_resident_put(mut held: List[IForestHostEntry]) raises:
+    """Return a taken (or freshly fitted) entry to the store, dropping the
+    oldest past `IF_RESIDENT_CAP`. Call under the GIL."""
+    if len(held) == 0:
+        return
+    var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    while len(p[].entries) >= IF_RESIDENT_CAP:  # small-loop(p[].entries): evict past the cap
+        var oldest = p[].entries.pop(0)
+        _ = oldest^
+    p[].entries.append(held.pop())
+
+
+def if_host_resident_release(token: Int) raises:
+    """Drop the resident forest `token` names, if any. Call under the GIL."""
+    if token == 0:
+        return
+    var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    var found = -1
+    for i in range(len(p[].entries)):  # small-loop(p[].entries: resident forests held): a token lookup over live entries
+        if p[].entries[i].token == token:
+            found = i
+            break
+    if found >= 0:
+        var entry = p[].entries.pop(found)
+        _ = entry^
+
+
+def iforest_run_host_resident(
+    mut held: List[IForestHostEntry], key: IFResidentKey, new_token: Int,
+    query_address: Int, n_query: Int, want: Int,
+) raises -> IForestHostRun:
+    """`iforest_run_host` with the forest resident. `held` is what
+    `if_host_resident_take` returned: one entry scores without fitting;
+    empty fits from `key.train_addr` (the refusals and the quantile are
+    `_iforest_host_fit`'s) and leaves the new entry, under `new_token`, in
+    `held` for `if_host_resident_put`."""
+    _iforest_host_want(want)
+    if len(held) == 0:
+        var fitted = _iforest_host_fit(
+            key.train_addr, key.n_train, key.n_features, key.n_estimators,
+            key.max_samples_mode, key.max_samples_int, key.max_samples_frac,
+            key.max_depth, key.max_features_mode, key.max_features_int,
+            key.max_features_frac, key.bootstrap, key.random_state,
+            key.contamination_auto, key.contamination,
+        )
+        held.append(IForestHostEntry(new_token, key, fitted^))
+    return _iforest_host_query(held[0].fitted, query_address, n_query, key.n_features, want)
+
