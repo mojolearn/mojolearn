@@ -145,7 +145,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             on-policy RL section of Thinking Machines, "Defeating
             Nondeterminism in LLM Inference", September 2025). SAMPLER:
             RLPAIR_SEQS = 5 prompts of RLPAIR_PROMPT = 4 held-out ids are
-            prefilled and RLPAIR_DECODE = 12 tokens decoded one step at a
+            prefilled and RLPAIR_DECODE = 8 tokens decoded one step at a
             time through the lane's public state API, greedy (argmax, lowest
             index on a tie, no RNG), recording each chosen id, its logits
             row and its NLL. TRAINER: the realized sequences, teacher
@@ -159,7 +159,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             row equals it, and every further sampler (below) equals it;
             (3) CONTINUOUS BATCHING: row 4 is prefilled and decoded alone for
             3 tokens, then its state joins the batch of the other four at row
-            2; row 1 leaves after token 8; every row's tokens equal the
+            2; row 1 leaves after token 5; every row's tokens equal the
             trainer's. The state rows are gathered and joined through the
             layouts the state classes document (`_rl_take`, `_rl_cat`); the
             Mamba-2/3 states and the KV cache hold ONE cursor per batch, so a
@@ -277,13 +277,16 @@ a record, and it now says so about itself instead of looking like one.
             that moves at A = 4 is condition 5 seen biting (recorded).
     batchscale  SERVING-SCALE B. A whole call of 1024 rows
             and sub-batches of B in {1, 17, 64, 256} at its start, middle and
-            end, every sub-batch row equal to its row of the whole; for the
-            causal sequence models also B = 2 at L = 1024 against every
-            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511,
-            512, 513, 1023} (the Mamba-3 chunk 64, the GEMM leaf 128, the
-            Mamba-2 chunk 256). Lanes: the sequence blocks, the byte LM lanes
-            (the long length loads the lane's parameters into the default
-            shape with `length=1024`), Samba, and the classical serving set
+            end, every sub-batch row equal to its row of the whole (the
+            causal sequence models since 2026-11-05: a whole call of
+            SEQ_SCALE_WHOLE = 128 rows, B = 256 recorded n/a); for the
+            causal sequence models also B = 2 at L = 300 against every
+            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 299}
+            (the Mamba-3 chunk 64, the GEMM leaf 128, the Mamba-2 chunk 256;
+            L = 1024 and the prefixes 511-1023 until 2026-11-05). Lanes: the
+            sequence blocks, the byte LM lanes (the long length loads the
+            lane's parameters into the default shape with `length=300`),
+            Samba, and the classical serving set
             knn, rf-clf, rf-reg, gbdt-symmetric, gbdt-rmse, ols, ridge,
             logistic, pca. Inputs past a fixture's size wrap around it. The
             batch part's sabotage switch sabotages this part too.
@@ -8806,9 +8809,17 @@ BATCHGRAD_DEFAULT = "n/a:no-backward"
 
 SCALE_BATCHES = (1, 17, 64, 256)
 SCALE_WHOLE = 1024
-SCALE_LONG_L = 1024
-#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk
-SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1023)
+#: the long length of the causal sequence models (only their specs read it).
+#: 300, as RAGGED_LONG_LENGTHS: past the Mamba-2 chunk (256) so the long call
+#: has two chunks and an inter-chunk carry, past two v1 GEMM leaves (128) so
+#: the key-position contraction folds three leaves, and past four Mamba-3
+#: chunks (64). It was 1024 until 2026-11-05 (lane/slow-verification-lanes):
+#: the prefixes 511-1023 crossed no boundary 257 does not already cross and
+#: made this part most of the sequence lanes' wall time.
+SCALE_LONG_L = 300
+#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk: each
+#: boundary minus one, at, and plus one, then the whole length minus one
+SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 299)
 
 BATCHSCALE = {}
 
@@ -8880,9 +8891,25 @@ def _scale_prefix(label, full, fn):
     return call
 
 
+#: the whole call of the causal sequence models' serving-scale rows (the three
+#: specs below; the classical serving set keeps SCALE_WHOLE). 128 rows of
+#: SEQ_LEN = 2048 tokens: wider than the 64-row sub-batch, so B = 1, 17 and 64
+#: each run at three distinct offsets (0, middle, end), and many thread blocks
+#: on every column. B = 256 is wider than the call and `_eval_scale_rows`
+#: records it n/a in the notes and leaves it out of the digest. No sequence
+#: kernel selects a path by batch row count (the only row bound on these
+#: surfaces is a refusal, BYTE_LOGITS_MAX_BATCH = 1024 in
+#: training/byte_lm_logits.mojo), and a Mamba-2 row costs one full 256-token
+#: chunk at any L <= 256 (mamba/impl/modules/ssd_minimal.mojo, "every
+#: intra-chunk structure is ALWAYS length Q"), so the 1024-row call and its
+#: 256-row sub-batches were the bulk of this part. 1024 until 2026-11-05
+#: (lane/slow-verification-lanes).
+SEQ_SCALE_WHOLE = 128
+
+
 def _batchscale_block(ml, blk, Xh):
     dm = blk.d_model
-    x = _tiled(Xh, (SCALE_WHOLE, SEQ_LEN, dm))
+    x = _tiled(Xh, (SEQ_SCALE_WHOLE, SEQ_LEN, dm))
     xl = _tiled(Xh[::-1], (2, SCALE_LONG_L, dm))
     return [_ScaleRows(f"forward L={SEQ_LEN}", x, lambda r: (np.asarray(blk.forward(r)),)),
             _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
@@ -8910,7 +8937,7 @@ def _long_byte_lm(ml, e):
 
 def _batchscale_byte_lm(ml, e, Xh):
     shape = _byte_lm_shape(ml, e)
-    ids = _tiled_ids(Xh, SCALE_WHOLE, shape.length)
+    ids = _tiled_ids(Xh, SEQ_SCALE_WHOLE, shape.length)
     long_m = _long_byte_lm(ml, e)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L)
     return [_ScaleRows(f"logits L={shape.length}", ids, lambda r: (np.asarray(e.logits(r)),)),
@@ -8923,7 +8950,7 @@ _batchscale_decl(_batchscale_byte_lm, "byte-lm", "byte-lm-resident", "byte-lm-ho
 
 
 def _batchscale_samba(ml, st, Xh):
-    ids = _tiled_ids(Xh, SCALE_WHOLE, SEQ_LEN, st.config.vocab)
+    ids = _tiled_ids(Xh, SEQ_SCALE_WHOLE, SEQ_LEN, st.config.vocab)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L, st.config.vocab)
     return [_ScaleRows(f"forward L={SEQ_LEN}", ids, lambda r: (np.asarray(st.forward(r)),)),
             _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
@@ -9333,8 +9360,16 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
 #: log-probability, so every hashed rlpair cell MUST read RLPAIR_MOVED
 RLPAIR_SABOTAGE_ENV = "MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE"
 
-#: sequences, prompt length and decoded tokens
-RLPAIR_SEQS, RLPAIR_PROMPT, RLPAIR_DECODE = 5, 4, 12
+#: sequences, prompt length and decoded tokens. 5, 4, 8 since 2026-11-05
+#: (lane/slow-verification-lanes; 5, 4, 12 before): every decoded token is
+#: one native step plus one cross-entropy call per sampler row set, and the
+#: five per-row samplers make most of this part's calls. Eight decoded
+#: tokens keep every event the twelve had: the joiner runs alone for 2
+#: steps, the joined batch for 3, the batch after the leaver for 2
+#: (RLPAIR_LEAVE_AFTER below), and the window-8 transformer's ring KV cache
+#: still fills during decode (positions 4-7) and wraps at position 8, inside
+#: the joined batch. 12 positions in all, the KV cache's `max_tokens`
+RLPAIR_SEQS, RLPAIR_PROMPT, RLPAIR_DECODE = 5, 4, 8
 
 #: the trainer's uneven microbatch split of the RLPAIR_SEQS rows: [0, 2), [2, 5)
 RLPAIR_SPLIT = (2,)
@@ -9344,7 +9379,9 @@ RLPAIR_SPLIT = (2,)
 #: other four at row RLPAIR_JOIN_ROW; sequence 1 leaves once its token
 #: RLPAIR_LEAVE_AFTER is chosen
 RLPAIR_JOINER, RLPAIR_JOIN_AT, RLPAIR_JOIN_ROW = 4, 3, 2
-RLPAIR_LEAVER, RLPAIR_LEAVE_AFTER = 1, 8
+#: RLPAIR_LEAVE_AFTER < RLPAIR_DECODE - 1, so the batch steps on without
+#: the leaver (8 of 12 until 2026-11-05, 5 of 8 since)
+RLPAIR_LEAVER, RLPAIR_LEAVE_AFTER = 1, 5
 
 #: the vocabulary of the head the harness puts on a bare sequence block
 RLPAIR_BLOCK_VOCAB = 48
