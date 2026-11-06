@@ -76,8 +76,10 @@ def _index(value: PythonObject) raises -> Int:
     # builds) is read directly: no class-name reads, no operator module
     # lookup, no Python call. Anything else keeps the checks below.
     ref cpy = Python().cpython()
+    var zero = PythonObject(0)
     var cls = PythonObject(from_owned=cpy.PyObject_Type(value._obj_ptr))
-    if cls is PythonObject(from_owned=cpy.PyObject_Type(PythonObject(0)._obj_ptr)):
+    var int_type = PythonObject(from_owned=cpy.PyObject_Type(zero._obj_ptr))
+    if cls is int_type:
         return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
