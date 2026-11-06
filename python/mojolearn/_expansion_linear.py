@@ -1654,7 +1654,6 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
 # intercept = 1 - offset, the offset step `- eta * alpha`); x_linear/sgd.mojo.
 
 class SGDOneClassSVM(NumericModeMixin):
-    _mojolearn_native_public = True
     """Linear one-class SVM trained by stochastic gradient descent.
 
     Follows scikit-learn's SGDOneClassSVM for outlier detection.
@@ -1716,6 +1715,7 @@ class SGDOneClassSVM(NumericModeMixin):
     >>> model = mojolearn.SGDOneClassSVM(nu=0.1).fit(X)
     >>> labels = model.predict(X)
     """
+    _mojolearn_native_public = True
 
     _BINDING = _BINDING
     _estimator_type = "outlier_detector"
@@ -2391,7 +2391,6 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 
 
 class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
-    _mojolearn_native_public = True
     """Isotonic regression: the best monotone fit of one feature.
 
     Follows scikit-learn's IsotonicRegression: fits a non-decreasing (or
@@ -2440,6 +2439,7 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
     >>> model = mojolearn.IsotonicRegression(out_of_bounds="clip").fit(x, y)
     >>> y_fit = model.predict(x)
     """
+    _mojolearn_native_public = True
 
     _BINDING = _BINDING
     _estimator_type = "regressor"
