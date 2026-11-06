@@ -8,6 +8,8 @@ from bindings.classical_attributes import classical_check_layout, classical_conn
 from bindings.classical_pandas import _pd_type_fields
 from bindings.host_logistic_native import _logistic_label_kind
 from bindings.native_owner_lifetime import native_release_admit
+from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 def _density_option(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -63,16 +65,15 @@ def _density_descriptor(name: PythonObject, member: PythonObject, present: Bool,
 
 
 def _density_get_slot(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
+    # p3-neighbors-cluster: the process-wide resolved CPython tables, not a
+    # by-name symbol lookup per slot read (PyErr_Clear only on a miss).
     ref cpy = Python().cpython()
     var attribute_error = context["host_density_attribute_error"]
-    var matches = cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")
-    var clear = cpy.lib.get_function[NoneType]("PyErr_Clear")
-    var get = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")
-    var result = get(model._obj_ptr, name._obj_ptr)
+    var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, name._obj_ptr)
     if result:
         return Python.tuple(PythonObject(from_owned=result), True)
-    if matches(attribute_error._obj_ptr) != 0:
-        clear()
+    if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return Python.tuple(PythonObject(None), False)
     raise cpy.unsafe_get_error()
 
@@ -118,8 +119,9 @@ def host_density_initialize(model: PythonObject, args: PythonObject, context: Py
             native_release_admit(previous[0], context)
         _ = py_call(write.append, True)
     ref cpy = Python().cpython()
+    var set_attr = cpy.lib.get_function[Int32]("PyObject_GenericSetAttr")  # resolved once, not per option
     for i in range(len(names)):  # driver-loop: publish admitted options through native dict/member slots
         if Bool(py=write[i]):
-            if cpy.lib.get_function[Int32]("PyObject_GenericSetAttr")(model._obj_ptr, names[i]._obj_ptr, args[i + 1]._obj_ptr) != 0:
+            if set_attr(model._obj_ptr, names[i]._obj_ptr, args[i + 1]._obj_ptr) != 0:
                 raise cpy.unsafe_get_error()
     return PythonObject(None)
