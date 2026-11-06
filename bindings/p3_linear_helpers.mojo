@@ -10,6 +10,7 @@ published, without a bound-method lookup and call per predicted row.
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from core.host_tree_impl import host_label_codes_in_range
 
 
 def py_list_select(labels: PythonObject, indices: List[Int]) raises -> PythonObject:
@@ -21,9 +22,8 @@ def py_list_select(labels: PythonObject, indices: List[Int]) raises -> PythonObj
     var table = List[PythonObject]()
     for c in range(k):  # driver-loop: over the fitted classes (model structure)
         table.append(labels[c])
-    for i in range(len(indices)):  # native index check over completed codes
-        if indices[i] < 0 or indices[i] >= k:
-            raise Error("predicted class index exceeds the fitted class table")
+    if not host_label_codes_in_range(indices, k):
+        raise Error("predicted class index exceeds the fitted class table")
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(len(indices))
     if not raw:
@@ -31,7 +31,7 @@ def py_list_select(labels: PythonObject, indices: List[Int]) raises -> PythonObj
     # NULL-filled until complete; the owner releases initialized slots on failure.
     var out = PythonObject(from_owned=raw)
     var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
-    for i in range(len(indices)):  # native output marshaling: one stored class reference per predicted row
+    for i in range(len(indices)):  # cpu-route: object-label output, one stored class reference per predicted row
         var item = table[indices[i]]._obj_ptr
         # SetItem steals a reference: hand it a new one to the stored class.
         cpy.Py_IncRef(item)

@@ -70,6 +70,7 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
 from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.classical_ridge_impl import classical_widen_f32_f64
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -945,8 +946,7 @@ def ols_predict_wide_binding(
             f32_ptr(x_address), f32_ptr(coef_address), np, nr, nf, intercept,
             host_predict_task_count(nr),
         )
-        for i in range(nr):  # native output marshaling: exact widening of the completed prediction
-            wide[i] = Float64(np[i])
+        classical_widen_f32_f64(Int(np), Int(wide), nr)
     _ = narrow^
     return PythonObject(0)
 
