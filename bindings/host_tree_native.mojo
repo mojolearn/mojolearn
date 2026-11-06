@@ -4,6 +4,8 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import NativeModules
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_value, trees_key_same
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
@@ -68,6 +70,9 @@ def host_tree_array(fields: PythonObject, name: String, dtype: String, context: 
     return value
 
 
+comptime _HOST_TREE_FIELDS_SLOT = "host_tree_fields_v1"
+
+
 def host_tree_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
     host_archive_check_layout(py_type(model), context)
     var b = native_loaded_module("builtins")
@@ -79,12 +84,36 @@ def host_tree_fields(model: PythonObject, context: PythonObject) raises -> Pytho
         raise Error("TypeError: this operation requires a connected CPU tree model")
     var fields = sequential_fields(model)
     var keys = py_call(b.list, fields.keys())
+    # p3-trees: the stored values are admitted once per stored state. The
+    # identities an admission reads (exact scalars, exact containers item by
+    # item) are recorded in the native side table; while they match, only
+    # values whose admission depends on more than identity (Arrays,
+    # ndarrays, other objects: the residual) are admitted again. Any
+    # assignment, added or removed field or exact-container edit changes the
+    # key and the full admission runs in its original order.
+    var mods = NativeModules()
+    var record = Python.list()
+    var residual = Python.list()
+    var recordable = True
     for i in range(len(keys)):  # driver-loop: stored native tree state names
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: tree state names must be native strings")
         var key = String(keys[i])
-        if key != "_binding" and key != "_groves":
-            classical_admit_value(fields[key], context)
+        _ = py_call(record.append, keys[i])
+        if key != "_binding" and key != "_groves" and recordable:
+            if not trees_key_value(mods, record, residual, fields[key], 0):
+                recordable = False
+    var held = trees_side_get(_HOST_TREE_FIELDS_SLOT, model) if recordable else PythonObject(None)
+    if held is not None and trees_key_same(held, record):
+        for i in range(len(residual)):  # driver-loop: stored values admitted by more than identity
+            classical_admit_value(residual[i][0], context, Int(py=residual[i][1]))
+    else:
+        for i in range(len(keys)):  # driver-loop: stored native tree state names
+            var key = String(keys[i])
+            if key != "_binding" and key != "_groves":
+                classical_admit_value(fields[key], context)
+        if recordable:
+            _ = trees_side_put(_HOST_TREE_FIELDS_SLOT, model, record)
     if fields["_binding"] is not context["host_archive_forest_binding"]:
         raise Error("TypeError: tree state must retain its connected CPU binding")
     return fields
