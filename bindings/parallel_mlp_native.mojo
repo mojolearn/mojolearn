@@ -368,7 +368,7 @@ def mlp_gradients_from_checked(checked: PythonObject, inputs: PythonObject, targ
     _ = py_call(result.append, grads)
     # Integer addresses do not retain their owners across sibling native
     # entries; keep every input/workspace alive through its consuming call.
-    _ = checked^
+    _ = checked  # borrowed argument: the caller owns it (compile-fix-1)
     _ = x^
     _ = y^
     _ = hidden^
