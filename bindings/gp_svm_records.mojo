@@ -181,16 +181,19 @@ def gp_kernel_arrays_reused(owner: PythonObject, kernel: PythonObject, context: 
         var key = Python.list()
         _context_key(key, context, _gp_pack_context())
         _gp_kernel_key(mods, key, held[1])
-        if trees_key_same(held[2], key):
+        # A kernel class change (or no type watchers) repacks: the packing
+        # refuses class-level descriptors for the fields it reads.
+        if trees_key_same(held[2], key) and _gp_kernel_classes_admitted(mods, held[4]):
             return held[3]
     var arrays = gp_kernel_arrays(kernel, context)
     var nodes = Python.list()
     var classes = Python.list()
     if _gp_kernel_nodes(kernel, context, nodes, classes):
+        _gp_kernel_classes_admit(mods, classes)
         var key = Python.list()
         _context_key(key, context, _gp_pack_context())
         _gp_kernel_key(mods, key, nodes)
-        _ = trees_side_put(_GP_PACK_SLOT, owner, Python.tuple(kernel, nodes, key, arrays))
+        _ = trees_side_put(_GP_PACK_SLOT, owner, Python.tuple(kernel, nodes, key, arrays, classes))
     return arrays
 
 
