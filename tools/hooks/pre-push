@@ -35,6 +35,11 @@
 # kernel launch (enqueue_function, DeviceContext(, parallelize, vectorize) beyond
 # tools/hooks/compute_in_shells_baseline.txt. Same main/--branch judging rule.
 #
+# The seventh fence (2026-11-06): no_runtime_import_module.py --tree refuses a new
+# `Python.import_module(` call in bindings/ or providers/ .mojo files outside an
+# import-time initializer (a `def PyInit_*` body or a line tagged `# import-time:`)
+# beyond tools/hooks/runtime_import_module_baseline.txt. Same main/--branch judging rule.
+#
 # The sixth fence (2026-10-28): tools/tests/test_no_python_runtime.py, when the pushed tree has
 # it, runs the public runtime endpoint ledger on an exported copy of the pushed commit and
 # refuses a prohibited_source endpoint that is neither an owner exception
@@ -69,7 +74,7 @@ here=$(dirname "$0")
 # installed copies never update themselves (an Oct 8 copy refused tagged driver loops on 2026-10-17): say so when the
 # checkout's hooks differ from the installed ones
 top=$(git rev-parse --show-toplevel 2>/dev/null)
-for f in pre-push no_host_routes.py rebuild_fence.py no_python_in_kernels.py no_compute_in_shells.py; do
+for f in pre-push no_host_routes.py rebuild_fence.py no_python_in_kernels.py no_compute_in_shells.py no_runtime_import_module.py; do
     if [ -f "$top/tools/hooks/$f" ] && ! cmp -s "$top/tools/hooks/$f" "$here/$f"; then
         echo "pre-push: the installed $f differs from tools/hooks/$f in this checkout; run bash tools/hooks/install.sh" >&2
     fi
@@ -124,6 +129,8 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     if [ -f "$here/no_python_in_kernels.py" ]; then python3 "$here/no_python_in_kernels.py" --tree "$local_sha" $mode || exit 4; fi
     # the no-compute-in-shells check (2026-10-21), same branch/main judging rule
     if [ -f "$here/no_compute_in_shells.py" ]; then python3 "$here/no_compute_in_shells.py" --tree "$local_sha" $mode || exit 4; fi
+    # the no-runtime-import_module check (2026-11-06), same branch/main judging rule
+    if [ -f "$here/no_runtime_import_module.py" ]; then python3 "$here/no_runtime_import_module.py" --tree "$local_sha" $mode || exit 4; fi
     # the no-Python-in-runtime gate (2026-10-28), when the pushed tree carries it: the endpoint
     # ledger of the pushed commit, run from an exported copy of that commit, must list every
     # prohibited_source endpoint as an owner exception or recorded debt and keep the unresolved
