@@ -954,6 +954,13 @@ def rf_regressor_fit_dart_binding(
     if cols_a != 0 and n_cols > d:
         raise Error("rf_regressor_fit_dart: more columns than X holds")
 
+    # Hazard B: the DART session registry is a process-global List that
+    # another thread may append to (reallocating it) or pop from while this
+    # member fit runs with the GIL released. Take the session's buffer
+    # HANDLES (reference counted; the device memory is shared) under the GIL
+    # and never index the registry inside the released block.
+    var dart_x = dreg[].sessions[di].x.copy()
+    var dart_target = dreg[].sessions[di].target.copy()
     var forest: RandomForestMetaData[DT, RLT]
     with GILReleased(Python()):
         var ctx = process_ctx[_DART_CTX]()
@@ -969,13 +976,13 @@ def rf_regressor_fit_dart_binding(
             ctx.enqueue_copy(dst_buf=dcols, src_ptr=_i32_ptr(cols_a))
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         launch_dart_member_x(
-            ctx, dreg[].sessions[di].x, drows, dcols, dx, d, n_rows, n_cols,
+            ctx, dart_x, drows, dcols, dx, d, n_rows, n_cols,
             rows_a != 0, cols_a != 0,
         )
         var dy: DeviceBuffer[RLT]
         if rows_a != 0:
             dy = ctx.enqueue_create_buffer[RLT](n_rows)
-            var tsub = dreg[].sessions[di].target.create_sub_buffer[RLT](
+            var tsub = dart_target.create_sub_buffer[RLT](
                 c * n, n
             )
             launch_dart_member_y(ctx, tsub, drows, dy, n_rows)
@@ -984,7 +991,7 @@ def rf_regressor_fit_dart_binding(
         else:
             # a device copy of the class plane: the fit owns its labels
             dy = ctx.enqueue_create_buffer[RLT](n_rows)
-            var tall = dreg[].sessions[di].target.create_sub_buffer[RLT](
+            var tall = dart_target.create_sub_buffer[RLT](
                 c * n, n
             )
             ctx.enqueue_copy(dst_buf=dy, src_buf=tall)
@@ -1051,6 +1058,10 @@ def rf_regressor_fit_session_rows_binding(
     var src_rows = reg[].sessions[si].n_rows
     if reg[].sessions[si].n_cols != n_cols:
         raise Error("rf_regressor_fit_session_rows: the session holds another column count")
+    # Hazard B: the session's X handle is taken under the GIL (see
+    # rf_regressor_fit_dart_binding); the registry is not indexed after the
+    # GIL is released.
+    var session_dx = reg[].sessions[si].dx.copy()
 
     var forest: RandomForestMetaData[DT, RLT]
     with GILReleased(Python()):
@@ -1072,7 +1083,7 @@ def rf_regressor_fit_session_rows_binding(
         var dxg = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
         launch_gather_rows_colmajor(
             ctx,
-            reg[].sessions[si].dx,
+            session_dx,
             drows,
             dxg,
             src_rows,
@@ -1146,11 +1157,57 @@ def rf_classifier_fit_weighted_session_binding(
     var host_x = reg[].sessions[si].host_x
     var prep = List[ForestPrep]()
     swap(prep, reg[].sessions[si].prep)
+    # Hazard B: the session's X handle is taken under the GIL; the registry
+    # is not indexed after the GIL is released (another thread may append or
+    # pop a session meanwhile). The swapped-out prep goes back to the session
+    # on the error path too.
+    var session_dx = reg[].sessions[si].dx.copy()
 
+    var forest: RandomForestMetaData[DT, CLT]
+    try:
+        forest = _rf_weighted_session_fit(
+            session_dx, yp, weights^, n_rows, n_cols, n_classes, rf_params^,
+            mw_frac, prep, share_tables, host_x, weight_total,
+        )
+    except error:
+        _rf_session_restore_prep(session_id, prep)
+        raise error^
+    _rf_session_restore_prep(session_id, prep)
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^, forest.notices)
+
+
+def _rf_session_restore_prep(session_id: Int, mut prep: List[ForestPrep]):
+    """Hand a member fit's swapped-out prep back to its session, if the
+    session is still open (a closed session simply drops it)."""
+    var back = RF_SESSIONS.get_or_create_ptr()
+    for i in range(len(back[].sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
+        if back[].sessions[i].id == session_id:
+            swap(prep, back[].sessions[i].prep)
+            return
+
+
+def _rf_weighted_session_fit(
+    session_dx: DeviceBuffer[DT],
+    yp: MutPointer[Int32, MutUntrackedOrigin],
+    var weights: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    n_classes: Int,
+    var rf_params: RF_params,
+    mw_frac: Float64,
+    mut prep: List[ForestPrep],
+    share_tables: Bool,
+    host_x: Int,
+    mut weight_total: Float64,
+) raises -> RandomForestMetaData[DT, CLT]:
+    """The GIL-released body of `rf_classifier_fit_weighted_session_binding`
+    over the session X handle the binding took under the GIL."""
     var forest: RandomForestMetaData[DT, CLT]
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dxv = reg[].sessions[si].dx.create_sub_buffer[DT](
+        var dxv = session_dx.create_sub_buffer[DT](
             0, n_rows * n_cols
         )
         var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
@@ -1227,13 +1284,7 @@ def rf_classifier_fit_weighted_session_binding(
         _ = hy^
         _ = ctx^
     _ = weights^
-    var back = RF_SESSIONS.get_or_create_ptr()
-    var bi = back[].find(session_id)
-    swap(prep, back[].sessions[bi].prep)
-    _ = prep^
-    var export_trees = forest.trees^
-    forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^, forest.notices)
+    return forest^
 
 
 def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
