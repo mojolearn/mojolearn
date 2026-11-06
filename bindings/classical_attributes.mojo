@@ -70,6 +70,56 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
 
 
 comptime _LAYOUT_CLASS_SLOT = "classical_layout_class_v1"
+comptime _LAYOUT_NAMES_SLOT = "classical_layout_names_v1"
+
+
+def _layout_class_names(mut mods: NativeModules, cls: PythonObject, plan: PythonObject) raises -> PythonObject:
+    """An exact dict of every name the connected ancestry rows of `cls`
+    define, computed once per admitted class layout stamp. Call only after
+    classical_check_layout admitted `cls` in the same native call: the stamp
+    it left in the registry is then the live one, and the names below were
+    read while that stamp was current (any later namespace edit, insertion or
+    removal on a mutable row changes the stamp, and the names are read
+    again). None: no admitted stamp, or a class row holds a non-string key;
+    the caller keeps the full member walk."""
+    var stamp = prepared_get(mods, _LAYOUT_CLASS_SLOT, cls)
+    if stamp is None:
+        return PythonObject(None)
+    var record = prepared_get(mods, _LAYOUT_NAMES_SLOT, cls)
+    if record is not None and record[0] is stamp:
+        return record[1]
+    var b = mods.module("builtins")
+    var names = Python.dict()
+    var usable = True
+    var mro = plan["mro"]
+    for k in range(len(mro)):  # driver-loop: over connected class ancestry metadata
+        var keys = py_call(b.list, py_call(_type_fields(mro[k]).keys))
+        for j in range(len(keys)):  # small-loop(keys: one class namespace): exact string names only
+            if py_type(keys[j]) is not b.str:
+                usable = False
+                break
+            py_setitem(names, keys[j], PythonObject(True))
+        if not usable:
+            break
+    var payload = names if usable else PythonObject(None)
+    # The record retains the stamp (as the layout record itself retains the
+    # ancestry); identity, not equality, decides reuse.
+    prepared_put(mods, _LAYOUT_NAMES_SLOT, cls, Python.tuple(stamp, payload))
+    return payload
+
+
+def _instance_result(name: PythonObject, value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # A public trailing-underscore Array field reads as its ndarray view once
+    # NumPy is connected. Native slot getters + ndarray C type wrap the same
+    # owner/storage. Never invoke Array.__array__, properties, or output
+    # Python code. Without NumPy the Array itself is the fitted attribute.
+    # `name` is an exact str (checked by the caller): native string tests.
+    var text = String(name)
+    if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")
+            and py_type(value) is context["array_class"] and py_get(context, "ndarray") is not None):
+        sequential_admit_value(value, context)
+        return sequential_input(value, context)
+    return value
 
 
 def _classical_check_class(model: PythonObject, context: PythonObject, cls: PythonObject, plan: PythonObject) raises:
@@ -157,6 +207,19 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
         classical_check_layout(model, context)
     var plan = _public_plan(model, context)
     var cls = py_type(model)
+    # Instance dictionary first. A name no connected class row defines has
+    # no class member, so no descriptor can take precedence: Python's lookup
+    # (and the walk below, with `present` False) answers from the instance
+    # dictionary or raises AttributeError. One dict probe replaces the member
+    # walk and the three descriptor-slot ancestry walks for every fitted
+    # field and parameter read.
+    var mods = NativeModules()
+    var names = _layout_class_names(mods, cls, plan)
+    if names is not None and not py_contains(names, name):
+        var stored = py_call(plan["fields_get"], model, cls)
+        if py_contains(stored, name):
+            return _instance_result(name, stored[name], context)
+        raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
     var member = PythonObject(None)
     var present = False
     var mro = plan["mro"]
@@ -177,15 +240,7 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
         return _classical_descriptor_get(binding, model, cls, plan)
     var fields = py_call(plan["fields_get"], model, cls)
     if py_contains(fields, name):
-        var value = fields[name]
-        if (len(name) > 0 and Bool(py=py_call(name.endswith, "_")) and not Bool(py=py_call(name.startswith, "_"))
-                and py_type(value) is context["array_class"] and py_get(context, "ndarray") is not None):
-            # Native slot getters + ndarray C type wrap the same owner/storage.
-            # Never invoke Array.__array__, properties, or output Python code.
-            # Without NumPy the Array itself is the fitted attribute.
-            sequential_admit_value(value, context)
-            return sequential_input(value, context)
-        return value
+        return _instance_result(name, fields[name], context)
     if not present:
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
     if descriptor:
