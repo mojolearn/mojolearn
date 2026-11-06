@@ -9,6 +9,7 @@ from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.cpython_table import cpython_table
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_watch_ready
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call_spans
 from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
@@ -144,6 +145,16 @@ def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+    # Python >= 3.12: the dictionary watcher reports every edit and the
+    # deallocation of the namespace, so the verdict is exact and a recycled
+    # address never matches (lane p3-neural-blocks). The integer record
+    # below is the fallback only where watchers are unavailable.
+    if dict_keys_admitted(fields):
+        return fields
+    if class_watch_ready():
+        _neural_descriptor_keys(fields, bi.str)
+        dict_keys_admit(fields)
+        return fields
     var module_address = Int(module._obj_ptr)
     var dict_address = Int(raw)
     var size = len(fields)
