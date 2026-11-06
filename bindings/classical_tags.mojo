@@ -2,6 +2,7 @@
 # Construct the standard sklearn tag records through their native slots.
 # Dataclass constructors and Python setattr/getattribute never run here.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 
 
@@ -81,7 +82,7 @@ def classical_tag_plan(context: PythonObject) raises -> PythonObject:
 
 
 def classical_tags(context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var plan = classical_tag_plan(context)
     if py_type(plan) is b.str:
         raise Error("ImportError: " + String(plan))

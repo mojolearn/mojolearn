@@ -20,6 +20,7 @@ the temporary tuple is released.
 from std.python import Python, PythonObject
 from std.os import getenv
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
@@ -225,7 +226,7 @@ def _mamba_saved_entries(mut mods: NativeModules, binding: PythonObject, context
         if py_type(entries) is not mods.module("types").SimpleNamespace:
             raise Error("TypeError: Mamba requires its connected native entry namespace")
         ref cpy = Python().cpython()
-        var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
+        var pointer = cpython_table()[].PyObject_GenericGetDict(entries._obj_ptr, PyObjectPtr())
         if not pointer:
             raise cpy.unsafe_get_error()
         var fields = PythonObject(from_owned=pointer)

@@ -2,6 +2,7 @@
 # Fixed LogisticRegression metadata; never invoke ParamsMixin, a Python
 # constructor, user scalar/protocol hooks, or mutable class descriptors.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_pandas import classical_admit_value
@@ -19,7 +20,7 @@ def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, c
         # already refuses Python hooks; the scalar check runs when a value is
         # consumed (fit, predict, ...).
         return
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if String(name) == "class_weight" and _one_of(py_type(value), context["mapping_types"]):
         var keys = py_call(b.list, value)
         for i in range(len(keys)):  # driver-loop: native scalar class labels and scalar weights only
@@ -106,7 +107,7 @@ def logistic_get_params(model: PythonObject, context: PythonObject) raises -> Py
 
 
 def logistic_set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(values) is not b.dict:
         raise Error("TypeError: native LogisticRegression updates require ordinary keyword storage")
     if len(values) == 0:

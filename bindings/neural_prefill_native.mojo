@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native zero-state training prefill and immutable tape ownership."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -18,7 +19,7 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
                             captured_fields: PythonObject) raises -> PythonObject:
     """The zero-state prefill: `(y, h_last, k_last, v_last, theta_last)`, the
     reports None where the binding skips them. The caller assigns them."""
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     # A public Mamba operation captures model metadata and weight owners once;
     # its caller publishes session/cache changes back to the live dictionary.
     var fields = py_call(bi.object.__getattribute__, block, "__dict__") if captured_fields is None else captured_fields
@@ -82,7 +83,7 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
 def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
     # Pass the captured fields explicitly: a PythonObject(None) default is
     # evaluated at compile time and needs a live interpreter.
-    var fields = py_call(Python.import_module("builtins").object.__getattribute__, block, "__dict__")
+    var fields = py_call(native_loaded_module("builtins").object.__getattribute__, block, "__dict__")
     var result = _prefill_mamba3_reports(block, x, entries, fields)
     var names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over report result metadata slots
@@ -92,7 +93,7 @@ def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject)
 
 def neural_prefill_forward(block: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var kind = String(fields["_native_kind"])
     if kind != "transformer" and kind != "mamba3":
@@ -155,7 +156,7 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
 
 def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var kind = String(fields["_native_kind"])
     var dims = List[Int]()
@@ -209,7 +210,7 @@ def neural_prefill_close(tape: PythonObject) raises:
         _ = neural_descriptor_reserved_execute(tape[4], tape[1], Int(py=tape[5]), base, base + 1, base + 4,
             [], [], [])
     else:
-        var bi = Python.import_module("builtins")
+        var bi = native_loaded_module("builtins")
         var kind = "transformer" if Bool(py=py_call(bi.hasattr, tape[0], "transformer_close_tape")) else "mamba3"
         _ = py_call(_native_function(tape[0], kind + "_close_tape"), tape[1])
 

@@ -2,6 +2,7 @@
 # Explicit CPU KDE keeps its existing serial kernel and fixed sum order;
 # query preparation, stored-buffer ownership and result publication are native.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes import classical_getattribute
@@ -132,7 +133,7 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
         if ("NaN" in text or "Infinit" in text or "infinit" in text
                 or "nonfinite" in text or "non-finite" in text
                 or "not finite" in text or "requires finite" in text or "must be finite" in text):
-            var name = py_call(Python.import_module("builtins").type.__dict__["__name__"].__get__, py_type(model))
+            var name = py_call(native_loaded_module("builtins").type.__dict__["__name__"].__get__, py_type(model))
             raise Error("Input X contains NaN or infinity (" + String(name) + ": " + text + ")")
         raise Error("HostKDEKernelError: " + text)
     _ = train^

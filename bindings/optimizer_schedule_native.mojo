@@ -3,6 +3,7 @@
 from std.memory import bitcast
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, opt_exact
@@ -34,11 +35,11 @@ def _sched_real(value: PythonObject, label: String) raises -> Float64:
 def _sched_int(value: PythonObject, label: String) raises -> Int:
     # An integer (int or a NumPy integer, not bool) for a schedule count;
     # a str or a float is refused as TypeError, never parsed or truncated.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.bool:
         raise Error("TypeError: " + label + " must be an integer")
     try:
-        return Int(py=py_call_typed(Python.import_module("operator").index, value))
+        return Int(py=py_call_typed(native_loaded_module("operator").index, value))
     except:
         raise Error("TypeError: " + label + " must be an integer")
 
@@ -47,7 +48,7 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
     opt_scalar(values, context)
     var kind = schedule_kind(owner, context)
     var fields = py_fields(owner)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = String(py=py_type(owner).__name__) + ": "
     if kind < 3:
         var peak = Float64(Float32(_sched_real(values[0], cls + "peak_lr")))
@@ -112,7 +113,7 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
 
 
 def schedule_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if operation == "schedule_construct":
         return schedule_construct(owner, values, context)
     if operation == "schedule_from_config":

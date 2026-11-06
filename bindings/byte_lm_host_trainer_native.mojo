@@ -44,7 +44,7 @@ comptime _IGNORE_INDEX = -100
 
 
 def _text(value: PythonObject) raises -> String:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return String(py=py_call(b.str, value))
 
 

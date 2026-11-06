@@ -5,6 +5,7 @@
 # by owned CPython references. The caller supplies the shared classical context.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from std.memory import bitcast, memcpy
 from std.sys import size_of
 from std.sys.info import CompilationTarget
@@ -83,7 +84,7 @@ def _rp_dict(value: PythonObject) raises -> PythonObject:
     # Used only after exact stored-class admission. GenericGetDict reads the
     # actual instance dictionary, never a replacement __dict__ property.
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr, PyObjectPtr())
+    var raw = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
     if not raw:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=raw)
@@ -978,8 +979,8 @@ def _rp_sparse_fill_array(value: PythonObject, context: PythonObject) raises -> 
             real = bitcast[DType.uint64](number)
         elif overflow > 0:
             var unsigned = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLong")(value._obj_ptr)
-            if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            if cpython_table()[].PyErr_Occurred():
+                cpy.PyErr_Clear()
                 dtype = "f8"
                 real = bitcast[DType.uint64](Float64(py=value))
             else:
@@ -1035,7 +1036,7 @@ def _rp_sparse_fill_type(value: PythonObject, context: PythonObject) raises -> P
 def _rp_datetime_type(name: String) raises -> PythonObject:
     var cls = _pd_class("datetime", name)
     ref cpy = Python().cpython()
-    if cls is None or (cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr) & UInt64(512)) != 0:
+    if cls is None or (cpython_table()[].PyType_GetFlags(cls._obj_ptr) & UInt64(512)) != 0:
         raise Error("TypeError: temporal storage boxing requires the static native datetime type")
     return cls
 

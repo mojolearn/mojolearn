@@ -3,6 +3,7 @@
 # metadata, never Python loaders, constructors, or callbacks. The public
 # router is switched only after every existing format has a native builder.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.memory import bitcast
 from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
@@ -52,7 +53,7 @@ def host_archive_shape(arrays: PythonObject, name: String, dtype: String, shape:
 
 
 def host_archive_check_layout(cls: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native archive classes require an ordinary native class layout")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
@@ -75,13 +76,13 @@ def host_archive_check_layout(cls: PythonObject, context: PythonObject) raises:
 
 def host_archive_allocate(cls: PythonObject, context: PythonObject) raises -> PythonObject:
     host_archive_check_layout(cls, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var model = py_call(b.object.__new__, cls)
     return model
 
 
 def host_archive_object(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native archive classes require an ordinary native class layout")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
@@ -238,7 +239,7 @@ def host_archive_tuple_shape(arrays: PythonObject, name: String, dtype: String, 
                              path: PythonObject, context: PythonObject) raises -> PythonObject:
     """A member whose shape is exactly `shape` (a tuple), refused as
     `{path!r} {name} shape {shape} is not {want}`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var value = _archive_exact(arrays, name, dtype, context)
     var got = py_call(b.tuple, value.shape)
     if not Bool(py=got == shape):
@@ -342,7 +343,7 @@ def host_archive_cholesky(cls: PythonObject, arrays: PythonObject, path: PythonO
                           context: PythonObject) raises -> PythonObject:
     # The refusals keep Cholesky.load's wording and order: numeric_mode,
     # the three field vectors' dtypes, their sizes, then the factor.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var where = host_archive_where(path, context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
@@ -406,7 +407,7 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
 
 def host_archive_sorted(table: PythonObject) raises -> String:
     """repr(sorted(table)): the list of names a loader's refusal shows."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return String(py_call(b.repr, py_call(b.sorted, table)))
 
 
@@ -661,7 +662,7 @@ def host_archive_class_values(value: PythonObject, context: PythonObject) raises
     # Archive decoding produces exact strings, lists, and Arrays. Read their
     # native storage directly; Array.tolist/__iter__ and arbitrary label
     # protocols never participate in loading.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.str:
         return Python.list(value)
     var result = Python.list()
@@ -845,7 +846,7 @@ def host_archive_series_shape(arrays: PythonObject, name: String, dtype: String,
     """An exact-dtype member of `shape`, refused as the series loaders
     refused it: `{path!r} {name} has shape {shape}, not {expected}`."""
     var value = _archive_exact(arrays, name, dtype, context)
-    var got = py_call(Python.import_module("builtins").tuple, value.shape)
+    var got = py_call(native_loaded_module("builtins").tuple, value.shape)
     if not Bool(py=got == shape):
         raise Error(host_archive_where(path, context) + " " + name + " has shape " + _archive_builtin_repr(got)
                     + ", not " + _archive_builtin_repr(shape))
@@ -956,7 +957,7 @@ def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path:
     maps the format to (parameter names, fitted names, (attribute, member,
     dtype) arrays, the other constructor defaults, the parameters saved as
     -1 for None)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var layout = context["host_archive_ann_layouts"][fmt]
     var names = layout[0]
     var fitted_names = layout[1]
@@ -1090,7 +1091,7 @@ def host_archive_rbc_metric_object(cls_name: String, metric: PythonObject, p: Py
     """`neighbors._resolve_rbc_metric(cls_name, metric, p)` for a saved
     metric name: `(metric_value, metric_arg)`, or the same refusal, by name
     and in the same order."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var head = "mojolearn " + cls_name + ": "
     var shown = _archive_builtin_repr(metric)
     if py_type(metric) is not b.str:
@@ -1177,7 +1178,7 @@ def host_archive_radius_refusals(fields: PythonObject, cls_name: String, context
     """`RadiusNeighbors._check_refusals` over the instance fields (at `fit`
     and at `load`): the metric (which sets `_metric_value`/`_metric_arg`),
     then the algorithm, then the radius, in the Python method's wording."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var metric = fields["metric"]
     var algorithm = fields["algorithm"]
     var radius = fields["radius"]
@@ -1392,7 +1393,7 @@ def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: P
     order and wording; the saved knobs pass through the constructor's checks
     again (`iforest_validate`, the native `_validate_params`), then the saved
     mode, the training matrix and the fitted scalars."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var where = host_archive_where(path, context)
     var ints = _archive_exact(arrays, "ints", "<i8", context)
     var reals = _archive_exact(arrays, "reals", "<f8", context)
@@ -1469,7 +1470,7 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonO
     if not py_contains(affinities, affinity):
         raise Error("mojolearn SpectralClustering: affinity=" + _archive_builtin_repr(affinity)
                     + " is refused; it must be one of "
-                    + _archive_builtin_repr(py_call(Python.import_module("builtins").list, affinities))
+                    + _archive_builtin_repr(py_call(native_loaded_module("builtins").list, affinities))
                     + ". A callable or another kernel name builds the affinity outside every identity column.")
     if name == "rbf" or name == "precomputed_nearest_neighbors":
         raise Error("NotImplementedError: mojolearn SpectralClustering: prediction_data with affinity="
@@ -1556,7 +1557,7 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObjec
     # The refusals keep UMAP.load's wording and order: the vector sizes,
     # then the constructor's validation of the saved controls, the saved
     # mode, the config round trip, then the training and embedding shapes.
-    var builtins = Python.import_module("builtins")
+    var builtins = native_loaded_module("builtins")
     var where = host_archive_where(path, context)
     var meta = _archive_exact(arrays, "meta", "<i8", context)
     var controls = _archive_exact(arrays, "controls", "<f4", context)
@@ -1843,7 +1844,7 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
         total += Int(py=length_list[i])
     if len(param_list) != count or len(length_list) != count or total != n_ls:
         raise Error(where + " kernel arrays disagree with each other")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var nodes = Python.list()
     var offset = 0
     for i in range(count):  # driver-loop: saved postfix kernel node metadata
@@ -1951,7 +1952,7 @@ def host_archive_svm_check(fields: PythonObject, classifier: Bool, context: Pyth
     """`SVC._validate_params` / `SVR._validate_params` on the constructor
     values a load restored: the same refusals, in the same order, then the
     checked `_hp_*` working values."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var head = String("mojolearn SVC: ") if classifier else String("mojolearn SVR: ")
     var kernels = context["host_archive_svm_kernels"]
     var refused = context["host_archive_svm_refused" if classifier else "host_archive_svr_refused"]
@@ -2239,7 +2240,7 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
                      context: PythonObject) raises -> PythonObject:
     """SVC.load / SVR.load: the object, attributes and refusals (wording
     and order) of the Python loaders they replaced."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var where = host_archive_where(path, context)
     var meta = host_archive_meta(arrays, "meta", 6 if classifier else 5, path, context)
     var hyper = host_archive_held(arrays, "hyper", "<f8", 4 if classifier else 5, path, context)
@@ -2520,7 +2521,7 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     if Int(py=bias.size) < 1:
         raise Error("saved gradient boosting bias is empty")
     var stored = _archive_exact(arrays, "model", "<u1", context)
-    var raw = py_call(Python.import_module("builtins").bytes, stored._mv)
+    var raw = py_call(native_loaded_module("builtins").bytes, stored._mv)
     var text = py_call(raw.decode, "utf-8")
     var state = host_archive_gbdt_state(text, context)
     if classical_i64(meta, 0) != Int(py=state["n_input_features"]) or classical_i64(meta, 1) != Int(py=state["dim"]):
@@ -2556,7 +2557,7 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
 def _archive_one_string(value: PythonObject) raises -> PythonObject:
     """`ensemble._one_string`: the single str a loaded member holds, or
     None."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var item = value
     while py_type(item) is b.list or py_type(item) is b.tuple:  # driver-loop: over the nesting depth of a stored string field
         if len(item) != 1:
@@ -2575,7 +2576,7 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     dimension comes from the model text through the GBDT binding's
     `gbdt_model_dim` (or, for a CTR text on the CPU binding, the native
     text reader), as the loader read it."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var saved = _archive_string(arrays, "estimator", context)
     if String(py=saved) != String(py=cls.__name__):
         raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
@@ -2646,7 +2647,7 @@ def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: Pyt
     saving estimator are checked with the refusals `_serialize.read_npz` and
     `linear_model._check_saved_by` gave, and the nearest connected ancestor
     (the class whose schema the file holds) is returned."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native archive loading requires an ordinary class")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
@@ -2722,11 +2723,11 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         raise Error("native host archive builder has no supported schema for " + fmt)
     var cls = py_get(classes, estimator)
     if cls is None:
-        raise Error("mojolearn: " + String(py_call(Python.import_module("builtins").repr, path)) + " was saved by " + String(estimator) + ", which " + fmt + " does not hold")
+        raise Error("mojolearn: " + String(py_call(native_loaded_module("builtins").repr, path)) + " was saved by " + String(estimator) + ", which " + fmt + " does not hold")
     if public_owner is not None:
         cls = requested_class
     elif requested_class is not None:
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(requested_class) is not b.type:
             raise Error("TypeError: native archive loading requires an ordinary class")
         var mro = py_call(b.type.__dict__["__mro__"].__get__, requested_class)

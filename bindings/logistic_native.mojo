@@ -10,6 +10,7 @@
 # the decoded prediction is handed straight to the native accuracy program
 # (bindings/classical_labels.mojo `classical_accuracy`).
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -45,7 +46,7 @@ comptime PY2MOJO_ROWS = 2
 
 
 def _builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def _repr(value: PythonObject) raises -> String:

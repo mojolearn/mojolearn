@@ -398,7 +398,7 @@ def _bad_rows(ran: PythonObject, staged: Tuple[Int, Int], limit: Int) raises -> 
 
 def _seed64(value: PythonObject) raises -> Tuple[Int, Int]:
     # (0 if None else int(value)) & 0xFFFFFFFFFFFFFFFF as its (low, high) words.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var seed = PythonObject(0) if value is None else py_call_typed(b.int, value)
     var mask = PythonObject(0xFFFFFFFF)
     var lo = Int(py=py_call(b.int.__dict__["__and__"], seed, mask))
@@ -416,16 +416,16 @@ def _seed_words(lo: Int, hi: Int) -> List[Int]:
 
 # ---------------------------------------------------------------- shared checks
 def _truth(value: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("builtins").bool, value))
+    return Bool(py=py_call(native_loaded_module("builtins").bool, value))
 
 
 def _is_str(value: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Bool(py=py_call(b.isinstance, value, b.str))
 
 
 def _is_float(value: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Bool(py=py_call(b.isinstance, value, b.float))
 
 
@@ -440,7 +440,7 @@ def _is_nan_value(value: PythonObject) raises -> Bool:
 def _real_like(value: PythonObject, context: PythonObject) raises -> Bool:
     # numbers.Real without its Python __instancecheck__: Python ints, bools
     # and floats, and NumPy integer and floating scalars when connected.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if Bool(py=py_call(b.isinstance, value, b.int)) or Bool(py=py_call(b.isinstance, value, b.float)):
         return True
     var integer = py_get(context, "integer")
@@ -451,11 +451,11 @@ def _real_like(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _float(value: PythonObject) raises -> Float64:
-    return Float64(py=py_call_typed(Python.import_module("builtins").float, value))
+    return Float64(py=py_call_typed(native_loaded_module("builtins").float, value))
 
 
 def _str_text(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").str, value))
+    return String(py_call(native_loaded_module("builtins").str, value))
 
 
 def _fitted(model: PythonObject) raises:
@@ -467,7 +467,7 @@ def _fitted(model: PythonObject) raises:
 def _check_width(model: PythonObject, d: Int) raises:
     # `_check_width`.
     var fitted = py_fields(model)["n_features_in_"]
-    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + _str_text(fitted))
 
 
@@ -507,7 +507,7 @@ def _qselect(mode: PythonObject, entries: PythonObject, context: PythonObject) r
     # import) on the FAST tier of a Metal device binding.
     if not Bool(py=context["prep_encode_qselect"]):
         return False
-    var text = py_call(Python.import_module("builtins").str, mode)
+    var text = py_call(native_loaded_module("builtins").str, mode)
     if String(py_call(py_call(text.strip).lower)) != "fast":
         return False
     if py_get(entries, "x_prep_host_column") is not None:
@@ -604,7 +604,7 @@ def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObjec
 
 def _index_list(value: PythonObject) raises -> List[Int]:
     # A fitted list of Python ints (`_keep`, `_indicator`).
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var items = py_call(b.list, value)
     var out = List[Int]()
     for i in range(len(items)):  # driver-loop: over fitted column indices (feature metadata)
@@ -711,8 +711,8 @@ def _check_weights(source: PythonObject, n: Int, who: String, context: PythonObj
 
 
 def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
-    var operator = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var operator = native_loaded_module("operator")
     var fields = py_fields(model)
     var encode = fields["encode"]
     var encode_text = String(encode) if _is_str(encode) else String("")
@@ -1105,7 +1105,7 @@ def _c08_route(mode: PythonObject, entries: PythonObject, bit: Int) raises -> Bo
 def _user_values(value: PythonObject, context: PythonObject) raises -> PythonObject:
     # A user list argument's values as a Python list (`v.tolist()` for an
     # array type, a mojolearn Array read as its float32 words).
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is context["array_class"]:
         var out = Python.list()
         if Int(py=value.size) == 0:
@@ -1210,7 +1210,7 @@ def _given_categories(categories: PythonObject, values: PythonObject, mode: Pyth
     """`_given_categories`: one numeric list per column, sorted ascending with
     at most a NaN last, stored as float32; with check_unknown a training
     value outside its column's list is refused."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var d = Int(py=values[4])
     var lists = py_call(b.list, categories)
     if len(lists) != d:
@@ -1259,13 +1259,13 @@ def _integral(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _is_bool(value: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Bool(py=py_call(b.isinstance, value, b.bool))
 
 
 def _cmp(name: String, a: PythonObject, b: PythonObject) raises -> Bool:
     # A Python comparison (operator.<name>) of two numbers.
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     return _truth(py_call(py_get(operator.__dict__, PythonObject(name)), a, b))
 
 
@@ -1289,7 +1289,7 @@ def _infrequent_threshold(n: Int, min_frequency: PythonObject, context: PythonOb
     ceil(n * f) in binary64; none, 0."""
     if min_frequency is None:
         return 0
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if _integral(min_frequency, context):
         return Int(py=py_call(b.int, min_frequency))
     return Int(ceil(Float64(n) * _float(min_frequency)))
@@ -1327,7 +1327,7 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObjec
     var m1 = p.alloc(d * kmax)
     var mp = p.alloc(d * kmax)
     var max_categories = fields["max_categories"]
-    var maxc = -1 if max_categories is None else Int(py=py_call(Python.import_module("builtins").int, max_categories))
+    var maxc = -1 if max_categories is None else Int(py=py_call(native_loaded_module("builtins").int, max_categories))
     _stage(p.program, OP_CODE_COUNTS, d, codes, n, d, kmax, cnt)
     _stage(p.program, OP_INF_M0, d * kmax, cnt, kc, kmax, _infrequent_threshold(n, fields["min_frequency"], context), m0)
     _stage(p.program, OP_INF_M1, d * kmax, cnt, kc, kmax, m0, maxc, m1)
@@ -1424,7 +1424,7 @@ def _scalar(mut p: EncProg, value: Float64, context: PythonObject) raises -> Int
 
 def _num_text(value: PythonObject) raises -> String:
     # A number in an f-string (format(value, "")).
-    return String(py_call(Python.import_module("builtins").format, value, ""))
+    return String(py_call(native_loaded_module("builtins").format, value, ""))
 
 
 # ---------------------------------------------------------------- OrdinalEncoder
@@ -1595,7 +1595,7 @@ def _grouped_sizes(fields: PythonObject) raises -> List[Int]:
 def _set_drop_idx(model: PythonObject, context: PythonObject) raises:
     """`_set_drop_idx`: `_drop_after` in grouped codes, drop_idx_ in category
     indices (None, or one int or None per column)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var sizes = _grouped_sizes(fields)
     var d = len(sizes)
@@ -1728,7 +1728,7 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
 def _onehot_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
     """OneHotEncoder `_transform_encoded`: lookup (or the C08 fit's inverse),
     the grouping remap with the unknown slots, and onehot."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -1867,7 +1867,7 @@ def _target_transform(model: PythonObject, values: PythonObject, context: Python
 def _spline_fused(mode: PythonObject, entries: PythonObject) raises -> Bool:
     # `_spline_fused`: the FAST Apple build with -D MOJOLEARN_SPLINE_FAST_FUSED
     # (it alone exports x_prep_spline_fused).
-    var text = py_call(Python.import_module("builtins").str, mode)
+    var text = py_call(native_loaded_module("builtins").str, mode)
     if String(py_call(py_call(text.strip).lower)) != "fast":
         return False
     return py_get(entries, "x_prep_spline_fused") is not None
@@ -1912,7 +1912,7 @@ def _spline_checks(fields: PythonObject) raises:
     if _truth(fields["sparse_output"]):
         raise Error("NotImplementedError: mojolearn: SplineTransformer sparse_output is not implemented "
                     + "(there is no sparse Array)")
-    var k = Int(py=py_call_typed(Python.import_module("builtins").int, fields["degree"]))
+    var k = Int(py=py_call_typed(native_loaded_module("builtins").int, fields["degree"]))
     if k < 0 or k > 7:
         raise Error("mojolearn: SplineTransformer needs 0 <= degree <= 7")
 
@@ -1932,7 +1932,7 @@ def _no_nan(fields: PythonObject, ran: PythonObject, st: Int, d: Int, n: Int) ra
 
 def _knot_rows(knots: PythonObject, context: PythonObject) raises -> PythonObject:
     # The user knots argument's rows, each a Python list of numbers.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(knots) is context["array_class"] and Int(py=knots.ndim) == 2:
         var rows = Python.list()
         var r = Int(py=knots.shape[0])
@@ -1963,7 +1963,7 @@ def _spline_fit(model: PythonObject, values: PythonObject, weight_source: Python
     """SplineTransformer `_fit`: the knots program (col_stats, the given,
     quantile or uniform base knots, spline_knots) and, with `fuse`, the
     spline_apply of X in the same program; returns the output or None."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _spline_checks(fields)
     var extrap = _extrapolation(fields["extrapolation"])
@@ -2269,7 +2269,7 @@ def _target_info(y: PythonObject, target_type: String, context: PythonObject) ra
     """`_target_arrays`, else `_target_kind`: a numeric buffer vector's own
     words (continuous: float32; else its class codes), then the label input
     step's codes for anything else."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(y)
     var listed = cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes
     var found = _view_or_none(y, context)
@@ -2311,7 +2311,7 @@ def _target_info(y: PythonObject, target_type: String, context: PythonObject) ra
 # ---------------------------------------------------------------- TargetEncoder fit
 def _target_check(fields: PythonObject, context: PythonObject) raises:
     """TargetEncoder `_check`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var categories = fields["categories"]
     var auto = _is_str(categories) and String(categories) == "auto"
     if not auto and not Bool(py=py_call(b.isinstance, categories, Python.tuple(b.list, b.tuple))):
@@ -2432,7 +2432,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         flag = staged[1]
     elif folds is None:
         # every row in no fold (`full((max(n, 1),), -1, "<i4")`: all-ones words)
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var m = max(n, 1)
         var ones = py_call(py_attr(py_call(b.bytes, Python.list(255)), "__mul__"), PythonObject(4 * m))
         var store = py_call(context["array_type"], "i", ones)
@@ -2529,10 +2529,10 @@ struct IndexI64(Copyable, Movable):
     var size: Int
 
     def __init__(out self, values: PythonObject, name: String, context: PythonObject) raises:
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var cls = py_type(values)
         if cls is b.list or cls is b.tuple or cls is b.range:
-            var store = py_call(Python.import_module("array").array, "q", values)
+            var store = py_call(native_loaded_module("array").array, "q", values)
             self.keep = store
             self.size = len(store)
             self.addr = Int(py=py_call(store.buffer_info)[0])
@@ -2591,7 +2591,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
     from a user cv splitter (`cv.split(X, y)`) or (train, test) iterable: the
     test folds cover every row exactly once, and each fold's training rows
     are every other row."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cv = py_fields(model)["cv"]
     # Only data and native splitters cross: a list or tuple of (train, test)
     # index arrays, or a mojolearn splitter, whose folds come from the
@@ -2646,7 +2646,7 @@ def _target_fit_transform(model: PythonObject, values: PythonObject, y: PythonOb
     """TargetEncoder.fit_transform: `splits` (fold int32 Array, n_splits)
     from a user cv splitter, or None: cv an integer, the folds staged on the
     device in the fit's own program."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var tt = String(fields["target_type"])
@@ -2765,7 +2765,7 @@ def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> 
     """`_key_words`: a float32 / int32 / int64 / float64 score vector's own
     words and its c2_key64 kind; a user score function's other answer
     converted once to float64."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(scores)
     if not (cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes):
         var found = _view_or_none(scores, context)
@@ -2825,7 +2825,7 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
     (their defaults) run as the encode owner's own operation, re-entered
     through its compiled entry. Any other score_func would be user Python code
     in fit and is refused."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var d = Int(py=values[4])
     var mode = _default_mode(context)
@@ -2947,7 +2947,7 @@ def prep_encode_scores_call(operation: String, args: PythonObject, context: Pyth
 # ---------------------------------------------------------------- the door
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     # The admitted class this model is (or subclasses), by its MRO.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     var kinds = context["prep_encode_kinds"]
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
@@ -3100,7 +3100,7 @@ def _encode_dispatch(model: PythonObject, kind: String, operation: String, args:
             # integer is a user splitter, its folds read here once
             var cv = py_fields(model)["cv"]
             var splits = PythonObject(None)
-            if cv is not None and not Bool(py=py_call(Python.import_module("builtins").isinstance, cv,
+            if cv is not None and not Bool(py=py_call(native_loaded_module("builtins").isinstance, cv,
                                                       Python.import_module("numbers").Integral)):
                 splits = _target_splitter_folds(model, args[0], args[1], Int(py=values[3]), context)
             result = _target_fit_transform(model, values, args[1], splits, context)

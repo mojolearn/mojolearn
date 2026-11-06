@@ -99,7 +99,7 @@ def _chol_extension(model: PythonObject, binding: PythonObject, context: PythonO
 def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`Cholesky.fit(A)`: factor A + jitter * I."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     for name in ["n_", "L_", "info_", "nb_", "_logdet", "jitter_", "_mojolearn_fitted"]:  # driver-loop: admit replaced fit owners before numerical work or publication
         if py_contains(fields, name):

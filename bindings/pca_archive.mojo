@@ -2,6 +2,7 @@
 # The incumbent mojolearn-pca-1 ZIP/NPY schema, using the shared native archive
 # reader/writer. This private owner never calls PCA.load or _serialize.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_description import sequential_fields
 from bindings.classical_arrays import classical_array, classical_word
@@ -19,7 +20,7 @@ def pca_archive_save(model: PythonObject, path: PythonObject, context: PythonObj
     py_setitem(values, "format", "mojolearn-pca-1")
     py_setitem(values, "estimator", "PCA")
     py_setitem(values, "numeric_mode", pca_mode(fields, context))
-    py_setitem(values, "svd_solver", py_call(Python.import_module("builtins").str, fields["svd_solver"]))
+    py_setitem(values, "svd_solver", py_call(native_loaded_module("builtins").str, fields["svd_solver"]))
     var names = Python.tuple("components", "mean", "singular_values", "explained_variance", "explained_variance_ratio")
     for k in range(len(names)):  # driver-loop: over the five existing PCA archive array members
         py_setitem(values, names[k], fields[names[k] + "_"])
@@ -72,7 +73,7 @@ def pca_archive_load(cls: PythonObject, path: PythonObject, context: PythonObjec
     if Int(py=noise.size) != 1:
         raise Error("PCA model noise_variance must hold one value")
     var solver = _archive_string(arrays, "svd_solver", context)
-    var model = py_call(Python.import_module("builtins").object.__new__, cls)
+    var model = py_call(native_loaded_module("builtins").object.__new__, cls)
     _ = pca_initialize(model, Python.tuple(nc, True, Bool(py=meta.flat[3]), solver, 0.0,
                                           "auto", 10, "auto", PythonObject(None), mode))
     var fields = sequential_fields(model)

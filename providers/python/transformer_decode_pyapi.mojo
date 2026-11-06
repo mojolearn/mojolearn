@@ -3,6 +3,7 @@
 # thin connection; GPU execution uses the common native provider and CPU copies
 # stay native. No Python session methods or block hooks are invoked here.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
@@ -59,13 +60,13 @@ struct TransformerDecodeHandle(Movable, Writable):
 
 
 def _transformer_decode_module(module: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(module) is bi.str:
         raise Error("TransformerDecodeSession: " + String(module))
     if py_type(module) is not context["admission_context"]["native_module_type"]:
         raise Error("TypeError: Transformer decode requires its connected native module")
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var raw = cpy.PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_borrowed=raw)
@@ -75,13 +76,13 @@ def _transformer_decode_module(module: PythonObject, context: PythonObject) rais
 
 def _transformer_decode_entry(entries: PythonObject, name: String) raises -> PythonObject:
     var entry = py_get(entries, name)
-    if py_type(entry) is not py_type(Python.import_module("builtins").len):
+    if py_type(entry) is not py_type(native_loaded_module("builtins").len):
         raise Error("NotImplementedError: Transformer decode lacks its connected compiled " + name + " entry")
     return entry
 
 
 def _transformer_decode_binding(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var route = String(fields["_native_route"])
     if route != "cpu" and route != "gpu":
         raise Error("TypeError: Transformer decode route must be cpu or gpu")
@@ -190,7 +191,7 @@ def _transformer_decode_block(block: PythonObject, context: PythonObject, weight
     # Retained decode sessions do not reread changed weights. Capture only
     # current configuration/profile metadata, preserving that ownership rule.
     var fields = neural_block_fields(block, context)
-    var snapshot = py_call(Python.import_module("builtins").dict, fields)
+    var snapshot = py_call(native_loaded_module("builtins").dict, fields)
     py_setitem(snapshot, "_opts_tail", neural_metadata_snapshot(fields["_opts_tail"]))
     return snapshot
 
@@ -198,13 +199,13 @@ def _transformer_decode_block(block: PythonObject, context: PythonObject, weight
 def _transformer_decode_state_fields(state: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var names = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "cached_tokens", "window", "k_cache", "v_cache", "arithmetic_profile", "_resident_session")
     var live = _transformer_fields(state, context["generation_classes"][2]["transformer"], names)
-    var slots = py_call(Python.import_module("builtins").dict, live)
+    var slots = py_call(native_loaded_module("builtins").dict, live)
     # Old serialized states may omit window when no sliding window is used.
     if not py_contains(slots, "window"):
         py_setitem(slots, "window", PythonObject(0))
     var words = _transformer_state_words(slots)
     var profile = py_get(slots, "arithmetic_profile")
-    if profile is not None and py_type(profile) is not Python.import_module("builtins").str:
+    if profile is not None and py_type(profile) is not native_loaded_module("builtins").str:
         raise Error("TypeError: Transformer cache arithmetic profile requires an ordinary string")
     var configuration = _transformer_configuration(fields)
     if words[1] != configuration[2] or words[2] != configuration[3] or words[5] != configuration[5]:
@@ -304,7 +305,7 @@ def _transformer_decode_copy(value: PythonObject, context: PythonObject) raises 
 
 
 def transformer_decode_init(session: PythonObject, block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var values = _transformer_decode_fields(session, context)
     var fields = _transformer_decode_block(block, context, True)
     var binding = _transformer_decode_binding(fields, context)
@@ -506,7 +507,7 @@ def transformer_decode_release(session: PythonObject, context: PythonObject) rai
 def transformer_decode_native_call(operation: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
     if operation == "new":
-        var session = py_call(Python.import_module("builtins").object.__new__, context["transformer_session_class"])
+        var session = py_call(native_loaded_module("builtins").object.__new__, context["transformer_session_class"])
         _ = transformer_decode_init(session, values[0], values[1], context)
         return session
     var session = values[0]
@@ -560,7 +561,7 @@ def transformer_decode_native_call(operation: String, values: PythonObject, cont
 def transformer_decode_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
-        var bi = Python.import_module("builtins")
+        var bi = native_loaded_module("builtins")
         if len(args) != 3 or py_type(args[0]) is not bi.str or py_type(args[1]) is not bi.tuple or py_type(args[2]) is not bi.dict:
             raise Error("TypeError: Transformer decode operation requires native connection arguments")
         var result = transformer_decode_native_call(String(args[0]), args[1], args[2])

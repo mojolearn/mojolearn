@@ -8,6 +8,7 @@
 # are unchanged. (The earlier ClassicalKit transcription made one native call
 # per step with host round trips between them; it is replaced by this.)
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_arrays import classical_array
 from bindings.sequential_arrays import sequential_address
 from bindings.sequential_description import sequential_fields
@@ -19,7 +20,7 @@ from bindings.py_balanced import py_call, py_get, py_type
 def pca_randomized_fit(model: PythonObject, args: PythonObject, project: Bool, entries: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var x = pca_input(args[0], context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])

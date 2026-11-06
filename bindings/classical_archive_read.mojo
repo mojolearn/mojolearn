@@ -6,6 +6,7 @@ from std.collections import Dict
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call
@@ -31,7 +32,7 @@ def _archive_model_fields(value: PythonObject) raises -> PythonObject:
     # A connected model owns an ordinary instance dictionary. Read that native
     # storage directly, without looking up the mutable builtins.object name.
     ref cpy = Python().cpython()
-    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr, PyObjectPtr())
+    var result = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
     if not result:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=result)

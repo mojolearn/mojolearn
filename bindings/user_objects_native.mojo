@@ -34,6 +34,7 @@
 # raises it, so the exception type and wording are the ones the Python had.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_setitem
@@ -63,13 +64,13 @@ struct _Env(Movable):
     var array: PythonObject
 
     def __init__(out self) raises:
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var numbers = Python.import_module("numbers")
         self.seq = Python.tuple(b.list, b.tuple)
         self.integral = numbers.Integral
         self.real = numbers.Real
-        self.op = Python.import_module("operator")
-        self.array = Python.import_module("array").array
+        self.op = native_loaded_module("operator")
+        self.array = native_loaded_module("array").array
         self.b = b
 
     def isinstance(self, v: PythonObject, cls: PythonObject) raises -> Bool:

@@ -12,6 +12,7 @@ It acts on the host arrays the fit already returned (its
 outputs), so the two columns run the same loops."""
 from core.py2mojo_cluster_est_impl import dbscan_core_count, dbscan_core_gather
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 
 # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_estimators.patch
@@ -19,7 +20,7 @@ from std.python import Python, PythonObject
 
 def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> PythonObject:
     """An `array.array(code)` of `nbytes` zero bytes."""
-    var zero = Python.import_module("builtins").bytes(nbytes)
+    var zero = native_loaded_module("builtins").bytes(nbytes)
     return arr.array(PythonObject(code), zero)
 
 
@@ -38,7 +39,7 @@ def dbscan_core_arrays_host_binding(
     var lp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels_addr))
     var cp = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=core_addr))
     var n_core = dbscan_core_count(cp, n)
-    var arr = Python.import_module("array")
+    var arr = native_loaded_module("array")
     var idx = _new_array(arr, "i", 4 * n_core)
     var comp = _new_array(arr, "f", 4 * n_core * d)
     var lab = _new_array(arr, "i", 4 * n_core)

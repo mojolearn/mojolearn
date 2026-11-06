@@ -3,6 +3,7 @@
 # only retained native slots publish the completed object, without callbacks.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_buffer_owner import native_storage_allocate
@@ -120,7 +121,7 @@ def _admit_buffer(value: PythonObject, context: PythonObject, depth: Int = 0) ra
     except:
         pass  # scalar exporters below are admitted by native dtype identities
     ref cpy = Python().cpython()
-    var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+    var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
     if (flags & UInt64(512)) == 0 and py_get(context["modules"], "numpy") is not None:
         # NumPy scalar buffers are zero-dimensional native exporters too.
         # Derive exact scalar identities from the checked C dtype constructor,

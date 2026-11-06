@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native truth and reduction configuration for the public training loss.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.optimizer_admission import opt_exact, opt_value
@@ -49,7 +50,7 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
     if depth > 64:
         raise Error("TypeError: loss options require native scalar configuration")
     var cls = py_type(value)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var admitted = opt_exact(cls, context["scalar_types"]) or opt_exact(cls, context["buffer_types"])
     admitted = admitted or opt_exact(cls, context["container_types"])
     if cls is context["container_types"][5]:
@@ -120,7 +121,7 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
 
 
 def loss_reduction(value: PythonObject, context: PythonObject) raises -> Int:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var text = cls is context["scalar_types"][5]
     if not text and py_get(context["modules"], "numpy") is not None:

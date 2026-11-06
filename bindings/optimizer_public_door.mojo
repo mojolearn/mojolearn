@@ -31,6 +31,7 @@ from std.ffi import _Global
 from std.memory import memcpy
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.native_buffer_owner import native_storage_allocate
 
@@ -136,7 +137,7 @@ def door_ready(guarded: PythonObject) raises:
         if d[].context is not guarded:
             opt_guards(d[].context)
         return
-    d[].bi = Python.import_module("builtins")
+    d[].bi = native_loaded_module("builtins")
     var training = Python.import_module("mojolearn._training_impl")
     d[].context = py_fields(training)["_OPT_CONTEXT"]
     if d[].context is not guarded:
@@ -428,7 +429,7 @@ def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var rc = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
     if rc != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return False
     return True
 

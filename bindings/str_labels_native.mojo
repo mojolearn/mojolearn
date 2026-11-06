@@ -9,7 +9,9 @@
 # None: a label is not a str (numbers and mixed lists keep the ORDER RULE's
 # own refusals and encodings in `_labels.sorted_classes`).
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
 
@@ -46,7 +48,7 @@ struct StrTable(Movable):
 def _is_str(value: PythonObject) raises -> Bool:
     ref cpy = Python().cpython()
     var cls = py_type(value)
-    var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+    var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
     return (flags & UInt64(UNICODE_FLAG)) != 0
 
 
@@ -117,8 +119,8 @@ def _sorted(table: StrTable, n: Int) -> List[Int]:
 
 
 def _store(code: String, n: Int) raises -> PythonObject:
-    var array = Python.import_module("array")
-    var b = Python.import_module("builtins")
+    var array = native_loaded_module("array")
+    var b = native_loaded_module("builtins")
     return py_call(array.array, code, py_call(b.bytes, 4 * max(n, 0)))
 
 
@@ -254,7 +256,7 @@ def _cross(table: StrTable, a: Int, single: StrTable) -> Int:
 def str_labels_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var operation = String(call[0])
         var result = PythonObject(None)
         if operation == "encode":

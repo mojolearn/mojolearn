@@ -5,6 +5,7 @@
 # their caller is migrated; arbitrary lock protocols are never invoked.
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
@@ -64,7 +65,7 @@ def operation_lock_create() raises -> PythonObject:
     var state = OPERATION_LOCK_BOUNDARY.get_or_create_ptr()
     if state[].cls is None:
         raise Error("native operation lock: import-time connection is missing")
-    var value = py_call(Python.import_module("builtins").object.__new__, state[].cls)
+    var value = py_call(native_loaded_module("builtins").object.__new__, state[].cls)
     var owner = PythonObject(alloc=ProviderOperationLock())
     _ = py_call(state[].setter, value, owner)
     return value
@@ -126,7 +127,7 @@ def operation_lock_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr
                 var timeout = Float64(-1)
                 if len(args) > (2 if operation == 3 else 4):
                     raise Error("TypeError: too many native operation lock arguments")
-                var bi = Python.import_module("builtins")
+                var bi = native_loaded_module("builtins")
                 if len(args) > 2:
                     if py_type(args[2]) is not bi.bool and py_type(args[2]) is not bi.int:
                         raise Error("TypeError: native operation lock blocking must be bool or int")

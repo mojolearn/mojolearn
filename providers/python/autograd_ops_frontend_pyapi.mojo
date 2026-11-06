@@ -2,6 +2,7 @@
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
 from providers.python.autograd_python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
@@ -90,7 +91,7 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
     var out = Python.list()
     for k in range(len(xs)):  # driver-loop: over returned metadata
         _ = py_call(out.append, xs[k])
-    return py_call(Python.import_module("builtins").tuple, out)
+    return py_call(native_loaded_module("builtins").tuple, out)
 
 
 
@@ -253,7 +254,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             _ = s[]._opt_index(opt)
         var grad = Bool(py=args[2]) and s[].recording()
         var res = ops_load_state_py[E, KIND](sid, native_path(args[0]), PythonObject(Int(grad)), PythonObject(opt))
-        var result = Python.import_module("builtins").dict()
+        var result = native_loaded_module("builtins").dict()
         py_setitem(result, "params", res[0])
         py_setitem(result, "seed", res[3].__lshift__(32).__or__(res[2]))
         py_setitem(result, "epoch", res[4])
@@ -321,7 +322,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         if name == "learning_rate":
             return PythonObject(Float64(s[].learning_rate(opt)))
         var kind = s[].opts[oi].cfg.kind
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if name == "optimizer_state":
             var st = s[].optimizer_state(opt, _int(args[1], "param", 1))
             var state = b.dict()
@@ -664,20 +665,20 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("ValueError: eps must be positive")
         fs.append(eps)
     if name == "transformer_softmax":
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if not (py_type(args[0]) is b.int):
             raise Error("TypeError: transformer handles must be exact native integers")
         code = 80
         hs = [_int(args[0], "input", 1)]
     if name == "transformer_linear":
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         for j in range(2):  # small-loop(2: projection handles): exact native scalar admission
             if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: transformer handles must be exact native integers")
         code = 79
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
     if name == "rms_norm":
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         for j in range(2):  # small-loop(2: RMSNorm handles): exact native scalar admission
             if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: transformer handles must be exact native integers")
@@ -688,7 +689,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
         fs.append(Float32(py=args[2]))
     if name == "rotary":
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         for j in range(3):  # small-loop(3: rotary handle/position metadata): exact native scalar admission
             if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: rotary handles and positions must be exact native integers")

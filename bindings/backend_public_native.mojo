@@ -42,7 +42,7 @@ def _read(entry: PythonObject, context: PythonObject, vendor: Bool = False) rais
     if not raw:
         if vendor and (cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["readback_skip_errors"][0]._obj_ptr) != 0
                 or cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["readback_skip_errors"][1]._obj_ptr) != 0):
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpy.PyErr_Clear()
             return PythonObject(None)
         var failure = stash_python_error()
         raise failure^

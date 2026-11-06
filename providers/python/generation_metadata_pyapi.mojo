@@ -6,6 +6,7 @@
 from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_array_snapshot, generation_buffer_view
@@ -29,7 +30,7 @@ def _generation_fields(value: PythonObject, names: PythonObject, allow_state: Bo
         # than the public Python class getset expected by _fields. Read the
         # actual native dictionary without executing a descriptor lookup.
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr, PyObjectPtr())
+        var raw = cpython_table()[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
         if not raw:
             raise cpy.unsafe_get_error()
         var fields = PythonObject(from_owned=raw)

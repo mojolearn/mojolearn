@@ -5,6 +5,7 @@
 # Py_buffer is the public stable CPython structure, represented by ten native
 # words on supported 64-bit little-endian targets (same as optimizer tensor_view).
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from std.ffi import _Global
 from core.borrowed_buffer import BorrowedBufferLayout
 from bindings.native_loaded_module import native_loaded_module
@@ -73,7 +74,7 @@ def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:
         # ndarray is a static extension type. A substituted Python class or
         # ndarray subclass cannot qualify merely by occupying this export.
         ref cpy = Python().cpython()
-        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+        var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
         if (flags & UInt64(512)) == 0 and cls is py_get(py_fields(numpy_module), "ndarray"):
             return
     var ctypes_module = py_get(sys.modules, "_ctypes")

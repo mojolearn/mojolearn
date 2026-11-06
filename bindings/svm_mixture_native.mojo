@@ -23,7 +23,7 @@ def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """`linear_model._qn_scores`: `qn_decision_function` on the fitted block,
     (n,) for one target, (n, n_targets) for the one-vs-rest block."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var x = family_as_f32(source, 2, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -49,7 +49,7 @@ def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
 
 def _class_count(classes: PythonObject) raises -> Int:
     """`len(classes_)` of a list, a tuple or an array, read natively."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(classes) is b.list or py_type(classes) is b.tuple:
         return len(classes)
     # an array has a shape; a list subclass (`_labels.ClassLabels`) does not

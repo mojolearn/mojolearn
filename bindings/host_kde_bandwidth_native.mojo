@@ -3,6 +3,7 @@
 # scalar implementation, while warning/error timing stays at the consumer.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from std.memory import bitcast
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
@@ -39,7 +40,7 @@ def kde_bandwidth_warning(message: String, category: PythonObject, context: Pyth
     pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(current._obj_ptr)
     _ = current^
     if not pointer:
-        if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+        if cpython_table()[].PyErr_Occurred():
             raise cpy.unsafe_get_error()
         raise Error("ValueError: call stack is not deep enough")
     var frame = PythonObject(from_owned=pointer)

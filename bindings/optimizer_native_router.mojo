@@ -3,6 +3,7 @@
 from bindings.embedding_layer_native import emblayer_operation
 from std.os import getenv
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.sequence_layers_native import sequence_layers_operation
@@ -29,7 +30,7 @@ from bindings.training_metadata_native import training_metadata
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var selected = mode
     if selected is None:
         selected = context["backend"]["_DEFAULT_MODE"]
@@ -179,7 +180,7 @@ def optimizer_params(owner: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(updates) is not b.dict:
         raise Error("TypeError: optimizer parameter updates require native keyword arguments")
     if len(updates) == 0:
@@ -248,7 +249,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     # opt_guards just ran on this context; when it is the door's own
     # (training._OPT_CONTEXT, as connected) the door does not walk it again.
     door_ready(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(values) is not b.tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
     if operation.startswith("seqdev_"):

@@ -5,11 +5,12 @@
 copies, no arithmetic on data."""
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from x_cluster.out import ClusterOut
 
 
 def cluster_out_to_py(o: ClusterOut) raises -> PythonObject:
-    var arr = Python.import_module("array")
+    var arr = native_loaded_module("array")
     var fl = Python.list()
     for a in o.f:  # small-loop(the result's float arrays, one memcpy each)
         fl.append(_py_array(arr, "f", a.unsafe_ptr().bitcast[UInt8](), len(a) * 4))
@@ -34,7 +35,7 @@ def _py_array(arr: PythonObject, code: StaticString, src: Pointer[UInt8, _], nby
     float32 itself, widened exactly on read, an 'i' item the int32. The
     element-by-element list it replaces cost seconds on an n^2 output
     (AffinityPropagation's affinity_matrix_: 25M PythonObject appends)."""
-    var zero = Python.import_module("builtins").bytes(nbytes)
+    var zero = native_loaded_module("builtins").bytes(nbytes)
     var out = arr.array(PythonObject(code), zero)
     if nbytes > 0:
         var addr = Int(py=out.buffer_info()[0])

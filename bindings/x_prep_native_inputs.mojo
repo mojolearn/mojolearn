@@ -46,7 +46,7 @@ def _target_finite(view: PythonObject, context: PythonObject) raises:
                 _ = storage  # keep the exported words alive through the scan above
                 return
         else:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpy.PyErr_Clear()
     var packed = py_call(storage.tobytes,"C")
     # Keep the existing device finite scan and Float64 values. Packing and
     # byte-order normalization use the native array buffer implementation.

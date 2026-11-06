@@ -2,6 +2,7 @@
 # Existing MinMaxScaler NPZ schema, decoded and published through native slots.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.classical_arrays import classical_address, classical_typed, classical_i64, classical_f64, classical_is_array, classical_c_order
 from bindings.classical_pandas import classical_admit_value
@@ -18,7 +19,7 @@ def minmax_archive_save(model: PythonObject, path: PythonObject, context: Python
     var fields = py_fields(model)
     if py_get(fields,"numeric_mode_") is None or py_get(fields,"scale_") is None:
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(fields["n_features_in_"]) is not b.int or py_type(fields["n_samples_seen_"]) is not b.int:
         raise Error("TypeError: MinMaxScaler dimensions and counts must remain native integers")
     var d = Int(py=fields["n_features_in_"])
@@ -44,7 +45,7 @@ def minmax_archive_save(model: PythonObject, path: PythonObject, context: Python
 
 
 def minmax_archive_build(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if String(_archive_string(arrays,"format",context)) != "mojolearn-scaler-1":
         raise Error("model archive format does not match mojolearn-scaler-1")
     if py_type(cls) is not b.type:

@@ -3,6 +3,7 @@
 # here. The preprocessing and x_prep kernels and their order are unchanged.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -27,7 +28,7 @@ alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def _configuration_mode(var mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
@@ -58,7 +59,7 @@ def _configuration(fields: PythonObject, context: PythonObject) raises -> Python
 
 def _features(fields: PythonObject) raises -> Int:
     var value = fields["n_features_in_"]
-    if py_type(value) is not Python.import_module("builtins").int:
+    if py_type(value) is not native_loaded_module("builtins").int:
         raise Error("TypeError: MinMaxScaler n_features_in_ must remain a native integer")
     return Int(py=value)
 
@@ -73,7 +74,7 @@ def _statistic(value: PythonObject, d: Int, name: String, context: PythonObject)
 
 
 def _minmax_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(mode) is not Python.import_module("builtins").str:
+    if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("TypeError: MinMaxScaler numeric_mode_ must remain a native string")
     if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
         raise Error("HostMinMaxScaler runs identical only on the host")
@@ -148,7 +149,7 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
     if configuration is None:
         configuration = _configuration(fields,context)
     var mode = configuration[0]
-    var names = py_call(Python.import_module("builtins").list,fields)
+    var names = py_call(native_loaded_module("builtins").list,fields)
     for k in range(len(names)):  # driver-loop: stale fitted attribute names on refit
         if String(names[k]).endswith("_"):
             _ = py_call(fields.pop,names[k])
@@ -221,7 +222,7 @@ def minmax_fit_transform(model: PythonObject, source: PythonObject, context: Pyt
     if entry is None or py_get(entries,"minmax_fit") is None:
         return PythonObject(None)
     # minmax_fit's refit invalidation comes before X is read.
-    var names = py_call(Python.import_module("builtins").list,fields)
+    var names = py_call(native_loaded_module("builtins").list,fields)
     for k in range(len(names)):  # driver-loop: stale fitted attribute names on refit
         if String(names[k]).endswith("_"):
             _ = py_call(fields.pop,names[k])
@@ -265,7 +266,7 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     var old_range = minmax_range_pair(fields["feature_range_"],context)
     if old_range != Python.tuple(configuration[1],configuration[2]):
         raise Error("MinMaxScaler partial_fit: feature_range changed since the first batch")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fitted_mode = fields["numeric_mode_"]
     var batch = py_call(b.object.__new__,context["scaler_class"])
     var batch_configuration = Python.tuple(_configuration_mode(fitted_mode,context),configuration[1],configuration[2],True,configuration[4])
@@ -414,7 +415,7 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var operation = String(all[1])
         var args = all[2]
         var context = all[3]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var cls = model if py_type(model) is b.type else py_type(model)
         if py_type(cls) is not b.type:
             raise Error("TypeError: native MinMaxScaler refuses Python metaclass hooks")

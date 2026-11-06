@@ -11,6 +11,7 @@
 from std.memory import memcpy
 from std.collections import Dict
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
@@ -37,7 +38,7 @@ comptime _PY2MOJO_ROWS = 2
 def _linear_check_common(model: PythonObject, fields: PythonObject) raises:
     """`_LinearSVMBase._check_common`."""
     var b = svc_builtins()
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     var name = svc_name(model)
     var penalty = svc_field(fields, "penalty")
     var loss = svc_field(fields, "loss")
@@ -87,7 +88,7 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
     codes: the per-row float32 class weight, or None when every class weight
     is 1."""
     var b = svc_builtins()
-    var itertools = Python.import_module("itertools")
+    var itertools = native_loaded_module("itertools")
     var n = Int(py=codes.size)
     var k = len(classes)
     var values: PythonObject
@@ -264,7 +265,7 @@ def _qn_fit_one_target(fields: PythonObject, binding: PythonObject, x: PythonObj
 
 def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`LinearSVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     var binding = args[0]
     var fields = py_fields(model)
     var epsilon = svc_field(fields, "epsilon")
@@ -340,7 +341,7 @@ def _r2_host(pred: PythonObject, y: PythonObject, context: PythonObject) raises 
 def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`LinearSVC.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
     var b = svc_builtins()
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     var binding = args[0]
     var fields = py_fields(model)
     var multi_class = svc_field(fields, "multi_class")

@@ -4,6 +4,7 @@
 # caller-frame inspection is part of the operation.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
@@ -62,7 +63,7 @@ def _outside() raises -> Bool:
         pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(frame._obj_ptr)
         _ = frame
         if not pointer:
-            if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+            if cpython_table()[].PyErr_Occurred():
                 raise cpy.unsafe_get_error()
             return True
         frame = PythonObject(from_owned=pointer)

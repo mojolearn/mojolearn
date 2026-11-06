@@ -3,6 +3,7 @@
 # kernels remain unchanged; this owner prepares all dense/sparse inputs,
 # retains buffers through their consumers and publishes the completed result.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact
@@ -36,7 +37,7 @@ def _kernel_entry(name: String, context: PythonObject) raises -> PythonObject:
 
 
 def host_kernel_admit_state(fields: PythonObject, kind: String, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var name = "_params" if kind == "rbf_sampler" else "_kernel_params"
     if py_contains(fields, name):
         var params = fields[name]
@@ -53,7 +54,7 @@ def host_kernel_admit_state(fields: PythonObject, kind: String, context: PythonO
 
 
 def host_kernel_inference(model: PythonObject, fields: PythonObject, kind: String, source: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fitting = Bool(py=py_get(fields, "_mojolearn_fitting", False))
     var format = host_sparse_format(source)
     var x = PythonObject(None)

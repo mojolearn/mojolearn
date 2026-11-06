@@ -2,6 +2,7 @@
 """Capture native Array slots and retained buffer metadata without input hooks."""
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.mode_metadata_native import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -216,7 +217,7 @@ struct NativeArrayAdmission(Copyable, Movable):
             self.slot_values.append(PythonObject(from_owned=cpy.Py_NewRef(value)))
         for i in range(len(self.mro)):  # small-loop(self.mro: Array ancestry): fixed native storage class hierarchy
             # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
-            var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(self.mro[i]._obj_ptr)
+            var flags = cpython_table()[].PyType_GetFlags(self.mro[i]._obj_ptr)
             if (flags & UInt64(1 << 8)) == 0:
                 self.rows.append(self.mro[i])
 

@@ -23,7 +23,7 @@ from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xp
 from gemm.f16_widen import f16_bits_to_f32
 
 def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.range or _one_of(cls,context["scalar_types"]):
         return Bool(py=value)
@@ -53,7 +53,7 @@ def _complex_warning(context: PythonObject) raises:
 
 
 def _number(value: PythonObject, context: PythonObject) raises -> Float64:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes or _one_of(cls,context["scalar_types"]):
         return Float64(py=py_call(b.float,value))
@@ -86,7 +86,7 @@ def _quantile_array(value: PythonObject, context: PythonObject) raises:
 
 
 def _quantiles(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var source = value
     if classical_is_array(value,context):
@@ -157,7 +157,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var lo = Float64(py=quantiles[0])
     var hi = Float64(py=quantiles[1])
     if not (0.0 <= lo and lo <= hi and hi <= 100.0):
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var given = fields["quantile_range"]
         # Only exact builtin sequence/scalar repr is allowed on this error
         # path; ndarray repr delegates to NumPy Python formatting.
@@ -256,7 +256,7 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
     var values = xprep_values(source,entries,context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    if py_type(fields["n_features_in_"]) is not Python.import_module("builtins").int or Int(py=fields["n_features_in_"]) != d:
+    if py_type(fields["n_features_in_"]) is not native_loaded_module("builtins").int or Int(py=fields["n_features_in_"]) != d:
         raise Error("RobustScaler input feature count differs from fit")
     var center = fields["center_"]
     var scale = fields["scale_"]

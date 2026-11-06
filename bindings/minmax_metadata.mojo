@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native validation of the two range endpoints and Boolean configuration.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_input, classical_is_array
@@ -10,7 +11,7 @@ from core.cast_in import cast_in_kind, NPY_BOOL
 from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 
 def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var types = py_get(context,"bool_types")
     if py_type(value) is not b.bool and (types is None or py_type(value) is not types[1]):
         raise Error(name + " must be a bool")
@@ -18,7 +19,7 @@ def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bo
 
 
 def _endpoint(value: PythonObject, context: PythonObject) raises -> Float64:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var bools = py_get(context,"bool_types")
     if cls is b.bool or (bools is not None and cls is bools[1]):
@@ -40,7 +41,7 @@ def _endpoint(value: PythonObject, context: PythonObject) raises -> Float64:
 
 def minmax_range_pair(value: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_admit_value(value,context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var sequence = py_type(value) is b.tuple or py_type(value) is b.list
     var ndarray = py_get(context,"ndarray")
     if not sequence and not classical_is_array(value,context) and (ndarray is None or py_type(value) is not ndarray):

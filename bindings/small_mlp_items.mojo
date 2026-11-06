@@ -138,7 +138,7 @@ def small_mlp_items(value: PythonObject, limit: Int, refusal: String,
             raise Error("TypeError: native Tensor unbind must return a tuple")
         return _plain_items(rows, limit, True)
     ref cpy = Python().cpython()
-    var raw_iterator = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")(value._obj_ptr)
+    var raw_iterator = cpy.PyObject_GetIter(value._obj_ptr)
     if not raw_iterator:
         _ = cpy.unsafe_get_error()
         raise Error("TypeError: " + refusal)

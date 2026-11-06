@@ -3,7 +3,9 @@
 # preparation. Its _array_like materializes pandas before checking names;
 # supported native buffers therefore have no incoming name sequence.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_warnings import classical_warning
 from bindings.native_caller_frame import native_frame_globals
@@ -12,7 +14,7 @@ from bindings.native_caller_frame import native_frame_globals
 def host_inference_feature_names(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
     if py_get(fields, "feature_names_in_") is None:
         return
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var name = String(py_call(b.type.__getattribute__, py_type(model), "__name__"))
     var message = "X does not have valid feature names, but " + name + " was fitted with feature names"
     # Match the old _getframe(1) attribution using public native CPython
@@ -26,7 +28,7 @@ def host_inference_feature_names(model: PythonObject, fields: PythonObject, cont
     pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(current._obj_ptr)
     _ = current^
     if not pointer:
-        if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+        if cpython_table()[].PyErr_Occurred():
             raise cpy.unsafe_get_error()
         raise Error("ValueError: call stack is not deep enough")
     var frame = PythonObject(from_owned=pointer)

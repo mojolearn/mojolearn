@@ -172,7 +172,7 @@ def _torch_loaded_namespace(modules: PythonObject, b: PythonObject,
     if py_type(module) is not module_type:
         raise Error("TypeError: Torch program execution requires an exact module: " + name)
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var raw = cpy.PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     if not native_namespace_string_keys(raw, b.str):

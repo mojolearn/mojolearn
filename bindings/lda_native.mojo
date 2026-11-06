@@ -6,6 +6,7 @@
 # sequenced, the same entries, operands, draws and order, so the same bits),
 # and the fitted attributes and the draw counters stored as the shell stored them.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_host_f32
@@ -24,7 +25,7 @@ comptime _PERPLEXITY = 4
 
 def _batch_size(fields: PythonObject) raises -> Int:
     """The online batch size: a positive int (not a bool)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var bs = fields["batch_size"]
     if py_type(bs) is b.bool or not Bool(py=py_call(b.isinstance, bs, b.int)) or Int(py=bs) < 1:
         raise Error("batch_size must be a positive integer")
@@ -126,7 +127,7 @@ def lda_fit(model: PythonObject, source: PythonObject, context: PythonObject) ra
     var fields = py_fields(model)
     decomp_set_mode(fields, context)
     var method = fields["learning_method"]
-    if not Bool(py=py_call(Python.import_module("operator").contains, Python.tuple("batch", "online"), method)):
+    if not Bool(py=py_call(native_loaded_module("operator").contains, Python.tuple("batch", "online"), method)):
         raise Error("learning_method must be 'batch' or 'online'")
     var x = decomp_input(source, "LatentDirichletAllocation", context)
     _init_fields(fields)

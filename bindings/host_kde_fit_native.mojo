@@ -3,6 +3,7 @@
 # Its CPU numerical binding has no immutable-fit or resident-fit registry;
 # preparing the stored float32 rows is the entire fit operation.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
@@ -39,7 +40,7 @@ def _kde_array_view(value: PythonObject, context: PythonObject) raises -> Python
         return value
     # Exact native ndarray admission precedes this function. Hold a native
     # buffer export for the complete fitted lifetime, including readonly data.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var pin = native_buffer_view(value)
     var flat = py_call(py_call(pin.cast, "B").cast, "f")
     var out = native_storage_allocate(context["array_class"])
@@ -85,7 +86,7 @@ def _kde_prepare(source: PythonObject, context: PythonObject, name: String) rais
     classical_admit_value(source, context)
     if native_pandas_exact(source):
         return _kde_pandas(source, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var prepared = native_torch_numpy(source) if _ordinary_torch(py_type(source), context) else source
     var value = classical_input(prepared, context, name)
     var copied = py_type(source) is b.list or py_type(source) is b.tuple or py_type(source) is b.range
@@ -98,7 +99,7 @@ def _kde_object_storage(value: PythonObject, context: PythonObject) raises -> Py
     # Ordinary object buffers containing native real scalars were supported
     # by _buffer._materialize. Read native object slots, admit every element,
     # then preserve its int64/float64 intermediate before the float32 cast.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not context["ndarray"]:
         raise Error("TypeError: object storage requires an exact native ndarray")
     var flat = value.flat
@@ -156,7 +157,7 @@ def _kde_cast(value: PythonObject, context: PythonObject, name: String) raises -
 def _kde_y(source: PythonObject, rows: Int, est: String, context: PythonObject) raises:
     if source is None:
         return
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var sparse = host_sparse_format(source)
     if sparse.byte_length() > 0:
         # y is ignored by this estimator. Read only admitted sparse shape;
@@ -222,7 +223,7 @@ def _kde_y(source: PythonObject, rows: Int, est: String, context: PythonObject) 
 def _kde_weights(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
     if source is None:
         return PythonObject(None)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     # Empty native sequences have a valid one-dimensional weight shape.
     # Check that shape before the general nonempty sequence materializer.
     var source_type = py_type(source)
@@ -260,7 +261,7 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     classical_connect_numpy(context)
     classical_check_layout(model, context)
     var fields = host_tree_constructor_fields(model, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     var known = False
     for i in range(len(mro)):  # driver-loop: fixed KDE class ancestry and hook refusal
@@ -351,7 +352,7 @@ def _kde_fit_mode(model: PythonObject, fields: PythonObject, context: PythonObje
 def _kde_fit_store(model: PythonObject, fields: PythonObject, raw: PythonObject, weight: PythonObject, copied: Bool, est: String, context: PythonObject) raises:
     # The CPU owner has no resident registry or immutable-fit experiment.
     # Refit clears an existing cache before preparation, like the old method.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_get(fields, "_resident") is not None:
         fields["_resident"] = PythonObject(None)
     var x = _kde_cast(raw, context, "X")

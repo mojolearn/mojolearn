@@ -14,6 +14,7 @@
 # Python fit, predict, get_params or constructor is never called.
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays import classical_typed, classical_wrap_array
 from bindings.classical_labels import LabelsView, labels_view
@@ -68,7 +69,7 @@ comptime GOLDEN: UInt64 = 0x9E3779B97F4A7C15
 
 # ---------------------------------------------------------------- small helpers
 def _b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def _u64_of(value: PythonObject) raises -> UInt64:

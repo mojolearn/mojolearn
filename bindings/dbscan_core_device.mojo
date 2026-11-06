@@ -2,13 +2,14 @@
 # core-sample arrays. The kernels and typed bodies live in
 # dbscan/core_device_impl.mojo (2026-10-21).
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from max.gpu.host import DeviceContext
 from dbscan.core_device_impl import dbscan_core_count, dbscan_core_gather
 
 
 def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> PythonObject:
     """An `array.array(code)` of `nbytes` zero bytes."""
-    var zero = Python.import_module("builtins").bytes(nbytes)
+    var zero = native_loaded_module("builtins").bytes(nbytes)
     return arr.array(PythonObject(code), zero)
 
 
@@ -27,7 +28,7 @@ def dbscan_core_arrays_device(
     var d = Int(py=params[1])
     if n < 0 or d < 1 or (n > 0 and d > 2147483000 // n):
         raise Error("dbscan_core_arrays: n >= 0, d >= 1 and n * d within Int32")
-    var arr = Python.import_module("array")
+    var arr = native_loaded_module("array")
     if n == 0:
         var out0 = Python.list()
         out0.append(_new_array(arr, "i", 0))

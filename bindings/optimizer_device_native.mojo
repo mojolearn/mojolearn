@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native ownership and consumed outputs of training device arrays.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
@@ -11,7 +12,7 @@ from bindings.native_buffer_owner import native_storage_allocate
 
 
 def device_entries(binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var bindings = context["bindings"]
     for mode in ["identical", "fast"]:  # driver-loop: over the two compiled numeric-mode owners
         var entries = bindings[PythonObject(mode)]
@@ -24,7 +25,7 @@ def device_entries(binding: PythonObject, context: PythonObject) raises -> Pytho
 
 def device_shape(shape: PythonObject, context: PythonObject) raises -> List[Int]:
     opt_scalar(shape, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(shape) is not b.tuple and py_type(shape) is not b.list:
         raise Error("TypeError: training device shape requires a native tuple or list")
     var dims = List[Int]()
@@ -51,7 +52,7 @@ def device_set(owner: PythonObject, binding: PythonObject, handle: PythonObject,
     for i in range(len(dims)):  # driver-loop: over native device-array shape words
         _ = py_call(shape.append, dims[i])
     py_setitem(fields, "h", handle)
-    py_setitem(fields, "shape", py_call(Python.import_module("builtins").tuple, shape))
+    py_setitem(fields, "shape", py_call(native_loaded_module("builtins").tuple, shape))
     py_setitem(fields, "size", PythonObject(shape_count(dims)))
     py_setitem(fields, "_base", base)
     py_setitem(fields, "_b", binding)
@@ -171,7 +172,7 @@ def device_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
 
 def device_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject,
                      selected: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if operation == "device_construct" or operation == "device_new":
         var binding = values[0]
         var entries = device_entries(binding, context)

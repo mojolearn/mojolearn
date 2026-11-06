@@ -13,7 +13,7 @@ from bindings.py_balanced import py_call, py_type, py_get
 def _storage_metadata() raises -> PythonObject:
     var module = native_loaded_module("mojolearn._native_array_storage")
     ref cpy = Python().cpython()
-    var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var fields = cpy.PyModule_GetDict(module._obj_ptr)
     if not fields:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=cpy.Py_NewRef(fields))
@@ -31,7 +31,7 @@ def _storage_type(metadata: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var owner = cpy.lib.get_function[PyObjectPtr]("PyType_GetModule")(cls._obj_ptr)
     if not owner:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         raise Error("TypeError: native array storage requires its extension type")
     if owner != module._obj_ptr:
         raise Error("TypeError: native array storage type has a different extension owner")

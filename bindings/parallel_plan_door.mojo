@@ -14,6 +14,7 @@ door's `finally`). No Python frame runs: every call below is a compiled
 entry or a builtin.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.family_common import family_call
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
@@ -26,7 +27,7 @@ def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
     `cooperative`: the binding shards inside one call (refused on a CPU-only
     install); otherwise the door shards and a CPU-only install runs the
     host binding per shard."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.tuple and py_type(value) is not b.list and py_type(value) is not b.range:
         raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
     var devices = py_call(b.tuple, value)
@@ -66,7 +67,7 @@ def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String,
     environment, every family but Cholesky). A binding built before the plan
     entries is refused by name (`rebuild`, the old worker's capability
     refusal)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var enter = py_call(b.getattr, binding, PythonObject("device_plan_enter"), PythonObject(None))
     var leave = py_call(b.getattr, binding, PythonObject("device_plan_exit"), PythonObject(None))
     if enter is None or leave is None:
@@ -76,7 +77,7 @@ def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String,
 
 def plan_exit(binding: PythonObject) raises:
     """Release the calling thread's plan in `binding`'s DSO."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _ = family_call(py_call(b.getattr, binding, PythonObject("device_plan_exit")))
 
 
@@ -91,7 +92,7 @@ def plan_require_identical(model: PythonObject, message: String) raises:
     var mode = plan_field(model, "numeric_mode")
     if mode is None:
         return
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(mode) is not b.str or String(mode) != "identical":
         raise Error("ValueError: " + message)
 

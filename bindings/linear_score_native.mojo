@@ -9,6 +9,7 @@
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_arrays import classical_address, classical_array, classical_host_f32
 from bindings.classical_attributes import classical_connect_numpy
@@ -18,7 +19,7 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 def _linear_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """The estimator's numeric mode, or the process default."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -39,7 +40,7 @@ def _linear_entries(table: PythonObject, mode: PythonObject) raises -> PythonObj
 
 def _linear_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """A fitted float32 field as one C-ordered float32 array, any rank."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.float or py_type(value) is b.int:
         var one = classical_array(1, 0, context)
         var word = _F32P(unsafe_from_address=Int(py=classical_address(one)))

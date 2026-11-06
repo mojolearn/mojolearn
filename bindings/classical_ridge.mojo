@@ -2,6 +2,7 @@
 # The existing Ridge route and arithmetic stay in their selected native
 # kernels. This owner replaces only Python preparation and launch decisions.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
@@ -31,7 +32,7 @@ def classical_center(x: PythonObject, mean: PythonObject, rows: Int, cols: Int,
 
 def classical_ridge_parameters(fields: PythonObject) raises:
     # Checked when fit runs, after the inputs, as the constructor stores them.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var alpha = fields["alpha"]
     var negative = False
     try:
@@ -55,7 +56,7 @@ def classical_ridge_parameters(fields: PythonObject) raises:
 
 
 def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
     classical_fit_replacements_admit(fields, True, context)
     var est = classical_estimator_name(model)

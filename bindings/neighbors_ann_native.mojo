@@ -203,7 +203,7 @@ def _ivf_extension(fields: PythonObject, binding: PythonObject, context: PythonO
     """`IVFIndex._extension`: the binary's own compile-time mode must be the
     one requested (`int(fn()) != _MODE_CODE.get(want)`)."""
     var b = native_loaded_module("builtins")
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     if want is None or not Bool(py=py_call(b.bool, want)):
         want = context["backend_fields"]["_DEFAULT_MODE"]

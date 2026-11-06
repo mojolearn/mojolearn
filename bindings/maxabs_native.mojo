@@ -122,7 +122,7 @@ def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonO
     var values = xprep_values(source,entries,context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    if py_type(fields["n_features_in_"]) is not Python.import_module("builtins").int or Int(py=fields["n_features_in_"]) != d:
+    if py_type(fields["n_features_in_"]) is not native_loaded_module("builtins").int or Int(py=fields["n_features_in_"]) != d:
         raise Error("MaxAbsScaler input feature count differs from fit")
     var scale = fields["scale_"]
     if scale is not None:

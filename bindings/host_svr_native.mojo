@@ -2,6 +2,7 @@
 # Explicit CPU SVR owns preparation, precomputed-column selection and output.
 # Its existing SVM numerical entries and reduction order stay unchanged.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
@@ -34,7 +35,7 @@ def host_svr_admit_state(fields: PythonObject, context: PythonObject) raises:
     for i in range(len(names)):  # driver-loop: fixed scalar fields consumed by the SVM ABI
         if py_contains(fields, names[i]):
             host_inference_scalar(fields[names[i]], context)
-    if py_contains(fields, "_hp_kernel") and py_type(fields["_hp_kernel"]) is not Python.import_module("builtins").str:
+    if py_contains(fields, "_hp_kernel") and py_type(fields["_hp_kernel"]) is not native_loaded_module("builtins").str:
         raise Error("TypeError: saved SVR kernel must be an exact native string")
 
 
@@ -139,7 +140,7 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     var params = Python.list(rows, features, count, _svr_bias(fields["intercept_"], context), code,
         fields["_gamma"], fields["_hp_cache_size"])
     if code == 1 or code == 3:
-        _ = py_call(params.append, py_call(Python.import_module("builtins").int, fields["_hp_degree"]))
+        _ = py_call(params.append, py_call(native_loaded_module("builtins").int, fields["_hp_degree"]))
         _ = py_call(params.append, Float64(py=fields["_hp_coef0"]))
     var out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
     _ = py_call(_kernel_entry("svr_predict", context), classical_address(x),
@@ -156,7 +157,7 @@ def _svr_coefficients(model: PythonObject, context: PythonObject) raises -> Pyth
     var fields = host_tree_constructor_fields(model, context)
     if not py_contains(fields, "dual_coef_"):
         raise Error("AttributeError: SVR coef_ requires a fitted model")
-    var keys = py_call(Python.import_module("builtins").list, fields.keys())
+    var keys = py_call(native_loaded_module("builtins").list, fields.keys())
     for i in range(len(keys)):  # driver-loop: native stored state admission before computed attribute work
         classical_admit_value(fields[keys[i]], context)
     host_svr_admit_state(fields, context)
@@ -169,7 +170,7 @@ def _svr_coefficients(model: PythonObject, context: PythonObject) raises -> Pyth
     var out = host_archive_typed(Python.tuple(1, features), "<f4", context["output_context"])
     if count > 0:
         var mode = py_get(fields, "numeric_mode")
-        if mode is not None and (py_type(mode) is not Python.import_module("builtins").str or String(mode) != "identical"):
+        if mode is not None and (py_type(mode) is not native_loaded_module("builtins").str or String(mode) != "identical"):
             raise Error("explicit host models run identical mode only")
         var dual = _kernel_buffer(fields["dual_coef_"], count, "<f4", context)
         var support = _svr_matrix(fields["support_vectors_"], count, features, context)
@@ -186,7 +187,7 @@ def host_svr_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -
         var context = args[0]
         var model = args[1]
         var name = args[2]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         classical_connect_numpy(context)
         classical_check_layout(model, context)
         if py_type(name) is not b.str:

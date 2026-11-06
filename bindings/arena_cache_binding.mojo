@@ -85,7 +85,7 @@ def cache_binding_attribute(binding: PythonObject, name: PythonObject,
     var absent = cls is context["cache_cpu_missing_proxy"]
     if cls is context["native_module_type"] or host or absent:
         ref cpy = Python().cpython()
-        var pointer = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(binding._obj_ptr)
+        var pointer = cpy.PyModule_GetDict(binding._obj_ptr)
         if not pointer:
             var failure = stash_python_error()
             raise failure^

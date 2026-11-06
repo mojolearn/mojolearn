@@ -2,6 +2,7 @@
 # The exact existing single-output _Reg R2 program, assembled and consumed
 # natively. The grouped sums and binary64 finishing remain x_metrics kernels.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy, bitcast
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_address
@@ -141,7 +142,7 @@ def _r2_finish(var layout: ClassicalR2Layout, arena: PythonObject, rows: Int, ta
     # while _r2_sums_of(..., None) uses the process-default metrics binding.
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var metrics = context["classical_metrics"][mode]
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(metrics) is bi.str:
         raise Error("ImportError: " + String(metrics))
     if String(metrics["x_metrics_vendor"]()) != String(py_get(context, "classical_metric_vendor", context["vendor"])):

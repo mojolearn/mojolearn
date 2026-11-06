@@ -12,6 +12,7 @@
 # fallback.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_class_admission import static_builtin_type
 from bindings.optimizer_public_words import stash_python_error
@@ -42,8 +43,8 @@ def family_raw_get_or(model: PythonObject, name: String, default: PythonObject) 
     var attribute_error = static_builtin_type("builtins", "AttributeError")
     var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model._obj_ptr, key._obj_ptr)
     if not result:
-        if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(attribute_error._obj_ptr) != 0:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
+            cpy.PyErr_Clear()
             return default
         var failure = stash_python_error()
         raise failure^

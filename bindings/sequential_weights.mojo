@@ -33,7 +33,7 @@ def _exact_mapping(value: PythonObject, mapping_types: PythonObject) raises -> B
 
 
 def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
     if len(fields["_layers"]) == 0:
         raise Error("add at least one layer before load_state_dict")

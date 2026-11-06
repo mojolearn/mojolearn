@@ -6,6 +6,7 @@ from std.memory import memcpy
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
 from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
@@ -67,8 +68,8 @@ def msel_try(callable: PythonObject, args: PythonObject, classes: PythonObject,
     var result = cpy.PyObject_Call(callable._obj_ptr, args._obj_ptr, PyObjectPtr())
     if result:
         return PythonObject(from_owned=result)
-    if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(classes._obj_ptr) != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    if cpython_table()[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
+        cpy.PyErr_Clear()
         return context["family_msel_miss"]
     var failure = stash_python_error()
     raise failure^
@@ -110,8 +111,8 @@ def msel_catch(error: Error, classes: PythonObject) raises -> Bool:
     if message == PYTHON_ERROR_PENDING:
         _ = _restore_python_error()
         ref cpy = Python().cpython()
-        if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(classes._obj_ptr) != 0:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        if cpython_table()[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
+            cpy.PyErr_Clear()
             return True
         _ = stash_python_error()
         return False

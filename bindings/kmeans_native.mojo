@@ -15,6 +15,7 @@
 # binding) takes the per-call entries as before.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -43,7 +44,7 @@ def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonO
             raise error
         _ = optimizer_python_error(error)
         ref cpy = Python().cpython()
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return PythonObject(None)
 
 
@@ -51,7 +52,7 @@ def _kmeans_release(model: PythonObject) raises:
     """Drop the resident centroids, if held, through the minting binding's
     `kmeans_centers_release`. Quiet on a binding that cannot be reached any
     more and on a handle already released (a copied instance)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         return
@@ -76,7 +77,7 @@ def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: Python
     var prepare = _kmeans_optional_entry(binding, "kmeans_centers_prepare", context)
     if prepare is None:
         return PythonObject(None)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
@@ -117,10 +118,10 @@ def _kmeans_metric(fields: PythonObject, context: PythonObject) raises -> Int:
         var table = context["family_kmeans_metrics"]
         if not py_contains(table, metric):
             raise Error("mojolearn: metric must be one of "
-                        + family_repr(py_call(Python.import_module("builtins").sorted, table))
+                        + family_repr(py_call(native_loaded_module("builtins").sorted, table))
                         + ", got " + family_repr(metric))
         return Int(py=table[metric])
-    return Int(py=family_call(Python.import_module("builtins").int, metric))
+    return Int(py=family_call(native_loaded_module("builtins").int, metric))
 
 
 def _kmeans_callable_init(init: PythonObject, source: PythonObject, k: PythonObject,
@@ -152,7 +153,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     once, where the binding has that door; otherwise the fit and then the
     transform, as before."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var binding = args[0]
     var source = args[1]
     var sample_weight = args[2]
@@ -183,7 +184,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var x = _kmeans_f32(source, "X", "fit", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if Bool(py=family_call(Python.import_module("operator").gt, k_obj, PythonObject(n))):
+    if Bool(py=family_call(native_loaded_module("operator").gt, k_obj, PythonObject(n))):
         raise Error("mojolearn: n_clusters=" + family_str(k_obj) + " exceeds n_samples=" + String(n))
     var k = Int(py=family_call(b.int, k_obj))
     var centers = family_array(Python.tuple(k, d), "<f4", context)
@@ -337,7 +338,7 @@ def _kmeans_operation_route(model: PythonObject, operation: String, args: Python
         # A pickle or a deepcopy carries no device handle: it is meaningful
         # only in the process and registry that minted it. The copy uploads
         # its own centroids at its first query.
-        var state = py_call(Python.import_module("builtins").dict, py_fields(model))
+        var state = py_call(native_loaded_module("builtins").dict, py_fields(model))
         _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
         return state
     if operation == "family_kmeans_setstate":

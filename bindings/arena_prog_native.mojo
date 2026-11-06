@@ -68,7 +68,7 @@ def _drop_pending(error: Error):
     _ = optimizer_python_error(error)
     try:
         ref cpy = Python().cpython()
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
     except ignored:
         _ = ignored^
 

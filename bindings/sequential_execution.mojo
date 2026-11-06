@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential orchestration of the existing model numerical ABI."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from core.cast_in import CastIn
@@ -14,7 +15,7 @@ from bindings.sequential_arrays import sequential_array, sequential_address, seq
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = sequential_fields(model)["numeric_mode"]
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -70,7 +71,7 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
 
 
 def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
     if len(fields["_layers"]) == 0:
         raise Error("add at least one layer before fit")
@@ -294,7 +295,7 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
         var actual = Python.list()
         for k in range(1, rank):  # driver-loop: over the prediction input sample rank
             _ = py_call(actual.append, PythonObject(x_snapshot.shape[k]))
-        if not Bool(py=py_call(Python.import_module("builtins").tuple, actual) == sample):
+        if not Bool(py=py_call(native_loaded_module("builtins").tuple, actual) == sample):
             mods.released()
             raise Error("X samples have a different shape from the fitted model")
         mods.released()

@@ -7,6 +7,7 @@
 # through bindings/decomp_kit_native.mojo: the same x_decomp entries with the
 # same words in the same order, so the bits are unchanged.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
@@ -59,7 +60,7 @@ def _flip_u(mut kit: DecompKit, u: Int, vt: Int, context: PythonObject, mode: Py
 def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # args: (M, n_components, n_oversamples, n_iter, power_iteration_normalizer,
     # transpose, flip_sign, random_state, numeric_mode)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = args[8]
     var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
     try:
@@ -178,7 +179,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
 
 def _is_vector(b: PythonObject) raises -> Bool:
     # `len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))`
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var shape = py_call(bi.getattr, b, PythonObject("shape"), Python.tuple())
     if len(shape) == 1:
         return True
@@ -192,7 +193,7 @@ def _rhs(mut kit: DecompKit, b: PythonObject, vec: Bool, context: PythonObject) 
     if not vec:
         var array = decomp_input(b, "b", context)
         return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var row: PythonObject
     if py_call(bi.getattr, b, PythonObject("shape"), PythonObject(None)) is not None and Bool(py=py_call(bi.hasattr, b, PythonObject("reshape"))):
         row = py_call(b.reshape, 1, -1)
@@ -232,7 +233,7 @@ def _resident_solve(mut kit: DecompKit, handles: List[Int], n: Int, b: PythonObj
         var nd = Int(py=view.ndim)
         if nd != 1:
             raise Error("mojolearn: b must be 1-D, got " + String(nd) + "-D shape "
-                        + String(py=py_call(Python.import_module("builtins").repr, view.shape)))
+                        + String(py=py_call(native_loaded_module("builtins").repr, view.shape)))
         rows = Int(py=view.shape[0])
         if rows != n:
             raise Error("b has " + String(rows) + " rows, the factorization has " + String(n))
@@ -400,9 +401,9 @@ def _f32_input(source: PythonObject, name: String, ndim: Int, context: PythonObj
     # The shape's repr names a refusal only; built on that path alone.
     if nd != 1:
         raise Error("mojolearn: " + name + " must be 1-D, got " + String(nd) + "-D shape "
-                    + String(py=py_call(Python.import_module("builtins").repr, view.shape)))
+                    + String(py=py_call(native_loaded_module("builtins").repr, view.shape)))
     if Int(py=view.shape[0]) == 0:
-        var shape = String(py=py_call(Python.import_module("builtins").repr, view.shape))
+        var shape = String(py=py_call(native_loaded_module("builtins").repr, view.shape))
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 sample(s) (shape="
                     + shape + ") while a minimum of 1 is required.")
     try:
@@ -510,7 +511,7 @@ def _decomp_module(mode_value: PythonObject, context: PythonObject) raises -> Py
 def _device_buffer(module: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
     # `_DevBuf(raw, count)`: a pooled device buffer id, returned to the pool
     # when the holder dies; the holder is assembled from its slots.
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var holder = py_call(bi.object.__new__, context["lu_device_buffer"])
     py_setattr(holder, "b", module)
     py_setattr(holder, "n", PythonObject(count))
@@ -521,7 +522,7 @@ def _device_buffer(module: PythonObject, count: Int, context: PythonObject) rais
 def _lu_pair(lu: PythonObject, piv: PythonObject, qfix_a: PythonObject, dev: PythonObject,
              context: PythonObject) raises -> PythonObject:
     # `_LUPair((lu, piv), qfix_a, dev=dev)`, assembled from its slots.
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var pair = py_call(bi.tuple.__new__, context["lu_pair_class"], Python.tuple(lu, piv))
     py_setattr(pair, "_qfix_a", qfix_a)
     py_setattr(pair, "_dev", dev)
@@ -616,7 +617,7 @@ def _lu_solve_trans(mut kit: DecompKit, lu: Int, piv: PythonObject, b: Int, tran
 
 def lu_solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # args: (lu_and_piv, b, trans, numeric_mode)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var trans = args[2]
     if not py_contains(Python.tuple(0, 1, 2), trans):
         raise Error("trans must be 0, 1 or 2")
@@ -682,7 +683,7 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var call = PythonObject(from_borrowed=args_ptr)
         if len(call) != 4:
             raise Error("TypeError: linalg_decomp_native_call requires model, operation, arguments and connected context")
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple or py_type(call[3]) is not b.dict:
             raise Error("TypeError: native linear algebra requires an operation, an argument tuple and its context")
         var context = call[3]

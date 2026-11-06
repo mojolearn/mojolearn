@@ -2,6 +2,7 @@
 # Python door for control-flow checkpoints (control_checkpoint.mojo):
 # argument unpacking and the result dict around the typed entries.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_setitem
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
@@ -39,7 +40,7 @@ def control_load_py[E: Exec & Movable & Deinitable, KIND: Int](
     var normalized = native_path(path)
     var r = control_load[E, KIND](Int(py=sid), String(py=normalized))
     var s = ops_session[E, KIND](Int(py=sid))
-    var out = Python.import_module("builtins").dict()
+    var out = native_loaded_module("builtins").dict()
     py_setitem(out, "kind", "while" if r.kind == 1 else "if")
     py_setitem(out, "max_iterations", PythonObject(r.limit) if r.kind == 1 else PythonObject(None))
     py_setitem(out, "body", program_info(r.ids[0], s[].program(r.ids[0])))
