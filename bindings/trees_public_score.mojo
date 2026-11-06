@@ -43,6 +43,8 @@ from bindings.trees_public_forest import (
 )
 from bindings.trees_public_inputs import trees_decode_labels
 from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.classical_labels import _text_buffer_labels as score_text_buffer_labels, _text_list_labels as score_text_list_labels
+from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -293,9 +295,10 @@ def _native_classification(values: PythonObject, context: PythonObject) raises -
         var n = len(values)
         if n == 0:
             return None
-        for i in range(n):  # cpu-route: the label types of a user Python list, the explicit label input step
-            if py_type(values[i]) is not b.int:
-                return None
+        # One C-level pass over the item classes (perf3-nbr-msel-trees):
+        # exact ints only, as the per-item walk it replaces.
+        if labels_list_scalar_kind(values) != LABELS_LIST_INT:
+            return None
         var store = PythonObject(None)
         try:
             store = py_call(context["array_type"], "q", values)
@@ -338,10 +341,24 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
     var shape = trees_shape_of(values, context)
     if len(shape) != 1:
         raise Error(name + " must be one-dimensional single-label data")
+    # perf3-nbr-msel-trees: str labels are encoded natively (classes and one
+    # int32 code per row) instead of a per-label type walk, a str() per label
+    # and a dict lookup per row in `_codes`. A '<U' ndarray is read from its
+    # buffer; a flat list of str labels after the flatten by the native str
+    # reader. Both give the sorted distinct strs and their dense codes, so
+    # `_label_set` and `_codes` see the same classes as the walk's values.
+    var text = score_text_buffer_labels(values, context)
+    if text:
+        var found = text.value().copy()
+        return ScoreLabels(True, found.classes, found.codes, PythonObject(None), found.n, "string")
     var labels = _flatten_labels(values, context)
     var n = len(labels)
     if n == 0:
         raise Error(name + " must contain at least one label")
+    var listed = score_text_list_labels(labels, context)
+    if listed:
+        var found = listed.value().copy()
+        return ScoreLabels(True, found.classes, found.codes, PythonObject(None), found.n, "string")
     var all_str = True
     var all_int = True
     # Builtins, bound methods and exact types read once, not per label; an
