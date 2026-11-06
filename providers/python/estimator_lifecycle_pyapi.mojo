@@ -32,16 +32,23 @@ def estimator_outside() raises -> Bool:
 
 def estimator_feature_check(model: PythonObject, fields: PythonObject, source: PythonObject,
                    context: PythonObject) raises:
-    var names = _feature_names(source, context)
     var fitted = py_get(fields, "feature_names_in_")
-    var b = Python.import_module("builtins")
-    var name = classical_estimator_name(model)
+    if fitted is None:
+        # Per-call fast path: an exact ndarray or mojolearn Array carries no
+        # column names, so a model fitted without names needs no pandas
+        # class lookups (sys/builtins module stamps) on every predict.
+        var cls = py_type(source)
+        if cls is py_get(context, "ndarray") or cls is py_get(context, "array_class"):
+            return
+    var names = _feature_names(source, context)
     if fitted is None:
         if names is not None:
-            metric_warn("X has feature names, but " + name + " was fitted without feature names", b.UserWarning, context)
+            var b = Python.import_module("builtins")
+            metric_warn("X has feature names, but " + classical_estimator_name(model) + " was fitted without feature names", b.UserWarning, context)
         return
     if names is None:
-        metric_warn("X does not have valid feature names, but " + name + " was fitted with feature names", b.UserWarning, context)
+        var b = Python.import_module("builtins")
+        metric_warn("X does not have valid feature names, but " + classical_estimator_name(model) + " was fitted with feature names", b.UserWarning, context)
         return
     classical_admit_value(fitted, context)
     var before = _flatten_labels(fitted, context)

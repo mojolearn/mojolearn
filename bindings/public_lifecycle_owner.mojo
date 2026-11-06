@@ -73,47 +73,75 @@ def _x_kind(source: PythonObject, context: PythonObject) raises -> String:
     return "O"
 
 
-def lifecycle_check_x(model: PythonObject, source: PythonObject, sparse_ok: Bool,
-                      context: PythonObject) raises:
-    """scikit-learn's `validate_data` refusals on X (`_sk_validate._check_X`):
-    sparse (unless the class takes it), complex, rank below two, no rows, no
-    columns. Values are read by the owner's own typed conversion."""
-    var est = classical_estimator_name(model)
-    var module = py_type(source).__module__
-    if (not sparse_ok and py_type(module) is native_loaded_module("builtins").str
-            and Bool(py=py_call(module.startswith, "scipy.sparse"))):
-        raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to "
-                    + "convert to a dense numpy array. (" + est + " takes dense X only.)")
-    var shape = lifecycle_x_shape(source, context)
-    if shape is None:
-        return
-    var kind = _x_kind(source, context)
+def _check_x_values(model: PythonObject, source: PythonObject, sparse_ok: Bool,
+                    context: PythonObject) raises -> PythonObject:
+    """`lifecycle_check_x`'s refusals; returns X's shape (None when X is not
+    an exact ndarray or Array) so the width check reuses it. The estimator
+    name is built only for a refusal, never on the accepted path."""
+    var cls = py_type(source)
+    var shape: PythonObject
+    var kind: String
+    if cls is py_get(context, "ndarray"):
+        # An exact ndarray is never scipy.sparse: no module lookup.
+        shape = source.shape
+        kind = String(source.dtype.kind)
+    elif cls is py_get(context, "array_class"):
+        shape = array_slot_once(source, "shape", context)
+        kind = _x_kind(source, context)
+    else:
+        var module = cls.__module__
+        if (not sparse_ok and py_type(module) is native_loaded_module("builtins").str
+                and Bool(py=py_call(module.startswith, "scipy.sparse"))):
+            raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to "
+                        + "convert to a dense numpy array. (" + classical_estimator_name(model) + " takes dense X only.)")
+        return PythonObject(None)
     if kind == "c":
-        raise Error("Complex data not supported: " + est + " got a complex X.")
+        raise Error("Complex data not supported: " + classical_estimator_name(model) + " got a complex X.")
     if kind == "O" or kind == "U" or kind == "S":
-        return  # object/string storage: the owner's encoder input step
+        return shape  # object/string storage: the owner's encoder input step
     var nd = len(shape)
     if nd < 2:
         raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape="
                     + _repr(shape) + "). " + RESHAPE_HINT)
     if nd == 2 and Int(py=shape[0]) == 0:
-        raise Error("Found array with 0 sample(s) (shape=" + _repr(shape) + ") while a minimum of 1 is required by " + est + ".")
+        raise Error("Found array with 0 sample(s) (shape=" + _repr(shape) + ") while a minimum of 1 is required by "
+                    + classical_estimator_name(model) + ".")
     if nd == 2 and Int(py=shape[1]) == 0:
-        raise Error("Found array with 0 feature(s) (shape=" + _repr(shape) + ") while a minimum of 1 is required by " + est + ".")
+        raise Error("Found array with 0 feature(s) (shape=" + _repr(shape) + ") while a minimum of 1 is required by "
+                    + classical_estimator_name(model) + ".")
+    return shape
+
+
+def _check_width_shape(model: PythonObject, fields: PythonObject, source: PythonObject, shape: PythonObject,
+                       context: PythonObject) raises:
+    var fitted = py_get(fields, "n_features_in_")
+    if shape is not None and len(shape) == 2 and py_type(fitted) is native_loaded_module("builtins").int:
+        if Int(py=shape[1]) != Int(py=fitted):
+            raise Error("X has " + String(Int(py=shape[1])) + " features, but " + classical_estimator_name(model)
+                        + " is expecting " + String(Int(py=fitted)) + " features as input.")
+    estimator_feature_check(model, fields, source, context)
+
+
+def lifecycle_check_x(model: PythonObject, source: PythonObject, sparse_ok: Bool,
+                      context: PythonObject) raises:
+    """scikit-learn's `validate_data` refusals on X (`_sk_validate._check_X`):
+    sparse (unless the class takes it), complex, rank below two, no rows, no
+    columns. Values are read by the owner's own typed conversion."""
+    _ = _check_x_values(model, source, sparse_ok, context)
 
 
 def lifecycle_check_width(model: PythonObject, fields: PythonObject, source: PythonObject,
                           context: PythonObject) raises:
     """X's width against `n_features_in_` (`_sk_validate._check_width`) and
     its column names against `feature_names_in_`."""
-    var b = native_loaded_module("builtins")
-    var fitted = py_get(fields, "n_features_in_")
-    var shape = lifecycle_x_shape(source, context)
-    if shape is not None and len(shape) == 2 and py_type(fitted) is b.int:
-        if Int(py=shape[1]) != Int(py=fitted):
-            raise Error("X has " + String(Int(py=shape[1])) + " features, but " + classical_estimator_name(model)
-                        + " is expecting " + String(Int(py=fitted)) + " features as input.")
-    estimator_feature_check(model, fields, source, context)
+    _check_width_shape(model, fields, source, lifecycle_x_shape(source, context), context)
+
+
+def lifecycle_check_x_width(model: PythonObject, fields: PythonObject, source: PythonObject, sparse_ok: Bool,
+                            context: PythonObject) raises:
+    """`lifecycle_check_x` then `lifecycle_check_width` in one pass over X's
+    metadata: the type, shape and dtype are read once per public call."""
+    _check_width_shape(model, fields, source, _check_x_values(model, source, sparse_ok, context), context)
 
 
 def lifecycle_admit_state(model: PythonObject, fields: PythonObject) raises:
@@ -142,11 +170,12 @@ def lifecycle_begin(model: PythonObject, method: String, source: PythonObject, x
         if requires_fit and not Bool(py=classical_is_fitted(model)):
             lifecycle_not_fitted(model, method, context)
         if x_checks and not nested and source is not None:
-            lifecycle_check_x(model, source, sparse_ok, context)
             # inverse_transform takes the transformed space, not the fit's
             # features: scikit-learn checks n_features_in_ only on the latter.
             if requires_fit and method != "inverse_transform":
-                lifecycle_check_width(model, fields, source, context)
+                lifecycle_check_x_width(model, fields, source, sparse_ok, context)
+            else:
+                lifecycle_check_x(model, source, sparse_ok, context)
     return 0
 
 
