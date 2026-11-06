@@ -9,10 +9,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def connection():
+    # The layouts module registers itself through the sibling
+    # `._native_loaded_modules` (standard library only) at import, so load
+    # both from the source tree inside a throwaway package. No mojolearn
+    # import runs and nothing stays in sys.modules.
+    package = types.ModuleType('_family_layout_pkg')
+    package.__path__ = [str(ROOT / 'python/mojolearn')]
+    name = package.__name__ + '._native_family_layouts'
     path = ROOT / 'python/mojolearn/_native_family_layouts.py'
-    spec = importlib.util.spec_from_file_location('_family_layout_test', path)
+    spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    saved = {key: sys.modules.get(key) for key in (package.__name__, name, package.__name__ + '._native_loaded_modules')}
+    sys.modules[package.__name__] = package
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = value
     return module
 
 
