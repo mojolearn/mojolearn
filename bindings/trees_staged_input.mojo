@@ -75,7 +75,12 @@ def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int
     var tables = Python.list()
     var counts = List[Int]()
     for i in range(len(members)):  # driver-loop: over the member estimators
-        var native = _member_table(members[i], cols, context)
+        var native = PythonObject(None)
+        try:
+            native = _member_table(members[i], cols, context)
+        except:
+            # The member's own call reports whatever this read refused.
+            pass
         if native is None:
             continue
         var seen = -1
