@@ -1722,7 +1722,13 @@ def boost_kind(model: PythonObject, context: PythonObject) raises -> String:
 def boost_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`trees_boost_<op>` of a connected Bagging*, AdaBoost*, DART* or
     RandomTreesEmbedding."""
-    var kind = boost_kind(model, context)
+    return boost_operation_of(model, boost_kind(model, context), operation, args, context)
+
+
+def boost_operation_of(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """`boost_operation` with the schema `kind` its caller already resolved
+    (the public door reads it once; lane perf-sweep-trees, 2026-11-05)."""
     var classifier = kind.endswith("_classifier")
     if kind.startswith("bagging_"):
         if operation == "trees_boost_fit":

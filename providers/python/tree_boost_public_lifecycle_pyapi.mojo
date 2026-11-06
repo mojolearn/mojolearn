@@ -8,7 +8,7 @@ from bindings.classical_validate import classical_check_x, classical_check_y, cl
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.trees_boost_admission import boost_admit
-from bindings.trees_public_boost import boost_kind, boost_operation
+from bindings.trees_public_boost import boost_kind, boost_operation_of
 from bindings.trees_public_mixin_score import boost_score
 from bindings.trees_public_auxiliary import embedding_apply
 from bindings.parallel_public_result import parallel_public_result
@@ -94,7 +94,7 @@ def tree_boost_public_operation(model: PythonObject, operation: String, args: Py
     if fitting:
         var depth = estimator_fit_begin(fields)
         try:
-            result = boost_operation(model, "trees_boost_" + method, call_args, context)
+            result = boost_operation_of(model, kind, "trees_boost_" + method, call_args, context)
         except error:
             var refused = _refusal(error, True, depth > 0, rows, columns, name)
             raise refused^
@@ -110,7 +110,7 @@ def tree_boost_public_operation(model: PythonObject, operation: String, args: Py
         return embedding_apply(model, call_args, context)
     else:
         try:
-            result = boost_operation(model, "trees_boost_" + method, call_args, context)
+            result = boost_operation_of(model, kind, "trees_boost_" + method, call_args, context)
         except error:
             var refused = _refusal(error, False, nested, rows, columns, name)
             raise refused^
