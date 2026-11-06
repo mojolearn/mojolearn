@@ -11,6 +11,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_typed
 from bindings.tsa_arima_native import arima_fit, _adopt, _no_exog
 from bindings.tsa_hw_native import tsa_array
+from providers.python.array_metadata_pyapi import ArrayMetadata
 
 
 
@@ -71,6 +72,7 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
     var fitted = Python.list()
     var search_maxiter = py_get(fields, "_search_maxiter")
     var iterations = -1 if search_maxiter is None else _integer(search_maxiter, context)
+    var block_cache = Optional[_SearchBlock]()
     for i in range(len(models)):  # driver-loop: over chosen order groups
         var spec = models[i]
         if py_type(spec) is not py_type(Python.tuple()) or len(spec) != 3:
@@ -94,7 +96,8 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
                           rows, ids.count, width * 4)
         var saved = PythonObject(None) if reuse is None else reuse[i]
         if saved is not None and maxiter == iterations:
-            _adopt_reuse(m, y, saved, ids.count, width, Int(py=_fields(m, context["arima_class"])["complexity_"]), context)
+            _adopt_reuse(m, y, saved, block_cache, ids.count, width,
+                         Int(py=_fields(m, context["arima_class"])["complexity_"]), context)
         else:
             _ = arima_fit(m, Python.tuple(y, PythonObject(None)), context)
         _ = py_call(fitted.append, m)
@@ -107,39 +110,73 @@ def autoarima_fit(model: PythonObject, args: PythonObject, context: PythonObject
     return model
 
 
-def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, count: Int, n_obs: Int, complexity: Int, context: PythonObject) raises:
+struct _SearchBlock(Movable):
+    """One AutoARIMA search fit block, admitted once: the float block, the
+    flags, the likelihoods and the retained offsets. Order groups chosen
+    from the same search group share one block object, so the fit admits
+    it once per block instead of once per selected order group."""
+    var owner: PythonObject
+    var f: ArrayMetadata
+    var flags: ArrayMetadata
+    var ll: ArrayMetadata
+    var offsets: List[Int]
+    var rows: Int
+
+    def __init__(out self, block: PythonObject, context: PythonObject) raises:
+        var tuple_type = py_type(Python.tuple())
+        if py_type(block) is not tuple_type or len(block) != 5:
+            raise Error("TypeError: AutoARIMA search fit block requires a native tuple")
+        # Admission precedes all shape/index reads in the adoption owner. The
+        # original arrays remain pinned by the block throughout the adoption.
+        var f = _packed(block[0], "search float block", context)
+        var flags = _buffer(block[1], "search flags", context)
+        var ll = _packed(block[4], "search likelihoods", context)
+        if not flags.c_order or flags.source.itemsize != 4 or flags.source.kind != 1:
+            raise Error("TypeError: AutoARIMA search flags require contiguous int32 storage")
+        var listed = block[2]
+        if py_type(listed) is not py_type(Python.list()) and py_type(listed) is not tuple_type:
+            raise Error("TypeError: AutoARIMA search offsets require a native sequence")
+        var rows = _integer(block[3], context)
+        var offsets = List[Int]()
+        for i in range(len(listed)):  # driver-loop: over retained candidate block offsets
+            offsets.append(_integer(listed[i], context))
+        self.owner = block
+        self.f = f^
+        self.flags = flags^
+        self.ll = ll^
+        self.offsets = offsets^
+        self.rows = rows
+
+
+def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, mut cache: Optional[_SearchBlock],
+                 count: Int, n_obs: Int, complexity: Int, context: PythonObject) raises:
     var tuple_type = py_type(Python.tuple())
     if py_type(saved) is not tuple_type or len(saved) != 3:
         raise Error("TypeError: AutoARIMA search reuse requires a native triple")
     var block = saved[0]
-    if py_type(block) is not tuple_type or len(block) != 5:
-        raise Error("TypeError: AutoARIMA search fit block requires a native tuple")
-    # Admission precedes all shape/index reads in the adoption owner. The
-    # original arrays remain pinned by saved throughout the native adoption.
-    var f = _packed(block[0], "search float block", context)
-    var flags = _buffer(block[1], "search flags", context)
-    var ll = _packed(block[4], "search likelihoods", context)
-    if not flags.c_order or flags.source.itemsize != 4 or flags.source.kind != 1:
-        raise Error("TypeError: AutoARIMA search flags require contiguous int32 storage")
-    var offsets = block[2]
-    if py_type(offsets) is not py_type(Python.list()) and py_type(offsets) is not tuple_type:
-        raise Error("TypeError: AutoARIMA search offsets require a native sequence")
+    if not cache or cache.value().owner is not block:
+        cache = _SearchBlock(block, context)
+    ref sb = cache.value()
+    ref f = sb.f
+    ref flags = sb.flags
+    ref ll = sb.ll
+    var n_offsets = len(sb.offsets)
     var trial = _integer(saved[1], context)
-    var rows = _integer(block[3], context)
-    if trial < 0 or trial >= len(offsets) or rows <= 0 or flags.count < 2 * rows * len(offsets) or ll.count < rows * len(offsets):
+    var rows = sb.rows
+    if trial < 0 or trial >= n_offsets or rows <= 0 or flags.count < 2 * rows * n_offsets or ll.count < rows * n_offsets:
         raise Error("ValueError: AutoARIMA search reuse dimensions disagree")
-    for i in range(len(offsets)):  # driver-loop: over retained candidate block offsets
-        var offset = _integer(offsets[i], context)
+    for i in range(n_offsets):  # driver-loop: over retained candidate block offsets
+        var offset = sb.offsets[i]
         if offset < 0 or offset >= f.count:
             raise Error("ValueError: AutoARIMA search block offset is out of range")
-    if _integer(offsets[trial], context) + rows * (3 * complexity + 1) > f.count:
+    if sb.offsets[trial] + rows * (3 * complexity + 1) > f.count:
         raise Error("ValueError: AutoARIMA selected search block is incomplete")
     var local = _packed(saved[2], "search local indices", context, True)
     if len(local.shape) != 1 or local.count != count:
         raise Error("ValueError: AutoARIMA search reuse local indices disagree")
     # Capture each caller-owned source once, then gather using only these
     # native addresses/dimensions while the snapshots pin original owners.
-    var offset = _integer(offsets[trial], context)
+    var offset = sb.offsets[trial]
     var params = tsa_array("f", "<f4", Python.tuple(count, complexity), count * complexity, 4, context)
     var x = tsa_array("f", "<f4", Python.tuple(count, complexity), count * complexity, 4, context)
     var x0 = tsa_array("f", "<f4", Python.tuple(count, complexity), count * complexity, 4, context)
@@ -163,6 +200,4 @@ def _adopt_reuse(model: PythonObject, y: PythonObject, saved: PythonObject, coun
     _adopt(model, _fields(model, context["arima_class"]), y, False, 2, count, n_obs, _no_exog(context), 0,
            complexity, params, x, x0, stats, result_flags, PythonObject(None), context)
     _ = local
-    _ = f
-    _ = flags
-    _ = ll
+    _ = block
