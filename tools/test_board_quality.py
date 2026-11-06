@@ -61,9 +61,14 @@ class QualityParity(unittest.TestCase):
         self.assertEqual(pair(torch, ours)["verdict"], "FAIL")
 
     def test_metrics_without_a_better_side_stay_symmetric(self):
-        for metric, a, b in (("silhouette", .5, .52), ("pvalue", .18, .2)):
+        for metric, a, b in (("modularity", .5, .52), ("pvalue", .18, .2)):
             self.assertEqual(pair({metric: a}, {metric: b})["verdict"], "FAIL")
             self.assertEqual(pair({metric: b}, {metric: a})["verdict"], "FAIL")
+
+    def test_silhouette_is_one_sided_higher_is_better(self):
+        # v9 (462c544c41): silhouette is a bounded cluster score, higher is better
+        self.assertEqual(pair({"silhouette": .5}, {"silhouette": .52})["verdict"], "FAIL")
+        self.assertEqual(pair({"silhouette": .52}, {"silhouette": .5})["verdict"], "PASS")
 
     def test_missing_or_nonfinite_metric_cannot_pass(self):
         for value in (None, float("nan"), float("inf"), True):

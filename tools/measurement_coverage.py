@@ -119,10 +119,8 @@ INDIRECT = {
 #: Public names the board does not time, each with its reason (fnmatch patterns over the canonical name).
 #: Andrew 2026-10-22: every exposed API is measured "if appropriate"; these are the ones where it is not.
 NOT_MEASURED = (
-    # Owner 2026-10-24: adapters are front-ends to the same kernels, qualified
-    # by installed adapter smokes rather than duplicate arithmetic lanes.
-    ("mojolearn.adapters._torch_compile._Compiled",
-     "whole-model adapter; covered by installed adapter smoke, not a separate estimator race"),
+    # (The adapters._torch_compile._Compiled row went with the retired
+    # graph-capture backend, 2ce2b0d7b9; the inventory no longer lists it.)
     # multi-GPU: excluded from the board by the standing rule (Andrew 2026-09-29, COVERAGE.md)
     ("mojolearn.Parallel*", "multi-GPU, excluded from the single-GPU board (Andrew 2026-09-29, COVERAGE.md)"),
     ("mojolearn.Pooled*", "multi-GPU model pool, excluded from the single-GPU board (COVERAGE.md)"),

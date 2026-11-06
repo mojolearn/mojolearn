@@ -83,13 +83,21 @@ class TokenizerPublicSource(unittest.TestCase):
         self.assertIn("lookup.__self__ is not codecs", connect)
         self.assertIn("state[].error_lookup = lookup", connect)
         decode = source.split("def tokenizer_decode_utf8(", 1)[1].split("\n\ndef ", 1)[0]
-        self.assertLess(decode.index("py_type(raw) is not bi.bytes"), decode.index("raw.decode"))
-        self.assertLess(decode.index("entry is not expected"), decode.index("raw.decode"))
-        self.assertNotIn("_native(entry)", decode)
-        self.assertNotIn("codecs.lookup_error", decode)
-        self.assertIn("var lookup = state[].error_lookup", decode)
-        self.assertIn("py_call(lookup, errors)", decode)
-        self.assertIn('Python.tuple("utf-8", errors)', decode)
+        # e132d551f0 moved the handler check into TokenizerUtf8Policy and the
+        # decode into CPython's native UTF-8 codec; the same order is kept:
+        # exact bytes, then the connected handler identity, then decoding.
+        self.assertLess(decode.index("py_type(raw) is not bi.bytes"), decode.index("TokenizerUtf8Policy(errors)"))
+        self.assertLess(decode.index("TokenizerUtf8Policy(errors)"), decode.index("policy.decode("))
+        policy = source.split("struct TokenizerUtf8Policy(", 1)[1].split("\n\ndef ", 1)[0]
+        self.assertIn("var handlers = state[].error_handlers", policy)
+        self.assertIn("state[].error_lookup is None", policy)
+        self.assertIn("self.expected = py_get(handlers, errors)", policy)
+        self.assertLess(policy.index("entry is not self.expected"), policy.index('"PyUnicode_DecodeUTF8"'))
+        self.assertLess(policy.index('"PyCodec_LookupError"'), policy.index("entry is not self.expected"))
+        for body in (decode, policy):
+            self.assertNotIn("_native(entry)", body)
+            self.assertNotIn("codecs.lookup_error", body)
+            self.assertNotIn("raw.decode", body)
         dispatch = source.split("def tokenizer_public_call(", 1)[1]
         self.assertEqual(dispatch.count("_connect_error_handlers()"), 2)
 

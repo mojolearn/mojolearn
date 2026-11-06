@@ -66,8 +66,15 @@ def test_subset_matches_existing_native_constructor_plans_and_inheritance():
     for name in ('_LinearClassifierMixin', '_LinearRegressorMixin'):
         cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name)
         assert ast.unparse(cls.bases[0]) == 'NativeParamsSetter'
+    # Remaining families keep the full rebuild type(self)(**values); since
+    # 4fe4a53c9d it runs natively (_generic_reset) behind one set_params call.
     mode = (ROOT / 'python/mojolearn/_mode.py').read_text()
-    assert 'replacement = type(self)(**values)' in mode  # remaining families stay visible, unchanged
+    assert 'return _GENERIC_PARAMS(self, params, _GENERIC_PARAMS_CONTEXT)' in mode
+    reset = (ROOT / 'bindings/full_reset_params_native.mojo').read_text()
+    generic = reset.split('def _generic_reset(', 1)[1].split('\ndef ', 1)[0]
+    assert 'return _generic_reset(model, params, context, depth)' in reset
+    assert 'cpy.PyObject_Call(cls._obj_ptr, empty._obj_ptr, values._obj_ptr)' in generic
+    assert generic.index('_merge(model, params, values, context, depth)') < generic.index('cpy.PyObject_Call(')
 
 
 def test_owned_fitted_state_covers_all_linear_owner_writes():

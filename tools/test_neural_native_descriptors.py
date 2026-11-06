@@ -75,9 +75,13 @@ def test_coverage_lists_actual_twenty_nine_plan_rows_and_pending_runtime():
 def test_result_and_error_share_stable_caller_owned_storage():
     caller = read('core/native_descriptor_call.mojo')
     assert 'List[NativeCallOutput]()' in caller
-    assert 'Int(MutPointer(to=output[0].result))' in caller
-    assert 'Int(MutPointer(to=output[0].error))' in caller
-    assert 'return output[0].result' in caller
+    # The heap-owned List element is handed to the span call (378a5d8a95),
+    # which writes result and error through that one retained field.
+    assert 'Int(floats.unsafe_ptr()), len(floats), output[0])' in caller
+    assert 'mut output: NativeCallOutput' in caller
+    assert 'Int(MutPointer(to=output.result))' in caller
+    assert 'Int(MutPointer(to=output.error))' in caller
+    assert 'return output.result' in caller
     assert 'Array[Int, 1]' not in caller
 
 

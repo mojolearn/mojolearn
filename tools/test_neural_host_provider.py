@@ -32,7 +32,7 @@ def test_cpu_session_and_causal_frontdoors_use_the_common_provider():
     assert 'Bool(py=e["cpu"]) and block_provider is not None' in causal
     assert '34 if head_profile else 33, a_words, p_words' in causal
     mamba=(ROOT/'bindings/mamba_public_native.mojo').read_text()
-    assert '2 * kind - 1, _neural_int_words(addresses), p, f' in mamba
+    assert 'neural_descriptor_execute(h[].provider, 2 * kind - 1, addresses, p, f)' in mamba
     transformer=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
     assert 'neural_descriptor_execute(h[].provider, 33, a, p, [])' in transformer
 

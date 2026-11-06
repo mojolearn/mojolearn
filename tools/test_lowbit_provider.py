@@ -38,7 +38,10 @@ def test_once_captured_foreign_metadata_retains_zero_copy_owner():
     assert section.count('AdmittedBorrowedBuffer(value)')==1
     assert 'classical_admit_value(value, context)' in section
     assert 'PyMemoryView_FromMemory' in section
-    assert 'PythonObject(alloc=LinBufferPin(input.pin^))' in section
+    # The admitted pin is moved out of the admission and into the Python pin
+    # object (the mode-parameterized LinBufferPin, a2b5592a6d).
+    assert 'swap(held_pin, input.pin)' in section
+    assert 'PythonObject(alloc=LinBufferPin[](held_pin^))' in section
     assert 'py_setattr(array, "_pin", pin)' in section
     assert 'py_setattr(array, "_store", input.keep)' in section
     assert 'return lin_borrow_array(input^, typestr, context)' in section

@@ -32,9 +32,9 @@ def test_state_admits_storage_before_buffer_export_and_preserves_view_copy_split
     constructor = NATIVE.split("struct TransformerBuffer(Movable):", 1)[1].split("def _transformer_state_words", 1)[0]
     assert constructor.index("admit_native_buffer_exporter(store)") < constructor.index("AdmittedBorrowedBuffer(store)")
     assert "self.owner = value" in constructor and "self.store = store" in constructor
-    assert "_transformer_array_slots(context)" in constructor
+    assert "_transformer_array_slots(mods, context)" in constructor
     state = NATIVE.split("def transformer_state_read(", 1)[1].split("struct TransformerPublicTapeOwner", 1)[0]
-    assert 'if window == 0:\n        return _transformer_cache_view(buffer, dims, context)' in state
+    assert 'if window == 0:\n        return _transformer_cache_view(mods, buffer, dims, context)' in state
     assert "var start = (cached - held) % window" in state
     assert "count=first * hd" in state and "count=(held - first) * hd" in state
     view = NATIVE.split("def _transformer_cache_view(", 1)[1].split("def transformer_state_read", 1)[0]
@@ -62,8 +62,11 @@ def test_tape_owns_native_metadata_and_uses_original_budget_aware_session_route(
 def test_public_state_and_tape_use_connected_modules_without_import_callbacks():
     assert 'Python.import_module(' not in NATIVE
     assert 'from bindings.native_loaded_module import native_loaded_module' in NATIVE
-    assert 'native_loaded_module("builtins")' in NATIVE
-    assert 'native_loaded_module("types")' in NATIVE
+    # Per-operation NativeModules.module() resolves through native_loaded_module.
+    assert 'mods.module("builtins")' in NATIVE
+    assert 'mods.module("types")' in NATIVE
+    loaded = (ROOT / "bindings/native_loaded_module.mojo").read_text()
+    assert 'var module = native_loaded_module(name)' in loaded.split("struct NativeModules(Movable):", 1)[1]
     allocation = (ROOT / "bindings/generation_buffers.mojo").read_text()
     initialization = allocation.split("def generation_initialize_binding", 1)[1].split("def py_ints", 1)[0]
     assert 'Python.import_module(' not in initialization

@@ -37,7 +37,7 @@ def test_session_ownership_uses_common_transport_and_exact_admission():
 
 def test_all_backward_and_prefill_dispatch_modes_reach_native_table():
     for operation in (7, 9):
-        assert f'neural_mamba_session_call(native, fields, entries, {operation},' in PUBLIC
+        assert f'neural_mamba_session_call(mods, native, fields, entries, {operation},' in PUBLIC
     assert 'neural_descriptor_execute(native, 4,' in PUBLIC
     assert 'neural_descriptor_execute(native, 3 if kind == "mamba2" else 2,' in PUBLIC
     for operation in (6, 8):
@@ -80,4 +80,4 @@ def test_resident_decode_families_use_existing_native_owners():
     assert 'var device_address: Int' in boundary
     for operation in (3,4,5,6):
         assert f'base + {operation},' in boundary
-    assert 'neural_descriptor_execute(h[].provider, 27 + 8 * (h[].kind - 1)' in boundary
+    assert 'neural_descriptor_execute(h[].provider, 27 + 8 * (h[].plan.kind - 1)' in boundary

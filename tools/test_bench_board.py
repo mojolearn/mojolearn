@@ -464,6 +464,9 @@ def test_fairness_fix_20261013_amd_installs_rocm_xgboost(monkeypatch):
         assert bb.amd_xgboost_index("DEFAULT", f) is None
         assert bb.amd_xgboost_index("DEFAULT", os.path.join(d, "missing")) == "DEFAULT"
     monkeypatch.setattr(bb, "amd_xgboost_index", lambda default, *a: default)
+    # the ROCm LightGBM group (FAIRNESS FIX 2026-10-30) depends on the box's ROCm version; this test is about
+    # xgboost, so that index is held off here (it would otherwise be the last group on an unreadable version)
+    monkeypatch.setattr(bb, "amd_lightgbm_index", lambda default, *a: None)
     groups = bb.opponent_requirements("amd", pins)
     assert not any(r.startswith("xgboost==") for _, reqs in groups for r in reqs)
     assert groups[-1] == (rocm[0], ["amd_xgboost==3.2.0"])
@@ -871,6 +874,10 @@ def test_plan_neural_fast_on_apple_only(vendor):
             # (the torch references are planned and refused by name at race time)
             want = want + {"nvidia": ["mamba-ssm-fp32", "mamba-ssm-tf32"],
                            "amd": ["mamba-ssm-fp32"]}.get(vendor, [])
+        if r["lane"] in ("transformer-decode", "transformer-forward", "samba-forward", "lm-forward"):
+            # FAIRNESS FIX (2026-10-30, fbef079078): torch also races its CUDA-graph replay on these GPU
+            # inference lanes (bench_board_neural.GRAPH_LANES); graph-tf32 only where TF32 exists
+            want = want + ["torch-graph-fp32"] + (["torch-graph-tf32"] if vendor == "nvidia" else [])
         assert r["opponents"] == want, r["id"]
         assert r["arms"] == ours + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere

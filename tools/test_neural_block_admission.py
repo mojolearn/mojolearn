@@ -10,13 +10,17 @@ ARRAY_ADMISSION = (ROOT / "bindings/native_array_snapshot.mojo").read_text()
 
 class NeuralAdmissionSource(unittest.TestCase):
     def test_public_owner_admits_before_scalar_and_binding_selection(self):
-        body = PUBLIC.split("def neural_block_owner(")[1].split("def neural_block_init_binding(")[0]
-        self.assertLess(body.index("neural_block_snapshot(block, context)"), body.index('String(fields["_native_kind"])'))
+        # neural_block_owner delegates to the full owner build (db970cfce4).
+        body = PUBLIC.split("def _neural_block_owner_full(")[1].split("\ndef ", 1)[0]
+        door = PUBLIC.split("def neural_block_owner(")[1].split("\ndef ", 1)[0]
+        self.assertIn("return _neural_block_owner_full(mods, block, context)", door)
+        self.assertLess(body.index("neural_block_snapshot(mods, block, context)"), body.index('String(fields["_native_kind"])'))
         self.assertNotIn('object.__getattribute__', body)
         self.assertIn('"_native_block_fields"', body)
 
     def test_array_metadata_uses_native_slots_and_retains_owner(self):
-        body = ARRAY_ADMISSION.split("def native_array_snapshot(")[1]
+        # The first overload is the per-call NativeModules wrapper; check the real body.
+        body = ARRAY_ADMISSION.split("def native_array_snapshot(mut mods: NativeModules,")[1]
         self.assertIn("native_array_snapshot as neural_array_snapshot", ADMISSION)
         self.assertIn('slots[names[i]].__get__', body)
         self.assertIn('AdmittedBorrowedBuffer(store)', body)
@@ -30,19 +34,19 @@ class NeuralAdmissionSource(unittest.TestCase):
         self.assertNotIn("operator.index", PUBLIC)
         self.assertNotIn("block._W_NAMES", PUBLIC)
         self.assertIn("admit_native_buffer_exporter(value)", PUBLIC)
-        self.assertIn("neural_native_scalar(batch, context, True)", PUBLIC)
-        self.assertIn("neural_block_f32(grad_output", PUBLIC)
+        self.assertIn("neural_native_scalar(mods, batch, context, True)", PUBLIC)
+        self.assertIn("neural_block_f32(mods, grad_output", PUBLIC)
 
     def test_native_dictionary_descriptor_guard_reused(self):
         body = ADMISSION.split("def neural_record_fields(")[1].split("\ndef ", 1)[0]
-        self.assertIn("var fields = _fields(value)", body)
-        self.assertNotIn("getattr", body.split("var fields = _fields(value)", 1)[1])
+        self.assertIn("var fields = _fields(mods, value)", body)
+        self.assertNotIn("getattr", body.split("var fields = _fields(mods, value)", 1)[1])
         self.assertIn('"__get__"', body)
 
     def test_state_publication_preserves_counters_and_failure_status(self):
         body = PUBLIC.split("def neural_block_forward_binding(")[1].split("def neural_training_entries(")[0]
         self.assertEqual(body.count("_neural_publish_state(state_value, captured)"), 2)
-        self.assertIn("_neural_state_capture(owner, state_value)", body)
+        self.assertIn("_neural_state_capture(mods, owner, state_value)", body)
 
 
 if __name__ == "__main__":

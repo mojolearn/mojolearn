@@ -45,7 +45,11 @@ def fake_driver_evidence(monkeypatch):
     # inference board needs the same isolation. Real audit tests stay separate.
     run_race = bb.run_race
     monkeypatch.setattr(bb, "run_race", lambda ctx, race: run_race(dict(ctx, capture_measurements=False), race))
-    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="MATCHED", races={}))
+    # every race MATCHED by name: since be1aff7650 a race without its own preflight verdict is a failed recipe
+    # and never times (the shared fixture in test_bench_board.py does the same)
+    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(
+        verdict="MATCHED", races={r["id"]: {"audit": {"verdict": "MATCHED"}} for r in races}))
+    monkeypatch.setattr(bb, "gpu_set_refusal", lambda python, vendor: None)
 
 # The trees stub, extended: with --infer it emits the FSPEED-INFER protocol.
 STUB_TREES_INFER = bbt.STUB_TREES + r'''
