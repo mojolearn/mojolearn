@@ -3,7 +3,8 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
 from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_buffer_owner import native_buffer_view
@@ -90,12 +91,16 @@ def _resident_owner(cached: PythonObject, context: PythonObject) raises -> Pytho
     return Python.tuple(cached[0], cached[1], connected[1])
 
 
+comptime _RADIUS_STATE_SLOT = "neighbor_radius_state_v1"
+
+
 def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject) raises -> Bool:
     """Admit the fitted state, once while it is unchanged: True when every
     fitted array, scalar and resident tuple is the object admitted before
     (or has just been admitted), so the query reads only its own input.
     k-NN stamps live in the resident holder (reset by fit); IVF stamps in
-    `_query_admitted` (dropped by extend and getstate). Radius is unstamped."""
+    `_query_admitted` (dropped by extend and getstate); radius stamps in the
+    native prepared registry."""
     var fields = py_fields(model)
     var b = native_loaded_module("builtins")
     var names = Python.tuple("_index", "centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
@@ -117,6 +122,20 @@ def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject)
         var stored = py_get(holder, "admitted_query") if holder is not None else py_get(fields, "_query_admitted")
         if knn_state_unchanged(stored, stamp):
             return True
+    # Radius models have no resident holder: their stamp (every slot object
+    # and exact container items) lives in the native prepared registry,
+    # weakly keyed by the model and outside `__dict__`.
+    var mods = NativeModules()
+    var radius_stamp = PythonObject(None)
+    if text == "radius":
+        radius_stamp = Python.list()
+        for i in range(len(names)):  # small-loop(fixed fitted array owners)
+            prepared_key_add(mods, radius_stamp, py_get(fields, names[i]))
+        for i in range(len(scalars)):  # small-loop(fixed native query configuration)
+            prepared_key_add(mods, radius_stamp, py_get(fields, scalars[i]))
+        var record = prepared_get(mods, _RADIUS_STATE_SLOT, model)
+        if record is not None and prepared_key_same(record, radius_stamp):
+            return True
     for i in range(len(names)):  # small-loop(fixed fitted array owners)
         var value = py_get(fields, names[i])
         if value is not None:
@@ -135,6 +154,14 @@ def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject)
     elif text == "knn" and holder is not None:
         py_setitem(holder, "index", _resident_owner(py_get(holder, "index"), context))
         py_setitem(holder, "admitted_query", knn_state_values(fields, names + scalars) + Python.tuple(py_get(holder, "index")))
+    elif text == "radius":
+        var self_reference = False
+        for i in range(len(radius_stamp)):  # driver-loop: over the stamp objects, refusing a self-reference
+            if radius_stamp[i] is model:
+                self_reference = True
+                break
+        if not self_reference:
+            prepared_put(mods, _RADIUS_STATE_SLOT, model, radius_stamp)
     return True
 
 
