@@ -18,7 +18,8 @@ from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_after_fit, _feature_names
 from bindings.trees_public_lifecycle_native import _feature_check
 from bindings.trees_public_meta import meta_kind, meta_admitted_operation
-from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_call, prep_native_context
+from bindings.prep_native_estimator import prep_estimator_admit, prep_native_context
+from bindings.trees_meta_admission import meta_admit_configuration
 from bindings.msel_inputs import msel_admit, msel_input_count
 from bindings.parallel_public_result import parallel_public_result
 
@@ -28,7 +29,9 @@ def meta_public_operation(model: PythonObject, operation: String, args: PythonOb
     # Admit the exact registered model and all argument objects before any
     # shape/label read. Unsupported Python input hooks must never be invoked.
     prep_estimator_admit(model, "native meta-estimator", context)
-    _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
+    # Constructor admission (one native clone of the model and every member)
+    # runs once per configuration, not once per call (trees_meta_admission).
+    meta_admit_configuration(model, context)
     var native = prep_native_context(context)
     msel_admit(args, native)
     var method = String("")

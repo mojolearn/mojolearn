@@ -47,6 +47,7 @@ from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_storage import native_array_from_values
 from bindings.msel_inputs import msel_admit, msel_input_count
+from bindings.trees_meta_admission import meta_admit_configuration
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -1711,7 +1712,7 @@ def meta_operation(model: PythonObject, operation: String, args: PythonObject,
     """The meta-estimators' methods (`trees_meta_*`) reached directly (a
     composed estimator's plan, cross-validation): admit, then run."""
     prep_estimator_admit(model, "native meta-estimator", context)
-    _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
+    meta_admit_configuration(model, context)
     msel_admit(args, prep_native_context(context))
     return meta_admitted_operation(model, meta_kind(model, context), operation, args, context)
 
