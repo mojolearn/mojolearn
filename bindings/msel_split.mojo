@@ -36,6 +36,7 @@ from bindings.msel_common import (
     msel_p64, msel_p32, msel_new, msel_new2, msel_i64_list, msel_i32_list, msel_read_i64, msel_slice_i64,
     msel_arange, msel_range_index, msel_split_mask, msel_split_indices, msel_index_copy, msel_as_index,
     MselGroups, MselRng, msel_mix_seed, msel_shuffle_sizes, msel_take_any, msel_lazy, msel_index_i64,
+    msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
 )
 
 
@@ -1381,6 +1382,19 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
         test = split[1]
     var out = Python.list()
     for i in range(len(prepared)):  # driver-loop: gather train/test from the same retained input snapshot
-        _ = py_call(out.append, msel_take_any(prepared[i], train, context))
-        _ = py_call(out.append, msel_take_any(prepared[i], test, context))
+        var value = prepared[i]
+        if py_type(value) is b.list or py_type(value) is b.tuple:
+            _ = py_call(out.append, msel_take_labels(value, train, context))
+            _ = py_call(out.append, msel_take_labels(value, test, context))
+            continue
+        # pass 3 (rank 316): the input prepared above is stored once in one
+        # resident entry and both sides gathered from it (msel_take_any
+        # re-materialized it and opened, uploaded and closed a resident per
+        # side: three host copies and two uploads per input).
+        var res = msel_resident_new(context)
+        try:
+            _ = py_call(out.append, msel_resident_take(res, value, train, context))
+            _ = py_call(out.append, msel_resident_take(res, value, test, context))
+        finally:
+            msel_resident_close(res, context)
     return out
