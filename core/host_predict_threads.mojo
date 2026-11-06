@@ -169,6 +169,19 @@ def host_predict_task_count_work(rows: Int, work: Int) -> Int:
     return max(tasks, 1)
 
 
+def host_grain_cap(tasks: Int, work: Int) -> Int:
+    """A caller's row-task count `tasks` with the grain floor applied: 1
+    when `work` (the whole call's scalar element operations) is below
+    2 * HOST_MIN_TASK_WORK, else at most `work // HOST_MIN_TASK_WORK`;
+    `work <= 0` (unknown) leaves `tasks` as given. For row-independent
+    splits only, like `host_predict_task_count_work`."""
+    if tasks <= 1 or work <= 0:
+        return max(tasks, 1)
+    if work < 2 * HOST_MIN_TASK_WORK:
+        return 1
+    return max(1, min(tasks, work // HOST_MIN_TASK_WORK))
+
+
 @always_inline
 def host_predict_chunk(rows: Int, tasks: Int) -> Int:
     """Rows per task, the ceiling of `rows / tasks`; task `c` owns

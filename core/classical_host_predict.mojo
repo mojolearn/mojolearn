@@ -118,6 +118,7 @@ from checks.numerics import (
 )
 from core.host_predict_threads import (
     HostF32Ptr,
+    host_grain_cap,
     HostF64Ptr,
     HostI64Ptr,
     host_list_ptr,
@@ -193,6 +194,8 @@ def host_gemm_nt_into(
         t = 1
     if t > m:
         t = m
+    # perf-host-grain: rows are independent, so a small call is one task
+    t = host_grain_cap(t, m * n * max(k, 1))
     var chunk = host_predict_chunk(m, t)
 
     def _rows(c: Int) {imm x, imm y, imm z, imm chunk, imm m, imm n, imm k}:
@@ -327,7 +330,8 @@ def host_qn_sigmoid_into(
     """
     if n_rows <= 0:
         return
-    var t = max(1, min(tasks, n_rows))
+    # perf-host-grain: rows are independent; an exp64 is ~20 operations
+    var t = host_grain_cap(max(1, min(tasks, n_rows)), 20 * n_rows)
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm scores, imm dst, imm chunk, imm n_rows}:
@@ -416,7 +420,8 @@ def host_qn_softmax_into(
     """
     if n_rows <= 0:
         return
-    var t = max(1, min(tasks, n_rows))
+    # perf-host-grain: rows are independent; two exp64 per cell
+    var t = host_grain_cap(max(1, min(tasks, n_rows)), 40 * n_rows * max(n_classes, 1))
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(task: Int) {imm scores, imm dst, imm chunk, imm n_rows, imm n_classes}:
@@ -504,6 +509,8 @@ def host_pca_transform_into(
         t = 1
     if t > n_rows:
         t = n_rows
+    # perf-host-grain: rows are independent, so a small call is one task
+    t = host_grain_cap(t, n_rows * max(n_cols, 1) * (n_components + 1))
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm x, imm mu, imm components, imm dst, imm chunk, imm n_rows, imm n_cols, imm n_components}:
