@@ -66,10 +66,15 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "identical" and String(mode) != "fast":
+    # `mode.strip().lower()` in native string operations, once. A word that
+    # is not then exactly "identical" or "fast" takes Python's Unicode-aware
+    # strip/lower (same refusal, same accepted spellings).
+    var name = String(String(String(mode).strip()).lower())
+    if name != "identical" and name != "fast":
+        name = String(py_call(py_call(mode.strip).lower))
+    if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    return mode
+    return PythonObject(name)
 
 
 def _table(tables: PythonObject, mode: PythonObject) raises -> PythonObject:
@@ -96,12 +101,25 @@ def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) r
     var host = py_get(context, "lr_host_model")
     var mode = _host_mode(model, fields) if host is not None else _mode(fields, context)
     var entries = _table(context["lr_bindings"], mode)
+    # The compiled mode of a connected entry table is fixed when its binding
+    # loads: check it once per (mode, entry table identity) and keep the
+    # verdict in the long-lived connection context, as classical_entries
+    # does. A reconnection installs a new table, so the check runs again.
+    var verdicts = py_get(context, "lr_entries_admitted")
+    if verdicts is not None:
+        var seen = py_get(verdicts, mode)
+        if seen is not None and seen is entries:
+            return entries
     var compiled = Int(py=py_call_typed(entries["estimators_numeric_mode"]))
     var expected = 1 if String(mode) == "identical" else 0
     if compiled != expected:
         var name = String("identical") if compiled == 1 else (String("fast") if compiled == 0 else String("unknown"))
         raise Error("RuntimeError: mojolearn: _mojolearn_estimators was compiled for " + name
                     + ", but this call requested " + String(mode) + "; rebuild the " + String(mode) + " binding")
+    if verdicts is None:
+        verdicts = Python.dict()
+        py_setitem(context, "lr_entries_admitted", verdicts)
+    py_setitem(verdicts, mode, entries)
     return entries
 
 
