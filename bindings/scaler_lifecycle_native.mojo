@@ -20,6 +20,7 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import native_pandas_exact, classical_admit_value
 from bindings.scaler_tags_native import scaler_tags
+from bindings.prep_entry_cache import prep_mode_checked
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
@@ -41,7 +42,8 @@ def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
     var expected = 1 if String(mode) == "identical" else 0
-    if Int(py=py_call_typed(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call_typed(entries["x_prep_numeric_mode"])) != expected:
+    # The two mode probes run once per binding (prep_entry_cache).
+    if not prep_mode_checked(entries, expected):
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
     return entries
 

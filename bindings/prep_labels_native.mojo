@@ -23,6 +23,7 @@ from bindings.classical_labels import (
     labels_helper, _numeric_label_view, _flatten_labels, _sorted_classes)
 from bindings.scaler_native import _stage
 from bindings.scaler_lifecycle_native import _entries
+from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_values
 from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
@@ -274,10 +275,7 @@ def _label_present_enabled(mode: PythonObject, entries: PythonObject) raises -> 
     var m = String(mode)
     if m != "fast" and m != "identical":
         return False
-    var entry = py_get(entries, "x_prep_label_present")
-    if entry is None:
-        return False
-    return _truth(py_call_typed(entry))
+    return prep_entry_word(entries, "x_prep_label_present") != 0  # read once per binding
 
 
 def _label_fit_present(entries: PythonObject, lb: LabelBuf, codes: Bool, context: PythonObject) raises -> Optional[LabelFit]:
