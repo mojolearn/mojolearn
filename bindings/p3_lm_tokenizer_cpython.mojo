@@ -7,7 +7,7 @@ and per-key loops. Pointer arguments and results are carried as `Int`
 addresses, the form the call sites already use."""
 
 from std.ffi import _Global
-from std.python import Python
+from std.python import Python, PythonObject
 from std.python._cpython import ExternalFunction, PyObjectPtr
 
 

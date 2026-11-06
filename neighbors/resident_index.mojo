@@ -168,7 +168,7 @@ def _registry_lock(state: UnsafePointer[KnnIndexRegistry, MutAnyOrigin]) raises:
             return
 
 
-def _registry_unlock(state: UnsafePointer[KnnIndexRegistry, MutAnyOrigin]) raises:
+def _registry_unlock(state: UnsafePointer[KnnIndexRegistry, MutAnyOrigin]):
     var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](state[].lock.unsafe_ptr())
     Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
 

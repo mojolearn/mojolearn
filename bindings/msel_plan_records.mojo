@@ -29,7 +29,8 @@ covers the protected-name refusal.
 """
 from std.ffi import _Global
 from std.python import PythonObject
-from bindings.native_class_admission import DICT_WATCH, _dict_epoch, dict_keys_admit, dict_keys_admitted
+from bindings.native_class_admission import dict_keys_admit, dict_keys_admitted
+from bindings.native_loaded_module import shared_dict_epoch, shared_dict_watcher
 
 
 struct MselFieldsRecords(Defaultable, Movable):
@@ -59,8 +60,7 @@ comptime _MSEL_FIELDS_RECORDS_MAX = 4096
 def msel_fields_admitted(fields: PythonObject, plan: PythonObject) raises -> Bool:
     """True when `fields` passed the full instance check for `plan` and the
     watched dictionary has not changed since."""
-    var watch = DICT_WATCH.get_or_create_ptr()
-    if watch[].watcher < 0:
+    if shared_dict_watcher() < 0:
         return False
     var address = Int(fields._obj_ptr)
     var g = MSEL_FIELDS_RECORDS.get_or_create_ptr()
@@ -68,7 +68,7 @@ def msel_fields_admitted(fields: PythonObject, plan: PythonObject) raises -> Boo
         return False
     if g[].plans[address] != Int(plan._obj_ptr):
         return False
-    return g[].epochs[address] == _dict_epoch(address)
+    return g[].epochs[address] == shared_dict_epoch(address)
 
 
 def msel_fields_admit(fields: PythonObject, plan: PythonObject) raises:
@@ -77,8 +77,7 @@ def msel_fields_admit(fields: PythonObject, plan: PythonObject) raises:
     # Arms the dictionary watcher on `fields` (and records the exact-str key
     # admission, which the caller has just made).
     dict_keys_admit(fields)
-    var watch = DICT_WATCH.get_or_create_ptr()
-    if watch[].watcher < 0:
+    if shared_dict_watcher() < 0:
         return
     # `dict_keys_admit` returns silently when PyDict_Watch refuses this
     # dictionary (for example a watcher id registered by another
@@ -94,5 +93,5 @@ def msel_fields_admit(fields: PythonObject, plan: PythonObject) raises:
     if address not in g[].epochs and len(g[].epochs) >= _MSEL_FIELDS_RECORDS_MAX:
         g[].epochs.clear()
         g[].plans.clear()
-    g[].epochs[address] = _dict_epoch(address)
+    g[].epochs[address] = shared_dict_epoch(address)
     g[].plans[address] = Int(plan._obj_ptr)

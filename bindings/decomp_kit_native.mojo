@@ -511,7 +511,8 @@ struct DecompKit(Movable):
         `resident_input` as before."""
         if self.owner is None or not self.resident:
             return -1
-        var record = prepared_get(NativeModules(), _DK_RESIDENT_SLOT, self.owner)
+        var mods = NativeModules()
+        var record = prepared_get(mods, _DK_RESIDENT_SLOT, self.owner)
         if record is None:
             return -1
         var held = py_get(record, PythonObject(name))

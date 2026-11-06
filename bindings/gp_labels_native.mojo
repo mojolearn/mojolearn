@@ -372,9 +372,9 @@ def _gp_decode_with(classes: PythonObject, kind: String, table: PythonObject, co
     # One PyList_New(n) and direct slot stores of the class objects (lane
     # p3-svm-gp-kernel, row 79): the k class pointers are read once, every
     # row stores a new reference to its class, no Python call per row.
-    var table = List[PythonObject](capacity=k)
+    var class_items = List[PythonObject](capacity=k)
     for j in range(k):  # driver-loop: over the distinct classes (k pointers read once)
-        table.append(classes[j])
+        class_items.append(classes[j])
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n)
     if not raw:
@@ -387,13 +387,13 @@ def _gp_decode_with(classes: PythonObject, kind: String, table: PythonObject, co
         var index = Int(rows[i])
         if index < 0 or index >= k:
             raise Error("IndexError: GP class code is outside its retained class table")
-        var item = table[index]._obj_ptr
+        var item = class_items[index]._obj_ptr
         cpy.Py_IncRef(item)
         # SetItem steals the new reference on BOTH success and failure.
         if set_item(result._obj_ptr, i, item) != 0:
             raise cpy.unsafe_get_error()
     _ = codes
-    _ = table^
+    _ = class_items^
     return result
 
 

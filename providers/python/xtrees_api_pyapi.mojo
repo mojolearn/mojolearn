@@ -904,7 +904,7 @@ def calibrated_proba_binding(acc: PythonObject, pairs: PythonObject, params: Pyt
     return PythonObject(n)
 
 
-def ovr_assemble_binding(out: PythonObject, columns: PythonObject, params: PythonObject) raises -> PythonObject:
+def ovr_assemble_binding(out_buf: PythonObject, columns: PythonObject, params: PythonObject) raises -> PythonObject:
     """OneVsRest's k > 2 prediction epilogue in one program
     (`xtrees/calibrated_apply.mojo`). params = [n, k, finish]: finish 0 the
     float64 n x k scores into out, 1 those scores row-normalized, 2 their
@@ -924,7 +924,7 @@ def ovr_assemble_binding(out: PythonObject, columns: PythonObject, params: Pytho
         if at >= bc:
             raise Error("x_trees_ovr_assemble: column out of range")
         parsed.append(OvrColumn(Int(py=col[0]), bc, at))
-    var address = Int(py=out)
+    var address = Int(py=out_buf)
     comptime if XTREES_DEVICE_OPS:
         ovr_assemble_device(parsed, n, k, finish, f64_ptr(address), i32_ptr(address))
     else:

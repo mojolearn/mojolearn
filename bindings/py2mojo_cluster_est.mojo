@@ -25,7 +25,7 @@ def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> Pyt
     # array repeated), not a zero bytes object copied into a second buffer.
     var one = py_call(arr.array, PythonObject(code), Python.list(PythonObject(0)))
     var item = Int(py=one.itemsize)
-    return py_call(one.__mul__, PythonObject(nbytes // item))
+    return one * PythonObject(nbytes // item)
 
 
 def _array_addr(a: PythonObject) raises -> Int:

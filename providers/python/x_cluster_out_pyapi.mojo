@@ -39,7 +39,7 @@ def _py_array(arr: PythonObject, code: StaticString, src: Pointer[UInt8, _], nby
     # p3-neighbors-cluster: ONE allocation of the final array (a one-item
     # array repeated), not a zero bytes object copied into a second buffer.
     var one = py_call(arr.array, PythonObject(code), Python.list(PythonObject(0)))
-    var out = py_call(one.__mul__, PythonObject(nbytes // Int(py=one.itemsize)))
+    var out = one * PythonObject(nbytes // Int(py=one.itemsize))
     if nbytes > 0:
         var addr = Int(py=out.buffer_info()[0])
         unsafe_memcpy(dest=MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=addr), src=src, count=nbytes)

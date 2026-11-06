@@ -161,10 +161,23 @@ def _ivf_search_arrays(
     var labels = List[UInt32]()
     # p3-neighbors-cluster: the admitted arrays move into the index (as the
     # host binding does); they were copied a second time on every call.
+    # compile-fix-1: each list moves out and its field is refilled empty, so
+    # `arrays` stays whole and is destroyed as one value (moving fields out of
+    # the middle of it does not compile); still no copy of the index arrays.
+    var taken_centers = arrays.centers^
+    arrays.centers = List[Float32]()
+    var taken_center_norms = arrays.center_norms^
+    arrays.center_norms = List[Float32]()
+    var taken_offsets = arrays.offsets^
+    arrays.offsets = List[Int32]()
+    var taken_list_indices = arrays.list_indices^
+    arrays.list_indices = List[UInt32]()
+    var taken_list_data = arrays.list_data^
+    arrays.list_data = List[Float32]()
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers^, arrays.center_norms^, arrays.offsets^,
-        arrays.list_indices^, arrays.list_data^, labels^,
+        taken_centers^, taken_center_norms^, taken_offsets^,
+        taken_list_indices^, taken_list_data^, labels^,
     )
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes, partial_storage=partial_storage, keep=keep)
@@ -418,10 +431,23 @@ def ivf_flat_extend_binding(
     var labels = List[UInt32]()
     # p3-neighbors-cluster: the admitted arrays move into the index (as the
     # host binding does); they were copied a second time on every call.
+    # compile-fix-1: each list moves out and its field is refilled empty, so
+    # `arrays` stays whole and is destroyed as one value (moving fields out of
+    # the middle of it does not compile); still no copy of the index arrays.
+    var taken_centers = arrays.centers^
+    arrays.centers = List[Float32]()
+    var taken_center_norms = arrays.center_norms^
+    arrays.center_norms = List[Float32]()
+    var taken_offsets = arrays.offsets^
+    arrays.offsets = List[Int32]()
+    var taken_list_indices = arrays.list_indices^
+    arrays.list_indices = List[UInt32]()
+    var taken_list_data = arrays.list_data^
+    arrays.list_data = List[Float32]()
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers^, arrays.center_norms^, arrays.offsets^,
-        arrays.list_indices^, arrays.list_data^, labels^,
+        taken_centers^, taken_center_norms^, taken_offsets^,
+        taken_list_indices^, taken_list_data^, labels^,
     )
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = ivf_flat_extend_host(ctx, index, new_x, n_new)

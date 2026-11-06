@@ -37,12 +37,12 @@ def _metric_array_alias(value: PythonObject, context: PythonObject) raises -> Py
     is held throughout, so the slots form one consistent capture."""
     var cls = context["array_class"]
     var fields = context["array_fields"]
-    var alias = native_storage_allocate(cls)
+    var array_alias = native_storage_allocate(cls)
     var names = py_call(native_loaded_module("builtins").list, fields)
     for i in range(len(names)):  # driver-loop: over the fixed Array slot names
         var name = names[i]
-        py_setattr(alias, String(py=name), py_call(fields[name], value, cls))
-    return alias
+        py_setattr(array_alias, String(py=name), py_call(fields[name], value, cls))
+    return array_alias
 
 
 def metric_input_snapshot(value: PythonObject, memo: PythonObject,

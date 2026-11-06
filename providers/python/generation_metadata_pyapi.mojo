@@ -49,7 +49,7 @@ def _generation_fields(value: PythonObject, names: PythonObject, allow_state: Bo
     # change after connection (generation_initialize_binding refuses it).
     var mods = NativeModules()
     var record = class_record(mods, _GENERATION_STATE_SLOT, cls)
-    if record is not None and py_type(names) is bi.tuple and Bool(py=py_call(bi.tuple.__eq__, record, names)):
+    if record is not None and py_type(names) is bi.tuple and Bool(py=record == names):
         return _fields(value)
     var admitted = cls is g[].state_cls
     model_dict(g[].layer_classes)
