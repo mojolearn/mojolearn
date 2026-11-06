@@ -38,6 +38,7 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit
 from core.array_helpers_impl import nsum_f64
 
 comptime _PREDICT_ROWS = 2048
+comptime _PREDICT_SLOT = "xcnn_clf_predict_v1"  # p3-cnn-sequence-tsa resident predict record
 
 
 def _b() raises -> PythonObject:
@@ -809,9 +810,6 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
 
 
 # ---------------------------------------------------------------- predict
-
-comptime _PREDICT_SLOT = "xcnn_clf_predict_v1"
-
 
 def _predict_layers(fields: PythonObject) raises -> PythonObject:
     """The layers whose weights a predict uploads: every block's conv, then
