@@ -106,7 +106,8 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
         gradient_pids = [worker['pid'] for worker in owner._pool['workers']]
         update_pid = owner._update_pool['workers'][0]['pid']
         pids = gradient_pids + [update_pid]
-        assert len(set(pids)) == len(devices) + 1
+        # one device: the update runs on the gradient worker (one pool)
+        assert len(set(pids)) == len(devices) + (0 if len(devices) == 1 else 1)
     finally:
         primary = sys.exception()
         cleanup_errors = []
