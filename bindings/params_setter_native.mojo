@@ -2,6 +2,7 @@
 # Public set_params for connected field-only constructors. Reuse their native
 # plans without cloning parameters or invoking Python estimator methods.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
@@ -169,15 +170,17 @@ def _set_inner(model: PythonObject, params: PythonObject, context: PythonObject)
 def _set(model: PythonObject, params: PythonObject, context: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var label = String(" while setting estimator parameters")
-    if cpy.lib.get_function[Int32]("Py_EnterRecursiveCall")(label.as_c_string_slice().unsafe_ptr()) != 0:
+    if cpython_table()[].Py_EnterRecursiveCall(Int(label.as_c_string_slice().unsafe_ptr())) != 0:
         var failure = stash_python_error()
         raise failure^
+    # The C string is passed as an address: keep `label` alive past the call.
+    _ = label.byte_length()
     try:
         var result = _set_inner(model, params, context)
-        cpy.lib.get_function[NoneType]("Py_LeaveRecursiveCall")()
+        cpython_table()[].Py_LeaveRecursiveCall()
         return result
     except error:
-        cpy.lib.get_function[NoneType]("Py_LeaveRecursiveCall")()
+        cpython_table()[].Py_LeaveRecursiveCall()
         raise error^
 
 

@@ -45,7 +45,7 @@ def family_raw_get_or(model: PythonObject, name: String, default: PythonObject) 
     var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
     if not result:
         if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
             return default
         var failure = stash_python_error()
         raise failure^
@@ -54,5 +54,16 @@ def family_raw_get_or(model: PythonObject, name: String, default: PythonObject) 
 
 def family_raw_has(model: PythonObject, name: String) raises -> Bool:
     """`hasattr(model, name)` through the generic lookup."""
-    var missing = Python.list()  # a fresh sentinel no stored attribute can be
-    return family_raw_get_or(model, name, missing) is not missing
+    # Same lookup and error rule as family_raw_get_or, without allocating a
+    # fresh Python sentinel list per probe.
+    var key = PythonObject(name)
+    var attribute_error = static_builtin_type("builtins", "AttributeError")
+    var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
+    if not result:
+        if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
+            cpython_table()[].PyErr_Clear()
+            return False
+        var failure = stash_python_error()
+        raise failure^
+    _ = PythonObject(from_owned=result)
+    return True

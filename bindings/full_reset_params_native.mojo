@@ -4,6 +4,7 @@
 # calling Python constructors. Every old owner that will actually be dropped is
 # admitted before clearing the existing dictionary, whose identity is preserved.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
@@ -313,17 +314,19 @@ def _set(model: PythonObject, params: PythonObject, context: PythonObject, depth
     # the limit raised nothing and the outer reset rewrote the parent.
     # Each nested level is one Python set_params call in the scikit-learn
     # contract, so the interpreter's own limit bounds the nesting depth.
-    if depth >= Int(cpy.lib.get_function[Int32]("Py_GetRecursionLimit")()):
+    if depth >= Int(cpython_table()[].Py_GetRecursionLimit()):
         raise Error("RecursionError: maximum recursion depth exceeded" + label)
-    if cpy.lib.get_function[Int32]("Py_EnterRecursiveCall")(label.as_c_string_slice().unsafe_ptr()) != 0:
+    if cpython_table()[].Py_EnterRecursiveCall(Int(label.as_c_string_slice().unsafe_ptr())) != 0:
         var failure = stash_python_error()
         raise failure^
+    # The C string is passed as an address: keep `label` alive past the call.
+    _ = label.byte_length()
     try:
         var result = _dispatch(model, params, context, depth)
-        cpy.lib.get_function[NoneType]("Py_LeaveRecursiveCall")()
+        cpython_table()[].Py_LeaveRecursiveCall()
         return result
     except error:
-        cpy.lib.get_function[NoneType]("Py_LeaveRecursiveCall")()
+        cpython_table()[].Py_LeaveRecursiveCall()
         raise error^
 
 
