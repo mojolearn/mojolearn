@@ -103,8 +103,14 @@ def _emit(text, stream=None):
 
 
 def _load_by_path(name, path):
-    if name in sys.modules:
-        return sys.modules[name]
+    cached = sys.modules.get(name)
+    if cached is not None:
+        # The fixed module name is reused only for the same file: a call with
+        # another path (a different tree or install) loads that file instead
+        # of serving the first one's module.
+        loaded = getattr(cached, "__file__", None)
+        if loaded and os.path.realpath(loaded) == os.path.realpath(path):
+            return cached
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
