@@ -22,7 +22,7 @@ from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import new_array, same_shape, base_format, py_ints, door_ready
@@ -527,6 +527,21 @@ def _require_shape(value: PythonObject, expected: List[Int], name: String, conte
         raise Error("ValueError: mojolearn Embedding: " + name + " has an unexpected shape")
 
 
+def _freeze(table: PythonObject) raises:
+    """Make the layer's own stored table read-only storage (lane
+    p3-neural-blocks): the binding keeps a resident device copy keyed by the
+    layer's token, so an in-place write (`np.asarray(layer.weight)[i] = v`)
+    would otherwise be served stale rows. The table is always the layer's
+    own copy (`_float_owned`, `_load`), never the caller's array; assigning
+    `layer.weight = new` stays allowed and takes a new token. Both the
+    Array's flag (`__array_interface__`) and its memoryview (the 3.12+
+    buffer export NumPy reads first) refuse writes."""
+    py_setattr(table, "_readonly", PythonObject(True))
+    var view = table._mv
+    if not Bool(py=view.readonly):
+        py_setattr(table, "_mv", py_call(view.toreadonly))
+
+
 def _integer(value: PythonObject, name: String) raises -> Int:
     if py_type(value) is not _b().int:
         raise Error("TypeError: mojolearn Embedding: " + name + " must be an int")
@@ -581,6 +596,7 @@ def _initialize(model: PythonObject, values: PythonObject, context: PythonObject
     py_setitem(fields, "norm_type", values[4])
     py_setitem(fields, "scale_grad_by_freq", values[5])
     py_setitem(fields, "sparse", values[6])
+    _freeze(table)
     py_setitem(fields, "weight", table)
     py_setitem(fields, "plan", values[8])
     py_setitem(fields, "numeric_mode", mode)
@@ -782,6 +798,7 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
     py_setitem(fields, "scale_grad_by_freq", False)
     py_setitem(fields, "sparse", False)
     py_setitem(fields, "plan", plan)
+    _freeze(table)
     py_setitem(fields, "weight", table)
     py_setitem(fields, "numeric_mode", mode)
     _ = meta^
@@ -856,6 +873,7 @@ def embedding_layer_lifetime_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
             _drop_table(fields, context)
             if py_get(fields, "_table_tok") is not None:
                 raise Error("RuntimeError: cannot release the previous Embedding table owner")
+            _freeze(table)
             py_setitem(fields, "weight", table)
         else:
             # Refuse descriptor callbacks before native setattr; native slots
