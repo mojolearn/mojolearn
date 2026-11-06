@@ -12,6 +12,8 @@ from bindings.svc_ocsvm_native import svc_ocsvm_operation
 from providers.python.svc_public_state_pyapi import svc_public_state_operation
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from bindings.gp_svm_gp_state import gp_x_mark, gp_x_release
+from bindings.host_sparse_native import host_sparse_format
 
 
 def _svc_operation_route(model: PythonObject, operation: String, args: PythonObject,
@@ -37,6 +39,18 @@ def svc_operation(model: PythonObject, operation: String, args: PythonObject,
     if lifecycle.method.byte_length() == 0:
         return _svc_operation_route(model, operation, args, context)
     var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    # Perf (lane perf3-cluster-gp-gate; perf2-gp-svm row 20): OneClassSVM's
+    # door replaced a dense X by its admitted C-order float32 snapshot
+    # (family_lifecycle_begin: rank, emptiness and finite scan). Register it
+    # for this operation (the GP door's registry, bindings/gp_svm_gp_state.mojo)
+    # so bindings/svc_ocsvm_native.mojo does not snapshot it again. A sparse X
+    # is not replaced and not registered; the registry also takes only an
+    # exact ndarray or Array.
+    var marked = PythonObject(None)
+    if operation.startswith("family_svc_ocsvm_") and lifecycle.replace:
+        if host_sparse_format(args[1]).byte_length() == 0:
+            marked = call.args[1]
+            gp_x_mark(marked)
     var result = PythonObject(None)
     try:
         result = _svc_operation_route(model, operation, call.args, context)
@@ -44,5 +58,7 @@ def svc_operation(model: PythonObject, operation: String, args: PythonObject,
         var failure = neighbors_public_refusal(error, call, model)
         raise failure^
     finally:
+        if marked is not None:
+            gp_x_release(marked)
         neighbors_public_end(model, call)
     return family_lifecycle_finish(model, lifecycle, result, call, context)
