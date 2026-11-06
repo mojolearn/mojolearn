@@ -77,6 +77,19 @@ from isolation_forest.estimator import (
     iforest_run_resident,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys import is_defined
+
+# Lane p3-svm-gp-kernel: the resident forest on every tier. `IDN_IF_RESIDENT`
+# is IDENTICAL only, so a FAST binary refit the whole forest (and re-ran the
+# contamination quantile) inside every score_samples / decision_function /
+# predict call. The resident entry is mode-agnostic (the forest `fit` built,
+# scored without a refit, isolation_forest/estimator.mojo "THE RESIDENT
+# ENTRY"), so FAST takes it too; `-D MOJOLEARN_IDN_IF_RESIDENT_OFF` still
+# restores the refit-per-call form on both tiers. FAST outputs are those of
+# the fit-time forest, the refit's own forest for unchanged training data.
+comptime _IF_RESIDENT_ROUTE = IDN_IF_RESIDENT or (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"]()
+)
 # cgfin-c-svm: the epilogues, Platt, the shuffle and the row glue run on
 # the device (the CPU binding runs svm/host/svc_proba.mojo's host twin)
 from providers.python.svm_impl_svc_epilogue_pyapi import (
@@ -557,7 +570,7 @@ def iforest_run_binding(
     Sixteen params is the DEVIATION 874 form, unchanged.
     """
     var resident = False
-    comptime if IDN_IF_RESIDENT:
+    comptime if _IF_RESIDENT_ROUTE:
         resident = len(params) == 17
     if len(params) != 16 and not resident:
         raise Error(
@@ -604,7 +617,7 @@ def iforest_run_binding(
     # below reads it again (isolation_forest/multi_gpu.mojo::fit_dispatch).
     var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
     var res = IFRunOutputs()
-    comptime if IDN_IF_RESIDENT:
+    comptime if _IF_RESIDENT_ROUTE:
         if resident:
             # The take and the put run under the GIL; the fit (on a miss) and
             # the scoring run with it released, on an entry no other thread
@@ -687,7 +700,7 @@ def iforest_resident_binding() raises -> PythonObject:
     (`IDN_IF_RESIDENT`, lane fam2-forests) and `iforest_run` takes the
     17-value params with a token; 0 otherwise (DEVIATION 874's refit per
     call)."""
-    comptime if IDN_IF_RESIDENT:
+    comptime if _IF_RESIDENT_ROUTE:
         return PythonObject(1)
     return PythonObject(0)
 
@@ -695,7 +708,7 @@ def iforest_resident_binding() raises -> PythonObject:
 def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
     """Drop the resident forest `token` names (the Python estimator was
     refitted or collected). A token nobody holds is a no-op. Returns 0."""
-    comptime if IDN_IF_RESIDENT:
+    comptime if _IF_RESIDENT_ROUTE:
         if_resident_release(Int(py=token))
     return PythonObject(0)
 
