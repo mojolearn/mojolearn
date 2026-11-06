@@ -53,7 +53,7 @@ echo "box_merged_verify: outputs $O"
 exec 3>&1
 exec >> "$O/job.log" 2>&1
 st() { echo "$(date -u +%H:%M:%SZ) $*" | tee -a "$O/status.txt"; }
-finish() { local rc=$?; printf '%s\n' "$rc" > "$O/exit-code"; st "DONE rc=$rc"; }
+finish() { local rc=$?; ! declare -F ptx_out >/dev/null || ptx_out; printf '%s\n' "$rc" > "$O/exit-code"; st "DONE rc=$rc"; }
 trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -259,18 +259,63 @@ cp -p "$O/artifacts/.libs/libMojolearnMath.so" "$MATHLIB" || die "cannot activat
 find "$O/artifacts" -type f -exec sha256sum {} \; > "$O/artifact-sha256.txt" || die "cannot record artifact hashes"
 check_tree
 export PYTHONPATH=$ROOT/python
+# ONE NVIDIA COLUMN ON THE PTX SET (Andrew 2026-11-05). On NVIDIA the verify and
+# the column record run on the sm_80 PTX set (MOJOLEARN_GPU_ARCH=sm_80), the set
+# the release ships in mojolearn-nvidia, not on the native set this box built.
+# The tree builds no PTX set, so the release leg's set comes in PTX_SET_TGZ (a
+# tarball of cuda/sm_80/..., its sha256 in PTX_SET_SHA256, its source commit in
+# PTX_SET_COMMIT, which must be HEAD or code-equal to it by
+# tools/identity_code_equal.py). It is unpacked after the last tree check and
+# moved out again before the optional jobs (the native witness needs the tree
+# without it). Without a set the verify runs on the native set and the record
+# is skipped: the NVIDIA lanes stay owed for a run with a set.
+ROUTE=native
+PTX_ASIDE=
+ptx_out() {
+  if [ -n "$PTX_ASIDE" ] && [ -d python/mojolearn/cuda ]; then
+    mv python/mojolearn/cuda "$PTX_ASIDE" && st "PTX set moved out of the tree to $PTX_ASIDE"
+  fi
+  PTX_ASIDE=
+}
+if [ "$V" = nvidia ] && [ -n "${PTX_SET_TGZ:-}" ]; then
+  [ -f "$PTX_SET_TGZ" ] && [ -n "${PTX_SET_SHA256:-}" ] && [ -n "${PTX_SET_COMMIT:-}" ] \
+    || die "PTX_SET_TGZ must exist and PTX_SET_SHA256 and PTX_SET_COMMIT must be set"
+  [ "$(sha256sum "$PTX_SET_TGZ" | cut -d' ' -f1)" = "$PTX_SET_SHA256" ] || die "$PTX_SET_TGZ sha256 differs from PTX_SET_SHA256"
+  SETC=$(git rev-parse --verify -q "$PTX_SET_COMMIT^{commit}") || die "PTX_SET_COMMIT $PTX_SET_COMMIT is not in this tree's history"
+  if [ "$SETC" != "$SHA" ]; then
+    python3 tools/identity_code_equal.py "$SETC" "$SHA" > "$O/ptx-code-equal.txt" 2>&1 \
+      || die "the PTX set's commit ${SETC:0:12} is not code-equal to $SHA (see ptx-code-equal.txt)"
+  fi
+  [ -z "$(tar -tzf "$PTX_SET_TGZ" | grep -v -E '^cuda/sm_80(/|$)' | head -n 1)" ] || die "the PTX tarball holds entries outside cuda/sm_80/"
+  PTX_ASIDE=$O/ptx-set
+  tar -xzf "$PTX_SET_TGZ" -C python/mojolearn || { ptx_out; die "cannot unpack $PTX_SET_TGZ"; }
+  printf 'set=%s\nsha256=%s\nset_commit=%s\nhead=%s\n' "$PTX_SET_TGZ" "$PTX_SET_SHA256" "$SETC" "$SHA" > "$O/ptx-set.txt"
+  export MOJOLEARN_GPU_ARCH=sm_80
+  ROUTE=ptx
+fi
+if [ "$V" = nvidia ]; then
+  # the route the verify and the record actually load, and the device they ran on
+  "$PY" -c 'import mojolearn as m, mojolearn._backend as b; print("route", b.gpu_arch(), "ptx" if b.baseline_selection_receipt() else "native")' \
+    > "$O/route.txt" 2>&1
+  nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv,noheader >> "$O/route.txt" 2>&1
+  st "ROUTE $(head -n 1 "$O/route.txt" | cut -c1-80) on $(sed -n 2p "$O/route.txt" | cut -c1-120)"
+fi
 (cd / && "$PY" -m mojolearn verify) > "$O/verify-identical.log" 2>&1
-rc=$?; printf 'identical\t%s\n' "$rc" > "$O/verify-status.tsv"
-st "VERIFY identical rc=$rc $(grep -m1 '^RESULT' "$O/verify-identical.log" | cut -c1-200)"
-[ "$rc" = 0 ] || die "identical verification failed; no reference recording or optional jobs"
-if [ "${BOX_RECORD:-1}" = 1 ]; then
+rc=$?; printf 'identical\t%s\t%s\n' "$rc" "$ROUTE" > "$O/verify-status.tsv"
+st "VERIFY identical route=$ROUTE rc=$rc $(grep -m1 '^RESULT' "$O/verify-identical.log" | cut -c1-200)"
+[ "$rc" = 0 ] || { ptx_out; die "identical verification failed; no reference recording or optional jobs"; }
+if [ "${BOX_RECORD:-1}" = 1 ] && [ "$V" = nvidia ] && [ "$ROUTE" != ptx ]; then
+  st "RECORD SKIP nvidia: no PTX_SET_TGZ; the NVIDIA column records on the sm_80 PTX set, its lanes stay owed"
+elif [ "${BOX_RECORD:-1}" = 1 ]; then
   ONLY_CHANGED=table REPEATS=1 bash tools/record_identity_column.sh "$LABEL" "$O/column" > "$O/record.log" 2>&1
   rc=$?; printf '%s\n' "$rc" > "$O/record-exit-code"
-  st "RECORD rc=$rc $(tail -n 1 "$O/record.log" | cut -c1-160)"
-  [ "$rc" = 0 ] || die "reference recording failed"
+  st "RECORD route=$ROUTE rc=$rc $(tail -n 1 "$O/record.log" | cut -c1-160)"
+  [ "$rc" = 0 ] || { ptx_out; die "reference recording failed"; }
 else
   st "RECORD SKIP BOX_RECORD=0"
 fi
+ptx_out
+unset MOJOLEARN_GPU_ARCH
 
 # RunPod's marker gates the cloud-only checks; an ssh shell may not carry it, PID 1 does.
 [ -n "${RUNPOD_POD_ID:-}" ] || export RUNPOD_POD_ID=$(tr '\0' '\n' < /proc/1/environ 2>/dev/null | sed -n 's/^RUNPOD_POD_ID=//p')
@@ -377,7 +422,7 @@ job_witness() {
   [ $V = nvidia ] || { st "WITNESS SKIP: NVIDIA only"; return 0; }
   local X=$O/witness; mkdir -p $X
   local L=sequence-adamax,sequence-nadam,sequence-lr-schedulers,et-clf-weighted,et-reg-weighted,gbdt-class-weights,gbdt-multiclass-offgrid
-  LANES=$L REPEATS=1 run $X record 5400 bash tools/record_identity_column.sh $LABEL $X/column
+  NVIDIA_ROUTE=native LANES=$L REPEATS=1 run $X record 5400 bash tools/record_identity_column.sh $LABEL $X/column
   ( cd / && MOJOLEARN_NUMERIC_MODE=identical run $X verify-neural 3600 $PY -m mojolearn verify --neural-training --all \
       --fixtures base --lanes sequence-adamax,sequence-nadam,sequence-lr-schedulers --json )
   ( cd / && MOJOLEARN_NUMERIC_MODE=identical run $X verify-trees 3600 $PY -m mojolearn verify --all --fixtures base \

@@ -64,7 +64,7 @@
 # `pypi` / `testpypi` environment: the macOS wheel and the Linux meta wheel).
 # Every job after the core checks its exact dependencies on the index,
 # including when the release uploads each project in a separate dispatch.
-# The NVIDIA PTX dependency is a regular payload and publishes before NVIDIA.
+# The NVIDIA wheel carries its PTX set (2026-11-05); no payload project publishes.
 # Every project uses its own Trusted Publisher environment: pypi[-<profile>]
 # and testpypi[-<profile>]. New architecture environments/publishers must be
 # provisioned externally before the first upload; this workflow does not

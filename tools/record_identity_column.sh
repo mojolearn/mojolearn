@@ -15,15 +15,18 @@
 # box; the host bindings too for the cpu column). Runs nothing else. The
 # orchestrator runs it on the box; lanes never do.
 #
-#   <vendor-label>  nvidia-<gpu>-<arch>  -> --require-backend cuda
-#                   nvidia-ptx-<gpu>-sm80 -> --require-backend cuda on the PTX set
-#                                           (MOJOLEARN_GPU_ARCH=sm_80): THE PTX COLUMN,
-#                                           Andrew 2026-10-10: PTX is a normal target; no
-#                                           flag. Recorded ONCE on any NVIDIA box; the tree
-#                                           must carry the PTX set at python/mojolearn/cuda/sm_80
+#   <vendor-label>  nvidia-<gpu>-<arch>  -> --require-backend cuda ON THE PTX sm_80 SET
+#                                           (MOJOLEARN_GPU_ARCH=sm_80). ONE NVIDIA COLUMN
+#                                           (Andrew 2026-11-05): the NVIDIA column records
+#                                           on the PTX set; there is no separate PTX column.
+#                                           <gpu>-<arch> name the actual device; the tree must
+#                                           carry the PTX set at python/mojolearn/cuda/sm_80
 #                                           (the cuda-sm_80 leg's sets/cuda/sm_80). The
-#                                           admission refuses a PTX digest that differs
-#                                           from the NVIDIA == AMD reference
+#                                           provenance records GPU, driver and route.
+#                                           NVIDIA_ROUTE=native records the native set instead
+#                                           (the box_merged_verify native witness only).
+#                   nvidia-ptx-<gpu>-sm80 -> the retired PTX column's label (history; the
+#                                           ptx class), still the PTX set
 #                   amd-<gpu>-<arch>     -> --require-backend hip
 #                   apple-<chip>         -> --require-backend metal
 #                   cpu                  -> MOJOLEARN_VENDOR=cpu, --require-backend cpu;
@@ -103,7 +106,7 @@ case $OUT in "$ROOT"|"$ROOT"/*) die "<outdir> must be outside the tree $ROOT";; 
 PTX=0
 case $LABEL in
     nvidia-ptx-*) BACKEND=cuda; PTX=1 ;;
-    nvidia-*) BACKEND=cuda ;;
+    nvidia-*) BACKEND=cuda; [ "${NVIDIA_ROUTE:-ptx}" = native ] || PTX=1 ;;
     amd-*) BACKEND=hip ;;
     apple-*) BACKEND=metal ;;
     cpu) BACKEND=cpu ;;
@@ -148,8 +151,8 @@ for v in MOJOLEARN_CPU_THREADS OMP_NUM_THREADS OMP_THREAD_LIMIT OPENBLAS_NUM_THR
 done
 export OMP_MAX_ACTIVE_LEVELS=1 OMP_DYNAMIC=FALSE
 if [ "$BACKEND" = cpu ]; then export MOJOLEARN_VENDOR=cpu; fi
-# THE PTX COLUMN: the PTX set by name, like any architecture directory; a native
-# column must not inherit a forced architecture from the caller.
+# THE NVIDIA COLUMN RUNS ON THE PTX SET (2026-11-05): selected by name, like any
+# architecture directory; a native witness must not inherit a forced architecture.
 if [ "$PTX" = 1 ]; then export MOJOLEARN_GPU_ARCH=sm_80; elif [ "$BACKEND" = cuda ]; then unset MOJOLEARN_GPU_ARCH; fi
 # identity_break refuses a Metal matrix of more than one lane unless it is an
 # intentional full run; a reference column is exactly that.
@@ -171,10 +174,12 @@ got=$("${PY[@]}" -c 'import mojolearn as m, mojolearn._backend as b; print(m.ven
 if [ "$BACKEND" = cuda ]; then
     set_got=$("${PY[@]}" -c 'import mojolearn as m, mojolearn._backend as b; print(b.gpu_arch(), "ptx" if b.baseline_selection_receipt() else "native")' 2>&1 | tail -1)
     if [ "$PTX" = 1 ]; then
-        [ "$set_got" = "sm_80 ptx" ] || die "preflight: a PTX column needs the PTX set loaded (sm_80 ptx), loaded '$set_got' (is the cuda-sm_80 leg's set at python/mojolearn/cuda/sm_80?)"
+        [ "$set_got" = "sm_80 ptx" ] || die "preflight: the NVIDIA column records on the PTX set (sm_80 ptx), loaded '$set_got' (is the cuda-sm_80 leg's set at python/mojolearn/cuda/sm_80?)"
     else
-        case "$set_got" in *" native") ;; *) die "preflight: a native NVIDIA column loaded '$set_got'; label a PTX record nvidia-ptx-<gpu>-sm80" ;; esac
+        case "$set_got" in *" native") ;; *) die "preflight: NVIDIA_ROUTE=native loaded '$set_got'" ;; esac
     fi
+    GPU_FACTS=$(nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv,noheader 2>/dev/null | head -1)
+    ROUTE="$set_got"
 fi
 
 if [ "$MODE" = --models ]; then
@@ -345,6 +350,7 @@ rc=${rc:-0}
     echo "commit=$COMMIT"
     echo "label=$LABEL"
     echo "backend=$BACKEND"
+    [ "$BACKEND" != cuda ] || { echo "gpu=${GPU_FACTS:-unknown} (name, driver, compute capability)"; echo "route=${ROUTE:-unknown}"; }
     echo "scope=${SCOPE:-routine} shard=${SHARD:-} lanes_override=${LANES:+yes} lane_selection=$SELECTION"
     echo "repeats=$REPEATS cpu_threads=$T"
     echo "host=$(uname -srm) $(hostname 2>/dev/null)"

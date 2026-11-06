@@ -1,7 +1,7 @@
 #!/bin/bash
 # tools/reference_refresh.sh [<sha>] [columns] -- THE REFERENCE REFRESH after merges to main (2026-11-04): record
 # the identity lanes of <sha> (default: the tip of origin/main) whose closure differs from their admitted record on
-# each column of the table (nvidia, amd, cpu, ptx, apple) over every lane the harness ships, admit every fetched
+# each column of the table (nvidia, amd, cpu, apple; the old ptx column is history) over every lane the harness ships, admit every fetched
 # record at once into python/mojolearn/verify_reference/table.json and commit the admission on branch
 # ref/<sha12>, pushed for the orchestrator to merge. So the release freeze finds every row already admitted.
 # Pending refreshes of older commits are superseded: N merges cost one refresh, at the newest commit.

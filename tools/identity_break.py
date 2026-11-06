@@ -10022,18 +10022,19 @@ def _run_reference(args):
     # PROVENANCE BEFORE THE FIRST FIT. The label and the commit are refused
     # here, in seconds, not after nine fixtures of fits.
     vendor = check_vendor_label(args.vendor if args.vendor is not None else default_vendor_label(ml))
-    # THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A CUDA
-    # record is the `ptx` device class exactly when the PTX set ran, and its label
-    # says so (`nvidia-ptx-<gpu>-sm80`): an A100 or H100 record taken through the
-    # PTX set must never stand for the native NVIDIA column, nor the reverse.
+    # ONE NVIDIA COLUMN (Andrew 2026-11-05): the NVIDIA column records on the PTX
+    # sm_80 set; there is no separate PTX column any more. The route that ran is
+    # recorded (package.gpu_arch, package.cuda_code_format) whatever the label.
+    # A legacy `nvidia-ptx-*` label still names a PTX run, so it must not carry a
+    # native one.
     gpu_arch = code_format = None
     if ml.vendor() == "cuda":
         from mojolearn import _backend as _ml_backend
         gpu_arch = _ml_backend.gpu_arch()
         code_format = "ptx" if _ml_backend.baseline_selection_receipt() is not None else "native"
-        if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
+        if code_format != "ptx" and "ptx" in str(vendor).lower():
             raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
-                             f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
+                             f"{vendor!r}; an nvidia-ptx-* label names a PTX run")
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),

@@ -14,7 +14,8 @@ tools/reference_refresh.sh, which execs this file. Docs: docs/release/REFERENCE_
                                                 submit what is owed and exit; rerun the same command to
                                                 fetch, admit and push
 
-  columns: comma list of nvidia, amd, cpu, ptx, apple. The default (and the only scope that needs no reason) is
+  columns: comma list of nvidia, amd, cpu, apple (ONE NVIDIA COLUMN, Andrew 2026-11-05: the NVIDIA column records
+  on the sm_80 PTX set; the table's old ptx column is history and is never planned). The default (and the only scope that needs no reason) is
   the release's SUPPORTED SURFACE: every column of the table at <sha> x every lane the harness ships
   (identity_columns.py --scope all: the routine AND the neural-training lanes). Naming fewer columns, or
   --scope routine|neural-training, only NARROWS it and needs --reason TEXT, which the state and the
@@ -27,17 +28,17 @@ records only the lanes whose closure differs from their admitted record, once. A
 merged into the target stops the refresh (merge ref/<sha12> first), so no lane is recorded twice.
 
 GAPS. A column that owes lanes and has no box or column runner (no NVIDIA pod, no AMD droplet, no built Apple
-tree, no sm_80 PTX set, a table column with no runner) is a GAP: --plan and the run print it per column, the
+tree, no sm_80 PTX set for the NVIDIA column, a table column with no runner) is a GAP: --plan and the run print it per column, the
 other columns are still admitted, the admission README records it, and the run exits 4.
 
 Each column runs exactly what its own tool runs (the same lane selection the plan prints):
   nvidia  tools/nvidia_central.sh sync + submit tools/identity_box_job.sh (box_merged_verify.sh: merged
-          bindings, `python -m mojolearn verify`, ONLY_CHANGED=table record), persisted to R2 from the pod
+          bindings, `python -m mojolearn verify`, ONLY_CHANGED=table record), persisted to R2 from the pod;
+          the verify and the record run on the release leg's sm_80 PTX set (REFRESH_PTX_SET_TGZ, a path on the
+          pod, with REFRESH_PTX_SET_SHA256 and REFRESH_PTX_SET_COMMIT); without a set owed NVIDIA lanes are a GAP
   amd     tools/do_amd_steward.sh update <sha> + run tools/identity_box_job.sh amd, persisted to R2
   cpu     tools/identity_box_job_cpu_ptx.sh on the NVIDIA pod, in the tree the nvidia job built (auto reuse);
           when cpu owes lanes and nvidia owes none, the nvidia job still runs: it builds that tree
-  ptx     the same cpu job with the release leg's sm_80 PTX set (REFRESH_PTX_SET_TGZ, a path on the pod, with
-          REFRESH_PTX_SET_SHA256 and REFRESH_PTX_SET_COMMIT); without a set an owed PTX column is a GAP
   apple   tools/record_identity_column.sh apple-<chip> (auto reuse) under tools/mac_slot.py metal, in
           REFRESH_APPLE_TREE: a checkout at <sha> with its Apple bindings already built (never built here)
 
@@ -74,7 +75,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 #: The columns a refresh can record, keyed like the table's columns (table.json cells[...][part]["cols"]).
-COLUMNS = ("nvidia", "amd", "cpu", "ptx", "apple")
+COLUMNS = ("nvidia", "amd", "cpu", "apple")
+#: Table columns kept as history only, never planned, owed or reported (2026-11-05: one NVIDIA column, recorded on
+#: the PTX set; the old ptx records stay in the table and the record dirs untouched).
+RETIRED_COLUMNS = ("ptx",)
 #: What each column's own job runs, so the plan prints the selection the job will make.
 #:   table  ONLY_CHANGED=table (box_merged_verify.sh), backend-filtered
 #:   class  record_identity_column.sh's default auto reuse from the class's newest good evidence
@@ -87,7 +91,8 @@ SURFACE_SCOPE = "all"
 NARROW_SCOPES = ("routine", "neural-training")
 TABLE = "python/mojolearn/verify_reference/table.json"
 ADMISSIONS = "bench/results/reference_admissions/"
-#: The env a PTX record needs (tools/identity_box_job_cpu_ptx.sh): REFRESH_<name> on the Mac -> <name> on the pod.
+#: The env the NVIDIA record needs for its PTX set (tools/box_merged_verify.sh): REFRESH_<name> on the Mac -> <name>
+#: on the pod.
 PTX_ENV = ("PTX_SET_TGZ", "PTX_SET_SHA256", "PTX_SET_COMMIT")
 #: Paths a record run may leave untracked in a box tree; they are removed before a sync (0.8.65: a resubmit
 #: refused "untracked source bench/results/identity_break/retained/...").
@@ -445,7 +450,7 @@ class Refresh:
         narrows."""
         table = Path(tree) / TABLE
         try:
-            surface_cols = table_columns(table)
+            surface_cols = [c for c in table_columns(table) if c not in RETIRED_COLUMNS]
         except (OSError, ValueError) as exc:
             raise Refused("cannot read the reference table %s (%s): the scope is derived from it" % (table, exc))
         runnable = [c for c in COLUMNS if c in surface_cols]
@@ -498,8 +503,8 @@ class Refresh:
             if not any((self.devpods / ("nvc%d" % i) / "state.env").is_file() for i in range(1, 4)):
                 return False, ("no shared NVIDIA pod is up (%s/nvc*/state.env); only the orchestrator brings one "
                                "up (tools/nvidia_central.sh up)" % self.devpods)
-            if c == "ptx" and not all(self.ptx_set.values()):
-                return False, ("no sm_80 PTX set: the PTX column records only with the release leg's set; set "
+            if c == "nvidia" and not all(self.ptx_set.values()):
+                return False, ("no sm_80 PTX set: the NVIDIA column records on the release leg's PTX set; set "
                                "REFRESH_PTX_SET_TGZ (its path on the pod), REFRESH_PTX_SET_SHA256 and "
                                "REFRESH_PTX_SET_COMMIT")
         if c == "amd" and not (self.do_state / "state.env").is_file():
@@ -664,7 +669,9 @@ class Refresh:
         self.must(self.nvc("sync", self.nv_lane, str(self.src)), "syncing %s to the NVIDIA pod" % self.sha12,
                   log=self.log("nvidia-sync.log"))
         out = self.must(self.nvc("submit", self.nv_lane, "--cap", "240", "--note", "reference_refresh %s" % self.sha12,
-                                 "--env", "SCOPE=%s" % self.box_scope(), "tools/identity_box_job.sh"),
+                                 "--env", "SCOPE=%s" % self.box_scope(),
+                                 *[x for k in PTX_ENV if self.ptx_set.get(k) for x in ("--env", "%s=%s" % (k, self.ptx_set[k]))],
+                                 "tools/identity_box_job.sh"),
                         "submitting the NVIDIA job", log=self.log("nvidia-submit.log"))
         tag, job = parse_submit(out)
         if not tag:

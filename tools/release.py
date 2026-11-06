@@ -1089,6 +1089,9 @@ SPLIT_PACKAGES = {"linux": (GPU_PACKAGES["CORE_DISTRIBUTION"], GPU_PACKAGES["COR
     "linux-meta": (GPU_PACKAGES["META_DISTRIBUTION"], GPU_PACKAGES["META_WHEEL_NAME"])}
 #: the split packages that carry GPU sets (every one but the core and the meta wheel)
 PLUGIN_PACKAGES = tuple(k for k in SPLIT_PACKAGES if k not in ("linux", "linux-meta"))
+#: split packages earlier releases published that this one does not: read only from a previous
+#: release's record (its PTX bytes, release_reuse), never packed or published (2026-11-05).
+LEGACY_SPLIT_PACKAGES = ("nvidia-ptx",)
 #: what `pip install <project>` must resolve on Linux: package -> the split packages it installs
 LINUX_RESOLVES = {"linux": ("linux",),
                   "linux-meta": tuple(SPLIT_PACKAGES),
@@ -2517,7 +2520,9 @@ class Release:
             info = prev.get(platform) or {}
             return Path("<published %s wheel %s>" % (platform, info.get("wheel", "?")))
         whl = release_reuse.published_wheel(prev, platform, self.evidence)
-        plugins = [k for k in PLUGIN_PACKAGES if prev.get(k)] if platform == "linux" else []
+        # LEGACY_SPLIT_PACKAGES: a previous release up to 0.8.65 shipped its PTX set in
+        # mojolearn-nvidia-ptx; its bytes stay reusable from that wheel.
+        plugins = [k for k in PLUGIN_PACKAGES + LEGACY_SPLIT_PACKAGES if prev.get(k)] if platform == "linux" else []
         if plugins:
             # a split release: its Linux bytes are the core and its plugins
             wheels = [whl] + [release_reuse.published_wheel(prev, k, self.evidence) for k in plugins]

@@ -10,7 +10,8 @@
 #   cpu  CPU_THREADS=3 REPEATS=1 tools/record_identity_column.sh cpu <out>/cpu: incremental by
 #        default (record_identity_column.sh's auto reuse: only the lanes whose closure changed since
 #        the cpu class's newest good evidence; FULL=1 is never set here).
-#   ptx  only with PTX_SET_TGZ: a cuda-sm_80 PTX set tarball (entries cuda/sm_80/..., the release
+#   ptx  RETIRED 2026-11-05 (one NVIDIA column, recorded on the PTX set by box_merged_verify.sh); formerly
+#        only with PTX_SET_TGZ: a cuda-sm_80 PTX set tarball (entries cuda/sm_80/..., the release
 #        leg's set, as ~/mojolearn-evidence/rel0864/sets/cuda-sm_80.tar.gz), placed on the box first,
 #        with PTX_SET_SHA256 (its sha256) and PTX_SET_COMMIT (the commit the set was built from; it
 #        must be HEAD or code-equal to HEAD by tools/identity_code_equal.py). The box_merged_verify
@@ -75,39 +76,10 @@ crc=$?
 mirror
 summary "identity_box_job cpu rc=$crc $(grep -m 1 -E '^(REUSED|NOTHING-CHANGED)' "$O/cpu-record.log" | cut -c1-120) | $(tail -n 1 "$O/cpu-record.log" | cut -c1-200)"
 
-# --- the PTX column ------------------------------------------------------------------------
+# --- the PTX column: RETIRED (Andrew 2026-11-05) -------------------------------------------
+# One NVIDIA column, recorded on the sm_80 PTX set by tools/box_merged_verify.sh (PTX_SET_TGZ there).
+# This job records the cpu column only; a PTX_SET_TGZ given here is ignored.
 prc=SKIPPED
-if [ -z "${PTX_SET_TGZ:-}" ]; then
-    summary "identity_box_job ptx rc=SKIPPED no PTX_SET_TGZ (this tree carries no sm_80 PTX set)"
-else
-    prc=3
-    if [ ! -f "$PTX_SET_TGZ" ] || [ -z "${PTX_SET_SHA256:-}" ] || [ -z "${PTX_SET_COMMIT:-}" ]; then
-        st "REFUSED ptx: PTX_SET_TGZ must exist and PTX_SET_SHA256 and PTX_SET_COMMIT must be set"
-    elif [ "$(sha256sum "$PTX_SET_TGZ" | cut -d' ' -f1)" != "$PTX_SET_SHA256" ]; then
-        st "REFUSED ptx: $PTX_SET_TGZ sha256 differs from PTX_SET_SHA256"
-    elif ! SETC=$(git rev-parse --verify -q "$PTX_SET_COMMIT^{commit}"); then
-        st "REFUSED ptx: PTX_SET_COMMIT $PTX_SET_COMMIT is not in this tree's history (fetch it first)"
-    elif [ "$SETC" != "$HEAD" ] && ! python3 tools/identity_code_equal.py "$SETC" "$HEAD" > "$O/ptx-code-equal.txt" 2>&1; then
-        st "REFUSED ptx: the set's commit ${SETC:0:12} is not code-equal to HEAD (see ptx-code-equal.txt)"
-    elif [ -n "$(tar -tzf "$PTX_SET_TGZ" | grep -v -E '^cuda/sm_80(/|$)' | head -n 1)" ]; then
-        st "REFUSED ptx: the tarball holds entries outside cuda/sm_80/"
-    else
-        PTX_ASIDE=$O/ptx-set
-        if tar -xzf "$PTX_SET_TGZ" -C python/mojolearn; then
-            CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d '. ')
-            GPU=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | sed -E 's/^NVIDIA //; s/^(GeForce|RTX|Tesla) //g' | awk '{print tolower($1)}')
-            LABEL=nvidia-ptx-${GPU:-gpu}-sm80
-            printf 'set=%s\nsha256=%s\nset_commit=%s\nhead=%s\nnative_cc=%s\nlabel=%s\n' "$PTX_SET_TGZ" "$PTX_SET_SHA256" \
-                "$SETC" "$HEAD" "$CC" "$LABEL" > "$O/ptx-set.txt"
-            st "PTX record $LABEL (set ${PTX_SET_SHA256:0:12} from ${SETC:0:12}; scope $SCOPE, REPEATS=1, incremental)"
-            REPEATS=1 bash tools/record_identity_column.sh "$LABEL" "$O/ptx" > "$O/ptx-record.log" 2>&1
-            prc=$?
-        else
-            st "REFUSED ptx: cannot unpack $PTX_SET_TGZ"
-        fi
-    fi
-    mirror
-    summary "identity_box_job ptx rc=$prc $(grep -m 1 -E '^(REUSED|NOTHING-CHANGED)' "$O/ptx-record.log" 2>/dev/null | cut -c1-120) | $(tail -n 1 "$O/ptx-record.log" 2>/dev/null | cut -c1-200)"
-fi
+summary "identity_box_job ptx rc=SKIPPED the PTX column is retired; the NVIDIA column records on the PTX set"
 st "DONE cpu=$crc ptx=$prc"
 [ "$crc" = 0 ] && { [ "$prc" = 0 ] || [ "$prc" = SKIPPED ]; }
