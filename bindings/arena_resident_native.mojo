@@ -13,6 +13,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.arena_cache_release import FirstFailure
 from bindings.arena_cache_upload import _native_call
 from bindings.arena_resident_rows import arena_resident_take, arena_resident_entry
+from bindings.native_loaded_module import native_namespace_string_keys
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.p3_array_arena_records import P3_RESIDENT_NATIVE, p3_layout_admitted, p3_layout_admit
 
 
 def _resident_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -20,29 +23,32 @@ def _resident_fields(model: PythonObject, context: PythonObject) raises -> Pytho
     var cls = py_type(model)
     if py_type(cls) is not b["type"]:
         raise Error("TypeError: resident requires native class metadata")
-    var ancestry = py_call(b["type"].__dict__["__mro__"].__get__, cls)
     var expected = context["arena_resident_class"]
     var descriptor = context["arena_resident_dict"]
-    if len(ancestry) < 2 or ancestry[len(ancestry)-2] is not expected or ancestry[len(ancestry)-1] is not b["object"]:
-        raise Error("TypeError: resident requires its ordinary class or an ordinary subclass")
-    for i in range(len(ancestry)-1):  # driver-loop: native instance metadata bypasses application descriptors and attribute hooks
-        var mapping = py_call(b["type"].__dict__["__dict__"].__get__, ancestry[i])
-        var keys = py_call(b["list"], mapping)
-        for j in range(len(keys)):  # driver-loop: class lookup cannot trigger key equality
-            if py_type(keys[j]) is not b["str"]:
-                raise Error("TypeError: resident class keys must be native strings")
-        if py_contains(mapping, "__getattribute__") or py_contains(mapping, "__setattr__"):
-            raise Error("TypeError: resident cannot invoke application attribute hooks")
-        var dictionary = py_get(mapping, "__dict__")
-        if dictionary is not None and dictionary is not descriptor:
-            raise Error("TypeError: resident requires its native dictionary descriptor")
+    # p3-array-arena: the class rows are admitted once per class state (type
+    # watcher; a modification of the class or any ancestor re-runs it).
+    if not p3_layout_admitted(P3_RESIDENT_NATIVE, cls, descriptor):
+        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__, cls)
+        if len(ancestry) < 2 or ancestry[len(ancestry)-2] is not expected or ancestry[len(ancestry)-1] is not b["object"]:
+            raise Error("TypeError: resident requires its ordinary class or an ordinary subclass")
+        for i in range(len(ancestry)-1):  # driver-loop: native instance metadata bypasses application descriptors and attribute hooks
+            var mapping = py_call(b["type"].__dict__["__dict__"].__get__, ancestry[i])
+            var keys = py_call(b["list"], mapping)
+            for j in range(len(keys)):  # driver-loop: class lookup cannot trigger key equality
+                if py_type(keys[j]) is not b["str"]:
+                    raise Error("TypeError: resident class keys must be native strings")
+            if py_contains(mapping, "__getattribute__") or py_contains(mapping, "__setattr__"):
+                raise Error("TypeError: resident cannot invoke application attribute hooks")
+            var dictionary = py_get(mapping, "__dict__")
+            if dictionary is not None and dictionary is not descriptor:
+                raise Error("TypeError: resident requires its native dictionary descriptor")
+        p3_layout_admit(P3_RESIDENT_NATIVE, cls, descriptor)
     var fields = py_call(descriptor.__get__, model, expected)
     if py_type(fields) is not b["dict"]:
         raise Error("TypeError: resident requires a native dictionary")
-    var keys = py_call(b["list"], fields)
-    for i in range(len(keys)):  # driver-loop: instance metadata key admission precedes lookup and mutation
-        if py_type(keys[i]) is not b["str"]:
-            raise Error("TypeError: resident fields require native string keys")
+    # Instance keys: one native dictionary walk, no key list.
+    if not native_namespace_string_keys(fields._obj_ptr, b["str"]):
+        raise Error("TypeError: resident fields require native string keys")
     return fields
 
 
@@ -56,10 +62,14 @@ def _entries(fields: PythonObject, context: PythonObject) raises -> PythonObject
     var entries = py_get(fields, "_entries")
     if py_type(entries) is not b["dict"]:
         raise Error("TypeError: resident entries require their native dictionary")
-    var keys = py_call(b["list"], entries)
-    for i in range(len(keys)):  # driver-loop: lookup by identity cannot invoke a custom integer key protocol
-        if py_type(keys[i]) is not b["int"]:
-            raise Error("TypeError: resident entry keys must be native integers")
+    # p3-array-arena: walked only after the dictionary changed since its last
+    # full admission (dictionary watcher, Python >= 3.12).
+    if not dict_keys_admitted(entries):
+        var keys = py_call(b["list"], entries)
+        for i in range(len(keys)):  # driver-loop: lookup by identity cannot invoke a custom integer key protocol
+            if py_type(keys[i]) is not b["int"]:
+                raise Error("TypeError: resident entry keys must be native integers")
+        dict_keys_admit(entries)
     return entries
 
 
