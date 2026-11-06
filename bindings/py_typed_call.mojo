@@ -4,6 +4,7 @@
 # the caller's door re-raises that class instead of a bare Exception. Kept out
 # of bindings/py_balanced.mojo so only the doors that use it rebuild.
 from bindings.native_loaded_module import _loaded_lookup
+from bindings.cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 
@@ -16,15 +17,15 @@ def _connected_builtin(name: String) raises -> PythonObject:
     `native_loaded_module("builtins")` would raise again here and the door
     would fall back to a bare Exception."""
     ref cpy = Python().cpython()
-    var modules = cpy.lib.get_function[PyObjectPtr]("PyImport_GetModuleDict")()
+    var modules = cpython_table()[].PyImport_GetModuleDict()
     if not modules:
         return PythonObject(None)
     var registry = _loaded_lookup(modules, "mojolearn._native_loaded_modules")
     if not registry:
         return PythonObject(None)
-    var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(registry)
+    var fields = cpy.PyModule_GetDict(registry)
     if not fields:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return PythonObject(None)
     var raw = _loaded_lookup(fields, "CONNECTIONS")
     if not raw:
@@ -56,7 +57,7 @@ def typed_python_error() -> Error:
     ref cpy = Python().cpython()
     var kind: PyObjectPtr
     try:
-        kind = cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")()
+        kind = cpython_table()[].PyErr_Occurred()
     except e:
         return e^
     if not kind:

@@ -3,6 +3,7 @@
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 
 
 def _loaded_type(value: PythonObject) raises -> PythonObject:
@@ -11,10 +12,10 @@ def _loaded_type(value: PythonObject) raises -> PythonObject:
 
 
 def _loaded_lookup(mapping: PyObjectPtr, var name: String) raises -> PyObjectPtr:
-    ref cpy = Python().cpython()
-    var result = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemString")(mapping, name.as_c_string_slice().unsafe_ptr())
-    _ = name^
-    return result
+    # PyDict_GetItemString builds the same temporary str key and, like
+    # PyDict_GetItem, suppresses lookup errors; the key object is ours here.
+    var key = PythonObject(name)
+    return cpython_table()[].PyDict_GetItem(mapping, key._obj_ptr)
 
 
 def native_namespace_string_keys(fields: PyObjectPtr, string_type: PythonObject) raises -> Bool:
@@ -24,10 +25,9 @@ def native_namespace_string_keys(fields: PyObjectPtr, string_type: PythonObject)
     var position = Int(0)
     var key = PyObjectPtr()
     var value = PyObjectPtr()
-    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
-    var count = cpy.lib.get_function[Int]("PyDict_Size")(fields)
+    var count = cpython_table()[].PyDict_Size(fields)
     for i in range(count):  # small-loop(count: namespace fields): native metadata key admission only
-        if next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) == 0:
+        if cpy.PyDict_Next(fields, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
             return False
         var cls = cpy.PyObject_Type(key)
         var same = cls == string_type._obj_ptr
@@ -42,13 +42,12 @@ def native_mapping_string_keys(fields: PythonObject, string_type: PythonObject) 
     # Python >=3.10 support precludes PyType_GetDict; the supported iterator
     # removes keys-view/list materialization without accessing private layout.
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")(fields._obj_ptr)
+    var raw = cpy.PyObject_GetIter(fields._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var iterator = PythonObject(from_owned=raw)
-    var next_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")
     while True:  # driver-loop: over exact native class mapping keys before keyed reads
-        var key = next_key(iterator._obj_ptr)
+        var key = cpy.PyIter_Next(iterator._obj_ptr)
         if not key:
             if cpy.PyErr_Occurred():
                 raise cpy.unsafe_get_error()
@@ -63,12 +62,12 @@ def native_mapping_string_keys(fields: PythonObject, string_type: PythonObject) 
 
 def _loaded_fields(module: PythonObject, pinned_hook: Bool = False) raises -> PythonObject:
     ref cpy = Python().cpython()
-    var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var fields = cpy.PyModule_GetDict(module._obj_ptr)
     if not fields:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         raise Error("TypeError: native module connection is not a native module")
     var cls = _loaded_type(module)
-    var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+    var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
     if (flags & UInt64(1 << 9)) != 0:
         raise Error("TypeError: native module connection cannot use a module subclass")
     # Keys are checked before keyed reads: foreign hash/equality hooks must
@@ -89,7 +88,7 @@ def _native_loaded_module_full(name: String) raises -> PythonObject:
     # These stable public CPython APIs read the loaded registry directly;
     # they never invoke __import__, a finder, a loader or module attributes.
     ref cpy = Python().cpython()
-    var modules = cpy.lib.get_function[PyObjectPtr]("PyImport_GetModuleDict")()
+    var modules = cpython_table()[].PyImport_GetModuleDict()
     if not modules:
         raise Error("ImportError: native execution has no loaded-module registry")
     var registry = _loaded_lookup(modules, "mojolearn._native_loaded_modules")
@@ -99,9 +98,9 @@ def _native_loaded_module_full(name: String) raises -> PythonObject:
     # CONNECTIONS is private import-only metadata, like the binding context
     # tables. Do not rescan its fixed records on every lookup; all mutable
     # target modules and the exports actually consumed remain checked below.
-    var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(metadata._obj_ptr)
+    var fields = cpy.PyModule_GetDict(metadata._obj_ptr)
     if not fields:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         raise Error("TypeError: native module connection metadata is not a module")
     var raw = _loaded_lookup(fields, "CONNECTIONS")
     if not raw:
@@ -128,7 +127,7 @@ def _native_loaded_module_full(name: String) raises -> PythonObject:
         # driver-loop: over exact identities of registered native exports
         for j in range(len(exports)):  # small-loop(exports: registered native names): validates fixed export identities before use
             var item = exports[j]
-            var current = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")(module_fields._obj_ptr, item[0]._obj_ptr)
+            var current = cpy.PyDict_GetItemWithError(module_fields._obj_ptr, item[0]._obj_ptr)
             if not current or current != item[1]._obj_ptr:
                 raise Error("TypeError: native module connection export changed: " + name + "." + String(item[0]))
         return module
@@ -183,9 +182,8 @@ struct _AdmittedModule(Copyable, Movable):
         var position = Int(0)
         var key = PyObjectPtr()
         var value = PyObjectPtr()
-        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
         for i in range(size):  # small-loop(size: namespace fields): capture metadata identities once
-            if next_item(fields._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=value)) == 0:
+            if cpy.PyDict_Next(fields._obj_ptr, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
                 raise Error("native module namespace changed during admission")
             self.namespace_keys.append(PythonObject(from_owned=cpy.Py_NewRef(key)))
             var expected = PyObjectPtr()
@@ -227,11 +225,12 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     # fixed at admission); only exports whose key object differs from the
     # namespace's own key take a hashed lookup.
     ref cpy = Python().cpython()
-    var modules = cpy.lib.get_function[PyObjectPtr]("PyImport_GetModuleDict")()
+    var t = cpython_table()
+    var modules = t[].PyImport_GetModuleDict()
     if not modules:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return False
-    var found = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItem")(modules, entry.name_key._obj_ptr)
+    var found = t[].PyDict_GetItem(modules, entry.name_key._obj_ptr)
     if not found or found != entry.module._obj_ptr:
         return False
     var cls = cpy.PyObject_Type(entry.module._obj_ptr)
@@ -239,11 +238,11 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     cpy.Py_DecRef(cls)
     if not same_type:
         return False
-    var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(entry.module._obj_ptr)
+    var fields = cpy.PyModule_GetDict(entry.module._obj_ptr)
     if not fields or fields != entry.fields._obj_ptr:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpy.PyErr_Clear()
         return False
-    if cpy.lib.get_function[Int]("PyDict_Size")(fields) != entry.size:
+    if t[].PyDict_Size(fields) != entry.size:
         return False
     if len(entry.namespace_keys) != entry.size or len(entry.slot_values) != entry.size:
         return False
@@ -252,9 +251,8 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     var position = Int(0)
     var key = PyObjectPtr()
     var value = PyObjectPtr()
-    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
     for i in range(entry.size):  # small-loop(entry.size: namespace fields): compare native metadata pointers only
-        if next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) == 0:
+        if cpy.PyDict_Next(fields, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
             return False
         if key != entry.namespace_keys[i]._obj_ptr:
             return False
@@ -262,13 +260,12 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
         if expected and value != expected:
             return False
     if len(entry.unslotted) > 0:
-        var lookup = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")
         # driver-loop: over the exports whose key object is not the namespace key (pointer compares)
         for k in range(len(entry.unslotted)):  # small-loop(unslotted: registered export names): keyed identity stamp
             var j = entry.unslotted[k]
-            var current = lookup(fields, entry.key_ptrs[j])
+            var current = cpy.PyDict_GetItemWithError(fields, entry.key_ptrs[j])
             if not current or current != entry.value_ptrs[j]:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpy.PyErr_Clear()
                 return False
     return True
 
@@ -276,11 +273,11 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
 def _admit_module(name: String, module: PythonObject) raises:
     # Called right after the full check passed: record what it verified.
     ref cpy = Python().cpython()
-    var registry = _loaded_lookup(cpy.lib.get_function[PyObjectPtr]("PyImport_GetModuleDict")(), "mojolearn._native_loaded_modules")
+    var registry = _loaded_lookup(cpython_table()[].PyImport_GetModuleDict(), "mojolearn._native_loaded_modules")
     var metadata = PythonObject(from_owned=cpy.Py_NewRef(registry))
     var connections = PythonObject(from_owned=cpy.Py_NewRef(
-        _loaded_lookup(cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(metadata._obj_ptr), "CONNECTIONS")))
-    var fields = PythonObject(from_owned=cpy.Py_NewRef(cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)))
+        _loaded_lookup(cpy.PyModule_GetDict(metadata._obj_ptr), "CONNECTIONS")))
+    var fields = PythonObject(from_owned=cpy.Py_NewRef(cpy.PyModule_GetDict(module._obj_ptr)))
     var keys = List[PythonObject]()
     var values = List[PythonObject]()
     # driver-loop: over the fixed import-time module inventory, once per process
@@ -293,7 +290,7 @@ def _admit_module(name: String, module: PythonObject) raises:
         for j in range(len(exports)):  # small-loop(exports: registered native names): retains admitted export identities
             keys.append(exports[j][0])
             values.append(exports[j][1])
-        var size = cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
+        var size = cpython_table()[].PyDict_Size(fields._obj_ptr)
         var cls = PythonObject(from_owned=cpy.PyObject_Type(module._obj_ptr))
         var g = _ADMITTED_MODULES.get_or_create_ptr()
         # Native names index the retained connections directly. Replacing a

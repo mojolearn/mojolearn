@@ -8,6 +8,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
+from bindings.cpython_table import cpython_table
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call_spans
 from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
@@ -74,7 +75,7 @@ def _neural_descriptor_module_fields(module: PythonObject, bi: PythonObject) rai
     # dictionary fields. Reuse its current builtins connection through this
     # GIL-held, callback-free admission rather than reconnecting per helper.
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var raw = cpy.PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
@@ -88,7 +89,7 @@ def _neural_descriptor_entry_fields(entries: PythonObject, bi: PythonObject) rai
         return _neural_descriptor_module_fields(entries, bi)
     elif cls is native_loaded_module("types").SimpleNamespace:
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
+        var raw = cpython_table()[].PyObject_GenericGetDict(entries._obj_ptr, PyObjectPtr())
         if not raw:
             raise cpy.unsafe_get_error()
         var fields = PythonObject(from_owned=raw)
@@ -104,7 +105,7 @@ def _neural_descriptor_function_owner(function: PythonObject) raises -> PyObject
     # attribute resolution or temporary owned PythonObject on the check path.
     # This neither inspects extension layout nor skips current owner checks.
     ref cpy = Python().cpython()
-    var owner = cpy.lib.get_function[PyObjectPtr]("PyCFunction_GetSelf")(function._obj_ptr)
+    var owner = cpython_table()[].PyCFunction_GetSelf(function._obj_ptr)
     if not owner and cpy.PyErr_Occurred():
         raise cpy.unsafe_get_error()
     _ = function
@@ -139,7 +140,7 @@ def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject
     # namespace (filled once at module init). Exact per-edit detection would
     # need CPython dict watchers (3.12+), recorded as owed for the 3.10 floor.
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    var raw = cpy.PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
