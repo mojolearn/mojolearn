@@ -88,6 +88,9 @@ def sequence_array_address(value: PythonObject) raises -> Int:
         raise cpy.unsafe_get_error()
     var address = view[0]
     cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    # Keep the Py_buffer storage alive past the release (ASAP destruction
+    # could free it before PyBuffer_Release reads it).
+    _ = view^
     return address
 
 

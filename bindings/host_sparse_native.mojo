@@ -203,6 +203,9 @@ def _sparse_array(value: PythonObject, rank: Int, context: PythonObject,
         captured.owner = Python.tuple(value, lease, captured.dtype)
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
     return captured^
 
 

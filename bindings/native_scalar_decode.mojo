@@ -90,6 +90,9 @@ def native_scalar_buffer_dtype(value: PythonObject, dtype: PythonObject) raises 
             raise cpy.unsafe_get_error()
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
     width = component_width
     var real = native_scalar_real(data, 0, code, width, little)
     var imag = NativeRealBits()

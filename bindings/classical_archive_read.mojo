@@ -299,6 +299,9 @@ def _read_uint(raw: PythonObject, at: Int, width: Int) raises -> Int:
     var size = storage[2]
     if at < 0 or width < 1 or at > size - width:
         cpython_table()[].PyBuffer_Release(pointer)
+        # Keep the Py_buffer storage alive past the release (ASAP destruction
+        # could free it before PyBuffer_Release reads it).
+        _ = len(storage)
         raise Error("truncated checkpoint record")
     var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
     var result = UInt64(0)
