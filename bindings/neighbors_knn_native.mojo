@@ -561,12 +561,42 @@ def _dist_params(model: PythonObject, context: PythonObject) raises -> PythonObj
     `bindings/_mojolearn.mojo::_dist_triple` reads (the metric resolved
     first, then the weights; the base class never weights)."""
     var fields = py_fields(model)
+    # p3-neighbors-cluster: the resolved triple is kept in the resident holder
+    # (never `__dict__`) with the class and the metric, p and weights objects
+    # it was resolved from; while they are the same immutable scalars
+    # (exact str/int/float/bool/None), a query reuses it instead of resolving
+    # the metric again. Any other value (a callable, a container) resolves
+    # every call, as before.
+    var b = _b()
+    var metric = family_field(fields, "metric")
+    var p = family_field(fields, "p")
+    var weights_value = py_get(fields, "weights")
+    var cls = py_type(model)
+    var holder = py_get(fields, "_resident_holder")
+    var cacheable = (holder is not None and py_type(holder) is b.dict
+                     and _knn_immutable_word(b, metric) and _knn_immutable_word(b, p)
+                     and _knn_immutable_word(b, weights_value))
+    if cacheable:
+        var held = py_get(holder, "dist_params")
+        if (held is not None and py_type(held) is b.tuple and len(held) == 7 and held[0] is cls
+                and held[1] is metric and held[2] is p and held[3] is weights_value):
+            return Python.list(held[4], held[5], held[6])
     var cls_name = _class_name(model)
-    var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
+    var resolved = knn_resolve_metric(cls_name, metric, p, context)
     var weights = 0
     if _is_knn(model, context):
         weights = knn_resolve_weights(cls_name, family_field(fields, "weights"))
+    if cacheable:
+        py_setitem(holder, "dist_params", Python.tuple(cls, metric, p, weights_value,
+                                                       resolved[0], resolved[1], PythonObject(weights)))
     return Python.list(resolved[0], resolved[1], PythonObject(weights))
+
+
+def _knn_immutable_word(b: PythonObject, value: PythonObject) raises -> Bool:
+    if value is None:
+        return True
+    var cls = py_type(value)
+    return cls is b.str or cls is b.int or cls is b.float or cls is b.bool
 
 
 def _check_metric_input(cls_name: String, value: Int, x: ArrayMetadata) raises:
