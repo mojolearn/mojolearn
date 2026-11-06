@@ -22,7 +22,13 @@ from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer
 from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.archive_schema_native import _schema_label_store
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_labels import _flatten_labels
+from bindings.classical_labels import (
+    _flatten_labels,
+    _text_buffer_labels as classical_text_buffer_labels,
+    _text_list_labels as classical_text_list_labels,
+)
+from bindings.label_input_sources import labels_storage_source, labels_list_scalar_kind, LABELS_LIST_OTHER, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
+from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
@@ -223,13 +229,64 @@ def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject)
     fast = _gp_float_storage_labels(y, base, context)
     if fast is not None:
         return fast
+    # perf3-label-doors (2026-11-06): the inputs below skip the snapshot,
+    # flatten and per-label admission, each with the classes, codes and
+    # refusals the walk gives it, so no bits change.
+    # A numpy-backed pandas Series of numeric or bool storage: its stored
+    # exact ndarray lists the same Python numbers in the same order (other
+    # storage, e.g. datetime, lists differently and keeps the walk).
+    var stored = labels_storage_source(y, context)
+    if stored is not None and stored is not y and py_type(stored) is py_get(context, "ndarray"):
+        var kind = String(stored.dtype.kind)
+        if kind == "i" or kind == "u" or kind == "b" or kind == "f":
+            return gp_encode_labels(stored, base, context)
+    # An exact flat list / tuple of exact ints, floats or bools.
+    fast = _gp_flat_list_labels(y, base, context)
+    if fast is not None:
+        return fast
+    # An exact '<U' ndarray: UCS4 read from its buffer, native stable sort
+    # by code point (Python's str order), the first of equal labels kept.
+    var text = classical_text_buffer_labels(y, context)
+    if text:
+        return Python.tuple(text.value().classes, text.value().codes)
     var source = gp_label_list(y, context) if py_type(y) is context["array_class"] else y
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
     fast = _gp_list_labels(flat, base, context)
     if fast is not None:
         return fast
+    # A flat list of exact str labels (subclasses and NumPy str_ keep the
+    # ORDER RULE below): the native str reader's code-point order and
+    # first-of-run classes are the ORDER RULE's.
+    if labels_all_exact_str(flat):
+        var named = classical_text_list_labels(flat, context)
+        if named:
+            return Python.tuple(named.value().classes, named.value().codes)
     return _gp_sorted_classes(flat, context)
+
+
+def _gp_flat_list_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
+    """An exact flat list or tuple of exact ints, exact floats or exact bools
+    (`labels_list_scalar_kind`, one class-pointer read per label through the
+    container's C storage) through one `prepare_targets` call, else None.
+    Ints and floats: the array `_gp_list_labels` builds from the same values,
+    so the same classes, codes and NaN refusal. Bools: stored as their 0/1
+    ints with the classes returned as bools, which is the ORDER RULE's
+    False < True with dense codes. An int outside int64 returns None (the
+    walk then encodes or refuses it as before)."""
+    var kind = labels_list_scalar_kind(y)
+    if kind == LABELS_LIST_OTHER:
+        return PythonObject(None)
+    var code = String("d") if kind == LABELS_LIST_FLOAT else String("q")
+    var store = PythonObject(None)
+    try:
+        store = py_call(context["array_type"], PythonObject(code), y)
+    except:
+        return PythonObject(None)
+    var address = Int(py=py_call(store.buffer_info)[0])
+    var result = _gp_prepare(address, 1 if kind == LABELS_LIST_FLOAT else 3, len(y), kind == LABELS_LIST_BOOL, base, context)
+    _ = store^
+    return result
 
 
 def _gp_number_kind(value: PythonObject, context: PythonObject) raises -> Int:
