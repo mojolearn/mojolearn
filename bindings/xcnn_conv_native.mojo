@@ -1070,22 +1070,30 @@ def _block_convs(fields: PythonObject) raises -> PythonObject:
     return convs
 
 
-def _chain_ok(fields: PythonObject, entries: PythonObject, context: PythonObject) raises -> Bool:
+def _chain_fields(fields: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The admitted fields of the block's conv layers (conv1, conv2, then the
+    downsample conv when present) when the resident chain applies, else None.
+    `_forward_chain` reuses them, so each conv is admitted once per forward
+    (`_conv_dev` re-admitted it). The chain path writes only `_pins`,
+    `_pin_src`, `_x` and `_xp`, none of them admitted fields, so the reused
+    admission is the one the re-admission would have repeated."""
     if not xcnn_mixed(entries):
-        return False
+        return PythonObject(None)
     var convs = _block_convs(fields)
+    var admitted = Python.list()
     for i in range(len(convs)):  # driver-loop: over the block's conv layers
         var f = _conv_admit(convs[i], context)
         if Int(py=f["groups"]) != 1 or _explicit(f):
-            return False
-    return True
+            return PythonObject(None)
+        _ = py_call(admitted.append, f)
+    return admitted
 
 
-def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, xh: PythonObject, xshape: List[Int],
-              name: String, context: PythonObject) raises -> PythonObject:
+def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, cf: PythonObject, xh: PythonObject,
+              xshape: List[Int], name: String, context: PythonObject) raises -> PythonObject:
     """`BasicBlock._conv_dev`: conv of resident `xh` into the block's
-    resident array `name`; (handle, out shape)."""
-    var cf = _conv_admit(conv, context)
+    resident array `name`; (handle, out shape). `cf`: the conv's fields as
+    `_chain_fields` admitted them."""
     var oshape = _conv_out(cf, xcnn_entries(cf, context), xshape)
     var yh = xcnn_dev_get(block, entries, name, xcnn_size(oshape), context)
     var values = _weight_pair(cf, context)
@@ -1131,27 +1139,27 @@ def _as_list(shape: PythonObject) raises -> List[Int]:
     return out^
 
 
-def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject,
-                   context: PythonObject) raises -> PythonObject:
+def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObject, convf: PythonObject,
+                   x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`BasicBlock._forward_chain(b, x)`: the whole block on resident arrays."""
     var dev = xcnn_dev(block, entries, context)
     var xs = xcnn_shape(x)
     if len(xs) != 4:
         raise Error("mojolearn: Conv2d.forward takes (N, C, H, W)")
     var conv1 = fields["conv1"]
-    var inc = Int(py=_fields(conv1)["in_channels"])
+    var inc = Int(py=convf[0]["in_channels"])
     if xs[1] != inc:
         raise Error("mojolearn: input has " + String(xs[1]) + " channels, the layer " + String(inc))
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(block, entries, "x", x, context)
     var map2 = xcnn_entry(entries, "x_cnn_map2_m")
-    var c1 = _conv_dev(block, entries, conv1, xh, xs, "c1", context)
+    var c1 = _conv_dev(block, entries, conv1, convf[0], xh, xs, "c1", context)
     var s1 = _as_list(c1[1])
     var n1 = xcnn_size(s1)
     var r1 = xcnn_dev_get(block, entries, "r1", n1, context)
     var b1 = _bn_dev(block, entries, fields["bn1"], c1[0], s1, "b1", context)
     _ = py_call_typed(map2, Python.list(b1, b1, r1), PythonObject(7), Python.list(0, n1))
-    var c2 = _conv_dev(block, entries, fields["conv2"], r1, s1, "c2", context)
+    var c2 = _conv_dev(block, entries, fields["conv2"], convf[1], r1, s1, "c2", context)
     var s2 = _as_list(c2[1])
     var n2 = xcnn_size(s2)
     var b2 = _bn_dev(block, entries, fields["bn2"], c2[0], s2, "b2", context)
@@ -1161,7 +1169,7 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
     var d1 = PythonObject(None)
     var sd = PythonObject(None)
     if downsampled:
-        var made = _conv_dev(block, entries, ds[0], xh, xs, "d1", context)
+        var made = _conv_dev(block, entries, ds[0], convf[2], xh, xs, "d1", context)
         d1 = made[0]
         sd = made[1]
         idh = _bn_dev(block, entries, ds[1], d1, _as_list(sd), "d2", context)
@@ -1190,7 +1198,7 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
     py_setitem(chain, "d1", d1 if downsampled else ds)
     py_setitem(chain, "sd", sd if downsampled else ds)
     _set(fields, "_chain", chain)
-    var c1f = _fields(conv1)
+    var c1f = convf[0]
     _set(c1f, "_x", x)
     _set(c1f, "_xp", x)
     return y
@@ -1201,12 +1209,14 @@ def xcnn_block_forward(block: PythonObject, x: PythonObject, context: PythonObje
     var fields = _block_fields(block, context)
     var entries = xcnn_entries(fields, context)
     if xcnn_is_t(x, context):
-        if _chain_ok(fields, entries, context) and xcnn_on_dev(entries, x, context):
-            return _forward_chain(block, fields, entries, x, context)
+        var tconvf = _chain_fields(fields, entries, context)
+        if tconvf is not None and xcnn_on_dev(entries, x, context):
+            return _forward_chain(block, fields, entries, tconvf, x, context)
         return xcnn_wrap(entries, xcnn_block_forward(block, xcnn_host_of(x, context), context), context)
     var a = xcnn_f32(x, "x", context)
-    if _chain_ok(fields, entries, context):
-        return _forward_chain(block, fields, entries, a, context)
+    var convf = _chain_fields(fields, entries, context)
+    if convf is not None:
+        return _forward_chain(block, fields, entries, convf, a, context)
     _set(fields, "_chain", PythonObject(None))
     var out = xcnn_relu_forward(fields["relu1"], xcnn_bn_forward(fields["bn1"], xcnn_conv2d_forward(fields["conv1"], a, context), context), context)
     out = xcnn_bn_forward(fields["bn2"], xcnn_conv2d_forward(fields["conv2"], out, context), context)
