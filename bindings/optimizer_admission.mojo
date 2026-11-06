@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Optimizer admission runs before native code encounters any Python hook.
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
@@ -26,10 +27,19 @@ def opt_numpy(cls: PythonObject, context: PythonObject) raises -> Bool:
     return False
 
 
+# Class-watcher slot family of a passed optimizer layout guard row
+# (bindings/p3_guard_records.mojo): a row is re-checked only after its class
+# or an ancestor was modified, instead of on every door call.
+comptime _OPT_GUARD_SLOT = "p3_opt_layout_guard_v1_"
+
+
 def opt_guards(context: PythonObject) raises:
     var guards = context["guards"]
+    var mods = NativeModules()
     for i in range(len(guards)):  # driver-loop: over registered public native object layouts
         var guard = guards[i]
+        if guard_row_admitted(mods, _OPT_GUARD_SLOT, i, guard[0], guard):
+            continue
         if py_call(context["type_mro"], guard[0]) is not guard[1]:
             raise Error("TypeError: optimizer native owner inheritance has changed")
         var fields = guard[2]
@@ -37,6 +47,7 @@ def opt_guards(context: PythonObject) raises:
         for j in range(len(pairs)):  # driver-loop: over retained native descriptors and attribute hooks
             if py_get(fields, pairs[j][0]) is not pairs[j][1]:
                 raise Error("TypeError: optimizer native owner has a replaced descriptor or Python attribute hook")
+        guard_row_admit(mods, _OPT_GUARD_SLOT, i, guard[0], guard)
 
 
 def opt_scalar(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
