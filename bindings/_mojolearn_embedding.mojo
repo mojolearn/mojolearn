@@ -288,7 +288,7 @@ def _give_i32(var buf: DeviceBuffer[DType.int32], n: Int) raises:
 
 def _table_slot(pool_w_token: List[Int], token: Int) -> Int:
     """The index of `token`'s resident table, or -1."""
-    for k in range(len(pool_w_token)):  # small-loop(resident tables, at most EMB_RESIDENT_KEEP)
+    for k in range(len(pool_w_token)):  # small-loop(pool_w_token: resident table tokens, at most EMB_RESIDENT_KEEP): table lookup, not data
         if pool_w_token[k] == token:
             return k
     return -1
