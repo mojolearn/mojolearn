@@ -19,6 +19,7 @@ from bindings.family_common import (
 )
 from core.family_weights_impl import family_fill_f32
 from bindings.gp_svm_records import ocsvm_coef_reused, ocsvm_coef_remember
+from bindings.gp_svm_gp_state import gp_x_known
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_has, svc_float, svc_int, svc_truthy, svc_base, svc_prefix, svc_scalar_array,
     svc_read_f32, svc_read_i32, svc_f32,
@@ -146,7 +147,11 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var nu = svc_float(svc_field(fields, "nu"))
     if not (0.0 < nu and nu <= 1.0):
         raise Error("nu must be in (0, 1]")
-    var x = svc_f32(source, 2, "X", True, context)[0]
+    # Perf (lane perf3-cluster-gp-gate): X the public door already admitted
+    # (2-D, non-empty, finite, C-order float32; registered for the operation
+    # by bindings/svm_mixture_native.mojo) is used as is, without a second
+    # metadata snapshot. Any other caller's X is converted as before.
+    var x = source if gp_x_known(source, context) else svc_f32(source, 2, "X", True, context)[0]
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var name = String(kernel)
@@ -285,7 +290,8 @@ def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObje
                   context: PythonObject) raises -> PythonObject:
     """`OneClassSVM.score_samples`: (n,) float32."""
     var fields = py_fields(model)
-    var q = svc_f32(source, 2, "X", True, context)[0]
+    # The door's admitted X is used as is (see _ocsvm_fit).
+    var q = source if gp_x_known(source, context) else svc_f32(source, 2, "X", True, context)[0]
     var dual = svc_field(fields, "dual_coef_")
     var n_sv = Int(py=dual.shape[1])
     # the (n_sv, 1) column of the C-order float32 coefficients. The fitted

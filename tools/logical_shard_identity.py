@@ -20,6 +20,16 @@ It prints one line per lane
 writes <out>/shardcheck.json and exits 1 unless every lane on the list is MATCH. FAIL CLOSED: a lane that cannot
 run, raises, times out or returns no digest is a FAIL with a one-line reason, never a skip.
 
+SPREAD (lane perf3-cluster-gp-gate, 2026-11-06): equal digests prove nothing when a small fixture keeps every
+shard on rank 0 (an owner loop's `active = min(count, tiles)` is 1, or an entry routes a small input to its
+one-device path). Each arm therefore records how many ranks received work: the number of distinct ranks whose
+device an owner loop opened for its shard under the bound plan (core/device_plan.mojo `used`, set by
+`DevicePlan.device` / `device_plan_device` exactly where each owner loop opens a rank's DeviceContext), read
+through every loaded binding's `device_plan_log()` -> (plans, ranks). A 2- or 3-device arm whose work reached
+fewer than 2 ranks is a FAIL ("spread"), and so is a binding that does not report ranks (built before the
+counter). The fixtures are sized from the dispatchers' split rules (see THE LIST) so that every logical device
+of the largest arm receives a shard.
+
 UNCONDITIONAL: the release's one verification round runs it every time, on the NVIDIA and AMD boxes, against the
 exact wheel bytes (tools/ops/release_gate_job.sh phase `shardcheck`; tools/release_identity_wheels.py
 `single_gate_ok` refuses a box job without a passing shardcheck.json). There is no change detection, no selector,
@@ -68,6 +78,32 @@ LANE_TIMEOUT = 1200
 # ---------------------------------------------------------------------------------------------------- THE LIST
 # lane, dispatcher family (the multi_gpu file whose shard path the call reaches), recipe, fixture, rows, features,
 # seed. One line per lane. Every lane runs COUNTS. Recipes are below; each calls only the public API.
+#
+# FIXTURE SIZES come from each dispatcher's split rule (read 2026-11-06, lane perf3-cluster-gp-gate), not from any
+# benchmark shape: every logical device of the largest arm (max(COUNTS) = 3) must receive a shard, with margin.
+#   svm-rbf      rows of the kernel matrix, active = min(count, m) (svm/multi_gpu.mojo:121): m >= 3 rows
+#   logistic     feature columns of X^T dZ, active = min(count, D) (glm/impl/qn/multi_gpu.mojo:70); binary y only
+#                (a C > 1 target takes the tiled multiclass rule, qn_tiled_rule.mojo:53): D >= 3
+#   lasso-cd     row leaves of 128 (bench/gemm_shapes.mojo contract_leaf_size), k <= 128 stays single
+#                (solver/multi_gpu.mojo:63): rows >= 2*128 + 1; only the column mean / norm passes before the
+#                Gram sweeps reach it
+#   ridge-gram   row chunks, active = min(count, min(128, ceil(k/kc))) (core/gram_multi_gpu.mojo:262), BUT the
+#                IDENTICAL Ridge fit takes linear_gram_fit first (bindings/classical_ridge.mojo:103-109), which
+#                has no DevicePlan: OWED, see the reply; the spread check fails this lane until a reachable recipe
+#   kmeans       row tiles of mblk = 4*8 = 32 rows below 32 features (cluster/multi_gpu.mojo:84-85,
+#                fused_distance_nn/simt_kernel.mojo:201-230): rows >= 2*32 + 1
+#   dbscan       query rows, active = min(count, rows) (dbscan/impl/multi_gpu.mojo:47): rows >= 3; the default
+#                algorithm='rbc' on NVIDIA/AMD identical takes the bitmap adjacency passes with no plan
+#                (dbscan/impl/runner.mojo:780-845), so the recipe uses algorithm='brute'
+#   gmm          E-step rows, active = min(count, n) (mixture/multi_gpu.mojo:233): rows >= 3
+#   bootstrap    resamples, active = min(count, n_resamples) (resample/multi_gpu.mojo:79): n_resamples >= 3
+#   cholesky     trailing-update rows after each 32-wide panel (cholesky/multi_gpu.mojo:89, potrf.mojo:398):
+#                n >= 32 + 3; solve over right-hand-side columns, active = min(count, nrhs): nrhs >= 3 (B has 4)
+#   iforest      trees, active = min(count, n_estimators) (isolation_forest/multi_gpu.mojo:112): default 100
+#   gbdt         one-byte packed feature groups of 4 (border_count=128; pointwise_multi_gpu.mojo:130-132,452):
+#                features >= 2*4 + 1
+#   forest       groves = min(32, trees), active = min(count, groves) (core/forest_inference_pool.mojo:418):
+#                n_estimators >= 3 (the recipe fits 16)
 LANES = (
     ("svm-rbf", "svm/multi_gpu.mojo", "svm", "classify", 600, 16, 11),
     ("logistic", "glm/impl/qn/multi_gpu.mojo", "logistic", "classify", 2000, 16, 12),
@@ -129,8 +165,13 @@ def arm_digest(parts):
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+#: the fewest ranks a multi-device arm must spread its work over (the gate's point: at least one real split)
+MIN_SPREAD = 2
+
+
 def lane_verdict(name, doc):
-    """(verdict, reason, {count: digest}) of one lane's worker document; FAIL on anything missing."""
+    """(verdict, reason, {count: digest}) of one lane's worker document; FAIL on anything missing, and FAIL when a
+    multi-device arm's work reached fewer than MIN_SPREAD ranks (a trivial MATCH)."""
     digests = {}
     if not isinstance(doc, dict) or doc.get("lane") != name:
         return "FAIL", "no worker result", digests
@@ -151,7 +192,39 @@ def lane_verdict(name, doc):
     differ = [c for c in COUNTS[1:] if digests[c] != single]
     if differ:
         return "DIFFER", "n%s differ from the single-device plan" % ",".join(map(str, differ)), digests
+    for count in COUNTS[1:]:
+        ranks = arms[str(count)].get("ranks")
+        if type(ranks) is not int:
+            return "FAIL", "arm n%d: no rank record (a binding without the device-plan work counter)" % count, digests
+        if ranks < min(MIN_SPREAD, count):
+            return ("FAIL", "arm n%d spread its work over %d rank(s), not >= %d: the fixture stays under the "
+                    "dispatcher's split" % (count, ranks, min(MIN_SPREAD, count)), digests)
+        if ranks > count:
+            return "FAIL", "arm n%d reports %d ranks, more than its %d devices" % (count, ranks, count), digests
     return "MATCH", "", digests
+
+
+def ranks_take(modules):
+    """The ranks that received work since the last take, over every loaded binding (`device_plan_log()` ->
+    (plans, ranks)); the record is cleared. Where the plan table is one process-wide named global the first
+    binding's take clears it for the rest, so the maximum is the answer either way. None when no loaded binding
+    reports ranks."""
+    best = None
+    seen = set()
+    for module in list(modules.values()):
+        if id(module) in seen:
+            continue
+        seen.add(id(module))
+        try:
+            log = getattr(module, "device_plan_log", None)
+        except Exception:
+            continue
+        if not callable(log):
+            continue
+        got = log()
+        if isinstance(got, tuple) and len(got) == 2 and type(got[1]) is int:
+            best = got[1] if best is None else max(best, got[1])
+    return best
 
 
 def one_line(text):
@@ -257,7 +330,9 @@ def _kmeans(ml, X, y, devices):
 
 def _dbscan(ml, X, y, devices):
     from mojolearn import parallel_classical as pc
-    est = pc.fit_dbscan(ml.DBSCAN(eps=0.5, min_samples=5), X, devices=devices)
+    # algorithm='brute': its eps-neighborhood queries go through dbscan/impl/multi_gpu.mojo; the default 'rbc'
+    # bitmap passes on NVIDIA/AMD identical have no device plan (see THE LIST).
+    est = pc.fit_dbscan(ml.DBSCAN(eps=0.5, min_samples=5, algorithm="brute"), X, devices=devices)
     return [("labels_", est.labels_)]
 
 
@@ -322,9 +397,11 @@ def worker(name, device, out_path):
             arm = dict(devices=list(devices_for(count, device)), parts=[], error=None)
             doc["arms"][str(count)] = arm
             started = time.time()
+            ranks_take(sys.modules)  # clear what earlier arms (and imports) recorded
             try:
                 for part, value in RECIPES[recipe](ml, X, y, devices_for(count, device)):
                     arm["parts"].append(dict(name=part, **digest(np.asarray(value))))
+                arm["ranks"] = ranks_take(sys.modules)
             except Exception as error:  # fail closed: recorded, judged FAIL
                 arm["error"] = "%s: %s" % (type(error).__name__, error)
                 arm["parts"] = []
@@ -403,7 +480,9 @@ def main(argv=None):
                 verdict, reason, digests, doc = future.result()
             except Exception as error:
                 verdict, reason, digests, doc = "FAIL", one_line("%s: %s" % (type(error).__name__, error)), {}, None
+            arms = (doc or {}).get("arms") or {}
             lanes[name] = dict(verdict=verdict, reason=reason, digests={str(c): d for c, d in digests.items()},
+                               ranks={str(c): (arms.get(str(c)) or {}).get("ranks") for c in COUNTS},
                                family={r[0]: r[1] for r in LANES}[name],
                                mojolearn_file=(doc or {}).get("mojolearn_file"))
     for name in lane_names():

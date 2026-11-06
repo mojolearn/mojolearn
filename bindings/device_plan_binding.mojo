@@ -12,7 +12,7 @@ from std.python import PythonObject
 from std.python import Python
 from bindings.py_balanced import py_call
 from bindings.native_loaded_module import native_loaded_module
-from core.device_plan import device_plan_enter, device_plan_exit, device_plan_log_take
+from core.device_plan import device_plan_enter, device_plan_exit, device_plan_log_take, device_plan_ranks_take
 
 
 def device_plan_enter_binding(devices: PythonObject, families: PythonObject) raises -> PythonObject:
@@ -35,9 +35,16 @@ def device_plan_exit_binding() raises -> PythonObject:
 
 
 def device_plan_log_binding() raises -> PythonObject:
-    """The device groups bound in this binding since the last call, as a
-    list of tuples, and an empty log: the placement record the verifier's
-    two-device witness reads (python/mojolearn/_verify_par.py)."""
+    """`(plans, ranks)`, and an empty record: `plans` is the device groups
+    bound in this binding since the last call, as a list of tuples (the
+    placement record); `ranks` is the number of distinct owner ranks whose
+    device an owner loop opened for its shard under a bound plan since the
+    last call (core/device_plan.mojo `used`): the count of devices, logical
+    or physical, that received work. The one-GPU multi-device gate
+    (tools/logical_shard_identity.py) fails a 2- or 3-device arm whose
+    `ranks` is below 2 (lane perf3-cluster-gp-gate; before it the entry
+    returned the plan list alone and nothing read it)."""
+    var ranks = device_plan_ranks_take()
     var plans = device_plan_log_take()
     var out = Python.list()
     # Empty logs need no module connection. Retain the constructor across plans.
@@ -49,4 +56,4 @@ def device_plan_log_binding() raises -> PythonObject:
         for r in range(len(plans[i])):  # driver-loop: over a logged plan's ranks
             _ = ids.append(PythonObject(plans[i][r]))
         _ = out.append(py_call(tuple_type, ids))
-    return out
+    return Python.tuple(out, PythonObject(ranks))

@@ -230,11 +230,14 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
     var mats: List[RKMat]
     var hosts: List[List[Float32]]
     var allocations: List[Int]
+    #: the mats index of this fit's ONE unused broadcast operand (a 0), or -1
+    var zero_operand: Int
 
     def __init__(out self):
         self.mats = List[RKMat]()
         self.hosts = List[List[Float32]]()
         self.allocations = List[Int]()
+        self.zero_operand = -1
 
     def close(mut self) raises:
         # Views may share a device id, so only the allocation ledger frees.
@@ -324,8 +327,22 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             return 3
         raise Error("x_decomp: randomized PCA has an invalid internal broadcast")
 
+    # Perf (lane perf3-cluster-gp-gate): the typed driver built a fresh
+    # 1 x 1 zero for EVERY ew and every matrix transpose, so on a GPU binding
+    # each of those steps paid a pool allocation and a synchronizing one-word
+    # upload (`dev_upload_run` waits on the queue). The Python kit cached one
+    # device zero per binding (`_dev_one`) and transposed with the source's
+    # own id as the unused index, so its launches pipelined. Same 0 word,
+    # same bits; the host column only saves the small allocations.
+    def unused_operand(mut self) -> Int:
+        """`_M._one` / `_M._dev_one`: the unused broadcast operand (a 1 x 1
+        zero), ONE per fit; on a GPU binding uploaded once."""
+        if self.zero_operand < 0:
+            self.zero_operand = self.zeros(1, 1)
+        return self.zero_operand
+
     def ew(mut self, op: Int, a: Int, b: Int = -1, c: Int = -1, scalar: Float64 = 0.0) raises -> Int:
-        var zero = self.zeros(1, 1)
+        var zero = self.unused_operand()
         var ib = zero if b < 0 else b
         var ic = zero if c < 0 else c
         var bm = 3 if b < 0 else self.broadcast(a, ib)
@@ -406,6 +423,12 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var total = self.sum(rows, True)
         return self.word(total)
 
+    def total_matrix(mut self, a: Int) raises -> Int:
+        """`_Kit.total` as the Python kit returned it: the 1 x 1 matrix, left
+        where it was summed (the same two folds as `total`)."""
+        var rows = self.sum(a, False)
+        return self.sum(rows, True)
+
     def move(
         mut self, a: Int, idx: Int, rows: Int, cols: Int, op: Int, count: Int, a1: Int, a2: Int, a3: Int,
         ist: Int, ioff: Int, nsrc: Int, ndst: Int, nidx: Int, resident: Bool,
@@ -455,7 +478,9 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         if rows == 1 or cols == 1:
             # a vector's transpose is the same words (a view)
             return self.add(self.mats[a].host, self.mats[a].dev, cols, rows)
-        var one = self.zeros(1, 1)
+        # the transpose reads no index: the fit's one unused operand (Perf,
+        # lane perf3-cluster-gp-gate, at `unused_operand`)
+        var one = self.unused_operand()
         return self.move(a, one, cols, rows, _MV_TRANSPOSE, rows * cols, rows, cols, 0, 0, 0,
                          rows * cols, rows * cols, 1, Self.RES)
 
@@ -733,12 +758,15 @@ def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         var squared = kit.ew(_OP_SQ, s)
         var variance = kit.ew(_OP_SCALE, squared, scalar=1.0 / Float64(rows - 1))
         var data_squared = kit.ew(_OP_SQ, centered)
-        var total_value = kit.total(data_squared)
-        var total = kit.constant(Float32(total_value))
+        # Perf (lane perf3-cluster-gp-gate): the two totals stay 1 x 1
+        # matrices where they were summed, as `_randomized_decompose` kept
+        # them; reading each word down and uploading it again as a constant
+        # cost a synchronizing download and upload per total on a GPU
+        # binding. The float32 word is the same either way (same bits).
+        var total = kit.total_matrix(data_squared)
         total = kit.ew(_OP_SCALE, total, scalar=1.0 / Float64(rows - 1))
         var ratio = kit.ew(_OP_DIV, variance, total)
-        var explained_value = kit.total(variance)
-        var explained = kit.constant(Float32(explained_value))
+        var explained = kit.total_matrix(variance)
         var noise = kit.ew(_OP_SUB, total, explained)
         noise = kit.ew(_OP_SCALE, noise, scalar=1.0 / Float64(min(rows, cols) - components))
         kit.copy_out(vt, components_out, components * cols)
