@@ -194,6 +194,16 @@ def _nested_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut
         _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
 
 
+def _fits_int64(value: PythonObject) -> Bool:
+    # Exact int only (the caller checked the type): the C conversion either
+    # returns the word or raises OverflowError, which is cleared here.
+    try:
+        _ = Int(py=value)
+        return True
+    except:
+        return False
+
+
 def _scalar_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                    mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject,
                    float_target: Bool) raises:
@@ -205,6 +215,11 @@ def _scalar_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut
         _promote(kind, size, "b", 1)
     elif cls is b.float or (cls is not b.int and Bool(py=py_call(b.isinstance, value, b.float))):
         _promote(kind, size, "f", 8)
+    elif cls is b.int and not float_target and _fits_int64(value):
+        # An exact int that converts to a signed 64-bit word is inside
+        # [int64_min, int64_max]: the "i" kind, with one native conversion
+        # instead of three rich comparisons against the context bounds.
+        _promote(kind, size, "i", 8)
     elif cls is b.int or Bool(py=py_call(b.isinstance, value, b.int)):
         if not float_target and (Bool(py=value < context["int64_min"]) or Bool(py=value > context["uint64_max"])):
             raise Error("TypeError: input integers exceed the supported numeric array range")
