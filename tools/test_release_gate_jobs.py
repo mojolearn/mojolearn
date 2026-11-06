@@ -65,7 +65,7 @@ def test_nvidia_job_goes_through_nvidia_central_submit_persisted(tmp_path):
     wheels = [f"{indir}/{w.name}" for w in plan.wheels]
     assert plan.gate == ["tools/gate_smoke_box.py", "nvidia", "0.8.57", f"{work}/out", "all",
                          "--profile", "release-light-v1",
-                         "--candidate-wheel", wheels[0], "--candidate-wheel", wheels[1], "--candidate-wheel", wheels[2],
+                         "--candidate-wheel", wheels[0], "--candidate-wheel", wheels[1],
                          "--source-commit", COMMIT, "--autograd-manifest", f"{work}/out/autograd-bin/build-manifest.json"]
     # every script the job runs is committed: the job script is the repository's own file, uploaded verbatim
     assert (RG.ROOT / RG.JOB_SCRIPT, f"{indir}/release_gate_job.sh", True) in plan.uploads()

@@ -18,7 +18,7 @@ COMMAND_TIMEOUT_SECONDS = 180  # Keep this standalone shipped runner dependency-
 #: (python/mojolearn/gpu_plugins.py; spelled here because this driver ships
 #: alone to the box, stdlib only, with no checkout beside it).
 PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
-    "mojolearn-nvidia", "mojolearn-amd", "mojolearn-nvidia-ptx")}
+    "mojolearn-nvidia", "mojolearn-amd")}  # the NVIDIA wheel carries its PTX set (2026-11-05)
 
 
 def admit(kind, doc, models):
@@ -285,7 +285,7 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
 LOCATE_INSTALLED = """import importlib.metadata as md,importlib.util,json
 spec=importlib.util.find_spec('mojolearn')
 dists={}
-for n in ('mojolearn','mojolearn-core','mojolearn-nvidia','mojolearn-amd','mojolearn-nvidia-ptx'):
+for n in ('mojolearn','mojolearn-core','mojolearn-nvidia','mojolearn-amd'):
     try: dists[n]=md.version(n)
     except md.PackageNotFoundError: dists[n]=None
 print(json.dumps(dict(package=list(spec.submodule_search_locations)[0] if spec else None,distributions=dists)))
@@ -321,7 +321,7 @@ def qualify_installed(parser, args):
             wrong = {n: v for n, v in located["distributions"].items() if v is not None and v != args.expected_version}
             installed_names = {n for n, v in located["distributions"].items() if v is not None}
             required = {"mojolearn-core"} if installed_names.intersection(
-                {"mojolearn-nvidia", "mojolearn-amd", "mojolearn-nvidia-ptx"}) else {"mojolearn"}
+                {"mojolearn-nvidia", "mojolearn-amd"}) else {"mojolearn"}
             wrong.update({name: None for name in required - installed_names})
             if wrong:
                 raise RuntimeError(f"installed distributions not at {args.expected_version}: {wrong}")
