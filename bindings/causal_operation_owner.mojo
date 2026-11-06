@@ -632,7 +632,10 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
     # scalar, buffer and session groups adds no protection between reads.
     var live = model_record_fields(mods, state, context["generation_classes"][2][kind], names[].layer_all)
     var bi = mods.module("builtins")
-    var fields = Python.dict()
+    # perf2-neural: fill the returned namespace's own dictionary (one dict
+    # copy per layer per operation fewer; same keys in the same order).
+    var captured_layer = py_call(mods.module("types").SimpleNamespace)
+    var fields = causal_snapshot_fields(mods, captured_layer)
     for i in range(len(scalar_names)):  # driver-loop: over retain declared layer state words
         if py_contains(live, scalar_names[i]):
             py_setitem(fields, scalar_names[i], live[scalar_names[i]])
@@ -712,7 +715,7 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
     py_setitem(fields, "_native_state_identity", state)
     py_setitem(fields, "_causal_live_fields", live)
     py_setitem(fields, "_causal_initial_buffers", original_buffers)
-    return _causal_namespace(mods, fields)
+    return captured_layer
 
 
 def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -721,7 +724,9 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
     var live = model_record_fields(mods, state, context["generation_classes"][1],
         Python.tuple("batch_size", "max_tokens", "positions", "layers", "_owner", "_usable"))
     var bi = mods.module("builtins")
-    var fields = Python.dict()
+    # perf2-neural: fill the returned namespace's own dictionary directly.
+    var captured_state = py_call(mods.module("types").SimpleNamespace)
+    var fields = causal_snapshot_fields(mods, captured_state)
     for name in ["batch_size", "max_tokens", "positions", "_usable", "_owner", "layers"]:  # small-loop(retain only outer-state schema fields)
         if py_contains(live, name):
             py_setitem(fields, name, live[name])
@@ -765,7 +770,7 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
     py_setitem(fields, "_causal_original", state)
     py_setitem(fields, "_native_state_identity", state)
     py_setitem(fields, "_causal_live_fields", live)
-    return _causal_namespace(mods, fields)
+    return captured_state
 
 
 def causal_layer_publish(mut mods: NativeModules, value: PythonObject) raises:
