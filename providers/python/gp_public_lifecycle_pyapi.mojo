@@ -103,9 +103,16 @@ def _gp_label_admit(value: PythonObject, name: String, context: PythonObject, de
 def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context: PythonObject) raises -> PythonObject:
     if source is None:
         raise Error(name + " requires y to be passed, but the target y is None.")
-    _gp_label_admit(source, name, context)
     var b = native_loaded_module("builtins")
     var kind = py_type(source)
+    # An exact flat list / tuple of exact ints first (lane p3-svm-gp-kernel,
+    # row 80): every item is an exact int, which the per-label admission walk
+    # below passes unchanged, so the walk is skipped (bools keep it).
+    if (kind is b.list or kind is b.tuple) and labels_list_integer_storage(source, False):
+        if len(source) != rows:
+            raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(len(source)) + "]")
+        return py_call(b.list, source)
+    _gp_label_admit(source, name, context)
     if kind is b.str or kind is b.bytes:
         raise Error("mojolearn: y must be a sequence of labels")
     # A rank-1 integer ndarray or Array goes to the encoder unchanged:
@@ -139,7 +146,10 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
         values = gp_label_list(native_torch_numpy(source), context)
     elif kind is not b.list and kind is not b.tuple:
         values = gp_label_list(source, context)
-    _gp_label_admit(values, name, context)
+    # A list / tuple source was admitted label by label above; only a new
+    # snapshot is admitted here (one walk per label, not two).
+    if not (values is source):
+        _gp_label_admit(values, name, context)
     if py_type(values) is not b.list and py_type(values) is not b.tuple:
         raise Error("mojolearn: y must be a sequence of labels")
     if len(values) != rows:
