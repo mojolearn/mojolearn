@@ -27,9 +27,11 @@ def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
     var x = family_as_f32(source, 2, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if d != Int(py=py_call(b.getattr, model, PythonObject("n_features_in_"))):
+    # Generic attribute reads (lane p3-svm-gp-kernel, row 347): no Python
+    # attribute protocol call per field.
+    if d != Int(py=family_raw_get(model, "n_features_in_")):
         raise Error("mojolearn " + String(py_type(model).__name__) + " feature count differs from fit")
-    var intercept = 1 if Bool(py=py_call(b.bool, py_call(b.getattr, model, PythonObject("fit_intercept")))) else 0
+    var intercept = 1 if Bool(py=py_call(b.bool, family_raw_get(model, "fit_intercept"))) else 0
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(intercept))
     var out: PythonObject
     if n_targets > 1:
@@ -37,7 +39,7 @@ def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
         out = family_array(Python.tuple(n, n_targets), "<f4", context)
     else:
         out = family_array(Python.tuple(n), "<f4", context)
-    var w = py_call(b.getattr, model, PythonObject("_w"))
+    var w = family_raw_get(model, "_w")
     _ = family_call(family_entry(binding, "qn_decision_function", context), classical_address(x),
                     classical_address(w), classical_address(out), params)
     _ = x  # keep the Python object alive through the native call above

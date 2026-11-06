@@ -633,11 +633,15 @@ def nystroem_transform_binding(
     var seed = UInt64(Int(py=params[6]))
     var sweeps = Int(py=params[7])
     var m = Int(py=params[8])
+    # The transform reads the components and the normalization only
+    # (`_nystroem_transform_dev`); the indices, eigenvalues and the q x q
+    # eigenvectors are not copied per call (lane p3-svm-gp-kernel, row 340).
+    # Their address slots stay in the argument list for its fixed order.
     var components = read_f32(Int(py=addrs[0]), max(0, q * d))
-    var indices = read_i32(Int(py=addrs[1]), max(0, q))
+    var indices = List[Int32]()
     var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
-    var eigenvalues = read_f32(Int(py=addrs[3]), max(0, q))
-    var eigenvectors = read_f32(Int(py=addrs[4]), max(0, q * q))
+    var eigenvalues = List[Float32]()
+    var eigenvectors = List[Float32]()
     var xaddr = Int(py=addrs[5])
     var op = _f32_ptr(Int(py=addrs[6]))
     var model = NystroemModel(

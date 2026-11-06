@@ -18,10 +18,12 @@
 # native call, gamma='scale' rounded from the binding's exact limbs in exact
 # integer math (core/scale_gamma_exact.mojo). A binding without a door
 # takes the entries it has, as before.
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_caller_frame import native_frame_globals
 from bindings.native_loaded_module import native_loaded_module
+from bindings.trees_side_records import trees_side_get, trees_side_put
 from bindings.classical_validate import classical_view
 from bindings.classical_warnings import classical_warning
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_bool
@@ -39,7 +41,7 @@ from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_field, plan_require_identical
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
 from bindings.classical_arrays import classical_address
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_attributes import classical_connect_numpy
@@ -51,6 +53,7 @@ from bindings.family_common import (
     family_owned_snapshot, family_f32_snapshot, family_snapshot_min, family_sample_weight_snapshot, family_field, family_f32,
 )
 
+comptime _KM_MODE_SLOT = "p3_km_binding_mode_checked_v1"
 comptime _KERNEL_PRECOMPUTED = 4
 comptime _KERNEL_CHI2 = 7
 comptime _KERNEL_ADDITIVE_CHI2 = 8
@@ -183,11 +186,21 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
         want = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(want) is not py_type(PythonObject("")):
         raise Error("TypeError: numeric_mode must be a native string or None")
-    want = want.strip().lower()
-    var selected = String(want)
+    # The spelling is normalized natively (lane p3-svm-gp-kernel, row 472):
+    # no Python strip()/lower() call; only "identical" and "fast" pass.
+    var selected = String(String(want).strip()).lower()
     if selected != "identical" and selected != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    want = PythonObject(selected)
     var native = kernel_method_provider(fields, binding, selected == "identical")
+    # The binary's compile-time mode never changes for one binding object:
+    # once it agreed with a requested mode, the check is skipped for that
+    # binding and mode (a side record weak-keyed by the binding).
+    var checked = trees_side_get(_KM_MODE_SLOT, binding)
+    if (checked is not None and py_type(checked) is b.tuple and len(checked) == 2 and py_contains(checked[0], want)
+            and ((native is None and checked[1] is None) or (native is not None and checked[1] is native))):
+        var flags_hit = kernel_method_metadata(native, 14) if native is not None else 0
+        return (binding, native, flags_hit)
     var getter = PythonObject(None)
     if native is None:
         getter = neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False)
@@ -203,6 +216,7 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
                         + "but " + String(owner_name) + " reports compile-time mode code "
                         + String(got) + "; the binary and the directory it sits in disagree, rebuild "
                         + "it with bash bindings/build_kernel_methods.sh")
+        _ = trees_side_put(_KM_MODE_SLOT, binding, Python.tuple(Python.tuple(want), native))
     var flags = kernel_method_metadata(native, 14) if native is not None else 0
     return (binding, native, flags)
 
@@ -294,7 +308,10 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     _ = dual  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    var kept = family_owned_snapshot(x_meta, context)
+    # X_fit_ is an owned copy, never the caller's own X (hazard class A,
+    # caller-aliased inputs, lane p3-svm-gp-kernel): the resident predict
+    # freezes X_fit_ read-only, which must never reach the caller's array.
+    var kept = _km_fit_owned(x_meta, context)
     _ = y^
     _ = weights^
     _ = weights_owner^
@@ -696,6 +713,40 @@ def _km_release(model: PythonObject, release: String) raises:
         pass
 
 
+def _km_fit_owned(x_meta: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+    """`x_meta`'s float32 C-order rows as an Array the model owns: the
+    snapshot's own copy when the admission made one, else one memcpy (the
+    caller's own Array is never kept, so freezing the fit never freezes it)."""
+    if x_meta.copied and x_meta.owned_writable:
+        return x_meta.keep
+    var result = family_array(x_meta.python_shape(), "<f4", context)
+    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
+           src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_meta.source.addr), count=x_meta.count)
+    return result
+
+
+def _km_freezable(value: PythonObject) raises -> Bool:
+    """True for an exact mojolearn Array that owns its store (see
+    `_km_freeze_fitted`)."""
+    var module = py_get(native_loaded_module("sys").modules, "mojolearn._array")
+    return module is not None and py_type(value) is module.Array and value._base is None
+
+
+def _km_freeze_fitted(value: PythonObject) raises -> Bool:
+    """Make a fitted array read-only at the buffer level before its device
+    copy is taken (hazard class A, lane p3-svm-gp-kernel): an in-place write
+    (`model.dual_coef_[...] = v`, `np.asarray(model.X_fit_)[:] = v`) then
+    raises the normal read-only error instead of leaving the resident copy
+    stale; replacing the attribute is noticed by identity and re-uploads.
+    Only an exact mojolearn Array owning its store can be frozen (its views
+    and the NumPy views of it inherit the flag); anything else returns False
+    and the predict keeps its per-call upload."""
+    if not _km_freezable(value):
+        return False
+    py_setattr(value, "_readonly", PythonObject(True))
+    return True
+
+
 def _km_resident_hit(model: PythonObject, binding: PythonObject, native: PythonObject, flags: Int,
                      x_fit_obj: PythonObject, dual_obj: PythonObject, d: Int, t: Int,
                      context: PythonObject) raises -> Int:
@@ -760,6 +811,12 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
                 and ((native is None and len(held) == 3) or (native is not None and len(held) == 5 and held[4] is native))):
             return held[1]
         _km_release(model, "kernel_ridge_resident_release")
+    # A device copy is taken only of fitted arrays frozen read-only; an
+    # array that cannot be frozen keeps the per-call upload (correct first).
+    if not _km_freezable(x_fit_obj) or not _km_freezable(dual_obj):
+        return PythonObject(None)
+    _ = _km_freeze_fitted(x_fit_obj)
+    _ = _km_freeze_fitted(dual_obj)
     var addresses = Python.list(PythonObject(x_fit.source.addr), PythonObject(dual.source.addr))
     var parameters = Python.list(PythonObject(n), PythonObject(d), PythonObject(t))
     var key = Python.tuple(x_fit_obj, dual_obj, PythonObject(n), PythonObject(d), PythonObject(t))

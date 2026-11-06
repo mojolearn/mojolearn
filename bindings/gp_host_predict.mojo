@@ -75,7 +75,10 @@ def gpr_predict_binding(
         String("gpr_predict"),
     )
     var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
-    var l = read_f32(Int(py=addrs[1]), max(0, n_train * n_train))
+    # The n x n factor is read only by the variance arm (`gpr_host_predict`
+    # solves with it under `return_std` alone): no copy for a mean-only
+    # predict (lane p3-svm-gp-kernel, row 342).
+    var l = read_f32(Int(py=addrs[1]), max(0, n_train * n_train)) if return_std else List[Float32]()
     var dual = read_f32(Int(py=addrs[2]), max(0, n_train))
     var x_star = read_f32(Int(py=addrs[3]), max(0, n_star * n_features))
     var n_clamped = 0

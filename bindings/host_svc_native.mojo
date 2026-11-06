@@ -82,6 +82,7 @@ def _svc_input(source: PythonObject, context: PythonObject) raises -> PythonObje
         return host_sparse_dense(source, format, context)
     classical_admit_value(source, context)
     var prepared = native_torch_numpy(source) if _ordinary_torch(py_type(source), context) else source
+    var tree_source = prepared
     if not native_pandas_exact(prepared):
         var raw = classical_input(prepared, context, "X")
         if classical_kind(raw, context) == "c":
@@ -89,8 +90,11 @@ def _svc_input(source: PythonObject, context: PythonObject) raises -> PythonObje
         if Int(py=raw.ndim) == 2 and classical_kind(raw, context) == "u" and Int(py=raw.itemsize) == 8:
             host_sparse_uint64_bound(Int(py=classical_address(raw)), Int(py=raw.shape[0]), Int(py=raw.shape[1]),
                 Int(py=raw.strides[0]), Int(py=raw.strides[1]), classical_is_array(raw, context) or Bool(py=raw.dtype.isnative))
-        _ = raw^
-    var x = host_tree_input(prepared, context)
+        # The admitted array goes on to the cast (lane p3-svm-gp-kernel, row
+        # 632): host_tree_input no longer re-admits and re-converts the source.
+        tree_source = raw
+    var x = host_tree_input(tree_source, context)
+    _ = tree_source^
     _ = prepared^
     return x
 

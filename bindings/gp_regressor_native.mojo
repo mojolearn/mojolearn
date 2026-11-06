@@ -311,8 +311,10 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + String(rank) + "-D shape " + family_shape_repr(view) + "; multi-target GP fits are not "
                     + "implemented (the n_targets refusal in __init__ is this same "
                     + "boundary)")
+    # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
+    # row 878): y is not viewed and converted a second time.
+    var targets = family_owned(family_as_f32(view, 1, "y", context), context)
     _ = view^
-    var targets = family_owned(family_as_f32(args[2], 1, "y", context), context)
     if Int(py=targets.shape[0]) != n_rows:
         raise Error(String(_GPR) + ": y has " + String(Int(py=targets.shape[0]))
                     + " entries, X has " + String(n_rows) + " rows")
@@ -434,9 +436,22 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     var mean = family_array(Python.tuple(n_star), "<f4", context)
-    var var_out = family_array(Python.tuple(n_star), "<f4", context)
-    var std = family_array(Python.tuple(n_star), "<f4", context)
-    var clamped = family_array(Python.tuple(n_star), "<i4", context)
+    # The variance, std and clamp outputs exist only for return_std (lane
+    # p3-svm-gp-kernel, row 628): every binding leaves their addresses
+    # untouched when return_std is 0, so a mean-only predict passes 0.
+    var var_out = PythonObject(None)
+    var std = PythonObject(None)
+    var clamped = PythonObject(None)
+    var var_address = PythonObject(0)
+    var std_address = PythonObject(0)
+    var clamped_address = PythonObject(0)
+    if return_std:
+        var_out = family_array(Python.tuple(n_star), "<f4", context)
+        std = family_array(Python.tuple(n_star), "<f4", context)
+        clamped = family_array(Python.tuple(n_star), "<i4", context)
+        var_address = classical_address(var_out)
+        std_address = classical_address(std)
+        clamped_address = classical_address(clamped)
     var lf = gp_f32(fields, "L_", -1, context)
     var dual = gp_f32(fields, "alpha_", -1, context)
     var ext = _gpr_ext(model, args[0], context)
@@ -450,8 +465,8 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var n_clamped = family_call(gp_entry(ext, String("gpr_predict_ptr") if (gp_caps(ext) & 2) == 2 else String("gpr_predict")),
         Python.list(classical_address(xt), classical_address(lf), classical_address(dual), classical_address(q),
                     classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
-                    classical_address(arrays[3]), classical_address(mean), classical_address(var_out),
-                    classical_address(std), classical_address(clamped)),
+                    classical_address(arrays[3]), classical_address(mean), var_address,
+                    std_address, clamped_address),
         params)
     _ = dual  # keep the Python object alive through the native call above
     _ = lf  # keep the Python object alive through the native call above
@@ -675,10 +690,12 @@ def _gpr_score(model: PythonObject, args: PythonObject, context: PythonObject) r
         raise Error(String(_GPR) + ": y must be 1-D with one "
                     + "entry per row of X, got shape " + family_shape_repr(view) + " against "
                     + String(n) + " predictions")
-    _ = view^
     if not py_contains(context, PythonObject("family_metrics_ops")):
         raise Error("ImportError: mojolearn GaussianProcessRegressor.score needs the metrics owner (mojolearn._expansion_metrics)")
-    var t = family_as_f32(args[2], 1, "y", context)
+    # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
+    # row 629): y is not viewed and converted a second time.
+    var t = family_as_f32(view, 1, "y", context)
+    _ = view^
     var r = _reg_new(Python.tuple(t, pred, PythonObject(None)), PythonObject("uniform_average"), "score", True, context)
     var sq = Int(py=context["family_metrics_terms"]["sq"])
     r.program(0.0, context)

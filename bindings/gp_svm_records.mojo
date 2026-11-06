@@ -206,18 +206,30 @@ def gpsvm_class_table_put(owner: PythonObject, slot: String, labels: PythonObjec
 # ------------------------------------------------------------ OneClassSVM
 
 
-comptime _OCSVM_COEF_SLOT = "ocsvm_coef_snapshot_v1"
+comptime _OCSVM_COEF_SLOT = "ocsvm_coef_snapshot_v2"
+
+
+def _ocsvm_coef_layout(dual: PythonObject) raises -> PythonObject:
+    """The object's own layout words: shape, dtype and strides. A NumPy array
+    can be reinterpreted in place (`a.dtype = ...`, `a.shape = ...`,
+    `a.resize(...)`) without becoming another object, so identity alone does
+    not prove the snapshot is still the object itself (lane p3-svm-gp-kernel,
+    row 953)."""
+    return Python.tuple(dual.shape, dual.dtype, dual.strides)
 
 
 def ocsvm_coef_reused(owner: PythonObject, dual: PythonObject) raises -> Bool:
     """`dual` is the coefficient object whose float32 snapshot was the object
-    itself last call (no conversion): the snapshot can be skipped."""
+    itself last call (no conversion), with the same shape, dtype and strides:
+    the snapshot can be skipped."""
     var held = trees_side_get(_OCSVM_COEF_SLOT, owner)
-    return held is not None and held[0] is dual and held[1] is py_type(dual)
+    if held is None or not (held[0] is dual) or not (held[1] is py_type(dual)):
+        return False
+    return Bool(py=held[2] == _ocsvm_coef_layout(dual))
 
 
 def ocsvm_coef_remember(owner: PythonObject, dual: PythonObject, coef: PythonObject) raises:
     if coef is dual:
-        _ = trees_side_put(_OCSVM_COEF_SLOT, owner, Python.tuple(dual, py_type(dual)))
+        _ = trees_side_put(_OCSVM_COEF_SLOT, owner, Python.tuple(dual, py_type(dual), _ocsvm_coef_layout(dual)))
     else:
         trees_side_drop(_OCSVM_COEF_SLOT, owner)
