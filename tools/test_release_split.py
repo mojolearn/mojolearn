@@ -65,7 +65,9 @@ class Switch(SplitBase):
         # (it requires the core and both vendors)
         # Andrew 2026-10-10: identity runs ONCE; linux-joint-diff is deleted
         # e1f7f8e24: every publish also needs both candidate gates (before any publication)
-        gates = {"gate-nvidia", "gate-amd"}
+        # 2026-11-06: and every publish needs the TestPyPI rehearsal of its bytes (release.REHEARSAL_STEP)
+        gates = {"gate-nvidia", "gate-amd", release.REHEARSAL_STEP}
+        self.assertEqual(set(r.NEEDS[release.REHEARSAL_STEP]), {"gate-nvidia", "gate-amd"})
         self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-pack"} | gates)
         # Andrew 2026-11-05: every publish also waits for every identity-lane step (release.DEVICE_LANE_STEPS)
         self.assertEqual(set(r.AFTER["publish-core-linux"]), {"gpu-column-nvidia", "gpu-column-amd"}
@@ -365,39 +367,8 @@ class ColumnsAndPublish(SplitBase):
                                      ("mojolearn_amd", "column-amd"), ("mojolearn", "--preverified")])
         self.assertIn("alpha-api-0.8.99-linux-meta-", calls[-1][3])
 
-    def test_finish_resolves_each_linux_install_to_its_package_set(self):
-        """pip install mojolearn installs everything; mojolearn-nvidia the core,
-        NVIDIA and its PTX package; mojolearn-amd the core and AMD; each at the
-        published bytes (Release.finish_resolve, 2026-10-20)."""
-        r = self.release(publish="pypi")
-        self.finals(r)
-        finals = r.split_finals()
-        by_project = {project: k for k, (project, _) in release.SPLIT_PACKAGES.items()}
-        served = {}
-
-        def runner(cmd, env, log, detach=False):
-            cmd = [str(c) for c in cmd]
-            dest = pathlib.Path(cmd[cmd.index("-d") + 1])
-            dest.mkdir(parents=True, exist_ok=True)
-            project = cmd[-1].split("==")[0]
-            for k in served.get(project, release.LINUX_RESOLVES[by_project[project]]):
-                shutil.copy2(finals[k], dest / finals[k].name)
-            return 0
-        r.runner = runner
-        venv = self.tmp / "venv"
-        self.assertIn("resolves mojolearn-core, mojolearn-nvidia", r.finish_resolve(venv, "nvidia"))
-        self.assertNotIn("mojolearn-nvidia-ptx", r.finish_resolve(venv, "nvidia"))
-        self.assertIn("resolves mojolearn-core, mojolearn-amd", r.finish_resolve(venv, "amd"))
-        self.assertIn("resolves mojolearn-core, mojolearn-nvidia, mojolearn-amd, mojolearn",
-                      r.finish_resolve(venv, "linux-meta"))
-        # a resolution without a vendor, or with other bytes, is refused
-        served["mojolearn"] = ("linux-meta", "linux", "nvidia")
-        with self.assertRaisesRegex(release.StepFailed, "does not resolve exactly"):
-            r.finish_resolve(venv, "linux-meta")
-        served.clear()
-        finals["amd"] = fake_wheel(self.tmp / "other" / finals["amd"].name, data=b"other bytes")
-        with self.assertRaisesRegex(release.StepFailed, "mojolearn-amd==0.8.99 .* does not resolve exactly"):
-            r.finish_resolve(venv, "amd")
+    # test_finish_resolves_each_linux_install_to_its_package_set moved (2026-11-06) with the resolution itself to
+    # tools/test_release_testpypi_rehearsal.py: the package sets resolve on TestPyPI BEFORE the first publish.
 
     @mock.patch('release_requirement_receipts.validate_producer_receipt', return_value=[])
     @mock.patch('release_requirements.producer_admission_available', return_value=True)

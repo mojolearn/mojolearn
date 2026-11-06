@@ -196,7 +196,10 @@ class Pipelines(Base):
         self.assertEqual(release.NEEDS["gpu-column-amd"], ["linux-pack"])
         # e1f7f8e24: every publish, the Mac's included, waits for both candidate gates
         # 2026-10-24: and for the Apple installed-wheel adapter smoke
-        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "gate-apple", "gate-nvidia", "gate-amd"])
+        # 2026-11-06: and the TestPyPI rehearsal of its bytes, which needs both gates
+        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "gate-apple", "gate-nvidia", "gate-amd",
+                                                          release.REHEARSAL_STEP])
+        self.assertEqual(release.NEEDS[release.REHEARSAL_STEP], ["gate-nvidia", "gate-amd"])
         for gone in ("release-check", "macos-self-test", "linux-joint-diff"):
             self.assertNotIn(gone, release.Release.STEPS)
 
@@ -517,6 +520,9 @@ class SourceAndTooling(Base):
         receipt.write_text(json.dumps(dict(status="PASSED", scope="expanded", source_commit=Y,
                                           wheel_sha256=release.sha256(whl))))
         r.apple_adapters_ok = lambda: (True, "PASSED")  # the Apple adapter gate (tested in test_adapter_gate.py)
+        # 2026-11-06: the TestPyPI rehearsal passed for these bytes (tools/test_release_testpypi_rehearsal.py)
+        r.state["steps"][release.REHEARSAL_STEP] = dict(done=True, commit=Y, at="t",
+                                                         wheels={"macos": release.sha256(whl)})
         # e1f7f8e24: publication requires both candidate gates
         r.gate_ok = lambda vendor: (False, "no gate report")
         with self.assertRaisesRegex(release.StepFailed, "publication requires both candidate gates"):
