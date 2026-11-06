@@ -790,6 +790,8 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         py_setitem(fields, "_bufs", bufs)
         py_setitem(fields, "_rw", b.dict())
     except error:
+        # p3-cnn-sequence-tsa: no field names a freed handle after a failure
+        py_setitem(fields, "_rw", b.dict())
         _free_all(entries, handles)
         raise error^
     _free_all(entries, handles)
@@ -860,6 +862,8 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
             s += m
         py_setitem(fields, "_rw", b.dict())
     except error:
+        # p3-cnn-sequence-tsa: no field names a freed handle after a failure
+        py_setitem(fields, "_rw", b.dict())
         _free_all(entries, handles)
         raise error^
     _free_all(entries, handles)

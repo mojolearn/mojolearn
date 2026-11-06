@@ -528,6 +528,10 @@ def _pool_layer(model: PythonObject, entries: PythonObject, k: List[Int], maxed:
         if len(cached_shape) != 2:
             raise Error("TypeError: adaptive pool cache must contain two dimensions")
         if cached_shape[0] == k[0] and cached_shape[1] == k[1] and py_type(hit[1]) is cls:
+            # p3-cnn-sequence-tsa (hazard C): the inner pool resolves its
+            # binding from its own numeric_mode, so a hit takes the adaptive
+            # layer's current mode (a changed mode no longer runs the old one).
+            py_setitem(_fields(hit[1]), "numeric_mode", py_get(fields, "numeric_mode"))
             return hit[1]
     var layer = py_call(py_call(b.getattr, b.object, "__new__"), cls)
     var state = _fields(layer)
