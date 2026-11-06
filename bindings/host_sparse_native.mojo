@@ -3,7 +3,7 @@
 # Python method/property, scalar conversion hook or SciPy computation runs.
 from std.memory import bitcast
 from std.math import isfinite
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_buffer_owner import native_buffer_view
@@ -91,10 +91,9 @@ def _sparse_fields(value: PythonObject) raises -> PythonObject:
             var fields = py_call(descriptor.__get__, value)
             if py_type(fields) is not b.dict:
                 raise Error("TypeError: sparse storage requires its native instance dictionary")
-            var keys = py_call(b.list, fields.keys())
-            for j in range(len(keys)):  # driver-loop: stored sparse field-name admission before lookup
-                if py_type(keys[j]) is not b.str:
-                    raise Error("TypeError: sparse stored field names must be exact native strings")
+            # One native dictionary walk, no key list (p3-array-arena).
+            if not native_namespace_string_keys(fields._obj_ptr, b.str):
+                raise Error("TypeError: sparse stored field names must be exact native strings")
             return fields
     raise Error("TypeError: sparse storage has no native dictionary descriptor")
 
