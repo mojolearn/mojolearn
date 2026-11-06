@@ -764,7 +764,8 @@ def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonOb
     if n > 0 and k > 0:
         var src = FP(unsafe_from_address=Int(py=h))
         var dst = IP(unsafe_from_address=Int(py=dst_addr))
-        argmax_rows_into(src, dst, n, k)
+        with GILReleased(Python()):  # p3-cnn-sequence-tsa
+            argmax_rows_into(src, dst, n, k)
     return PythonObject(n)
 
 
@@ -826,17 +827,23 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
         if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
             raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
         var rq = i32_ptr(Int(py=rows_addr))
-        for t in range(2):  # small-loop(the two arrays of the pair form)
-            var d2 = f32_ptr(Int(py=dst[t]))
-            var s2 = f32_ptr(Int(py=src[t]))
-            var rw = Int(py=params[1 + t])
-            gather_rows_f32(d2, s2, rq, n, rw)
+        var d0 = f32_ptr(Int(py=dst[0]))
+        var s0 = f32_ptr(Int(py=src[0]))
+        var d1 = f32_ptr(Int(py=dst[1]))
+        var s1 = f32_ptr(Int(py=src[1]))
+        var r0 = Int(py=params[1])
+        var r1 = Int(py=params[2])
+        # p3-cnn-sequence-tsa: the copies run with the GIL released
+        with GILReleased(Python()):
+            gather_rows_f32(d0, s0, rq, n, r0)
+            gather_rows_f32(d1, s1, rq, n, r1)
         return PythonObject(n)
     var row = Int(py=params[1])
     var d = f32_ptr(Int(py=dst))
     var sr = f32_ptr(Int(py=src))
     var rp = i32_ptr(Int(py=rows_addr))
-    gather_rows_f32(d, sr, rp, n, row)
+    with GILReleased(Python()):
+        gather_rows_f32(d, sr, rp, n, row)
     return PythonObject(n)
 
 
