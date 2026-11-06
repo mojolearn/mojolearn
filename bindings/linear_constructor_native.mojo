@@ -7,7 +7,8 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -26,6 +27,21 @@ def _constructor_plan(model: PythonObject, fields: PythonObject, context: Python
     var plan = _connected_plan(cls, context)
     if plan is None:
         raise Error("TypeError: native linear constructor requires a connected class")
+    # The class-row checks below (ancestry, metaclasses, base and inherited
+    # hooks, parameter descriptors) depend only on the class rows and the
+    # connected plan: their pass is kept per class state with the plan's
+    # identity (native_class_admission invalidates it on any modification of
+    # the class or an ancestor; a reconnected plan differs). The instance
+    # check (`protected`) runs on every construction.
+    var mods = NativeModules()
+    var plan_word = Int(plan._obj_ptr)
+    var record = class_record(mods, _CONSTRUCTOR_SLOT, cls)
+    if record is not None and Int(py=record) == plan_word:
+        var protected_fields = plan["protected"]
+        for i in range(len(protected_fields)):  # driver-loop: stored protocol hooks are never product callbacks
+            if py_contains(fields, protected_fields[i]):
+                raise Error("TypeError: native constructors refuse instance protocol overrides")
+        return plan
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var base = plan["mro"]
     var connected_ancestry = py_call(b.type.__dict__["__mro__"].__get__, base[0])
@@ -64,7 +80,11 @@ def _constructor_plan(model: PythonObject, fields: PythonObject, context: Python
                 or (String(names[i]) == "numeric_mode"
                     and _resolved(kind, "__get__", context["missing"]) is not context["missing"])):
             raise Error("TypeError: native constructors refuse parameter descriptor callbacks")
+    class_admit(mods, _CONSTRUCTOR_SLOT, cls, PythonObject(plan_word))
     return plan
+
+
+comptime _CONSTRUCTOR_SLOT = "linear_constructor_class_rows_v1"
 
 
 def _initialize(model: PythonObject, positional: PythonObject, keywords: PythonObject, context: PythonObject) raises -> PythonObject:
