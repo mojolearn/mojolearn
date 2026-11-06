@@ -7,8 +7,8 @@ lane of one column. Identity is within-release cross-vendor bit equality: a
 unit passes only when the Apple, NVIDIA and AMD columns recorded at the
 ledger's frozen source agree on every part of the lane, the CPU column equals
 that reference (or is N/A where the harness declares it), and, when the unit's
-frozen NVIDIA environment binds the sm_80 PTX set, the ``nvidia-ptx-*`` column
-equals it too. A STABLE cell of one column never proves identity by itself.
+NVIDIA column itself records on the sm_80 PTX set (2026-11-05; the old
+``nvidia-ptx-*`` column is history and never required). A STABLE cell of one column never proves identity by itself.
 
 Records are admitted only as produced: complete, one commit witness equal to
 the unit's begun revision (see below), REPEATS=1, every fixture, no partial column, no sabotage, a
@@ -395,8 +395,10 @@ def required_classes(wanted):
     scope = unit_scope(wanted)
     require(scope["applicable"], "identity unit is inapplicable on this column; "
             + scope["excluded"].get(wanted["inputs"]["unit"]["vendor"], "separate device claim"))
-    classes = tuple(scope["required_columns"])
-    return classes + ((PTX_CLASS,) if ptx_required(wanted) and "nvidia" in classes else ())
+    # ONE NVIDIA COLUMN (Andrew 2026-11-05): the NVIDIA column records on the PTX
+    # sm_80 set, so the separate ptx class is never required (ptx_required stays as
+    # a fact about the frozen environment; old ptx records are history).
+    return tuple(scope["required_columns"])
 
 
 # ------------------------------------------------------------------ derivation

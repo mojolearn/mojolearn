@@ -132,8 +132,7 @@ def unit_classes(wanted, vendor):
     environment = ((wanted.get("inputs") or {}).get("execution_environment") or {})
     lane = wanted["inputs"]["unit"]["lanes"][0]
     bindings = (environment.get(lane) or {}).get("bindings") or {}
-    if vendor == "nvidia" and any(key.split("/")[1:3] == ["cuda", "sm_80"] for key in bindings):
-        check.append("ptx")
+    # 2026-11-05: one NVIDIA column, recorded on the PTX set; no separate ptx class.
     scope = (wanted.get("dependency_provenance") or {}).get("identity_applicability") or {}
     required = scope.get("required_columns")
     gpus = [c for c in GPU_CLASSES if c in required] if isinstance(required, list) else list(GPU_CLASSES)

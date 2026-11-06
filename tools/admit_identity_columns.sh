@@ -43,9 +43,9 @@
 #      from the new commit vs. still resting on an older one
 #   5. `verify --self-test --cpu-threads 3` and `verify --coverage` against the
 #      new table, from source, host column
-#   6. THE PTX COLUMN (`nvidia-ptx-<gpu>-sm80` records, Andrew 2026-10-10): the
-#      table's `ptx_divergent` must be empty, i.e. every PTX digest equals the
-#      NVIDIA == AMD reference; a differing part fails the admission (PTX rc=1)
+#   6. THE OLD PTX COLUMN is history (Andrew 2026-11-05: one NVIDIA column, recorded
+#      on the PTX set): `nvidia-ptx-*` records already in the table stay, are
+#      counted, and never fail or flag an admission (PTX rc is always 0)
 #   --check-only does 1, then 3-5 on a scratch table; nothing in the tree changes.
 #   --lanes selects complete lanes; default is every lane in incoming records.
 #   Unselected table rows and original records stay intact. Selected numerical
@@ -155,16 +155,12 @@ checks() {  # $1 = table; self-test then coverage; sets ST_RC, COV_RC
     COV_RC=$?
     grep -m 3 -iE 'admission|legacy|reference' "$EVID/coverage.log" | cut -c1-200
     echo "COVERAGE rc=$COV_RC (report $EVID/coverage.json)"
-    # THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag). A
-    # `nvidia-ptx-*` record is admitted like every column; IDENTICAL on PTX holds
-    # when its digests equal the NVIDIA == AMD reference. Each differing part is
-    # a PTX codegen bug to fix (docs/NVIDIA_PTX_IDENTITY.md), never a rerun and
-    # never a separate qualification step: this admission refuses it.
-    PTX_DIV=$("${PY[@]}" -c "import json,sys; print(len(json.load(open(sys.argv[1])).get('ptx_divergent') or []))" "$t")
+    # ONE NVIDIA COLUMN (Andrew 2026-11-05): the NVIDIA column itself records on the
+    # PTX set and is judged like every column above. The old `nvidia-ptx-*` records
+    # are history: counted here, never required, never a failure.
     PTX_COLS=$("${PY[@]}" -c "import json,sys; print(sum(r.get('class') == 'ptx' for r in json.load(open(sys.argv[1]))['records']))" "$t")
-    PTX_RC=0; [ "$PTX_DIV" = 0 ] || PTX_RC=1
-    "${PY[@]}" -c "import json,sys; [print('  PTX-DIVERGENT', r['cell'], r['part'], 'ptx', r['ptx'], 'reference', r['reference']) for r in (json.load(open(sys.argv[1])).get('ptx_divergent') or [])[:10]]" "$t"
-    echo "PTX rc=$PTX_RC ptx_records=$PTX_COLS divergent_parts=$PTX_DIV"
+    PTX_RC=0
+    echo "PTX rc=0 (history) ptx_records=$PTX_COLS"
 }
 
 # =========================================================== models mode

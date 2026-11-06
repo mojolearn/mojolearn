@@ -113,7 +113,7 @@ def prepare_reconciliation(ledger, *, origin_map, source_audit, comparison, revi
                 or wanted['inputs']['unit']['vendor'] not in ('nvidia', 'amd')):
             continue
         lane, vendor = identity.unit_lane(wanted), wanted['inputs']['unit']['vendor']
-        routes = ('nvidia', 'ptx') if vendor == 'nvidia' else ('amd',)
+        routes = (vendor,)  # one NVIDIA column, on the PTX set (2026-11-05)
         retained = {}
         for route in routes:
             cells = {key: row for key, row in origins[route]['latest_cells'].items()

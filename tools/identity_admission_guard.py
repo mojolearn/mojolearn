@@ -204,11 +204,8 @@ def validate(base, candidate, lanes, gpu_only=None):
                     idx = value if type(value) is int else (value[0] if isinstance(value, list) and len(value) == 2 else None)
                     if type(idx) is not int or not 0 <= idx < len(records) or records[idx].get("class") != cls:
                         problems.append(f"{key}/{part}: invalid {cls} record witness")
-                # merge_reference_lanes keeps global metadata from the base;
-                # a NEW PTX disagreement therefore also needs this local check.
-                ptx = cols.get("ptx")
-                if lane not in host_only and isinstance(ptx, list) and len(ptx) == 2 and ptx[1] != ref:
-                    problems.append(f"{key}/{part}: PTX differs from the reference")
+                # The old ptx column is history since 2026-11-05 (one NVIDIA column,
+                # recorded on the PTX set): its cells are kept and never judged here.
                 if lane in host_only:
                     # These lanes execute only host arithmetic. Keep original
                     # GPU-labelled historical observations as provenance, not

@@ -5358,7 +5358,7 @@ class Release:
         "published-smoke-nvidia": ("numerical", "nvidia"), "published-smoke-amd": ("numerical", "amd"),
     }
     #: identity column -> the box its record runs on (Apple records on this Mac: never rented)
-    PLAN_COLUMN_DEVICE = {"nvidia": "nvidia", "amd": "amd", "cpu": "nvidia", "ptx": "nvidia", "apple": None}
+    PLAN_COLUMN_DEVICE = {"nvidia": "nvidia", "amd": "amd", "cpu": "nvidia", "apple": None}
 
     def plan_json_path(self):
         return Path(getattr(self.args, "plan_json", "") or (self.rel / "plan.json"))
@@ -5791,8 +5791,9 @@ def main(argv=None):
                     help="THE RELEASE PLAN (tools/release_plan.py): one decision with a reason per compile group, "
                          "identity lane x column, gate/producer, box and publish row; writes plan.json; runs nothing")
     ap.add_argument("--plan-json", default="", help="where --plan writes plan.json (default <release>/<commit12>/plan.json)")
-    ap.add_argument("--plan-columns", default="nvidia,amd,cpu,ptx,apple",
-                    help="identity columns --plan selects (tools/identity_columns.py changed-lanes per column)")
+    ap.add_argument("--plan-columns", default="nvidia,amd,cpu,apple",
+                    help="identity columns --plan selects (tools/identity_columns.py changed-lanes per column); "
+                         "one NVIDIA column, recorded on the PTX sm_80 set (2026-11-05)")
     ap.add_argument("--report", action="store_true",
                     help="THE STATUS REPORT (tools/release_report.py): one row per ledger requirement and release "
                          "step, each passed / reused / failed / missing-execution / blocked-provenance / "
