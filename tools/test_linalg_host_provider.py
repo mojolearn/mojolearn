@@ -7,7 +7,10 @@ NAMES=('gemm','gemm_bf16','gemm_int8','quantize_int8','dequantize_int8','gemm_in
 
 
 def body(source,name):
-    return re.search(r'^def '+name+r'\(.*?(?=^def |\Z)',source,re.M|re.S).group()
+    # Whole-line `#` comments are notes, not transport: drop them so a comment
+    # after a refusal does not glue onto the raise being compared.
+    text=re.search(r'^def '+name+r'\(.*?(?=^def |\Z)',source,re.M|re.S).group()
+    return re.sub(r'^[ \t]*#[^\n]*\n','',text,flags=re.M)
 
 
 def test_host_transport_preserves_numerical_calls_and_refusals():
