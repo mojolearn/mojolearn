@@ -14,6 +14,7 @@
 # `split` stays a generator shell that `yield from`s the result, so its
 # refusals are still raised at the first `next`.
 from std.memory import memcpy
+from std.builtin.sort import sort
 from std.os import getenv
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
@@ -484,14 +485,23 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
                         PythonObject(msel_addr(gc.codes)), PythonObject(n), PythonObject(gc.m),
                         PythonObject(msel_addr(first)))
         _ = first  # keep the Python object alive through the native call above
-        var keys = py_call(b.list, first._mv)
-        var keywords = Python.dict()
-        py_setitem(keywords, "key", py_call(b.getattr, keys, PythonObject("__getitem__")))
-        var order = family_call_kw(b.sorted, keywords, py_call(b.range, PythonObject(gc.m)))
+        # pass 3 (rank 367): the classes ordered by their first row natively.
+        # Every class's first row is distinct, so sorting the first rows and
+        # mapping each back to its class is `sorted(range(m), key=first)`
+        # exactly (no ties), without a Python list, key callable and sort.
+        var fp = msel_p64(first)
+        var rows_sorted = List[Int](capacity=gc.m)
+        var class_of = Dict[Int, Int]()
+        for c in range(gc.m):  # driver-loop: over classes (one first-row word each)
+            var r = Int(fp[c])
+            rows_sorted.append(r)
+            class_of[r] = c
+        _ = first  # keep the storage alive through the reads above
+        sort(rows_sorted)
         var table = List[Int](length=gc.m, fill=0)
         var counts = Python.list()
         for rank in range(gc.m):  # driver-loop: over classes (first-seen order)
-            var c = Int(py=order[rank])
+            var c = class_of[rows_sorted[rank]]
             table[c] = rank
             _ = py_call(counts.append, PythonObject(gc.counts[c]))
         var words = gc.mapped(table, context)
