@@ -72,6 +72,9 @@ def _arrow_string_names(storage: PythonObject) raises -> PythonObject:
     var list_type = py_type(Python.list())
     var names = Python.list()
     var count = Int(py=chunked.num_chunks)
+    # p3-labels-metrics: PyUnicode_DecodeUTF8 resolved once per call (it was
+    # resolved by name, dlsym, once per column name).
+    var decode_utf8 = Python().cpython().lib.get_function[PyObjectPtr]("PyUnicode_DecodeUTF8")
     for c in range(count):  # driver-loop: over Arrow chunks of the column-name index
         var chunk = py_call(chunked.chunk, c)
         if py_type(chunk) is not expected:
@@ -109,7 +112,7 @@ def _arrow_string_names(storage: PythonObject) raises -> PythonObject:
             if first < 0 or last < first or last > sizes[2]:
                 raise Error("ValueError: pandas Arrow string span exceeds its native data buffer")
             var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addresses[2] + first)
-            var raw = cpy.lib.get_function[PyObjectPtr]("PyUnicode_DecodeUTF8")(data, last - first, Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
+            var raw = decode_utf8(data, last - first, Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
             if not raw:
                 raise cpy.unsafe_get_error()
             _ = py_call(names.append, PythonObject(from_owned=raw))
