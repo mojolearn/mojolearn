@@ -355,7 +355,7 @@ def _clone_from(base: PythonObject, template: PythonObject, seed: Int, context: 
     before a member loop (lane perf-sweep-trees, 2026-11-05: every round
     re-read the unchanged base's parameters). get_params maps names to the
     stored values by identity, so a shallow copy is the same dictionary."""
-    var params = py_call(template.copy)
+    var params = py_call(py_attr(template, "copy"))
     if py_contains(params, "random_state"):
         py_setitem(params, "random_state", _P(seed))
     return _new_member(py_type(base), params, context)

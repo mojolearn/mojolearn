@@ -127,7 +127,7 @@ def model_record_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
     # The payload holds cls by address only (it is in the key's MRO, so it
     # stays alive while the record can hit) and the names tuple by value.
     var record = class_record(mods, _RECORD_FIELDS_SLOT, py_type(value))
-    if record is not None and py_type(names) is bi.tuple and Int(py=record[0]) == Int(cls._obj_ptr) and Bool(py=py_call(bi.tuple.__eq__, record[1], names)):
+    if record is not None and py_type(names) is bi.tuple and Int(py=record[0]) == Int(cls._obj_ptr) and Bool(py=record[1] == names):
         var cached_fields = _fields(mods, value)
         model_dict(mods, cached_fields)
         return cached_fields
