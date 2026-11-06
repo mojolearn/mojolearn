@@ -7,6 +7,7 @@
 # Python stored. With `prediction_data=True` the core rows become resident
 # on the device at fit (bindings/cfb_resident.mojo), so `predict` uploads
 # only its queries. Same entries, same inputs: the bits do not move.
+from bindings.p3nc_fitted_freeze import fitted_freeze
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields
@@ -199,6 +200,11 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     _ = core  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
+    # p3-neighbors-cluster: the core rows behind predict's resident device
+    # copy (keyed by identity, bindings/cfb_resident.mojo) are read-only.
+    _ = fitted_freeze(indices, context)
+    _ = fitted_freeze(components, context)
+    _ = fitted_freeze(core_labels, context)
     py_setitem(fields, "core_sample_indices_", indices)
     py_setitem(fields, "components_", components)
     py_setitem(fields, "_core_labels", core_labels)
