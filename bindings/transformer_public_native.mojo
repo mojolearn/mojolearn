@@ -68,7 +68,7 @@ def _transformer_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
     # import-connected class.
     var value_class = py_type(value)
     var record = class_record(mods, _FIELDS_CLASS_SLOT, value_class)
-    if record is None or record[0] is not cls or record[1] is not names:
+    if record is None or record[0] is not cls or not _same_names(record[1], names):
         var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, value_class)
         var admitted = False
         for i in range(len(ancestry)):  # driver-loop: passive subclasses retain native owner storage
@@ -84,6 +84,22 @@ def _transformer_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
         if class_watch_ready():
             class_admit(mods, _FIELDS_CLASS_SLOT, value_class, Python.tuple(cls, names))
     return _fields(mods, value)
+
+
+def _same_names(kept: PythonObject, names: PythonObject) raises -> Bool:
+    """The record's field names equal `names`: the same tuple, or the same
+    exact strings in order. Callers build their names tuple per call (the
+    decode step, lane p3-neural-blocks), so an identity test never hit and
+    every step re-ran the ancestry walk and rewrote the record. Both tuples
+    are native-built tuples of exact str: no Python comparison hook runs."""
+    if kept is names:
+        return True
+    if len(kept) != len(names):
+        return False
+    for i in range(len(names)):  # driver-loop: fixed owner storage schema names
+        if String(py=kept[i]) != String(py=names[i]):
+            return False
+    return True
 
 
 comptime _FIELDS_CLASS_SLOT = "transformer_owner_fields_class_v1"
