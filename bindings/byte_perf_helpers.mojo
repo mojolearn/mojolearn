@@ -6,18 +6,21 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
+from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
 
 
 def byte_int_list_from_i32(address: Int, count: Int) raises -> PythonObject:
     """A new list of `count` Python ints read from native int32 storage."""
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    var table = lm_cpython_table()
+    var raw = table[].PyList_New(count)
     if not raw:
         raise cpy.unsafe_get_error()
     # The list owns itself at once; unset NULL slots are safe to destroy.
     var out = PythonObject(from_owned=raw)
-    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    # Entries resolved once per process (no by-name lookup per call).
+    var box_int = table[].PyLong_FromLongLong
+    var set_item = table[].PyList_SetItem
     var source = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
     for i in range(count):  # cpu-route: publish completed native token ids as Python integers
         var item = box_int(Int64(source[i]))
@@ -32,12 +35,14 @@ def byte_int_list_from_i32(address: Int, count: Int) raises -> PythonObject:
 def byte_int_list_from_i64(address: Int, count: Int) raises -> PythonObject:
     """A new list of `count` Python ints read from native int64 storage."""
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    var table = lm_cpython_table()
+    var raw = table[].PyList_New(count)
     if not raw:
         raise cpy.unsafe_get_error()
     var out = PythonObject(from_owned=raw)
-    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    # Entries resolved once per process (no by-name lookup per call).
+    var box_int = table[].PyLong_FromLongLong
+    var set_item = table[].PyList_SetItem
     var source = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
     for i in range(count):  # cpu-route: publish completed native token ids as Python integers
         var item = box_int(source[i])
