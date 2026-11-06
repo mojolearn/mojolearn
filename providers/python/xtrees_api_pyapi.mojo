@@ -49,6 +49,7 @@ from xtrees.api_kernels import (
 #: `-D MOJOLEARN_COLUMN_CPU`) keeps `xtrees/ops.mojo`'s serial loops. Fixed
 #: at build time, never a runtime route.
 comptime XTREES_DEVICE_OPS = TARGET_COLUMN != COLUMN_CPU
+from xtrees.calibrated_apply import CalPair, calibrated_proba_device, calibrated_proba_host
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
@@ -856,6 +857,48 @@ def complement_pairs_binding(x: PythonObject, params: PythonObject) raises -> Py
             elem_dev.complement_pairs_device(f64_ptr(Int(py=x)), n)
         else:
             complement_pairs(f64_ptr(Int(py=x)), n)
+    return PythonObject(n)
+
+
+def calibrated_proba_binding(acc: PythonObject, pairs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """CalibratedClassifierCV's whole prediction epilogue in one program
+    (`xtrees/calibrated_apply.mojo`): acc (float64, n x k) = the mean of the
+    pairs' calibrated probabilities. params = [n, k]; `pairs` lists
+    (blk, bc, at, cols, ks, calibrators), `blk` the member's float32 n x bc
+    scores, `cols` its int32[ks] class codes (k > 2), `at` its code-1 column
+    (k == 2, bc > 1); `calibrators` lists (kind, a, b, kx, ky, m): kind 0
+    sigmoid (a, b), 1 isotonic (float64 knots kx, ky, m of them)."""
+    _need(params, 2, "x_trees_calibrated_proba")
+    var n = _count(_i(params, 0), "x_trees_calibrated_proba")
+    var k = _i(params, 1)
+    if k < 2:
+        raise Error("x_trees_calibrated_proba: k must be at least 2")
+    var parsed = List[CalPair]()
+    for p in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+        var row = pairs[p]
+        var cals = row[5]
+        var kinds = List[Int]()
+        var a = List[Float64]()
+        var b = List[Float64]()
+        var kx = List[Int]()
+        var ky = List[Int]()
+        var m = List[Int]()
+        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
+            var cal = cals[j]
+            kinds.append(Int(py=cal[0]))
+            a.append(Float64(py=cal[1]))
+            b.append(Float64(py=cal[2]))
+            kx.append(Int(py=cal[3]))
+            ky.append(Int(py=cal[4]))
+            m.append(Int(py=cal[5]))
+        if len(kinds) != (1 if k == 2 else k):
+            raise Error("x_trees_calibrated_proba: one calibrator per class column")
+        parsed.append(CalPair(Int(py=row[0]), Int(py=row[1]), Int(py=row[2]), Int(py=row[3]), Int(py=row[4]),
+                              kinds^, a^, b^, kx^, ky^, m^))
+    comptime if XTREES_DEVICE_OPS:
+        calibrated_proba_device(parsed, n, k, f64_ptr(Int(py=acc)))
+    else:
+        calibrated_proba_host(parsed, n, k, f64_ptr(Int(py=acc)))
     return PythonObject(n)
 
 
@@ -1698,6 +1741,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[platt_apply_strided_binding]("x_trees_platt_apply_strided")
     m.def_function[isotonic_predict_strided_binding]("x_trees_isotonic_predict_strided")
     m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
+    m.def_function[calibrated_proba_binding]("x_trees_calibrated_proba")
     m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
     m.def_function[column_f64_binding]("x_trees_column_f64")
     m.def_function[fast_switches_binding]("x_trees_fast_switches")

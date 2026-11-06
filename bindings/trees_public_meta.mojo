@@ -1597,13 +1597,68 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     return model
 
 
+def _calibrated_fused(model: PythonObject, xt: PythonObject, fused: PythonObject, pairs: PythonObject,
+                      Xa: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    """`_calibrated_proba` through `x_trees_calibrated_proba`: the members'
+    scores, then the whole epilogue (scores, calibrators, complement or
+    normalization, float32 narrowing, the mean) as one device program with
+    one readback (lane perf-sweep-trees, 2026-11-05; before it about twenty
+    glue round trips per pair). Same kernels in the same order: no bit moves
+    (xtrees/calibrated_apply.mojo)."""
+    var keep = Python.list()
+    var rows = Python.list()
+    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+        var e = pairs[i][0]
+        var cals = pairs[i][1]
+        var out: PythonObject
+        if prep_estimator_has(e, "decision_function", context):
+            out = prep_estimator_call(e, "decision_function", Python.tuple(Xa), context)
+        else:
+            out = prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context)
+        var blk = _out2d(out, n, context)
+        _ = py_call(keep.append, blk.keep)
+        var at = 0
+        var cols_addr = 0
+        var ks = 0
+        if k == 2:
+            if blk.cols != 1:
+                at = _index_of_one(e, context)
+                if at < 0:
+                    raise Error("1 is not in list")
+        else:
+            var sub_cols = _sub_cols(e, context)
+            _ = py_call(keep.append, sub_cols)
+            cols_addr = trees_address(sub_cols)
+            ks = len(_attr(e, "classes_", Python.list()))
+        var described = Python.list()
+        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
+            var entry = cals[j]
+            var par = entry[1]
+            if String(entry[0]) == "sigmoid":
+                _ = py_call(described.append, Python.tuple(_P(0), par[0], par[1], _P(0), _P(0), _P(0)))
+            else:
+                _ = py_call(keep.append, par[0])
+                _ = py_call(keep.append, par[1])
+                _ = py_call(described.append, Python.tuple(_P(1), _F(0.0), _F(0.0), _A(par[0]), _A(par[1]), par[2]))
+        _ = py_call(rows.append, Python.tuple(_P(blk.addr), _P(blk.cols), _P(at), _P(cols_addr), _P(ks), described))
+        _ = blk^
+    var acc = trees_vector(n * k, "<f8", context)
+    _ = py_call_typed(fused, _A(acc), rows, Python.list(_P(n), _P(k)))
+    _ = acc  # keep the Python object alive through the native call above
+    _ = keep  # keep the members' blocks, class codes and knots alive through the native call above
+    return trees_reshape(acc, Python.tuple(n, k), context)
+
+
 def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
     var k = len(_attr(model, "classes_", Python.list()))
-    var acc = _class_zero(xt, n * k, context)
     var pairs = _attr(model, "calibrated_classifiers_", Python.list())
+    var fused = py_get(xt, PythonObject("x_trees_calibrated_proba"))
+    if fused is not None and k >= 2:
+        return _calibrated_fused(model, xt, fused, pairs, Xa, n, k, context)
+    var acc = _class_zero(xt, n * k, context)
     for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
         var p = _calibrated_probs(model, xt, pairs[i][0], pairs[i][1], Xa, context)
         _acc_w(xt, acc, p, n * k, 1.0, context)
