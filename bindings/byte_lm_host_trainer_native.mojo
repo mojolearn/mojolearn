@@ -17,6 +17,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.native_array_storage import native_array_zeros
 from bindings.byte_lm_trainer_native import _validated_state
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from providers.python.byte_lm_json_checkpoint_pyapi import byte_json_payload, byte_json_arrays, byte_json_read
@@ -72,7 +73,7 @@ def _ids_i32(source: PythonObject, context: PythonObject) raises -> PythonObject
     var kind = classical_cast_kind(value, item, "ids", context)
     if kind == CAST_KIND_FLOAT:
         raise Error("TypeError: ids must be an integer array")
-    var store = py_call(context["array_type"], PythonObject("i"), py_call(context["native_bytes_type"], 4 * rows * cols))
+    var store = _zero_store("i", rows * cols, context)
     var tokens = classical_wrap_array(store, Python.tuple(rows, cols), "<i4", "C", context)
     neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
                        rows, cols, item, kind, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
@@ -85,8 +86,18 @@ def _ids_i32(source: PythonObject, context: PythonObject) raises -> PythonObject
 def _f32_array(n: Int, context: PythonObject) raises -> PythonObject:
     """`_buffer.empty((n,), "<f4")`: a zero-filled mojolearn Array, on every
     install (the trainer's state is Arrays, NumPy or not)."""
-    var store = py_call(context["array_type"], PythonObject("f"), py_call(context["native_bytes_type"], 4 * n))
+    var store = _zero_store("f", n, context)
     return classical_wrap_array(store, Python.tuple(n), "<f4", "C", context)
+
+
+def _zero_store(code: String, n: Int, context: PythonObject) raises -> PythonObject:
+    # One zero-filled native store (sequence repeat of a zero seed), instead
+    # of a zero bytes object copied into a second store. Same storage type;
+    # an unexpected storage type keeps the original two-step allocation.
+    var store = native_array_zeros(code, n)
+    if py_type(store) is context["array_type"]:
+        return store
+    return py_call(context["array_type"], PythonObject(code), py_call(context["native_bytes_type"], 4 * n))
 
 
 def _host_provider(fields: PythonObject) raises -> PythonObject:
