@@ -367,8 +367,13 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
     var binding = args[0]
     if not py_contains(fields, PythonObject("_x")):
         raise Error("mojolearn KernelDensity: call fit() first")
-    var dense = _kde_dense(args[1], context)
-    var q = dense[0]
+    # Perf (perf2-neighbors): a dense query arrives as the public begin's
+    # float32 C-order snapshot (providers/python/neighbors_public_lifecycle_pyapi.mojo),
+    # the array `_kde_dense` would rebuild, and a query never reports
+    # `input_copied_`; only a sparse query is densified here.
+    var q = args[1]
+    if host_sparse_format(q).byte_length() > 0:
+        q = _kde_dense(q, context)[0]
     var features = family_field(fields, "n_features_in_")
     if _kde_truth(family_call(native_loaded_module("operator").ne, q.shape[1], features)):
         raise Error("mojolearn KernelDensity: X has " + family_str(q.shape[1]) + " features, "

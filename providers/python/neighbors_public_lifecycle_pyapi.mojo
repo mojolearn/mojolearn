@@ -184,6 +184,14 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         var borrow = (not fitting and not operation.startswith("family_xn_loc_imp_")
                       and not snapshot.readonly and snapshot.f32_c())
         py_setitem(values, PythonObject(first), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
+    elif not fitting and host_sparse_format(source).byte_length() == 0:
+        # Perf (perf2-neighbors): a dense KDE query (score_samples/score) only
+        # reads X and never reports `input_copied_`, so it takes this float32
+        # C-order snapshot as `_kde_scores` would have rebuilt it
+        # (`family_as_f32` is this same snapshot's `keep`). A KDE fit keeps
+        # its own capture and copy report; a sparse query keeps its exact
+        # densification (bindings/neighbors_kde_native.mojo `_kde_dense`).
+        py_setitem(values, PythonObject(first), snapshot.keep)
     if fitting and Int(py=depth) == 0:
         var target_index = 2
         if operation == "family_xn_knn_nn_fit":
