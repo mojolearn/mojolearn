@@ -13,6 +13,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from std.memory import memcpy
+from std.os import getenv
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.parallel_byte_native import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
@@ -244,10 +245,13 @@ def _mlp_sum(values: PythonObject, rows: Int, columns: Int) raises -> PythonObje
 
 
 def _mlp_fused_enabled() raises -> Bool:
+    # The process environment read natively: os.environ assignment (and
+    # monkeypatch.setenv) updates the C environment through putenv, so this
+    # reads the same values the os.environ._data lookup did, with no Python
+    # string encoding or mapping calls per training step.
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    return b[].entries["mlp_train_step"] is not None and Bool(py=py_get(b[].environ,
-        py_call(PythonObject("MOJOLEARN_MLP_FUSED").encode, "ascii"), py_call(PythonObject("1").encode, "ascii")) != py_call(PythonObject("0").encode, "ascii")) and Bool(py=py_get(b[].environ,
-        py_call(PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode, "ascii"), py_call(PythonObject("1").encode, "ascii")) == py_call(PythonObject("1").encode, "ascii"))
+    return (b[].entries["mlp_train_step"] is not None and getenv("MOJOLEARN_MLP_FUSED", "1") != "0"
+            and getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1")
 
 
 def _mlp_fused_gradients(checked: PythonObject, x: PythonObject, y: PythonObject) raises -> PythonObject:
@@ -411,7 +415,11 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
 
 def neural_cooperative_admit() raises:
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var count = Int(py=py_call(b[].bi.int, py_get(b[].environ, py_call(PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode, "ascii"), py_call(PythonObject("1").encode, "ascii"))))
+    var words = getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")
+    if words == "1":
+        return
+    # Any other value keeps the int() parse (and its refusal) of before.
+    var count = Int(py=py_call(b[].bi.int, py_call(PythonObject(words).encode, "ascii")))
     if count > 1:
         for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # small-loop(the three cooperative entry names)
             if b[].entries[name] is None:
