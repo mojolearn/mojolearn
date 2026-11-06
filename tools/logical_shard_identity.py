@@ -78,6 +78,32 @@ LANE_TIMEOUT = 1200
 # ---------------------------------------------------------------------------------------------------- THE LIST
 # lane, dispatcher family (the multi_gpu file whose shard path the call reaches), recipe, fixture, rows, features,
 # seed. One line per lane. Every lane runs COUNTS. Recipes are below; each calls only the public API.
+#
+# FIXTURE SIZES come from each dispatcher's split rule (read 2026-11-06, lane perf3-cluster-gp-gate), not from any
+# benchmark shape: every logical device of the largest arm (max(COUNTS) = 3) must receive a shard, with margin.
+#   svm-rbf      rows of the kernel matrix, active = min(count, m) (svm/multi_gpu.mojo:121): m >= 3 rows
+#   logistic     feature columns of X^T dZ, active = min(count, D) (glm/impl/qn/multi_gpu.mojo:70); binary y only
+#                (a C > 1 target takes the tiled multiclass rule, qn_tiled_rule.mojo:53): D >= 3
+#   lasso-cd     row leaves of 128 (bench/gemm_shapes.mojo contract_leaf_size), k <= 128 stays single
+#                (solver/multi_gpu.mojo:63): rows >= 2*128 + 1; only the column mean / norm passes before the
+#                Gram sweeps reach it
+#   ridge-gram   row chunks, active = min(count, min(128, ceil(k/kc))) (core/gram_multi_gpu.mojo:262), BUT the
+#                IDENTICAL Ridge fit takes linear_gram_fit first (bindings/classical_ridge.mojo:103-109), which
+#                has no DevicePlan: OWED, see the reply; the spread check fails this lane until a reachable recipe
+#   kmeans       row tiles of mblk = 4*8 = 32 rows below 32 features (cluster/multi_gpu.mojo:84-85,
+#                fused_distance_nn/simt_kernel.mojo:201-230): rows >= 2*32 + 1
+#   dbscan       query rows, active = min(count, rows) (dbscan/impl/multi_gpu.mojo:47): rows >= 3; the default
+#                algorithm='rbc' on NVIDIA/AMD identical takes the bitmap adjacency passes with no plan
+#                (dbscan/impl/runner.mojo:780-845), so the recipe uses algorithm='brute'
+#   gmm          E-step rows, active = min(count, n) (mixture/multi_gpu.mojo:233): rows >= 3
+#   bootstrap    resamples, active = min(count, n_resamples) (resample/multi_gpu.mojo:79): n_resamples >= 3
+#   cholesky     trailing-update rows after each 32-wide panel (cholesky/multi_gpu.mojo:89, potrf.mojo:398):
+#                n >= 32 + 3; solve over right-hand-side columns, active = min(count, nrhs): nrhs >= 3 (B has 4)
+#   iforest      trees, active = min(count, n_estimators) (isolation_forest/multi_gpu.mojo:112): default 100
+#   gbdt         one-byte packed feature groups of 4 (border_count=128; pointwise_multi_gpu.mojo:130-132,452):
+#                features >= 2*4 + 1
+#   forest       groves = min(32, trees), active = min(count, groves) (core/forest_inference_pool.mojo:418):
+#                n_estimators >= 3 (the recipe fits 16)
 LANES = (
     ("svm-rbf", "svm/multi_gpu.mojo", "svm", "classify", 600, 16, 11),
     ("logistic", "glm/impl/qn/multi_gpu.mojo", "logistic", "classify", 2000, 16, 12),
@@ -304,7 +330,9 @@ def _kmeans(ml, X, y, devices):
 
 def _dbscan(ml, X, y, devices):
     from mojolearn import parallel_classical as pc
-    est = pc.fit_dbscan(ml.DBSCAN(eps=0.5, min_samples=5), X, devices=devices)
+    # algorithm='brute': its eps-neighborhood queries go through dbscan/impl/multi_gpu.mojo; the default 'rbc'
+    # bitmap passes on NVIDIA/AMD identical have no device plan (see THE LIST).
+    est = pc.fit_dbscan(ml.DBSCAN(eps=0.5, min_samples=5, algorithm="brute"), X, devices=devices)
     return [("labels_", est.labels_)]
 
 
