@@ -45,6 +45,9 @@ from core.label_cast import host_unique_inverse_cast
 from core.metrics_exp_impl import mexp_gather_i32
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact, metric_i32_vector, metric_f32_vector
 from bindings.metrics_reg_native import _reg_weights
+from bindings.native_array_storage import native_array_zeros
+from bindings.p3_labels_metrics_native import (
+    p3_integral_list, p3_text_codes, p3_text_classes, p3_table, P3_TEXT_OK)
 
 comptime MC_NONE = -1
 comptime MC_PARAMS = 14
@@ -60,12 +63,22 @@ def mc_b() raises -> PythonObject:
 
 def mc_len(value: PythonObject) raises -> Int:
     """`len(value)`; a Python exception it raises is restored unchanged."""
-    return Int(py=family_call(mc_b().len, value))
+    # p3-labels-metrics: an exact list, tuple, dict, set or str answers
+    # through the C length slot (it cannot raise); anything else keeps the
+    # builtins call, whose exception class the door restores.
+    var b = mc_b()
+    var cls = py_type(value)
+    if cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.str:
+        return len(value)
+    return Int(py=family_call(b.len, value))
 
 
 def mc_bool(value: PythonObject) raises -> Bool:
     """`bool(value)` (Python truthiness; an ambiguous array raises as it did)."""
-    return Bool(py=family_call(mc_b().bool, value))
+    var b = mc_b()
+    if py_type(value) is b.bool:
+        return value is PythonObject(True)
+    return Bool(py=family_call(b.bool, value))
 
 
 def mc_eq(a: PythonObject, b: PythonObject) raises -> Bool:
@@ -324,10 +337,11 @@ def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context
         # flattened list (a fresh list) is the converted one; no per-label call
         return Python.tuple(labels, PythonObject("integer"))
     if mc_types_integral(types, context):
-        var converted = Python.list()
-        for index in range(mc_len(labels)):  # driver-loop: native integer boxing after exact type admission
-            py_call(converted.append, metric_integer(labels[index], context))
-        return Python.tuple(converted, PythonObject("integer"))
+        # p3-labels-metrics: `metric_integer` per label (type tests, a scalar
+        # buffer decode, a PyLong parsed from text, a Python append) becomes
+        # one presized list filled by C calls: exact ints kept, bools 0 / 1,
+        # NumPy integer scalars their exact int (bindings/p3_labels_metrics_native.mojo).
+        return Python.tuple(p3_integral_list(labels, py_get(context, "bool_types")), PythonObject("integer"))
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 
@@ -365,8 +379,8 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
         return PythonObject(None)
     var item = Int(py=view.itemsize)
     var stride = Int(py=view.strides[0])
-    var store = family_call(native_loaded_module("array").array, PythonObject("q"),
-                            py_call(b.bytes, PythonObject(8 * count)))
+    # One zeroed int64 store (it was a bytes object copied into an array).
+    var store = native_array_zeros(String("q"), count)
     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
     if not mcls_read_i64(Int(py=classical_address(view)), stride, count, item, kind == 1, dst):
         return PythonObject(None)
@@ -392,16 +406,28 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     """`(classes, codes)` of `count` int64 labels (the ORDER RULE: sorted
     distinct values, one dense int32 code per row), encoded natively: the
     classes as a Python int list."""
-    var b = mc_b()
-    var array = native_loaded_module("array").array
-    var classes = family_call(array, PythonObject("q"), py_call(b.bytes, PythonObject(8 * count)))
+    # p3-labels-metrics: the class words land in a native scratch list and
+    # only the k classes become Python ints (one presized list), instead of
+    # an n-slot bytes + array store, a slice and a tolist.
+    var classes = List[Int64](length=max(count, 1), fill=0)
     var codes = family_array(Python.tuple(count), "<i4", context)
     var k = mc_encode_signed(Int(py=py_call(store.buffer_info)[0]), 8, count,
-                             Int(py=py_call(classes.buffer_info)[0]), Int(py=classical_address(codes)))
+                             Int(classes.unsafe_ptr()), Int(py=classical_address(codes)))
     _ = store  # keep the label store alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    var head = family_call(py_attr(classes, "__getitem__"), family_call(b.slice, PythonObject(0), PythonObject(k)))
-    return Python.tuple(family_call(head.tolist), codes)
+    ref cpy = Python().cpython()
+    var t = p3_table()
+    var raw = t[].list_new(k)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var listed = PythonObject(from_owned=raw)
+    for c in range(k):  # driver-loop: over the k distinct classes
+        var item = t[].long_from(classes[c])
+        if not item:
+            raise cpy.unsafe_get_error()
+        _ = t[].list_set(listed._obj_ptr, c, item)
+    _ = classes^
+    return Python.tuple(listed, codes)
 
 
 def mc_fast_labels(values: PythonObject, context: PythonObject, admitted: Bool = False) raises -> PythonObject:
@@ -465,9 +491,22 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject, admitte
             var count = mc_len(store)
             var encoded = mc_encode_store(store, count, context)
             return McLabels("integer", count, encoded[0], encoded[1])
+    if String(listed[1]) == "string":
+        # p3-labels-metrics: exact str labels hashed to their k distinct
+        # values by UTF-8 bytes, only the k classes sorted (code-point order,
+        # as `sorted(set(...))`), int32 codes written natively.
+        var fast = p3_text_codes(labels, False)
+        if fast.status == P3_TEXT_OK:
+            var n = len(fast.codes)
+            var fast_codes = family_array(Python.tuple(n), "<i4", context)
+            var target = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(fast_codes)))
+            for i in range(n):  # driver-loop: native copy of the n codes
+                target[i] = fast.codes[i]
+            _ = fast_codes  # keep the Python object alive through the native writes above
+            return McLabels("string", n, p3_text_classes(labels, fast.first), fast_codes)
     var classes = mc_sorted(mc_set(labels))
     var index = mc_index(classes)
-    # cpu-route: str or Python int labels, the explicit label input step (dict lookups by builtins map)
+    # cpu-route: Python ints outside int64 or str with no UTF-8 form, the explicit label input step (dict lookups by builtins map)
     var codes = mc_i32_array(family_call(b.list, family_call(b.map, py_attr(index, "__getitem__"), labels)), context)
     return McLabels(String(listed[1]), mc_len(labels), classes, codes)
 
