@@ -187,7 +187,7 @@ class PublishingGraph(unittest.TestCase):
 
     def condition(self, job, *, alpha=False, payloads='[]', plugins='[]', payload_result='skipped',
                   aggregate_result='skipped', core_result='success', core='true', mojolearn='true', cpu=None,
-                  cancelled=False):
+                  cancelled=False, ledger='success'):
         stage = 'alpha_stage' if alpha else 'build'
         core_job = 'publish_alpha_core' if alpha else 'publish_core'
         payload_job = 'publish_alpha_payloads' if alpha else 'publish_payloads'
@@ -197,6 +197,8 @@ class PublishingGraph(unittest.TestCase):
         needs = SimpleNamespace(**{
             stage: SimpleNamespace(result='success', outputs=SimpleNamespace(**outputs)),
             'cpu_certification': SimpleNamespace(result=cpu or ('skipped' if alpha else 'success')),
+            # every publication route waits on the canonical ledger admission (b2853847df)
+            'ledger_admission': SimpleNamespace(result=ledger),
             core_job: SimpleNamespace(result=core_result),
             payload_job: SimpleNamespace(result=payload_result),
             aggregate_job: SimpleNamespace(result=aggregate_result)})
@@ -281,6 +283,18 @@ class PublishingGraph(unittest.TestCase):
         self.assertFalse(self.condition('publish_alpha_core', alpha=True, cpu='failure'))
         # an alpha candidate without a mojolearn wheel publishes no mojolearn project
         self.assertFalse(self.condition('publish_alpha', alpha=True, mojolearn='false'))
+
+    def test_no_publication_route_runs_without_the_ledger_admission(self):
+        for graph in self.GRAPHS:
+            for job in graph:
+                self.assertIn('ledger_admission', self.jobs[job]['needs'])
+        for result in ('failure', 'cancelled', 'skipped'):
+            with self.subTest(result=result):
+                self.assertFalse(self.condition('publish', ledger=result))
+                self.assertFalse(self.condition('publish_core', ledger=result))
+                self.assertFalse(self.condition('publish_alpha', alpha=True, ledger=result))
+                self.assertFalse(self.condition('publish_alpha_plugins', alpha=True, plugins='["nvidia"]',
+                                                ledger=result))
 
     def test_registry_classification_runs_at_both_staging_boundaries(self):
         full = '\n'.join(step.get('run', '') for step in self.jobs['build']['steps'])
