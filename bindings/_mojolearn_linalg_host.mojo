@@ -43,7 +43,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_call as _balanced_call, py_type as _balanced_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
@@ -123,6 +123,11 @@ comptime LINALG_HOST_MAX_EXTENT = 1073741824
 
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address and size word the doors pass) is its own
+    # index: read natively, no class-name strings, module lookup or Python
+    # call (p3 rank 409). Anything else takes the full path below.
+    if _balanced_type(value) is _balanced_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("linalg host: integers expected, not booleans")
@@ -284,9 +289,12 @@ def cholesky_factor_binding(
             " addressable, got " + String(n)
         )
     var jitter = Float32(Float64(py=params[1]))
-    var a = read_f32(_index(addrs[0]), n * n)
+    # The owned input copy is made with the GIL released (p3 rank 513).
+    var a_address = _index(addrs[0])
+    var a = List[Float32]()
     var info = 0
     with GILReleased(Python()):
+        a = read_f32(a_address, n * n)
         info = cholesky_factor_host_run(a, n, jitter, lp, sp)
     _ = a^
     return PythonObject(info)

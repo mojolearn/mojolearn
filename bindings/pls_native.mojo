@@ -144,6 +144,9 @@ def _row(mut kit: DecompKit, source: PythonObject, name: String, context: Python
 def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted operand: admitted per call as before; on a query its device
     # copy is kept across calls (DecompKit.resident_input), else as _matrix.
+    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+    if hit >= 0:
+        return hit
     var input = decomp_input_snapshot(source, name, context)
     var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, input.shape[0], input.shape[1])
     if held >= 0:
@@ -153,6 +156,9 @@ def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, conte
 
 def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector as a 1 x n matrix, resident as _fitted_matrix.
+    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+    if hit >= 0:
+        return hit
     var input = decomp_input_snapshot(source, name, context, 1)
     var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, 1, input.shape[0])
     if held >= 0:

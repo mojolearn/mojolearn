@@ -3,6 +3,7 @@
 """Typed GPU entries behind `bindings/_mojolearn_mixture.mojo`'s Python doors
 (lane thin-trees-metrics, 2026-10-21: the `_gmm_*_run` bodies moved word for
 word out of that shell; no Python here)."""
+from std.memory import memcpy
 from core.hostptr import copy_f32
 from mixture.estimator import (
     GaussianMixtureModel,
@@ -73,8 +74,11 @@ def _gmm_predict_run(
     op: MutPointer[Int32, MutUntrackedOrigin],
 ) raises:
     var labels = gaussian_mixture_predict(model, x, n)
-    for i in range(n):
-        op.unsafe_store(i, labels[i])
+    # One block copy into the caller's int32 buffer (was a per-row store
+    # loop; p3 rank 98).
+    if n > 0:
+        memcpy(dest=op, src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(labels.unsafe_ptr())), count=n)
+    _ = labels^
 
 
 def _gmm_sample_run(
@@ -87,8 +91,9 @@ def _gmm_sample_run(
     var labels = List[Int32](length=max(0, n), fill=Int32(0))
     var x = gaussian_mixture_sample(model, n, seed, labels)
     copy_f32(x.unsafe_ptr(), xp, n * model.n_features)
-    for i in range(n):
-        yp.unsafe_store(i, labels[i])
+    if n > 0:
+        memcpy(dest=yp, src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(labels.unsafe_ptr())), count=n)
+    _ = labels^
 
 
 def _gmm_score_bic_aic_run(

@@ -21,7 +21,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_host_f32, classical_kind
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
@@ -198,6 +198,18 @@ def decomp_shape(source: PythonObject, name: String, context: PythonObject) rais
     return (rows, cols)
 
 
+def decomp_freeze_array(array: PythonObject) raises:
+    """Make an owned mojolearn Array read-only at the buffer level: its
+    `_readonly` flag and a read-only memoryview (`memoryview.toreadonly()`),
+    so NumPy views made from it from now on are writeable=False and cannot
+    be turned writable again. Native kernels still write by address."""
+    var view = array._mv
+    if not Bool(py=view.readonly):
+        py_setattr(array, "_mv", py_call(view.toreadonly))
+    if not Bool(py=array._readonly):
+        py_setattr(array, "_readonly", PythonObject(True))
+
+
 # Device-resident fitted operands of a query model (lane perf2-pca-decomp):
 # one prepared-registry record per model (a dict: operand name -> (stored
 # source, alloc entry, free entry, rows, cols, handle, owning capsule)). The
@@ -336,11 +348,17 @@ struct DecompKit(Movable):
     # The fitted model of a query (predict/transform/...), or None: its fitted
     # operands stay on the device across calls (`resident_input`).
     var owner: PythonObject
+    # A binding's compiled-route words (`flags`), read once per kit: they are
+    # compile-time constants (p3 rank 414: 3 to 6 binding calls per call).
+    var flag_names: List[String]
+    var flag_words: List[Int]
 
     def __init__(out self, entries: PythonObject, context: PythonObject) raises:
         self.entries = entries
         self.context = context
         self.owner = PythonObject(None)
+        self.flag_names = List[String]()
+        self.flag_words = List[Int]()
         self.hot = List[PythonObject]()
         for _ in range(_DK_HOT_COUNT):  # driver-loop: over the fixed entry-handle slots
             self.hot.append(PythonObject(None))
@@ -372,13 +390,17 @@ struct DecompKit(Movable):
     def has(self, name: String) raises -> Bool:
         return py_get(self.entries, PythonObject(name)) is not None
 
-    def flags(self, name: String) raises -> Int:
+    def flags(mut self, name: String) raises -> Int:
         # A binding's compiled-route word (`x_decomp_s_flags`, ...): 0 when
         # the binding has no such entry, as `_Kit.s_flags` and its siblings.
+        for i in range(len(self.flag_names)):  # small-loop(the few route-word names one kit reads)
+            if self.flag_names[i] == name:
+                return self.flag_words[i]
         var entry = py_get(self.entries, PythonObject(name))
-        if entry is None:
-            return 0
-        return Int(py=py_call(entry))
+        var word = 0 if entry is None else Int(py=py_call(entry))
+        self.flag_names.append(name)
+        self.flag_words.append(word)
+        return word
 
     def opt_dev(self, name: String) raises -> Bool:
         # `_Kit._opt_dev`: an optional resident entry this binding exports.
@@ -433,6 +455,17 @@ struct DecompKit(Movable):
         var n = rows * cols
         if self.owner is None or not self.resident or n < 1:
             return -1
+        # Hazard class A (p3 brief): a device copy is served only while the
+        # host words cannot change under it. The stored operand is made
+        # read-only at the buffer level here (its `_readonly` flag and a
+        # read-only memoryview, so `np.asarray(m.coef_)[:] = W` and
+        # `m.coef_[...] = v` raise NumPy's read-only error instead of
+        # diverging from the device copy); replacing the attribute is still
+        # noticed by identity below. An operand that cannot be frozen (a
+        # NumPy array or a view of another owner the caller assigned) keeps
+        # the per-call upload: correct first.
+        if not self._freeze(source):
+            return -1
         var mods = NativeModules()
         var record = prepared_get(mods, _DK_RESIDENT_SLOT, self.owner)
         if record is None:
@@ -455,7 +488,10 @@ struct DecompKit(Movable):
             var capsule = _resident_capsule(free, handle)
             _ = py_call(upload, handle, PythonObject(address), n)
             _ = keep  # keep the host owner alive through the upload above
-            held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle), capsule)
+            # Word 7: the uploaded words are the frozen source's own (no cast
+            # copy), so `resident_hit` may serve it without re-admission.
+            held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle), capsule,
+                                PythonObject(host is source))
             py_setitem(record, key, held)
         # The kit holds the entry (and its capsule) until it is dropped, so
         # the buffer outlives this operation even when the model cannot be
@@ -465,6 +501,41 @@ struct DecompKit(Movable):
         var index = self.add(host, rows, cols, handle, address)
         self.matrices[index].on_device = False
         return index
+
+    def resident_hit(mut self, source: PythonObject, name: String) raises -> Int:
+        """A fitted operand already resident on this kit's binding, served
+        before the per-call admission (view, float32 cast, finite scan):
+        the stored `source` is the same frozen float32 Array whose own
+        words were uploaded, so neither its values nor its shape can have
+        changed since. -1 on any miss: the caller admits it and calls
+        `resident_input` as before."""
+        if self.owner is None or not self.resident:
+            return -1
+        var record = prepared_get(NativeModules(), _DK_RESIDENT_SLOT, self.owner)
+        if record is None:
+            return -1
+        var held = py_get(record, PythonObject(name))
+        if held is None or held[0] is not source or not Bool(py=held[7]):
+            return -1
+        if (held[1] is not self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc")
+                or held[2] is not self._entry(_DK_DEV_FREE, "x_decomp_dev_free")):
+            return -1
+        if not Bool(py=source._readonly) or not Bool(py=source._mv.readonly):
+            return -1
+        self.input_owners.append(held)
+        var index = self.add(source, Int(py=held[3]), Int(py=held[4]), Int(py=held[5]), Int(py=source._addr))
+        self.matrices[index].on_device = False
+        return index
+
+    def _freeze(self, source: PythonObject) raises -> Bool:
+        # A mojolearn Array (the class of the kit's own zero matrix) that owns
+        # its words (`_base` None) is frozen in place; anything else is not.
+        if py_type(source) is not py_type(self.matrices[self.one_host].host):
+            return False
+        if source._base is not None:
+            return False
+        decomp_freeze_array(source)
+        return True
 
     def const(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
         # `_M.of([v] * (r * c), r, c)`: the value rounded once to float32.

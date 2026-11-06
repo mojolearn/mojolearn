@@ -1,8 +1,57 @@
 # SPDX-License-Identifier: Apache-2.0
 # Typed native matrix/device lifetimes. No Python _M attribute hook or _DevBuf
 # finalizer participates in a manifold operation, including temporary cleanup.
+from std.ffi import _Global, c_int
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import ExternalFunction, PyObjectPtr
+
+# PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg)  (new ref)
+# Resolved once per process (the release below runs once per pooled device
+# buffer; it did four by-name symbol lookups and a List allocation each time,
+# p3 ranks 200 / 419). The shared bindings/cpython_table.mojo does not carry
+# this symbol, so this lane-local table holds it.
+comptime _PyObject_CallOneArg = ExternalFunction[
+    "PyObject_CallOneArg", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyList_New(Py_ssize_t len)  (new ref)
+comptime _PyList_New = ExternalFunction["PyList_New", def(Int) thin abi("C") -> PyObjectPtr]
+# PyObject *PyLong_FromLongLong(long long v)  (new ref)
+comptime _PyLong_FromLongLong = ExternalFunction["PyLong_FromLongLong", def(Int64) thin abi("C") -> PyObjectPtr]
+# PyObject *PyNumber_Long(PyObject *o) / PyNumber_Float(PyObject *o)  (new ref)
+comptime _PyNumber_Long = ExternalFunction["PyNumber_Long", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+comptime _PyNumber_Float = ExternalFunction["PyNumber_Float", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item)  (steals item)
+comptime _PyList_SetItem = ExternalFunction[
+    "PyList_SetItem", def(PyObjectPtr, Int, PyObjectPtr) thin abi("C") -> c_int]
+
+
+struct ManifoldCalls(Movable):
+    var PyObject_CallOneArg: _PyObject_CallOneArg.type
+    var PyList_New: _PyList_New.type
+    var PyLong_FromLongLong: _PyLong_FromLongLong.type
+    var PyList_SetItem: _PyList_SetItem.type
+    var PyNumber_Long: _PyNumber_Long.type
+    var PyNumber_Float: _PyNumber_Float.type
+
+    def __init__(out self):
+        ref cpy = Python().cpython()
+        var lib = cpy.lib.borrow()
+        self.PyObject_CallOneArg = _PyObject_CallOneArg.load(lib)
+        self.PyList_New = _PyList_New.load(lib)
+        self.PyLong_FromLongLong = _PyLong_FromLongLong.load(lib)
+        self.PyList_SetItem = _PyList_SetItem.load(lib)
+        self.PyNumber_Long = _PyNumber_Long.load(lib)
+        self.PyNumber_Float = _PyNumber_Float.load(lib)
+
+
+comptime _MANIFOLD_CALLS = _Global[
+    StorageType=ManifoldCalls, name="MojolearnManifoldCallsV1",
+    init_fn=ManifoldCalls.__init__,
+]
+
+
+def manifold_calls() raises -> UnsafePointer[ManifoldCalls, MutAnyOrigin]:
+    """The process-wide manifold call table, filled at first use."""
+    return _MANIFOLD_CALLS.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 struct ManifoldDevice(Movable, Writable):
@@ -45,17 +94,16 @@ struct ManifoldDevice(Movable, Writable):
         # unraisable hook, a Python __del__, or mutable module attributes.
         try:
             ref cpy = Python().cpython()
-            var saved = List[Int](length=3, fill=0)
-            var words = saved.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-            cpy.lib.get_function[NoneType]("PyErr_Fetch")(words, words + 1, words + 2)
-            var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(self.release._obj_ptr, self.identifier._obj_ptr)
+            var calls = manifold_calls()
+            var pending = cpy.PyErr_FetchTriple()
+            var result = calls[].PyObject_CallOneArg(self.release._obj_ptr, self.identifier._obj_ptr)
             if result:
                 cpy.Py_DecRef(result)
             else:
                 # The previous _DevBuf finalizer silently ignored pool-release
                 # failures, including interpreter/device shutdown.
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
-            cpy.lib.get_function[NoneType]("PyErr_Restore")(saved[0], saved[1], saved[2])
+                cpy.PyErr_Clear()
+            cpy.PyErr_Restore(pending[0], pending[1], pending[2])
         except:
             pass
 

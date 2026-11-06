@@ -79,6 +79,18 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
     # as f8 and was scanned. Preserve that distinction before the f32 cast.
     if policy == 1 and data.itemsize == 2:
         return
+    if snapshot.native_byte_order and (data.itemsize == 4 or data.itemsize == 8):
+        # float32 / float64 in native order: one typed exponent test per
+        # word over the captured strides (the generic scalar decoder with a
+        # String type code ran per element; p3 rank 100). Same refusal.
+        var mask = UInt64(0x7F800000) if data.itemsize == 4 else UInt64(0x7FF0000000000000)
+        for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input
+            for column in range(data.cols):  # driver-loop: finite check over the captured pre-cast input
+                var at = data.addr + row * data.s0 + column * data.s1
+                var bits = UInt64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)[0]) if data.itemsize == 4 else MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=at)[0]
+                if (bits & mask) == mask:
+                    raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
+        return
     var code = String("e") if data.itemsize == 2 else String("f") if data.itemsize == 4 else String("d")
     var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data.addr)
     for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input

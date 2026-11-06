@@ -110,6 +110,28 @@ def _target_finite(snapshot: ArrayMetadata) raises -> Bool:
         raise Error("TypeError: target strides must match its captured shape")
     var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
     var mask = UInt64(0x7F800000) if width == 4 else UInt64(0x7FF0000000000000)
+    # A C-contiguous native-order target (the common ndarray / Array / list
+    # case) is one typed scan over its words (p3 rank 12): no per-element
+    # odometer or byte assembly.
+    var contiguous = snapshot.native_byte_order
+    var expected = width
+    for k in range(len(snapshot.shape)):  # small-loop(rank: target metadata axes)
+        var axis = len(snapshot.shape) - 1 - k
+        if snapshot.shape[axis] > 1 and snapshot.strides[axis] != expected:
+            contiguous = False
+        expected *= snapshot.shape[axis]
+    if contiguous:
+        if width == 4:
+            var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
+            for i in range(snapshot.count):  # cpu-route: ignored-target finiteness over contiguous native words
+                if (UInt64(words[i]) & mask) == mask:
+                    return False
+            return True
+        var wide = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
+        for i in range(snapshot.count):  # cpu-route: ignored-target finiteness over contiguous native words
+            if (wide[i] & mask) == mask:
+                return False
+        return True
     for linear in range(snapshot.count):  # cpu-route: ignored-target finiteness over captured native strides
         var remainder = linear
         var offset = 0
@@ -132,9 +154,17 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
     var sparse = host_sparse_format(source)
     if sparse_allowed:
         if sparse.byte_length() > 0:
-            if not py_contains(context, "output_context"):
+            # The densifier reads `output_context`; a self-reference left in
+            # the per-call context made it a cycle only the collector frees
+            # (p3 rank 945), so the entry added here is removed after use.
+            var added = not py_contains(context, "output_context")
+            if added:
                 py_setitem(context, "output_context", context)
-            prepared = host_sparse_dense(source, sparse, context)
+            try:
+                prepared = host_sparse_dense(source, sparse, context)
+            finally:
+                if added:
+                    _ = py_call(context.pop, PythonObject("output_context"), PythonObject(None))
     elif sparse.byte_length() > 0:
         # Identity-based sparse admission precedes all source/type attributes;
         # a foreign metaclass must not execute from the sparse refusal itself.
@@ -148,19 +178,23 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
     # well as the provider's immediate storage owner, including after casts.
     snapshot.owner = Python.tuple(source, prepared, snapshot.owner)
     var nd = len(snapshot.shape)
-    var text = family_repr(snapshot.python_shape())
     if _complex_dtype(snapshot.dtype_number):
         raise Error("Complex data not supported: " + name + " got a complex X.")
+    # The shape text names a refusal only; it is built on those paths alone
+    # (it went through Python's repr on every call; p3 rank 417).
     if _numeric_dtype(snapshot.dtype_number):
         if nd < 2:
-            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + text + "). " + RESHAPE_HINT)
+            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape="
+                        + family_repr(snapshot.python_shape()) + "). " + RESHAPE_HINT)
         if nd == 2 and snapshot.shape[0] == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + text + ") while a minimum of 1 is required by " + name + ".")
+            raise Error("Found array with 0 sample(s) (shape=" + family_repr(snapshot.python_shape())
+                        + ") while a minimum of 1 is required by " + name + ".")
         if nd == 2 and snapshot.shape[1] == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + text + ") while a minimum of 1 is required by " + name + ".")
+            raise Error("Found array with 0 feature(s) (shape=" + family_repr(snapshot.python_shape())
+                        + ") while a minimum of 1 is required by " + name + ".")
     if nd != 2:
         var hint = String(". ") + RESHAPE_HINT if nd < 2 else String("")
-        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + text + hint)
+        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + family_repr(snapshot.python_shape()) + hint)
     var result = _cast(snapshot^, "X", context)
     _ = view
     _ = prepared
@@ -187,7 +221,9 @@ def _target_leaves(mut mods: NativeModules, b: PythonObject, seq: _SequentialVal
         for i in range(len(value)):  # driver-loop: ignored target references, never conversion hooks
             _target_leaves(mods, b, seq, kinds, value[i], context, depth + 1)
         return
-    if cls is b.complex or cls is b.bytes:
+    if cls is b.complex or cls is b.bytes or cls is b.int or cls is b.float or cls is b.bool:
+        # An exact builtin number is admitted by sequential admission as is;
+        # skip the per-leaf admission call for it (p3 rank 12).
         return
     _classical_admit(mods, seq, kinds, value, context, 0)
 

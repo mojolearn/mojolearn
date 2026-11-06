@@ -16,7 +16,7 @@
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
@@ -60,18 +60,42 @@ def _mani_eq(value: PythonObject, text: String, context: PythonObject) raises ->
     # Remaining migration: retain the original rich-comparison behavior until
     # native record/temporal and version-specific array errors are covered.
     var b = native_loaded_module("builtins")
+    # An exact str compares natively (the settings are exact strings; two
+    # module lookups and two Python calls per comparison before; p3 rank 702).
+    if py_type(value) is b.str:
+        return String(py=value) == text
     return Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, value, PythonObject(text))))
 
 
 def _mani_in(value: PythonObject, choices: PythonObject, context: PythonObject) raises -> Bool:
     """`value in choices`."""
+    var b = native_loaded_module("builtins")
+    if py_type(value) is b.str and py_type(choices) is b.tuple:
+        # An exact str among a tuple of exact strs: native comparisons; any
+        # other member type takes Python's containment test.
+        var text = String(py=value)
+        var plain = True
+        for i in range(len(choices)):  # small-loop(the fixed choices of one setting)
+            if py_type(choices[i]) is not b.str:
+                plain = False
+                break
+            if String(py=choices[i]) == text:
+                return True
+        if plain:
+            return False
     return Bool(py=py_call(native_loaded_module("operator").contains, choices, value))
 
 
 def _mani_truth(value: PythonObject, context: PythonObject) raises -> Bool:
     # Structured subarray nonzero behavior remains with the original slot;
     # this numeric-conversion increment does not claim truth migration.
-    return Bool(py=py_call(native_loaded_module("builtins").bool, value))
+    var b = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is b.bool or cls is b.int:
+        return Bool(py=value)
+    if value is None:
+        return False
+    return Bool(py=py_call(b.bool, value))
 
 
 def _mani_int(value: PythonObject, context: PythonObject) raises -> Int:

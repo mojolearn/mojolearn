@@ -31,6 +31,11 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
+    # The exact spellings answer natively (two Python calls per use before;
+    # p3 rank 413); any other text is normalized as before.
+    var text = String(py=mode)
+    if text == "identical" or text == "fast":
+        return mode
     var name = py_call(py_call(mode.strip).lower)
     if String(name) != "identical" and String(name) != "fast":
         raise Error("numeric_mode must be fast, identical or None")

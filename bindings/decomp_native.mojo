@@ -4,7 +4,8 @@
 # decomp_c, which admits the model by its connected class and dispatches the
 # operation to the class's native file (bindings/ica_native.mojo, ...).
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -24,20 +25,37 @@ from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
 
+comptime _DECOMP_FAMILY_SLOT = "decomp_family_class_v1"
+
+
 def _family(model: PythonObject, context: PythonObject) raises -> String:
     """The connected class the model's MRO holds ('' for none)."""
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         return ""
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var classes = context["decomp_classes"]
+    # One weak record per class (p3 ranks 411, 421): the answer is reused
+    # while the connected class table is the same object (a reconnect makes
+    # a new one). The record holds no reference to the class itself, so the
+    # weak key still dies with it. Not noticed: assigning `cls.__bases__`
+    # after the first call.
+    var mods = NativeModules()
+    var held = prepared_get(mods, _DECOMP_FAMILY_SLOT, cls)
+    if held is not None and held[0] is classes:
+        return String(py=held[1])
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var names = py_call(b.list, classes.keys())
+    var found = String("")
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         for j in range(len(names)):  # driver-loop: over the connected classes
             if mro[k] is classes[names[j]]:
-                return String(names[j])
-    return ""
+                found = String(names[j])
+                break
+        if found.byte_length() > 0:
+            break
+    prepared_put(mods, _DECOMP_FAMILY_SLOT, cls, Python.tuple(classes, PythonObject(found)))
+    return found
 
 
 def _kpca_public(model: PythonObject, operation: String, args: PythonObject,

@@ -51,6 +51,9 @@ def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: Pyt
 
 def _fitted(mut kit: DecompKit, fields: PythonObject, name: String, rows: Int, context: PythonObject) raises -> Int:
     # A fitted float32 Array (location_ (p,) as 1 x p, _precision p x p).
+    var hit = kit.resident_hit(fields[name], name)  # frozen and resident: no re-admission
+    if hit >= 0:
+        return hit
     var array = classical_host_f32(fields[name], 1 if rows == 1 else 2, name, context)
     var size = Int(py=array.size)
     # On a query its device copy is kept across calls (DecompKit.resident_input).
@@ -148,6 +151,9 @@ def _slogdet(mut kit: DecompKit, a: Int) raises -> Tuple[Float64, Float64]:
     # `_slogdet`: (sign, log|det|) from the LU factor (sums ascending).
     var factor = kit.lu(a)
     var aux = kit.lu_aux(factor[0], factor[1])
+    # The small aux vector comes down once; the three words below are then
+    # host reads (they were three strided gathers and downloads; p3 rank 529).
+    _ = kit.host(aux[0])
     if kit.word(aux[0], 1) > 0:
         return (Float64(0.0), -inf[DType.float64]())
     var negative = Int(kit.word(aux[0], 2)) + Int(kit.word(aux[0], 3))
