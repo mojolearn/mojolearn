@@ -436,6 +436,12 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
         # by syntax, plus the `host_model` route of a class a door defines
         # (`resolved_bindings`, 2026-09-23): still this lane's own doors
         resolved = lane_select.resolved_bindings(doors)
+        # ...or a registry the lane enters LOADS it by a literal argument
+        # (`sink_region_loads`, 2026-11-05). Read whole here: a superset of
+        # the region the map read, still syntax and never prose.
+        for rel in sources[lane]:
+            if rel in sinks and rel.endswith(".py"):
+                resolved |= set(lane_select.sink_region_loads(rel, None)[0])
         for binding in why[lane]["bindings"]:
             assert binding in resolved, \
                 f"{lane} carries {binding} but no door of its own resolves it"
@@ -989,8 +995,14 @@ def test_the_six_lanes_the_report_named_are_attributed():
                  "samba", "samba-untied-dropout-accum",
                  "mlp", "transformer", "transformer-window"):
         assert lane in got, f"neural_inference.py serves {lane} and the map does not say so"
-    assert len(got) < len(sources) // 2, \
-        f"neural_inference.py now claims {len(got)} of {len(sources)} lanes; the edge is too wide"
+    # BOUND DROPPED 2026-11-05 (was `len(got) < len(sources) // 2`). The file's
+    # IMPORT-TIME code runs in every lane: `import mojolearn` imports
+    # `_samba_impl.py` (__init__.py), whose module level calls
+    # `_native_samba_bridge.connect`, whose `_connect_admission` imports
+    # `SambaInference` from this file. The map (427 of 513 on the 2026-11-05
+    # CPU leg, through `_training_impl.py` -> `_native_samba_bridge`) is
+    # below the truth, not above it; a function-body edit is narrowed per
+    # definition by `python_edit_lanes`, not by this file's map.
 
 
 def test_a_base_everything_inherits_is_not_evidence():
