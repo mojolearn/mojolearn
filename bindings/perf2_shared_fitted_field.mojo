@@ -15,12 +15,15 @@
 # dictionary when:
 #   - no ancestry row of the class defines the name (computed once per class
 #     state under the type watchers of native_class_admission; recomputed on
-#     any class or ancestor change, and on every call on Python 3.10/3.11),
+#     any class or ancestor change),
 #   - every ancestry key is an exact string (no foreign __eq__ can run), and
 #     the resolved __getattribute__ is not a Python function (a Python-level
 #     hook is never skipped),
 #   - the instance dictionary is an exact dict with exact string keys and
 #     holds the name.
+# Where no type watcher is available (Python 3.10/3.11, or no free watcher
+# slot) the names could not be kept, so the reader goes straight to `getattr`
+# (the cost before the perf2 lanes) instead of rebuilding them per read.
 # Anything else falls back to `getattr`, exactly as before: absence, a class
 # member of that name, a Python hook, or a model without an instance dict.
 # What it does not repeat for internal reads: the public hook's class-layout
@@ -31,7 +34,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module, native_namespace_string_keys
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.native_instance_item import native_instance_find_admitted
 from bindings.py_balanced import py_call, py_type, py_setitem, py_contains
 
@@ -77,6 +80,10 @@ def _class_member_names(mut mods: NativeModules, cls: PythonObject) raises -> Py
 
 
 def _instance_value(mut mods: NativeModules, model: PythonObject, key: PythonObject) raises -> Tuple[Bool, PythonObject]:
+    if not class_watch_ready():
+        # No class record can be kept: rebuilding the ancestry names on every
+        # read costs more than the public hook it skips.
+        return (False, PythonObject(None))
     var b = mods.module("builtins")
     var names = _class_member_names(mods, py_type(model))
     if py_type(names) is not b.dict or py_contains(names, key):
@@ -85,7 +92,7 @@ def _instance_value(mut mods: NativeModules, model: PythonObject, key: PythonObj
     if not raw:
         # No instance dictionary: getattr decides, with its own error.
         ref cpy = Python().cpython()
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return (False, PythonObject(None))
     var fields = PythonObject(from_owned=raw)
     if py_type(fields) is not b.dict or not native_namespace_string_keys(fields._obj_ptr, b.str):
