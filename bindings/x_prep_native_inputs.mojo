@@ -13,6 +13,7 @@ from bindings.sequential_admission import _one_of, _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.scaler_native import _input
 from core.array_helpers_impl import strided_copy_bytes
+from bindings.cpython_table import cpython_table  # buffer calls without a dlsym per call (perf2-prep)
 
 
 def _target_finite(view: PythonObject, context: PythonObject) raises:
@@ -36,10 +37,11 @@ def _target_finite(view: PythonObject, context: PythonObject) raises:
         var buffer = List[Int](length=10,fill=0)
         var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
         # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
-        if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(storage._obj_ptr,bp,Int32(0x38)) == 0:
+        if cpython_table()[].PyObject_GetBuffer(storage._obj_ptr,bp,Int32(0x38)) == 0:
             var direct = buffer[0]
             var length = buffer[2]
-            cpy.lib.get_function[NoneType]("PyBuffer_Release")(bp)
+            cpython_table()[].PyBuffer_Release(bp)
+            _ = buffer^  # the Py_buffer words stay alive through the release above
             if length == size*item:
                 if Int(py=py_call(context["maxabs_finite_f64" if item == 8 else "maxabs_finite_f32"],direct,size)) != 1:
                     raise Error("Input y contains NaN or infinity (MaxAbsScaler).")
@@ -198,10 +200,11 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
     ref cpy = Python().cpython()
     var buffer = List[Int](length=10,fill=0)
     var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(view._obj_ptr,bp,Int32(0)) != 0:
+    if cpython_table()[].PyObject_GetBuffer(view._obj_ptr,bp,Int32(0)) != 0:
         raise cpy.unsafe_get_error()
     var address = buffer[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(bp)
+    cpython_table()[].PyBuffer_Release(bp)
+    _ = buffer^  # the Py_buffer words stay alive through the release above
     if String(order) == "F":
         packed = native_array_zeros(String(code), nr*d)
         var dims = List[Int64](length=8,fill=0)
