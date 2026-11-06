@@ -57,6 +57,7 @@ The GPU binding's OTHER entries (`graph_parallel_available`) are deliberately AB
 reaches them keeps refusing BY NAME through `_HostBinding` until a lane
 lands them.
 """
+from bindings.p3_labels_metrics_native import p3_type_word
 from core.experiment_guards_base import BASE_GUARDS_OK
 from std.math import isfinite
 from std.memory import memcpy
@@ -138,6 +139,13 @@ from metrics.host.classification_oracle import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # p3-labels-metrics: an exact Python int (every address and size the
+    # metric doors pass) is read by PyLong_AsSsize_t; no class-name read,
+    # operator module stamp or Python call. A bool is not an exact int and
+    # keeps the refusal below; anything else keeps operator.index.
+    var small = PythonObject(0)
+    if p3_type_word(value._obj_ptr) == p3_type_word(small._obj_ptr):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("metrics host: integers expected, not booleans")
