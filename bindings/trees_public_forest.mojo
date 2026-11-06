@@ -32,7 +32,7 @@ from bindings.trees_public_inputs import (
     trees_decode_labels, trees_argmax_rows, trees_class_rows_only, trees_weighted_rows, trees_cast,
     trees_view, trees_call,
 )
-from bindings.trees_side_records import trees_finite_known, trees_finite_mark
+from bindings.trees_side_records import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
 from bindings.trees_lifetime import trees_resident_new
 from bindings.metrics_native_support import metric_is_integral, metric_warning_location
 from bindings.classical_warnings import classical_warning
@@ -97,16 +97,29 @@ def _mro(cls: PythonObject) raises -> PythonObject:
     return py_call(b.type.__dict__["__mro__"].__get__, cls)
 
 
+comptime _KIND_SLOT = "trees_forest_kind_v1"
+
+
 def forest_kind(model: PythonObject, context: PythonObject) raises -> String:
     """The connected schema of the model's class: the nearest registered
     class in its ancestry ("rf_classifier", "dt_regressor", "et_classifier",
     ...)."""
     var cls = py_type(model)
-    var mro = _mro(cls)
     var table = context["trees_classes"]
+    # Once per class (p3-trees): the forest door and the forest predict each
+    # walked the class ancestry on every call. The record lives in the native
+    # side table keyed weakly on the class and holds the connected class
+    # table, the class's `__mro__` tuple and the answer; a reconnection (a
+    # new table) or a `__bases__` assignment (a new `__mro__` tuple) walks
+    # again.
+    var mro = _mro(cls)
+    var held = trees_side_get(_KIND_SLOT, cls)
+    if held is not None and held[0] is table and held[1] is mro:
+        return String(held[2])
     for i in range(len(mro)):  # driver-loop: over the class ancestry metadata
         var kind = py_get(table, mro[i])
         if kind is not None:
+            _ = trees_side_put(_KIND_SLOT, cls, Python.tuple(table, mro, kind))
             return String(kind)
     raise Error("TypeError: " + String(cls.__name__) + " is not a connected tree ensemble")
 
