@@ -114,6 +114,16 @@ comptime _Py_EnterRecursiveCall = ExternalFunction[
 # void Py_LeaveRecursiveCall(void)
 comptime _Py_LeaveRecursiveCall = ExternalFunction[
     "Py_LeaveRecursiveCall", def() thin abi("C") -> NoneType]
+# PyObject *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size, const char *errors)
+# (s and errors as addresses; errors 0 = strict)
+comptime _PyUnicode_DecodeUTF8 = ExternalFunction[
+    "PyUnicode_DecodeUTF8", def(Int, Int, Int) thin abi("C") -> PyObjectPtr]
+# double PyOS_string_to_double(const char *s, char **endptr, PyObject *overflow_exception)
+comptime _PyOS_string_to_double = ExternalFunction[
+    "PyOS_string_to_double", def(Int, Int, Int) thin abi("C") -> Float64]
+# PyObject *PyLong_FromString(const char *str, char **pend, int base)
+comptime _PyLong_FromString = ExternalFunction[
+    "PyLong_FromString", def(Int, Int, c_int) thin abi("C") -> PyObjectPtr]
 # int PyBuffer_ToContiguous(void *buf, const Py_buffer *src, Py_ssize_t len, char order)
 # (the Py_buffer as the same word storage as PyObject_GetBuffer)
 comptime _PyBuffer_ToContiguous = ExternalFunction[
@@ -151,6 +161,9 @@ struct CPythonTable(Movable):
     var Py_EnterRecursiveCall: _Py_EnterRecursiveCall.type
     var Py_LeaveRecursiveCall: _Py_LeaveRecursiveCall.type
     var PyBuffer_ToContiguous: _PyBuffer_ToContiguous.type
+    var PyUnicode_DecodeUTF8: _PyUnicode_DecodeUTF8.type
+    var PyOS_string_to_double: _PyOS_string_to_double.type
+    var PyLong_FromString: _PyLong_FromString.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -185,6 +198,9 @@ struct CPythonTable(Movable):
         self.Py_EnterRecursiveCall = _Py_EnterRecursiveCall.load(lib)
         self.Py_LeaveRecursiveCall = _Py_LeaveRecursiveCall.load(lib)
         self.PyBuffer_ToContiguous = _PyBuffer_ToContiguous.load(lib)
+        self.PyUnicode_DecodeUTF8 = _PyUnicode_DecodeUTF8.load(lib)
+        self.PyOS_string_to_double = _PyOS_string_to_double.load(lib)
+        self.PyLong_FromString = _PyLong_FromString.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of

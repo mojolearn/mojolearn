@@ -5,6 +5,7 @@ from bindings.native_buffer_address import native_buffer_address
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
 
@@ -69,8 +70,10 @@ struct NativeJSON(Movable):
         # copy or bound decode call. A malformed run raises the same
         # UnicodeDecodeError the bytes.decode("utf-8") of that run raised.
         ref cpy = Python().cpython()
-        var data = self.buf.unsafe_ptr() + start
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyUnicode_DecodeUTF8")(data, end - start, Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
+        # Resolved once per process (cpython_table), not by name per string.
+        var data = Int(self.buf.unsafe_ptr()) + start
+        var raw = cpython_table()[].PyUnicode_DecodeUTF8(data, end - start, Int(0))
+        _ = len(self.buf)  # the buffer outlives the decode (address passed)
         if not raw:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=raw)
@@ -163,14 +166,16 @@ struct NativeJSON(Movable):
         memcpy(dest=digits.unsafe_ptr(), src=self.buf.unsafe_ptr() + start, count=count)
         digits[count] = 0
         ref cpy = Python().cpython()
+        # Entries resolved once per process (cpython_table), not per number.
+        var t = cpython_table()
         var raw = PyObjectPtr()
         if floating:
-            var number = cpy.lib.get_function[Float64]("PyOS_string_to_double")(digits.unsafe_ptr(), Int(0), Int(0))
+            var number = t[].PyOS_string_to_double(Int(digits.unsafe_ptr()), Int(0), Int(0))
             if number == -1.0 and cpy.PyErr_Occurred():
                 raise cpy.unsafe_get_error()
-            raw = cpy.lib.get_function[PyObjectPtr]("PyFloat_FromDouble")(number)
+            raw = t[].PyFloat_FromDouble(number)
         else:
-            raw = cpy.lib.get_function[PyObjectPtr]("PyLong_FromString")(digits.unsafe_ptr(), Int(0), Int32(10))
+            raw = t[].PyLong_FromString(Int(digits.unsafe_ptr()), Int(0), Int32(10))
         _ = digits^
         if not raw:
             raise cpy.unsafe_get_error()
