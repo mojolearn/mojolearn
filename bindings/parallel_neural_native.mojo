@@ -21,6 +21,7 @@ from bindings.native_transport import transport_close
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.parallel_neural_admission import neural_admit
 from core.sha256 import Sha256
+from bindings.cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text
 
 
@@ -190,6 +191,24 @@ comptime _CACHE_MISS = "parallel neural: worker cache miss"
 comptime _CACHE_HISTORY = 4
 
 
+def _digest_array_bytes(mut h: Sha256, view: PythonObject) raises:
+    """`h.update(view.tobytes("C"))` without the two copies: a C-contiguous
+    export is hashed in place (the same bytes tobytes would build), while
+    the export is held; any other layout keeps the copy."""
+    var buffer = List[Int](length=10, fill=0)
+    var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
+    if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, bp, Int32(0x38)) == 0:
+        h.update(buffer[0], buffer[2])
+        cpython_table()[].PyBuffer_Release(bp)
+        _ = buffer^  # the Py_buffer words stay alive through the release above
+        _ = view  # the exporter stays alive through the hash above
+        return
+    ref cpy = Python().cpython()
+    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    sha256_update(h, py_call(view.tobytes, "C"))
+
+
 def _digest_into(mut h: Sha256, value: PythonObject) raises -> Bool:
     """Hash a model state (dicts, lists, tuples, arrays, scalars) into `h`;
     False for a value it cannot describe exactly (the caller then sends the
@@ -219,7 +238,7 @@ def _digest_into(mut h: Sha256, value: PythonObject) raises -> Bool:
     if py_type(value) is g[].array_cls:
         sha256_update_text(h, value.shape)
         sha256_update_text(h, value.dtype)
-        sha256_update(h, py_call(value._mv.tobytes, "C"))
+        _digest_array_bytes(h, value._mv)
         return True
     if py_type(value) is b[].bi.bytes or py_type(value) is b[].bi.bytearray:
         sha256_update(h, value)
