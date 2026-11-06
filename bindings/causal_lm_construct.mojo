@@ -853,7 +853,11 @@ def _causal_model_prepare_snapshot(mut mods: NativeModules, model: PythonObject,
     _causal_array_guard()
     if not Bool(py=captured["_head"].shape == py_call(bi.tuple, py_ints([vocab, dm]))):
         raise Error("UnsupportedModel: tensor " + String(plan["head_name"]) + " has shape " + String(py_call(bi.str, captured["_head"].shape)) + ", want vocab_size=" + String(vocab) + " and hidden_size=" + String(dm))
-    for value in [captured["_embed"], captured["_norm"], captured["_head"]]:  # driver-loop: over the three top-level tensors
+    for index in range(3):  # driver-loop: over the three top-level tensors
+        var value = captured["_embed"] if index == 0 else (captured["_norm"] if index == 1 else captured["_head"])
+        # Tied embeddings: the head is the embedding Array; scan it once.
+        if index == 2 and value is captured["_embed"]:
+            continue
         if value is not None:
             _causal_array_guard()
             var ptr = f32_ptr(Int(py=value._addr))
