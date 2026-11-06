@@ -51,7 +51,12 @@ def _query_route(model: PythonObject, kind: PythonObject, group: String, context
         raise Error("TypeError: numeric_mode must be a string or None")
     if host and String(mode) != "identical":
         raise Error("ValueError: saved CPU models require identical numeric mode")
-    mode = py_call(py_call(mode.strip).lower)
+    # Perf (perf2-neighbors): only a non-canonical spelling pays the two str
+    # method calls (as estimator_binding_mode does); an exact canonical str is
+    # already its own normal form.
+    var spelled = String(mode)
+    if spelled != "identical" and spelled != "fast":
+        mode = py_call(py_call(mode.strip).lower)
     if String(mode) != "identical" and String(mode) != "fast":
         raise Error("ValueError: numeric_mode must be identical or fast")
     var routes = context["neighbor_query_host_routes"] if host else context["neighbor_query_routes"]
@@ -271,14 +276,21 @@ def _ivf_search(model: PythonObject, kind: PythonObject, args: PythonObject, adm
     if Int(py=_ivf_metric(fields, context)) != fitted[3]:
         raise Error("ValueError: metric differs from the fitted index")
     var binding = _query_route(model, kind, "ivf", context)
-    var mode = knn_door(binding, "ivf_numeric_mode")
+    # Perf (perf2-neighbors): `_query_route` already checked this binding's
+    # `ivf_numeric_mode` getter against the requested canonical mode (once per
+    # process; codes identical=1, fast=0 as `_MODE_CODE`), so a canonical
+    # request needs no second getter call per search. A non-canonical spelling
+    # has no `_MODE_CODE` entry and keeps its refusal when the getter exists.
     var requested = py_get(fields, "numeric_mode")
     if requested is None:
         requested = PythonObject("identical") if Bool(py=kind[1]) else context["backend_fields"]["_DEFAULT_MODE"]
-    if mode is not None:
-        var expected = py_get(context["family_xn_ann_ivf_mode_codes"], requested)
-        if expected is None or Int(py=family_call(mode)) != Int(py=expected):
-            raise Error("RuntimeError: IVF binding numeric mode differs from the requested mode")
+    var requested_text = String(requested)
+    if requested_text != "identical" and requested_text != "fast":
+        var mode = knn_door(binding, "ivf_numeric_mode")
+        if mode is not None:
+            var expected = py_get(context["family_xn_ann_ivf_mode_codes"], requested)
+            if expected is None or Int(py=family_call(mode)) != Int(py=expected):
+                raise Error("RuntimeError: IVF binding numeric mode differs from the requested mode")
     var n = fitted[0]
     var m = q.shape[0]
     var k = Int(py=fields["n_neighbors"])
