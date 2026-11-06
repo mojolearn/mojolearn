@@ -4,7 +4,7 @@
 # legacy transitive call. Existing owner-specific scalar/buffer checks remain.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp, prepared_class_matches
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_attributes import _type_mro
@@ -71,7 +71,8 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
     # admitted on every call.
     var admitted = prepared_get(mods, _FAMILY_CLASS_SLOT, cls)
     if admitted is not None and prepared_class_matches(mods, cls, [layouts, plan], admitted):
-        class_admit(mods, _FAMILY_WATCH_SLOT, cls, Python.tuple(layouts, plan))
+        if class_watch_ready():  # no payload where no record can be kept (3.10/3.11)
+            class_admit(mods, _FAMILY_WATCH_SLOT, cls, Python.tuple(layouts, plan))
         return _family_instance_fields(b, model, cls, plan)
     var connected = plan["mro"]
     if len(ancestry) - start != len(connected):
@@ -124,7 +125,8 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
                 raise Error("TypeError: native family operation refuses overridden Python descriptors")
     var stamp = prepared_class_stamp(mods, cls, Python.list(layouts, plan))
     prepared_put(mods, _FAMILY_CLASS_SLOT, cls, stamp)
-    class_admit(mods, _FAMILY_WATCH_SLOT, cls, Python.tuple(layouts, plan))
+    if class_watch_ready():  # no payload where no record can be kept (3.10/3.11)
+        class_admit(mods, _FAMILY_WATCH_SLOT, cls, Python.tuple(layouts, plan))
     return _family_instance_fields(b, model, cls, plan)
 
 
