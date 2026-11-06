@@ -4361,6 +4361,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
             once = self.gate_identity_errors(vendor, output, doc.get("correctness"))
             if once:
                 return False, "; ".join(once)
+            # the measurement smoke runs in every box job (release_gate_job.sh phase measuresmoke, unconditional)
+            from release_identity_wheels import measure_smoke_errors
+            measure = measure_smoke_errors(output)
+            if measure:
+                return False, "; ".join(measure)
             runtime, cases = self.gate_runtime_error(vendor, output)
             if runtime:
                 return False, runtime
