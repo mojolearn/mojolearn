@@ -2,7 +2,7 @@
 # CPU IsolationForest rebuilds and scores through its existing numerical ABI.
 # Preparation, resolved controls, state readback and output publication stay native.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.sequential_admission import _one_of
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind, classical_f64
 from bindings.host_array_native import host_archive_typed
@@ -128,6 +128,27 @@ def host_iforest_admit_state(fields: PythonObject, context: PythonObject) raises
         raise Error("TypeError: IsolationForest training state requires native numeric storage")
 
 
+def _host_resident_entries(entry: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The `(iforest_resident_release,)` entry of the binary that serves
+    `entry` when that binary keeps the fitted forest resident between calls
+    (`iforest_resident()` is 1, `IDN_IF_RESIDENT`); None otherwise. Read from
+    the minting module's dictionary (no module __getattr__), and refused
+    unless each is a fixed native entry, like `iforest_run` itself."""
+    var owner = entry.__self__
+    if owner is None or py_type(owner) is not context["host_iforest_module_type"]:
+        return PythonObject(None)
+    var table = py_fields(owner)
+    var probe = py_get(table, "iforest_resident")
+    var release = py_get(table, "iforest_resident_release")
+    if probe is None or release is None:
+        return PythonObject(None)
+    if py_type(probe) is not context["host_tree_entry_type"] or py_type(release) is not context["host_tree_entry_type"]:
+        raise Error("TypeError: explicit CPU inference requires a fixed native entry")
+    if Int(py=py_call(probe)) != 1:
+        return PythonObject(None)
+    return Python.tuple(release)
+
+
 def host_iforest_inference(model: PythonObject, fields: PythonObject, source: PythonObject, want: Int,
                            context: PythonObject, public: Bool) raises -> PythonObject:
     var b = Python.import_module("builtins")
@@ -155,14 +176,29 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     if features < 1 or count < 1 or count > 2147483647 // features:
         raise Error("IsolationForest fitted dimensions exceed native indexing")
     var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", context["output_context"])
-    var info = host_archive_typed(Python.tuple(3), "<f8", context["output_context"])
     if not py_contains(fields, "_seed"):
         _iforest_resolve(fields, context)
     var params = Python.list(count, features, rows, fields["_n_estimators"], fields["_max_samples_mode"], fields["_max_samples_int"], fields["_max_samples_frac"], fields["_max_depth"], fields["_max_features_mode"], fields["_max_features_int"], fields["_max_features_frac"], Int(Bool(py=fields["_bootstrap"])), fields["_seed"], Int(Bool(py=fields["_contamination_auto"])), fields["_contamination"], want)
     var entry = _kernel_entry("iforest_run", context)
+    # Lane perf-sweep-trees (2026-11-05): the resident form of the GPU owner
+    # (bindings/trees_public_iforest.mojo::_run) on the explicit CPU entry.
+    # Before it every score call refit the whole forest from `_x` and the
+    # seed. A binary with `iforest_resident()` == 1 takes a seventeenth
+    # param, the token: 0 fits once and keeps the forest; a live token whose
+    # key (training buffer address and shape, every resolved control) is
+    # unchanged scores with no fit. The forest is a pure function of the seed
+    # and the X bits, so the scores are the refit's bit for bit. CPU fit pops
+    # `_if_token` (bindings/host_iforest_fit_native.mojo), so a refit always
+    # mints a fresh forest; `__getstate__` drops it too.
+    var resident = _host_resident_entries(entry, context)
+    var held = 0
+    if resident is not None:
+        var stored = py_get(fields, "_if_token", PythonObject(0))
+        if py_type(stored) is py_type(PythonObject(0)):
+            held = Int(py=stored)
+        _ = py_call(params.append, PythonObject(held))
+    var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", context["output_context"])
     try:
-        # The explicit CPU entry has no resident registry; preserve its existing
-        # seeded reconstruction on each call and consume the matching buffer only.
         _ = py_call(entry, classical_address(train), classical_address(query), classical_address(out) if want != 2 else PythonObject(0), classical_address(out) if want == 2 else PythonObject(0), classical_address(info), params)
     except error:
         var text = String(error)
@@ -175,6 +211,17 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     _ = query^
     py_setitem(fields, "offset_", Float64(Float32(classical_f64(info, 0))))
     py_setitem(fields, "max_samples_", Int(classical_f64(info, 1)))
+    if resident is not None:
+        var token = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(info)))[3])
+        if token != held:
+            # A fresh forest replaced the held one: drop the old entry now
+            # (the store also evicts past its cap).
+            if held > 0:
+                try:
+                    _ = py_call(resident[0], PythonObject(held))
+                except:
+                    pass
+            py_setitem(fields, "_if_token", PythonObject(token))
     _ = info^
     if want != 2 and public:
         out = host_tree_wide(out, context)

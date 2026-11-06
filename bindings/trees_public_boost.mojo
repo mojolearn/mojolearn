@@ -30,6 +30,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
+from bindings.trees_staged_input import trees_stage_members, trees_unstage
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_need,
@@ -317,7 +318,15 @@ def _new_member(cls: PythonObject, settings: PythonObject, context: PythonObject
 
 def _clone(base: PythonObject, seed: Int, context: PythonObject) raises -> PythonObject:
     """`_trees_clone(base, random_state=seed)`."""
-    var params = forest_get_params(base, context)
+    return _clone_from(base, forest_get_params(base, context), seed, context)
+
+
+def _clone_from(base: PythonObject, template: PythonObject, seed: Int, context: PythonObject) raises -> PythonObject:
+    """`_clone` from `template`, the base's `forest_get_params` read once
+    before a member loop (lane perf-sweep-trees, 2026-11-05: every round
+    re-read the unchanged base's parameters). get_params maps names to the
+    stored values by identity, so a shallow copy is the same dictionary."""
+    var params = py_call(template.copy)
     if py_contains(params, "random_state"):
         py_setitem(params, "random_state", _P(seed))
     return _new_member(py_type(base), params, context)
@@ -634,6 +643,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var all_rows = n_rows == n and not bootstrap
     var all_cols = n_feat == d and not bootstrap_features
     var count = Int(py=_int(fields["n_estimators"]))
+    var template = forest_get_params(base, context) if count > 0 else Python.dict()
     for k in range(count):  # driver-loop: over the member estimators
         var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
         var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
@@ -642,7 +652,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         var ys = y_all
         if not all_rows:
             ys = _gather_codes(xt, y_all, rows, context) if classifier else _gather_vec(xt, trees_address(y_all), n, rows, context)
-        var member = _clone(base, _sub_seed(seed, k), context)
+        var member = _clone_from(base, template, _sub_seed(seed, k), context)
         var weights = PythonObject(None)
         if sw:
             # every row: the weights as given (the member's own check reads
@@ -710,7 +720,7 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: TreesMatrix,
     """`_BaggingBase._oob_outputs`: each member's output on its out-of-bag
     rows, added in member order; (sums, counts)."""
     var n = x.rows
-    var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
+    var acc = trees_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var counts = trees_vector(n, "<i4", context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
@@ -820,13 +830,18 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
         _ = proba  # keep the Python object alive through the native call above
         return out
     var xt = _xt(fields, context)
-    var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
+    var acc = trees_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var rows_all = _arange(xt, n, context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
-    for i in range(len(members)):  # driver-loop: over the member estimators
-        var xs = _sub_x(xt, x, xa, features[i], rows_all, context)
-        _acc_cols(xt, acc, _member_proba(members[i], xs, context), _sub_cols(members[i], context), n, k, context)
+    # One device copy of X for the full-width members (trees_staged_input).
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    try:
+        for i in range(len(members)):  # driver-loop: over the member estimators
+            var xs = _sub_x(xt, x, xa, features[i], rows_all, context)
+            _acc_cols(xt, acc, _member_proba(members[i], xs, context), _sub_cols(members[i], context), n, k, context)
+    finally:
+        trees_unstage(staged)
     _scale(xt, acc, Float64(len(members)))
     return trees_reshape(acc, Python.tuple(n, k), context)
 
@@ -859,8 +874,12 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
     var rows_all = _arange(xt, n, context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
-    for i in range(len(members)):  # driver-loop: over the member estimators
-        _acc(xt, acc, _member_predict(members[i], _sub_x(xt, x, xa, features[i], rows_all, context), context), n, context)
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    try:
+        for i in range(len(members)):  # driver-loop: over the member estimators
+            _acc(xt, acc, _member_predict(members[i], _sub_x(xt, x, xa, features[i], rows_all, context), context), n, context)
+    finally:
+        trees_unstage(staged)
     _scale(xt, acc, Float64(len(members)))
     return acc
 
@@ -979,9 +998,10 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             session = _member_session(base, cm, False, True, _ada_session_default(fields, xt, context), context)
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
+        var template = forest_get_params(base, context) if m > 0 else Python.dict()
         try:
             for it in range(m):  # driver-loop: over the boosting rounds (one member each)
-                var member = _clone(base, _sub_seed(seed, it), context)
+                var member = _clone_from(base, template, _sub_seed(seed, it), context)
                 if xcm:
                     _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
                 else:
@@ -1102,13 +1122,27 @@ def _ada_decision(fields: PythonObject, x: TreesMatrix, xt: PythonObject, contex
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
-    var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
+    var acc = trees_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var members = fields["estimators_"]
     var alphas = fields["estimator_weights_"]
-    for i in range(len(members)):  # driver-loop: over the member estimators
-        var pred = _i32_codes(_member_predict(members[i], xa, context), context)
-        var a = Float64(py=_float(alphas[i]))
-        _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
+    # One device copy of X for every one-tree member (trees_staged_input).
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    # The weights as one float64 store, read once (`array('d', alphas)` is
+    # the same float conversion `_float` made per member, and the store fsum
+    # reads): one conversion per predict instead of one per member plus the
+    # fsum's own (lane perf-sweep-trees, 2026-11-05).
+    var weights = py_call(context["array_type"], PythonObject("d"), alphas)
+    if len(weights) < len(members):
+        raise Error("IndexError: list index out of range")
+    var wp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(weights.buffer_info)[0]))
+    try:
+        for i in range(len(members)):  # driver-loop: over the member estimators
+            var pred = _i32_codes(_member_predict(members[i], xa, context), context)
+            var a = wp[unsafe_offset=i]
+            _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
+    finally:
+        trees_unstage(staged)
+    _ = weights  # keep the store alive through the reads above
     _scale(xt, acc, _fsum(alphas, context))
     return acc
 
@@ -1171,13 +1205,18 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
     var m = len(members)
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
     var preds = trees_vector(m * n, "<f4", context)
-    for j in range(m):  # driver-loop: over the member estimators
-        var p = _f32_vector(_member_predict(members[j], xa, context), context)
-        _ = py_call_typed(_x(xt, "x_trees_put_f32"), _A(preds), _P(p.addr), Python.list(_P(j * n), _P(n)))
-        _ = p  # keep the Python object alive through the native call above
-        _ = preds  # keep the Python object alive through the native call above
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    try:
+        for j in range(m):  # driver-loop: over the member estimators
+            var p = _f32_vector(_member_predict(members[j], xa, context), context)
+            _ = py_call_typed(_x(xt, "x_trees_put_f32"), _A(preds), _P(p.addr), Python.list(_P(j * n), _P(n)))
+            _ = p  # keep the Python object alive through the native call above
+            _ = preds  # keep the Python object alive through the native call above
+    finally:
+        trees_unstage(staged)
     var b = trees_builtins()
-    var weights_store = py_call(context["array_type"], PythonObject("d"), py_call(b.map, b.float, fields["estimator_weights_"]))
+    # `array('d', ...)` converts each weight with float() itself: no map layer.
+    var weights_store = py_call(context["array_type"], PythonObject("d"), fields["estimator_weights_"])
     var weights = classical_wrap_array(weights_store, Python.tuple(m), "<f8", "C", context)
     var out = trees_vector(n, "<f4", context)
     _ = py_call_typed(_x(xt, "x_trees_weighted_median"), _A(preds), _A(weights), _A(out), Python.list(_P(n), _P(m)))
@@ -1693,7 +1732,13 @@ def boost_kind(model: PythonObject, context: PythonObject) raises -> String:
 def boost_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`trees_boost_<op>` of a connected Bagging*, AdaBoost*, DART* or
     RandomTreesEmbedding."""
-    var kind = boost_kind(model, context)
+    return boost_operation_of(model, boost_kind(model, context), operation, args, context)
+
+
+def boost_operation_of(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """`boost_operation` with the schema `kind` its caller already resolved
+    (the public door reads it once; lane perf-sweep-trees, 2026-11-05)."""
     var classifier = kind.endswith("_classifier")
     if kind.startswith("bagging_"):
         if operation == "trees_boost_fit":

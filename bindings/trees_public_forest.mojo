@@ -1372,13 +1372,20 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
     var engine = _engine(fields, staged.mode)
     var wrote = PythonObject(None)
     if engine == "sequential" and not _ordered_export(staged.native):
-        var function = trees_need(staged.native, sequential_name,
-                                  "rebuild the forest binding for inference_engine=" + _repr(PythonObject(engine)))
+        # The refusal's words are built only when the entry is missing.
+        var function = trees_entry(staged.native, sequential_name)
+        if function is None:
+            raise Error("RuntimeError: rebuild the forest binding for inference_engine=" + _repr(PythonObject(engine)))
         var arrays = _model_arrays(fields)
         var dims = Python.list(PythonObject(rows), PythonObject(staged.x.cols), _int(fields["_n_trees"]), PythonObject(outputs))
         var call = Python.list()
+        var array_class = context["array_class"]
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-            _ = py_call(call.append, PythonObject(trees_view(arrays[i], "forest model", context).addr))
+            # An exact mojolearn Array's data address is its `_addr` slot, the
+            # one `trees_view` reads; any other storage is viewed as before.
+            var a = arrays[i]
+            var addr = trees_address(a) if py_type(a) is array_class else trees_view(a, "forest model", context).addr
+            _ = py_call(call.append, PythonObject(addr))
         _ = py_call(call.append, PythonObject(staged.x.addr))
         _ = py_call(call.append, PythonObject(trees_address(out)))
         _ = out  # keep the Python object alive through the native call above

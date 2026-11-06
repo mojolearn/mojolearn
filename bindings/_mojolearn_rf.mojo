@@ -46,6 +46,8 @@ from forest_inference_binding import (
     forest_prepare_gpu_binding, forest_release_gpu_binding,
     forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
+    forest_stage_input_gpu_binding,
+    forest_unstage_input_gpu_binding,
     forest_resident_layout_binding, forest_ordered_resident_binding,
     forest_identical_fused_labels_binding,
 )
@@ -1717,6 +1719,8 @@ def build__mojolearn_rf() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
         m.def_function[forest_predict_resident_labels_gpu_binding[True]]("forest_predict_resident_labels_gpu")
+        m.def_function[forest_stage_input_gpu_binding[True]]("forest_stage_input_gpu")
+        m.def_function[forest_unstage_input_gpu_binding[True]]("forest_unstage_input_gpu")
         m.def_function[rf_data_session_open_binding]("rf_data_session_open")
         m.def_function[rf_data_session_close_binding]("rf_data_session_close")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.

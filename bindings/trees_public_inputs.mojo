@@ -19,6 +19,7 @@ from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
@@ -45,7 +46,11 @@ comptime TREES_NONFINITE = "X contains NaN or infinity; the forest has no missin
 
 
 def trees_builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    # The admitted builtins module (one stamp compare per call) instead of
+    # `Python.import_module`, which ran the import machinery's `__import__`
+    # on every call (lane perf-sweep-trees, 2026-11-05: dozens of calls per
+    # public predict).
+    return native_loaded_module("builtins")
 
 
 def trees_table(context: PythonObject, mode: String, name: String) raises -> PythonObject:
@@ -863,9 +868,22 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
     var values = Python.list()
     var p = _I64P(unsafe_from_address=trees_address(wide_codes))
     _ = wide_codes  # keep the Python object alive through the native call above
+    # The k class objects and the list's `append` read once (lane
+    # perf-sweep-trees, 2026-11-05: an attribute lookup and a Python index
+    # per row before). A code indexes as the Python list did: a negative code
+    # counts from the end, any other out-of-range code is refused.
+    var labels = List[PythonObject]()
+    for c in range(k):  # driver-loop: over the k class objects
+        labels.append(classes[c])
+    var append = values.append
     for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
-        _ = py_call(values.append, classes[Int(p[i])])
-        _ = wide_codes  # keep the Python object alive through the native call above
+        var code = Int(p[i])
+        if code < 0:
+            code += k
+        if code < 0 or code >= k:
+            raise Error("IndexError: list index out of range")
+        _ = py_call(append, labels[code])
+    _ = wide_codes  # keep the Python object alive through the reads above
     return values
 
 

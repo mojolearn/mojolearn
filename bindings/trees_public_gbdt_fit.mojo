@@ -466,21 +466,29 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
     var flat = trees_vector(2 * m, "<u4", context)
     var fp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(flat))
     _ = flat  # keep the Python object alive through the native call above
+    # Builtins and the connected types read once, each index converted once
+    # (lane perf-sweep-trees, 2026-11-05: re-read and re-converted per pair).
+    var isinstance_ = b.isinstance
+    var integral_t = context["trees_integral_type"]
+    var bool_t = b.bool
+    var int_t = b.int
     for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
         var pair = rows[i]
         if len(pair) != 2:
             raise Error("mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
+        var ends = List[Int]()
         for j in range(2):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
             var index = pair[j]
-            if not Bool(py=py_call(b.isinstance, index, context["trees_integral_type"])) or Bool(py=py_call(b.isinstance, index, b.bool)):
+            if not Bool(py=py_call(isinstance_, index, integral_t)) or Bool(py=py_call(isinstance_, index, bool_t)):
                 raise Error("mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '" + _str(index) + "' value "
                             + "type=" + _str(py_type(index)) + ": must be an integer.")
-            var v = Int(py=py_call_typed(b.int, index))
+            var v = Int(py=py_call_typed(int_t, index))
             if not (0 <= v and v < n_rows):
                 raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
                             + String(n_rows) + " rows")
-        var w0 = Int(py=py_call_typed(b.int, pair[0]))
-        var w1 = Int(py=py_call_typed(b.int, pair[1]))
+            ends.append(v)
+        var w0 = ends[0]
+        var w1 = ends[1]
         if w0 == w1:
             raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
         fp[2 * i] = UInt32(w0)
@@ -499,15 +507,17 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
         if len(values) != m:
             raise Error("mojolearn: len(pairs_weight) = " + String(len(values)) + " is not equal to "
                         + "len(pairs) = " + String(m) + " ")
+        var real_t = context["trees_real_type"]
         for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
             var w = values[i]
-            var ok = Bool(py=py_call(b.isinstance, w, context["trees_real_type"]))
+            var ok = Bool(py=py_call(isinstance_, w, real_t))
+            var f = Float64(0.0)
             if ok:
-                var f = _float(w)
+                f = _float(w)
                 ok = isfinite(f) and f >= 0
             if not ok:
                 raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
-            wp[i] = Float32(_float(w))
+            wp[i] = Float32(f)
             _ = weights  # keep the Python object alive through the native call above
     return Python.tuple(flat, weights)
 
@@ -873,7 +883,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "test_loss_curve_", _f64_array(out[4], context) if n_eval_rows else PythonObject(None))
     py_setitem(fields, "n_features_in_", PythonObject(n_features))
     var dim = PythonObject(None)
-    if gbdt_has_ctr(text) and gbdt_vendor(table) == "cpu":
+    if gbdt_vendor(table) == "cpu" and gbdt_has_ctr(text):
         dim = py_call_typed(b.int, host_archive_gbdt_state(py_call(b.str, text), context)["dim"])
     else:
         dim = py_call_typed(trees_need(table, "gbdt_model_dim", "mojolearn: this gbdt binding has no gbdt_model_dim",

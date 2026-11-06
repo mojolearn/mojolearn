@@ -24,6 +24,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_attr import py_attr
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
@@ -47,6 +48,8 @@ from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_storage import native_array_from_values
 from bindings.msel_inputs import msel_admit, msel_input_count
+from bindings.trees_meta_admission import meta_admit_configuration
+from bindings.trees_staged_input import trees_stage_members, trees_unstage
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -242,8 +245,11 @@ def _zeros(count: Int, context: PythonObject) raises -> PythonObject:
 
 
 def _class_zero(xt: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_class_major([0.0], n)`."""
-    return _class_major(xt, Python.list(PythonObject(0.0)), n, context)
+    """`_class_major([0.0], n)`: a zero-filled buffer (`trees_empty` fills
+    zero bytes, +0.0), without the separate fill program it used to run
+    (lane perf-sweep-trees, 2026-11-05). Same bits."""
+    _ = xt
+    return trees_vector(n, "<f8", context)
 
 
 # ---------------------------------------------------------------- members
@@ -1145,7 +1151,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         var m = len(rows[0])
         _set(model, "estimators_", fitted)
         _set(model, "classes_", classes)
-        var getter = Python.import_module("operator").itemgetter
+        var getter = native_loaded_module("operator").itemgetter
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
             var labels = trees_encode_labels(column, context)
@@ -1355,6 +1361,37 @@ def _positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: Pyth
     return _proba_positive(xt, e, Xa, context)
 
 
+def _ovr_fused(xt: PythonObject, fused: PythonObject, members: PythonObject, Xa: PythonObject, n: Int, k: Int,
+               decision: Bool, finish: Int, context: PythonObject) raises -> PythonObject:
+    """The k > 2 OneVsRest epilogue through `x_trees_ovr_assemble`: the
+    members' positive columns (`_positive` when `decision`, else
+    `_proba_positive`) widened into the scores and finished (normalized, or
+    the row argmax) as one device program with one readback (lane
+    perf-sweep-trees, 2026-11-05; before it a gather and a scatter, each with
+    its readbacks, per member). Same kernels and widening: no bit moves."""
+    var keep = Python.list()
+    var columns = Python.list()
+    for j in range(len(members)):  # driver-loop: over members
+        var e = members[j]
+        if decision and prep_estimator_has(e, "decision_function", context):
+            var score = _f32_array(prep_estimator_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
+            var blk = _out2d(score, n, context)
+            _ = py_call(keep.append, blk.keep)
+            _ = py_call(columns.append, Python.tuple(_P(blk.addr), _P(blk.cols), _P(0)))
+            _ = blk^
+        else:
+            var p = _out2d(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
+            var at = _index_of_one(e, context)
+            _ = py_call(keep.append, p.keep)
+            _ = py_call(columns.append, Python.tuple(_P(p.addr), _P(p.cols), _P(at)))
+            _ = p^
+    var out = trees_vector(n, "<i4", context) if finish == 2 else trees_vector(n * k, "<f8", context)
+    _ = py_call_typed(fused, _A(out), columns, Python.list(_P(n), _P(k), _P(finish)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = keep  # keep the members' blocks alive through the native call above
+    return out
+
+
 def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
@@ -1364,6 +1401,9 @@ def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     var members = _attr(model, "estimators_", Python.list())
     if k == 2:
         return trees_decode_labels(classes, _i32_vec(prep_estimator_call(members[0], "predict", Python.tuple(Xa), context), "codes", context), context)
+    var fused = py_get(xt, PythonObject("x_trees_ovr_assemble"))
+    if fused is not None and len(members) == k:
+        return trees_decode_labels(classes, _ovr_fused(xt, fused, members, Xa, n, k, True, 2, context), context)
     var acc = _class_zero(xt, n * k, context)
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
@@ -1379,8 +1419,6 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var n = _rows(Xa)
     var k = len(_attr(model, "classes_", Python.list()))
     var members = _attr(model, "estimators_", Python.list())
-    var acc = _class_zero(xt, n * k, context)
-    var rows = _arange(xt, n, context)
     if k == 2:
         # `_trees_binary_proba`: rows (1 - p, p) of the positive column
         var p = _f32_array(_proba_positive(xt, members[0], Xa, context), 1, "p", context)
@@ -1389,6 +1427,11 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
         _ = out  # keep the Python object alive through the native call above
         _ = p  # keep the Python object alive through the native call above
         return trees_reshape(out, Python.tuple(n, 2), context)
+    var fused = py_get(xt, PythonObject("x_trees_ovr_assemble"))
+    if fused is not None and len(members) == k:
+        return trees_reshape(_ovr_fused(xt, fused, members, Xa, n, k, False, 1, context), Python.tuple(n, k), context)
+    var acc = _class_zero(xt, n * k, context)
+    var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_proba_positive(xt, members[j], Xa, context), n, context)
         _ = _place(xt, acc, n, k, blk, rows, j)
@@ -1595,13 +1638,68 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     return model
 
 
+def _calibrated_fused(model: PythonObject, xt: PythonObject, fused: PythonObject, pairs: PythonObject,
+                      Xa: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    """`_calibrated_proba` through `x_trees_calibrated_proba`: the members'
+    scores, then the whole epilogue (scores, calibrators, complement or
+    normalization, float32 narrowing, the mean) as one device program with
+    one readback (lane perf-sweep-trees, 2026-11-05; before it about twenty
+    glue round trips per pair). Same kernels in the same order: no bit moves
+    (xtrees/calibrated_apply.mojo)."""
+    var keep = Python.list()
+    var rows = Python.list()
+    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+        var e = pairs[i][0]
+        var cals = pairs[i][1]
+        var out: PythonObject
+        if prep_estimator_has(e, "decision_function", context):
+            out = prep_estimator_call(e, "decision_function", Python.tuple(Xa), context)
+        else:
+            out = prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context)
+        var blk = _out2d(out, n, context)
+        _ = py_call(keep.append, blk.keep)
+        var at = 0
+        var cols_addr = 0
+        var ks = 0
+        if k == 2:
+            if blk.cols != 1:
+                at = _index_of_one(e, context)
+                if at < 0:
+                    raise Error("1 is not in list")
+        else:
+            var sub_cols = _sub_cols(e, context)
+            _ = py_call(keep.append, sub_cols)
+            cols_addr = trees_address(sub_cols)
+            ks = len(_attr(e, "classes_", Python.list()))
+        var described = Python.list()
+        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
+            var entry = cals[j]
+            var par = entry[1]
+            if String(entry[0]) == "sigmoid":
+                _ = py_call(described.append, Python.tuple(_P(0), par[0], par[1], _P(0), _P(0), _P(0)))
+            else:
+                _ = py_call(keep.append, par[0])
+                _ = py_call(keep.append, par[1])
+                _ = py_call(described.append, Python.tuple(_P(1), _F(0.0), _F(0.0), _A(par[0]), _A(par[1]), par[2]))
+        _ = py_call(rows.append, Python.tuple(_P(blk.addr), _P(blk.cols), _P(at), _P(cols_addr), _P(ks), described))
+        _ = blk^
+    var acc = trees_vector(n * k, "<f8", context)
+    _ = py_call_typed(fused, _A(acc), rows, Python.list(_P(n), _P(k)))
+    _ = acc  # keep the Python object alive through the native call above
+    _ = keep  # keep the members' blocks, class codes and knots alive through the native call above
+    return trees_reshape(acc, Python.tuple(n, k), context)
+
+
 def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
     var k = len(_attr(model, "classes_", Python.list()))
-    var acc = _class_zero(xt, n * k, context)
     var pairs = _attr(model, "calibrated_classifiers_", Python.list())
+    var fused = py_get(xt, PythonObject("x_trees_calibrated_proba"))
+    if fused is not None and k >= 2:
+        return _calibrated_fused(model, xt, fused, pairs, Xa, n, k, context)
+    var acc = _class_zero(xt, n * k, context)
     for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
         var p = _calibrated_probs(model, xt, pairs[i][0], pairs[i][1], Xa, context)
         _acc_w(xt, acc, p, n * k, 1.0, context)
@@ -1711,9 +1809,37 @@ def meta_operation(model: PythonObject, operation: String, args: PythonObject,
     """The meta-estimators' methods (`trees_meta_*`) reached directly (a
     composed estimator's plan, cross-validation): admit, then run."""
     prep_estimator_admit(model, "native meta-estimator", context)
-    _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
+    meta_admit_configuration(model, context)
     msel_admit(args, prep_native_context(context))
     return meta_admitted_operation(model, meta_kind(model, context), operation, args, context)
+
+
+def _member_list(model: PythonObject, kind: String) raises -> PythonObject:
+    """The fitted members a prediction of `model` runs on X itself."""
+    if kind == "calibrated":
+        var pairs = _attr(model, "calibrated_classifiers_", Python.list())
+        var members = Python.list()
+        for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+            _ = py_call(members.append, pairs[i][0])
+        return members
+    return _attr(model, "estimators_", Python.list())
+
+
+def _staged_input(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`(Xa, staged)`: X converted once (`_check_x`, which every prediction
+    path runs first; on the converted Array it returns that Array) and staged
+    as the one device copy its forest members share (bindings/trees_staged_input.mojo).
+    Any refusal here leaves `(X, [])`: the operation then raises it itself,
+    in its own order and words."""
+    var Xa: PythonObject
+    try:
+        Xa = _check_x(model, X, context)
+    except:
+        return Python.tuple(X, Python.list())
+    # Staging never leaves a binary staged on a refusal: a failed stage is
+    # unstaged inside trees_stage_members, and the caller unstages the rest.
+    return Python.tuple(Xa, trees_stage_members(_member_list(model, kind), trees_address(Xa), _rows(Xa), _cols(Xa),
+                                                context))
 
 
 def meta_admitted_operation(model: PythonObject, kind: String, operation: String, args: PythonObject,
@@ -1723,7 +1849,26 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
     model, its constructor configuration (a native clone of the meta-estimator
     and every member) and the arguments, and read `kind`; it calls this
     directly (lane perf-meta-estimators, 2026-11-05: every public call used
-    to pay that admission twice, the second time inside meta_operation)."""
+    to pay that admission twice, the second time inside meta_operation).
+    A prediction (predict, predict_proba, transform, score) stages X once
+    for its forest members (lane perf-sweep-trees, 2026-11-05)."""
+    if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
+            or operation == "trees_meta_transform" or operation == "trees_meta_score"):
+        var prepared = _staged_input(model, kind, args[0], context)
+        var call = Python.list(prepared[0])
+        for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
+            _ = py_call(call.append, args[i])
+        var result = PythonObject(None)
+        try:
+            result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
+        finally:
+            trees_unstage(prepared[1])
+        return result
+    return _meta_dispatch(model, kind, operation, args, context)
+
+
+def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
     if operation == "trees_meta_fit":
         return _meta_fit(model, kind, args[0], args[1], args[2], context)
     if operation == "trees_meta_predict":
@@ -1745,7 +1890,14 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
     if operation == "trees_meta_fit_transform":
         var fitted = _meta_fit(model, kind, args[0], args[1], _fit_params_weight(args[2]), context)
         _ = fitted
-        return _meta_transform(model, kind, args[0], context)
+        # The transform half stages X for its forest members like transform.
+        var prepared = _staged_input(model, kind, args[0], context)
+        var result = PythonObject(None)
+        try:
+            result = _meta_transform(model, kind, prepared[0], context)
+        finally:
+            trees_unstage(prepared[1])
+        return result
     if operation == "trees_meta_score":
         var X = args[0]
         var y = args[1]

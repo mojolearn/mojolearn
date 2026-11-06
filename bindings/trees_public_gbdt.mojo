@@ -79,8 +79,18 @@ def gbdt_vendor(table: PythonObject) raises -> String:
 
 def gbdt_has_ctr(text: PythonObject) raises -> Bool:
     """`ensemble._has_ctr_records`: a CTR table or tensor CTR registry."""
-    var t = String(py_call(trees_builtins().str, text))
+    var b = trees_builtins()
     var names: List[String] = ["ctr_columns", "ctr_table", "tensor_ctr_registry"]
+    if py_type(text) is b.str:
+        # Searched in place (lane perf-sweep-trees, 2026-11-05): the model
+        # text can be megabytes, and every predict used to copy it whole.
+        for i in range(3):  # small-loop(names): the three fixed record names
+            if py_contains(text, PythonObject("\n" + names[i] + " ")):
+                return True
+            if Bool(py=py_call(text.startswith, PythonObject(names[i] + " "))):
+                return True
+        return False
+    var t = String(py_call(b.str, text))
     for i in range(3):  # small-loop(names): the three fixed record names
         if ("\n" + names[i] + " ") in t or t.startswith(names[i] + " "):
             return True
@@ -175,7 +185,7 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     if text is None:
         raise Error("RuntimeError: mojolearn: predict() before fit()")
     var table = gbdt_table(fields, context)
-    if gbdt_has_ctr(text) and gbdt_vendor(table) == "cpu":
+    if gbdt_vendor(table) == "cpu" and gbdt_has_ctr(text):
         # The CPU restatement of a CTR model's apply (`HostGBDT`).
         var args = Python.tuple(X, fields["loss"], text, fields["n_features_in_"], fields["approx_dim_"],
                                 fields["n_classes_"], py_type(model).__name__)
