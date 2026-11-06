@@ -109,6 +109,16 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             lifecycle = (ROOT / 'bindings/trees_public_meta_lifecycle.mojo').read_text()
             assert 'if operation == "trees_public_meta_fit":\n        method = "fit"' in lifecycle
             assert 'meta_operation(model, "trees_meta_" + method, call_args, context)' in lifecycle
+        elif public_operation == 'trees_public_boost_fit':
+            # Boost/bagging/DART/RTE public doors (2c61cfe498) own the
+            # lifecycle and forward to the internal trees_boost_* ABI, the
+            # same split as the meta doors above.
+            assert operation == 'trees_boost_fit', name
+            lifecycle = (ROOT / 'providers/python/tree_boost_public_lifecycle_pyapi.mojo').read_text()
+            assert 'var method = String(operation[byte=String("trees_public_boost_").byte_length():])' in lifecycle
+            assert 'boost_operation(model, "trees_boost_" + method, call_args, context)' in lifecycle
+            dispatch = (ROOT / 'bindings/trees_public_native.mojo').read_text()
+            assert 'if operation.startswith("trees_public_boost_"):\n        return tree_boost_public_operation(' in dispatch
         else:
             assert operation == public_operation, name
         expected = native.args[2].elts
