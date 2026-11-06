@@ -79,7 +79,7 @@ def _resident_params(mut ex: DeviceExec, owner: Int, token: Int, src: Int, n: In
     address `src` named (`owner`, `token`); 0 when the block is not kept."""
     var store = _STORE.get_or_create_ptr()
     store[].tick += 1
-    for i in range(len(store[].owners)):  # small-loop(resident slots, at most _SLOTS): owner lookup, no data
+    for i in range(len(store[].owners)):  # driver-loop: over resident fitted-model slots (at most _SLOTS), owner lookup
         if store[].owners[i] == owner:
             if store[].tokens[i] == token and store[].counts[i] == n:
                 store[].used[i] = store[].tick
@@ -90,7 +90,7 @@ def _resident_params(mut ex: DeviceExec, owner: Int, token: Int, src: Int, n: In
         return 0
     while len(store[].owners) > 0 and (len(store[].owners) >= _SLOTS or store[].bytes + n * 4 > _KEEP_BYTES):
         var oldest = 0
-        for i in range(1, len(store[].used)):  # small-loop(resident slots, at most _SLOTS): least recently used
+        for i in range(1, len(store[].used)):  # driver-loop: over resident fitted-model slots (at most _SLOTS), least recently used
             if store[].used[i] < store[].used[oldest]:
                 oldest = i
         _evict(ex, oldest)
