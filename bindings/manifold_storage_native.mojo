@@ -16,6 +16,9 @@ comptime _PyObject_CallOneArg = ExternalFunction[
 comptime _PyList_New = ExternalFunction["PyList_New", def(Int) thin abi("C") -> PyObjectPtr]
 # PyObject *PyLong_FromLongLong(long long v)  (new ref)
 comptime _PyLong_FromLongLong = ExternalFunction["PyLong_FromLongLong", def(Int64) thin abi("C") -> PyObjectPtr]
+# PyObject *PyNumber_Long(PyObject *o) / PyNumber_Float(PyObject *o)  (new ref)
+comptime _PyNumber_Long = ExternalFunction["PyNumber_Long", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+comptime _PyNumber_Float = ExternalFunction["PyNumber_Float", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
 # int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item)  (steals item)
 comptime _PyList_SetItem = ExternalFunction[
     "PyList_SetItem", def(PyObjectPtr, Int, PyObjectPtr) thin abi("C") -> c_int]
@@ -26,6 +29,8 @@ struct ManifoldCalls(Movable):
     var PyList_New: _PyList_New.type
     var PyLong_FromLongLong: _PyLong_FromLongLong.type
     var PyList_SetItem: _PyList_SetItem.type
+    var PyNumber_Long: _PyNumber_Long.type
+    var PyNumber_Float: _PyNumber_Float.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -34,6 +39,8 @@ struct ManifoldCalls(Movable):
         self.PyList_New = _PyList_New.load(lib)
         self.PyLong_FromLongLong = _PyLong_FromLongLong.load(lib)
         self.PyList_SetItem = _PyList_SetItem.load(lib)
+        self.PyNumber_Long = _PyNumber_Long.load(lib)
+        self.PyNumber_Float = _PyNumber_Float.load(lib)
 
 
 comptime _MANIFOLD_CALLS = _Global[
