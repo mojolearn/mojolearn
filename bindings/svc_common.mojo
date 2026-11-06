@@ -27,6 +27,7 @@ from bindings.classical_labels import _pandas_values, labels_type_name
 from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
 from bindings.classical_labels import labels_encode_labels, labels_accuracy
 from bindings.label_admission_native import classifier_label_list
+from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
     family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr, family_f32_snapshot,
