@@ -14,6 +14,7 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points connected at import (python/mojolearn/_native_trees_bridge.py)
 # and C builtins.
+from std.ffi import _Global
 from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
@@ -743,8 +744,29 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
     buffers, a pandas Series, a matrix, an empty vector)."""
     var b = trees_builtins()
     var cls = py_type(y)
-    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or native_pandas_exact(y):
+    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes:
         return None
+    if native_pandas_exact(y):
+        # An exact pandas Series over one plain NumPy integer, unsigned,
+        # bool or float block (lane perf2-trees, 2026-11-06): its `tolist()`
+        # lists exactly that block's values as Python ints, bools or floats,
+        # which the label input step then encoded through the same native
+        # `prepare_targets` (ints, floats) or sorted to the same bool classes
+        # (`bool_source`). The block is read in place instead of listed and
+        # walked per label. Nullable, categorical, string, object and any
+        # other storage keep the walk. Same classes and codes: no bits change.
+        var values = PythonObject(None)
+        try:
+            values = _pandas_values(y)
+        except:
+            return None
+        var ndarray = py_get(context, "ndarray")
+        if ndarray is None or py_type(values) is not ndarray or Int(py=values.ndim) != 1:
+            return None
+        var kind = String(values.dtype.kind)
+        if not (kind == "i" or kind == "u" or kind == "b" or kind == "f"):
+            return None
+        return _numeric_label_view(values, context, bool_source)
     var found: Optional[TreesView] = None
     try:
         if cls is context["array_class"]:
@@ -826,15 +848,110 @@ def trees_label_kind(var classes: PythonObject, context: PythonObject) raises ->
     return "object"
 
 
+# ------------------------------------------------- decode tables, per classes_
+#
+# Every classifier predict decoded through `classes_` re-derived the label
+# kind (three type tests per class) and rebuilt the int64/float64 gather table
+# (one `int()`/`float()` and two range compares per class). Both depend only
+# on the class objects, so they are kept for the last few `classes_` seen
+# (lane perf2-trees, 2026-11-06). An entry is reused only while the caller's
+# classes object is the recorded one AND its listed items are the recorded
+# objects, one by one (identity only: no user `__eq__` runs), so an in-place
+# edit of `classes_`, a refit or a replaced attribute rebuilds it. The table
+# is read-only (the gather's source); entries hold strong references to at
+# most _DECODE_SLOTS small class lists.
+
+
+comptime _DECODE_SLOTS = 8
+
+
+struct _DecodeTables(Defaultable, Movable):
+    var owners: List[PythonObject]
+    var items: List[PythonObject]
+    var kinds: List[Int]
+    var tables: List[PythonObject]
+    var next: Int
+
+    def __init__(out self):
+        self.owners = List[PythonObject]()
+        self.items = List[PythonObject]()
+        self.kinds = List[Int]()
+        self.tables = List[PythonObject]()
+        self.next = 0
+
+
+comptime _DECODE = _Global[StorageType=_DecodeTables, name="MojolearnTreesDecodeTablesV1",
+                           init_fn=_DecodeTables.__init__]
+
+
+def _decode_slot(owner: PythonObject, classes: PythonObject) raises -> Int:
+    """The cache slot recorded for `owner` whose listed classes are still
+    the same objects, or -1."""
+    var g = _DECODE.get_or_create_ptr()
+    for s in range(len(g[].owners)):  # small-loop(_DECODE_SLOTS): at most eight recorded classes_
+        if not (g[].owners[s] is owner):
+            continue
+        var held = g[].items[s]
+        if len(held) != len(classes):
+            return -1
+        for i in range(len(classes)):  # driver-loop: over the k class objects (identity only)
+            if not (held[i] is classes[i]):
+                return -1
+        return s
+    return -1
+
+
+def _decode_record(owner: PythonObject, classes: PythonObject, kind: Int, table: PythonObject) raises:
+    """Record `kind` (0 int, 1 float, 2 object) and the gather table."""
+    var g = _DECODE.get_or_create_ptr()
+    var copy = py_call(trees_builtins().list, classes)
+    for s in range(len(g[].owners)):  # small-loop(_DECODE_SLOTS): replace this owner's stale entry
+        if g[].owners[s] is owner:
+            g[].items[s] = copy
+            g[].kinds[s] = kind
+            g[].tables[s] = table
+            return
+    if len(g[].owners) < _DECODE_SLOTS:
+        g[].owners.append(owner)
+        g[].items.append(copy)
+        g[].kinds.append(kind)
+        g[].tables.append(table)
+        return
+    var s = g[].next
+    g[].next = (s + 1) % _DECODE_SLOTS
+    # Hold the displaced objects until the slot is rewritten, so no
+    # destructor runs while the cache is being changed.
+    var old_owner = g[].owners[s]
+    var old_items = g[].items[s]
+    var old_table = g[].tables[s]
+    g[].owners[s] = owner
+    g[].items[s] = copy
+    g[].kinds[s] = kind
+    g[].tables[s] = table
+    _ = old_owner^
+    _ = old_items^
+    _ = old_table^
+
+
 def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.decode_labels(classes, codes)` for int64 or int32 codes:
     integer classes an int64 Array, real classes a float64 Array (the base
     binding's gathers), str or bool classes a Python list."""
     var b = trees_builtins()
+    var owner = classes
     # ClassLabels inherits list but its __getitem__ is Python. Copy its
     # verified native list storage once, preserving the caller's label objects.
     classes = classifier_label_list(classes, context)
-    var kind = trees_label_kind(classes, context)
+    var slot = _decode_slot(owner, classes)
+    var kind: String
+    var cached_table = PythonObject(None)
+    if slot >= 0:
+        var g = _DECODE.get_or_create_ptr()
+        var code = g[].kinds[slot]
+        kind = String("int") if code == 0 else (String("float") if code == 1 else String("object"))
+        cached_table = g[].tables[slot]
+    else:
+        kind = trees_label_kind(classes, context)
     var n = Int(py=codes.size)
     var k = len(classes)
     var wide_codes = codes
@@ -842,20 +959,26 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
         wide_codes = trees_vector(n, "<i8", context)
         trees_cast(trees_address(codes), "<i4", trees_address(wide_codes), "<i8", n, context)
         _ = wide_codes  # keep the Python object alive through the native call above
-    if (kind == "int" or kind == "float") and k > 0:
-        var table = trees_vector(k, "<i8" if kind == "int" else "<f8", context)
+    if slot < 0 and not ((kind == "int" or kind == "float") and k > 0):
+        _decode_record(owner, classes, 2 if kind != "int" and kind != "float" else (0 if kind == "int" else 1),
+                       PythonObject(None))
+    if (kind == "int" or kind == "float") and k > 0 and (slot < 0 or cached_table is not None):
+        var table = cached_table
         var fits = True
-        for i in range(k):  # driver-loop: over the k class values into the gather table
-            if kind == "int":
-                var v = classes[i]
-                if Bool(py=v < PythonObject(-9223372036854775808)) or Bool(py=v > PythonObject(9223372036854775807)):
-                    fits = False
-                    break
-                _I64P(unsafe_from_address=trees_address(table))[i] = Int64(Int(py=py_call(b.int, v)))
-                _ = table  # keep the Python object alive through the native call above
-            else:
-                _F64P(unsafe_from_address=trees_address(table))[i] = Float64(py=py_call(b.float, classes[i]))
-                _ = table  # keep the Python object alive through the native call above
+        if slot < 0:
+            table = trees_vector(k, "<i8" if kind == "int" else "<f8", context)
+            for i in range(k):  # driver-loop: over the k class values into the gather table
+                if kind == "int":
+                    var v = classes[i]
+                    if Bool(py=v < PythonObject(-9223372036854775808)) or Bool(py=v > PythonObject(9223372036854775807)):
+                        fits = False
+                        break
+                    _I64P(unsafe_from_address=trees_address(table))[i] = Int64(Int(py=py_call(b.int, v)))
+                    _ = table  # keep the Python object alive through the native call above
+                else:
+                    _F64P(unsafe_from_address=trees_address(table))[i] = Float64(py=py_call(b.float, classes[i]))
+                    _ = table  # keep the Python object alive through the native call above
+            _decode_record(owner, classes, 0 if kind == "int" else 1, table if fits else PythonObject(None))
         if fits:
             var out = trees_vector(n, "<i8" if kind == "int" else "<f8", context)
             var fn_obj = trees_helper(context, "gather_i64" if kind == "int" else "gather_f64")

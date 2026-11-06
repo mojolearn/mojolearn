@@ -18,12 +18,30 @@ from bindings.family_common import family_cast_view_f64
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.trees_public_iforest import iforest_operation_with_source
 from bindings.trees_public_state import _release_tree_values
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_same, trees_key_shallow
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 
 
 comptime _IFOREST_CLASS_SLOT = "iforest_public_class_v1"
+comptime _IFOREST_FITTED_SLOT = "iforest_public_fitted_inputs_v1"
+
+
+def _fitted_inputs_key(fields: PythonObject) raises -> PythonObject:
+    """The identities the fitted-X view and the feature-name admission read:
+    each field's presence, its object and, for an exact list/tuple/dict, its
+    items (trees_key_shallow)."""
+    var mods = NativeModules()
+    var key = Python.list()
+    var names = Python.tuple("_x", "feature_names_in_")
+    for i in range(2):  # small-loop(names): the two fitted input fields
+        if py_contains(fields, names[i]):
+            _ = py_call(key.append, names[i])
+            trees_key_shallow(mods, key, fields[names[i]], 0)
+        else:
+            _ = py_call(key.append, PythonObject(None))
+    return key
 
 
 def _admit(model: PythonObject, context: PythonObject, fitting: Bool) raises -> PythonObject:
@@ -50,10 +68,23 @@ def _admit(model: PythonObject, context: PythonObject, fitting: Bool) raises -> 
         raise Error("TypeError: native fitted flags cannot invoke Python boolean hooks")
     if py_type(py_get(fields, "_mojolearn_fitting", PythonObject(0))) is not b.int:
         raise Error("TypeError: native fit depth must be an exact integer")
-    if py_contains(fields, "_x"):
-        _ = classical_view(fields["_x"], context, "fitted X")
-    if py_contains(fields, "feature_names_in_"):
-        classical_admit_value(fields["feature_names_in_"], context)
+    # The fitted X view and the feature-name admission depend only on those
+    # two stored objects, which only a fit replaces: a query reuses the
+    # previous acceptance while their identity key matches (lane perf2-trees,
+    # 2026-11-06; both ran on every score_samples/decision_function/predict).
+    # The record lives in the native side table, never in `__dict__`.
+    var inputs_key = _fitted_inputs_key(fields)
+    var inputs_known = False
+    if not fitting:
+        var held = trees_side_get(_IFOREST_FITTED_SLOT, model)
+        inputs_known = held is not None and trees_key_same(held, inputs_key)
+    if not inputs_known:
+        if py_contains(fields, "_x"):
+            _ = classical_view(fields["_x"], context, "fitted X")
+        if py_contains(fields, "feature_names_in_"):
+            classical_admit_value(fields["feature_names_in_"], context)
+        if not fitting:
+            _ = trees_side_put(_IFOREST_FITTED_SLOT, model, inputs_key)
     # Both fit and resident prediction may replace the native forest owner.
     # Admit only displaced fields, leaving unrelated caller state untouched.
     # A query (score_samples/decision_function/predict, trees_public_iforest

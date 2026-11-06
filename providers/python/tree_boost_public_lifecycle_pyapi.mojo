@@ -22,10 +22,11 @@ def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
                              context: PythonObject) raises -> PythonObject:
     """The classifier target a boost fit hands to `trees_boost_fit`.
 
-    A rank-1 integer ndarray or Array takes the forest owner's admission
-    (`lda_native_labels`, trees_public_lifecycle_native) and is passed on
-    unchanged: `trees_encode_labels` reads it with one native call. Every
-    other target (lists, tuples, torch, bool, float, object or 2-D arrays) keeps the GP
+    A rank-1 integer, bool or float32/float64 ndarray or Array takes the
+    forest owner's admission (`lda_native_labels`,
+    trees_public_lifecycle_native) and is passed on unchanged:
+    `trees_encode_labels` reads it with one native call. Every other target
+    (lists, tuples, torch, object or 2-D arrays) keeps the GP
     label snapshot, which boxes, admits and converts each label as a Python
     object. That snapshot cost about 2.3 s per classifier fit at 20000 rows
     on every column (identity records b25df4e213 -> 0412c8ee2f, train stage:
@@ -41,15 +42,23 @@ def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
     # and trees_encode_labels encodes it with one prepare_targets call into
     # float64 classes, the same Python-float classes and codes the snapshot's
     # float list encodes to, so no bits change.
+    # A rank-1 bool ndarray or Array takes it too (lane perf2-trees,
+    # 2026-11-06): lda_native_labels admits bool storage from its dtype
+    # (labels_integer_storage, allow_bool), and trees_encode_labels reads a
+    # bool buffer as its 0/1 bytes with `bool_source` set, so the classes are
+    # the Python bools [False, True] and the codes 0/1, exactly what the
+    # snapshot's list of Python bools sorts to (`_sorted_classes`). No bits
+    # change; the per-label snapshot walk is gone for bool targets.
     if ndarray is not None and cls is ndarray:
         var kind = String(source.dtype.kind)
         var typestr = String(source.dtype.str)
-        fast = Int(py=source.ndim) == 1 and (kind == "i" or kind == "u" or typestr == "<f4" or typestr == "<f8")
+        fast = Int(py=source.ndim) == 1 and (kind == "i" or kind == "u" or kind == "b"
+                                             or typestr == "<f4" or typestr == "<f8")
     elif cls is context["array_class"]:
         var typestr = String(source.dtype)
         fast = Int(py=source.ndim) == 1 and (typestr.startswith("<i") or typestr.startswith("<u")
                                              or typestr.startswith("|i") or typestr.startswith("|u")
-                                             or typestr == "<f4" or typestr == "<f8")
+                                             or typestr == "|b1" or typestr == "<f4" or typestr == "<f8")
     if not fast:
         return _gp_classifier_target(source, rows, name, context)
     lda_native_labels(source, context, True, name)
