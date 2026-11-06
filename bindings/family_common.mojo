@@ -192,13 +192,16 @@ def family_cast_view(view: PythonObject, name: String, context: PythonObject) ra
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_is_f32(view, context) and classical_c_order(view, context):
         return view
-    var rows = 1 if nd == 0 else Int(py=view.shape[0])
-    var cols = 1 if nd < 2 else Int(py=view.shape[1])
+    # Shape and strides read once each (they were read per dimension).
+    var shape = view.shape
+    var rows = 1 if nd == 0 else Int(py=shape[0])
+    var cols = 1 if nd < 2 else Int(py=shape[1])
     var item = Int(py=view.itemsize)
     var kind = classical_cast_kind(view, item, name, context)
-    var s0 = 0 if nd == 0 else Int(py=view.strides[0])
-    var s1 = 0 if nd < 2 else Int(py=view.strides[1])
-    var result = family_array(py_call(b.tuple, view.shape), "<f4", context)
+    var strides = view.strides if nd > 0 else PythonObject(None)
+    var s0 = 0 if nd == 0 else Int(py=strides[0])
+    var s1 = 0 if nd < 2 else Int(py=strides[1])
+    var result = family_array(py_call(b.tuple, shape), "<f4", context)
     family_cast_rows(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
                      FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))))
     _ = result  # keep the Python object alive through the native call above
@@ -217,13 +220,15 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_dtype_str(view, context) == "<f8" and classical_c_order(view, context):
         return view
-    var rows = 1 if nd == 0 else Int(py=view.shape[0])
-    var cols = 1 if nd < 2 else Int(py=view.shape[1])
+    var shape = view.shape
+    var rows = 1 if nd == 0 else Int(py=shape[0])
+    var cols = 1 if nd < 2 else Int(py=shape[1])
     var item = Int(py=view.itemsize)
     var kind = classical_cast_kind(view, item, name, context)
-    var s0 = 0 if nd == 0 else Int(py=view.strides[0])
-    var s1 = 0 if nd < 2 else Int(py=view.strides[1])
-    var result = family_array(py_call(b.tuple, view.shape), "<f8", context)
+    var strides = view.strides if nd > 0 else PythonObject(None)
+    var s0 = 0 if nd == 0 else Int(py=strides[0])
+    var s1 = 0 if nd < 2 else Int(py=strides[1])
+    var result = family_array(py_call(b.tuple, shape), "<f8", context)
     family_cast_rows_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
                          FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))))
     _ = result  # keep the Python object alive through the native call above
