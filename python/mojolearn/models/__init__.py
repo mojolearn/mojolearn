@@ -32,9 +32,34 @@ Examples
 # refusals by name) is in README.md beside this file and in config.py.
 from .config import FAMILIES, HFConfig, ModelPlan, UnsupportedModel, plan_for
 from .safetensors import Checkpoint, SafetensorsFile
-from .causal_lm import CausalLM, CausalLMState, GenerationStream
-from .parallel_causal_lm import ParallelCausalLM
 from .tokenizer import PATTERNS, Tokenizer
+# perf2-neural (2026-11-06): `causal_lm` connects the GPU transformer, mamba,
+# training and linalg bindings when it is imported (9d3b9ba18b). Importing it
+# here charged that connection to `import mojolearn` and to every Tokenizer,
+# config or checkpoint user. The causal classes now load on first attribute
+# access (`__getattr__` below): the first `models.CausalLM` (construct or
+# `load`) pays the connection, and the standalone blocks still connect when
+# `_transformer_impl` / `_mamba_impl` are imported. Import glue only.
+_CAUSAL_NAMES = {"CausalLM": ".causal_lm", "CausalLMState": ".causal_lm",
+                 "GenerationStream": ".causal_lm", "ParallelCausalLM": ".parallel_causal_lm"}
+
+
+def _connect_runtime_codec():
+    # The cheap, process-wide part of the causal connection stays at import:
+    # the shared operation-lock protocol and the state codec's storage classes
+    # in the tokenizer host. The parallel MLP, neural, byte and forecast pools
+    # pack values through that codec without importing `causal_lm`, so it must
+    # not wait for the first CausalLM. `causal_lm` repeats both calls; each is
+    # idempotent for the same runtime and classes.
+    from .. import lowbit
+    from .._array import Array
+    from .._native_operation_lock import connect
+    from .tokenizer import _NATIVE as runtime
+    connect(runtime)
+    runtime.native_codec_call("initialize", (Array, lowbit.BF16Weight, lowbit.Int8Weight))
+
+
+_connect_runtime_codec()
 # catalog / verify_catalog_entry: listed in docs-site/api_exclude.txt until the first verified catalog
 # entry lands; then add them to the docstring above and drop those two lines.
 # Catalog verification depends on the optional ops/importer surface. Keep
@@ -47,6 +72,11 @@ __all__ = ["ParallelCausalLM", "CausalLM", "CausalLMState", "GenerationStream", 
 
 
 def __getattr__(name):
+    if name in _CAUSAL_NAMES:
+        import importlib
+        value = getattr(importlib.import_module(_CAUSAL_NAMES[name], __name__), name)
+        globals()[name] = value
+        return value
     if name in ("catalog", "verify_catalog_entry"):
         from . import _catalog
         value = getattr(_catalog, name)
