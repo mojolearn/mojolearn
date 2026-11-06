@@ -5,7 +5,8 @@
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
 from providers.python.autograd_program_arrays_pyapi import program_admission_context
 from providers.python.neural_descriptor_pyapi import (
@@ -133,16 +134,28 @@ def _owned_program_class(cls: PythonObject) raises -> Int:
             kind = i
     if kind == -1:
         raise Error("TypeError: captured program requires its exact connected owner class")
+    var layout = row.layouts[kind]
+    # Depends only on the class rows: kept per class under the type watcher
+    # (bindings/native_class_admission.mojo; Python 3.10/3.11 check per call).
+    var mods = NativeModules()
+    var record = class_record(mods, _OWNED_LAYOUT_SLOT, cls)
+    if record is not None and Int(py=record) == Int(layout._obj_ptr):
+        return kind
     var b = native_loaded_module("builtins")
     var bases = py_call(b.type.__dict__["__bases__"].__get__, cls)
     if len(bases) != 1 or bases[0] is not b.object:
         raise Error("TypeError: captured program ancestry changed after connection")
     var namespace = py_call(b.type.__dict__["__dict__"].__get__, cls)
-    var layout = row.layouts[kind]
     for i in range(len(layout)):  # driver-loop: over connected native owner storage and lifecycle identities
         if py_get(namespace, layout[i][0]) is not layout[i][1]:
             raise Error("TypeError: captured program storage or attribute hook changed after connection")
+    class_admit(mods, _OWNED_LAYOUT_SLOT, cls, PythonObject(Int(layout._obj_ptr)))
     return kind
+
+
+# Class-watcher slot of a captured program owner class verdict (payload: the
+# address of the connected layout it was checked against).
+comptime _OWNED_LAYOUT_SLOT = "p3_autograd_owned_layout_v1"
 
 
 def _owned_program_fields(owner: PythonObject) raises -> Tuple[PythonObject, Int]:
@@ -151,10 +164,12 @@ def _owned_program_fields(owner: PythonObject) raises -> Tuple[PythonObject, Int
     var fields = py_fields(owner)
     if py_type(fields) is not py_type(Python.dict()):
         raise Error("TypeError: captured program requires an exact instance dictionary")
-    var keys = py_call(b.list, fields.keys())
-    for i in range(len(keys)):  # driver-loop: over exact string owner keys before any lookup or mutation
-        if py_type(keys[i]) is not py_type(PythonObject("")):
-            raise Error("TypeError: captured program fields require exact string keys")
+    if not dict_keys_admitted(fields):
+        var keys = py_call(b.list, fields.keys())
+        for i in range(len(keys)):  # driver-loop: over exact string owner keys before any lookup or mutation
+            if py_type(keys[i]) is not py_type(PythonObject("")):
+                raise Error("TypeError: captured program fields require exact string keys")
+        dict_keys_admit(fields)
     return (fields, kind)
 
 
