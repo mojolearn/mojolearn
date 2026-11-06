@@ -16,7 +16,8 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
@@ -247,6 +248,13 @@ struct EncProg(Movable):
         var flat = _input(value, 1, False, context)
         return self.put(flat, Int(py=flat.size))
 
+    def put_fitted(mut self, owner: PythonObject, name: String, value: PythonObject, context: PythonObject) raises -> Int:
+        # `put_array` of the fitted field `name` of `owner`: the admitted flat
+        # float32 vector is kept per model (`_fitted_flat`), so a transform
+        # re-admits it only after the field was reassigned (refit, load).
+        var flat = _fitted_flat(owner, name, value, context)
+        return self.put(flat[1], Int(py=flat[2]))
+
     def put_floats(mut self, values: List[Float64], context: PythonObject) raises -> Int:
         # `_Prog.put_list`: the values rounded to float32 ([0.0] when empty).
         return self.put(_floats(values, context), max(len(values), 1))
@@ -277,6 +285,25 @@ struct EncProg(Movable):
         xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words,
                   self.inout_ranges.copy())
         return Python.tuple(arena, store)
+
+
+def _fitted_flat(owner: PythonObject, name: String, value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """(value, flat float32 vector, words) of a fitted field: `_input`'s
+    admission and conversion of `value`, kept in the prepared-owner registry
+    keyed weakly by the model (one slot per field name, never in the model's
+    `__dict__`) and reused while the field holds the same object (perf2-prep).
+    Not noticed: a value written in place into a fitted array whose
+    admission produced a converted copy (the fitted arrays are written by
+    the encoder alone)."""
+    var mods = NativeModules()
+    var slot = String("prep_encode_fitted_v1:") + name
+    var record = prepared_get(mods, slot, owner)
+    if record is not None and record[0] is value:
+        return record
+    var flat = _input(value, 1, False, context)
+    record = Python.tuple(value, flat, Int(py=flat.size))
+    prepared_put(mods, slot, owner, record)
+    return record
 
 
 def _floats(values: List[Float64], context: PythonObject) raises -> PythonObject:
@@ -631,7 +658,7 @@ def _imputer_transform(model: PythonObject, values: PythonObject, context: Pytho
     var p = EncProg()
     var x_in = p.put_x(values)
     var xo = _mark_missing(p, x_in, n * d, fields["missing_values"], context)
-    var so = p.put_array(fields["_fill"], context)
+    var so = p.put_fitted(model, "_fill", fields["_fill"], context)
     var ko = p.put_floats(_to_floats(keep), context)
     var out = p.alloc(n * dout)
     _stage(p.program, OP_FILL, n * dout, xo, n, d, so, out, ko, dout)
@@ -894,8 +921,8 @@ def _kbins_transform(model: PythonObject, values: PythonObject, context: PythonO
     var stride = Int(py=fields["_stride"])
     var p = EncProg()
     var xo = p.put_x(values)
-    var eo = p.put_array(fields["_edges"], context)
-    var no = p.put_array(fields["_ne"], context)
+    var eo = p.put_fitted(model, "_edges", fields["_edges"], context)
+    var no = p.put_fitted(model, "_ne", fields["_ne"], context)
     var codes = p.alloc(n * d)
     _stage(p.program, OP_KBINS_CODES, n * d, xo, n, d, eo, stride, no, codes)
     var encode = fields["encode"]
@@ -956,7 +983,7 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
         bad_code = -1
         why = "can not be inverted because they contain all zeros"
     var out = p.output(n * d, entries)
-    var eo2 = p.put_array(fields["_edges"], context)
+    var eo2 = p.put_fitted(model, "_edges", fields["_edges"], context)
     _stage(p.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
     var staged = _bad_rows_stages(p, codes, n, d, bad_code, NONE)
     var ran = p.run(entries, context)
@@ -1155,21 +1182,87 @@ def _f32_array(values: List[Float32], context: PythonObject) raises -> PythonObj
     return out
 
 
-def _category_block(mut p: EncProg, categories: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
-    # `_category_block`: every column's categories in one (d, kmax) block.
+# ---------------------------------------------------------------- fitted category record
+# The fitted category state a transform, inverse_transform or infrequent
+# step reads (the (d, kmax) float32 category block, kmax, the per-column
+# sizes and their float32 words) used to be rebuilt and re-admitted on every
+# call: per column a full `_input` admission of the category Array (about
+# 40-60 CPython calls each, ~700-900 per 16-column transform). It is built
+# once per fitted `categories_` and kept in the prepared-owner registry
+# (bindings/native_prepared_owner.mojo) keyed weakly by the model, outside
+# its `__dict__` (perf2-prep). The record is valid while `categories_` is the
+# same object holding the same column objects (identity compares, no Python
+# protocol runs); a refit, set_params + fit, a reassignment or an item
+# replacement misses and rebuilds. Not noticed: a value written in place
+# into a fitted category array (the category arrays are fitted state the
+# encoder alone writes). A copied or unpickled model has no record and
+# builds one on first use. Same float32 words as before: no bit change.
+comptime _CAT_SLOT = "prep_encode_category_block_v1"
+
+
+def _category_build(categories: PythonObject, context: PythonObject) raises -> PythonObject:
+    """(categories, column objects, block, kmax, sizes, size words, block
+    words): `_category_block`'s block and `_sizes` built once."""
+    var b = native_loaded_module("builtins")
     var d = len(categories)
+    var items = Python.list()
+    var sizes = List[Int]()
     var kmax = 0
     for j in range(d):  # driver-loop: over the per-column category arrays
-        kmax = max(kmax, Int(py=categories[j].size))
-    var block = classical_typed(Python.tuple(max(d * kmax, 1)), "<f4", context["output_context"])
+        var cats = categories[j]
+        _ = py_call(items.append, cats)
+        var k = Int(py=cats.size)
+        sizes.append(k)
+        kmax = max(kmax, k)
+    var words = max(d * kmax, 1)
+    var block = classical_typed(Python.tuple(words), "<f4", context["output_context"])
     var dest = _ptr(block)
     _ = block  # keep the Python object alive through the native call above
     for j in range(d):  # driver-loop: over the per-column category arrays
-        var cats = _cat_values(categories[j], context)
+        var cats = _cat_values(items[j], context)
         for i in range(len(cats)):  # driver-loop: over one column's categories
             dest[j * kmax + i] = cats[i]
             _ = block  # keep the Python object alive through the native call above
-    return (p.put(block, max(d * kmax, 1)), kmax)
+    var size_list = Python.list()
+    for j in range(d):  # driver-loop: over the per-column category counts
+        _ = py_call(size_list.append, PythonObject(sizes[j]))
+    return Python.tuple(categories, py_call(b.tuple, items), block, kmax, py_call(b.tuple, size_list),
+                        _floats(_to_floats(sizes), context), words)
+
+
+def _category_same(record: PythonObject, categories: PythonObject) raises -> Bool:
+    if record is None or record[0] is not categories:
+        return False
+    var held = record[1]
+    var d = len(held)
+    if len(categories) != d:
+        return False
+    for j in range(d):  # driver-loop: identity compare of the per-column category arrays
+        if categories[j] is not held[j]:
+            return False
+    return True
+
+
+def _category_record(owner: PythonObject, categories: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The category record of `categories` (the fitted `categories_` of
+    `owner`); without an owner (a fit's fresh lists) it is built for this
+    call only."""
+    if owner is None:
+        return _category_build(categories, context)
+    var mods = NativeModules()
+    var record = prepared_get(mods, _CAT_SLOT, owner)
+    if _category_same(record, categories):
+        return record
+    record = _category_build(categories, context)
+    prepared_put(mods, _CAT_SLOT, owner, record)
+    return record
+
+
+def _category_block(mut p: EncProg, categories: PythonObject, context: PythonObject,
+                    owner: PythonObject) raises -> Tuple[Int, Int]:
+    # `_category_block`: every column's categories in one (d, kmax) block.
+    var record = _category_record(owner, categories, context)
+    return (p.put(record[2], Int(py=record[6])), Int(py=record[3]))
 
 
 def _sizes(categories: PythonObject) raises -> List[Int]:
@@ -1179,14 +1272,47 @@ def _sizes(categories: PythonObject) raises -> List[Int]:
     return out^
 
 
-def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, context: PythonObject, device_only: Bool = False) raises -> Tuple[Int, Int]:
+def _record_column(record: PythonObject, j: Int) raises -> List[Float32]:
+    # Column j's float32 category words (`_cat_values`) from the record's
+    # block (row j, the column's size words).
+    var size = Int(py=record[4][j])
+    var kmax = Int(py=record[3])
+    var block = record[2]
+    var source = _ptr(block)
+    var out = List[Float32]()
+    for i in range(size):  # driver-loop: over one column's fitted categories
+        out.append(source[j * kmax + i])
+        _ = block  # keep the Python object alive through the reads above
+    return out^
+
+
+def _record_last_is_nan(record: PythonObject, j: Int) raises -> Bool:
+    # `_last_is_nan` of column j from the record.
+    var values = _record_column(record, j)
+    return len(values) > 0 and values[len(values) - 1] != values[len(values) - 1]
+
+
+def _record_sizes(record: PythonObject) raises -> List[Int]:
+    # `_sizes` from a category record (exact ints, no attribute reads).
+    var held = record[4]
+    var out = List[Int]()
+    for j in range(len(held)):  # driver-loop: over the per-column category counts
+        out.append(Int(py=held[j]))
+    return out^
+
+
+def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, context: PythonObject, device_only: Bool,
+           owner: PythonObject) raises -> Tuple[Int, Int]:
     """`_codes`: each element's category index (or -1) and, unless
-    device_only, each column's unknown count. Returns (codes, neg)."""
+    device_only, each column's unknown count. Returns (codes, neg).
+    `owner`: the fitted model whose `categories_` these are (its category
+    record is reused), or None."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var xo = p.put_x(values)
-    var block = _category_block(p, categories, context)
-    var co = p.put_floats(_to_floats(_sizes(categories)), context)
+    var record = _category_record(owner, categories, context)
+    var block = (p.put(record[2], Int(py=record[6])), Int(py=record[3]))
+    var co = p.put(record[5], max(len(record[4]), 1))
     var codes = p.scratch(n * d) if device_only else p.alloc(n * d)
     _stage(p.program, OP_LOOKUP, n * d, xo, n, d, block[0], block[1], co, codes)
     if device_only:
@@ -1244,7 +1370,7 @@ def _given_categories(categories: PythonObject, values: PythonObject, mode: Pyth
         _ = py_call(out.append, _f32_array(canon, context))
     if check_unknown:
         var p = EncProg()
-        var staged = _codes(p, values, out, context)
+        var staged = _codes(p, values, out, context, False, PythonObject(None))
         var ran = p.run(entries, context)
         var bad = _unknown_columns(ran, staged[1], d)
         if len(bad) > 0:
@@ -1309,16 +1435,21 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObjec
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var cats_all = fields["categories_"]
+    # The fitted category record (built here once; the transforms reuse it):
+    # sizes and each column's float32 words come from it, not from a fresh
+    # admission of every category array.
+    var record = _category_record(model, cats_all, context)
+    var sizes = _record_sizes(record)
     var ks = List[Int]()
     var kmax = 0
-    for j in range(len(cats_all)):  # driver-loop: one size per column
-        var size = Int(py=cats_all[j].size)
-        ks.append(size - 1 if (ignore_missing and size > 0 and _last_is_nan(cats_all[j], context)) else size)
+    for j in range(len(sizes)):  # driver-loop: one size per column
+        var size = sizes[j]
+        ks.append(size - 1 if (ignore_missing and size > 0 and _record_last_is_nan(record, j)) else size)
         kmax = max(kmax, size)
     var p = EncProg()
     var codes = 0
     if inverse is None:
-        codes = _codes(p, values, cats_all, context)[0]
+        codes = _codes(p, values, cats_all, context, False, model)[0]
     else:
         codes = p.put_array2(inverse)
     var cnt = p.alloc(d * kmax)
@@ -1351,7 +1482,7 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObjec
         for i in range(ks[j]):  # driver-loop: over one column's categories
             group.append(_iword(ran, mp + j * kmax + i))
         _ = py_call(grouping.append, _int_list(group))
-        var values_j = _cat_values(cats_all[j], context)
+        var values_j = _record_column(record, j)
         var picked = List[Float32]()
         for i in range(len(inf)):  # driver-loop: over one column's infrequent categories
             picked.append(values_j[inf[i]])
@@ -1409,8 +1540,9 @@ def _remap(mut p: EncProg, codes: Int, n: Int, d: Int, table: Tuple[Int, Int, In
     return out
 
 
-def _gather_categories(mut p: EncProg, codes: Int, n: Int, d: Int, categories: PythonObject, context: PythonObject) raises -> Int:
-    var block = _category_block(p, categories, context)
+def _gather_categories(mut p: EncProg, codes: Int, n: Int, d: Int, categories: PythonObject, context: PythonObject,
+                       owner: PythonObject) raises -> Int:
+    var block = _category_block(p, categories, context, owner)
     var out = p.alloc(n * d)
     _stage(p.program, OP_CAT_GATHER, n * d, codes, n, d, block[0], block[1], out)
     return out
@@ -1505,7 +1637,7 @@ def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: Pytho
     var codes = 0
     var neg = 0
     if inverse is None:
-        var staged = _codes(p, values, fields["categories_"], context)
+        var staged = _codes(p, values, fields["categories_"], context, False, model)
         codes = staged[0]
         neg = staged[1]
     else:
@@ -1553,7 +1685,7 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
     var handle = fields["handle_unknown"]
     var encoded = _is_str(handle) and String(handle) == "use_encoded_value"
     var p = EncProg()
-    var ncat = _sizes(cats)
+    var ncat = _record_sizes(_category_record(model, cats, context))
     var grouped = fields["_grouping"] is not None
     var back = (0, 0, 0)
     if grouped:
@@ -1572,7 +1704,7 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
     _stage(p.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 1 if encoded else 0, uo, no, codes)
     if grouped:
         codes = _remap(p, codes, n, d, back, NONE)
-    var out = _gather_categories(p, codes, n, d, cats, context)
+    var out = _gather_categories(p, codes, n, d, cats, context, model)
     var staged = _bad_rows_stages(p, codes, n, d, -2, NONE)
     var ran = p.run(entries, context)
     var bad = _bad_rows(ran, staged, 10)
@@ -1582,8 +1714,9 @@ def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonO
 
 
 # ---------------------------------------------------------------- OneHotEncoder
-def _grouped_sizes(fields: PythonObject) raises -> List[Int]:
-    var sizes = _sizes(fields["categories_"])
+def _grouped_sizes(fields: PythonObject, owner: PythonObject, context: PythonObject) raises -> List[Int]:
+    # With an `owner` (a fitted model), the sizes come from its category record.
+    var sizes = _sizes(fields["categories_"]) if owner is None else _record_sizes(_category_record(owner, fields["categories_"], context))
     var groups = fields["_grouping"]
     if groups is not None:
         for j in range(len(sizes)):  # driver-loop: per-column grouped category counts
@@ -1597,7 +1730,7 @@ def _set_drop_idx(model: PythonObject, context: PythonObject) raises:
     indices (None, or one int or None per column)."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var sizes = _grouped_sizes(fields)
+    var sizes = _grouped_sizes(fields, model, context)
     var d = len(sizes)
     var groups = fields["_grouping"]
     var drop = fields["drop"]
@@ -1683,8 +1816,12 @@ def _onehot_drops(fields: PythonObject) raises -> List[Int]:
 
 def _onehot_widths(fields: PythonObject) raises -> List[Int]:
     # `_widths`: per-column one-hot block widths.
-    var sizes = _grouped_sizes(fields)
-    var drops = _onehot_drops(fields)
+    return _onehot_widths_of(_grouped_sizes(fields, PythonObject(None), PythonObject(None)), _onehot_drops(fields))
+
+
+def _onehot_widths_of(sizes: List[Int], drops: List[Int]) -> List[Int]:
+    # `_widths` from sizes and drops the caller already read (the transform
+    # and inverse read the drops once, not twice).
     var widths = List[Int]()
     for j in range(len(sizes)):  # driver-loop: per-column one-hot block widths
         widths.append(sizes[j] - (0 if drops[j] < 0 else 1))
@@ -1733,8 +1870,8 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var entries = _entries(fields["numeric_mode_"], context)
-    var widths = _onehot_widths(fields)
     var drops = _onehot_drops(fields)
+    var widths = _onehot_widths_of(_grouped_sizes(fields, model, context), drops)
     var W = 0
     for j in range(len(widths)):  # driver-loop: total one-hot output width
         W += widths[j]
@@ -1744,7 +1881,7 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
     var codes = 0
     var neg = 0
     if inverse is None:
-        var staged = _codes(p, values, fields["categories_"], context)
+        var staged = _codes(p, values, fields["categories_"], context, False, model)
         codes = staged[0]
         neg = staged[1]
     else:
@@ -1789,8 +1926,8 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
     """OneHotEncoder.inverse_transform: block_argmax, the inverse grouping
     remap, cat_gather and the strict bad-row compaction."""
     var fields = py_fields(model)
-    var widths = _onehot_widths(fields)
     var drops = _onehot_drops(fields)
+    var widths = _onehot_widths_of(_grouped_sizes(fields, model, context), drops)
     var n = Int(py=values[3])
     var cols = Int(py=values[4])
     var d = len(widths)
@@ -1813,7 +1950,7 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
     if groups is not None:
         var table = _grouping_table(p, groups, True, context)
         codes = _remap(p, codes, n, d, table, NONE)
-    var out = _gather_categories(p, codes, n, d, fields["categories_"], context)
+    var out = _gather_categories(p, codes, n, d, fields["categories_"], context, model)
     # an all-zero block is unknown (NaN) under 'ignore', and under
     # 'infrequent_if_exist' / 'warn' for a column with no infrequent
     # category; anywhere else it cannot be inverted
@@ -1854,9 +1991,9 @@ def _target_transform(model: PythonObject, values: PythonObject, context: Python
     var T = Int(py=fields["_T"])
     var cmax = Int(py=fields["_cmax"])
     var p = EncProg()
-    var codes = _codes(p, values, fields["categories_"], context, _target_scratch(mode, entries))[0]
-    var enc = p.put_array(fields["_enc"], context)
-    var meta = p.put_array(fields["_meta"], context)
+    var codes = _codes(p, values, fields["categories_"], context, _target_scratch(mode, entries), model)[0]
+    var enc = p.put_fitted(model, "_enc", fields["_enc"], context)
+    var meta = p.put_fitted(model, "_meta", fields["_meta"], context)
     var out = p.output(n * d * T, entries)
     _stage(p.program, OP_TE_APPLY, n * d * T, codes, n, d, T, NONE, enc, cmax, meta, 0, out)
     var ran = p.run(entries, context)
@@ -2133,7 +2270,7 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
     var extrap_error = _is_str(fields["extrapolation"]) and String(fields["extrapolation"]) == "error"
     var p = EncProg()
     var xo = p.put_x(values)
-    var ko = p.put_array(fields["_knots"], context)
+    var ko = p.put_fitted(model, "_knots", fields["_knots"], context)
     var out = p.alloc(n * W) if fortran else p.output(n * W, entries)
     var st = p.alloc(6 * d)
     var check = extrap_error or missing_error
@@ -2409,7 +2546,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
     var scratch = _target_scratch(mode, entries)
     var codes = 0
     if inverse is None:
-        codes = _codes(p, values, cats, context, scratch)[0]
+        codes = _codes(p, values, cats, context, scratch, PythonObject(None))[0]
     else:
         codes = p.put_array2(inverse)
     var yo = 0
@@ -2946,10 +3083,15 @@ def prep_encode_scores_call(operation: String, args: PythonObject, context: Pyth
 
 # ---------------------------------------------------------------- the door
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
-    # The admitted class this model is (or subclasses), by its MRO.
+    # The admitted class this model is (or subclasses), by its MRO. The
+    # model's own class is the MRO's first row: an exact public class is
+    # answered by that one lookup, without the MRO read (perf2-prep).
+    var kinds = context["prep_encode_kinds"]
+    var own = py_get(kinds, py_type(model))
+    if own is not None:
+        return String(own)
     var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    var kinds = context["prep_encode_kinds"]
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var kind = py_get(kinds, mro[k])
         if kind is not None:
@@ -2972,9 +3114,9 @@ def _fit_weights(model: PythonObject, args: PythonObject, operation: String) rai
     var position = 0
     var raw_key = PyObjectPtr()
     var raw_value = PyObjectPtr()
-    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+    # The standard library's typed PyDict_Next (no dlsym per call).
     for i in range(len(params)):  # driver-loop: native keyword insertion order, without iterator/list dispatch
-        if next_item(params._obj_ptr, Pointer(to=position), Pointer(to=raw_key), Pointer(to=raw_value)) == 0:
+        if cpy.PyDict_Next(params._obj_ptr, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
             break
         var key = PythonObject(from_owned=cpy.Py_NewRef(raw_key))
         # Check before String/repr: a supplied name subclass must not invoke
@@ -3001,8 +3143,8 @@ def _no_fit_params(model: PythonObject, args: PythonObject) raises:
     var raw_value = PyObjectPtr()
     # Only the first keyword can be consumed: any keyword refuses. Native
     # iteration reads no value and invokes no mapping/key protocol hooks.
-    if cpy.lib.get_function[Int32]("PyDict_Next")(
-            params._obj_ptr, Pointer(to=position), Pointer(to=raw_key), Pointer(to=raw_value)) != 0:
+    if cpy.PyDict_Next(
+            params._obj_ptr, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_value).unsafe_origin_cast[MutAnyOrigin]()) != 0:
         var key = PythonObject(from_owned=cpy.Py_NewRef(raw_key))
         _ = params
         if py_type(key) is not b.str:

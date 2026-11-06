@@ -7,32 +7,31 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
 
 
-def _exact_dict(mapping: PythonObject) raises:
-    if py_type(mapping) is not native_loaded_module("builtins").dict:
+def _exact_dict(mapping: PythonObject, b: PythonObject) raises:
+    if py_type(mapping) is not b.dict:
         raise Error("TypeError: preprocessing provider metadata requires an exact dictionary")
 
 
-def _copy_records(records: PythonObject) raises -> PythonObject:
+def _copy_records(records: PythonObject, b: PythonObject) raises -> PythonObject:
     # The operation's copy is built from the immutable import-time records
     # alone (one C-level dict construction), so a later change to the import
     # context can never reach it. The former per-key walk of the source
     # context (key admission plus an identity test per key, every operation)
-    # only re-proved that, and is gone.
-    var b = native_loaded_module("builtins")
+    # only re-proved that, and is gone. `b` is the operation's admitted
+    # builtins module (one stamp per operation, not one per record copy).
     if py_type(records) is not b.tuple:
         raise Error("TypeError: preprocessing provider identity records must remain immutable")
     return py_call(b.dict, records)
 
 
-def _fixed_maps(destination: PythonObject, records: PythonObject) raises:
-    var b = native_loaded_module("builtins")
+def _fixed_maps(destination: PythonObject, records: PythonObject, b: PythonObject) raises:
     if py_type(records) is not b.tuple:
         raise Error("TypeError: preprocessing fixed provider maps must remain immutable")
     for i in range(len(records)):  # driver-loop: fixed class/descriptor/dtype-code maps
         var record = records[i]
         if py_type(record) is not b.tuple or len(record) != 3 or py_type(record[0]) is not b.str:
             raise Error("TypeError: preprocessing provider map identity is invalid")
-        py_setitem(destination, record[0], _copy_records(record[2]))
+        py_setitem(destination, record[0], _copy_records(record[2], b))
 
 
 # The context keys classical_connect_numpy publishes. The first operation
@@ -75,26 +74,26 @@ def prep_operation_context(source: PythonObject) raises -> PythonObject:
     var connection = native_loaded_module("mojolearn._native_prep_stateless_bridge").CONTEXT_CONNECTION
     if py_type(connection) is not b.tuple or len(connection) != 6 or source is not connection[0]:
         raise Error("TypeError: preprocessing requires its originally connected native provider context")
-    var context = _copy_records(connection[1])
-    _fixed_maps(context, connection[2])
-    var output = _copy_records(connection[4])
-    _fixed_maps(output, connection[5])
-    # The process mode and loaded-module namespace are mutable process data:
-    # copy each namespace before a readback or input preparation can release
-    # the GIL.
+    var context = _copy_records(connection[1], b)
+    _fixed_maps(context, connection[2], b)
+    var output = _copy_records(connection[4], b)
+    _fixed_maps(output, connection[5], b)
+    # The process mode is mutable process data: the backend namespace (a
+    # small module dict) is copied in C before a readback or input
+    # preparation can release the GIL, so one operation reads one mode.
     var process = context["backend_fields"]
     var modules = context["modules"]
-    _exact_dict(process)
-    _exact_dict(modules)
-    # Both namespaces (the backend module's and sys.modules, ~1000 keys with
-    # NumPy loaded) are copied in C; their keys are no longer walked one by
-    # one per operation. Every other native family reads them directly.
+    _exact_dict(process, b)
+    _exact_dict(modules, b)
     var process_copy = py_call(b.dict, process)
-    var modules_copy = py_call(b.dict, modules)
     py_setitem(context, "backend_fields", process_copy)
-    py_setitem(context, "modules", modules_copy)
     py_setitem(output, "backend_fields", process_copy)
-    py_setitem(output, "modules", modules_copy)
+    # sys.modules (~1000-3000 keys with NumPy loaded) is no longer copied per
+    # operation (perf2-prep): the stateless chain only looks modules up by
+    # name (`py_get(context["modules"], name)`), exactly as every other native
+    # family reads the live sys.modules its import context holds, and a
+    # lookup after a GIL window sees the current module, as theirs do.
+    py_setitem(output, "modules", modules)
     py_setitem(context, "output_context", output)
     _connect_numpy_once(source, context)
     return context

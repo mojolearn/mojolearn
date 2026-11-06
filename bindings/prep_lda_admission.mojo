@@ -15,6 +15,11 @@ from bindings.metrics_native_support import metric_float, metric_is_real, metric
 from bindings.classical_warnings import COLUMN_WARNING, _warning_category
 from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
 from bindings.native_typed_context import native_typed_context
+from bindings.native_loaded_module import NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
+from bindings.native_class_admission import class_record, class_admit
+from bindings.label_admission_native import _labels_class as native_labels_class
+from bindings.py_attr import py_attr
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -53,18 +58,111 @@ def lda_native_initialize(model: PythonObject, args: PythonObject, context: Pyth
     return PythonObject(None)
 
 
-def lda_native_fields(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
+comptime _LABELS_CLASS_SLOT = "prep_labels_class_checked_v1"
+comptime _LDA_FIELDS_SLOT = "prep_lda_fields_admitted_v1"
+
+
+def prep_plain_classes(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`classifier_label_list`: the plain list copy of a ClassLabels
+    `classes_` (any other value as is). The ClassLabels class check
+    (ancestry and namespace against the import-time connection) runs once
+    per class state: the result is kept in the class-admission registry
+    (type-watcher epoch; any class or ancestor assignment drops it; Python
+    3.10/3.11 keep no record and check every call, as before) (perf2-prep)."""
+    var cls = py_get(context, "classifier_labels_class")
+    if cls is None or py_type(value) is not cls:
+        return value
+    var connected = context["classifier_labels_namespace"]
+    var mods = NativeModules()
+    var record = class_record(mods, _LABELS_CLASS_SLOT, cls)
+    if record is None or record[0] is not connected:
+        _ = native_labels_class(context)
+        class_admit(mods, _LABELS_CLASS_SLOT, cls, Python.tuple(connected))
+    # list.copy is the native list implementation, not an iterable protocol.
+    return py_call(py_attr(py_type(Python.list()), "copy"), value)
+
+
+def lda_native_fields_plain(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
+    """(fields, plain classes_ or None): `lda_native_fields` plus the plain
+    `classes_` list it admitted, so the caller does not copy it again.
+
+    The 7 constructor values and up to 18 fitted fields were each re-admitted
+    (`classical_admit_value`) on every predict, transform and score. Now a
+    per-model record in the prepared-owner registry (keyed weakly by the
+    model, outside its `__dict__`) holds the identity key of what the last
+    full admission passed: each field name, the value object and, for exact
+    list/tuple/dict values, their items (bindings/native_prepared_owner.mojo
+    `prepared_key_add`), and the items of the plain `classes_`. A call whose
+    key is the same skips the admissions; any set_params, refit, attribute
+    reassignment, container edit or `classes_` edit misses and admits in full
+    (perf2-prep). Not noticed: an element written in place into an ndarray or
+    Array value (its admission is of the object, its dtype and shape, which
+    such a write does not change), or an in-place dtype/shape reassignment of
+    an ndarray. The covariance_estimator refusal runs on every call."""
     var fields = _lda_storage(model, context)
     var names = context["lda_parameters"]
+    var mods = NativeModules()
+    var key = Python.list()
+    # A missing parameter or a covariance_estimator refusal takes the full
+    # path below, which raises at the original position and order.
+    var full = False
+    for i in range(len(names)):  # driver-loop: fixed constructor configuration identities
+        if not py_contains(fields, names[i]):
+            full = True
+            break
+        var value = fields[names[i]]
+        if not configure and String(names[i]) == "covariance_estimator" and value is not None:
+            full = True
+            break
+        _ = py_call(key.append, names[i])
+        prepared_key_add(mods, key, value)
+    var fitted = context["lda_fitted_fields"]
+    var plain = PythonObject(None)
+    for i in range(len(fitted)):  # driver-loop: consumed fitted state identities
+        if full:
+            break
+        if py_contains(fields, fitted[i]):
+            var value = fields[fitted[i]]
+            _ = py_call(key.append, fitted[i])
+            if String(fitted[i]) == "classes_":
+                try:
+                    plain = prep_plain_classes(value, context)
+                except:
+                    # Refused by the class check: the full path raises it at
+                    # its original position, after the parameters.
+                    full = True
+                if full:
+                    break
+                _ = py_call(key.append, value)
+                if plain is not value:
+                    for k in range(len(plain)):  # driver-loop: class labels of the fitted classes_ (identity key)
+                        _ = py_call(key.append, plain[k])
+                else:
+                    prepared_key_add(mods, key, value)
+            else:
+                prepared_key_add(mods, key, value)
+    var held = PythonObject(None) if full else prepared_get(mods, _LDA_FIELDS_SLOT, model)
+    if held is not None and prepared_key_same(held, key):
+        return Python.tuple(fields, plain)
     for i in range(len(names)):  # driver-loop: fixed constructor configuration, before comparisons or conversion
         if not py_contains(fields, names[i]):
             raise Error("AttributeError: LDA constructor parameter is missing: " + String(names[i]))
         _lda_parameter(names[i], fields[names[i]], context, configure)
-    names = context["lda_fitted_fields"]
-    for i in range(len(names)):  # driver-loop: consumed fitted state cannot introduce attribute or scalar hooks
-        if py_contains(fields, names[i]):
-            classical_admit_value(classifier_label_list(fields[names[i]], context) if String(names[i]) == "classes_" else fields[names[i]], context)
-    return fields
+    for i in range(len(fitted)):  # driver-loop: consumed fitted state cannot introduce attribute or scalar hooks
+        if py_contains(fields, fitted[i]):
+            if String(fitted[i]) == "classes_":
+                if plain is None:
+                    plain = prep_plain_classes(fields[fitted[i]], context)
+                classical_admit_value(plain, context)
+            else:
+                classical_admit_value(fields[fitted[i]], context)
+    if not full:
+        prepared_put(mods, _LDA_FIELDS_SLOT, model, key)
+    return Python.tuple(fields, plain)
+
+
+def lda_native_fields(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
+    return lda_native_fields_plain(model, context, configure)[0]
 
 
 def lda_native_get_params(fields: PythonObject, context: PythonObject) raises -> PythonObject:

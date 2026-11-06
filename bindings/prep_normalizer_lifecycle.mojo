@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Normalizer operations own their complete previously decorated public calls.
+from std.ffi import _Global
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _truth
 from bindings.params_metadata_native import _resolved, _value
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_warn
@@ -84,30 +87,109 @@ def _tags(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     return py_call(b.dict, tags)
 
 
-def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+def _tags_of(value: PythonObject, unset: PythonObject) raises -> PythonObject:
+    # `_tags` on a class value already resolved by `_class_settings`: the
+    # same exact-dict and exact-string-key admission (native key iteration)
+    # and the same copy, read from the live class dict every call.
     var b = native_loaded_module("builtins")
-    if py_type(mode) is not b.str or (String(mode) != "identical" and String(mode) != "fast"):
-        raise Error("numeric_mode must be fast, identical or None")
-    var tables = context["scaler_bindings"]
-    if py_type(tables) is not b.dict:
-        raise Error("TypeError: native Normalizer bindings require an ordinary dictionary")
-    var modes = py_call(b.list, tables)
-    for i in range(len(modes)):  # driver-loop: binding mode keys before lookup
-        if py_type(modes[i]) is not b.str:
-            raise Error("TypeError: native Normalizer binding keys require exact strings")
-    var entries = tables[mode]
-    if py_type(entries) is b.str:
-        raise Error("ImportError: " + String(entries))
-    if py_type(entries) is not b.dict:
-        raise Error("TypeError: native Normalizer entries require an ordinary dictionary")
-    var keys = py_call(b.list, entries)
-    var captured = Python.dict()
-    for i in range(len(keys)):  # driver-loop: entry keys before binding selection
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: native Normalizer entry keys require exact strings")
-    for i in range(len(keys)):  # driver-loop: retain compiled entries once before any entry executes
-        py_setitem(captured, keys[i], entries[keys[i]])
-    var pins = context["prep_stateless_entry_identities"]
+    var tags = Python.dict() if value is unset else value
+    if py_type(tags) is not b.dict:
+        raise Error("TypeError: native Normalizer input tags require an ordinary dictionary")
+    if not native_namespace_string_keys(tags._obj_ptr, b.str):
+        raise Error("TypeError: native Normalizer input tags require exact string keys")
+    return py_call(b.dict, tags)
+
+
+comptime _CLASS_SETTINGS_SLOT = "prep_normalizer_class_settings_v1"
+comptime _CLASS_SETTING_NAMES = 7
+
+
+def _class_settings_names() raises -> PythonObject:
+    # The class-level names one Normalizer transform reads, in this order.
+    return Python.tuple("_sklearn_requires_fit", "_sklearn_input_tags", "_mojolearn_allows_nan",
+                        "metric", "kernel", "affinity", "dissimilarity")
+
+
+def _plain_setting(value: PythonObject, b: PythonObject) raises -> Bool:
+    # A resolved class value a record may hold: plain values only, so the
+    # record never retains a function (its globals reach the class) or a
+    # descriptor.
+    var cls = py_type(value)
+    return value is None or cls is b.bool or cls is b.int or cls is b.str or cls is b.dict
+
+
+def _class_settings(model: PythonObject) raises -> PythonObject:
+    """(missing, the seven class-resolved values of `_class_settings_names`,
+    each the `missing` object when no ancestry row defines it).
+
+    The MRO walks behind `_class_setting` / `_setting` ran seven times per
+    transform. Their class half depends only on the class rows, so it is
+    kept per class in the class-admission registry (bindings/
+    native_class_admission.mojo, type-watcher epoch: any assignment to the
+    class or an ancestor drops it; Python 3.10/3.11 have no record and walk
+    every call, as before) (perf2-prep). Only plain values are kept; any
+    other resolved value is not recorded, and the walk runs every call."""
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var record = class_record(mods, _CLASS_SETTINGS_SLOT, cls)
+    if record is not None:
+        return record
+    var b = mods.module("builtins")
+    var missing = Python.list()
+    var names = _class_settings_names()
+    var out = Python.list()
+    _ = py_call(out.append, missing)
+    var plain = True
+    for i in range(len(names)):  # small-loop(metadata: the seven fixed class setting names)
+        var value = _resolved(mods, cls, names[i], missing)
+        plain = plain and (value is missing or _plain_setting(value, b))
+        _ = py_call(out.append, value)
+    var payload = py_call(b.tuple, out)
+    if plain:
+        class_admit(mods, _CLASS_SETTINGS_SLOT, cls, payload)
+    return payload
+
+
+def _instance_setting(model: PythonObject, fields: PythonObject, settings: PythonObject, index: Int,
+                      fallback: PythonObject) raises -> PythonObject:
+    # `_setting` on a recorded class value: the instance field wins, then the
+    # class value through `_value` (descriptor checks), else `fallback`.
+    var key = _class_settings_names()[index]
+    if not py_contains(fields, key) and settings[index + 1] is settings[0]:
+        return fallback
+    return _value(model, fields, key, Python.dict(missing=Python.list()), "AttributeError")
+
+
+struct _PinnedEntries(Defaultable, Movable):
+    # The import-time entry identities of one numeric mode as a name -> entry
+    # dict, built once from the immutable pins tuple it came from.
+    var pins: PythonObject
+    var mode: String
+    var expected: PythonObject
+
+    def __init__(out self):
+        self.pins = PythonObject(None)
+        self.mode = String("")
+        self.expected = PythonObject(None)
+
+
+comptime _PINNED_ENTRIES = _Global[
+    StorageType=_PinnedEntries, name="MojolearnPrepNormalizerPinnedEntriesV1",
+    init_fn=_PinnedEntries.__init__,
+]
+
+
+def _expected_entries(pins: PythonObject, mode: PythonObject, b: PythonObject) raises -> PythonObject:
+    # `pins` is the immutable tuple of immutable (mode, ((name, entry), ...))
+    # records the bridge froze at import. The name -> entry dict built from
+    # it is kept with a strong reference to that tuple and reused while the
+    # context still holds the same tuple object (an identity compare), so
+    # the record walk and the dict build run once per process and mode, not
+    # once per operation (perf2-prep). The dict never leaves this module.
+    var g = _PINNED_ENTRIES.get_or_create_ptr()
+    var text = String(mode)
+    if g[].pins is pins and g[].mode == text and g[].expected is not None:
+        return g[].expected
     if py_type(pins) is not b.tuple:
         raise Error("TypeError: native Normalizer requires its immutable import-time entry identities")
     var selected = PythonObject(None)
@@ -115,7 +197,7 @@ def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonO
         var record = pins[i]
         if py_type(record) is not b.tuple or len(record) != 2 or py_type(record[0]) is not b.str:
             raise Error("TypeError: native Normalizer binding identity metadata is invalid")
-        if String(record[0]) == String(mode):
+        if String(record[0]) == text:
             selected = record[1]
     if py_type(selected) is not b.tuple:
         raise Error("TypeError: native Normalizer requires the originally connected compiled entries")
@@ -125,14 +207,43 @@ def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonO
         if py_type(pair) is not b.tuple or len(pair) != 2 or py_type(pair[0]) is not b.str:
             raise Error("TypeError: native Normalizer entry identity metadata is invalid")
         py_setitem(expected_entries, pair[0], pair[1])
+    g[].pins = pins
+    g[].mode = text
+    g[].expected = expected_entries
+    return expected_entries
+
+
+def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    if py_type(mode) is not b.str or (String(mode) != "identical" and String(mode) != "fast"):
+        raise Error("numeric_mode must be fast, identical or None")
+    var tables = context["scaler_bindings"]
+    if py_type(tables) is not b.dict:
+        raise Error("TypeError: native Normalizer bindings require an ordinary dictionary")
+    # Exact string keys are admitted by native dict iteration (no Python key
+    # list, no per-key call), before any keyed lookup can compare a key.
+    if not native_namespace_string_keys(tables._obj_ptr, b.str):
+        raise Error("TypeError: native Normalizer binding keys require exact strings")
+    var entries = tables[mode]
+    if py_type(entries) is b.str:
+        raise Error("ImportError: " + String(entries))
+    if py_type(entries) is not b.dict:
+        raise Error("TypeError: native Normalizer entries require an ordinary dictionary")
+    if not native_namespace_string_keys(entries._obj_ptr, b.str):
+        raise Error("TypeError: native Normalizer entry keys require exact strings")
+    # Retain the compiled entries once before any entry executes: one C-level
+    # copy of the exact dict (it neither hashes nor compares keys).
+    var captured = py_call(b.dict, entries)
+    var expected_entries = _expected_entries(context["prep_stateless_entry_identities"], mode, b)
     var names = Python.tuple("preprocessing_numeric_mode", "x_prep_numeric_mode", "x_prep_run",
         "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges", "x_prep_dev_put", "x_prep_dev_free",
         "x_prep_dev_live", "x_prep_dev_take_rows", "arena_binding", "arena_binding_id")
+    var builtin_type = py_type(b.len)
     for i in range(len(names)):  # small-loop(ABI: fixed connected numerical entry points)
         var entry = captured[names[i]] if i < 3 else py_get(captured, names[i])
         if entry is not py_get(expected_entries, names[i]):
             raise Error("TypeError: native Normalizer compiled entry identity changed after import")
-        if i < 10 and entry is not None and py_type(entry) is not py_type(b.len):
+        if i < 10 and entry is not None and py_type(entry) is not builtin_type:
             raise Error("TypeError: native Normalizer execution requires compiled binding entries; Python callbacks cannot execute")
     if py_type(captured["arena_binding_id"]) is not b.int:
         raise Error("TypeError: native Normalizer arena binding identity must remain a native integer")
@@ -190,7 +301,9 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
     var fitted = py_get(fields, "n_features_in_")
     var feature_names = py_get(fields, "feature_names_in_")
     var name = String(py_type(model).__name__)
-    var requires_fit = _truth(_class_setting(model, "_sklearn_requires_fit", PythonObject(True)))
+    var settings = _class_settings(model)
+    var unset = settings[0]
+    var requires_fit = _truth(PythonObject(True) if settings[1] is unset else settings[1])
     if requires_fit and not _fitted(fields):
         var category = classical_not_fitted_class(context)
         var message = "This " + name + " instance is not fitted yet. Call 'fit' with appropriate arguments before using transform."
@@ -199,15 +312,15 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
         var failure = stash_python_error()
         raise failure^
     var nested = _truth(py_get(fields, "_mojolearn_fitting"))
-    var tags = _tags(model, fields)
+    var tags = _tags_of(settings[2], unset)
     var validate = not nested and _truth(py_get(tags, "two_d_array", True)) and not _truth(py_get(tags, "one_d_array", False))
     var scan = not _truth(py_get(tags, "allow_nan", False))
     # A Python hook used solely to decide validation is still runtime work.
-    if not nested and scan and _setting(model, fields, "_mojolearn_allows_nan", PythonObject(None)) is not None:
+    if not nested and scan and _instance_setting(model, fields, settings, 2, PythonObject(None)) is not None:
         raise Error("TypeError: native Normalizer validation requires static input tags; Python allow-NaN hooks cannot execute")
     var precomputed = False
-    for key in ["metric", "kernel", "affinity", "dissimilarity"]:  # small-loop(metadata: existing width-check exemptions)
-        var option = _setting(model, fields, key, PythonObject(None))
+    for k in range(3, 7):  # small-loop(metadata: existing width-check exemptions metric/kernel/affinity/dissimilarity)
+        var option = _instance_setting(model, fields, settings, k, PythonObject(None))
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
     var sparse = _truth(py_get(tags, "sparse", False))
     var snapshot = prep_transform_snapshot(source, name, validate, scan, context, sparse, not nested)
