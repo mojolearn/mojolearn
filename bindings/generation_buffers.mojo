@@ -11,7 +11,8 @@ kept every array built here, and the caller's buffers, alive for ever.
 """
 from std.ffi import _Global
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_contains
 from bindings.native_array_snapshot import native_array_slots, native_array_snapshot
 from bindings.native_array_storage import native_array_zeros
@@ -28,6 +29,9 @@ struct GenerationBoundary(Defaultable, Movable):
     var state_cls: PythonObject
     var layer_classes: PythonObject
     var stream_cls: PythonObject
+    # The Array context dictionary, built once per connected Array class
+    # (formerly a new dictionary per call).
+    var array_context: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -36,6 +40,7 @@ struct GenerationBoundary(Defaultable, Movable):
         self.state_cls = PythonObject(None)
         self.layer_classes = PythonObject(None)
         self.stream_cls = PythonObject(None)
+        self.array_context = PythonObject(None)
 
 
 comptime GENERATION_BOUNDARY = _Global[
@@ -82,10 +87,34 @@ def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
 
 
 def generation_array_context() raises -> PythonObject:
-    var cls = GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var cls = g[].array_cls
     if cls is None:
         raise Error("RuntimeError: generation requires its import-time Array connection")
-    return Python.dict(array_class=cls)
+    # The Array class identity can never be replaced after connection
+    # (generation_initialize_binding refuses it), so one context serves
+    # every call.
+    if g[].array_context is None or g[].array_context["array_class"] is not cls:
+        g[].array_context = Python.dict(array_class=cls)
+    return g[].array_context
+
+
+comptime _GENERATION_SLOTS = "generation_array_slots_v1"
+
+
+def _generation_slots() raises -> PythonObject:
+    # The admitted Array storage descriptors, kept per class epoch (type
+    # watcher): a class change re-runs the full descriptor admission. The
+    # descriptors reference the Array class, which the generation boundary
+    # already holds for the process lifetime.
+    var mods = NativeModules()
+    var cls = GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls
+    var cached = class_record(mods, _GENERATION_SLOTS, cls)
+    if cached is not None:
+        return cached
+    var slots = native_array_slots(mods, generation_array_context())
+    class_admit(mods, _GENERATION_SLOTS, cls, slots)
+    return slots
 
 
 def generation_array_snapshot(value: PythonObject) raises -> PythonObject:
@@ -109,7 +138,9 @@ def py_ints(values: List[Int]) raises -> PythonObject:
 
 def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var slots = native_array_slots(generation_array_context())
+    if g[].array_cls is None:
+        raise Error("RuntimeError: generation requires its import-time Array connection")
+    var slots = _generation_slots()
     if code != "f" and code != "i" and code != "b":
         raise Error("generation: unsupported native allocation dtype")
     var n = 1
@@ -120,23 +151,35 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
         n *= dims[i]
     var store = native_array_zeros(code, n)
     var result = py_call(g[].bi.object.__new__, g[].array_cls)
-    var values = Python.dict(_store=store, _base=PythonObject(None), _pin=PythonObject(None),
-        _mv=py_call(g[].bi.memoryview, store), _addr=store.buffer_info()[0], _readonly=False,
-        shape=py_call(g[].bi.tuple, py_ints(dims)),
-        dtype=PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")),
-        ndim=len(dims), size=n, nbytes=n * itemsize, itemsize=itemsize, order="C")
-    var strides = g[].bi.list()
-    var insert = strides.insert
+    # Strides computed natively (row-major), then one tuple; each slot is set
+    # directly (no intermediate dictionary or key list), in the former order.
+    var stride_words = List[Int](length=len(dims), fill=0)
     var stride = itemsize
     for i in range(len(dims)):  # small-loop(array shape dimension words)
         var axis = len(dims) - i - 1
-        _ = py_call(insert, 0, stride)
+        stride_words[axis] = stride
         stride *= dims[axis]
-    py_setitem(values, "strides", py_call(g[].bi.tuple, strides))
-    var names = py_call(g[].bi.list, values.keys())
-    for i in range(len(names)):  # small-loop(publish generated Array through admitted native slots)
-        py_call(slots[names[i]].__set__, result, values[names[i]])
+    var shape = py_call(g[].bi.tuple, py_ints(dims))
+    var strides = py_call(g[].bi.tuple, py_ints(stride_words))
+    _generation_slot_set(slots, result, "_store", store)
+    _generation_slot_set(slots, result, "_base", PythonObject(None))
+    _generation_slot_set(slots, result, "_pin", PythonObject(None))
+    _generation_slot_set(slots, result, "_mv", py_call(g[].bi.memoryview, store))
+    _generation_slot_set(slots, result, "_addr", store.buffer_info()[0])
+    _generation_slot_set(slots, result, "_readonly", PythonObject(False))
+    _generation_slot_set(slots, result, "shape", shape)
+    _generation_slot_set(slots, result, "dtype", PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
+    _generation_slot_set(slots, result, "ndim", PythonObject(len(dims)))
+    _generation_slot_set(slots, result, "size", PythonObject(n))
+    _generation_slot_set(slots, result, "nbytes", PythonObject(n * itemsize))
+    _generation_slot_set(slots, result, "itemsize", PythonObject(itemsize))
+    _generation_slot_set(slots, result, "order", PythonObject("C"))
+    _generation_slot_set(slots, result, "strides", strides)
     return result
+
+
+def _generation_slot_set(slots: PythonObject, target: PythonObject, name: String, value: PythonObject) raises:
+    py_call(slots[name].__set__, target, value)
 
 
 def generation_address(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
