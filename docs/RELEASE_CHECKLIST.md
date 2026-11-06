@@ -341,8 +341,32 @@ Any failure stops the release before the real PyPI sees anything
 After the publish nothing installs or runs anything. The finish line compares
 the sha256 of each file the real PyPI serves (`pip download --no-deps`) with
 the shipped wheel, `published-<vendor>` does the same with RECORD checks, and
-the `bench/results/release_verification/<date>_pypi_<v>/` record covers what is
-published; they run again when another platform publishes.
+the `record` step writes the release evidence set (below); they run again when
+another platform publishes.
+
+**The release evidence: one set, overwritten each release (Andrew, 2026-11-06).**
+The `record` step deletes everything in `bench/results/release_evidence/` and
+writes this release's evidence there, then commits it ("Release evidence for
+<version>") and tags that commit `v<version>`. The directory only ever holds
+one release. It contains `manifest.json` (the version, the frozen source commit,
+every wheel's file name and sha256, the tools used, and for every file its
+sha256, the step that produced it and the wheels it was checked against),
+`README.md`, the identity round (`identity/`), the gate verdicts per vendor with
+the shard check, the measurement smoke and the machine facts (`gates/`), the
+TestPyPI rehearsal and the post-publish byte checks (`publish/`), the release's
+tool tests and compile summary (`checks/`, `compile/`), and the published
+wheels' manifests, provenance and binding identities the next release reuses.
+Logs, wheels, the full identity table, the reuse plan, build receipts and box
+results stay in `~/mojolearn-evidence` and R2; the manifest names each by path
+or R2 tag and sha256. The item list, which items are required and the size caps
+(2 MiB per file, 6 MiB for the set) are in `tools/release_evidence_set.py`;
+a missing required item fails `record` by name. To see an older release's
+evidence, read it from its tag:
+`git show v<version>:bench/results/release_evidence/manifest.json`. The dated
+directories releases up to 0.8.65 wrote under
+`bench/results/release_verification/` are in git history; read them at the
+parent of the commit that removed them
+(`git log -n 1 --format=%H -- bench/results/release_verification/`).
 
 **The shipped source and the release tooling are two commits.** The freeze
 pins the source commit in `state.json`; it never moves because main moved,
@@ -409,9 +433,9 @@ identity of a binding is its source closure digest (the same walk
 the Mojo/MAX packages pixi.lock pins for the target platform, the build flags
 the release scripts export for it, the builder scripts, and the pinned box
 image (on macOS the Xcode and Metal toolchain instead). REUSE means the exact
-identity digest of the last PUBLISHED release (the newest
-`bench/results/release_verification/<date>_pypi_<v>/` record, its
-`binding-identities.json` when it has one, else that commit's tree); the
+identity digest of the last PUBLISHED release (the release evidence set
+`bench/results/release_evidence/`, its `binding-identities.json` when it has
+one, else that commit's tree); the
 published bytes then come from a local copy or PyPI, verified by sha256 against
 the record and against the wheel's own payload, and are packed again. Anything
 else, including an unreadable pin, builds. A build leg runs only for a set with
