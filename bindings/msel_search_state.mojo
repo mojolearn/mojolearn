@@ -11,6 +11,18 @@ from bindings.msel_scorer_native import msel_scorer_fields
 from bindings.native_owner_lifetime import native_release_weakrefs
 from bindings.declared_params_native import _release as declared_release
 from bindings.params_metadata_native import _resolved
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
+from bindings.msel_plan_records import msel_fields_admitted, msel_fields_admit
+
+
+# perf3-nbr-msel-trees: the search plan's class rows are checked once per
+# class state and the instance keys once per dictionary state, with the
+# records `msel_estimator_plan` uses (native_class_admission type watchers,
+# bindings/msel_plan_records.mojo dictionary watchers). A search plan is its
+# own registry object, so its address never matches an estimator plan's
+# record. Without watchers (Python < 3.12) both checks run on every call.
+comptime _SEARCH_PLAN_CLASS_SLOT = "msel_search_plan_class_v1"
 
 
 def msel_search_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -21,6 +33,18 @@ def msel_search_plan(model: PythonObject, context: PythonObject) raises -> Pytho
     var plan = py_get(context["family_msel_search_layouts"], cls)
     if plan is None:
         raise Error("TypeError: use a connected native search or parameter container; Python subclass hooks are not supported")
+    var mods = NativeModules()
+    var class_held = class_record(mods, _SEARCH_PLAN_CLASS_SLOT, cls)
+    if class_held is not None and Int(py=class_held) == Int(plan._obj_ptr):
+        return plan
+    _search_check_class_rows(cls, plan, b)
+    # The payload is the plan's address (plans live in the import-time
+    # registry for the process): a record never retains its class.
+    class_admit(mods, _SEARCH_PLAN_CLASS_SLOT, cls, PythonObject(Int(plan._obj_ptr)))
+    return plan
+
+
+def _search_check_class_rows(cls: PythonObject, plan: PythonObject, b: PythonObject) raises:
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     if len(mro) != len(plan["mro"]):
         raise Error("TypeError: native search ancestry changed")
@@ -32,19 +56,23 @@ def msel_search_plan(model: PythonObject, context: PythonObject) raises -> Pytho
         var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[k][0])
         if py_get(row, hooks[k][1]) is not hooks[k][2]:
             raise Error("TypeError: native search class hooks changed")
-    return plan
 
 
 def msel_search_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var plan = msel_search_plan(model, context)
     var fields = py_call(plan["fields_get"], model, py_type(model))
+    if msel_fields_admitted(fields, plan):
+        return fields
     var keys = py_call(b.list, fields.keys())
+    var protected = plan["protected"]
     for k in range(len(keys)):  # driver-loop: stored field names before dictionary lookup
         if py_type(keys[k]) is not b.str:
             raise Error("TypeError: native search state requires exact string keys")
-        if py_contains(plan["protected"], keys[k]):
+        if py_contains(protected, keys[k]):
             raise Error("TypeError: native search instance overrides a method or storage hook")
+    if py_type(fields) is b.dict:
+        msel_fields_admit(fields, plan)
     return fields
 
 
