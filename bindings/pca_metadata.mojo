@@ -2,7 +2,8 @@
 # Native PCA constructor and scalar-parameter metadata. Public activation is
 # separate: this private owner does not replace inherited Python API wrappers.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
@@ -11,8 +12,15 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_ty
 def pca_dictionary(context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var cls = context["pca_class"]
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var descriptor = context["pca_dictionary_descriptor"]
+    # The finalizer and dictionary-descriptor checks read only the PCA class
+    # rows: run them once per class state (native_class_admission) and
+    # descriptor identity, not on every PCA call.
+    var mods = NativeModules()
+    var record = class_record(mods, _PCA_DICTIONARY_SLOT, cls)
+    if record is not None and record is descriptor:
+        return descriptor
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var found = False
     for k in range(len(mro)):  # driver-loop: over native MRO dictionary descriptors before stored-field access
         var class_fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
@@ -24,7 +32,11 @@ def pca_dictionary(context: PythonObject) raises -> PythonObject:
             found = True
     if not found:
         raise Error("TypeError: PCA native instance dictionary is unavailable")
+    class_admit(mods, _PCA_DICTIONARY_SLOT, cls, descriptor)
     return descriptor
+
+
+comptime _PCA_DICTIONARY_SLOT = "pca_dictionary_descriptor_v1"
 
 
 def pca_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
