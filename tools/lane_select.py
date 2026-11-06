@@ -473,6 +473,8 @@ def reset_caches():
     _MOJO_CONFORMANCE = None
     _MOJO_IMPORTERS = None
     _PKG_IMPORT_CLOSURE = None
+    global _IMPORT_TIME_CLOSURE
+    _IMPORT_TIME_CLOSURE = None
     _CORPUS = None
     _CORPUS_TEXT = None
     _REVERSE = None
@@ -6474,6 +6476,92 @@ def _package_import_closure():
     return _PKG_IMPORT_CLOSURE
 
 
+_IMPORT_TIME_CLOSURE = None
+
+
+def package_import_time_closure():
+    """The package files whose IMPORT-TIME code `import mojolearn` runs, so
+    every lane runs it: `__init__.py`'s module-level statements, then each
+    imported file read in the region its importers ask for
+    (`_region_import_edges`: module-level statements, the defs they call, a
+    function-local import only when its def runs), to a fixed point, walking
+    straight through the registries the lane map stops at. `__init__.py`'s
+    own defs (`__getattr__`, the lazy doors) run on first touch, not at
+    import, so its walk starts from its module-level statements alone.
+    Derived from the import graph, never a list (2026-11-05: 160 files by
+    module-level imports alone, of 309 package files outside tests).
+
+    WHY. The lane map is door reach: what a lane's own calls run. Import-time
+    code runs in every lane's process whatever the lane calls:
+    `__init__.py:357` imports `_samba_impl.py`, whose module level calls
+    `_native_samba_bridge.connect`, which imports `neural_inference.py`; that
+    file's map said 427 of 513."""
+    global _IMPORT_TIME_CLOSURE
+    if _IMPORT_TIME_CLOSURE is None:
+        init = os.path.join(PKG, "__init__.py")
+        wanted, walked, stack = {}, {}, [(init, set())]
+        while stack:
+            rel, names = stack.pop()
+            first = rel not in wanted
+            if first:
+                wanted[rel] = None if names is None else set(names)
+            elif wanted[rel] is not None:
+                wanted[rel] = None if names is None else wanted[rel] | names
+            region = None if wanted[rel] is None else frozenset(wanted[rel])
+            if not first and walked.get(rel, ()) == region:
+                continue
+            walked[rel] = region
+            for f, n in _region_import_edges(rel, region, narrow_unused=False).items():
+                stack.append((f, n))
+        _IMPORT_TIME_CLOSURE = frozenset(wanted)
+    return _IMPORT_TIME_CLOSURE
+
+
+def _import_time_shape(tree):
+    """What of a module runs at import: every module-level statement, the
+    header of every def (decorators, defaults, annotations), and of every
+    class its header and its class-body statements (they run when the class
+    statement does), method headers included; never a def's or method's
+    body. Compared as dumps of a docstring-stripped tree."""
+    import copy
+
+    def header(node):
+        bare = copy.copy(node)
+        bare.body = [ast.Pass()]
+        return ast.dump(bare)
+
+    def shape(body):
+        out = []
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                out.append(("def", header(node)))
+            elif isinstance(node, ast.ClassDef):
+                out.append(("class", header(node), tuple(shape(node.body))))
+            else:
+                out.append(("stmt", ast.dump(node)))
+        return out
+    return tuple(shape(tree.body))
+
+
+def import_time_code_changed(ref, path):
+    """True when `path`'s diff against `ref` can change what runs at import
+    (`_import_time_shape`), or cannot be read: no old revision (a new file's
+    top level is all new), a file gone, a text that does not parse."""
+    old_text = _git_show(ref, path)
+    if old_text is None:
+        return True
+    try:
+        new_text = _read(path)
+    except OSError:
+        return True
+    try:
+        old = _import_time_shape(_strip_docstrings(ast.parse(old_text)))
+        new = _import_time_shape(_strip_docstrings(ast.parse(new_text)))
+    except SyntaxError:
+        return True
+    return old != new
+
+
 def _package_file_unreachable(path):
     """A file inside python/mojolearn/ that no lane can load.
 
@@ -10741,6 +10829,18 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
             reasons[path] = ("rental measurement tooling: a leg body, session script or probe that runs "
                              "on a rented box to build and time a binding and replay recorded steps; no "
                              "lane computes through it (MEASUREMENT_TOOLING_PREFIXES)")
+            continue
+        if ref and path.endswith(".py") and path in package_import_time_closure() \
+                and import_time_code_changed(ref, path):
+            # IMPORT-TIME CODE OF A MODULE EVERY LANE IMPORTS (2026-11-05,
+            # `package_import_time_closure`): `import mojolearn` runs it in
+            # every lane's process, so the edit selects every lane, never
+            # fewer, whatever the door map says. A diff confined to def and
+            # method bodies falls through to the per-definition rules below.
+            lanes.update(every)
+            by_path[path] = set(every)
+            reasons[path] = (f"{len(every)} lane(s): import-time code changed in a module `import mojolearn` "
+                             f"runs in every lane (package_import_time_closure)")
             continue
         why_only = _imported_only_by_unreachable_modules(path) if path not in rev else None
         if why_only:

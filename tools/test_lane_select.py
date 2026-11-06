@@ -3498,3 +3498,49 @@ def test_release_build_only_keeps_the_lanes_whose_bindings_build():
             os.environ.pop(lane_select.RELEASE_BUILD_ONLY_ENV, None)
         else:
             os.environ[lane_select.RELEASE_BUILD_ONLY_ENV] = saved
+
+
+def _import_time_case():
+    """A real module every lane imports (`package_import_time_closure`) with a
+    top-level def whose body can take one more statement."""
+    path = "python/mojolearn/neural_inference.py"
+    assert path in lane_select.package_import_time_closure(), "pick a module `import mojolearn` runs"
+    old = lane_select._read(path)
+    fn = next(n for n in ast.parse(old).body if isinstance(n, ast.FunctionDef))
+    lines = old.split("\n")
+    last = fn.body[0]
+    indent = " " * last.col_offset
+    body = "\n".join(lines[:last.end_lineno] + [indent + "_lane_select_probe = 0"] + lines[last.end_lineno:])
+    top = old + "\n_LANE_SELECT_PROBE = 0\n"
+    return path, old, body, top
+
+
+def test_an_import_time_edit_of_a_module_every_lane_imports_selects_every_lane():
+    """2026-11-05: `import mojolearn` runs this file's top level in every lane
+    (`__init__.py` -> `_samba_impl.py` -> `_native_samba_bridge.connect` ->
+    `_connect_admission`), whatever its door map says."""
+    path, old, _body, top = _import_time_case()
+    with _Seeded({path: old}, {path: top}):
+        sel = lane_select.select([path], ref=_FAKE_REF)
+    assert set(sel["lanes"]) == set(lane_select.lane_sources()[0]), (len(sel["lanes"]), sel["reasons"][path])
+    assert "import-time code changed" in sel["reasons"][path], sel["reasons"][path]
+
+
+def test_a_body_only_edit_of_the_same_module_keeps_todays_selection():
+    """THE OTHER SIDE: a def-body edit runs nothing at import, so the
+    per-definition rule decides exactly as it did without the import-time
+    rule; and that rule fires again for the top-level edit (the arm that
+    must change)."""
+    path, old, body, top = _import_time_case()
+    with _Seeded({path: old}, {path: body}):
+        assert not lane_select.import_time_code_changed(_FAKE_REF, path)
+        got = lane_select.select([path], ref=_FAKE_REF)
+        real = lane_select.import_time_code_changed
+        lane_select.import_time_code_changed = lambda ref, p: False
+        try:
+            before = lane_select.select([path], ref=_FAKE_REF)
+        finally:
+            lane_select.import_time_code_changed = real
+    assert got["lanes"] == before["lanes"], (len(got["lanes"]), len(before["lanes"]))
+    with _Seeded({path: old}, {path: top}):
+        assert lane_select.import_time_code_changed(_FAKE_REF, path)
