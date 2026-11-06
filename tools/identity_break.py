@@ -1532,8 +1532,16 @@ def _(ml, X, yc, yr, Xh=None):
     from its CPU column at depth 1 (taxi, AUC 0.556 vs 0.610), with every
     identity lane green. A fixture column with fewer than 129 distinct
     values quantizes to fewer borders and does not reach the arm."""
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
-    w = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. 4000 rows keep every float column far
+    # above the 255 distinct values borders254 needs, the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62).
+    # gbdt-symmetric-eval's `m` is this fit and must stay the same shape.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss").fit(X, yc)
+    w = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
               border_count=254).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      borders254=_h(w.predict_proba(X))),
@@ -1551,8 +1559,8 @@ def _(ml, X, yc, yr, Xh=None):
 
     THREE FITS, AND THE SECOND TWO HAVE A SHAPE OF THEIR OWN FOR A REASON.
 
-    `m` is gbdt-symmetric's fit exactly (20 depth-6 trees at `_gbdt`'s
-    recorded options) plus an eval set, with the detector off and
+    `m` is gbdt-symmetric's fit exactly (its rows, its 8 depth-6 trees at
+    `_gbdt`'s recorded options) plus an eval set, with the detector off and
     `use_best_model` off. Its `predict` and `proba` must therefore be
     gbdt-symmetric's, bit for bit, on every column: an eval set does not
     reach the learn cursor, the borders, the splits or the leaves on the
@@ -1573,17 +1581,25 @@ def _(ml, X, yc, yr, Xh=None):
     and the two asserts are what keep it overfitting: a change that makes
     the curve monotone again reads REFUSED on this lane rather than passing
     with nothing measured."""
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    base = dict(n_estimators=20, max_depth=6, loss="Logloss")
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 training and 20000 eval
+    # rows -> 4000 and 4000, `m` at gbdt-symmetric's 8 trees (the two lanes must
+    # stay one fit). The overfitting shape below is kept as measured; fewer rows
+    # overfit sooner, and the two asserts still refuse a fixture on which the
+    # detector or the shrink goes inert.
+    rows = 4000
+    X, yc = X[:rows], yc[:rows]
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    base = dict(n_estimators=8, max_depth=6, loss="Logloss")
     m = _gbdt(ml.GradientBoosting, use_best_model=False, **base).fit(
-        X, yc, eval_set=(Xh, ych))
+        X, yc, eval_set=(Xe, ych))
     # the overfitting shape (measured: fires and cuts on all nine fixtures)
     stop = dict(n_estimators=30, max_depth=7, loss="Logloss",
                 learning_rate=1.8, l2_leaf_reg=3.0)
     od = _gbdt(ml.GradientBoosting, od_type="Iter", od_wait=2,
-               use_best_model=False, **stop).fit(X, yc, eval_set=(Xh, ych))
+               use_best_model=False, **stop).fit(X, yc, eval_set=(Xe, ych))
     sh = _gbdt(ml.GradientBoosting, use_best_model=True,
-               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xh, ych))
+               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xe, ych))
     if not od.stopped_early_ or len(od.test_loss_curve_) >= stop["n_estimators"]:
         raise RuntimeError(
             "gbdt-symmetric-eval: the Iter detector did not fire (trees="
@@ -1639,12 +1655,20 @@ def _(ml, X, yc, yr, Xh=None):
     is untouched by it. The CPU column trains binary class_weights since
     2026-10-03 (lane/fix-cpu-column2: the weight column through the host
     search planes, WeightsCpu and the leaf oracle)."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. Lossguide still fills max_leaves=32 on
+    # 1500 rows (gbdt-lossguide-newtoncosine's floor). 4000 rows keep the root
+    # leaf above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder
+    # arms) and two BK_CHUNK 2048 partials, the second ragged
+    # (bin_keyed_stats.mojo:62); the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
     cw = [1.0, 1.3101271632087197]
     parts, first = {}, None
     for policy, kw in (("SymmetricTree", dict(max_depth=6, random_strength=1.0, bootstrap_type="No")),
                        ("Depthwise", dict(max_depth=6)),
                        ("Lossguide", dict(max_leaves=32))):
-        m = _gbdt(ml.GradientBoosting, n_estimators=20, grow_policy=policy, loss="Logloss",
+        m = _gbdt(ml.GradientBoosting, n_estimators=trees, grow_policy=policy, loss="Logloss",
                   l2_leaf_reg=1.0, class_weights=cw, **kw).fit(X, yc)
         parts[policy] = _h(m.predict(X))
         first = first or m
@@ -1657,7 +1681,15 @@ def _(ml, X, yc, yr, Xh=None):
     the CPU column carries (gbdt/host/gbdt_oracle_multiclass.mojo restates
     `snap_weights_to_grid_kernel`); gbdt-multiclass's [1, 2, 0.5] is on the
     grid and does not reach the snap's rounding (lane/sym-quality)."""
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClass", l2_leaf_reg=1.0,
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClass", l2_leaf_reg=1.0,
               class_weights=[1.0, 1.3101271632087197, 0.7]).fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -1676,20 +1708,32 @@ _GBDT_BORDER_TYPES = ("Median", "Uniform", "UniformAndQuantiles", "MaxLogSum",
 
 
 @lane("gbdt-ordered")
+@floor(rows=(5000, "5000 rows is where CatBoost's fold size reaches its min_fold_size arm "
+                   "(gbdt/methods/dynamic_boosting_folds.mojo:459-464: below 5000 it is docCount/50, "
+                   "below 500 it is the 1-document cliff), so the Ordered fold structure this lane "
+                   "hashes is the one a real fit trains; set 2026-11-05, lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """GradientBoosting(boosting_type='Ordered') at the recorded GBDT
     configuration of `_gbdt` (no bootstrap, no score noise): a Logloss fit
     (their four permutations, ten Newton steps per leaf) with an eval set,
     the Iter detector at wait 5 and use_best_model (their test cursor), and
-    an RMSE fit (boost_from_average on, as their unset default), 20 trees of
+    an RMSE fit (boost_from_average on, as their unset default), 8 trees of
     depth 6 each. The fold structure search, every (permutation, fold)
     cursor and the estimation permutation reach the train column through both
     fits' predictions and learn curves and the Logloss fit's held-out curve."""
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 training and eval rows x
+    # 20 trees -> 6000 x 8. 6000 rows sit above the floor's 5000, so the fold
+    # size is min_fold_size and the permutation block stays 1
+    # (ordered_plan.mojo:40, below 50000); the tree count is not the point.
+    rows = 6000                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    trees = 8
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
               boosting_type="Ordered", od_type="Iter", od_wait=5
-              ).fit(X, yc, eval_set=(Xh, ych))
-    r = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+              ).fit(X, yc, eval_set=(Xe, ych))
+    r = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
               boosting_type="Ordered").fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      test_loss_curve=_h(np.asarray(m.test_loss_curve_, dtype=np.float64)),
@@ -1700,14 +1744,23 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("gbdt-ordered-bayesian-noise")
+@floor(rows=(5000, "the Ordered fold size is min_fold_size only from 5000 rows up "
+                   "(gbdt/methods/dynamic_boosting_folds.mojo:459-464, docCount/50 below it), and the "
+                   "Bayesian bootstrap and score noise here ride those folds; set 2026-11-05, "
+                   "lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """Ordered boosting at CatBoost's GPU defaults for the parts `_gbdt`
     pins elsewhere: the Bayesian bootstrap at temperature 1 on the quality
     slices and random_strength 1.0 with its model-length decay, one Logloss
-    fit of 20 depth-6 trees with a NewtonCosine twin (Newton weights in the
+    fit of 8 depth-6 trees with a NewtonCosine twin (Newton weights in the
     search planes). The learning rate is pinned to 0.03 and the leaf count to
     Logloss's ten, so the lane moves only with the bootstrap and the noise."""
-    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered",
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 rows x 20 trees -> 6000 x
+    # 8, above the floor's 5000; eight trees still carry the noise's
+    # model-length decay across trees.
+    rows = 6000                                  # FLOORED, see @floor above
+    X, yc = X[:rows], yc[:rows]
+    kw = dict(n_estimators=8, max_depth=6, loss="Logloss", boosting_type="Ordered",
               learning_rate=0.03, leaf_estimation_iterations=10)
     m = ml.GradientBoosting(**kw).fit(X, yc)
     nc = ml.GradientBoosting(score_function="NewtonCosine", **kw).fit(X, yc)
@@ -1741,6 +1794,10 @@ def _gbdt_binary_columns(X):
 
 
 @lane("gbdt-binary-columns")
+@floor(rows=(5000, "four of this lane's six fits are Ordered, whose fold size is min_fold_size only "
+                   "from 5000 rows up (gbdt/methods/dynamic_boosting_folds.mojo:459-464, docCount/50 "
+                   "below it), so the Ordered fold arm's binary histograms run on real folds; set "
+                   "2026-11-05, lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """Five columns with exactly ONE border each (0/1 flags,
     `_gbdt_binary_columns`), the BinaryFeatures histogram policy
@@ -1754,12 +1811,20 @@ def _(ml, X, yc, yr, Xh=None):
 
     The fits are the configurations the small-pool host route took before
     lane hr-gbdt-small deleted it: Plain and Ordered, Logloss and
-    RMSE, at `_gbdt`'s recorded options, 20 depth-6 trees each; the Ordered
+    RMSE, at `_gbdt`'s recorded options, 8 depth-6 trees each; the Ordered
     RMSE fit again at CatBoost's GPU defaults for the bootstrap and the
     noise (Bayesian, random_strength 1), which is what an unset
     `GradientBoosting()` of 500 trees or more trains below 50,000 rows; and
     OrderedRMSE, whose host restatement shares the Ordered fold arm. The
     model and held-out columns read the Ordered Logloss fit."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 6000 x 8 per fit. 6000 rows sit above the floor's
+    # 5000 (the Ordered fold arm), keep the root leaf above GATHER_INPLACE_SIZE
+    # 1024 (split_points.mojo:829) and both flag values on every fixture (the
+    # refusal below still checks); the tree count is not what this lane checks.
+    rows = 6000                                  # FLOORED, see @floor above
+    trees = 8
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]
     X = _gbdt_binary_columns(X)
     Xh = None if Xh is None else _gbdt_binary_columns(Xh)
     for c in _GBDT_BINARY_COLUMNS:
@@ -1775,18 +1840,18 @@ def _(ml, X, yc, yr, Xh=None):
     yc = (np.asarray(yc, dtype=np.int32) ^ X[:, 5].astype(np.int32)).astype(np.int32)
     yr = (np.asarray(yr, dtype=np.float32) + np.float32(1.5) * X[:, 3]
           - np.float32(1.0) * X[:, 8]).astype(np.float32)
-    pc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    pc = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
                boosting_type="Plain").fit(X, yc)
-    pr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+    pr = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
                boosting_type="Plain").fit(X, yr)
-    oc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    oc = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
                boosting_type="Ordered").fit(X, yc)
-    orr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+    orr = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
                 boosting_type="Ordered").fit(X, yr)
-    od = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE",
+    od = ml.GradientBoosting(n_estimators=trees, max_depth=6, loss="RMSE",
                              boosting_type="Ordered", learning_rate=0.03).fit(X, yr)
     perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
-    ormse = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
+    ormse = ml.OrderedRMSE(n_estimators=trees, max_depth=6).fit(X, yr, permutation=perm)
     return _fit(dict(plain_logloss=_h(pc.predict(X), pc.predict_proba(X)),
                      plain_rmse=_h(pr.predict(X)),
                      plain_curves=_h(np.asarray(pc.loss_curve_, dtype=np.float64),
@@ -1807,14 +1872,23 @@ def _(ml, X, yc, yr, Xh=None):
     the loss: the auto learning rate off the GPU coefficient rows (read back
     as `learning_rate_`), the Bayesian bootstrap at temperature 1,
     random_strength 1 with its model-length decay, and the small-iteration
-    leaf rule (one Newton step below 200 trees and 20 features). 20 trees,
+    leaf rule (one Newton step below 200 trees and 20 features). 8 trees,
     Plain (below 500 trees), Logloss, and the same fit through
-    GradientBoostingClassifier, which defers every default. At 20 trees the
+    GradientBoostingClassifier, which defers every default. At 8 trees the
     auto rate is capped at 0.5 on every fixture, so a third fit, 50 depth-2
     trees on the first 2000 rows, reads the formula below its cap (0.475 on
     the GPU rows; 0.216 on the CPU rows the sabotage arm swaps in)."""
-    m = ml.GradientBoosting(n_estimators=20, loss="Logloss").fit(X, yc)
-    c = ml.GradientBoostingClassifier(n_estimators=20).fit(X, yc)
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"): the
+    # two capped fits go 20000 rows x 20 trees -> 4000 x 8. The GPU Logloss row
+    # (python/mojolearn/ensemble.py:275) gives 0.031 * (1000/8) ^0.896 = 2.4 at
+    # 4000 rows and 8 trees, still far above the 0.5 cap, and 8 trees are still
+    # below the 200-tree one-Newton-step rule. The below-cap fit keeps its
+    # measured 2000 rows and 50 depth-2 trees (the prefix of a prefix: its bytes
+    # do not move).
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = ml.GradientBoosting(n_estimators=trees, loss="Logloss").fit(X, yc)
+    c = ml.GradientBoostingClassifier(n_estimators=trees).fit(X, yc)
     a = ml.GradientBoosting(n_estimators=50, max_depth=2, loss="Logloss").fit(X[:2000], yc[:2000])
     lr = np.asarray([m.learning_rate_, a.learning_rate_], dtype=np.float64)
     return _fit(dict(predict=_h(m.predict(X)), learning_rate=_h(lr),
@@ -1827,26 +1901,32 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The bootstrap and the score noise on every arm a default fit or a
     `bootstrap_type` reaches, Logloss and RMSE (lane/gbdt-cpu-default-parity,
-    2026-09-20). 20 trees each, everything else unset. SymmetricTree: the
+    2026-09-20). 6 trees each, everything else unset. SymmetricTree: the
     default RMSE fit (Bayesian bootstrap, random_strength 1, its leaves read
     off the bootstrapped planes), the same through GradientBoostingRegressor,
     and Bernoulli and No for both losses (No keeps the noise). Depthwise and
     Lossguide: RMSE at the policy defaults, the Bayesian and Bernoulli
     bootstraps for both losses, and Depthwise with random_strength 1 under
     the Bayesian bootstrap. Then the ten pointwise losses at their defaults
-    (Bayesian bootstrap, random_strength 1), eight trees each. Poisson keeps
+    (Bayesian bootstrap, random_strength 1), four trees each. Poisson keeps
     ten leaf iterations so its backtracking can handle the wide fixture's
     large counts; the small-fit one-step shortcut overflows on both devices.
     The first 4000 rows of the fixture."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # rows stay 4000; 20 trees -> 6 per arm and 8 -> 4 per pointwise loss. On
+    # the Apple column a fit costs per tree, not per row, and this lane runs 28
+    # fits. Six trees still sample six bootstraps and six points of the score
+    # noise's model-length decay; every arm and loss is kept.
     rows = 4000
+    trees, loss_trees = 6, 4
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]
-    m = ml.GradientBoosting(n_estimators=20, loss="RMSE").fit(X, yr)
-    reg = ml.GradientBoostingRegressor(n_estimators=20).fit(X, yr)
+    m = ml.GradientBoosting(n_estimators=trees, loss="RMSE").fit(X, yr)
+    reg = ml.GradientBoostingRegressor(n_estimators=trees).fit(X, yr)
     parts = dict(predict=_h(m.predict(X)), regressor=_h(reg.predict(X)))
     curves = [np.asarray(m.loss_curve_, dtype=np.float64)]
 
     def add(name, y, **kw):
-        g = ml.GradientBoosting(n_estimators=20, **kw).fit(X, y)
+        g = ml.GradientBoosting(n_estimators=trees, **kw).fit(X, y)
         parts[name] = _h(g.predict(X))
         curves.append(np.asarray(g.loss_curve_, dtype=np.float64))
 
@@ -1866,9 +1946,9 @@ def _(ml, X, yc, yr, Xh=None):
     for loss, kw in (("Quantile", {}), ("MAE", {}), ("LogLinQuantile", {}), ("MAPE", {}),
                      ("Poisson", dict(leaf_estimation_iterations=10)), ("Lq", dict(loss_q=3.0)), ("Expectile", dict(loss_alpha=0.3)),
                      ("Tweedie", dict(loss_variance_power=1.5)), ("Huber", dict(loss_delta=1.0))):
-        g = ml.GradientBoosting(n_estimators=8, loss=loss, **kw).fit(X, ypos)
+        g = ml.GradientBoosting(n_estimators=loss_trees, loss=loss, **kw).fit(X, ypos)
         parts["sym-%s" % loss] = _h(g.predict(X))
-    ce = ml.GradientBoosting(n_estimators=8, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+    ce = ml.GradientBoosting(n_estimators=loss_trees, loss="CrossEntropy").fit(X, yc.astype(np.float32))
     parts["sym-CrossEntropy"] = _h(ce.predict(X))
     parts["loss_curves"] = _h(np.concatenate(curves))
     return _fit(parts, m, lambda e: (e.predict(Xh),))
@@ -3636,8 +3716,16 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-multiclass")
 def _(ml, X, yc, yr, Xh=None):
     """MultiClass with class weights on the three-class target."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
     t = _three_class_centered(X)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClass",
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClass",
                             class_weights=[1.0, 2.0, 0.5]).fit(X, t)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -3645,7 +3733,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-onevsall")
 def _(ml, X, yc, yr, Xh=None):
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -3653,11 +3749,19 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-multiclass-defaults")
 def _(ml, X, yc, yr, Xh=None):
     """Public multiclass defaults: Bayesian bootstrap and random strength one."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. Eight trees still carry eight
+    # bootstraps and the noise's model-length decay. 4000 rows keep the root
+    # leaf above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder
+    # arms) and two BK_CHUNK 2048 partials, the second ragged
+    # (bin_keyed_stats.mojo:62); the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
     target = _three_class_centered(X)
     parts = {}
     m = None
     for loss in ("MultiClass", "MultiClassOneVsAll"):
-        m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss=loss,
+        m = ml.GradientBoosting(n_estimators=trees, max_depth=6, loss=loss,
                                 class_weights=[1.0, 2.0, 0.5]).fit(X, target)
         parts[loss] = _h(m.predict(X), m.predict_proba(X))
     return _fit(parts, m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -3715,12 +3819,21 @@ def _(ml, X, yc, yr, Xh=None):
     temperature, boost from average on Logloss, an eval set with
     iteration-based early stopping and best-model truncation, and row
     weights: one symmetric fit."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. The eval set is cut to the same 4000
+    # held-out rows. 4000 rows keep the root leaf above GATHER_INPLACE_SIZE 1024
+    # (split_points.mojo:829, both reorder arms) and two BK_CHUNK 2048 partials,
+    # the second ragged (bin_keyed_stats.mojo:62); the tree count is not what
+    # this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
     w = _hw((X.shape[0],), "gbdt-eval:sample_weight", 0.5, 1.5)
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", score_function="L2",
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss", score_function="L2",
                             use_pointwise_searcher=True, bootstrap_type="Bayesian", bagging_temperature=0.5,
                             boost_from_average=True, od_type="Iter", od_wait=5, use_best_model=True
-                            ).fit(X, yc, sample_weight=w, eval_set=(Xh, ych))
+                            ).fit(X, yc, sample_weight=w, eval_set=(Xe, ych))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -3932,7 +4045,14 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The sklearn-style classifier adapter, the only caller of the binary
     probability and class entries. It refuses save, so no model column."""
-    m = _gbdt(ml.GradientBoostingClassifier, n_estimators=20, max_depth=6).fit(X, yc)
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = _gbdt(ml.GradientBoostingClassifier, n_estimators=trees, max_depth=6).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      decision=_h(m.decision_function(X[:512]))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
@@ -4048,9 +4168,17 @@ def _(ml, X, yc, yr, Xh=None):
     column refuses sample_weight on every loss. YetiRank has no loss value
     (the target writes 0), so `loss_curve_` is hashed only to pin that.
     Predict is row-wise, so the held-out probe and the batch part apply."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows -> 4000 and the main fit's 20 trees -> 8. 4000 rows carry about
+    # 465 of the uneven RANK_QUERY_SIZES queries (gbdt-pair-logit's floor
+    # measured 178 at 1500 still mixing every grade) and keep the root leaf
+    # above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829). The seeded fit
+    # keeps its 8 depth-4 trees.
+    rows, trees = 4000, 8
+    X, yr = X[:rows], yr[:rows]
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
     e = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
         X, rel, group_id=g)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
@@ -7686,13 +7814,22 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-catboost-defaults", "gbdt-stochastic-arms")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
-_batch_decl(_rows_calls("predict", "predict_proba", prep=_gbdt_binary_columns), "gbdt-binary-columns")
+# 2026-11-05 (lane/slow-verification-lanes): gbdt-binary-columns and
+# gbdt-adapter-clf ask the first 2048 held-out rows rather than all 20000.
+# The harness's per-row compare is Python over every row, and 2048 rows are
+# still several thread blocks at any block size up to 1024, the 1/7/rest
+# split and the 16 rows alone; a derived input is still cut ONCE from the
+# whole held-out slice (`prep(Xh)[sl]`). gbdt-categorical-ctr-tables keeps
+# its whole slice: its CPU role reads checked-in GPU-saved models.
+_GBDT_BATCH_ROWS = slice(0, 2048)
+_batch_decl(_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS, prep=_gbdt_binary_columns),
+            "gbdt-binary-columns")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
-    return (_rows_calls("predict", "predict_proba")(ml, e, Xh)
+    return (_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS)(ml, e, Xh)
             + _rows_calls("decision_function", sl=slice(0, 512))(ml, e, Xh))
 
 
