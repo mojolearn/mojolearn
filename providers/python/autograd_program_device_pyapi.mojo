@@ -126,7 +126,7 @@ def ops_imported_run_device_py[KIND: Int](
             if j > 0:
                 text += ", "
             text += String(dim)
-        text += ",)" if len(shape) == 1 else ")"
+        text += String(",)") if len(shape) == 1 else String(")")
         var addr = Int(py=outputs[k])
         if count > 0 and addr == 0:
             raise Error("ValueError: output buffer " + String(k) + " has a null device address")
