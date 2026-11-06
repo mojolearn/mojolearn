@@ -148,7 +148,7 @@ def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject
     var size = len(fields)
     var record = NEURAL_DESCRIPTOR_ADMITTED.get_or_create_ptr()
     var slot = -1
-    for i in range(len(record[].modules)):  # driver-loop: over the few admitted binding modules
+    for i in range(len(record[].modules)):  # small-loop(record: admitted binding modules): a few compiled extension modules per process, never data
         if record[].modules[i] == module_address:
             if record[].dicts[i] == dict_address and record[].sizes[i] == size:
                 return fields
