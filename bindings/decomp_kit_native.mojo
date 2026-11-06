@@ -15,6 +15,7 @@
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
 from std.ffi import _Global, external_call, c_size_t
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
@@ -97,11 +98,11 @@ def decomp_is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
     # Python indexing per call). An MRO holds classes only, so anything
     # that is not a class is never found, as before.
     var meta = py_type(py_type(PythonObject(0)))  # the builtin `type`
-    ref cpy = Python().cpython()
-    var subtype = cpy.lib.get_function[Int32]("PyType_IsSubtype")
-    if subtype(py_type(cls)._obj_ptr, meta._obj_ptr) == 0:
+    # Resolved once per process in the shared table (pass 2), not by name per call.
+    var t = cpython_table()
+    if t[].PyType_IsSubtype(py_type(cls)._obj_ptr, meta._obj_ptr) == 0:
         return False
-    return subtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
+    return t[].PyType_IsSubtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
 
 
 def decomp_class_attr(model: PythonObject, name: String) raises -> PythonObject:

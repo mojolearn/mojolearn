@@ -9,6 +9,7 @@
 # shell published. fit_transform projects the X the fit converted.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -36,8 +37,9 @@ def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
         return False
     # CPython's own subtype test walks the same tp_mro by identity in one
     # native call (no MRO tuple fetch or per-row Python indexing).
-    ref cpy = Python().cpython()
-    return cpy.lib.get_function[Int32]("PyType_IsSubtype")(cls._obj_ptr, target._obj_ptr) != 0
+    # Resolved once per process in the shared table (pass 2), not by name per call.
+    var t = cpython_table()
+    return t[].PyType_IsSubtype(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def _int(value: PythonObject) raises -> Int:
