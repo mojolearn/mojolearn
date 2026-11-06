@@ -795,7 +795,8 @@ def previous_release(root=ROOT):
     # recorded beside the core's alpha-manifest-linux.json by a split release
     import runpy
     registry = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
-    for platform in ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]())):
+    # "nvidia-ptx": the PTX wheel releases up to 0.8.65 published (read only; 2026-11-05 folded it into nvidia)
+    for platform in ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]()), "nvidia-ptx"):
         try:
             doc = json.loads((d / f"alpha-manifest-{platform}.json").read_text())
         except (OSError, ValueError):
@@ -837,7 +838,8 @@ def version_tuple(v):
 def _platforms():
     import runpy
     registry = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
-    return ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]()))
+    # "nvidia-ptx": read only, from candidates up to 0.8.65 that published the PTX wheel (2026-11-05)
+    return ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]()), "nvidia-ptx")
 
 
 def candidate_builds(evidence_root, platforms=None):

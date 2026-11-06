@@ -47,7 +47,7 @@ def test_split_wheel_ownership_and_negative_controls(verifier, monkeypatch, tmp_
 
     def distribution(name):
         calls.append(name)
-        assert name == 'mojolearn-nvidia-ptx'
+        assert name == 'mojolearn-nvidia'  # the NVIDIA wheel owns cuda_ptx/sm_80 (2026-11-05)
         if fault == 'missing-owner':
             raise metadata.PackageNotFoundError(name)
         return payload
@@ -65,7 +65,7 @@ def test_split_wheel_ownership_and_negative_controls(verifier, monkeypatch, tmp_
             verifier.verify_distribution_records(core, package, source, native)
     else:
         verifier.verify_distribution_records(core, package, source, native)
-        assert calls == ['mojolearn-nvidia-ptx']
+        assert calls == ['mojolearn-nvidia']
 
 
 def test_monolithic_wheel_needs_no_plugin_lookup(verifier, monkeypatch, tmp_path):

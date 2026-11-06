@@ -107,7 +107,7 @@ RELEASE_PROFILES = frozenset({RELEASE_PROFILE, 'release-0.6.1'})
 #
 # - REQUIRED: gpu_plugins.required_sets(vendor) -- every native slot's first
 #   spelling (cuda/sm_89, hip/gfx942) plus the shipped PTX slot (cuda/sm_80,
-#   packed into its own mojolearn-nvidia-ptx wheel at mojolearn/cuda_ptx/sm_80
+#   packed into the mojolearn-nvidia wheel at mojolearn/cuda_ptx/sm_80 (2026-11-05)
 #   and keyed cuda/sm_80 at the build layout). The PTX set is a set like any
 #   other: built by its own leg, proved by its own build proof, qualified under
 #   its own runtime key (Andrew 2026-10-10: PTX is a normal target; no flag).
@@ -123,7 +123,7 @@ _REGISTRY = load_gpu_plugins()
 LINUX_VENDORS = ('cuda', 'hip')
 
 #: Each plugin's required sets, 'vendor/arch' (gpu_plugins.required_sets):
-#: the split profile packs `mojolearn-nvidia` + `mojolearn-nvidia-ptx` from
+#: the split profile packs `mojolearn-nvidia` (native + PTX) from
 #: PLUGIN_ARCHES['cuda'] and `mojolearn-amd` from PLUGIN_ARCHES['hip'].
 PLUGIN_ARCHES = {vendor: frozenset('/'.join(k) for k in _REGISTRY.required_sets(vendor))
                  for vendor in LINUX_VENDORS}

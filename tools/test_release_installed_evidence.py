@@ -240,7 +240,8 @@ def test_published_install_is_admitted_against_the_qualified_artifacts(tmp_path,
     report = json.loads((out / published.REPORT).read_text())
     assert report['status'] == 'passed', report['checks']
     assert {row['id']: row['expected'] for row in report['coverage']} == {
-        'index-resolution': 8, 'published-artifact-hashes': 3, 'wheel-integrity': 3, 'gate-evidence': 5}
+        # mojolearn-core and mojolearn-nvidia (the NVIDIA wheel carries its PTX set, 2026-11-05)
+        'index-resolution': 6, 'published-artifact-hashes': 2, 'wheel-integrity': 2, 'gate-evidence': 4}
     ledger, rows = published_ledger(tmp_path, repo, revision, {w.name: sha(w) for w in wheels})
     assert producer_admission_available(rows['published-nvidia'])
     # The directory is moved before admission: evidence is judged where it now lies.
@@ -309,9 +310,9 @@ def test_real_catalog_rows_have_installed_adapters():
 
 def test_linux_split_wheels_match_candidate_distribution_names():
     import release_installed_evidence as E
-    configuration = {"artifacts:nvidia": {"mojolearn-core": "a" * 64, "mojolearn-nvidia-ptx": "b" * 64}}
+    configuration = {"artifacts:nvidia": {"mojolearn-core": "a" * 64, "mojolearn-nvidia": "b" * 64}}
     wheels = {"mojolearn_core-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "a" * 64,
-              "mojolearn_nvidia_ptx-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "b" * 64}
+              "mojolearn_nvidia-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "b" * 64}
     assert E._qualified(configuration, wheels)
     assert not E._qualified(configuration, dict(wheels, **{
         "mojolearn_core-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "c" * 64}))

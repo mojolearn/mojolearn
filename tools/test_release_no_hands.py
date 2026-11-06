@@ -502,7 +502,7 @@ def test_published_steps_skip_without_pypi_and_take_a_passed_report_for_these_wh
     assert r.step_published_nvidia() == "skipped (not published to PyPI)"
     r = make(tmp_path, publish="pypi")
     w = finals(r)
-    report(r.published_out("nvidia"), "nvidia", [w["linux"], w["nvidia"], w["nvidia-ptx"]])
+    report(r.published_out("nvidia"), "nvidia", [w["linux"], w["nvidia"]])
     assert r.published_ok("nvidia")[0] and r.step_published_nvidia().endswith("(report exists)")
     record(r, "published-nvidia")
     assert r.have("published-nvidia", r.recorded("published-nvidia")).startswith("PASSED index-resolution=3/3")
@@ -530,7 +530,7 @@ def test_published_step_runs_the_bytes_check_locally_with_the_gate_receipts(tmp_
     def runner(cmd, env, log, detach=False):
         cmd = [str(c) for c in cmd]
         seen.append(cmd)
-        report(pathlib.Path(cmd[cmd.index("--out") + 1]), "nvidia", [w["linux"], w["nvidia"], w["nvidia-ptx"]])
+        report(pathlib.Path(cmd[cmd.index("--out") + 1]), "nvidia", [w["linux"], w["nvidia"]])
         return 0
     r = make(tmp_path, runner=runner, publish="pypi")
     w = finals(r)
@@ -546,7 +546,7 @@ def test_published_step_runs_the_bytes_check_locally_with_the_gate_receipts(tmp_
     assert cmd[cmd.index("--gate-evidence") + 1] == str(receipt) and cmd[cmd.index("--gate-verdict") + 1]
     assert cmd[cmd.index("--index-url") + 1] == "https://pypi.org/simple"
     assert [cmd[i + 1] for i, a in enumerate(cmd) if a == "--candidate-wheel"] == [
-        str(w["linux"]), str(w["nvidia"]), str(w["nvidia-ptx"])]
+        str(w["linux"]), str(w["nvidia"])]  # the NVIDIA wheel carries its PTX set (2026-11-05)
 
 
 def test_published_step_refuses_without_a_passed_gate_and_runs_nothing(tmp_path, monkeypatch):

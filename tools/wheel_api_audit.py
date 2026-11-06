@@ -252,16 +252,10 @@ def split_audit(wheels):
                 bundle = actual_marker.get('bundled_ptx')
             except (KeyError, ValueError, AttributeError):
                 bundle = None
-            if package.get('ptx'):
-                try:
-                    plugins.validate_bundle_descriptor(bundle)
-                    row['ptx_reference'] = bundle
-                except ValueError as exc:
-                    problems.append(f'{wheel.name}: invalid PTX dependency manifest: {exc}')
-            elif package['code_format'] == 'ptx':
-                # THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag):
-                # owned by the PTX dependency, with its manifest bound by both
-                # package markers and its bytes by the release inventory.
+            if package.get('ptx') and package.get('ptx_shipped', True):
+                # THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag),
+                # in the NVIDIA wheel itself since 2026-11-05: its manifest bound by
+                # the vendor marker and its bytes by the release inventory.
                 try:
                     if bundle is None:
                         raise ValueError('the vendor marker binds no PTX set')
@@ -293,6 +287,12 @@ def split_audit(wheels):
                     row['ptx'] = dict(bundle, source_commit=ptx_source, arch=plugins.PTX_ARCH)
                 except (ValueError, KeyError, TypeError) as exc:
                     problems.append(f'{wheel.name}: invalid PTX slot: {exc}')
+            elif package.get('ptx'):
+                if bundle is not None:
+                    try:
+                        plugins.validate_bundle_descriptor(bundle)
+                    except ValueError as exc:
+                        problems.append(f'{wheel.name}: invalid PTX slot digest: {exc}')
             elif bundle is not None:
                 problems.append(f'{wheel.name}: only the NVIDIA wheel carries a PTX slot')
             arches = []
@@ -333,11 +333,12 @@ def split_audit(wheels):
         problems.append(f'the split wheels carry different versions: {sorted(versions)}')
     if len(tagsets) > 1:
         problems.append(f'the split wheels carry different tags: {sorted(tagsets)}')
-    ptx = next((r.get('ptx') for r in rows if r.get('role') == plugins.PTX_PROFILE), None)
-    if ptx is not None:
-        for row in rows:
-            if 'ptx_reference' in row and row['ptx_reference']['manifest_sha256'] != ptx['manifest_sha256']:
-                problems.append(f"{row['wheel']}: PTX dependency manifest differs from the vendor marker")
+    # mojolearn-nvidia-ptx (0.8.39 to 0.8.65) is no longer a release project: the
+    # NVIDIA wheel carries its PTX set (2026-11-05). A staged one is refused.
+    for row in rows:
+        if row.get('distribution') == plugins.LEGACY_PTX_DISTRIBUTION:
+            problems.append(f"{row['wheel']}: {plugins.LEGACY_PTX_DISTRIBUTION} is no longer released; "
+                            'the PTX set ships in mojolearn-nvidia')
     return dict(scope='Split wheel ownership, dependencies, size and metadata; no numerical qualification.',
                 wheels=rows, problems=problems)
 
@@ -359,8 +360,7 @@ def _index_files(index, project, version, timeout=20):
 
 def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
     """DEPENDENCIES PUBLISH FIRST (2026-10-20). mojolearn-core requires no
-    vendor; each vendor requires mojolearn-core (and mojolearn-nvidia its PTX
-    package); the Linux `mojolearn` wheel requires the core and both vendors.
+    vendor; each vendor requires mojolearn-core; the Linux `mojolearn` wheel requires the core and both vendors.
     For each such wheel among `wheels`, every one of its mojolearn
     requirements at its version must already be on `index` ('pypi' or
     'testpypi'), so the index never serves an unresolvable requirement.

@@ -162,11 +162,12 @@ def test_gate_job_stages_candidate_wheels_and_builds_the_eight_binaries_in_the_j
     plan = RG.Plan('nvidia', VERSION, COMMIT, tmp_path, tmp_path/'out', paths, 'rel-test',
                    prior=directory, prior_files=RG.prior_files(directory, 'nvidia'))
     uploads = plan.uploads()
-    # three wheels, the job script, the retained set (eight binaries + receipt) and gate.env
-    assert len(uploads) == 3+1+8+1+1
+    # two wheels (the NVIDIA wheel carries its PTX set), the job script, the retained set
+    # (eight binaries + receipt) and gate.env
+    assert len(uploads) == 2+1+8+1+1
     assert len([r for _, r, _ in uploads if '/autograd-prior/' in r]) == 9
     assert all(x for _, r, x in uploads if '/autograd-prior/' in r and not r.endswith('.json'))
-    assert plan.gate.count('--candidate-wheel') == 3
+    assert plan.gate.count('--candidate-wheel') == 2
     assert plan.gate[plan.gate.index('--source-commit')+1] == COMMIT
     manifest = plan.gate[plan.gate.index('--autograd-manifest')+1]
     out = plan.build[plan.build.index('--out')+1]

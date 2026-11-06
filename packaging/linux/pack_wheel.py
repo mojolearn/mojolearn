@@ -10,14 +10,14 @@
         --out python/dist
 
 FOUR WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py): core, NVIDIA
-native sm_89, AMD gfx942 and NVIDIA PTX sm_80. The core requires both
-vendors, and NVIDIA requires PTX, all pinned to the same version.
+(native sm_89 AND PTX sm_80 in one wheel, Andrew 2026-11-05), AMD gfx942 and
+the file-free meta `mojolearn`, all pinned to the same version.
 Default pip installation includes every released target.
 
-`--wheels nvidia,nvidia-ptx` emits the native NVIDIA wheel and its exactly
-pinned PTX dependency. The PTX slot (`cuda/sm_80`, installed at
-`cuda_ptx/sm_80`) has its own build proof. Both package markers bind the
-same PTX manifest SHA256; native and PTX files have disjoint owners.
+`--wheels nvidia` emits the one NVIDIA wheel: `cuda_native/sm_89` and the PTX
+slot (`cuda/sm_80`, installed at `cuda_ptx/sm_80`, its own build proof). Its
+marker binds the PTX manifest SHA256. There is no separate PTX wheel any more
+(mojolearn-nvidia-ptx shipped 0.8.39 to 0.8.65).
 Every wheel is checked against its project's PyPI file limit (packaging/pypi_limits.json) here, at pack time;
 an oversize wheel fails the pack with its per-set compressed sizes.
 Kernel bytes are unchanged. Native roots move to cuda_native/ and hip_native/
@@ -317,13 +317,14 @@ from verify_linux_surface_qualification import (  # noqa: E402
 gpu_plugins = load_gpu_plugins()
 # PER-PROJECT PyPI LIMITS (2026-11-05): packaging/pypi_limits.json holds what PyPI
 # granted (mojolearn-nvidia and mojolearn-amd 250 MiB per file since 2026-11-04;
-# mojolearn, mojolearn-core and mojolearn-nvidia-ptx the 100 MiB default).
+# mojolearn and mojolearn-core the 100 MiB default). The NVIDIA wheel carries
+# native sm_89 and PTX sm_80 together and is checked against its 250 MiB.
 sys.path.insert(0, str(REPO / "packaging"))
 import pypi_limits  # noqa: E402
 #: The combined (unsplit) wheel publishes as `mojolearn`.
 PYPI_LIMIT = pypi_limits.file_limit("mojolearn")
 #: The profiles that emit the split wheels from the same inputs:
-#: `mojolearn-core` (core-linux), `mojolearn-nvidia`, `mojolearn-nvidia-ptx`,
+#: `mojolearn-core` (core-linux), `mojolearn-nvidia` (native + PTX),
 #: `mojolearn-amd` and the file-free `mojolearn` (meta-linux, requiring the
 #: core and both vendors; 2026-10-20). `split` is the
 #: default and checks sets the way `generic` does; `release-split` checks
@@ -1429,8 +1430,8 @@ def main(argv=None, _gates=True):
                     help="platform tag; default " + SPLIT_PLAT + " for the split profiles, "
                          "linux_x86_64 (for audit.sh to retag) for the combined ones")
     # DEVIATION 2290: `release-0.6.1` is the deprecated alias of release-linux3.
-    # THE DEFAULT IS THE SPLIT: the core, the PTX payload and one
-    # plugin per GPU vendor. `generic` and `release-linux3` still pack the one
+    # THE DEFAULT IS THE SPLIT: the core and one plugin per GPU vendor
+    # (the NVIDIA plugin carries the PTX set). `generic` and `release-linux3` still pack the one
     # combined wheel and are what tools/release.py asks for by name.
     ap.add_argument('--profile', choices=SPLIT_PROFILES + ('generic', RELEASE_PROFILE, 'release-0.6.1'),
                     default=SPLIT_PROFILE)
@@ -1883,6 +1884,10 @@ def main(argv=None, _gates=True):
                 "compressed_bytes": size, "compressed_mb": round(size / 1e6, 2),
                 "pypi_limit_bytes": limit, "over_limit": size > limit,
                 "payloads": wheel_payload_sizes(whl)}
+            # One line per wheel with its per-set compressed sizes: the NVIDIA wheel
+            # carries cuda_native/sm_89 and cuda_ptx/sm_80 together (2026-11-05).
+            print(f"pack_wheel: size {whl.name}: {size / 2**20:.1f} MiB of {limit / 2**20:.0f} MiB; "
+                  + ", ".join(f"{k} {n / 2**20:.1f} MiB" for k, n in sorted(wheels[whl.name]["payloads"].items())))
         sizes = {
             "wheels": wheels, "pypi_limit_bytes": PYPI_LIMIT,
             "over_limit": any(w["over_limit"] for w in wheels.values()),

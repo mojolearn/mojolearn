@@ -3,7 +3,8 @@
 The cuda/sm_80 set is the PTX set. It packs into the NVIDIA vendor wheel at
 cuda_ptx/sm_80 beside the native sets, the vendor marker binds its manifest by
 SHA256, and a release-split pack proves it with its own build proof like any
-set. Synthetic inert bytes only.
+set. Since 2026-11-05 there is no separate mojolearn-nvidia-ptx wheel: the one
+NVIDIA wheel owns cuda_native/sm_89 and cuda_ptx/sm_80. Synthetic inert bytes only.
 """
 import hashlib
 import json
@@ -27,11 +28,11 @@ def inputs(root, include_byte_lm=False, merged=False):
     return dirs, root / 'sets/cuda/sm_80'
 
 
-def pack(root, dirs, wheels='nvidia,nvidia-ptx', extra=()):
+def pack(root, dirs, wheels='nvidia', extra=()):
     args = [arg for directory in dirs for arg in ('--set', directory)]
     args += ['--wheels', wheels, '--out', str(root/'out'), *extra]
     assert pw.main(args, _gates=False) == 0
-    return next((root/'out').glob('mojolearn_nvidia_ptx-*.whl'))
+    return next((root/'out').glob('mojolearn_nvidia-*.whl'))
 
 
 def rewrite(path, files):
@@ -55,26 +56,29 @@ def test_ptx_set_lands_at_cuda_ptx_with_its_bytes_and_a_native_marker(tmp_path, 
     assert (prefix+'identical/'+MERGED_INDEX in files) == merged
     assert files[prefix+pw.gpu_plugins.BASELINE_MANIFEST]==manifest
     marker=json.loads(next(data for name,data in files.items() if name.endswith('/gpu_plugin.json')))
-    assert marker['arches']==['sm_80']
+    # the vendor marker: native arches, the PTX slot named, its manifest bound
+    assert marker['arches']==['sm_89']
     assert marker['bundled_ptx']==dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
-    assert marker['role']=='payload'
-    assert marker['code_format']=='ptx'
+    assert marker['role']=='vendor'
+    assert marker['code_format']=='native'
+    assert marker['ptx']==dict(arch='sm_80', directory='cuda_ptx')
     wheels=list((tmp_path/'out').glob('*.whl'))
     assert not wheel_api_audit.split_audit(wheels)['problems']
-    assert sorted(p.name.split('-')[0] for p in wheels)==['mojolearn_nvidia','mojolearn_nvidia_ptx']
-    native=members(next(p for p in wheels if p.name.startswith('mojolearn_nvidia-')))
-    native_marker=json.loads(next(b for n,b in native.items() if n.endswith('/gpu_plugin.json')))
-    assert native_marker['bundled_ptx']==marker['bundled_ptx']
-    assert not any(n.startswith(prefix) for n in native)
+    assert sorted(p.name.split('-')[0] for p in wheels)==['mojolearn_nvidia']
+    assert any(n.startswith('mojolearn/cuda_native/sm_89/') for n in files)
 
 
-def test_ptx_payload_owns_only_its_slot_without_bundle_flags():
+def test_the_nvidia_wheel_owns_the_ptx_slot_without_bundle_flags():
     gp=pw.gpu_plugins
     assert 'nvidia-ptx80' not in gp.PAYLOADS
-    assert [r['profile'] for r in gp.distribution_rows(include_experimental=True)]==['nvidia','amd','nvidia-ptx']
-    assert gp.owns_member('nvidia-ptx','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
-    assert gp.owns_member('nvidia-ptx','mojolearn/cuda/sm_80/identical/_mojolearn_x.so')
-    assert not gp.owns_member('nvidia','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
+    assert 'nvidia-ptx' not in gp.PAYLOADS
+    assert gp.LEGACY_PTX_DISTRIBUTION=='mojolearn-nvidia-ptx'
+    assert [r['profile'] for r in gp.distribution_rows(include_experimental=True)]==['nvidia','amd']
+    assert gp.owns_member('nvidia','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
+    assert gp.owns_member('nvidia','mojolearn/cuda/sm_80/identical/_mojolearn_x.so')
+    assert gp.owns_member('nvidia','mojolearn/cuda_native/sm_89/_mojolearn_x.so')
+    assert gp.payload_requirements('cuda','0.0.1')==[]
+    assert gp.package_requirements('nvidia','0.0.1')==['mojolearn-core==0.0.1']
     assert gp.installed_member('mojolearn/cuda/sm_80/_mojolearn_x.so')=='mojolearn/cuda_ptx/sm_80/_mojolearn_x.so'
     assert not gp.owns_member('amd','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
     assert gp.required_sets('cuda')=={('cuda','sm_89'),('cuda','sm_80')}

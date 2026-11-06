@@ -161,6 +161,11 @@ the worst ratio measured on a fully measured group (2.48, `_mojolearn_native_seq
 | macOS `mojolearn-...-macosx_26_0_arm64.whl` | mojolearn | 100 MiB | 64.3 MiB | 86.0 MiB | **110.1 MiB** |
 | `mojolearn_nvidia` (sm_89) | mojolearn-nvidia | 250 MiB | 33.1 MiB | 46.1 MiB | 80.0 MiB |
 | `mojolearn_nvidia_ptx` (sm_80) | mojolearn-nvidia-ptx | 100 MiB | 30.3 MiB | 42.7 MiB | 74.7 MiB |
+| **next: one `mojolearn_nvidia` (sm_89 + PTX sm_80)** | mojolearn-nvidia | 250 MiB | 63.4 MiB (sum) | 88.8 MiB (sum) | 154.7 MiB (sum) |
+
+From the release after 0.8.65 the PTX set packs into `mojolearn-nvidia` (Andrew 2026-11-05); the
+pack's size check prints both sets per wheel against the 250 MiB limit. The sums above are an upper
+bound: the two sets share no file, so the combined wheel is about their sum.
 | `mojolearn_amd` (gfx942) | mojolearn-amd | 250 MiB | 24.7 MiB | 34.4 MiB | 59.5 MiB |
 | `mojolearn_core` (host) | mojolearn-core | 100 MiB | 32.4 MiB | 40.4 MiB | 72.3 MiB |
 | Linux meta `mojolearn` | mojolearn | 100 MiB | 0.2 MiB | 0.2 MiB | 0.2 MiB |
