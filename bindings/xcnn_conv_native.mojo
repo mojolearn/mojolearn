@@ -11,6 +11,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value, neural_string_keys
+from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value, _one_of
 from bindings.xseq_native_common import XseqStream
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
@@ -67,11 +68,15 @@ def _weight_pair(fields: PythonObject, context: PythonObject) raises -> PythonOb
 
 def _conv_admit(layer: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(layer)
+    # One admission dictionary and one module view for the fifteen fields
+    # (they were rebuilt per field); the checks and their order are unchanged.
+    var mods = NativeModules()
+    var admission = Python.dict(admission_context=context)
     # driver-loop: fixed passive convolution configuration fields
     for name in ["in_channels", "out_channels", "kernel_size", "stride", "dilation", "groups", "padding_mode",
                  "padding", "_pads", "_explicit", "_conv_pad", "bias", "random_state", "input_shape", "numeric_mode"]:
         # driver-loop: fixed passive layer configuration; no numeric/protocol hooks
-        neural_plain_value(py_get(fields, PythonObject(name)), 0, Python.dict(admission_context=context))
+        neural_plain_value(mods, py_get(fields, PythonObject(name)), 0, admission)
     return fields
 
 
@@ -651,9 +656,16 @@ def _conv_forward_t(layer: PythonObject, x: PythonObject, context: PythonObject)
     var groups = Int(py=fields["groups"])
     var conv = xcnn_entry(entries, "x_cnn_conv2d_forward_m")
     if groups == 1:
-        _ = _res_w_values(layer, fields, entries, values, context)   # G3: pins on first use (a no-op with the switch off)
-        var pw = _pinned(fields, entries, "weight_", xcnn_size(xcnn_shape(values[0])))
-        var pb = _pinned(fields, entries, "bias_", xcnn_size(xcnn_shape(values[1])))
+        # G3: pins on first use (a no-op with the switch off). The auto-pinned
+        # pair is exactly `_pinned` of both names; only when it holds no pair
+        # (an explicit `pin_weights` on a binding without the resident route)
+        # are the pins read again.
+        var pair = _res_w_values(layer, fields, entries, values, context)
+        var pw = pair[0]
+        var pb = pair[1]
+        if pw is None or pb is None:
+            pw = _pinned(fields, entries, "weight_", xcnn_size(xcnn_shape(values[0])))
+            pb = _pinned(fields, entries, "bias_", xcnn_size(xcnn_shape(values[1])))
         if pw is not None and pb is not None:
             # the pinned weights are read where they live
             _ = py_call_typed(conv, Python.list(xp.h, pw, pb, out.h), PythonObject(15), prm)
@@ -714,7 +726,7 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
     var values = _weight_pair(fields, context)
     var ps = xcnn_shape(xp)
     var prm = _conv_params(fields, ps)
-    var oshape = _conv_out(fields, xcnn_entries(fields, context), xs)
+    var oshape = _conv_out(fields, entries, xs)   # the entries resolved above (was a second resolution)
     var out = xcnn_host_f32(oshape, context)
     var groups = Int(py=fields["groups"])
     var cg = Int(py=fields["in_channels"]) // groups
@@ -856,8 +868,10 @@ def _block_init(block: PythonObject, args: PythonObject, context: PythonObject) 
 
 def _block_fields(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(block)
+    var mods = NativeModules()
+    var admission = Python.dict(admission_context=context)
     for name in ["numeric_mode", "input_shape", "training"]:  # small-loop(block configuration)
-        neural_plain_value(py_get(fields, PythonObject(name)), 0, Python.dict(admission_context=context))
+        neural_plain_value(mods, py_get(fields, PythonObject(name)), 0, admission)
     for name in ["conv1", "conv2", "bn1", "bn2", "relu1", "relu2"]:  # small-loop(fixed residual block layers)
         var expected = "xcnn_conv2d_class" if name.startswith("conv") else ("xcnn_bn_class" if name.startswith("bn") else "xcnn_relu_class")
         if py_type(fields[PythonObject(name)]) is not context[PythonObject(expected)]:
@@ -1182,7 +1196,7 @@ def xcnn_block_forward(block: PythonObject, x: PythonObject, context: PythonObje
     var ds = fields["downsample"]
     if ds is not None and _truth(ds):
         identity = xcnn_bn_forward(ds[1], xcnn_conv2d_forward(ds[0], a, context), context)
-    return xcnn_relu_forward(fields["relu2"], _add(xcnn_entries(fields, context), out, identity, context), context)
+    return xcnn_relu_forward(fields["relu2"], _add(entries, out, identity, context), context)
 
 
 # ---------------------------------------------------------------- dispatch
