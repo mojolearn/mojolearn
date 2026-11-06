@@ -518,7 +518,7 @@ def _parallel_causal_usable(fields: PythonObject) raises:
         raise Error("RuntimeError: ParallelCausalLM worker state was lost; reload the model")
 
 
-def _parallel_pool_publish(mut mods: NativeModules, fields: PythonObject) raises:
+def _parallel_pool_publish(mut mods: NativeModules, fields: PythonObject, workers: Bool = True) raises:
     var pool = fields["_pool"]
     var live = fields["_native_parallel_pool_live"]
     if pool is None or live is None:
@@ -527,7 +527,12 @@ def _parallel_pool_publish(mut mods: NativeModules, fields: PythonObject) raises
     # Do not expose this operation's mutable worker metadata through the live
     # pool: later RPCs can release the GIL. Only native socket capsule identity
     # is shared; the worker dictionaries/lists are detached publication copies.
-    py_setitem(live, "workers", _parallel_pool_capture(mods, pool)["workers"])
+    # `workers` False: a successful request on an already started pool left
+    # the worker records as they were published (process_pool_start returns
+    # at once and the request mutates only sequence/closed), so only the two
+    # progress words are republished, not a fresh capture of every worker.
+    if workers:
+        py_setitem(live, "workers", _parallel_pool_capture(mods, pool)["workers"])
     for name in ["sequence", "closed"]:  # small-loop(two resource progress words published after every request)
         py_setitem(live, name, pool[name])
 
@@ -542,6 +547,7 @@ def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: P
     if pool is None:
         raise Error("RuntimeError: ParallelCausalLM has no process owner")
     var result = PythonObject(None)
+    var started = len(pool["workers"]) != 0
     try:
         result = process_pool_call(pool, index, Python.list(PythonObject(operation), args))
         mods.released()
@@ -554,7 +560,7 @@ def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: P
             model_dict(mods, live)
             py_setitem(live, "_failed", True)
         raise error
-    _parallel_pool_publish(mods, fields)
+    _parallel_pool_publish(mods, fields, not started)
     return result
 
 
