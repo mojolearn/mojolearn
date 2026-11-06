@@ -3,6 +3,10 @@ rehearsal-suite-green, 2026-10-08): the six border types' tables and
 per-column functions, moved verbatim so the host oracle imports no `std.gpu`
 module. The device file imports every name back.
 """
+from std.memory import bitcast
+from std.sys.compile import is_defined
+from std.sys.info import is_apple_gpu
+
 from checks.numerics import ftz, pinned_mul_f32, portable_divf
 from checks.soft_f64 import (
     sf64_add,
@@ -30,6 +34,41 @@ from gbdt.grid_creator.gls_borders_cells import (
 )
 
 comptime BT_EPS12 = UInt64(0x3D719799812DEA11)  # 1e-12, their `Eps`
+
+#: Lane perf-trees-misc (2026-11-05): the exact dynamic program's double
+#: adds and compares run on the hardware binary64 unit wherever there is one
+#: (NVIDIA, AMD, the host), soft binary64 only on the Apple GPU. The soft
+#: operations are SoftFloat's correctly rounded IEEE add and the IEEE
+#: ordered compare (+0 == -0; no NaN reaches the DP: every operand is a
+#: finite table entry or a sum of them, and no sum comes near the subnormal
+#: range), so every word is the one the soft path returned and the columns
+#: keep their bits; the DP no longer spends a few hundred integer
+#: instructions per add on the devices that have the unit.
+#: `-D MOJOLEARN_GBDT_BT_HW_F64_OFF` restores the soft path everywhere.
+comptime BT_HW_F64 = not is_defined["MOJOLEARN_GBDT_BT_HW_F64_OFF"]()
+
+
+@always_inline
+def _dp_add(a: UInt64, b: UInt64) -> UInt64:
+    """`sf64_add`, on the binary64 unit where there is one."""
+    comptime if BT_HW_F64 and not is_apple_gpu():
+        return bitcast[DType.uint64](bitcast[DType.float64](a) + bitcast[DType.float64](b))
+    else:
+        return sf64_add(a, b)
+
+
+@always_inline
+def _dp_lt(a: UInt64, b: UInt64) -> Bool:
+    """`sf64_lt` (non-NaN operands), on the binary64 unit where there is one."""
+    comptime if BT_HW_F64 and not is_apple_gpu():
+        return bitcast[DType.float64](a) < bitcast[DType.float64](b)
+    else:
+        return sf64_lt(a, b)
+
+
+@always_inline
+def _dp_gt(a: UInt64, b: UInt64) -> Bool:
+    return _dp_lt(b, a)
 
 
 # ---- the tables ---------------------------------------------------------------
@@ -237,32 +276,35 @@ def exact_column(
         return _thresholds_to_borders(thr, bins - 1, uniq, wsize, dst)
 
     var dsize = wsize - bins + 1
-    var cur = f64s
-    var prev = f64s + n
+    # `prev` holds the previous layer's errors and `e1` this layer's: every
+    # `e1[k]` is final once reconciliation passes `k` (later `k` only touch
+    # higher indices), so their `cur[k] = e1[k]` followed by the next
+    # layer's `prev[i] = cur[i]` is the two pointers swapped at the end of
+    # the layer (lane perf-trees-misc, 2026-11-05: two O(dsize) serial
+    # copies per layer gone, the same values read). Plane `f64s + n` is
+    # unused.
+    var prev = f64s
     var e1 = f64s + 2 * n
     var e2 = f64s + 3 * n
     var bs1 = i32s + n
     var bs2 = i32s + 2 * n
     var best = i32s + 3 * n
     for i in range(dsize):
-        cur[i] = tab[Int(sw[i])]
+        prev[i] = tab[Int(sw[i])]
         bs1[i] = 0
         bs2[i] = 0
         e1[i] = UInt64(0)
         e2[i] = UInt64(0)
 
     for l in range(bins - 2):
-        for i in range(dsize):
-            prev[i] = cur[i]
-
         # their "First forward loop"
         var fi = 0
         for j in range(dsize):
-            var best_error = sf64_add(prev[fi], _pen(tab, sw, l + j + 1, l + fi))
+            var best_error = _dp_add(prev[fi], _pen(tab, sw, l + j + 1, l + fi))
             fi += 1
             while fi <= j:
-                var new_error = sf64_add(prev[fi], _pen(tab, sw, l + j + 1, l + fi))
-                if sf64_gt(new_error, sf64_add(best_error, BT_EPS12)):
+                var new_error = _dp_add(prev[fi], _pen(tab, sw, l + j + 1, l + fi))
+                if _dp_gt(new_error, _dp_add(best_error, BT_EPS12)):
                     break
                 best_error = new_error
                 fi += 1
@@ -283,10 +325,10 @@ def exact_column(
                 continue
             var best_error = e1[dsize - j - 1]
             while vi + 1 < maxi:
-                var new_error = sf64_add(
+                var new_error = _dp_add(
                     prev[dsize - vi - 1], _pen(tab, sw, l + dsize - j, l + dsize - vi - 1)
                 )
-                if sf64_lt(sf64_add(new_error, BT_EPS12), best_error):
+                if _dp_lt(_dp_add(new_error, BT_EPS12), best_error):
                     best_error = new_error
                     break
                 vi += 1
@@ -295,10 +337,10 @@ def exact_column(
             else:
                 vi += 1
                 while vi + 1 < maxi:
-                    var new_error = sf64_add(
+                    var new_error = _dp_add(
                         prev[dsize - vi - 1], _pen(tab, sw, l + dsize - j, l + dsize - vi - 1)
                     )
-                    if sf64_gt(new_error, sf64_add(best_error, BT_EPS12)):
+                    if _dp_gt(new_error, _dp_add(best_error, BT_EPS12)):
                         break
                     best_error = new_error
                     vi += 1
@@ -327,8 +369,8 @@ def exact_column(
                         continue
                     var best_error = e2[j]
                     while ri + 1 < maxi:
-                        var new_error = sf64_add(prev[ri], _pen(tab, sw, l + j + 1, l + ri))
-                        if sf64_lt(sf64_add(new_error, BT_EPS12), best_error):
+                        var new_error = _dp_add(prev[ri], _pen(tab, sw, l + j + 1, l + ri))
+                        if _dp_lt(_dp_add(new_error, BT_EPS12), best_error):
                             best_error = new_error
                             break
                         ri += 1
@@ -337,8 +379,8 @@ def exact_column(
                     else:
                         ri += 1
                         while ri + 1 < maxi:
-                            var new_error = sf64_add(prev[ri], _pen(tab, sw, l + j + 1, l + ri))
-                            if sf64_gt(new_error, sf64_add(best_error, BT_EPS12)):
+                            var new_error = _dp_add(prev[ri], _pen(tab, sw, l + j + 1, l + ri))
+                            if _dp_gt(new_error, _dp_add(best_error, BT_EPS12)):
                                 break
                             best_error = new_error
                             ri += 1
@@ -362,10 +404,10 @@ def exact_column(
                         continue
                     var best_error = e1[dsize - jj - 1]
                     while qi + 1 < maxi:
-                        var new_error = sf64_add(
+                        var new_error = _dp_add(
                             prev[dsize - qi - 1], _pen(tab, sw, l + dsize - jj, l + dsize - qi - 1)
                         )
-                        if sf64_lt(sf64_add(new_error, BT_EPS12), best_error):
+                        if _dp_lt(_dp_add(new_error, BT_EPS12), best_error):
                             best_error = new_error
                             break
                         qi += 1
@@ -374,10 +416,10 @@ def exact_column(
                     else:
                         qi += 1
                         while qi + 1 < maxi:
-                            var new_error = sf64_add(
+                            var new_error = _dp_add(
                                 prev[dsize - qi - 1], _pen(tab, sw, l + dsize - jj, l + dsize - qi - 1)
                             )
-                            if sf64_gt(new_error, sf64_add(best_error, BT_EPS12)):
+                            if _dp_gt(new_error, _dp_add(best_error, BT_EPS12)):
                                 break
                             best_error = new_error
                             qi += 1
@@ -386,18 +428,20 @@ def exact_column(
                     e2[dsize - jj - 1] = best_error
                     jj += 1
 
-            # "Everything is fine now!"
+            # "Everything is fine now!" (their `cur[k] = e1[k]`: the swap below)
             best[l * dsize + k] = bs1[k]
-            cur[k] = e1[k]
+        var done = e1
+        e1 = prev
+        prev = done
 
     # their "Last match": `<`, the FIRST index wins a tie
     var l_last = bins - 2
     var j_last = dsize - 1
     var best_index = 0
-    var best_error = sf64_add(cur[0], _pen(tab, sw, l_last + j_last + 1, l_last))
+    var best_error = _dp_add(prev[0], _pen(tab, sw, l_last + j_last + 1, l_last))
     for i in range(1, j_last + 1):
-        var new_error = sf64_add(cur[i], _pen(tab, sw, l_last + j_last + 1, l_last + i))
-        if sf64_lt(new_error, best_error):
+        var new_error = _dp_add(prev[i], _pen(tab, sw, l_last + j_last + 1, l_last + i))
+        if _dp_lt(new_error, best_error):
             best_error = new_error
             best_index = i
 

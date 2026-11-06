@@ -9,6 +9,7 @@ search is `gls_column` for GreedyLogSum and `border_types.mojo`'s
 `border_type_column` for the six others (its table built by
 `border_table_kernel`, its scratch sized per type)."""
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.sys.compile import is_defined
 
 from core.device_zero import enqueue_fill
 from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
@@ -38,6 +39,9 @@ from gbdt.grid_creator.gls_borders import (
     gls_columns_kernel,
     gls_log_table_kernel,
 )
+
+
+comptime GBDT_BT_COLUMN_BLOCKS = not is_defined["MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF"]()
 
 
 def _blocks(n: Int) -> Int:
@@ -160,6 +164,21 @@ def device_float_borders(
     var base = 0
     while base < n_float:
         var width = min(chunk, n_float - base)
+        # Lane perf-trees-misc (2026-11-05): one column per block for the six
+        # border types (`GBDT_BT_COLUMN_BLOCKS`). Each column's search is a
+        # serial, data-dependent walk (the exact DP's pointer loops, the
+        # greedy heap); 64 columns packed into one block shared one
+        # multiprocessor and their warps diverged on every branch, so a
+        # chunk of up to 64 columns ran on one SM at a fraction of one
+        # thread's speed. One block per column spreads the columns over
+        # every multiprocessor, none diverging. The same kernel and the same
+        # per-column arithmetic: no bit change. `-D
+        # MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF` restores the packed launch.
+        var bt_grid = max(1, (width + 63) // 64)
+        var bt_block = 64
+        comptime if GBDT_BT_COLUMN_BLOCKS:
+            bt_grid = width
+            bt_block = 1
         var cols_ptr = d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if use_dev:
             cols_ptr = dev_cols.value() + base * n_rows
@@ -219,7 +238,7 @@ def device_float_borders(
                 d_i32s.unsafe_ptr(), Int64(i32_stride),
                 d_uniq.unsafe_ptr(), Int64(uniq_stride),
                 d_out.unsafe_ptr(), Int32(out_cap), d_counts.unsafe_ptr(),
-                grid_dim=max(1, (width + 63) // 64), block_dim=64,
+                grid_dim=bt_grid, block_dim=bt_block,
             )
         ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_out)
         ctx.enqueue_copy(dst_ptr=h_counts.unsafe_ptr(), src_buf=d_counts)

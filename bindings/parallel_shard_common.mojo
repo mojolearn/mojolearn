@@ -105,6 +105,28 @@ struct ShardTrace(Defaultable, Movable):
 comptime SHARD_TRACE = _Global[StorageType=ShardTrace, name="MojoParallelShardTrace", init_fn=ShardTrace.__init__]
 
 
+struct ShardIdle(Defaultable, Movable):
+    #: {(child module, devices tuple): [pool, parent environment snapshot]}
+    var pools: PythonObject
+
+    def __init__(out self):
+        self.pools = PythonObject(None)
+
+
+#: Lane perf-trees-misc (2026-11-05): the started one-shot shard pools kept
+#: between `shard_run` calls. Each call used to spawn a fresh worker per
+#: device (interpreter start, package import, binding connection: about 5 s
+#: per open on Linux, `~/mojolearn-evidence/svl-partA.txt`), so a
+#: par-forecast fit, predict and forecast paid it three times per cell. An
+#: idle pool is reused only for the same child module, the same device tuple
+#: and an unchanged parent environment (the worker environment, visibility
+#: mask included, is derived from it at spawn); every reuse re-admits the
+#: workers by identity and starts its own trace record, as a fresh pool
+#: does. A failed call closes its pool and nothing is kept. Workers held
+#: here end when the parent process ends (their socket closes).
+comptime SHARD_IDLE = _Global[StorageType=ShardIdle, name="MojoParallelShardIdle", init_fn=ShardIdle.__init__]
+
+
 def shard_identity() raises -> PythonObject:
     """A worker's answer to an identity request: its own process and the
     devices its visibility mask leaves it (bindings/native_worker_inventory.mojo)."""
@@ -118,8 +140,15 @@ def shard_open(devices: PythonObject, child: String) raises -> PythonObject:
     distinct processes started here and, on CUDA and HIP, distinct physical
     GPUs, one per worker (`native_require_worker_inventory`, the CV pool's
     rule). The pool and its inventory are recorded in the trace."""
-    var b = shard_b()
     var pool = process_pool_create(devices, False, child)
+    return _shard_admit(pool, devices)
+
+
+def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObject:
+    """`shard_open`'s admission of a pool's workers (a fresh pool, or an idle
+    one `shard_run` reuses): the identity round, the inventory check and a
+    new trace record. The pool is closed on a refusal."""
+    var b = shard_b()
     var requests = b.list()
     for i in range(len(devices)):  # driver-loop: one identity request per worker
         _ = py_call(requests.append, Python.tuple("identity"))
@@ -217,17 +246,51 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
 
 def shard_run(requests: PythonObject, devices: PythonObject, child: String) raises -> PythonObject:
     """The workers' results in request order (waves of len(devices), wave
-    position j on worker j); the pool always closes."""
-    var pool = shard_open(devices, child)
+    position j on worker j). A pool whose call succeeded is kept idle for the
+    next call with the same child, devices and environment (`SHARD_IDLE`);
+    a failed call closes it."""
+    var b = shard_b()
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    if idle[].pools is None:
+        idle[].pools = b.dict()
+    var key = Python.tuple(PythonObject(child), py_call(b.tuple, devices))
+    var environ = py_call(b.dict, PROCESS_BOUNDARY.get_or_create_ptr()[].environ)
+    var reused = PythonObject(None)
+    var held = py_call(idle[].pools.pop, key, PythonObject(None))
+    if held is not None:
+        if (Bool(py=held[1] == environ) and not Bool(py=held[0]["closed"])
+                and len(held[0]["workers"]) == len(devices)):
+            try:
+                reused = _shard_admit(held[0], devices)
+            except error:
+                # a worker that died while idle: the identity round closed
+                # the pool; a fresh one is opened below
+                _ = error
+                reused = PythonObject(None)
+        else:
+            try:
+                process_pool_close(held[0])
+            except error:
+                _ = error
+    if reused is None:
+        var pool = shard_open(devices, child)
+        reused = pool
     var results = PythonObject(None)
     try:
-        results = shard_map(pool, requests)
+        results = shard_map(reused, requests)
     except error:
-        process_pool_close(pool)
+        process_pool_close(reused)
         raise error^
-    process_pool_close(pool)
     if len(results) != len(requests):
+        process_pool_close(reused)
         raise Error("ValueError: shard workers returned an incomplete batch")
+    var other = py_call(idle[].pools.pop, key, PythonObject(None))
+    if other is not None:  # another thread kept a pool under this key meanwhile
+        try:
+            process_pool_close(other[0])
+        except error:
+            _ = error
+    py_setitem(idle[].pools, key, Python.list(reused, environ))
     return results
 
 

@@ -124,7 +124,17 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     var pool = process_pool_create(devices, False, child_module)
     if len(pool["devices"]) > shards:
         raise Error("physical device count exceeds logical shard count")
-    var update_pool = process_pool_create(pool["devices"], True, child_module)
+    # One device (lane perf-trees-misc, 2026-11-05): the cooperative update
+    # group IS the gradient worker's group (the same device, the same worker
+    # environment: `_process_environment` sees the same devices and group),
+    # so the update request goes to the gradient pool's worker instead of a
+    # second spawned process per owner (the neural-trainer-unfused cell
+    # paid two interpreter starts, imports and binding connections). The
+    # worker dispatch takes gradient and update requests alike; the update
+    # reads only the request's state, never the worker's resident cache.
+    var update_pool = pool
+    if len(pool["devices"]) != 1:
+        update_pool = process_pool_create(pool["devices"], True, child_module)
     py_setattr(owner, "_operation", operation)
     py_setattr(owner, "_pool", pool)
     py_setattr(owner, "_update_pool", update_pool)
@@ -430,7 +440,8 @@ def _neural_close(owner: PythonObject) raises:
     except error:
         failure = String(error)
     try:
-        process_pool_close(owner._update_pool)
+        if owner._update_pool is not owner._pool:  # one device: one shared pool, closed above
+            process_pool_close(owner._update_pool)
     except error:
         if failure == "":
             failure = String(error)
