@@ -7,6 +7,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
+from std.python._cpython import PyObjectPtr
+from bindings.p3_labels_metrics_native import p3_type_word
 
 def labels_primitive_kind(cls: PythonObject, context: PythonObject) raises -> Int:
     # 0 unsupported, 1 string, 2 bool, 3 integer, 4 real.
@@ -75,6 +77,21 @@ struct LabelTypeKinds(Movable):
 
     def admit(mut self, value: PythonObject, context: PythonObject) raises -> Int:
         var kind = self.kind(py_type(value), context)
+        if kind == 0:
+            raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
+        return kind
+
+    def kind_raw(mut self, raw: PyObjectPtr, context: PythonObject) raises -> Int:
+        """`kind` of a borrowed label's class (p3-labels-metrics): a memo hit
+        reads the class pointer only; no PythonObject is made per label."""
+        var identity = p3_type_word(raw)
+        if identity in self.kinds:
+            return self.kinds[identity]
+        return self.kind(py_type(PythonObject(from_borrowed=raw)), context)
+
+    def admit_raw(mut self, raw: PyObjectPtr, context: PythonObject) raises -> Int:
+        """`admit` of a borrowed label (same refusal)."""
+        var kind = self.kind_raw(raw, context)
         if kind == 0:
             raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
         return kind

@@ -727,25 +727,51 @@ def _flatten_labels(var y: PythonObject, context: PythonObject) raises -> Python
         raise Error("mojolearn: y must be a sequence of labels")
     var out = Python.list()
     var kinds = LabelTypeKinds()
-    # Exact container types and the output's native append owner are stable
-    # throughout this recursive walk; capture them once, not per node/leaf.
-    _flatten_into(item, out.append, b.list, b.tuple, context, kinds)
+    # Exact container class words are stable throughout this recursive walk;
+    # capture them once, not per node/leaf.
+    _flatten_into(item, out, Int(b.list._obj_ptr), Int(b.tuple._obj_ptr), context, kinds)
     _ = kinds^
     return out
 
 
-def _flatten_into(item: PythonObject, append: PythonObject, list_type: PythonObject,
-                  tuple_type: PythonObject, context: PythonObject, mut kinds: LabelTypeKinds,
-                  depth: Int = 0) raises:
+def _flatten_into(item: PythonObject, out: PythonObject, list_word: Int, tuple_word: Int,
+                  context: PythonObject, mut kinds: LabelTypeKinds, depth: Int = 0) raises:
+    # p3-labels-metrics: items are read borrowed from the exact container's C
+    # storage and their classes compared by pointer; a container holding no
+    # nested container is admitted label by label (same order, same
+    # refusals) and copied with ONE list.extend; leaves of a mixed container
+    # go in by PyList_Append. No boxed index, no Python append call per label.
     if depth > 64:
         raise Error("TypeError: label nesting exceeds the supported native depth")
-    var cls = py_type(item)
-    if cls is list_type or cls is tuple_type:
-        for k in range(len(item)):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
-            _flatten_into(item[k], append, list_type, tuple_type, context, kinds, depth + 1)
+    var cls = p3_type_word(item._obj_ptr)
+    if cls == list_word or cls == tuple_word:
+        var is_tuple = cls == tuple_word
+        var n = len(item)
+        var nested = False
+        for k in range(n):  # driver-loop: exact native container slots by pointer, stops at the first nested one
+            var child = p3_type_word(p3_item(item, k, is_tuple))
+            if child == list_word or child == tuple_word:
+                nested = True
+                break
+        if not nested:
+            for k in range(n):  # driver-loop: exact native container slots, one memoized class admission per label
+                _ = kinds.admit_raw(p3_item(item, k, is_tuple), context)
+            _ = py_call(out.extend, item)
+            return
+        ref cpy = Python().cpython()
+        for k in range(n):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
+            var raw = p3_item(item, k, is_tuple)
+            var child = p3_type_word(raw)
+            if child == list_word or child == tuple_word:
+                _flatten_into(PythonObject(from_borrowed=raw), out, list_word, tuple_word, context, kinds, depth + 1)
+            else:
+                _ = kinds.admit_raw(raw, context)
+                if Int(p3_table()[].list_append(out._obj_ptr, raw)) != 0:
+                    raise cpy.unsafe_get_error()
+        _ = item
         return
     _ = kinds.admit(item, context)
-    _ = py_call(append, item)
+    _ = py_call(out.append, item)
 
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
