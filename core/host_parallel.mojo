@@ -64,6 +64,8 @@ from std.memory import stack_allocation
 
 from max.algorithm import sync_parallelize
 
+from core.host_predict_threads import HOST_MIN_TASK_WORK
+
 
 @always_inline
 def host_fp_env() -> UInt64:
@@ -96,7 +98,16 @@ def host_fp_env_set(v: UInt64):
 def host_parallelize[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     """`sync_parallelize(func, n)`, every task in the caller's floating-point
     environment (DEVIATION 5900). The work split, the task count and the
-    join are `sync_parallelize`'s, unchanged."""
+    join are `sync_parallelize`'s, unchanged.
+
+    One task (or none) runs on the calling thread without touching the pool
+    (lane perf-host-grain): the caller's environment is the one every task
+    is pinned to, so the bits are the pool's."""
+    if n <= 0:
+        return
+    if n == 1:
+        func(0)
+        return
     var env = host_fp_env()
 
     def task(i: Int) {imm func, imm env}:
@@ -106,6 +117,25 @@ def host_parallelize[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
         host_fp_env_set(saved)
 
     sync_parallelize(task, n)
+
+
+def host_parallelize_work[FuncType: def(Int) -> None](ref func: FuncType, n: Int, work: Int):
+    """`host_parallelize(func, n)` with the grain floor (lane
+    perf-host-grain, `core/host_predict_threads.mojo::HOST_MIN_TASK_WORK`):
+    when the whole region's `work` (scalar element operations) is below
+    2 * HOST_MIN_TASK_WORK, the SAME `n` tasks run on the calling thread,
+    task 0 first, in order. The partition is the caller's and is never
+    changed, so a split whose partials feed an ordered fold after the join
+    gets the same partials; every task already runs in the caller's
+    environment, so inline tasks read the same bits. A `work` of 0 or less
+    means unknown and always dispatches."""
+    if n <= 0:
+        return
+    if n == 1 or (work > 0 and work < 2 * HOST_MIN_TASK_WORK):
+        for i in range(n):
+            func(i)
+        return
+    host_parallelize(func, n)
 
 
 def host_parallelize_pool_env[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
