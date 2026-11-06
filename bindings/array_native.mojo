@@ -656,22 +656,105 @@ def _from_flat_as(cls: PythonObject, flat: PythonObject, shape: PythonObject, dt
 def _flatten_fast(nested: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_flatten_fast`: `(shape, flat)` for a flat list of Python scalars or
     a list of equal-length rows of them, by C builtins; None otherwise."""
+    # p3-array-arena: one native walk over the exact list/tuple items (exact
+    # type addresses, borrowed reads, no Python callbacks), then one walk that
+    # fills the flat list; was set(map(type)), set(map(len)), list(chain),
+    # set(map(type)) over Python objects. Same answers: the scalar and row
+    # classes are the exact members of the connected sets (int, float, bool;
+    # list, tuple), so a subclass still takes the general reader.
     var b = native_loaded_module("builtins")
     var kind = py_type(nested)
     if (kind is not b.list and kind is not b.tuple) or len(nested) == 0:
         return PythonObject(None)
-    var kinds = _call(b.set, _call(b.map, b.type, nested))
-    if _truth(_call(kinds.issubset, context["scalar_type_set"])):
-        return Python.tuple(Python.tuple(PythonObject(len(nested))), _call(b.list, nested))
-    if not _truth(_call(kinds.issubset, context["row_type_set"])):
-        return PythonObject(None)
-    var widths = _call(b.set, _call(b.map, b.len, nested))
-    if len(widths) != 1:
-        return PythonObject(None)
-    var flat = _call(b.list, _call(context["chain_from_iterable"], nested))
-    if not _truth(_call(_call(b.set, _call(b.map, b.type, flat)).issubset, context["scalar_type_set"])):
-        return PythonObject(None)
-    return Python.tuple(Python.tuple(PythonObject(len(nested)), _call(widths.pop)), flat)
+    ref cpy = Python().cpython()
+    var scalars = _member_addresses(context["scalar_type_set"])
+    var row_types = _member_addresses(context["row_type_set"])
+    var list_class = Int(b.list._obj_ptr)
+    var get_list = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
+    var get_tuple = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")
+    var n = len(nested)
+    var outer_list = kind is b.list
+    var all_scalar = True
+    var all_rows = True
+    for i in range(n):  # driver-loop: classify each top-level item by its exact class address
+        var raw = get_list(nested._obj_ptr, i) if outer_list else get_tuple(nested._obj_ptr, i)
+        if not raw:
+            var failure = stash_python_error()
+            raise failure^
+        var cls = Int(_type_address(raw))
+        all_scalar = all_scalar and _address_in(cls, scalars)
+        all_rows = all_rows and _address_in(cls, row_types)
+        if not all_scalar and not all_rows:
+            return PythonObject(None)
+    if all_scalar:
+        return Python.tuple(Python.tuple(PythonObject(n)), _call(b.list, nested))
+    var width = -1
+    for i in range(n):  # driver-loop: one equal-width check over the exact rows
+        var row = PythonObject(from_borrowed=get_list(nested._obj_ptr, i) if outer_list else get_tuple(nested._obj_ptr, i))
+        var w = len(row)
+        if width < 0:
+            width = w
+        elif w != width:
+            return PythonObject(None)
+    var raw_flat = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n * width)
+    if not raw_flat:
+        var failure = stash_python_error()
+        raise failure^
+    var flat = PythonObject(from_owned=raw_flat)
+    var set_item = cpy.lib.get_function[Int32]("PyList_SetItem")
+    for i in range(n):  # driver-loop: copy each row's item references into the flat list, checking exact scalar classes
+        var row = PythonObject(from_borrowed=get_list(nested._obj_ptr, i) if outer_list else get_tuple(nested._obj_ptr, i))
+        var row_list = Int(_type_address(row._obj_ptr)) == list_class
+        for j in range(width):  # driver-loop: items of one row
+            var item = get_list(row._obj_ptr, j) if row_list else get_tuple(row._obj_ptr, j)
+            if not item:
+                var failure = stash_python_error()
+                raise failure^
+            if not _address_in(Int(_type_address(item)), scalars):
+                return PythonObject(None)
+            # PyList_SetItem steals the new reference.
+            if set_item(flat._obj_ptr, i * width + j, cpy.Py_NewRef(item)) != 0:
+                var failure = stash_python_error()
+                raise failure^
+    return Python.tuple(Python.tuple(PythonObject(n), PythonObject(width)), flat)
+
+
+def _type_address(raw: PyObjectPtr) raises -> PyObjectPtr:
+    """The exact class of an object, as a borrowed address (the object keeps
+    its class alive)."""
+    ref cpy = Python().cpython()
+    var cls = cpy.PyObject_Type(raw)
+    cpy.Py_DecRef(cls)
+    return cls
+
+
+def _member_addresses(members: PythonObject) raises -> List[Int]:
+    """The element addresses of a small connected frozenset of classes (the
+    context retains the set, so the members stay alive)."""
+    ref cpy = Python().cpython()
+    var out = List[Int]()
+    var raw_iterator = cpy.PyObject_GetIter(members._obj_ptr)
+    if not raw_iterator:
+        var failure = stash_python_error()
+        raise failure^
+    var iterator = PythonObject(from_owned=raw_iterator)
+    while True:  # driver-loop: over the few connected class-set members
+        var raw = cpy.PyIter_Next(iterator._obj_ptr)
+        if not raw:
+            if cpy.PyErr_Occurred():
+                var failure = stash_python_error()
+                raise failure^
+            break
+        out.append(Int(raw))
+        cpy.Py_DecRef(raw)
+    return out^
+
+
+def _address_in(address: Int, members: List[Int]) -> Bool:
+    for i in range(len(members)):  # driver-loop: over the few connected class-set members
+        if members[i] == address:
+            return True
+    return False
 
 
 def _from_list(cls: PythonObject, nested: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
