@@ -29,7 +29,7 @@ from bindings.classical_labels import labels_f32, labels_vector, classical_encod
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
-from bindings.prep_stateless_native import _select_transform
+from bindings.prep_stateless_native import _select_transform, _support_columns
 from bindings.prep_encode_native import (
     EncProg, _cs, _codes, _fit_categories, _take1, _take2, _word, _iword, _put_codes, _default_mode,
     _seed64, _score_words)
@@ -291,14 +291,15 @@ def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
     if operation == "get_support":
         var fields = py_fields(model)
         var mask = fields["_mask"]
-        var result = Python.list()
         var indices = Bool(py=args[0])
-        for i in range(len(mask)):  # driver-loop: completed feature support metadata
-            if indices:
-                if Bool(py=mask[i]):
-                    _ = py_call(result.append, PythonObject(i))
-            else:
-                _ = py_call(result.append, mask[i])
+        if not indices:
+            # list(mask): one call (p3-prep)
+            return py_call(native_loaded_module("builtins").list, mask)
+        # The kept indices by a pointer scan of the fitted bool list.
+        var keep = _support_columns(mask)
+        var result = Python.list()
+        for i in range(len(keep)):  # driver-loop: completed feature support metadata
+            _ = py_call(result.append, PythonObject(keep[i]))
         return result
     if operation == "transform":
         return _rfe_transform(model, args[0], context)
