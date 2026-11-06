@@ -32,7 +32,10 @@ HERE = Path(__file__).resolve().parent
 FRAMEWORKS = "torch,max"
 PHASES = ("torch-compile", "torch-training", "max-training")
 #: the device string each vendor's framework build uses (torch-ROCm keeps the cuda device type)
-DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps"}
+DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps",
+          # the CPU route (release.py --identity-on-wheels): torch and MAX on the CPU of a GitHub runner, the
+          # installed host bindings underneath; the device phases stay on the GPU boxes
+          "cpu": "cpu"}
 RECEIPT = "adapter-smoke.json"
 
 

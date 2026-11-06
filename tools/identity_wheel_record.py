@@ -199,11 +199,14 @@ class Run:
         workers = (auto_workers(len(devices), nproc, free) if self.a.workers_per_gpu == "auto"
                    else int(self.a.workers_per_gpu))
         slots = plan_slots(columns, devices, workers)
-        selected, report = {}, dict(schema=SCHEMA, columns={}, nproc=nproc, gpus=len(devices),
+        selected, report = {}, dict(schema=SCHEMA, columns={}, nproc=nproc, gpus=len(devices), shard=self.a.shard,
                                     workers_per_device=workers, gpu_free_gib=free,
                                     wheels=listed.read_text().split("\n")[:-1])
+        shard_i, shard_n = (int(x) for x in self.a.shard.split("/"))
         for c in columns:
             lanes, reused = self.select(py, listed, c, labels[c])
+            # --shard i/N (the GitHub CPU matrix): every job selects by the same rule and records lanes[i::N]
+            lanes = lanes[shard_i::shard_n]
             selected[c] = lanes
             report["columns"][c] = dict(label=labels[c], owed=len(lanes), reused=reused, chunks=[], rc=0)
             self.say("%s: REUSED %s / RUN %d" % (labels[c], "?" if reused is None else reused, len(lanes)))
@@ -270,7 +273,11 @@ def parse(argv=None):
     ap.add_argument("--workers-per-gpu", default="auto", help="auto (cores and measured memory) or a number")
     ap.add_argument("--venv", default="")
     ap.add_argument("--python", default=sys.executable)
+    ap.add_argument("--shard", default="0/1", help="i/N: record every N-th owed lane from i (a CI job matrix)")
     a = ap.parse_args(argv)
+    m = re.fullmatch(r"(\d+)/(\d+)", a.shard)
+    if not m or not 0 <= int(m.group(1)) < int(m.group(2)):
+        ap.error("--shard is i/N with 0 <= i < N")
     if a.workers_per_gpu != "auto" and not a.workers_per_gpu.isdigit():
         ap.error("--workers-per-gpu is auto or a positive number")
     return a

@@ -86,7 +86,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VENDORS = ("metal", "nvidia", "amd")
-BINDING_VENDOR = {"metal": "metal", "nvidia": "cuda", "amd": "hip"}
+BINDING_VENDOR = {"metal": "metal", "nvidia": "cuda", "amd": "hip", "cpu": "cpu"}
+#: THE CPU ROUTE (release.py --identity-on-wheels, Andrew 2026-11-05: every check that needs no card runs on
+#: GitHub's free runners). `run --vendor cpu` starts the Python entries through the installed host bindings
+#: (MOJOLEARN_VENDOR=cpu); the `source` entries are compiled device check executables (autograd/checks/*gpu.mojo,
+#: the *_tape_*_check.mojo programs) and stay on the GPU box.
+RUN_VENDORS = VENDORS + ("cpu",)
+
 #: Andrew, 2026-10-14: smoke is a 5 s "does it start"
 TIMEOUT_S = 5
 #: the vendor column define a GPU check is built with (bindings/build_byte_lm.sh's rule)
@@ -599,7 +605,10 @@ def start(cmd, log, timeout, env=None, cwd=None):
 
 
 def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None, deadline=None):
-    selected = list(ENTRIES) if entries is None else [e for e in ENTRIES if e["name"] in entries]
+    pool = [e for e in ENTRIES if vendor != "cpu" or "source" not in e]
+    if vendor == "cpu" and entries is not None and set(entries) - {e["name"] for e in pool}:
+        raise ValueError("compiled device checks need a GPU: %s" % sorted(set(entries) - {e["name"] for e in pool}))
+    selected = list(pool) if entries is None else [e for e in pool if e["name"] in entries]
     unknown = set(entries or ()) - {e["name"] for e in ENTRIES}
     if unknown or not selected:
         raise ValueError("empty or unknown smoke selection: %s" % sorted(unknown))
@@ -686,7 +695,7 @@ def main(argv=None):
     b.add_argument("--bin-dir", required=True)
     b.add_argument("--target-accelerator", default=None, help="e.g. sm_89 or gfx942 for a cross build")
     r = sub.add_parser("run", help="start every entry once with its 5 s timer")
-    r.add_argument("--vendor", required=True, choices=VENDORS)
+    r.add_argument("--vendor", required=True, choices=RUN_VENDORS)
     r.add_argument("--bin-dir", required=True)
     r.add_argument("--python", default=sys.executable)
     r.add_argument("--out", required=True)
@@ -698,7 +707,7 @@ def main(argv=None):
     pr.add_argument("kind", choices=sorted(PROBES))
     child = sub.add_parser("entry", help="internal isolated Python entry with compiled-binding readback")
     child.add_argument("name", choices=[e["name"] for e in ENTRIES if "source" not in e])
-    child.add_argument("--vendor", choices=VENDORS, required=True)
+    child.add_argument("--vendor", choices=RUN_VENDORS, required=True)
     child.add_argument("--binding-report", required=True)
     child.add_argument("--junit", required=True)
     child.add_argument("--source-package")
