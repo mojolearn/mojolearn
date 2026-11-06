@@ -20,7 +20,8 @@ from bindings.classical_warnings import classical_warn_column
 from bindings.classifier_public_lifecycle import _public_labels
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_array_view import native_array_ndarray_view
-from core.p3nc_scan import p3nc_all_finite_f32, p3nc_widen_f32_f64
+from core.p3nc_scan import p3nc_all_finite_f32, p3nc_widen_f32_f64, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
+from bindings.p3nc_label_lists import p3nc_float_list_verdict
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_f32_snapshot, family_owned_snapshot, family_array
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
@@ -124,6 +125,16 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
             raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
         if refusal == LABELS_FLOAT_OK:
             return source
+    # p3-neighbors-cluster: an exact flat list / tuple of exact floats is
+    # checked in one native pass (bindings/p3nc_label_lists.mojo) with the
+    # walk's verdicts; the walk returns such a list unchanged.
+    var verdict = p3nc_float_list_verdict(source, classifier)
+    if verdict == P3NC_REAL_NONFINITE:
+        raise Error("Input y contains NaN or infinity (" + name + ").")
+    if verdict == P3NC_REAL_CONTINUOUS:
+        raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+    if verdict == P3NC_REAL_OK:
+        return source
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
     for i in range(len(flat)):  # driver-loop: admitted label words, never Python element protocols

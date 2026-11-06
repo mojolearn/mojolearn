@@ -10,6 +10,7 @@ time (the `core/staged_download.mojo::_first_nonfinite` and
 The finite test reads only exponent bits and the widening is exact, so no
 result or refusal changes. No host threads: the GPU bindings import these.
 """
+from std.math import floor
 from std.memory import bitcast
 
 comptime _P3NC_F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -46,3 +47,22 @@ def p3nc_widen_f32_f64(sp: _P3NC_F32P, dp: _P3NC_F64P, n: Int):
     while i < n:
         dp.unsafe_store(i, sp.unsafe_load(i).cast[DType.float64]())
         i += 1
+
+
+comptime P3NC_REAL_OK = 0
+comptime P3NC_REAL_NONFINITE = 1
+comptime P3NC_REAL_CONTINUOUS = 2
+
+
+def p3nc_real_labels(values: List[Float64], classifier: Bool) -> Int:
+    """The label walk's verdict on real labels in C order: the first
+    non-finite label is P3NC_REAL_NONFINITE, else (for a classifier) a
+    non-integral one P3NC_REAL_CONTINUOUS, else P3NC_REAL_OK; each label is
+    tested in the walk's order (finite, then integral)."""
+    for i in range(len(values)):  # native label check: one pass over copied label words
+        var v = values[i]
+        if (bitcast[DType.uint64](v) & UInt64(0x7FF0000000000000)) == UInt64(0x7FF0000000000000):
+            return P3NC_REAL_NONFINITE
+        if classifier and floor(v) != v:
+            return P3NC_REAL_CONTINUOUS
+    return P3NC_REAL_OK
