@@ -523,36 +523,6 @@ def _is_float(value: PythonObject) raises -> Bool:
 # ---------------------------------------------------------------- classification_report
 
 
-def _support_total(s: MxSums, arena: MxArena, k: Int, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_support_total`: the report's support total (cm_epi TOTAL) in its
-    own program, from the k supports' words (Float32 PairSum images or the
-    Int32 counts, the copies `put` / `put_i32` made of the support array)."""
-    var prog = MxProg(context)
-    var src: Int
-    if s.weighted:
-        var w = family_array(Python.tuple(PythonObject(k)), "<f4", context)
-        var dst = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))
-        _ = w  # keep the Python object alive through the native call above
-        for j in range(k):  # driver-loop: over the reported labels
-            dst[j] = Float32(arena.f32(s.g_out[1] + j))
-            _ = w  # keep the Python object alive through the native call above
-        src = prog.put(w)
-    else:
-        var c = family_array(Python.tuple(PythonObject(k)), "<i4", context)
-        var dst = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(c)))
-        _ = c  # keep the Python object alive through the native call above
-        for j in range(k):  # driver-loop: over the reported labels
-            dst[j] = Int32(arena.i32(s.cnt[1] + j))
-            _ = c  # keep the Python object alive through the native call above
-        src = prog.put_i32(c)
-    var out = prog.want(prog.alloc(2), 2)
-    prog.stage("cm_epi", 1, [_CM_TOTAL, src, k, 1 if s.weighted else 0, out])
-    var res = mx_run(prog, mode, context)
-    if s.weighted:
-        return PythonObject(res.f64(out))
-    return PythonObject(res.i64(out))
-
-
 def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """classification_report; args = (y_true, y_pred, labels, target_names,
     sample_weight, digits, output_dict, zero_division, mode)."""
@@ -590,6 +560,14 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var avg_codes: List[Int] = [0, 1, 2, 3]
     for i in range(4):  # small-loop(4: the report's four averages): fixed
         s.add_epi(2, k, avg_codes[i], zd, 2, 1.0, context)
+    # p3-labels-metrics: the support total (cm_epi TOTAL over the k support
+    # words: the Float32 pair-sum images or the Int32 counts) is staged in
+    # this program over the slots that hold them; it was a second program
+    # fed by a host copy of the same k words (a device round trip and a
+    # second binding call). Same stage, same input words, same result.
+    var total_src = s.g_out[1] if s.weighted else s.cnt[1]
+    var total_out = s.prog.want(s.prog.alloc(2), 2)
+    s.prog.stage("cm_epi", 1, [_CM_TOTAL, total_src, k, 1 if s.weighted else 0, total_out])
     var arena = mx_run(s.prog, mode, context)
     var all_for = Python.tuple(PythonObject("precision"), PythonObject("recall"), PythonObject("f-score"))
     _prf_warn(arena.i32(s.eos[0]), all_for, zero_division, context)
@@ -602,7 +580,7 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var row = rows[i]
         py_setitem(report, row[0], py_call(b.dict, py_call(b.zip, headers,
                    Python.tuple(row[1], row[2], row[3], row[4]))))
-    var total = _support_total(s, arena, k, mode, context)
+    var total = PythonObject(arena.f64(total_out)) if s.weighted else PythonObject(arena.i64(total_out))
     if micro_is_accuracy:
         _prf_warn(arena.i32(s.eos[1]), all_for, zero_division, context)
         py_setitem(report, "accuracy", PythonObject(arena.f64(s.eos[1] + 2)))
