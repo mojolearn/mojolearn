@@ -20,6 +20,8 @@ launch order as the Python bodies, so the bits do not move.
 from std.math import sqrt
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from std.ffi import c_int
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_f32, xcnn_addr, xcnn_readonly
@@ -91,11 +93,23 @@ def _contiguous(source: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 def _float_words(values: PythonObject) raises -> PythonObject:
+    """`values.tolist()` of a float64 array: one PyList_New and a stolen
+    PyList_SetItem per word (p3-cnn-sequence-tsa: it was a bound `append`
+    call per word)."""
     var count = Int(py=values.size)
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(values)))
-    var result = Python.list()
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # Own the NULL-filled list at once: a failure releases every stored slot.
+    var result = PythonObject(from_owned=raw)
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     for i in range(count):  # driver-loop: native loss/optimizer scalar result publication
-        _ = py_call(result.append, PythonObject(words[i]))
+        var item = PythonObject(words[i])
+        # SetItem steals the reference on both success and failure.
+        if set_item(result._obj_ptr, i, item.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
     _ = values
     return result
 
