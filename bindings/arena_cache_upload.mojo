@@ -43,6 +43,18 @@ def _increment(value: PythonObject, context: PythonObject) raises -> PythonObjec
             var failure = stash_python_error()
             raise failure^
         return PythonObject(from_owned=pointer)
+    # An exact builtin int/bool counter that fits a machine word (every real
+    # hit/upload count) is incremented natively in one step; only a counter
+    # outside the Int range takes the arbitrary-precision binary walk below.
+    var small = 0
+    var fits = False
+    try:
+        small = Int(py=value)
+        fits = small < Int.MAX
+    except:
+        fits = False
+    if fits:
+        return PythonObject(small + 1)
     ref cpy = Python().cpython()
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_ToBase")(value._obj_ptr,Int32(2))
     if not pointer:
