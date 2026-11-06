@@ -159,14 +159,18 @@ def test_release_split_proves_the_ptx_set_like_any_set(tmp_path, monkeypatch):
         raise InventoryReached()
     monkeypatch.setattr(pw,'release_inventory',inventory)
     args=[arg for directory in dirs for arg in ('--set',directory)]
+    # the packer parses each proof's schema before admission (pack_wheel main, dab191f3da): give it files
+    proofs=[]
+    for leg in ('cuda-sm_89','cuda-sm_80'):
+        proof=tmp_path/(leg+'.json');proof.write_text('{}');proofs+=['--build-proof',str(proof)]
     with pytest.raises(InventoryReached):
-        pw.main(args+['--profile','release-split','--wheels','nvidia','--build-proof','cuda-sm_89.json',
-                     '--build-proof','cuda-sm_80.json','--out',str(tmp_path/'out')],_gates=False)
+        pw.main(args+['--profile','release-split','--wheels','nvidia',*proofs,'--out',str(tmp_path/'out')],_gates=False)
 
 
 def test_release_split_refuses_without_the_ptx_proof(tmp_path):
     dirs,ptx=inputs(tmp_path, include_byte_lm=True)
     args=[arg for directory in dirs for arg in ('--set',directory)]
+    (tmp_path/'cuda-sm_89.json').write_text('{}')  # parsed for its schema before admission
     with pytest.raises(SystemExit,match='proof'):
         pw.main(args+['--profile','release-split','--wheels','nvidia','--build-proof',str(tmp_path/'cuda-sm_89.json'),
                      '--out',str(tmp_path/'out')],_gates=False)

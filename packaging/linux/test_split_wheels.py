@@ -317,8 +317,10 @@ class SplitWheels(unittest.TestCase):
         output2.mkdir()
         combined2, _ = qualification.split_combined(without_meta, output2)
         self.assertEqual({n: b for n, b in members(combined2).items() if '.dist-info/' not in n}, expected)
+        # without mojolearn-nvidia no CUDA wheel is staged at all (it carries the PTX set too,
+        # 2026-11-05), so the plugin check refuses before the per-package one
         incomplete = [w for w in wheels if not w.name.startswith('mojolearn_nvidia-')]
-        with self.assertRaisesRegex(ValueError, 'every native vendor package'):
+        with self.assertRaisesRegex(ValueError, 'Stage every plugin the core was packed with: packed cuda,hip, staged hip'):
             qualification.split_combined(incomplete, output)
 
     def test_file_names_and_tags(self):
