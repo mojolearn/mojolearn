@@ -142,9 +142,12 @@ def trees_empty(shape: PythonObject, typestr: String, context: PythonObject, ord
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
-    var width = trees_itemsize(typestr)
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)),
-                        py_call(context["native_bytes_type"], count * width))
+    # One zero-filled store: `array(code, [0]) * count` (p3-trees: a
+    # zero-filled bytes object of the full size was allocated first and then
+    # copied into the array, two allocations and two passes).
+    _ = trees_itemsize(typestr)  # refuses a non-Array dtype as before
+    var seed = py_call(context["array_type"], PythonObject(_store_code(typestr)), Python.list(PythonObject(0)))
+    var store = py_call(py_attr(seed, "__mul__"), PythonObject(count))
     return classical_wrap_array(store, shape, typestr, order, context)
 
 
