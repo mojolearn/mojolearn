@@ -1117,13 +1117,22 @@ def _ada_decision(fields: PythonObject, x: TreesMatrix, xt: PythonObject, contex
     var alphas = fields["estimator_weights_"]
     # One device copy of X for every one-tree member (trees_staged_input).
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    # The weights as one float64 store, read once (`array('d', alphas)` is
+    # the same float conversion `_float` made per member, and the store fsum
+    # reads): one conversion per predict instead of one per member plus the
+    # fsum's own (lane perf-sweep-trees, 2026-11-05).
+    var weights = py_call(context["array_type"], PythonObject("d"), alphas)
+    if len(weights) < len(members):
+        raise Error("IndexError: list index out of range")
+    var wp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(weights.buffer_info)[0]))
     try:
         for i in range(len(members)):  # driver-loop: over the member estimators
             var pred = _i32_codes(_member_predict(members[i], xa, context), context)
-            var a = Float64(py=_float(alphas[i]))
+            var a = wp[unsafe_offset=i]
             _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
     finally:
         trees_unstage(staged)
+    _ = weights  # keep the store alive through the reads above
     _scale(xt, acc, _fsum(alphas, context))
     return acc
 
@@ -1196,7 +1205,8 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
     finally:
         trees_unstage(staged)
     var b = trees_builtins()
-    var weights_store = py_call(context["array_type"], PythonObject("d"), py_call(b.map, b.float, fields["estimator_weights_"]))
+    # `array('d', ...)` converts each weight with float() itself: no map layer.
+    var weights_store = py_call(context["array_type"], PythonObject("d"), fields["estimator_weights_"])
     var weights = classical_wrap_array(weights_store, Python.tuple(m), "<f8", "C", context)
     var out = trees_vector(n, "<f4", context)
     _ = py_call_typed(_x(xt, "x_trees_weighted_median"), _A(preds), _A(weights), _A(out), Python.list(_P(n), _P(m)))
