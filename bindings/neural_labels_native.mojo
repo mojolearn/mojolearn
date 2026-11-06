@@ -6,6 +6,8 @@ from std.sys import size_of
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type
+from bindings.cpython_table import cpython_table
+from core.borrowed_buffer import BorrowedBufferLayout
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequential_admission import sequential_admit_value, SequentialValueAdmitter
@@ -18,6 +20,15 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_LABELS
 from core.cast_in import cast_in_kind
+
+
+def _item(layout: BorrowedBufferLayout, i: Int) -> Int:
+    # The address of element i of a one-dimensional buffer: one multiply,
+    # not a coordinate List per element (lane p3-neural-blocks); an indirect
+    # (suboffset) buffer keeps the general walk.
+    if layout.suboffsets[0] < 0:
+        return layout.address + i * layout.strides[0]
+    return layout.item_address([i])
 
 
 def _numeric(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -49,9 +60,9 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var result = Python.list()
     if py_type(source) is b.list or py_type(source) is b.tuple:
-        for i in range(len(source)):  # driver-loop: exact label sequence owners
-            _ = py_call(result.append, source[i])
-        return result
+        # One native list copy of the exact sequence (its items are the same
+        # objects), not one bound append call per label.
+        return py_call(b.list, source)
     if py_type(source) is not context["ndarray"]:
         raise Error("TypeError: labels require a native numeric buffer or a text sequence")
     var dtype = source.dtype
@@ -65,8 +76,13 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("ValueError: text and object labels must be one-dimensional")
     ref cpy = Python().cpython()
     var admitter = SequentialValueAdmitter(context)
+    # The CPython constructors resolved once, not by name per label.
+    var bytes_from = cpy.lib.get_function[def(MutPointer[UInt8, MutUntrackedOrigin], Int) -> PyObjectPtr]("PyBytes_FromStringAndSize")
+    var unicode_from = cpy.lib.get_function[def(Int32, MutPointer[UInt32, MutUntrackedOrigin], Int) -> PyObjectPtr]("PyUnicode_FromKindAndData")
+    var native = Bool(py=dtype.isnative)
+    var words = List[UInt32](length=layout.itemsize // 4, fill=0)
     for i in range(layout.count):  # driver-loop: native label schema decoding, never input hooks
-        var address = layout.item_address([i])
+        var address = _item(layout, i)
         var raw = PyObjectPtr()
         if kind == "O":
             raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=address)[0]
@@ -78,11 +94,9 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
             var count = layout.itemsize
             while count > 0 and ptr[count - 1] == 0:  # driver-loop: remove fixed-width byte-label padding
                 count -= 1
-            raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(ptr, count)
+            raw = bytes_from(ptr, count)
         else:
             var ptr = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
-            var words = List[UInt32](length=layout.itemsize // 4, fill=0)
-            var native = Bool(py=dtype.isnative)
             for j in range(len(words)):  # driver-loop: decode fixed-width unicode metadata
                 var word = UInt32(0)
                 for k in range(4):  # small-loop(one unicode code point)
@@ -91,7 +105,7 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
             var count = len(words)
             while count > 0 and words[count - 1] == 0:  # driver-loop: remove fixed-width unicode padding
                 count -= 1
-            raw = cpy.lib.get_function[PyObjectPtr]("PyUnicode_FromKindAndData")(Int32(4), words.unsafe_ptr(), count)
+            raw = unicode_from(Int32(4), words.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), count)
         if not raw:
             raise cpy.unsafe_get_error()
         var value = PythonObject(from_owned=raw)
@@ -138,16 +152,15 @@ def neural_encode_labels(source: PythonObject, entries: PythonObject, context: P
     # `source` above (it visits each element), an ndarray's decoded values by
     # `_flat`. The per-label re-admission repeated that walk.
     for i in range(count):  # driver-loop: native label kind admission
-        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(py_type(labels[i])._obj_ptr)
+        var flags = cpython_table()[].PyType_GetFlags(py_type(labels[i])._obj_ptr)
         all_text = all_text and (flags & UInt64(1 << 28)) != 0
         all_bytes = all_bytes and (flags & UInt64(1 << 27)) != 0
     if not all_text and not all_bytes:
         return _numeric(sequential_input(labels, context), entries, context)
-    var normalized = Python.list()
-    for i in range(count):  # driver-loop: lossless native bytes-to-codepoint key normalization
-        if all_text:
-            _ = py_call(normalized.append, labels[i])
-        else:
+    # Text labels are read as they are; only bytes need the Latin-1 key.
+    var normalized = labels if all_text else Python.list()
+    for i in range(0 if all_text else count):  # driver-loop: lossless native bytes-to-codepoint key normalization
+        if not all_text:
             var pointer = Int(0)
             var size = 0
             if cpy.lib.get_function[Int32]("PyBytes_AsStringAndSize")(labels[i]._obj_ptr, Pointer(to=pointer), Pointer(to=size)) != 0:
@@ -221,25 +234,31 @@ def neural_decode_labels(classes: PythonObject, codes: PythonObject, context: Py
     var result = _object_array(count, context) if kind == "O" else sequential_array(Python.tuple(count), classes.dtype, context)
     var base = native_buffer_address(result)
     var admitter = SequentialValueAdmitter(context)
+    # Object classes are admitted once per distinct class on first use, not
+    # once per predicted row (lane p3-neural-blocks); the same classes are
+    # refused, at the first row that predicts them.
+    var checked = List[Bool](length=layout.count if kind == "O" else 0, fill=False)
     for i in range(count):  # driver-loop: publish one predicted label from its native class words
-        var code_address = code_layout.item_address([i])
+        var code_address = _item(code_layout, i)
         var index = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=code_address)[0]) if code_layout.itemsize == 4 else Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=code_address)[0])
         if index < 0 or index >= layout.count:
             raise Error("ValueError: predicted class index is outside classes_")
         if kind == "O":
             ref cpy = Python().cpython()
-            var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=layout.item_address([index]))[0]
+            var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=_item(layout, index))[0]
             if not raw:
                 raise Error("TypeError: classes_ contains an uninitialized object slot")
             var value = PythonObject(from_owned=cpy.Py_NewRef(raw))
-            admitter.admit(value, context)
-            var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(py_type(value)._obj_ptr)
-            if (flags & UInt64((1 << 28) | (1 << 27))) == 0:
-                raise Error("TypeError: object classes_ requires native string or bytes values")
+            if not checked[index]:
+                admitter.admit(value, context)
+                var flags = cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr)
+                if (flags & UInt64((1 << 28) | (1 << 27))) == 0:
+                    raise Error("TypeError: object classes_ requires native string or bytes values")
+                checked[index] = True
             _object_store(base + i * size_of[PyObjectPtr](), value)
             continue
         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base + i * layout.itemsize),
-               src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=layout.item_address([index])), count=layout.itemsize)
+               src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=_item(layout, index)), count=layout.itemsize)
     _ = classes
     _ = codes
     return result
