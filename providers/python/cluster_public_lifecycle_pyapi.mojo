@@ -244,8 +244,9 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
             _target(args[len(args) - 1], rows, name, context)
         if not fitting or method == "partial_fit":
             var precomputed = False
-            for key in ["metric", "affinity"]:  # driver-loop: two supported precomputed-mode settings
-                var value = py_get(fields, key)
+            # The loop name differs from the record `key` above so the two never share a binding.
+            for setting in ["metric", "affinity"]:  # driver-loop: two supported precomputed-mode settings
+                var value = py_get(fields, setting)
                 precomputed = precomputed or (py_type(value) is py_type(PythonObject("")) and String(value) == "precomputed")
             if not precomputed:
                 var width = py_get(fields, "n_features_in_")
