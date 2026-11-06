@@ -4,7 +4,8 @@
 from std.memory import memcpy
 from std.sys import size_of
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, ExternalFunction
+from std.ffi import c_int
 from bindings.py_balanced import py_call, py_type
 from bindings.cpython_table import cpython_table
 from core.borrowed_buffer import BorrowedBufferLayout
@@ -20,6 +21,12 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_LABELS
 from core.cast_in import cast_in_kind
+
+
+comptime _PyBytes_FromStringAndSize = ExternalFunction[
+    "PyBytes_FromStringAndSize", def(Int, Int) thin abi("C") -> PyObjectPtr]
+comptime _PyUnicode_FromKindAndData = ExternalFunction[
+    "PyUnicode_FromKindAndData", def(c_int, Int, Int) thin abi("C") -> PyObjectPtr]
 
 
 def _item(layout: BorrowedBufferLayout, i: Int) -> Int:
@@ -77,8 +84,9 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var admitter = SequentialValueAdmitter(context)
     # The CPython constructors resolved once, not by name per label.
-    var bytes_from = cpy.lib.get_function[def(MutPointer[UInt8, MutUntrackedOrigin], Int) -> PyObjectPtr]("PyBytes_FromStringAndSize")
-    var unicode_from = cpy.lib.get_function[def(Int32, MutPointer[UInt32, MutUntrackedOrigin], Int) -> PyObjectPtr]("PyUnicode_FromKindAndData")
+    var lib = cpy.lib.borrow()
+    var bytes_from = _PyBytes_FromStringAndSize.load(lib)
+    var unicode_from = _PyUnicode_FromKindAndData.load(lib)
     var native = Bool(py=dtype.isnative)
     var words = List[UInt32](length=layout.itemsize // 4, fill=0)
     for i in range(layout.count):  # driver-loop: native label schema decoding, never input hooks
@@ -94,7 +102,7 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
             var count = layout.itemsize
             while count > 0 and ptr[count - 1] == 0:  # driver-loop: remove fixed-width byte-label padding
                 count -= 1
-            raw = bytes_from(ptr, count)
+            raw = bytes_from(Int(ptr), count)
         else:
             var ptr = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
             for j in range(len(words)):  # driver-loop: decode fixed-width unicode metadata
@@ -105,7 +113,7 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
             var count = len(words)
             while count > 0 and words[count - 1] == 0:  # driver-loop: remove fixed-width unicode padding
                 count -= 1
-            raw = unicode_from(Int32(4), words.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), count)
+            raw = unicode_from(c_int(4), Int(words.unsafe_ptr()), count)
         if not raw:
             raise cpy.unsafe_get_error()
         var value = PythonObject(from_owned=raw)
