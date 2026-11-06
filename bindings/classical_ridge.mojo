@@ -43,10 +43,11 @@ def classical_ridge_parameters(fields: PythonObject) raises:
         raise Error("alpha must be non-negative, got " + String(py_call(b.str, alpha)))
     var solver = fields["solver"]
     var name = String(solver) if py_type(solver) is b.str else String("")
-    var shown = String(py_call(b.repr, solver))
+    # repr(solver) is built only inside the refusals that show it.
     if name != "auto" and name != "eig" and name != "svd" and name != "cd":
-        raise Error("TypeError: solver " + shown + " is not supported")
+        raise Error("TypeError: solver " + String(py_call(b.repr, solver)) + " is not supported")
     if name == "svd" or name == "cd":
+        var shown = String(py_call(b.repr, solver))
         raise Error("NotImplementedError: mojolearn Ridge: solver=" + shown + " is not implemented "
                     + "(ridgeSVD is raft::linalg::svdQR -> cuSOLVER gesvd; 'cd' is cuml/solvers/cd.pyx); "
                     + "solver='eig' (cuML's 'auto') is the implemented arm. See glm/NOT_IMPLEMENTED.tsv")
@@ -172,6 +173,13 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
 
 
 def classical_linear_predict(model: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    return _classical_linear_predict(model, value, entries, context, False)
+
+
+def _classical_linear_predict(model: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject,
+                              wide: Bool) raises -> PythonObject:
+    # wide: write the float64 public prediction in the same native call
+    # (`ols_predict_wide`), one output buffer and no separate widening pass.
     var fields = sequential_fields(model)
     if py_get(fields, "coef_") is None:
         raise Error("ValueError: call fit before predict")
@@ -183,9 +191,9 @@ def classical_linear_predict(model: PythonObject, value: PythonObject, entries: 
     var coef = classical_host_f32(fields["coef_"], 1, "coef_", context)
     if Int(py=coef.size) != cols:
         raise Error("coef_ length differs from fitted feature count")
-    var out = classical_array(rows, 0, context)
-    _ = py_call_typed(entries["ols_predict"], classical_address(x), classical_address(coef), classical_address(out),
-                                Python.list(rows, cols, fields["intercept_"]))
+    var out = classical_array(rows, 0, context, wide)
+    _ = py_call_typed(entries["ols_predict_wide" if wide else "ols_predict"], classical_address(x),
+                      classical_address(coef), classical_address(out), Python.list(rows, cols, fields["intercept_"]))
     _ = x^
     _ = coef^
     return out
@@ -196,6 +204,11 @@ def classical_linear_predict_public(model: PythonObject, value: PythonObject,
     # PublicOutputsMixin historically widens the completed float32 prediction
     # to float64. Preserve this output conversion without changing the fitted
     # kernel or the float32 prediction consumed internally by R2 scoring.
+    # A binding with `ols_predict_wide` writes the exact float64 widening of
+    # the same float32 words in its own call (GIL released); an older binding
+    # keeps the separate widening pass below.
+    if py_get(entries, "ols_predict_wide") is not None:
+        return _classical_linear_predict(model, value, entries, context, True)
     var narrow = classical_linear_predict(model, value, entries, context)
     var size = Int(py=narrow.size)
     var wide = classical_array(size, 0, context, True)

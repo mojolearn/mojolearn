@@ -914,6 +914,38 @@ def ols_predict_binding(
     return PythonObject(0)
 
 
+def ols_predict_wide_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ols_predict` with a float64 output: the same float32 predictions,
+    each widened exactly to float64 as it is written, with the GIL released.
+    params: n_rows, n_features, intercept. Returns 0."""
+    if len(params) != 3:
+        raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
+    var x_address = _index(x_addr)
+    var coef_address = _index(coef_addr)
+    var wide = f64_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var intercept = Float32(Float64(py=params[2]))
+    var narrow = List[Float32](length=max(nr, 1), fill=0)
+    var np = f32_ptr(Int(narrow.unsafe_ptr()))
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        host_ols_predict_into(
+            f32_ptr(x_address), f32_ptr(coef_address), np, nr, nf, intercept,
+            host_predict_task_count(nr),
+        )
+        for i in range(nr):  # native output marshaling: exact widening of the completed prediction
+            wide[i] = Float64(np[i])
+    _ = narrow^
+    return PythonObject(0)
+
+
 def tsvd_transform_binding(
     x_addr: PythonObject,
     components_addr: PythonObject,
@@ -1465,6 +1497,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")
+        module.def_function[ols_predict_wide_binding]("ols_predict_wide")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")
         module.def_function[pca_whiten_transform_binding]("pca_whiten_transform")

@@ -858,6 +858,38 @@ def ols_predict_binding(
     return PythonObject(0)
 
 
+def ols_predict_wide_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ols_predict` with a float64 output: the same float32 kernel and
+    words, each prediction widened exactly to float64 as it is written to
+    `out` (the public predict's dtype). One call and one output buffer, the
+    widening done with the GIL released (Apple GPUs have no float64, so the
+    exact widen stays on the host side of the download). params: n_rows,
+    n_features, intercept. Returns 0."""
+    if len(params) != 3:
+        raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    var wide = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var intercept = Float32(Float64(py=params[2]))
+    var narrow = List[Float32](length=max(nr, 1), fill=0)
+    var np = _f32_ptr(Int(narrow.unsafe_ptr()))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ols_predict_host(ctx, xp, cp, np, nr, nf, intercept)
+        ctx.synchronize()
+        for i in range(nr):  # native output marshaling: exact widening of the downloaded prediction
+            wide[i] = Float64(np[i])
+    _ = narrow^
+    return PythonObject(0)
+
+
 def ridge_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -1533,6 +1565,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
+        m.def_function[ols_predict_wide_binding]("ols_predict_wide")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")
         m.def_function[ridge_resident_default_binding]("ridge_resident_default")
