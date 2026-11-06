@@ -366,17 +366,19 @@ def _score_binding(fields: PythonObject, context: PythonObject) raises -> Python
     # mode refusals/readback before invoking the existing native metric owner.
     var mode = py_get(fields, "numeric_mode")
     var b = native_loaded_module("builtins")
+    var expected = String("")
     if mode is not None:
         if py_type(mode) is not b.str:
             raise Error("numeric_mode must be 'fast' or 'identical'")
-        var selected = String(py=py_call(py_call(mode.strip).lower))
-        if selected != "fast" and selected != "identical":
+        # One spelling normalization, reused below (it was computed twice).
+        expected = String(py=py_call(py_call(mode.strip).lower))
+        if expected != "fast" and expected != "identical":
             raise Error("numeric_mode must be 'fast' or 'identical'")
     else:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
-        raise Error("numeric_mode must be 'fast' or 'identical'")
-    var expected = String(py=py_call(py_call(mode.strip).lower))
+        if py_type(mode) is not b.str:
+            raise Error("numeric_mode must be 'fast' or 'identical'")
+        expected = String(py=py_call(py_call(mode.strip).lower))
     var module = estimator_binding_mode(mode, "_mojolearn_metrics", context, False)
     var reader = neural_descriptor_entry(module, "metrics_numeric_mode", False)
     if reader is None:
