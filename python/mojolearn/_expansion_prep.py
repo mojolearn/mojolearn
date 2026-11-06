@@ -706,7 +706,14 @@ class RobustScaler(_PrepBase):
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
                  unit_variance=False):
-        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance), _ROBUST_CONTEXT)
+        # Plain constructor stores (the native "init" only stored them; the
+        # layout check runs at every native operation), so a clone per fold
+        # or candidate takes no native crossing.
+        self.with_centering = with_centering
+        self.with_scaling = with_scaling
+        self.quantile_range = quantile_range
+        self.copy = copy
+        self.unit_variance = unit_variance
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""
@@ -782,7 +789,8 @@ class MaxAbsScaler(_PrepBase):
         _register_maxabs_scaler(cls, _MAXABS_CONTEXT)
 
     def __init__(self, *, copy=True):
-        return _MAXABS_CALL(self, "init", (copy,), _MAXABS_CONTEXT)
+        # A plain constructor store (the native "init" only stored it).
+        self.copy = copy
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""
