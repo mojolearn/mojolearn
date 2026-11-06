@@ -26,7 +26,7 @@ from std.sys import llvm_intrinsic
 from std.time import perf_counter_ns
 
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
+from core.host_predict_threads import HOST_MIN_TASK_WORK, host_predict_task_count, host_predict_task_count_work
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -421,8 +421,10 @@ def host_tick(on: Bool, mut t: Int, name: StaticString):
     t = now
 
 
-#: Scalar operations below which a row split is not worth a thread fork.
-comptime HOST_ROW_TASK_MIN_WORK = 1 << 16
+#: Scalar operations below which a row split is not worth a thread fork:
+#: the shared grain floor (`core/host_predict_threads.mojo::HOST_MIN_TASK_WORK`,
+#: its cost reasoning stated there).
+comptime HOST_ROW_TASK_MIN_WORK = HOST_MIN_TASK_WORK
 
 
 def host_row_tasks(rows: Int, work_per_row: Int) -> Int:
@@ -430,10 +432,9 @@ def host_row_tasks(rows: Int, work_per_row: Int) -> Int:
     operations each: the host thread policy (`core/host_predict_threads.mojo`)
     capped so every task gets at least HOST_ROW_TASK_MIN_WORK operations. A
     schedule knob: it moves no bit."""
-    var work = rows * max(work_per_row, 1)
-    if rows <= 1 or work < 2 * HOST_ROW_TASK_MIN_WORK:
+    if rows <= 1:
         return 1
-    return max(1, min(host_predict_task_count(rows), work // HOST_ROW_TASK_MIN_WORK))
+    return host_predict_task_count_work(rows, rows * max(work_per_row, 1))
 
 
 def all_finite(values: List[Float32]) -> Bool:
