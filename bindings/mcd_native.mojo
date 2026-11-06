@@ -151,6 +151,9 @@ def _slogdet(mut kit: DecompKit, a: Int) raises -> Tuple[Float64, Float64]:
     # `_slogdet`: (sign, log|det|) from the LU factor (sums ascending).
     var factor = kit.lu(a)
     var aux = kit.lu_aux(factor[0], factor[1])
+    # The small aux vector comes down once; the three words below are then
+    # host reads (they were three strided gathers and downloads; p3 rank 529).
+    _ = kit.host(aux[0])
     if kit.word(aux[0], 1) > 0:
         return (Float64(0.0), -inf[DType.float64]())
     var negative = Int(kit.word(aux[0], 2)) + Int(kit.word(aux[0], 3))
