@@ -26,6 +26,7 @@ from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.family_common import family_f32_snapshot, family_array
 from core.family_cast_impl import family_all_finite_f32, family_cast_rows_f64
+from core.cast_in import CAST_KIND_FLOAT
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from bindings.native_class_admission import class_record, class_admit
@@ -274,6 +275,19 @@ def kernel_public_result(result: PythonObject, prediction: Bool, outside: Bool,
         return native_array_ndarray_view(result, context)
     # The established regressor public output is float64; internal predictions
     # retain float32. Widen the finished result in native code before publishing.
+    # The prediction is the binding's own fresh C-order float32 Array (lane
+    # p3-svm-gp-kernel, rows 245/806): widened straight from its store, with
+    # no second input admission of a result we just made.
+    var shape = result.shape
+    var rank = len(shape)
+    if String(result.dtype) == "<f4" and String(result.order) == "C" and (rank == 1 or rank == 2):
+        var rows = Int(py=shape[0])
+        var cols = Int(py=shape[1]) if rank == 2 else 1
+        var widened = family_array(shape, "<f8", context)
+        family_cast_rows_f64(Int(py=classical_address(result)), cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT,
+                             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(widened))))
+        _ = result
+        return native_array_ndarray_view(widened, context)
     var value = family_f32_snapshot(result, -1, "prediction", context)
     var wide = family_array(value.python_shape(), "<f8", context)
     var source = value.source
