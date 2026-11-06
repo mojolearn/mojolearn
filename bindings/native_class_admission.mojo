@@ -81,11 +81,18 @@ def _class_watcher() raises -> Int:
     if identifier < 0:
         # All interpreter watcher slots are taken: keep the full per-call
         # admission instead of failing the operation.
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         g[].watcher = -1
         return -1
     g[].watcher = Int(identifier)
     return g[].watcher
+
+
+def class_watch_ready() raises -> Bool:
+    """True where class records can be kept (Python >= 3.12 with a type
+    watcher). Where False, `class_admit` is a no-op and `class_record` always
+    misses, so callers skip building record payloads."""
+    return _class_watcher() >= 0
 
 
 def _class_epoch(cls: PythonObject) raises -> Int:
@@ -104,7 +111,11 @@ def _class_arm(cls: PythonObject) raises -> Bool:
         return False
     ref cpy = Python().cpython()
     if cpy.lib.get_function[Int32]("PyType_Watch")(Int32(watcher), cls._obj_ptr) < 0:
-        raise cpy.unsafe_get_error()
+        # Watch refused (e.g. a sub-interpreter that does not know this
+        # watcher ID): admit no record, so the caller keeps the full per-call
+        # admission instead of failing the user's call.
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return False
     return cpy.lib.get_function[Int32]("PyUnstable_Type_AssignVersionTag")(cls._obj_ptr) != 0
 
 
@@ -189,7 +200,7 @@ def _dict_watcher() raises -> Int:
     ref cpy = Python().cpython()
     var identifier = cpy.lib.get_function[Int32]("PyDict_AddWatcher")(_dict_modified_c)
     if identifier < 0:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         g[].watcher = -1
         return -1
     g[].watcher = Int(identifier)
@@ -222,7 +233,9 @@ def dict_keys_admit(fields: PythonObject) raises:
         return
     ref cpy = Python().cpython()
     if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields._obj_ptr) < 0:
-        raise cpy.unsafe_get_error()
+        # Watch refused: record nothing; the full key scan stays per call.
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return
     var address = Int(fields._obj_ptr)
     var g = DICT_WATCH.get_or_create_ptr()
     g[].admitted[address] = _dict_epoch(address)
