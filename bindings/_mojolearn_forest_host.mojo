@@ -66,7 +66,7 @@ from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_call as _balanced_call, py_type as _exact_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -130,6 +130,11 @@ comptime FOREST_HOST_MAX_ROWS = 1073741824
 
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address, count and slot the wrappers pass) is its
+    # own operator.index: read it directly (p3-trees: two attribute reads, a
+    # class-name string and a module lookup per integer argument before).
+    if _exact_type(value) is _exact_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("forest host: integers expected, not booleans")
