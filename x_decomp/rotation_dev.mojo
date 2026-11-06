@@ -19,7 +19,7 @@ from x_decomp.select_ops import SEL_MAXABS
 
 
 def _polar_input(mut k: DKit, C: DMat, R: DMat, nrow: Int, vm: Bool) raises -> DMat:
-    """C^T target(C R): the matrix `polar_dev` factors in one iteration."""
+    """C^T target(C R): the matrix `_polar` factors in one iteration."""
     var cr = k.mm(C, R, False, False)
     var target: DMat
     if vm:
