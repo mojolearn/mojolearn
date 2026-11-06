@@ -35,22 +35,35 @@ def _name(model: PythonObject) raises -> String:
     return String(py=py_type(model).__name__)
 
 
+def _str_instance(value: PythonObject) raises -> Bool:
+    # `isinstance(value, str)` through CPython's own native entry (the same
+    # protocol, without a Python-level builtins.isinstance call).
+    ref cpy = Python().cpython()
+    var found = cpy.lib.get_function[Int32]("PyObject_IsInstance")(value._obj_ptr, native_loaded_module("builtins").str._obj_ptr)
+    if found < 0:
+        raise cpy.unsafe_get_error()
+    return found == 1
+
+
 def _is_str(value: PythonObject, text: String) raises -> Bool:
-    var b = native_loaded_module("builtins")
-    return Bool(py=py_call(b.isinstance, value, b.str)) and String(py=value) == text
+    return _str_instance(value) and String(py=value) == text
 
 
 def _algo_index(value: PythonObject) raises -> Int:
-    # The position in `_SPARSE_ALGOS`, -1 when not one of them.
-    if _is_str(value, "lasso_lars"):
+    # The position in `_SPARSE_ALGOS`, -1 when not one of them. One instance
+    # check and one string read for the five names.
+    if not _str_instance(value):
+        return -1
+    var text = String(py=value)
+    if text == "lasso_lars":
         return 0
-    if _is_str(value, "lasso_cd"):
+    if text == "lasso_cd":
         return 1
-    if _is_str(value, "lars"):
+    if text == "lars":
         return 2
-    if _is_str(value, "omp"):
+    if text == "omp":
         return 3
-    if _is_str(value, "threshold"):
+    if text == "threshold":
         return 4
     return -1
 
