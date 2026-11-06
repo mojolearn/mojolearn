@@ -17,7 +17,7 @@ from bindings.classical_labels import labels_shape_of
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_after_fit, _feature_names
 from bindings.trees_public_lifecycle_native import _feature_check
-from bindings.trees_public_meta import meta_kind, meta_operation
+from bindings.trees_public_meta import meta_kind, meta_admitted_operation
 from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_call, prep_native_context
 from bindings.msel_inputs import msel_admit, msel_input_count
 from bindings.parallel_public_result import parallel_public_result
@@ -71,7 +71,7 @@ def meta_public_operation(model: PythonObject, operation: String, args: PythonOb
         var depth = Int(py=saved)
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
         try:
-            result = meta_operation(model, "trees_meta_" + method, call_args, context)
+            result = meta_admitted_operation(model, kind, "trees_meta_" + method, call_args, context)
         finally:
             if depth:
                 py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
@@ -91,6 +91,6 @@ def meta_public_operation(model: PythonObject, operation: String, args: PythonOb
         if method == "fit":
             return result
     else:
-        result = meta_operation(model, "trees_meta_" + method, call_args, context)
+        result = meta_admitted_operation(model, kind, "trees_meta_" + method, call_args, context)
     var estimator_type = PythonObject("regressor" if kind.endswith("_regressor") else "classifier")
     return parallel_public_result(result, method, estimator_type, context)
