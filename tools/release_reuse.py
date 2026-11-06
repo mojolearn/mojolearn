@@ -52,11 +52,12 @@ leg (the cheapest box) builds it. A Python-only release therefore rents
 nothing for builds; its NVIDIA and AMD release columns still run from the
 packed wheel as before.
 
-The previous release is the newest bench/results/release_verification/
-<date>_pypi_<v>/ record (its alpha manifests name the published wheels and
-their sha256, its light-smoke receipts the source commit); its identities
-come from binding-identities.json in that record when the release wrote one,
-otherwise from `git archive` of its commit.
+The previous release is the release evidence set at bench/results/release_evidence/
+(tools/release_evidence_set.py; each release replaces it, so it holds the newest
+published release): its alpha manifests name the published wheels and their
+sha256, its light-smoke receipts the source commit; its identities come from
+binding-identities.json in the set when the release wrote one, otherwise from
+`git archive` of its commit.
 
 A PUBLISHED CANDIDATE (2026-10-15): a freeze tools/release.py published to
 TestPyPI (or PyPI) under <evidence>/release/<version>/<commit12>/ records every
@@ -142,7 +143,6 @@ PORTABLE_MATH = "packaging/portable_math"
 GENERATORS = "tokenizer/tools"
 NVIDIA_IMAGE_RE = re.compile(r'LEG_IMAGE_NVIDIA="\$\{MOJOLEARN_GEMM_LEG_IMAGE_NVIDIA:-([^}]+)\}"')
 AMD_IMAGE_RE = re.compile(r"^IMAGE=(\S+)", re.M)
-RECORD_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_pypi_(\d+)$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -769,26 +769,17 @@ def compare(cur, prev):
 
 # ---------------------------------------------------------------- the previous release
 def previous_release(root=ROOT):
-    """The newest published release record: version, commit, wheels."""
-    base = Path(root) / "bench" / "results" / "release_verification"
-    best = None
-    for d in sorted(base.iterdir()) if base.is_dir() else []:
-        m = RECORD_RE.match(d.name)
-        if not m or not (d / "alpha-manifest-linux.json").is_file():
-            continue
-        try:
-            linux = json.loads((d / "alpha-manifest-linux.json").read_text())
-        except (OSError, ValueError):
-            continue
-        version = linux.get("version")
-        if not version:
-            continue
-        vt = tuple(int(x) for x in re.findall(r"\d+", version))
-        if best is None or vt > best[0]:
-            best = (vt, d, linux)
-    if best is None:
+    """The newest published release record: version, commit, wheels (the release evidence set)."""
+    import release_evidence_set
+    d = release_evidence_set.current_dir(root)
+    if d is None or not (d / "alpha-manifest-linux.json").is_file():
         return None
-    _, d, linux = best
+    try:
+        linux = json.loads((d / "alpha-manifest-linux.json").read_text())
+    except (OSError, ValueError):
+        return None
+    if not linux.get("version"):
+        return None
     rec = dict(version=linux["version"], record_dir=str(d), source_commit=(linux.get("light_smoke", {}).get("source_commit")
                                                   or linux.get("qualification_reuse", {}).get("source_commit")))
     # "nvidia" and "amd": the split Linux plugins (python/mojolearn/gpu_plugins.py),

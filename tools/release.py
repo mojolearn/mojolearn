@@ -216,8 +216,13 @@ THE STEPS
                      (tools/box_persist.py fetch --tag; none missing, or nothing is taken down), then what
                      gate-boxes rented taken down (nvidia_central.sh down, do_amd_steward.sh down); an
                      adopted box is released, left up
-  record             bench/results/release_verification/<date>_pypi_<v>/, committed; waits for both
-                     gates and the published-* producers and preserves their candidate artifact provenance
+  record             THE RELEASE EVIDENCE SET (tools/release_evidence_set.py): deletes the previous content of the ONE
+                     fixed directory bench/results/release_evidence/ and writes this release's evidence there
+                     (manifest.json: version, frozen commit, wheel names and sha256, tools, every item's sha256,
+                     producing step and the wheel bytes it checked; README.md), commits it as "Release evidence for
+                     <version>", pushes, and tags that commit v<version>. A missing required item fails the step by
+                     name. An older release's evidence: `git show v<version>:bench/results/release_evidence/
+                     manifest.json`. Waits for both gates and the published-* producers
 
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
@@ -2534,7 +2539,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         base = prev.get("source_commit")
         if not base:
             raise StepFailed("cross-compile: no published release record names a source commit to diff "
-                             "against (bench/results/release_verification/*/alpha-manifest-linux.json)")
+                             "against (bench/results/release_evidence/alpha-manifest-linux.json)")
         reused = self.cross_compile_reuse(base)
         if reused:
             return reused
@@ -5331,12 +5336,53 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if not ready:
                 raise StepFailed("release record requires the candidate gates and the pre- and post-publication "
                                  "ledger checks: " + "; ".join(reasons))
-        date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "") \
-            or dt.date.today().isoformat()
-        rec = ROOT / "bench" / "results" / "release_verification" / f"{date}_pypi_{self.version.replace('.', '')}"
+        # THE RELEASE EVIDENCE SET (Andrew 2026-11-06; tools/release_evidence_set.py): ONE committed set at the
+        # fixed bench/results/release_evidence/, replaced as a whole by every release, the release tag v<version>
+        # on the commit that holds it; no dated directory per release. The record files the next release's
+        # reuse plan reads (alpha manifests, admissions, provenance, binding identities, the PTX proof) are
+        # staged here first and enter the set under the same names.
+        import release_evidence_set
+        tag = release_evidence_set.TAG_FORMAT.format(version=self.version)
+        fixed = ROOT / release_evidence_set.EVIDENCE_DIR
         if self.dry:
-            return "would write " + str(rec.relative_to(ROOT)), dict(platforms=published)
-        rec.mkdir(parents=True, exist_ok=True)
+            return "would replace %s with the %s evidence and tag %s" % (
+                fixed.relative_to(ROOT), self.version, tag), dict(platforms=published)
+        local_tag = git("rev-parse", "-q", "--verify", f"refs/tags/{tag}^{{commit}}", check=False)
+        remote_tag = git("ls-remote", "--tags", "origin", f"refs/tags/{tag}", check=False)
+        if local_tag or remote_tag.strip():
+            raise StepFailed(f"the release tag {tag} already exists; a release tag is never moved")
+        stage = self.stage_record_files(published)
+        try:
+            manifest = release_evidence_set.write_set(self.evidence_set_context(published, stage), ROOT)
+        except release_evidence_set.EvidenceError as exc:
+            raise StepFailed(str(exc))
+        self.say(f"  wrote {fixed.relative_to(ROOT)}: {len(manifest['items'])} items, "
+                 f"{len(manifest['absent_optional'])} optional absent, {len(manifest['references'])} references")
+        # `git add -A` on the directory stages the previous set's removed files too: only this set remains
+        self.must(["git", "-C", ROOT, "add", "-A", "--", fixed], what="git add record")
+        self.must(["git", "-C", ROOT, "commit", "-q", "-m",
+                   f"Release evidence for {self.version} ({', '.join(published)}): replaces the previous set",
+                   "-m", "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"],
+                  what="git commit record")
+        branch = git("rev-parse", "--abbrev-ref", "HEAD")
+        # main has usually moved on during the builds; the record rides on top
+        # of it (0.8.16's record push was rejected as non-fast-forward)
+        self.must(["git", "-C", ROOT, "fetch", "-q", "origin", branch], what="git fetch")
+        self.must(["git", "-C", ROOT, "rebase", "-q", f"origin/{branch}"], what="git rebase record onto origin")
+        self.must(["git", "-C", ROOT, "push", "origin", f"HEAD:refs/heads/{branch}"], what="git push record")
+        # THE RELEASE TAG on the commit that holds this set: `git show v<version>:<set>/manifest.json`
+        self.must(["git", "-C", ROOT, "tag", "-a", tag, "-m", f"mojolearn {self.version}: release evidence", "HEAD"],
+                  what="git tag release")
+        self.must(["git", "-C", ROOT, "push", "origin", f"refs/tags/{tag}"], what="git push release tag")
+        return str(fixed.relative_to(ROOT)) + f" ({', '.join(published)}) committed on {branch}, tagged {tag}", \
+            dict(platforms=published)
+
+    def stage_record_files(self, published):
+        """The record files of this release, written fresh into <commit12>/record-staged/ (cleared first)."""
+        rec = self.rel / "record-staged"
+        if rec.exists():
+            shutil.rmtree(rec)
+        rec.mkdir(parents=True)
         for platform in published:
             art = self.rel / f"publish-{platform}"
             smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") \
@@ -5346,7 +5392,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
                               (Path(smoke), f"{'light-smoke' if self.gpu_smoke() else 'self-test'}-{platform}.json")):
                 if src.is_file():
                     shutil.copy2(src, rec / name)
-        (rec / "README.md").write_text(self.readme())
         write_json(rec / "release-provenance.json", self.release_provenance())
         # The identity of every shipped binding and what it shipped as, so the
         # next release decides REUSE or BUILD from this record alone (the
@@ -5367,19 +5412,43 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     self.say(f"  NOTE the PTX proof is not retained ({exc}); the next release builds its PTX set")
             else:
                 self.say("  NOTE no PTX leg named for the shipped PTX set; the next release builds its PTX set")
-        self.must(["git", "-C", ROOT, "add", "--", rec], what="git add record")
-        self.must(["git", "-C", ROOT, "commit", "-q", "-m",
-                   f"Record the published {self.version} wheels ({', '.join(published)}) and their release verification",
-                   "-m", "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"],
-                  what="git commit record")
-        branch = git("rev-parse", "--abbrev-ref", "HEAD")
-        # main has usually moved on during the builds; the record rides on top
-        # of it (0.8.16's record push was rejected as non-fast-forward)
-        self.must(["git", "-C", ROOT, "fetch", "-q", "origin", branch], what="git fetch")
-        self.must(["git", "-C", ROOT, "rebase", "-q", f"origin/{branch}"], what="git rebase record onto origin")
-        self.must(["git", "-C", ROOT, "push", "origin", f"HEAD:refs/heads/{branch}"], what="git push record")
-        return str(rec.relative_to(ROOT)) + f" ({', '.join(published)}) committed on " + branch, \
-            dict(platforms=published)
+        return rec
+
+    def evidence_set_context(self, published, stage):
+        """tools/release_evidence_set.py's view of this release (paths, state, wheels; nothing is run)."""
+        import release_evidence_set
+        date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "") \
+            or dt.date.today().isoformat()
+        single = bool(self.single())
+        gate_dirs = {}
+        for vendor in GATE_VENDORS:
+            if vendor in published:
+                try:
+                    gate_dirs[vendor] = self.gate_out(vendor)
+                except (StepFailed, OSError, ValueError, KeyError, zipfile.BadZipFile) as exc:
+                    self.say(f"  NOTE no gate directory for {vendor}: {exc}")
+        admitted = self.state.get("identity_admitted")
+        table, table_ref = None, ""
+        admitted_table = self.rel / "identity-wheels" / "admitted-table.json"
+        if single and admitted_table.is_file():
+            table = admitted_table
+            table_ref = "%s:%s" % ((admitted or {}).get("commit", "?"), "python/mojolearn/verify_reference/table.json")
+        else:
+            path = "python/mojolearn/verify_reference/table.json"
+            text = file_at(self.commit, path)
+            if text:
+                table = stage.parent / "record-table.json"
+                table.write_text(text)
+                table_ref = "%s:%s" % (self.commit, path)
+        wheels = {platform: wheel for platform, wheel, _ in self.platform_wheels() if wheel}
+        git_version = subprocess.run(["git", "--version"], capture_output=True, text=True).stdout.strip()
+        return release_evidence_set.Context(
+            version=self.version, commit=self.commit, tooling_commit=self.tooling_commit, date=date, rel=self.rel,
+            staged=stage, publish=self.args.publish, published=list(published), wheels=wheels, single=single,
+            gate_dirs=gate_dirs, steps=dict(self.state.get("steps") or {}), identity_admitted=admitted,
+            adapters=os.environ.get("MOJOLEARN_RELEASE_ADAPTERS", "1") != "0", table=table, table_ref=table_ref,
+            box_tags=self.box_job_tags(),
+            tools=dict(git=git_version, release_py_sha256=sha256(Path(__file__)), tooling_commit=self.tooling_commit))
 
     def publish_step(self, platform):
         """The publish step of the pipeline whose platform is `platform`."""
@@ -5396,41 +5465,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
             rows.append((platform, self.split_final(platform), Path(smoke)))
         return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json" if self.gpu_smoke()
                         else self.macos_self_test())]
-
-    def readme(self):
-        wheels = []
-        published = self.published_platforms()
-        for platform, wheel, smoke in self.platform_wheels():
-            if not wheel:
-                continue
-            try:
-                r = json.loads(Path(smoke).read_text())
-            except (OSError, ValueError):
-                r = {}
-            tag = self.recorded(self.publish_step(platform)) or {}
-            plat = wheel.name.split("-", 4)[-1][:-4]
-            if wheel.name.split("-")[0] != "mojolearn" or platform == "linux-meta":
-                plat = wheel.name.split("-")[0].replace("_", "-") + " " + plat
-            wheels.append(f"| {plat} | {sha256(wheel)} | {r.get('status', '?' if self.gpu_smoke() else 'preverified')}, {len(r.get('jobs', []))} jobs "
-                          f"| {tag.get('result', '?') if platform in published else 'not yet published'} |")
-        date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "")
-        return "\n".join([
-            f"# mojolearn {self.version}", "",
-            f"Source commit {self.commit}; release tooling at {self.tooling_commit}. Published {date}. "
-            "See CHANGELOG.md.", "",
-            "## Identity", "",
-            # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
-            "One identity check per release: the admitted reference table "
-            "(python/mojolearn/verify_reference/table.json, NVIDIA == AMD, "
-            "tools/admit_identity_columns.sh). " + (
-                "Every wheel smoke below verifies the installed wheel against it." if self.gpu_smoke() else
-                "Identity and behavior were checked before merge on NVIDIA, AMD, Apple and CPU; this release "
-                "built, checked artifact integrity and published (preverified route). The macOS wheel passed "
-                "`verify --self-test` in a fresh venv."), "",
-            "## Wheels (" + ("light" if self.gpu_smoke() else "preverified") + " route)", "",
-            "| platform | sha256 | smoke | published |", "|---|---|---|---|", *wheels, "",
-            f"Finish line: {(self.recorded('finish-line') or {}).get('result', 'not run')}.", "",
-            "Provenance of every leg and column (built, or taken and why): release-provenance.json.", ""])
 
     # ------------------------------------------------------------ the run
     # ------------------------------------------------------------ done steps short-circuit
