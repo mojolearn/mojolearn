@@ -19,7 +19,9 @@ from bindings.neural_labels_native import neural_encode_labels, neural_decode_la
 from std.math import sqrt
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_identity_key import NativeIdentityKey
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from providers.python.autograd_pyapi import cast_in_of
@@ -200,6 +202,66 @@ def _buffer_address(value: PythonObject) raises -> PythonObject:
     return xseq_addr(value)
 
 
+# ---------------------------------------------------------------- fitted-weight records
+#
+# perf2-neural (2026-11-06): one native record per fitted model in the
+# prepared registry (weak on the model, outside its `__dict__`, so pickling,
+# cloning and scikit-learn's dict checks see nothing). It holds the identities
+# of the fitted fields predict reads (`params_`, or `coefs_` / `intercepts_`
+# and every array in them) plus the admitted operand built from them, so a
+# predict on an unchanged model skips the per-layer admission, private views,
+# dtype casts and the weight repacking. Any replaced field (refit, set
+# attribute, a list item swapped, unpickling) misses the identity compare and
+# takes the full path, which also writes the new record. Not noticed: values
+# or headers edited in place inside the SAME ndarray objects (`coefs_[0][:] = 0`,
+# `params_.shape = ...`); the MLP keeps its packed copy, the recurrent model
+# its admitted view (which still sees in-place value edits of a float32
+# C-ordered `params_`).
+
+comptime _MLP_PACKED_SLOT = "xseq_mlp_packed_v1"
+comptime _RNN_PARAMS_SLOT = "xseq_rnn_params_v1"
+
+
+def _record_get(mut mods: NativeModules, slot: String, model: PythonObject, first: PythonObject,
+                second: PythonObject) raises -> PythonObject:
+    """The model's record in `slot` when `first` (and `second`, unless None)
+    are the very objects, with the same container items, it was built from;
+    None otherwise (a stale record is dropped)."""
+    var record = prepared_get(mods, slot, model)
+    if record is None:
+        return record
+    var saved = record[0]
+    var key = saved.downcast_value_ptr[NativeIdentityKey]()
+    var offset = 0
+    var same = False
+    try:
+        same = key[].matches(first, offset)
+        if same and second is not None:
+            same = key[].matches(second, offset)
+        same = same and key[].complete(offset)
+    except:
+        same = False
+    if same:
+        return record
+    prepared_drop(mods, slot, model)
+    return PythonObject(None)
+
+
+def _record_put(mut mods: NativeModules, slot: String, model: PythonObject, first: PythonObject,
+                second: PythonObject, operands: PythonObject) raises:
+    """Store `(identity key of first[, second], *operands)` for `model`."""
+    var key = NativeIdentityKey(mods)
+    key.add(first)
+    if second is not None:
+        key.add(second)
+    if key.retains(model):
+        return  # a self-referential field must not keep its weak owner alive
+    var record = Python.list(PythonObject(alloc=key^))
+    for i in range(len(operands)):  # small-loop(record operands)
+        _ = py_call(record.append, operands[i])
+    prepared_put(mods, slot, model, py_call(native_loaded_module("builtins").tuple, record))
+
+
 # ---------------------------------------------------------------- recurrent models
 
 def _rnn_cell(model: PythonObject, fields: PythonObject) raises -> Int:
@@ -254,6 +316,8 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     if n < 1 or steps_t < 1:
         raise Error("X needs at least one sample and one time step")
     var stream = XseqStream(py_get(fields, "random_state"), context)
+    var mods = NativeModules()
+    prepared_drop(mods, _RNN_PARAMS_SLOT, model)  # the new params_ is a new object
     # the parameters in layout order, U(-1/sqrt(H), 1/sqrt(H)), one block
     var cell = _rnn_cell(model, fields)
     var gates = _rnn_gates(cell)
@@ -312,7 +376,17 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var steps_t = Int(py=x.shape[1])
     var out = xseq_zeros(Python.tuple(n, fields["n_outputs_"]), context)
     var seq = xseq_zeros(Python.tuple(n, steps_t, xseq_int(fields["hidden_size"])) if want_seq else Python.tuple(1), context)
-    var params = xseq_f32(xseq_private_input(fields["params_"], context, "params_"), "params_", False, context)
+    # The admitted float32 view of `params_`, kept per model while `params_`
+    # is the same object (see "fitted-weight records" above).
+    var mods = NativeModules()
+    var source_params = fields["params_"]
+    var params: PythonObject
+    var record = _record_get(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None))
+    if record is not None:
+        params = record[1]
+    else:
+        params = xseq_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
+        _record_put(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params))
     var ip = _rnn_ints(model, fields)
     var network = net_of(ip)
     if Int(py=params.size) != network.n_params():
@@ -453,6 +527,8 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
         sizes.append(hidden[i])
     sizes.append(o)
     var stream = XseqStream(py_get(fields, "random_state"), context)
+    var mods = NativeModules()
+    prepared_drop(mods, _MLP_PACKED_SLOT, model)  # the refit publishes new coefs_ / intercepts_
     var logistic = _eq(fields["activation"], "logistic")
     # Glorot-uniform per layer, drawn straight into the flat block the
     # entry trains, w then b of each layer, as the packed layout orders them
@@ -556,22 +632,14 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     return model
 
 
-def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, context: PythonObject) raises -> PythonObject:
-    """`_BaseMLP._forward(X, proba2)`."""
-    var b = native_loaded_module("builtins")
-    var x = xseq_as_f32_c(source, 2, "X", context)
-    var x_shape = x.shape
-    var rows = Int(py=x_shape[0])
-    var columns = Int(py=x_shape[1])
-    if not Bool(py=PythonObject(columns) == fields["n_features_in_"]):
-        raise Error("X has " + String(columns) + " features, the model was fitted on "
-                    + String(py=py_call(b.str, fields["n_features_in_"])))
-    var coefs = fields["coefs_"]
-    var intercepts = fields["intercepts_"]
+def _mlp_pack(coefs: PythonObject, intercepts: PythonObject, columns: Int,
+              context: PythonObject) raises -> PythonObject:
+    """Admit the fitted layers and pack them, w then b of each layer, into one
+    float32 block: `(params, hidden widths, input width, output width)`."""
     var layers = len(coefs)
     if layers < 1 or len(intercepts) != layers:
         raise Error("ValueError: MLP fitted weights require matching nonempty layer lists")
-    var hidden = List[Int]()
+    var hidden = Python.list()
     var weights_kept = Python.list()
     var biases_kept = Python.list()
     var weight_counts = List[Int]()
@@ -597,12 +665,7 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
         _ = py_call(weights_kept.append, weights)
         _ = py_call(biases_kept.append, bias)
         if l < layers - 1:
-            hidden.append(fo)
-    if input_width != Int(py=fields["n_outputs_"]):
-        raise Error("ValueError: MLP output weights differ from n_outputs_")
-    var width = 2 if proba2 else Int(py=fields["n_outputs_"])
-    var out = xseq_zeros(Python.tuple(rows, width), context)
-    # the packed layout of the fitted weights, w then b of each layer
+            _ = py_call(hidden.append, PythonObject(fo))
     var params = xseq_zeros(Python.tuple(total), context)
     var offset = 0
     var destination = xseq_f32p(params)
@@ -621,6 +684,46 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
             _ = bias  # keep the Python object alive through the native call above
             _ = params  # keep the Python object alive through the native call above
         offset += count
+    return Python.tuple(params, hidden, columns, input_width)
+
+
+def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject, proba2: Bool,
+                 context: PythonObject) raises -> PythonObject:
+    """`_BaseMLP._forward(X, proba2)`."""
+    var b = native_loaded_module("builtins")
+    var x = xseq_as_f32_c(source, 2, "X", context)
+    var x_shape = x.shape
+    var rows = Int(py=x_shape[0])
+    var columns = Int(py=x_shape[1])
+    if not Bool(py=PythonObject(columns) == fields["n_features_in_"]):
+        raise Error("X has " + String(columns) + " features, the model was fitted on "
+                    + String(py=py_call(b.str, fields["n_features_in_"])))
+    var coefs = fields["coefs_"]
+    var intercepts = fields["intercepts_"]
+    # The packed fitted block, kept per model while `coefs_` and
+    # `intercepts_` hold the same arrays (see "fitted-weight records" above).
+    # A record packed for another input width is not reused: the full path
+    # then raises the layout refusal as before.
+    var mods = NativeModules()
+    var packed = _record_get(mods, _MLP_PACKED_SLOT, model, coefs, intercepts)
+    if packed is not None and Int(py=packed[3]) != columns:
+        packed = PythonObject(None)
+    var operands: PythonObject
+    if packed is not None:
+        operands = Python.tuple(packed[1], packed[2], packed[3], packed[4])
+    else:
+        operands = _mlp_pack(coefs, intercepts, columns, context)
+        _record_put(mods, _MLP_PACKED_SLOT, model, coefs, intercepts, operands)
+    var params = operands[0]
+    var hidden_widths = operands[1]
+    var input_width = Int(py=operands[3])
+    var hidden = List[Int]()
+    for i in range(len(hidden_widths)):  # driver-loop: over hidden layer widths
+        hidden.append(Int(py=hidden_widths[i]))
+    if input_width != Int(py=fields["n_outputs_"]):
+        raise Error("ValueError: MLP output weights differ from n_outputs_")
+    var width = 2 if proba2 else Int(py=fields["n_outputs_"])
+    var out = xseq_zeros(Python.tuple(rows, width), context)
     var out_act = Int(py=context["xseq_mlp_outputs"][fields["out_activation_"]])
     var ip: List[Int] = [rows, columns, Int(py=fields["n_outputs_"]),
                          Int(py=context["xseq_mlp_activations"][fields["activation"]]), out_act, 4096, len(hidden)]
@@ -670,8 +773,8 @@ def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context
         py_setitem(fields, "_LOSS_CODE", 2)
         return _mlp_fit(model, fields, args[0], codes, 4, k, context)
     if operation == "mlp_predict_proba":
-        return _mlp_forward(fields, args[0], Int(py=fields["n_outputs_"]) == 1, context)
-    var out = _mlp_forward(fields, args[0], False, context)
+        return _mlp_forward(model, fields, args[0], Int(py=fields["n_outputs_"]) == 1, context)
+    var out = _mlp_forward(model, fields, args[0], False, context)
     var rows = Int(py=out.shape[0])
     if not classifier:
         if xseq_truth(py_get(fields, "_y_1d", PythonObject(False))):
