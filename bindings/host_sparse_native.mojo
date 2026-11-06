@@ -39,7 +39,7 @@ def host_sparse_format(value: PythonObject) raises -> String:
     var abc_meta = PythonObject(None)
     var formats: List[String] = ["csr", "csc", "coo", "bsr", "dia", "dok", "lil"]
     for i in range(len(formats)):  # driver-loop: seven supported native sparse storage schemas
-        var name = formats[i]
+        var name = String(formats[i])
         var module = py_get(modules, PythonObject("scipy.sparse._" + name))
         if module is None or py_type(module) is not module_type:
             continue
