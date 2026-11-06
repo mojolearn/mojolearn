@@ -14,7 +14,7 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points connected at import (python/mojolearn/_native_trees_bridge.py)
 # and C builtins.
-from std.ffi import _Global
+from std.ffi import _Global, c_int
 from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
@@ -108,7 +108,9 @@ def trees_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     arguments, keeping the class of a refusal the entry raises."""
     ref cpy = Python().cpython()
     var envelope = py_call(trees_builtins().tuple, args)
-    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallObject")(entry._obj_ptr, envelope._obj_ptr)
+    # The interpreter's own PyObject_Call entry (no by-name symbol lookup per
+    # call, p3-trees); the same call as PyObject_CallObject with a tuple.
+    var result = cpy.PyObject_Call(entry._obj_ptr, envelope._obj_ptr, PyObjectPtr())
     if not result:
         raise typed_python_error()
     return PythonObject(from_owned=result)
@@ -263,10 +265,12 @@ def _any_contiguous_address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var storage = List[Int](length=10, fill=0)
     var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x9C)) != 0:
+    # The process-wide C-API table (no by-name symbol lookup per call).
+    var table = cpython_table()
+    if table[].PyObject_GetBuffer(value._obj_ptr, pointer, c_int(0x9C)) != 0:
         raise cpy.unsafe_get_error()
     var address = storage[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    table[].PyBuffer_Release(pointer)
     _ = storage^
     return address
 
