@@ -17,10 +17,11 @@ from bindings.pca_query_native import pca_query_operation
 from bindings.pca_archive import pca_archive_save, pca_archive_load
 
 
-def _pca_admitted(model: PythonObject, loading: Bool, context: PythonObject) raises -> Bool:
+def _pca_admitted(b: PythonObject, model: PythonObject, loading: Bool, context: PythonObject) raises -> Bool:
     # PCA itself or an ordinary subclass of it (HostPCA, a user's class):
     # the class's MRO, read through type's own descriptor, holds PCA.
-    var b = native_loaded_module("builtins")
+    # `b` is the builtins module the entry already admitted this call (one
+    # module check per call, not two).
     var cls = model if loading else py_type(model)
     if py_type(cls) is not b.type:
         return False
@@ -48,7 +49,7 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if py_type(context) is not b.dict:
             raise Error("TypeError: native PCA requires connected context")
         var loading = operation == "load"
-        if not _pca_admitted(model, loading, context):
+        if not _pca_admitted(b, model, loading, context):
             raise Error("TypeError: the native PCA owner requires a PCA instance")
         classical_connect_numpy(context)
         var result = PythonObject(None)
