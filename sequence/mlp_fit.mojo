@@ -983,17 +983,24 @@ def mlp_fit[E: Exec](
 
 
 def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
-                         proba2: Bool = False) raises:
+                         proba2: Bool = False, resident: Bool = False) raises:
     """`proba2` (cpu2-l11-neural): a one-output logistic net writes the
-    (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on the executor)."""
+    (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on the executor).
+    `resident` (perf3-seq-neural): `Pin` is already this executor's memory
+    (the model's resident fitted block, sequence/perf3_seq_resident.mojo),
+    read in place: no per-call allocation and upload of the parameters."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]
     var bs = chunk if chunk < N else N
     var dX = ex.alloc(N * D)
     ex.upload(dX, X, N * D)
-    var P = ex.alloc(net.n_params())
-    ex.upload(P, Pin, net.n_params())
+    var P: FP
+    if resident:
+        P = Pin
+    else:
+        P = ex.alloc(net.n_params())
+        ex.upload(P, Pin, net.n_params())
     var acts = List[FP]()
     for i in range(L + 1):
         acts.append(ex.alloc(bs * net.sizes[i]))
@@ -1025,7 +1032,7 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
 
 
 def mlp_predict_autograd[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
-                                  proba2: Bool = False) raises:
+                                  proba2: Bool = False, resident: Bool = False) raises:
     """mlp_predict through the tape: each chunk runs mlp_forward_autograd on a
     tape in inference mode (no graph, no gradient storage), so predictions
     come from the same kernels, in the same order, as the training forward.
@@ -1036,8 +1043,12 @@ def mlp_predict_autograd[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP
     var bs = chunk if chunk < N else N
     var dX = ex.alloc(N * D)
     ex.upload(dX, X, N * D)
-    var P = ex.alloc(net.n_params())
-    ex.upload(P, Pin, net.n_params())
+    var P: FP
+    if resident:
+        P = Pin
+    else:
+        P = ex.alloc(net.n_params())
+        ex.upload(P, Pin, net.n_params())
     var acts = List[FP]()
     for i in range(L + 1):  # driver-loop: over layers
         acts.append(ex.alloc(bs * net.sizes[i]))
