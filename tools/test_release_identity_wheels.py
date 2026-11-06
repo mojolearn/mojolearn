@@ -198,3 +198,49 @@ def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monke
         "install-load": dict(decision="run", status="passed"), "adapters": dict(decision="reuse", status="reused")})))
     ok, why = r.single_gate_ok("amd", out)
     assert ok and "12 runtime cases" in why
+
+
+def test_a_vendor_that_owes_nothing_is_composed_on_the_mac_and_rents_nothing(tmp_path, monkeypatch):
+    r = make(tmp_path, identity_on_wheels=True)
+    verdicts = iter([(False, "no gate report"), (True, "PASS")])
+    monkeypatch.setattr(r, "gate_ok", lambda vendor: next(verdicts))
+    monkeypatch.setattr(r, "lanes_owed", lambda col: [])
+    monkeypatch.setattr(r, "units_plan", lambda vendor: dict(reused=26, owed=[]))
+    monkeypatch.setattr(r, "compose_without_box", lambda vendor: "composed")
+    assert r.box_step_owed("gate-amd") is None
+    assert any("nothing owed, composed on this Mac" in l and "no rental" in l for l in r.lines)
+
+
+def test_a_vendor_whose_runtime_units_are_owed_rents(tmp_path, monkeypatch):
+    r = make(tmp_path, identity_on_wheels=True)
+    monkeypatch.setattr(r, "gate_ok", lambda vendor: (False, "no gate report"))
+    monkeypatch.setattr(r, "lanes_owed", lambda col: [])
+    monkeypatch.setattr(r, "units_plan", lambda vendor: dict(reused=26, owed=[]))
+    monkeypatch.setattr(r, "compose_without_box", lambda vendor: "runtime units owed")
+    assert r.box_step_owed("gate-amd") == "no gate report"
+    assert any("runtime units owed" in l for l in r.lines)
+
+
+def test_cpu_with_nothing_owed_dispatches_nothing(tmp_path, monkeypatch):
+    r = make(tmp_path, identity_on_wheels=True)
+    core = tmp_path / "core.whl"
+    core.write_bytes(b"core")
+    monkeypatch.setattr(r, "split_final", lambda package: core)
+    monkeypatch.setattr(r, "lanes_owed", lambda col: [])
+    monkeypatch.setattr(r, "units_plan", lambda vendor: dict(reused=20, owed=[]))
+
+    def composed(vendor, wheels, device, out):
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "runtime-report.json").write_text(json.dumps(dict(status="passed")))
+        return True
+    monkeypatch.setattr(r, "compose_runtime", composed)
+    monkeypatch.setattr(r, "gh", lambda *a, **k: pytest.fail("no workflow dispatch when nothing is owed"))
+    assert "no dispatch" in r.step_identity_cpu()
+
+
+def test_an_unchanged_apple_adapter_unit_runs_nothing(tmp_path, monkeypatch):
+    r = make(tmp_path, identity_on_wheels=True)
+    monkeypatch.setattr(r, "units_plan", lambda vendor: dict(vendor="apple", device_class="apple-m2-pro", reused=1,
+                        owed=[], units=[dict(unit="adapters", decision="reuse")]))
+    monkeypatch.setattr(r, "apple_adapter_gate", lambda: pytest.fail("the adapter smoke must not run"))
+    assert r.apple_adapter_unit_gate().startswith("adapters REUSED") and r.apple_adapter_unit_ok()
