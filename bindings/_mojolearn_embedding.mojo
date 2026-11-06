@@ -29,6 +29,7 @@ device call, and nothing inside the `GILReleased` block touches a
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.ffi import _Global
+from std.atomic import Atomic, Ordering
 from std.sys.compile import is_defined
 from core.hostptr import f32_ptr, read_f32, read_i32
 from std.python import Python, PythonObject
@@ -162,29 +163,62 @@ comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or (_EMB_IDENTICAL and not (is_d
 #: buffers kept per element type (the oldest is retired past these)
 comptime EMB_POOL_F32_KEEP = 3
 comptime EMB_POOL_I32_KEEP = 6
+#: resident tables kept at once, one per layer token (the least recently
+#: used is retired past this). Lane p3-neural-blocks: the pool held ONE
+#: table, so two Embedding layers used in turn (token and position tables)
+#: evicted each other and every forward re-uploaded and re-scanned its
+#: table. Four covers the usual embedding stacks; a layer's table also goes
+#: when the layer is finalized or its weight is assigned.
+comptime EMB_RESIDENT_KEEP = 4
+
+
+def _emb_lock(mut lock: List[Int64]) raises:
+    """Take a pool's lock word. The pools are process globals and the
+    forward / backward entries use them with the GIL released, so two
+    Python threads could otherwise pop one buffer twice or clear a table
+    the other is reading (lane p3-neural-blocks; the pattern of
+    cluster/resident_centers.mojo). Held for one list step only, never
+    across a device call."""
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](lock.unsafe_ptr())
+    while True:  # driver-loop: spin on the pool's lock word (held for one list step only)
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, Int64(1)):
+            return
+
+
+def _emb_unlock(mut lock: List[Int64]) raises:
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](lock.unsafe_ptr())
+    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
 
 
 struct _EmbPool(Defaultable, Movable):
-    #: the resident table (0 or 1 entry) and its key
+    #: the resident tables (at most EMB_RESIDENT_KEEP, most recent last)
+    #: and their keys: layer token, host address and cell count
     var w: List[DeviceBuffer[DType.float32]]
-    var w_token: Int
-    var w_addr: Int
-    var w_cells: Int
+    var w_token: List[Int]
+    var w_addr: List[Int]
+    var w_cells: List[Int]
     #: pooled work buffers and their element counts
     var f: List[DeviceBuffer[DType.float32]]
     var f_n: List[Int]
     var i: List[DeviceBuffer[DType.int32]]
     var i_n: List[Int]
+    #: the lock word (see `_emb_lock`)
+    var lock: List[Int64]
 
     def __init__(out self):
         self.w = List[DeviceBuffer[DType.float32]]()
-        self.w_token = 0
-        self.w_addr = 0
-        self.w_cells = 0
+        self.w_token = List[Int]()
+        self.w_addr = List[Int]()
+        self.w_cells = List[Int]()
         self.f = List[DeviceBuffer[DType.float32]]()
         self.f_n = List[Int]()
         self.i = List[DeviceBuffer[DType.int32]]()
         self.i_n = List[Int]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
 comptime _EMB_POOL_NAME = "MojoEmbeddingResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoEmbeddingResidentFast"
@@ -196,40 +230,68 @@ def _pool_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     the pooled one of that size, else a new one."""
     var nb = n if n > 0 else 1
     var pool = _EMB_POOL.get_or_create_ptr()
+    var got = List[DeviceBuffer[DType.float32]]()
+    _emb_lock(pool[].lock)
     for k in range(len(pool[].f_n)):  # small-loop(f_n: pooled buffer sizes, at most EMB_POOL_F32_KEEP): buffer pool lookup, not data
         if pool[].f_n[k] == nb:
             _ = pool[].f_n.pop(k)
-            return pool[].f.pop(k)
+            got.append(pool[].f.pop(k))
+            break
+    _emb_unlock(pool[].lock)
+    if len(got) > 0:
+        return got.pop()
     return ctx.enqueue_create_buffer[DType.float32](nb)
 
 
 def _give_f32(var buf: DeviceBuffer[DType.float32], n: Int) raises:
     var pool = _EMB_POOL.get_or_create_ptr()
+    var retired = List[DeviceBuffer[DType.float32]]()
+    _emb_lock(pool[].lock)
     if len(pool[].f) >= EMB_POOL_F32_KEEP:
         _ = pool[].f_n.pop(0)
-        _ = pool[].f.pop(0)
+        retired.append(pool[].f.pop(0))
     pool[].f.append(buf^)
     pool[].f_n.append(n if n > 0 else 1)
+    _emb_unlock(pool[].lock)
+    _ = retired^
 
 
 def _pool_i32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.int32]:
     """`_pool_f32` for int32."""
     var nb = n if n > 0 else 1
     var pool = _EMB_POOL.get_or_create_ptr()
+    var got = List[DeviceBuffer[DType.int32]]()
+    _emb_lock(pool[].lock)
     for k in range(len(pool[].i_n)):  # small-loop(i_n: pooled buffer sizes, at most EMB_POOL_I32_KEEP): buffer pool lookup, not data
         if pool[].i_n[k] == nb:
             _ = pool[].i_n.pop(k)
-            return pool[].i.pop(k)
+            got.append(pool[].i.pop(k))
+            break
+    _emb_unlock(pool[].lock)
+    if len(got) > 0:
+        return got.pop()
     return ctx.enqueue_create_buffer[DType.int32](nb)
 
 
 def _give_i32(var buf: DeviceBuffer[DType.int32], n: Int) raises:
     var pool = _EMB_POOL.get_or_create_ptr()
+    var retired = List[DeviceBuffer[DType.int32]]()
+    _emb_lock(pool[].lock)
     if len(pool[].i) >= EMB_POOL_I32_KEEP:
         _ = pool[].i_n.pop(0)
-        _ = pool[].i.pop(0)
+        retired.append(pool[].i.pop(0))
     pool[].i.append(buf^)
     pool[].i_n.append(n if n > 0 else 1)
+    _emb_unlock(pool[].lock)
+    _ = retired^
+
+
+def _table_slot(pool_w_token: List[Int], token: Int) -> Int:
+    """The index of `token`'s resident table, or -1."""
+    for k in range(len(pool_w_token)):  # small-loop(resident tables, at most EMB_RESIDENT_KEEP)
+        if pool_w_token[k] == token:
+            return k
+    return -1
 
 
 def _table_take(
@@ -242,18 +304,27 @@ def _table_take(
     """The device copy of the caller's table, refused for non-finite values:
     the resident one when (token, address, cells) match, else a new upload
     and scan. The pool gives the buffer up for the call (`_table_give`
-    returns it), so a raise in between leaves no resident table behind."""
+    returns it), so a raise in between leaves no resident table behind.
+    The layer's stored table is read-only storage (bindings/
+    embedding_layer_native.mojo `_freeze`), so a resident copy cannot go
+    stale through an in-place write; assigning `weight` takes a new token."""
     comptime if EMB_RESIDENT:
         if token > 0:
             var pool = _EMB_POOL.get_or_create_ptr()
-            var hit = (
-                len(pool[].w) > 0 and pool[].w_token == token
-                and pool[].w_addr == addr and pool[].w_cells == n
-            )
-            pool[].w_token = 0
+            var got = List[DeviceBuffer[DType.float32]]()
+            var hit = False
+            _emb_lock(pool[].lock)
+            var k = _table_slot(pool[].w_token, token)
+            if k >= 0:
+                hit = pool[].w_addr[k] == addr and pool[].w_cells[k] == n
+                _ = pool[].w_token.pop(k)
+                _ = pool[].w_addr.pop(k)
+                _ = pool[].w_cells.pop(k)
+                got.append(pool[].w.pop(k))
+            _emb_unlock(pool[].lock)
             if hit:
-                return pool[].w.pop()
-            pool[].w.clear()
+                return got.pop()
+            _ = got^
     var d = _upload_f32_ptr(ctx, wp, n)
     _refuse_nonfinite_device(ctx, String("W"), d, wp, n)
     return d^
@@ -263,11 +334,24 @@ def _table_give(var d: DeviceBuffer[DType.float32], token: Int, addr: Int, n: In
     comptime if EMB_RESIDENT:
         if token > 0:
             var pool = _EMB_POOL.get_or_create_ptr()
-            pool[].w.clear()
+            var retired = List[DeviceBuffer[DType.float32]]()
+            _emb_lock(pool[].lock)
+            # A second thread on the same layer may have given its own copy
+            # back first: keep one per token.
+            var k = _table_slot(pool[].w_token, token)
+            if k < 0 and len(pool[].w) >= EMB_RESIDENT_KEEP:
+                k = 0
+            if k >= 0:
+                _ = pool[].w_token.pop(k)
+                _ = pool[].w_addr.pop(k)
+                _ = pool[].w_cells.pop(k)
+                retired.append(pool[].w.pop(k))
             pool[].w.append(d^)
-            pool[].w_token = token
-            pool[].w_addr = addr
-            pool[].w_cells = n
+            pool[].w_token.append(token)
+            pool[].w_addr.append(addr)
+            pool[].w_cells.append(n)
+            _emb_unlock(pool[].lock)
+            _ = retired^
             return
     _ = d^
 
@@ -278,9 +362,17 @@ def embedding_table_release_binding(token_obj: PythonObject) raises -> PythonObj
     var token = Int(py=token_obj)
     comptime if EMB_RESIDENT:
         var pool = _EMB_POOL.get_or_create_ptr()
-        if token > 0 and pool[].w_token == token:
-            pool[].w.clear()
-            pool[].w_token = 0
+        var retired = List[DeviceBuffer[DType.float32]]()
+        _emb_lock(pool[].lock)
+        var k = _table_slot(pool[].w_token, token) if token > 0 else -1
+        if k >= 0:
+            _ = pool[].w_token.pop(k)
+            _ = pool[].w_addr.pop(k)
+            _ = pool[].w_cells.pop(k)
+            retired.append(pool[].w.pop(k))
+        _emb_unlock(pool[].lock)
+        if k >= 0:
+            _ = retired^
             return PythonObject(1)
     return PythonObject(0)
 
@@ -794,10 +886,15 @@ struct _EmbTensors(Defaultable, Movable):
     var bufs: List[DeviceBuffer[DType.float32]]
     #: floats per handle (0 marks a free handle)
     var n: List[Int]
+    #: the lock word (see `_emb_lock`): the forward / backward device
+    #: entries read handles with the GIL released while another thread can
+    #: allocate (the list may move) or free one
+    var lock: List[Int64]
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.n = List[Int]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
 comptime _EMB_TENSORS_NAME = "MojoEmbeddingTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoEmbeddingTensorsFast"
@@ -806,9 +903,37 @@ comptime _EMB_TENSORS = _Global[StorageType=_EmbTensors, name=_EMB_TENSORS_NAME,
 
 def _tensor_n(h: Int) raises -> Int:
     var pool = _EMB_TENSORS.get_or_create_ptr()
-    if h < 1 or h > len(pool[].n) or pool[].n[h - 1] == 0:
+    _emb_lock(pool[].lock)
+    var have = 0
+    if h >= 1 and h <= len(pool[].n):
+        have = pool[].n[h - 1]
+    _emb_unlock(pool[].lock)
+    if have == 0:
         raise Error("embedding: tensor handle " + String(h) + " is not open")
-    return pool[].n[h - 1]
+    return have
+
+
+def _tensor_sub(h: Int, n: Int, refusal: String) raises -> DeviceBuffer[DType.float32]:
+    """A view of the first n floats of open handle h (which must hold at
+    least n), taken under the lock: the view shares the handle's memory and
+    keeps it alive if the handle is freed meanwhile."""
+    var pool = _EMB_TENSORS.get_or_create_ptr()
+    _emb_lock(pool[].lock)
+    var have = 0
+    if h >= 1 and h <= len(pool[].n):
+        have = pool[].n[h - 1]
+    if have == 0 or n < 1 or n > have:
+        _emb_unlock(pool[].lock)
+        if have == 0:
+            raise Error("embedding: tensor handle " + String(h) + " is not open")
+        raise Error(refusal)
+    try:
+        var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+        _emb_unlock(pool[].lock)
+        return view^
+    except error:
+        _emb_unlock(pool[].lock)
+        raise error^
 
 
 def _tensor_view(h: Int, n: Int, what: String) raises -> DeviceBuffer[DType.float32]:
@@ -816,8 +941,7 @@ def _tensor_view(h: Int, n: Int, what: String) raises -> DeviceBuffer[DType.floa
     var have = _tensor_n(h)
     if have != n:
         raise Error("embedding: " + what + " holds " + String(have) + " floats, the call needs " + String(n))
-    var pool = _EMB_TENSORS.get_or_create_ptr()
-    return pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+    return _tensor_sub(h, n, "embedding: " + what + " does not fit its tensor")
 
 
 def seq_tensor_alloc_binding(n_obj: PythonObject, zero_obj: PythonObject) raises -> PythonObject:
@@ -832,6 +956,7 @@ def seq_tensor_alloc_binding(n_obj: PythonObject, zero_obj: PythonObject) raises
     if zero:
         enqueue_fill(ctx, buf, Float32(0.0))
     var pool = _EMB_TENSORS.get_or_create_ptr()
+    _emb_lock(pool[].lock)
     var h = -1
     for j in range(len(pool[].n)):  # small-loop(pool: resident tensor handles): free handle slot search, no data
         if pool[].n[j] == 0 and h < 0:
@@ -843,6 +968,7 @@ def seq_tensor_alloc_binding(n_obj: PythonObject, zero_obj: PythonObject) raises
     else:
         pool[].bufs[h] = buf^
         pool[].n[h] = n
+    _emb_unlock(pool[].lock)
     ctx.synchronize()
     return PythonObject(h + 1)
 
@@ -852,21 +978,22 @@ def seq_tensor_free_binding(handle: PythonObject) raises -> PythonObject:
     _ = _tensor_n(h)
     var ctx = neural_ctx[_NEURAL_CTX]()
     ctx.synchronize()
+    var placeholder = ctx.enqueue_create_buffer[DType.float32](1)
     var pool = _EMB_TENSORS.get_or_create_ptr()
-    pool[].bufs[h - 1] = ctx.enqueue_create_buffer[DType.float32](1)
-    pool[].n[h - 1] = 0
+    _emb_lock(pool[].lock)
+    if h >= 1 and h <= len(pool[].n) and pool[].n[h - 1] != 0:
+        pool[].bufs[h - 1] = placeholder^
+        pool[].n[h - 1] = 0
+    _emb_unlock(pool[].lock)
     return PythonObject(h)
 
 
 def seq_tensor_upload_binding(handle: PythonObject, addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
     var h = Int(py=handle)
     var n = Int(py=n_obj)
-    if n < 1 or n > _tensor_n(h):
-        raise Error("seq_tensor_upload: n must fit the tensor")
+    var view = _tensor_sub(h, n, "seq_tensor_upload: n must fit the tensor")
     var src = f32_ptr(Int(py=addr))
     var ctx = neural_ctx[_NEURAL_CTX]()
-    var pool = _EMB_TENSORS.get_or_create_ptr()
-    var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
     ctx.enqueue_copy(dst_buf=view, src_ptr=src)
     ctx.synchronize()
     _ = view^
@@ -876,12 +1003,9 @@ def seq_tensor_upload_binding(handle: PythonObject, addr: PythonObject, n_obj: P
 def seq_tensor_download_binding(handle: PythonObject, addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
     var h = Int(py=handle)
     var n = Int(py=n_obj)
-    if n < 1 or n > _tensor_n(h):
-        raise Error("seq_tensor_download: n must fit the tensor")
+    var view = _tensor_sub(h, n, "seq_tensor_download: n must fit the tensor")
     var dst = f32_ptr(Int(py=addr))
     var ctx = neural_ctx[_NEURAL_CTX]()
-    var pool = _EMB_TENSORS.get_or_create_ptr()
-    var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
     ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
     ctx.synchronize()
     _ = view^
@@ -892,12 +1016,9 @@ def seq_tensor_copy_binding(dst: PythonObject, src: PythonObject, n_obj: PythonO
     var hd = Int(py=dst)
     var hs = Int(py=src)
     var n = Int(py=n_obj)
-    if n < 1 or n > _tensor_n(hd) or n > _tensor_n(hs):
-        raise Error("seq_tensor_copy: n must fit both tensors")
+    var vd = _tensor_sub(hd, n, "seq_tensor_copy: n must fit both tensors")
+    var vs = _tensor_sub(hs, n, "seq_tensor_copy: n must fit both tensors")
     var ctx = neural_ctx[_NEURAL_CTX]()
-    var pool = _EMB_TENSORS.get_or_create_ptr()
-    var vd = pool[].bufs[hd - 1].create_sub_buffer[DType.float32](0, n)
-    var vs = pool[].bufs[hs - 1].create_sub_buffer[DType.float32](0, n)
     ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
     ctx.synchronize()
     _ = vd^
