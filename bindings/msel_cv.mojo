@@ -265,6 +265,8 @@ struct MselFoldRows(Movable):
     var extra: PythonObject
     var dev: Bool
     var scope: PythonObject
+    var rows_class: PythonObject
+    var rows_take: PythonObject
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -277,6 +279,8 @@ struct MselFoldRows(Movable):
         self.dev = (device_rows and msel_is_array(x, context) and String(py=x.dtype) == "<f4" and Int(py=x.ndim) == 2
                     and Int(py=x.size) > 0 and msel_has_c(x))
         self.scope = PythonObject(None)
+        self.rows_class = PythonObject(None)
+        self.rows_take = PythonObject(None)
         if self.dev:
             # DeviceRows exposes a bound take owner to its materializer. Keep
             # that separately mutable public boundary on its existing checks.
@@ -289,16 +293,20 @@ struct MselFoldRows(Movable):
             py_setattr(scope, "_scope", PythonObject(None))
             _ = _arena_rows_call(scope, "scope_enter", Python.tuple(), context)
             self.scope = scope
+            # perf2-msel: the DeviceRows class and the resident store's bound
+            # `take` are read once per fold set, not once per fold side. The
+            # store is this owner's own object; the class is the import-time
+            # `_arena_io` connection read once at the start of the run.
+            self.rows_class = family_call(msel_b().getattr, context["family_msel_arena_io"], PythonObject("DeviceRows"))
+            self.rows_take = family_call(msel_b().getattr, self.res, PythonObject("take"))
 
     def xrows(mut self, idx_in: PythonObject, context: PythonObject) raises -> PythonObject:
         if not self.dev:
             var x = self.x
             return self.rows(x, idx_in, context)
         var idx = msel_index_i64(idx_in, context)
-        var dr = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
-                                                     PythonObject("DeviceRows")))
-        var take = family_call(msel_b().getattr, self.res, PythonObject("take"))
-        _ = _arena_rows_call(dr, "init", Python.tuple(self.x, idx, take), context)
+        var dr = native_storage_allocate(self.rows_class)
+        _ = _arena_rows_call(dr, "init", Python.tuple(self.x, idx, self.rows_take), context)
         return dr
 
     def resident_take(mut self, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -346,6 +354,7 @@ struct MselFoldRows(Movable):
 
     def close(mut self, context: PythonObject) raises:
         self.extra = PythonObject(None)
+        self.rows_take = PythonObject(None)
         var scope = self.scope
         self.scope = PythonObject(None)
         try:
