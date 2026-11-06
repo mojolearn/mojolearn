@@ -54,7 +54,7 @@ comptime _U_IDENTITY = 6
 comptime _LOCAL_STATE_SLOT = "neighbors_local_state_v1"
 
 
-def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool = False) raises:
+def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool = False) raises -> PythonObject:
     # Mutable settings are re-admitted before comparison, coercion or truth
     # slots. Input metadata is captured by the consuming native buffer helper.
     # The admitted state's identity stamp (every slot object and, for exact
@@ -63,6 +63,10 @@ def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool
     # unchanged a query skips the re-admission, as knn's resident stamp does.
     # `classes_` is re-admitted on every call (an object-dtype label array can
     # change in place without an identity change), like knn's class lists.
+    # Perf (perf2-neighbors): returns that admitted label list (None when the
+    # model has no `classes_` or at fit), so NearestCentroid predict/score
+    # reuse it instead of building it a second time per call.
+    var labels = PythonObject(None)
     classical_check_layout(model, context)
     var fields = py_fields(model)
     var scalars = Python.tuple("metric", "p", "contamination", "n_neighbors", "novelty", "shrink_threshold",
@@ -82,7 +86,8 @@ def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool
     if record is not None and prepared_key_same(record, stamp):
         var classes = py_get(fields, "classes_")
         if classes is not None:
-            classical_admit_value(classifier_label_list(classes, context), context)
+            labels = classifier_label_list(classes, context)
+            classical_admit_value(labels, context)
     else:
         for i in range(len(scalars)):  # small-loop(fixed scalar parameter and fitted-state schema)
             var value = py_get(fields, scalars[i])
@@ -91,16 +96,21 @@ def _admit_local_state(model: PythonObject, context: PythonObject, fitting: Bool
         for i in range(len(values)):  # small-loop(fixed native container and buffer owners)
             var value = py_get(fields, values[i])
             if value is not None:
-                classical_admit_value(classifier_label_list(value, context) if String(values[i]) == "classes_" else value, context)
+                if String(values[i]) == "classes_":
+                    labels = classifier_label_list(value, context)
+                    classical_admit_value(labels, context)
+                else:
+                    classical_admit_value(value, context)
     if fitting:
         # Fit replaces the fitted slots: never retain the old arrays.
         prepared_drop(mods, _LOCAL_STATE_SLOT, model)
-        return
+        return PythonObject(None)
     if record is None or not prepared_key_same(record, stamp):
         for i in range(len(stamp)):  # driver-loop: over the stamp objects, refusing a self-reference
             if stamp[i] is model:
-                return
+                return labels
         prepared_put(mods, _LOCAL_STATE_SLOT, model, stamp)
+    return labels
 
 
 def _b() raises -> PythonObject:
@@ -725,12 +735,14 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
     return out
 
 
-def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`NearestCentroid.predict(X)`."""
+def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
+                labels: PythonObject = PythonObject(None)) raises -> PythonObject:
+    """`NearestCentroid.predict(X)`. `labels`: the label list of `classes_`
+    `_admit_local_state` built and admitted for this call, if any."""
     var fields = py_fields(model)
     var binding = args[0]
     var q = _f32(args[1], context)
-    var classes = classifier_label_list(family_field(fields, "classes_"), context)
+    var classes = labels if labels is not None else classifier_label_list(family_field(fields, "classes_"), context)
     if _nc_uniform(fields, context):
         var cent = family_field(fields, "centroids_")
         var dmat: PythonObject
@@ -811,10 +823,11 @@ def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: Pyth
     return out
 
 
-def _nc_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _nc_score(model: PythonObject, args: PythonObject, context: PythonObject,
+              labels: PythonObject = PythonObject(None)) raises -> PythonObject:
     """`NearestCentroid.score(X, y, sample_weight)`: accuracy_fraction of
     `predict(X)` (the process-default metrics mode)."""
-    var prediction = _nc_predict(model, Python.tuple(args[0], args[1]), context)
+    var prediction = _nc_predict(model, Python.tuple(args[0], args[1]), context, labels)
     return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), context))
 
 
@@ -987,7 +1000,7 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
 def _neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    _admit_local_state(model, context, operation.endswith("_fit") or "_fit_" in operation)
+    var labels = _admit_local_state(model, context, operation.endswith("_fit") or "_fit_" in operation)
     for i in range(1, len(args)):  # small-loop(public data arguments, before native preparation)
         if host_sparse_format(args[i]).byte_length() == 0:
             classical_admit_value(args[i], context)
@@ -1009,7 +1022,7 @@ def _neighbors_local_operation(model: PythonObject, operation: String, var args:
         _nc_fit(model, args, context)
         return model
     if operation == "family_xn_loc_nc_predict":
-        return _nc_predict(model, args, context)
+        return _nc_predict(model, args, context, labels)
     if operation == "family_xn_loc_nc_decision_function":
         return _nc_decision(model, args, context)
     if operation == "family_xn_loc_nc_predict_proba":
@@ -1017,7 +1030,7 @@ def _neighbors_local_operation(model: PythonObject, operation: String, var args:
     if operation == "family_xn_loc_nc_predict_log_proba":
         return _nc_predict_log_proba(model, args, context)
     if operation == "family_xn_loc_nc_score":
-        return _nc_score(model, args, context)
+        return _nc_score(model, args, context, labels)
     if operation == "family_xn_loc_imp_fit":
         _imp_fit(model, args, context)
         return model
