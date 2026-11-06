@@ -1027,20 +1027,20 @@ def ridge_fit_multi_binding(
     var nt = Int(py=params[2])
     var alpha = Float32(Float64(py=params[3]))
     var center = Int(py=params[4]) != 0
+    # The intercept addresses are read with the GIL held, before the one
+    # GIL-released device section that runs the fit and then the intercepts.
+    var want_icpt = len(params) == 7 and nt > 0 and nf > 0
+    var xm = _f32_ptr(Int(py=params[5])) if want_icpt else wp
+    var ic = _f32_ptr(Int(py=params[6])) if want_icpt else wp
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
         ctx.synchronize()
-    if len(params) == 7:
-        var xm = _f32_ptr(Int(py=params[5]))
-        var ic = _f32_ptr(Int(py=params[6]))
-        if nt > 0 and nf > 0:
-            with GILReleased(Python()):
-                # cpu2-l6-bindings: the intercepts on the device
-                # (`ridge_multi_icpt_kernel`), one thread per target
-                var ctx = process_ctx[_DEVCTX_SLOT]()
-                ridge_multi_icpt_device(ctx, xm, wp, mp, ic, nf, nt)
-                _ = ctx^
+        if want_icpt:
+            # cpu2-l6-bindings: the intercepts on the device
+            # (`ridge_multi_icpt_kernel`), one thread per target
+            ridge_multi_icpt_device(ctx, xm, wp, mp, ic, nf, nt)
+        _ = ctx^
     return PythonObject(0)
 
 
