@@ -5,6 +5,7 @@ import _thread
 import builtins
 import itertools
 import math  # exact integer exports only; see the connect_module('math', ...) call below
+import numbers
 import operator
 import os
 import sys
@@ -93,6 +94,9 @@ connect_module('os', os, ('stat', 'urandom', 'getcwd'))
 connect_module('types', types, ('ModuleType', 'SimpleNamespace', 'MemberDescriptorType', 'MethodDescriptorType',
                                 'MethodType', 'BuiltinFunctionType'))
 connect_module('warnings', warnings, ())  # warning filters are mutable native configuration, validated by their owner
+# TargetEncoder's user-cv test reads numbers.Integral through this connection
+# instead of importing the module on every fit_transform.
+connect_module('numbers', numbers, ('Integral',))
 
 
 # glue: exact standard path identities, connected before any product operation.

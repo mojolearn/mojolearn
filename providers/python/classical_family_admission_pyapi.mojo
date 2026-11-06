@@ -3,7 +3,8 @@
 # This admits connected class/storage identities, not the arithmetic or every
 # legacy transitive call. Existing owner-specific scalar/buffer checks remain.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp, prepared_class_matches
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_attributes import _type_mro
@@ -28,14 +29,29 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
     # Functions such as metrics/resampling have no estimator storage.
     if model is None:
         return PythonObject(None)
-    var b = native_loaded_module("builtins")
+    # One admitted module view for the whole admission (no GIL release).
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native family operations refuse Python metaclass hooks")
-    var module = native_loaded_module("mojolearn._native_family_layouts")
+    var module = mods.module("mojolearn._native_family_layouts")
     var layouts = py_fields(module)["LAYOUTS"]
     if py_type(layouts) is not b.dict:
         raise Error("TypeError: native family layouts require their connected dictionary")
+    # Watched class record (Python 3.12+ type watchers, perf3-prep-shared):
+    # every check below depends only on the class rows (ancestry, storage
+    # hooks, descriptors) and the connected layouts table. While no row of
+    # the class or its ancestors changed, the layouts table is the same
+    # object and it still maps the connected owner to the same plan, the
+    # MRO walk and the identity stamp of every key and value of every
+    # mutable row (about 300 C-API calls for PCA/PLS) are skipped. Python
+    # 3.10/3.11 keep the stamp path below.
+    var watched = class_record(mods, _FAMILY_WATCH_SLOT, cls)
+    if watched is not None and watched[0] is layouts:
+        var known = watched[1]
+        if py_get(layouts, known["mro"][0]) is known:
+            return _family_instance_fields(b, model, cls, known)
     var ancestry = _type_mro(cls)
     var plan = PythonObject(None)
     var start = -1
@@ -53,9 +69,9 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
     # again whenever any mutable row's namespace changed (identity stamp of
     # every key and value, no descriptor resolution). Instance storage is
     # admitted on every call.
-    var mods = NativeModules()
     var admitted = prepared_get(mods, _FAMILY_CLASS_SLOT, cls)
     if admitted is not None and prepared_class_matches(mods, cls, [layouts, plan], admitted):
+        class_admit(mods, _FAMILY_WATCH_SLOT, cls, Python.tuple(layouts, plan))
         return _family_instance_fields(b, model, cls, plan)
     var connected = plan["mro"]
     if len(ancestry) - start != len(connected):
@@ -69,17 +85,17 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
         var current = missing
         var found = False
         for i in range(len(ancestry)):  # driver-loop: resolve hook identities from native class namespaces
-            var row = _class_fields(ancestry[i])
+            var row = _class_fields(mods, ancestry[i])
             if not found and py_contains(row, hook):
                 current = row[hook]
                 found = True
         if current is not py_get(names, hook):
             raise Error("TypeError: native family operation refuses changed Python storage hooks")
-    var function_type = native_loaded_module("types").FunctionType
+    var function_type = mods.module("types").FunctionType
     var snapshots = plan["descriptors"]
     for i in range(len(ancestry)):  # driver-loop: reject descriptor replacement before any instance field read
         var owner = ancestry[i]
-        var row = _class_fields(owner)
+        var row = _class_fields(mods, owner)
         if i >= start:
             var saved = snapshots[i - start][1]
             var saved_keys = py_call(b.list, saved)
@@ -108,6 +124,7 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
                 raise Error("TypeError: native family operation refuses overridden Python descriptors")
     var stamp = prepared_class_stamp(mods, cls, Python.list(layouts, plan))
     prepared_put(mods, _FAMILY_CLASS_SLOT, cls, stamp)
+    class_admit(mods, _FAMILY_WATCH_SLOT, cls, Python.tuple(layouts, plan))
     return _family_instance_fields(b, model, cls, plan)
 
 
@@ -115,11 +132,12 @@ def _family_instance_fields(b: PythonObject, model: PythonObject, cls: PythonObj
     var fields = py_call(plan["fields_get"], model, cls)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: native family estimator requires an ordinary instance dictionary")
-    var keys = py_call(b.list, fields)
-    for k in range(len(keys)):  # driver-loop: exact keys before any owner dictionary lookup
-        if py_type(keys[k]) is not b.str:
-            raise Error("TypeError: native family estimator state requires exact string keys")
+    # Exact keys before any owner dictionary lookup: one native dictionary
+    # walk (no key list, no per-key Python type call).
+    if not native_namespace_string_keys(fields._obj_ptr, b.str):
+        raise Error("TypeError: native family estimator state requires exact string keys")
     return fields
 
 
 comptime _FAMILY_CLASS_SLOT = "classical_family_class_v1"
+comptime _FAMILY_WATCH_SLOT = "classical_family_class_watch_v1"

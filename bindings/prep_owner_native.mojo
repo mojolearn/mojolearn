@@ -10,7 +10,8 @@
 # operation name. Each owner builds the x_prep programs the Python built (the
 # same stages, operands and order, so the same bits).
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -31,16 +32,39 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
     # the encode owner serves it (or model is None: a module function).
     if model is None:
         return ""
-    var b = native_loaded_module("builtins")
-    if py_type(py_type(model)) is not b.type:
+    var mods = NativeModules()
+    var b = mods.module("builtins")
+    var cls = py_type(model)
+    if py_type(cls) is not b.type:
         raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     var kinds = context["prep_owner_kinds"]
+    # The model's own class is the MRO's first row: an exact owner class is
+    # answered by that one lookup (perf3-prep-shared; same as the encode
+    # owner's `_kind`). Any other class (the encode classes: the common
+    # case) used to read its MRO and look up every row per call; the answer
+    # depends only on the class rows and the connected kinds table, so it is
+    # kept per class state (native_class_admission type watchers) and per
+    # kinds-table identity.
+    var own = py_get(kinds, cls)
+    if own is not None:
+        return String(own)
+    var record = class_record(mods, _OWNER_KIND_SLOT, cls)
+    if record is not None and record[0] is kinds:
+        return String(record[1])
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var found = String("")
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var kind = py_get(kinds, mro[k])
         if kind is not None:
-            return String(kind)
-    return ""
+            found = String(kind)
+            break
+    # The payload holds the kinds table (import-time public classes), never
+    # `cls` itself.
+    class_admit(mods, _OWNER_KIND_SLOT, cls, Python.tuple(kinds, PythonObject(found)))
+    return found
+
+
+comptime _OWNER_KIND_SLOT = "prep_owner_kind_v1"
 
 
 def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

@@ -28,6 +28,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call
@@ -116,12 +117,14 @@ def class_record(mut mods: NativeModules, slot: String, cls: PythonObject) raise
     var record = prepared_get(mods, slot, cls)
     if record is None:
         return PythonObject(None)
-    ref cpy = Python().cpython()
-    var raw_epoch = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(record._obj_ptr, 0)
-    var epoch = cpy.lib.get_function[Int64]("PyLong_AsLongLong")(raw_epoch)
+    # Pointers resolved once per process (perf2-shared table), not three
+    # dlsym lookups per record read: doors read records per MRO row.
+    var t = perf2_cpython_table()
+    var raw_epoch = t[].PyTuple_GetItem(record._obj_ptr, 0)
+    var epoch = t[].PyLong_AsLongLong(raw_epoch)
     if Int(epoch) != _class_epoch(cls):
         return PythonObject(None)
-    return PythonObject(from_borrowed=cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(record._obj_ptr, 1))
+    return PythonObject(from_borrowed=t[].PyTuple_GetItem(record._obj_ptr, 1))
 
 
 def class_admit(mut mods: NativeModules, slot: String, cls: PythonObject, payload: PythonObject) raises:

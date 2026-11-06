@@ -28,7 +28,7 @@ from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address
-from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _cached_slot
+from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
 from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -84,8 +84,14 @@ def _family_entries(mode: PythonObject, family: String, context: PythonObject) r
     var refusal = String(context["prog_mode_refusal"])
     if py_type(selected) is not types["str"]:
         raise Error("ValueError: " + refusal)
-    selected = py_call(py_call(selected.strip).lower)
-    if String(selected) != "fast" and String(selected) != "identical":
+    # Only a non-canonical spelling pays the two str method calls (as in
+    # estimator_binding_mode); an exact "fast"/"identical" is its own
+    # normalization.
+    var word = String(py=selected)
+    if word != "fast" and word != "identical":
+        selected = py_call(py_call(selected.strip).lower)
+        word = String(py=selected)
+    if word != "fast" and word != "identical":
         raise Error("ValueError: " + refusal)
     var entries = context["prog_bindings"][selected]
     if py_type(entries) is types["str"]:
@@ -234,6 +240,21 @@ def _prep_scratch(value: PythonObject, sbase: Int, obase: Int, context: PythonOb
 
 
 def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The stage records come from the program's `_stages` list of lists.
+    return _prep_run_impl(prog, mode, context, List[Int32](), False)
+
+
+def prep_run_words(prog: PythonObject, mode: PythonObject, context: PythonObject,
+                   words: List[Int32]) raises -> PythonObject:
+    """The same runner for a native owner whose stage records are already
+    native words (16 per stage, scratch words already placed): the owner no
+    longer builds a Python list of 16 ints per stage for this runner to
+    type-check and convert word by word (perf3-prep-shared)."""
+    return _prep_run_impl(prog, mode, context, words, True)
+
+
+def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject,
+                   native_words: List[Int32], has_native: Bool) raises -> PythonObject:
     # Classifier owners call this runner directly, bypassing arena_prog_c.
     # Connect already-loaded native NumPy metadata in this runner's own
     # context before a DeviceRows snapshot admits an ndarray-owned view.
@@ -279,6 +300,14 @@ def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) rai
     var out = PythonObject(None)
     var nst = 0
     var t_in = 0
+    # Per run, not per input (perf3-prep-shared, the helpers perf2-prep added
+    # for xprep_run): the resident scope admission and the resident cache's
+    # state admission are read once, at the first input that needs them,
+    # with the same checks and refusals `_resident` / `_cached_slot` ran per
+    # input. Within one run only this runner inserts native keys.
+    var scope_read = False
+    var scope = PythonObject(None)
+    var cache_state = PythonObject(None)
     try:
         for k in range(len(inputs)):  # driver-loop: over the program's input buffers
             var record = inputs[k]
@@ -300,9 +329,14 @@ def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) rai
                 if src < 0:
                     value = _values(value, context, True)
             if src < 0 and ranges and not is_inout:
-                var cache = _resident(entries, size, False, context, "x_prep")
-                if cache is not None:
-                    src = _cached_slot(cache, value, entries, context, "x_prep")
+                if not scope_read:
+                    scope = _resident_scope(entries, context, "x_prep")
+                    scope_read = True
+                if scope is not None and size >= Int(py=scope[0]):
+                    if cache_state is None:
+                        var cache = _resident_cache(entries, scope[1], context, "x_prep")
+                        cache_state = _cache_state(cache, entries, context, "x_prep")
+                    src = _cached_slot_in(cache_state, value, entries, "x_prep")
                 elif direct_ok and size >= PREP_DIRECT_MIN_WORDS:
                     # TOMBSTONE: lane fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP, x_prep_run_ranges_host host spans) deleted 2026-10-09
                     # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
@@ -316,14 +350,20 @@ def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) rai
             if not is_inout:
                 _ = py_call(in_spans.append, Python.tuple(off, off + size))
         py_setitem(fields, "_in_spans", in_spans)
-        var stage_list = fields["_stages"]
-        nst = len(stage_list)
-        for i in range(nst):  # driver-loop: over the program's stage records
-            var stage = stage_list[i]
-            if len(stage) != STAGE_WORDS:
+        if has_native:
+            if len(native_words) % STAGE_WORDS != 0:
                 raise Error("ValueError: x_prep: a stage record must hold 16 words")
-            for j in range(STAGE_WORDS):  # driver-loop: over one stage record's fixed words
-                stages.append(Int32(_prep_scratch(stage[j], sbase, obase, context)))
+            nst = len(native_words) // STAGE_WORDS
+            stages = native_words.copy()
+        else:
+            var stage_list = fields["_stages"]
+            nst = len(stage_list)
+            for i in range(nst):  # driver-loop: over the program's stage records
+                var stage = stage_list[i]
+                if len(stage) != STAGE_WORDS:
+                    raise Error("ValueError: x_prep: a stage record must hold 16 words")
+                for j in range(STAGE_WORDS):  # driver-loop: over one stage record's fixed words
+                    stages.append(Int32(_prep_scratch(stage[j], sbase, obase, context)))
         if nst == 0:
             stages.append(0)
         var pa = Int(stages.unsafe_ptr())
@@ -530,6 +570,10 @@ def _metrics_execute[native_plan: Bool](
     var input_count = len(native_inputs) if native_plan else len(inputs)
     var ins = List[Int32]()
     var owned = List[Int](capacity=2 * input_count)
+    # Resident scope and cache state admitted once per run (as in _prep_run).
+    var scope_read = False
+    var scope = PythonObject(None)
+    var cache_state = PythonObject(None)
     try:
         for k in range(input_count):  # driver-loop: over the program's input buffers
             var off = 0
@@ -555,9 +599,14 @@ def _metrics_execute[native_plan: Bool](
             if src < 0 and ranges:
                 # resident (lane py-shared): the device copies it from the
                 # store; the host arena's words stay zero and are never read
-                var cache = _resident(entries, size_k, False, context, "x_metrics")
-                if cache is not None:
-                    src = _cached_slot(cache, value, entries, context, "x_metrics")
+                if not scope_read:
+                    scope = _resident_scope(entries, context, "x_metrics")
+                    scope_read = True
+                if scope is not None and size_k >= Int(py=scope[0]):
+                    if cache_state is None:
+                        var cache = _resident_cache(entries, scope[1], context, "x_metrics")
+                        cache_state = _cache_state(cache, entries, context, "x_metrics")
+                    src = _cached_slot_in(cache_state, value, entries, "x_metrics")
             if src < 0:
                 memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
                        src=F32P(unsafe_from_address=Int(py=classical_address(value))), count=size_k)

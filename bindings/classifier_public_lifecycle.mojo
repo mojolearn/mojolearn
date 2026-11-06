@@ -7,6 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.py_attr import py_attr
+from bindings.cpython_table import cpython_table
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get
 from bindings.classical_labels import _flatten_labels
 from bindings.native_buffer_owner import native_buffer_view
@@ -38,10 +39,11 @@ def _cpl_buffer_address(view: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var storage = List[Int](length=10, fill=0)
     var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(view._obj_ptr, pointer, Int32(0)) != 0:
+    var t = cpython_table()
+    if t[].PyObject_GetBuffer(view._obj_ptr, pointer, Int32(0)) != 0:
         raise cpy.unsafe_get_error()
     var address = storage[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    t[].PyBuffer_Release(pointer)
     _ = storage^
     return address
 

@@ -10,7 +10,7 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_is_array, classical_host_f32
-from bindings.arena_prog_native import _prep_run
+from bindings.arena_prog_native import prep_run_words
 from bindings.x_prep_native_owner import xprep_r3, xprep_take, xprep_address
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -164,28 +164,29 @@ struct ClsProg(Movable):
         var prog = py_call(b.object.__new__, pc["prog_class"])
         var fields = py_fields(prog)
         var host = self.size
-        var records = Python.list()
+        # The stage words stay native: the runner takes them directly
+        # (prep_run_words) instead of a Python list of 16 ints per stage that
+        # it type-checked and converted word by word (perf3-prep-shared).
+        var words = List[Int32](capacity=len(self.stages))
         for i in range(len(self.stages) // STAGE_WORDS):  # driver-loop: over the program's stages
-            var record = Python.list()
             for k in range(STAGE_WORDS):  # small-loop(params: the fixed sixteen-word stage record)
                 var word = self.stages[i * STAGE_WORDS + k]
                 if k >= 2 and word < -1:
                     # scratch word s sits past the host arena (no output region)
                     word = host - word - 2
-                _ = py_call(record.append, word)
-            _ = py_call(records.append, record)
+                words.append(Int32(word))
         py_setitem(fields, "size", host)
         py_setitem(fields, "scratch_size", self.scratch_size)
         py_setitem(fields, "out_size", PythonObject(None))
         py_setitem(fields, "_inputs", self.inputs)
         py_setitem(fields, "_inout", self.inout)
-        py_setitem(fields, "_stages", records)
+        py_setitem(fields, "_stages", Python.list())
         py_setitem(fields, "arena", PythonObject(None))
         py_setitem(fields, "_out", PythonObject(None))
         py_setitem(fields, "_out_at", PythonObject(None))
         py_setitem(fields, "_out_code", "f")
         py_setitem(fields, "_after", Python.list())
-        _ = _prep_run(prog, mode, pc)
+        _ = prep_run_words(prog, mode, pc, words)
         self.store = fields["arena"]
         self.base = xprep_address(self.store)
 
