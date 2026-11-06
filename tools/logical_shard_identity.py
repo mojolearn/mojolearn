@@ -87,9 +87,14 @@ LANE_TIMEOUT = 1200
 #   lasso-cd     row leaves of 128 (bench/gemm_shapes.mojo contract_leaf_size), k <= 128 stays single
 #                (solver/multi_gpu.mojo:63): rows >= 2*128 + 1; only the column mean / norm passes before the
 #                Gram sweeps reach it
-#   ridge-gram   row chunks, active = min(count, min(128, ceil(k/kc))) (core/gram_multi_gpu.mojo:262), BUT the
-#                IDENTICAL Ridge fit takes linear_gram_fit first (bindings/classical_ridge.mojo:103-109), which
-#                has no DevicePlan: OWED, see the reply; the spread check fails this lane until a reachable recipe
+#   tsvd-gram    TruncatedSVD(algorithm="covariance_eigh") through fit_gram_estimator: bindings/tsvd_native.mojo
+#                `_exact` -> `tsvd_fit_explained` (bindings/_mojolearn_estimators.mojo) -> decomposition/estimator.mojo
+#                plan-less `gemm_tn` -> core/gemm.mojo `gram_plan_current()` -> identical split-K arm while
+#                features <= GRAM_MAX_COLS = 128 (core/gram_splitk.mojo `gram_splitk_applies`) -> core/gram_multi_gpu.mojo
+#                `gram_splitk_parallel`: kc = ceil(rows/128) over the 128 pinned chunks, live = min(128, ceil(rows/kc)),
+#                active = min(count, live). Rule: features <= 128 and rows >= 3*128 give >= 3 live chunks.
+#                (Not Ridge / LinearRegression: their unweighted IDENTICAL fit takes `linear_gram_fit` first,
+#                bindings/classical_ridge.mojo:103-109, which reads no DevicePlan, so it never spreads.)
 #   kmeans       row tiles of mblk = 4*8 = 32 rows below 32 features (cluster/multi_gpu.mojo:84-85,
 #                fused_distance_nn/simt_kernel.mojo:201-230): rows >= 2*32 + 1
 #   dbscan       query rows, active = min(count, rows) (dbscan/impl/multi_gpu.mojo:47): rows >= 3; the default
@@ -108,7 +113,7 @@ LANES = (
     ("svm-rbf", "svm/multi_gpu.mojo", "svm", "classify", 600, 16, 11),
     ("logistic", "glm/impl/qn/multi_gpu.mojo", "logistic", "classify", 2000, 16, 12),
     ("lasso-cd", "solver/multi_gpu.mojo", "lasso", "regress", 2000, 32, 13),
-    ("ridge-gram", "core/gram_multi_gpu.mojo", "ridge", "regress", 4000, 32, 14),
+    ("tsvd-gram", "core/gram_multi_gpu.mojo", "tsvd", "regress", 4000, 32, 14),
     ("kmeans", "cluster/multi_gpu.mojo", "kmeans", "blobs", 4000, 8, 15),
     ("dbscan", "dbscan/impl/multi_gpu.mojo", "dbscan", "blobs", 1500, 4, 16),
     ("gmm", "mixture/multi_gpu.mojo", "gmm", "blobs", 3000, 4, 17),
@@ -194,21 +199,25 @@ def lane_verdict(name, doc):
         return "DIFFER", "n%s differ from the single-device plan" % ",".join(map(str, differ)), digests
     for count in COUNTS[1:]:
         ranks = arms[str(count)].get("ranks")
+        broken = arms[str(count)].get("rank_errors") or []
+        why = ("; device_plan_log raised: " + one_line(broken[0])) if broken else ""
         if type(ranks) is not int:
-            return "FAIL", "arm n%d: no rank record (a binding without the device-plan work counter)" % count, digests
+            return ("FAIL", "arm n%d: no rank record (a binding without the device-plan work counter)%s"
+                    % (count, why), digests)
         if ranks < min(MIN_SPREAD, count):
             return ("FAIL", "arm n%d spread its work over %d rank(s), not >= %d: the fixture stays under the "
-                    "dispatcher's split" % (count, ranks, min(MIN_SPREAD, count)), digests)
+                    "dispatcher's split%s" % (count, ranks, min(MIN_SPREAD, count), why), digests)
         if ranks > count:
             return "FAIL", "arm n%d reports %d ranks, more than its %d devices" % (count, ranks, count), digests
     return "MATCH", "", digests
 
 
-def ranks_take(modules):
+def ranks_take(modules, errors=None):
     """The ranks that received work since the last take, over every loaded binding (`device_plan_log()` ->
     (plans, ranks)); the record is cleared. Where the plan table is one process-wide named global the first
     binding's take clears it for the rest, so the maximum is the answer either way. None when no loaded binding
-    reports ranks."""
+    reports ranks. A binding whose `device_plan_log()` raises is skipped and its one-line reason appended to
+    `errors` (when given), so a broken binding shows up in the lane's FAIL reason instead of losing the arm."""
     best = None
     seen = set()
     for module in list(modules.values()):
@@ -221,7 +230,13 @@ def ranks_take(modules):
             continue
         if not callable(log):
             continue
-        got = log()
+        try:
+            got = log()
+        except Exception as error:
+            if errors is not None:
+                errors.append(one_line("%s.device_plan_log: %s: %s" % (getattr(module, "__name__", "?"),
+                                                                        type(error).__name__, error)))
+            continue
         if isinstance(got, tuple) and len(got) == 2 and type(got[1]) is int:
             best = got[1] if best is None else max(best, got[1])
     return best
@@ -316,10 +331,12 @@ def _lasso(ml, X, y, devices):
     return [("coef_", est.coef_), ("intercept_", est.intercept_)]
 
 
-def _ridge(ml, X, y, devices):
+def _tsvd(ml, X, y, devices):
     from mojolearn import parallel_classical as pc
-    est = pc.fit_gram_estimator(ml.Ridge(alpha=1.0), X, y, devices=devices)
-    return [("coef_", est.coef_), ("intercept_", est.intercept_)]
+    # no y: TruncatedSVD is unsupervised (fit_gram_estimator takes y only for LinearRegression and Ridge)
+    est = pc.fit_gram_estimator(ml.TruncatedSVD(n_components=3, algorithm="covariance_eigh"), X, devices=devices)
+    return [("components_", est.components_), ("singular_values_", est.singular_values_),
+            ("explained_variance_", est.explained_variance_)]
 
 
 def _kmeans(ml, X, y, devices):
@@ -375,7 +392,7 @@ def _forest(ml, X, y, devices):
         return [("predict_proba", pool.predict_proba(X))]
 
 
-RECIPES = dict(svm=_svm, logistic=_logistic, lasso=_lasso, ridge=_ridge, kmeans=_kmeans, dbscan=_dbscan,
+RECIPES = dict(svm=_svm, logistic=_logistic, lasso=_lasso, tsvd=_tsvd, kmeans=_kmeans, dbscan=_dbscan,
                gmm=_gmm, bootstrap=_bootstrap, cholesky=_cholesky, iforest=_iforest, gbdt=_gbdt, forest=_forest)
 
 
@@ -401,7 +418,10 @@ def worker(name, device, out_path):
             try:
                 for part, value in RECIPES[recipe](ml, X, y, devices_for(count, device)):
                     arm["parts"].append(dict(name=part, **digest(np.asarray(value))))
-                arm["ranks"] = ranks_take(sys.modules)
+                rank_errors = []
+                arm["ranks"] = ranks_take(sys.modules, rank_errors)
+                if rank_errors:
+                    arm["rank_errors"] = rank_errors[:4]
             except Exception as error:  # fail closed: recorded, judged FAIL
                 arm["error"] = "%s: %s" % (type(error).__name__, error)
                 arm["parts"] = []
