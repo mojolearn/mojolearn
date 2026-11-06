@@ -313,6 +313,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     var b = native_loaded_module("builtins")
     var view = classical_view(source, context, name)
     var typestr = classical_dtype_str(view, context)
+    var cast = False
     if (typestr == "<f8" or typestr == "<i8") and not classical_is_array(source, context):
         var listed = py_type(source) is b.list or py_type(source) is b.tuple
         var buffered = True
@@ -324,6 +325,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
         if listed or not buffered:
             view = family_cast_view(view, name, context)
             typestr = "<f4"
+            cast = True
     if typestr != "<f4":
         raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly before scoring")
     var nd = Int(py=view.ndim)
@@ -334,7 +336,9 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     if (nd != 1 and nd != 2) or rows == 0 or cols == 0:
         raise Error("mojolearn " + caller + ": " + name + " must be a nonempty (n,) or (n, n_outputs) array")
     # (n,) reads as (n, 1): the same C-ordered words.
-    var flat = family_cast_view(view, name, context)
+    # p3-labels-metrics: a list already cast above is the fresh C-order
+    # float32 array this cast would return; it is not cast twice.
+    var flat = view if cast else family_cast_view(view, name, context)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(flat))), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " contains NaN or infinity")
     _ = flat  # keep the Python object alive through the native calls above
