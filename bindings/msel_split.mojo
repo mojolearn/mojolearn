@@ -1368,8 +1368,10 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
     else:
         var split: PythonObject
         if stratify is not None:
-            # A numeric label vector is encoded from its buffer (msel_encode).
-            var strat = stratify if msel_numeric_vector(stratify, False, context) else msel_labels_list(stratify, "stratify", context)
+            # A numeric label vector is encoded from its buffer (msel_encode);
+            # a numeric Series or an exact int list takes the one-read source
+            # (perf3-label-doors), the rest the label input step.
+            var strat = _msel_label_source(stratify, "stratify", context)
             split = msel_strat_shuffle_split(strat, 1, PythonObject(n_test), PythonObject(n_train), random_state,
                                              PythonObject(0.1), context)[0]
         else:
