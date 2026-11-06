@@ -88,6 +88,11 @@ def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises
     var address = exported[0]
     var size = exported[2]
     cpython_table()[].PyBuffer_Release(pointer)
+    # `pointer` is an untracked-origin pointer into `exported`, so its last
+    # tracked use was `exported[2]` above and ASAP destruction could free the
+    # list before PyBuffer_Release reads the Py_buffer (view->obj, then its
+    # DECREF). Keep the storage alive past the release.
+    _ = exported^
     var offset = 0 if empty else Int(py=values["_addr"]) - address
     if offset < 0 or offset > size:
         raise Error("ValueError: native output view lies outside its retained storage")
