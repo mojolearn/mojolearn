@@ -18,7 +18,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from bindings.classical_arrays import classical_address
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
-from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage, labels_text_storage
+from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage, labels_text_storage, labels_list_scalar_kind, LABELS_LIST_FLOAT
 from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
@@ -235,6 +235,20 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
         if refusal == LABELS_FLOAT_NONFINITE:
             raise Error("ValueError: Input y contains NaN or infinity")
         if refusal == LABELS_FLOAT_OK:
+            walk = False
+    # An exact flat list / tuple of exact floats (lane p3-svm-gp-kernel, row
+    # 81): the walk refuses only a non-finite item, so one packed float64
+    # copy (one C-level conversion) and one native finite pass stand in.
+    if walk and labels_list_scalar_kind(source) == LABELS_LIST_FLOAT:
+        var array_type = py_get(context, "array_type")
+        if array_type is not None:
+            var packed = py_call(array_type, PythonObject("d"), source)
+            var count = len(source)
+            var values = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(packed.buffer_info)[0]))
+            for i in range(count):  # driver-loop: native finite scan over the packed float64 copy
+                if not isfinite(values[i]):
+                    raise Error("ValueError: Input y contains NaN or infinity")
+            _ = packed^
             walk = False
     if walk:
         var flat = _flatten_labels(source, context)
