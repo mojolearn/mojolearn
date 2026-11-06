@@ -138,6 +138,9 @@ def _native_loaded_module_full(name: String) raises -> PythonObject:
 struct _AdmittedModule(Copyable, Movable):
     # One connection admitted by the full check, kept for the process.
     var name: String
+    # The registry key as a str object: its cached hash serves every stamp
+    # lookup (no C-string to str conversion per call).
+    var name_key: PythonObject
     var module: PythonObject
     var module_type: PythonObject
     var fields: PythonObject
@@ -147,10 +150,18 @@ struct _AdmittedModule(Copyable, Movable):
     var namespace_keys: List[PythonObject]
     var key_ptrs: List[PyObjectPtr]
     var value_ptrs: List[PyObjectPtr]
+    # Per namespace slot (PyDict_Next order): the admitted export value at
+    # that slot, or null for a key that is not a registered export. The stamp
+    # compares keys and export values in ONE walk, with no hashed lookup.
+    var slot_values: List[PyObjectPtr]
+    # Registered exports whose key object is not the namespace's own key
+    # object (an equal but distinct str): the stamp looks these up by key.
+    var unslotted: List[Int]
 
     def __init__(out self, name: String, module: PythonObject, module_type: PythonObject, fields: PythonObject,
                  size: Int, keys: List[PythonObject], values: List[PythonObject]) raises:
         self.name = name
+        self.name_key = PythonObject(name)
         self.module = module
         self.module_type = module_type
         self.fields = fields
@@ -158,6 +169,16 @@ struct _AdmittedModule(Copyable, Movable):
         self.keys = keys.copy()
         self.values = values.copy()
         self.namespace_keys = List[PythonObject]()
+        self.slot_values = List[PyObjectPtr]()
+        self.unslotted = List[Int]()
+        # Raw pointers of the retained lists' items (kept alive by them).
+        self.key_ptrs = List[PyObjectPtr]()
+        self.value_ptrs = List[PyObjectPtr]()
+        # driver-loop: over the registered exports, once per admission
+        for j in range(len(keys)):  # small-loop(keys: registered export names): retains admitted export pointers
+            self.key_ptrs.append(keys[j]._obj_ptr)
+            self.value_ptrs.append(values[j]._obj_ptr)
+        var placed = List[Bool](length=len(keys), fill=False)
         ref cpy = Python().cpython()
         var position = Int(0)
         var key = PyObjectPtr()
@@ -167,13 +188,18 @@ struct _AdmittedModule(Copyable, Movable):
             if next_item(fields._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=value)) == 0:
                 raise Error("native module namespace changed during admission")
             self.namespace_keys.append(PythonObject(from_owned=cpy.Py_NewRef(key)))
-        # Raw pointers of the retained lists' items (kept alive by them).
-        self.key_ptrs = List[PyObjectPtr]()
-        self.value_ptrs = List[PyObjectPtr]()
+            var expected = PyObjectPtr()
+            # driver-loop: over the registered exports, once per admission (slot of each export key)
+            for j in range(len(keys)):  # small-loop(keys: registered export names): pointer match, once per process
+                if not placed[j] and key == self.key_ptrs[j]:
+                    expected = self.value_ptrs[j]
+                    placed[j] = True
+                    break
+            self.slot_values.append(expected)
         # driver-loop: over the registered exports, once per admission
-        for j in range(len(keys)):  # small-loop(keys: registered export names): retains admitted export pointers
-            self.key_ptrs.append(keys[j]._obj_ptr)
-            self.value_ptrs.append(values[j]._obj_ptr)
+        for j in range(len(keys)):  # small-loop(keys: registered export names): exports needing a keyed stamp read
+            if not placed[j]:
+                self.unslotted.append(j)
 
 
 struct _AdmittedModules(Defaultable, Movable):
@@ -186,7 +212,7 @@ struct _AdmittedModules(Defaultable, Movable):
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever _AdmittedModule's layout changes.
 comptime _ADMITTED_MODULES = _Global[
-    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV3",
+    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV4",
     init_fn=_AdmittedModules.__init__,
 ]
 
@@ -196,17 +222,22 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     # still the loaded one, with its type, its namespace dictionary and that
     # dictionary's size, every namespace key, and every registered export
     # still have their admitted identities. Native pointer comparisons only:
-    # no registry scan or temporary Python containers.
+    # no registry scan or temporary Python containers. Keys and export values
+    # are compared in one PyDict_Next walk (the slot of each export key was
+    # fixed at admission); only exports whose key object differs from the
+    # namespace's own key take a hashed lookup.
     ref cpy = Python().cpython()
     var modules = cpy.lib.get_function[PyObjectPtr]("PyImport_GetModuleDict")()
     if not modules:
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return False
-    var found = _loaded_lookup(modules, entry.name.copy())
+    var found = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItem")(modules, entry.name_key._obj_ptr)
     if not found or found != entry.module._obj_ptr:
         return False
-    var cls = PythonObject(from_owned=cpy.PyObject_Type(entry.module._obj_ptr))
-    if cls is not entry.module_type:
+    var cls = cpy.PyObject_Type(entry.module._obj_ptr)
+    var same_type = cls == entry.module_type._obj_ptr
+    cpy.Py_DecRef(cls)
+    if not same_type:
         return False
     var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(entry.module._obj_ptr)
     if not fields or fields != entry.fields._obj_ptr:
@@ -214,29 +245,31 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
         return False
     if cpy.lib.get_function[Int]("PyDict_Size")(fields) != entry.size:
         return False
+    if len(entry.namespace_keys) != entry.size or len(entry.slot_values) != entry.size:
+        return False
     # Size alone misses delete+insert edits. Compare every admitted key by
     # pointer before any hash lookup, including an added __getattr__ key.
     var position = Int(0)
     var key = PyObjectPtr()
     var value = PyObjectPtr()
-    var index = 0
     var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
     for i in range(entry.size):  # small-loop(entry.size: namespace fields): compare native metadata pointers only
         if next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) == 0:
             return False
-        if index >= len(entry.namespace_keys) or key != entry.namespace_keys[index]._obj_ptr:
+        if key != entry.namespace_keys[i]._obj_ptr:
             return False
-        index += 1
-    if index != len(entry.namespace_keys):
-        return False
-    var lookup = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")
-    var count = len(entry.key_ptrs)
-    # driver-loop: over the admitted export identities of one module (pointer compares)
-    for j in range(count):  # small-loop(count: registered export names): pointer identity stamp, no namespace walk
-        var current = lookup(fields, entry.key_ptrs[j])
-        if not current or current != entry.value_ptrs[j]:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        var expected = entry.slot_values[i]
+        if expected and value != expected:
             return False
+    if len(entry.unslotted) > 0:
+        var lookup = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")
+        # driver-loop: over the exports whose key object is not the namespace key (pointer compares)
+        for k in range(len(entry.unslotted)):  # small-loop(unslotted: registered export names): keyed identity stamp
+            var j = entry.unslotted[k]
+            var current = lookup(fields, entry.key_ptrs[j])
+            if not current or current != entry.value_ptrs[j]:
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                return False
     return True
 
 

@@ -32,7 +32,12 @@ def host_inference_primitive_number(value: PythonObject, context: PythonObject,
 def host_inference_scalar(value: PythonObject, context: PythonObject, truth: Bool = False) raises:
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    if _one_of(cls, Python.tuple(b.str, b.bytes, b.bytearray, b.int, b.float, b.bool, py_type(PythonObject(None)))) or _one_of(cls, context["scalar_types"]):
+    # Exact builtin scalar classes compared directly: no temporary 7-tuple
+    # (and None instance) per admitted field, on every public call.
+    if (cls is b.float or cls is b.int or cls is b.str or cls is b.bool or cls is b.bytes
+            or cls is b.bytearray or cls is py_type(PythonObject(None))):
+        return
+    if _one_of(cls, context["scalar_types"]):
         return
     if cls is py_get(context, "ndarray"):
         # Ordinary numeric 0-D arrays were accepted scalar state. NumPy's

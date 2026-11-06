@@ -214,7 +214,12 @@ def family_lifecycle_begin(model: PythonObject, operation: String, spec: FamilyL
                 if not isfinite(data[i]):
                     raise Error("Input X contains NaN or infinity (" + name + ").")
         if spec.replace:
-            py_setitem(values, PythonObject(x_index), family_owned_snapshot(snapshot, context))
+            # Perf: a query only reads X (its owners write separate outputs),
+            # so an admitted C-order float32 X that is not a readonly view is
+            # handed over without a per-call copy; a fit retains X and keeps
+            # the owned copy.
+            var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
+            py_setitem(values, PythonObject(x_index), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
     if not fitting and Int(py=depth) == 0 and columns >= 0 and not spec.graph and not _precomputed(fields):
         var width = py_get(fields, "n_features_in_")
         if py_type(width) is b.int:

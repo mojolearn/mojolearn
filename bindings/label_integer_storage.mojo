@@ -56,7 +56,7 @@ def _ndarray_buffer_address(value: PythonObject) raises -> Int:
     return address
 
 
-def labels_float_storage(value: PythonObject, context: PythonObject) raises -> Int:
+def labels_float_storage(value: PythonObject, context: PythonObject, integral: Bool = True) raises -> Int:
     """-1 unless `value` is an exact ndarray or exact native Array of rank
     >= 1 with a native little-endian float32 or float64 dtype. For such a
     target, the refusal code of `label_float_target_refusal`
@@ -65,7 +65,9 @@ def labels_float_storage(value: PythonObject, context: PythonObject) raises -> I
     at the first refused label in C order, read from the buffer in one native
     pass. Such a target holds no element any other target check can refuse
     (`tolist()` yields exact Python floats), so callers admit the container
-    itself (`classical_admit_value`) first and skip the per-label walk."""
+    itself (`classical_admit_value`) first and skip the per-label walk.
+    `integral=False` (a regressor target) applies the finite test only, so
+    code 2 is never returned."""
     var cls = py_type(value)
     var typestr: String
     var address: Int
@@ -92,4 +94,4 @@ def labels_float_storage(value: PythonObject, context: PythonObject) raises -> I
         shape.append(Int(py=pyshape[k]))
         strides.append(Int(py=pystrides[k]))
     # The caller holds `value` (the buffer's owner) across this native read.
-    return label_float_target_refusal(address, typestr == "<f8", shape, strides)
+    return label_float_target_refusal(address, typestr == "<f8", shape, strides, integral)

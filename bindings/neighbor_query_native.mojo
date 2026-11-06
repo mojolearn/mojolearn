@@ -535,17 +535,32 @@ def neighbor_query_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         var model = args[1]
         var name = args[2]
         classical_connect_numpy(context)
-        var kind = _query_kind(model, context)
+        # Perf: every attribute read on a connected neighbor model lands here
+        # (about 20 per _clone()). The public read below goes through
+        # classical_getattribute, which runs classical_check_layout itself,
+        # so the ordinary read checks the layout ONCE instead of twice. The
+        # branches that answer or materialize before that read keep their own
+        # check first, and an unconnected class still refuses through
+        # _query_kind (layout refusal first, then the kind refusal).
+        var kind = py_get(context["neighbor_query_classes"], py_type(model))
+        if kind is None:
+            kind = _query_kind(model, context)
         if py_type(name) is not native_loaded_module("builtins").str:
             raise Error("TypeError: attribute name must be a string")
-        var fields = py_fields(model)
         var text = String(name)
-        if String(kind[0]) == "ivf" and text == "list_data_":
+        var family = String(kind[0])
+        var early = (family == "ivf" and text == "list_data_") or (family == "ann_pq" and text == "codes_") or (
+            family == "knn" and (text == "_resident" or text == "used_query_tile_"
+                                 or text == "n_candidate_distances_" or text == "classes_"))
+        if early:
+            classical_check_layout(model, context)
+        var fields = py_fields(model) if early else PythonObject(None)
+        if family == "ivf" and text == "list_data_":
             _ = _admit_state(model, kind, context)
             _ivf_materialize(fields, context)
-        if String(kind[0]) == "ann_pq" and text == "codes_":
+        if family == "ann_pq" and text == "codes_":
             _ = ann_pq_materialize(model, context)
-        if String(kind[0]) == "knn":
+        if family == "knn":
             if text == "_resident":
                 return py_get(py_get(fields, "_resident_holder", Python.dict()), "index").steal_data()
             if text == "used_query_tile_" or text == "n_candidate_distances_":
@@ -565,6 +580,8 @@ def neighbor_query_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
                 return classes[0].steal_data()
         var result = classical_getattribute(model, name, context)
         if not _outside(context, 0):
+            if not early:
+                fields = py_fields(model)
             var original = py_get(fields, name)
             if classical_is_array(original, context):
                 result = original
