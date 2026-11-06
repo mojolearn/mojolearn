@@ -32,7 +32,12 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
         assert '_svc_provider(' not in src
     assert body('_svc_fit').count('_svc_fit_settings(') == 1
     assert '_svc_provider(' not in body('_svc_fit')
-    assert body('svc_kernel_operation').count('_svc_provider(') == 1
+    # One provider selection per call on each of the two exclusive paths: the
+    # algorithm-only early return, and the public/fit lifecycle after it.
+    operation = body('svc_kernel_operation')
+    early, lifecycle = operation.split('        return plain\n', 1)
+    assert early.count('_svc_provider(') == 1
+    assert lifecycle.count('_svc_provider(') == 1
 
 
 def test_common_provider_is_selected_without_new_provider_type():
