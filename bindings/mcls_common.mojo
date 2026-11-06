@@ -23,7 +23,7 @@ from core.metrics_program_plan import MetricProgramPlan
 from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
-from bindings.metrics_native_inputs import metric_shape, metric_flatten, metric_flatten_admitted
+from bindings.metrics_native_inputs import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
 from bindings.classical_pandas import classical_admit_value
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -300,11 +300,14 @@ struct McLabels(Movable):
         self.codes = codes
 
 
-def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context: PythonObject) raises -> PythonObject:
+def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context: PythonObject,
+                  admitted: Bool = False) raises -> PythonObject:
     """`_metrics_impl._classification_labels`: (labels, kind) of a 1-D
     label sequence, the explicit label input step."""
     var b = mc_b()
-    if mc_rank(mc_shape_of(values, context)) != 1:
+    # `admitted`: the caller ran classical_admit_value(values) in this call.
+    var shape = metric_shape_admitted(values, context) if admitted else mc_shape_of(values, context)
+    if mc_rank(shape) != 1:
         raise Error(name + " must be one-dimensional single-label data")
     var source = values
     if family_isinstance(source, Python.tuple(b.str, b.bytes)):
@@ -401,7 +404,7 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     return Python.tuple(family_call(head.tolist), codes)
 
 
-def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> PythonObject:
+def mc_fast_labels(values: PythonObject, context: PythonObject, admitted: Bool = False) raises -> PythonObject:
     """`_native_classification_labels`: (classes, codes, n) of an integer
     or bool label buffer, or a flat list of exact Python ints within int64;
     None for everything the label input step reads."""
@@ -427,7 +430,8 @@ def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> Python
                 _ = native_buffer_view(values)
             except:
                 return PythonObject(None)
-        if mc_rank(mc_shape_of(values, context)) != 1:
+        var shape = metric_shape_admitted(values, context) if admitted else mc_shape_of(values, context)
+        if mc_rank(shape) != 1:
             return PythonObject(None)
         var packed = mc_int_store(values, context)
         if packed is None:
@@ -438,14 +442,14 @@ def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> Python
     return Python.tuple(encoded[0], encoded[1], PythonObject(count))
 
 
-def mc_labels(values: PythonObject, name: String, context: PythonObject) raises -> McLabels:
+def mc_labels(values: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> McLabels:
     """`_classification_encoded(values, name)`: the native encoder for an
     integer buffer, else the label input step, then one code per row."""
     var b = mc_b()
-    var fast = mc_fast_labels(values, context)
+    var fast = mc_fast_labels(values, context, admitted)
     if fast is not None:
         return McLabels("integer", Int(py=fast[2]), fast[0], fast[1])
-    var listed = mc_label_list(values, name, False, context)
+    var listed = mc_label_list(values, name, False, context, admitted)
     var labels = listed[0]
     if String(listed[1]) == "integer":
         # The converted labels are exact Python ints (pandas, uint64 or
@@ -537,9 +541,10 @@ def mc_positive(pos_label: PythonObject, context: PythonObject) raises -> Python
     return Python.tuple(listed[0][0], listed[1])
 
 
-def mc_refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject) raises:
+def mc_refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject,
+                         admitted: Bool = False) raises:
     """`_expansion_metrics._refuse_multilabel`."""
-    var shape = mc_shape_of(y, context)
+    var shape = metric_shape_admitted(y, context) if admitted else mc_shape_of(y, context)
     if mc_rank(shape) == 2 and mc_dim(shape, 1) != 1:
         raise Error("NotImplementedError: mojolearn " + caller + ": " + name + " is 2-D; multilabel-indicator "
                     + "targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")

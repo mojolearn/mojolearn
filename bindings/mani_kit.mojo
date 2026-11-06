@@ -12,6 +12,8 @@
 # and resident/host operation ordering.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from std.ffi import c_int
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.py_attr import py_attr
 from bindings.manifold_storage_native import (
@@ -60,10 +62,26 @@ comptime SEL_MIN = 2
 
 
 def mk_ints(values: List[Int]) raises -> PythonObject:
-    """A Python list of ints (an entry's integer parameter list)."""
-    var out = Python.list()
-    for i in range(len(values)):  # small-loop(params: one entry's parameter list): bounded by the call site
-        _ = py_call(out.append, PythonObject(values[i]))
+    """A Python list of ints (an entry's integer parameter list), filled in
+    one pass through the CPython C API (PyList_New, PyLong_FromLongLong,
+    PyList_SetItem) with no `list.append` call per value. It stays a list:
+    a few callers append further words (mk_append)."""
+    ref cpy = Python().cpython()
+    var count = len(values)
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # The list owns itself at once; unset NULL slots are safe to destroy.
+    var out = PythonObject(from_owned=raw)
+    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    for i in range(count):  # small-loop(params: one entry's parameter list): bounded by the call site
+        var item = box_int(Int64(values[i]))
+        if not item:
+            raise cpy.unsafe_get_error()
+        # SetItem steals the new reference on success and failure.
+        if set_item(out._obj_ptr, i, item) != 0:
+            raise cpy.unsafe_get_error()
     return out
 
 
@@ -127,7 +145,13 @@ def mk_devbuf(raw: PythonObject, n: Int, ctx: PythonObject) raises -> PythonObje
     """`_DevBuf(raw, n)`: a pooled device buffer of the binding, freed (back to
     the pool) when its last holder dies."""
     var release = family_entry(raw, "x_decomp_dev_free", ctx)
-    var identifier = family_call(family_entry(raw, "x_decomp_dev_alloc", ctx), PythonObject(max(n, 1)))
+    return mk_devbuf_with(raw, release, family_entry(raw, "x_decomp_dev_alloc", ctx), n)
+
+
+def mk_devbuf_with(raw: PythonObject, release: PythonObject, alloc: PythonObject, n: Int) raises -> PythonObject:
+    """`mk_devbuf` with the binding's free and alloc entries already resolved
+    (MKit keeps them per kit)."""
+    var identifier = family_call(alloc, PythonObject(max(n, 1)))
     return PythonObject(alloc=ManifoldDevice(raw, release, identifier, n))
 
 
@@ -343,6 +367,7 @@ struct MKit(Movable):
     var opt: PythonObject
     var lle_mm: PythonObject
     var lle_lu: PythonObject
+    var handles: Dict[String, PythonObject]  # entries resolved by this kit, once each
 
     def __init__(out self, mode: String, binding: PythonObject, ctx: PythonObject) raises:
         self.mode = mode
@@ -358,10 +383,24 @@ struct MKit(Movable):
         self.opt = Python.dict()
         self.lle_mm = PythonObject(None)
         self.lle_lu = PythonObject(None)
+        self.handles = Dict[String, PythonObject]()
 
-    def fn(self, name: String) raises -> PythonObject:
-        """`self.b.<name>`."""
-        return spectral_umap_entry(self.b, name, self.ctx)
+    def fn(mut self, name: String) raises -> PythonObject:
+        """`self.b.<name>`: resolved (module dict read and compiled-entry
+        check) once per kit, then the cached handle. The admitted binding is
+        an exact native module whose entries are fixed at import, and a
+        refusal is raised at first use exactly as before."""
+        if name in self.handles:
+            return self.handles[name]
+        var entry = spectral_umap_entry(self.b, name, self.ctx)
+        self.handles[name] = entry
+        return entry
+
+    def _devbuf(mut self, n: Int) raises -> PythonObject:
+        """`mk_devbuf(self.raw, n)` with the kit's cached free/alloc entries
+        (self.raw is self.b, so the entries are the same objects)."""
+        var release = self.fn("x_decomp_dev_free")
+        return mk_devbuf_with(self.raw, release, self.fn("x_decomp_dev_alloc"), n)
 
     def has(self, name: String) -> Bool:
         """Whether the admitted module exports a compiled optional entry."""
@@ -455,7 +494,7 @@ struct MKit(Movable):
             return device_identifier(d)
         var a = mk_store(m, self.ctx)
         var n = mk_store_len(a)
-        var nd = mk_devbuf(self.raw, n, self.ctx)
+        var nd = self._devbuf(n)
         if n > 0:
             _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(nd), mk_store_addr(a), PythonObject(n))
             _ = a  # keep the Python object alive through the native call above
@@ -465,7 +504,7 @@ struct MKit(Movable):
         return device_identifier(nd)
 
     def dout(mut self, r: Int, c: Int) raises -> PythonObject:
-        return mk_dev_view(mk_devbuf(self.raw, r * c, self.ctx), r, c, self.ctx)
+        return mk_dev_view(self._devbuf(r * c), r, c, self.ctx)
 
     def dev_one(mut self) raises -> PythonObject:
         """`_dev_one(kit)`: the unused broadcast operand on the device, one
@@ -477,7 +516,7 @@ struct MKit(Movable):
         var key = py_call(native_loaded_module("builtins").id, self.raw)
         var d = py_get(cache, key, PythonObject(None))
         if d is None or not (device_binding(d) is self.raw):
-            d = mk_devbuf(self.raw, 1, self.ctx)
+            d = self._devbuf(1)
             var z = mk_store_zeros(1, self.ctx)
             _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(d), mk_store_addr(z), PythonObject(1))
             _ = z  # keep the Python object alive through the native call above

@@ -18,6 +18,7 @@ from std.python import Python, PythonObject
 from bindings.metrics_plan_admission import MetricArenaOwner
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays import classical_address, classical_dtype_str
+from bindings.classical_pandas import classical_admit_value
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_call, family_array, family_as_f32,
 )
@@ -59,12 +60,21 @@ struct McPair(Movable):
 
 
 def mc_pair(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject, caller: String,
-            context: PythonObject) raises -> McPair:
-    """`_expansion_metrics._pair(y_true, y_pred, sample_weight, caller)`."""
-    mc_refuse_multilabel(y_true, "y_true", caller, context)
-    mc_refuse_multilabel(y_pred, "y_pred", caller, context)
-    var true = mc_labels(y_true, "y_true", context)
-    var pred = mc_labels(y_pred, "y_pred", context)
+            context: PythonObject, true_admitted: Bool = False) raises -> McPair:
+    """`_expansion_metrics._pair(y_true, y_pred, sample_weight, caller)`.
+
+    Each label input is admitted (`classical_admit_value`) once here, in the
+    order the shape probes admitted them, and the multilabel refusal, the
+    fast encoder and the label input step reuse that admission instead of
+    walking a label list again. `true_admitted`: the caller already admitted
+    y_true in this native call (GaussianProcessClassifier.score)."""
+    if not true_admitted:
+        classical_admit_value(y_true, context)
+    mc_refuse_multilabel(y_true, "y_true", caller, context, True)
+    classical_admit_value(y_pred, context)
+    mc_refuse_multilabel(y_pred, "y_pred", caller, context, True)
+    var true = mc_labels(y_true, "y_true", context, True)
+    var pred = mc_labels(y_pred, "y_pred", context, True)
     if true.n != pred.n:
         raise Error("mojolearn " + caller + ": y_true and y_pred lengths differ")
     if true.kind != pred.kind:
@@ -695,12 +705,13 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def mcls_accuracy_fraction(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject,
-                           numeric_mode: PythonObject, context: PythonObject) raises -> PythonObject:
+                           numeric_mode: PythonObject, context: PythonObject,
+                           true_admitted: Bool = False) raises -> PythonObject:
     """`_expansion_metrics.accuracy_fraction` (the estimators' `score`): the
     COUNT tail of `_accuracy_sums` over the match sums, the (weighted)
     match count over the row count or the weight total; a zero weight total
     raises as the division did. The same program as accuracy_count's."""
-    var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context)
+    var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context, true_admitted)
     var prog = McProg(context)
     var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
     var out = mc_count_tail(prog, s, mc_len(pair.present))
