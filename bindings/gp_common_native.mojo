@@ -13,6 +13,11 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.family_common import family_repr, family_is_str, family_call, family_as_f32
 from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_store
+from bindings.trees_side_records import trees_side_get, trees_side_put
+
+
+comptime _GP_MODE_CODE_SLOT = "p3_gp_binding_mode_code_v1"
+comptime _GP_CAPS_SLOT = "p3_gp_binding_caps_v1"
 
 
 def gp_mode_wanted(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -39,9 +44,19 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     estimator's message head, `rebuild` the sentence after the mode code."""
     var b = native_loaded_module("builtins")
     var want = gp_mode_wanted(model, context)
-    var getter = neural_descriptor_entry(binding, "gp_numeric_mode", False)
-    if getter is not None:
-        var got = Int(py=family_call(b.int, family_call(getter)))
+    # The binary's compile-time mode code never changes for one binding
+    # object: read once and kept in a record weak-keyed by the binding (lane
+    # p3-svm-gp-kernel, row 752); -1 records a binding without the entry.
+    var got = -1
+    var held = trees_side_get(_GP_MODE_CODE_SLOT, binding)
+    if held is not None:
+        got = Int(py=held)
+    else:
+        var getter = neural_descriptor_entry(binding, "gp_numeric_mode", False)
+        if getter is not None:
+            got = Int(py=family_call(b.int, family_call(getter)))
+        _ = trees_side_put(_GP_MODE_CODE_SLOT, binding, PythonObject(got))
+    if got >= 0:
         var wanted = py_get(context["family_gp_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
             raise Error("RuntimeError: " + prefix + ": numeric_mode=" + family_repr(want) + " was requested but "
@@ -54,11 +69,15 @@ def gp_caps(binding: PythonObject) raises -> Int:
     """`int(ext.gp_idn_caps())`, 0 when the binding has no such entry (the host
     binding and the `_OFF` builds): bit 1 is gpc_fit_all / gpc_predict_all,
     bit 2 gpr_fit_ptr / gpr_predict_ptr."""
+    var held = trees_side_get(_GP_CAPS_SLOT, binding)
+    if held is not None:
+        return Int(py=held)
     var b = native_loaded_module("builtins")
     var fn_obj = neural_descriptor_entry(binding, "gp_idn_caps", False)
-    if fn_obj is None:
-        return 0
-    return Int(py=family_call(b.int, family_call(fn_obj)))
+    var caps = 0 if fn_obj is None else Int(py=family_call(b.int, family_call(fn_obj)))
+    # The capability word is the binary's own: one read per binding object.
+    _ = trees_side_put(_GP_CAPS_SLOT, binding, PythonObject(caps))
+    return caps
 
 
 def gp_entry(binding: PythonObject, name: String) raises -> PythonObject:
