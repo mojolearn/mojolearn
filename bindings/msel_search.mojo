@@ -38,8 +38,9 @@ from bindings.msel_common import (
 from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
 from bindings.msel_cv import (
     msel_clone, msel_cv_folds, msel_device_rows_ok, msel_require_serial, msel_scorers, MselFoldRows, MselScores,
-    msel_cross_validate_run, msel_seconds, msel_fit, msel_error_value,
+    msel_cross_validate_run, msel_seconds, msel_fit, msel_fit_planned, msel_error_value,
 )
+from bindings.msel_estimator_native import msel_native_clone_planned
 
 from bindings.msel_estimator_native import msel_native_set_params, msel_estimator_plan
 from bindings.msel_search_state import msel_search_fields, msel_parameter_values, msel_search_update
@@ -511,16 +512,18 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
             for f in range(nf):  # driver-loop: over folds
                 var test = folds[f][1]
                 var sub = msel_slice_i64(orders[f], 0, a, context)
-                var est = msel_clone(estimator, False, context)
+                var cloned = msel_native_clone_planned(estimator, context)
+                var est = cloned[0]
+                var plan = cloned[1]
                 var t0 = msel_seconds()
                 var xs = _take(res, x, sub, context)
                 var ys = _take(res, y, sub, context)
                 var fitted = True
                 if raise_errors:
-                    msel_fit(est, xs, ys, context)
+                    msel_fit_planned(est, plan, xs, ys, context)
                 else:
                     try:
-                        msel_fit(est, xs, ys, context)
+                        msel_fit_planned(est, plan, xs, ys, context)
                     except error:
                         if not msel_catch(error, b.Exception):
                             raise error^

@@ -650,10 +650,11 @@ def _kfold_ranges(x: PythonObject, y: PythonObject, folds: PythonObject, context
     return ranges^
 
 
-def msel_fit_score_fold(fitted: PythonObject, xtr: PythonObject, ytr: PythonObject, xte: PythonObject,
-                        yte: PythonObject, scoring: PythonObject, context: PythonObject) raises -> Float64:
-    """`_fit_score_fold`."""
-    msel_fit(fitted, xtr, ytr, context)
+def msel_fit_score_fold(fitted: PythonObject, plan: PythonObject, xtr: PythonObject, ytr: PythonObject,
+                        xte: PythonObject, yte: PythonObject, scoring: PythonObject,
+                        context: PythonObject) raises -> Float64:
+    """`_fit_score_fold` of a fresh `msel_native_clone_planned` clone."""
+    msel_fit_planned(fitted, plan, xtr, ytr, context)
     return Float64(py=msel_score(fitted, xte, yte, scoring, context))
 
 
@@ -682,15 +683,17 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
     try:
         for i in range(len(folds)):  # driver-loop: over folds
-            var fitted = msel_clone(estimator, False, context)
+            var cloned = msel_native_clone_planned(estimator, context)
+            var fitted = cloned[0]
+            var plan = cloned[1]
             if sliced:
                 var a = ranges[2 * i]
                 var b = ranges[2 * i + 1]
-                scores.append(msel_fit_score_fold(fitted, _rows_outside(x, a, b, context), _rows_outside(y, a, b, context),
+                scores.append(msel_fit_score_fold(fitted, plan, _rows_outside(x, a, b, context), _rows_outside(y, a, b, context),
                                                   _row_view(x, a, b, context), _row_view(y, a, b, context), scoring, context))
             else:
                 var fr = rows.take(i, PythonObject(None), context)
-                scores.append(msel_fit_score_fold(fitted, fr[0], fr[1], fr[2], fr[3], scoring, context))
+                scores.append(msel_fit_score_fold(fitted, plan, fr[0], fr[1], fr[2], fr[3], scoring, context))
             # each fold's estimator is released before the next is built
             _ = fitted^
     finally:
