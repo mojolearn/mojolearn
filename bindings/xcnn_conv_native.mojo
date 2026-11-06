@@ -1283,6 +1283,13 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         return layer
     if operation == "conv_init" or operation == "conv_init1d":
         return _conv_init(layer, args, operation == "conv_init1d", context)
+    # p3-cnn-sequence-tsa: the BasicBlock operations come before the Conv2d
+    # field admission (it admitted 15 conv fields of the block object, which
+    # `_block_fields` then admitted again as a block)
+    if operation == "block_forward":
+        return xcnn_block_forward(layer, args[0], context)
+    if operation == "block_transform":
+        return _flat_rows(xcnn_block_forward(layer, _rows(_fields(layer), args[0], False, context), context), context)
     # One admission per call: every conv handler below takes these fields
     # (they re-admitted the same layer 2-4 times per call before). This line
     # stays first, so the first error a bad layer raises is unchanged.
@@ -1329,8 +1336,4 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         return xcnn_conv_forward(layer, fields, args[0], context)
     if operation == "conv_transform":
         return _flat_rows(xcnn_conv_forward(layer, fields, _rows(fields, args[0], True, context), context), context)
-    if operation == "block_forward":
-        return xcnn_block_forward(layer, args[0], context)
-    if operation == "block_transform":
-        return _flat_rows(xcnn_block_forward(layer, _rows(fields, args[0], False, context), context), context)
     raise Error("RuntimeError: unknown CNN layer operation " + operation)
