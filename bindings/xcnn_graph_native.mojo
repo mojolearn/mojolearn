@@ -869,7 +869,7 @@ def _gcn_backward(layer: PythonObject, gradient: PythonObject, context: PythonOb
     var d = Int(py=fields["in_channels"])
     var f = Int(py=fields["out_channels"])
     var gb = _gemm(entries, g, _ones(n, context), f, 1, n, 2, context) if Bool(py=fields["bias"]) else xcnn_host_f32([f], context)
-    py_setitem(fields, "grad_bias_", xcnn_reshape(gb, [f]))
+    py_setitem(fields, "grad_bias_", xcnn_reshape(gb, [f], context))
     var graph = fields["_g"]
     var dh = _spmm(entries, graph, _vals_t(entries, graph, fields["_vals"], context), g, 0, context, True)
     py_setitem(fields, "grad_weight_", _gemm(entries, dh, fields["_x"], f, d, n, 2, context))

@@ -51,7 +51,7 @@ def _snapshot(value: PythonObject, name: String, context: PythonObject) raises -
     var admitted = xcnn_f32(value, name, context)
     # A fresh native view freezes the shape/strides for this operation while
     # retaining the admitted buffer's original storage owner.
-    return xcnn_reshape(admitted, xcnn_shape(admitted))
+    return xcnn_reshape(admitted, xcnn_shape(admitted), context)
 
 
 def _weight_pair(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -228,10 +228,10 @@ def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObj
     var expected: List[Int] = [outc, inc, k[0], k[1]]
     var w = xcnn_f32(args[0], "weight", context)
     if one:
-        w = xcnn_reshape(w, expected)
+        w = xcnn_reshape(w, expected, context)
     if not _same_shape(xcnn_shape(w), expected):
         raise Error("mojolearn: weight shape differs from the configured convolution shape")
-    var new_w = xcnn_reshape(xcnn_slice_f32(w, 0, xcnn_size(expected), context), expected)
+    var new_w = xcnn_reshape(xcnn_slice_f32(w, 0, xcnn_size(expected), context), expected, context)
     var bias = args[1]
     var new_b = py_get(fields, "bias_")
     if bias is not None:
@@ -261,7 +261,7 @@ def _conv_gradient(fields: PythonObject, weight: Bool, context: PythonObject) ra
         var value = xcnn_download(pending[0], pending[1], xcnn_size(shape), context)
         if weight and _truth(py_get(fields, "_gw_1d")):
             shape = [shape[0], shape[1], shape[3]]
-        value = xcnn_reshape(value, shape)
+        value = xcnn_reshape(value, shape, context)
         _set(fields, key, value)
         _set(fields, pending_key, PythonObject(None))
     if not py_contains(fields, PythonObject(key)):
@@ -426,7 +426,7 @@ def _to_four(value: PythonObject, context: PythonObject) raises -> PythonObject:
     if len(s) != 3:
         raise Error("mojolearn: expected (N, C, L)")
     var shape: List[Int] = [s[0], s[1], 1, s[2]]
-    return xcnn_reshape_t(v, shape, context) if xcnn_is_t(v, context) else xcnn_reshape(v, shape)
+    return xcnn_reshape_t(v, shape, context) if xcnn_is_t(v, context) else xcnn_reshape(v, shape, context)
 
 
 def _conv_backward(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -467,10 +467,10 @@ def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: Pytho
         else:
             var dw = fields["grad_weight_"]
             var ws = xcnn_shape(dw)
-            _set(fields, "grad_weight_", xcnn_reshape(dw, [ws[0], ws[1], ws[3]]))
+            _set(fields, "grad_weight_", xcnn_reshape(dw, [ws[0], ws[1], ws[3]], context))
         var os = xcnn_shape(out)
         var shape: List[Int] = [os[0], os[1], os[3]]
-        return xcnn_reshape_t(out, shape, context) if xcnn_is_t(out, context) else xcnn_reshape(out, shape)
+        return xcnn_reshape_t(out, shape, context) if xcnn_is_t(out, context) else xcnn_reshape(out, shape, context)
     return out
 
 
@@ -540,7 +540,7 @@ def _host_rows(source: PythonObject, start: Int, stop: Int, context: PythonObjec
     var width = xcnn_size(shape) // max(shape[0], 1)
     var out = xcnn_slice_f32(a, start * width, (stop - start) * width, context)
     shape[0] = stop - start
-    return xcnn_reshape(out, shape)
+    return xcnn_reshape(out, shape, context)
 
 
 # ---------------------------------------------------------------- pinned weights (G3)
@@ -796,9 +796,9 @@ def xcnn_conv_forward(layer: PythonObject, fields: PythonObject, x: PythonObject
     var s = xcnn_shape(a)
     if len(s) != 3:
         raise Error("mojolearn: Conv1d.forward takes (N, C, L)")
-    var out = xcnn_conv2d_forward_fields(layer, fields, xcnn_reshape(a, [s[0], s[1], 1, s[2]]), context)
+    var out = xcnn_conv2d_forward_fields(layer, fields, xcnn_reshape(a, [s[0], s[1], 1, s[2]], context), context)
     var o = xcnn_shape(out)
-    return xcnn_reshape(out, [o[0], o[1], o[3]])
+    return xcnn_reshape(out, [o[0], o[1], o[3]], context)
 
 
 # ---------------------------------------------------------------- ReLU and add
@@ -1246,7 +1246,7 @@ def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObj
         rest *= s[i]
     if xcnn_is_t(out_buf, context):
         return xcnn_reshape_t(out_buf, [s[0], rest], context)
-    return xcnn_reshape(out_buf, [s[0], rest])
+    return xcnn_reshape(out_buf, [s[0], rest], context)
 
 
 def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: PythonObject) raises -> PythonObject:
@@ -1265,7 +1265,7 @@ def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: P
         var given = declared
         for i in range(len(given)):  # driver-loop: over the declared sample shape words
             dims.append(Int(py=given[i]))
-        return xcnn_reshape(a, dims)
+        return xcnn_reshape(a, dims, context)
     return a
 
 
@@ -1316,7 +1316,7 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
     if operation == "conv_weight1d":
         var w = xcnn_f32(fields["weight_"], "weight_", context)
         var s = xcnn_shape(w)
-        return xcnn_reshape(w, [s[0], s[1], s[3]])
+        return xcnn_reshape(w, [s[0], s[1], s[3]], context)
     if operation == "conv_fit":
         var a = _rows(fields, args[0], True, context)
         var shape = xcnn_shape(a)

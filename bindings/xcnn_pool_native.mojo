@@ -189,14 +189,14 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
         var o = xcnn_shape(out)
         if xcnn_is_t(out, context):
             return xcnn_reshape_t(out, [o[0], o[1], o[3]], context)
-        return xcnn_reshape(out, [o[0], o[1], o[3]])
+        return xcnn_reshape(out, [o[0], o[1], o[3]], context)
     var a = xcnn_f32(x, "x", context)
     var s = xcnn_shape(a)
     if len(s) != 3:
         raise Error("mojolearn: " + name + ".forward takes (N, C, L)")
-    var out = _pool2d_forward(model, xcnn_reshape(a, [s[0], s[1], 1, s[2]]), context)
+    var out = _pool2d_forward(model, xcnn_reshape(a, [s[0], s[1], 1, s[2]], context), context)
     var o = xcnn_shape(out)
-    return xcnn_reshape(out, [o[0], o[1], o[3]])
+    return xcnn_reshape(out, [o[0], o[1], o[3]], context)
 
 
 # ---------------------------------------------------------------- passive settings and backward
@@ -365,11 +365,11 @@ def xcnn_pool_backward(model: PythonObject, source: PythonObject, context: Pytho
     var shape = xcnn_shape(g)
     if len(shape) != 3:
         raise Error("mojolearn: one-dimensional pool backward takes (N, C, L)")
-    var expanded = xcnn_reshape_t(g, [shape[0], shape[1], 1, shape[2]], context) if tensor else xcnn_reshape(g, [shape[0], shape[1], 1, shape[2]])
+    var expanded = xcnn_reshape_t(g, [shape[0], shape[1], 1, shape[2]], context) if tensor else xcnn_reshape(g, [shape[0], shape[1], 1, shape[2]], context)
     var out = _pool_backward2d(model, expanded, context)
     var result_shape = xcnn_shape(out)
     var compact: List[Int] = [result_shape[0], result_shape[1], result_shape[3]]
-    return xcnn_reshape_t(out, compact, context) if tensor else xcnn_reshape(out, compact)
+    return xcnn_reshape_t(out, compact, context) if tensor else xcnn_reshape(out, compact, context)
 
 
 # ---------------------------------------------------------------- row inputs
@@ -391,7 +391,7 @@ def xcnn_rows(model: PythonObject, source: PythonObject, required: Bool, context
         var given = _pool_shape_words(shape, "input_shape", context)
         for i in range(len(given)):  # driver-loop: over the admitted sample shape words
             dims.append(given[i])
-        return xcnn_reshape(a, dims)
+        return xcnn_reshape(a, dims, context)
     return a
 
 
@@ -403,7 +403,7 @@ def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObj
         rest *= s[i]
     if xcnn_is_t(out_buf, context):
         return xcnn_reshape_t(out_buf, [s[0], rest], context)
-    return xcnn_reshape(out_buf, [s[0], rest])
+    return xcnn_reshape(out_buf, [s[0], rest], context)
 
 
 def xcnn_conv_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -486,7 +486,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         s4.append(xs[i])
     var prm = _dropout_words(fields, probability, s4[0], s4[1], s4[2] * s4[3], context)
     _ = fields  # keep the Python object alive through the native call above
-    var x4 = xcnn_reshape(a, s4)
+    var x4 = xcnn_reshape(a, s4, context)
     var y = xcnn_host_f32(s4, context)
     var entries = xcnn_entries(fields, context)
     if xcnn_mixed(entries):
@@ -498,16 +498,16 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         _set(fields, "_mask_host", PythonObject(None))
         _set(fields, "_mask_dev", h)
         _set(fields, "_mask_shape", xcnn_tuple(xs))
-        return xcnn_reshape(y, xs)
+        return xcnn_reshape(y, xs, context)
     var mask = xcnn_host_f32(s4, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d"), xcnn_addr(x4), xcnn_addr(y), xcnn_addr(mask), prm, fields["p"])
     _ = mask  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = x4  # keep the Python object alive through the native call above
     # the `mask_` setter: the host mask, no resident copy
-    _set(fields, "_mask_host", xcnn_reshape(mask, xs))
+    _set(fields, "_mask_host", xcnn_reshape(mask, xs, context))
     _set(fields, "_mask_dev", PythonObject(None))
-    return xcnn_reshape(y, xs)
+    return xcnn_reshape(y, xs, context)
 
 
 # ---------------------------------------------------------------- adaptive pools

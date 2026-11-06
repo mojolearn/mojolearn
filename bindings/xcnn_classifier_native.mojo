@@ -543,7 +543,7 @@ def _images(fields: PythonObject, source: PythonObject, context: PythonObject) r
         raise Error("ValueError: classifier images require a row dimension")
     var full: List[Int] = [shape[0], Int(py=given[0]), Int(py=given[1]), Int(py=given[2])]
     if len(shape) == 2:
-        return xcnn_reshape(x, full)
+        return xcnn_reshape(x, full, context)
     if len(shape) != 4:
         raise Error("ValueError: classifier images must have rank two or four")
     for i in range(1, 4):  # small-loop(image channel/height/width metadata)

@@ -477,6 +477,23 @@ def xcnn_writable_copy(value: PythonObject, context: PythonObject) raises -> Pyt
     return out
 
 
+def xcnn_reshape(value: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
+    """`xcnn_reshape` with the operation's connected `context["ndarray"]`
+    (p3-cnn-sequence-tsa: the two-argument form builds a fresh module dict
+    and resolves the ndarray type again on every call)."""
+    var cls = py_get(context, "ndarray")
+    if cls is None:
+        return xcnn_reshape(value, shape)
+    if py_type(value) is not cls:
+        raise Error("TypeError: CNN reshape requires an exact ndarray")
+    admit_native_buffer_exporter(value)
+    var view = AdmittedBorrowedBuffer(value)
+    var layout = view.layout.value().copy()
+    if layout.count != xcnn_size(shape):
+        raise Error("ValueError: CNN reshape changes the number of elements")
+    return py_call(cls, xcnn_tuple(shape), dtype=value.dtype, buffer=value)
+
+
 def xcnn_addr(value: PythonObject) raises -> PythonObject:
     admit_native_buffer_exporter(value)
     return PythonObject(native_buffer_address(value))
@@ -524,7 +541,7 @@ def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: Pytho
         var value = xcnn_download(dev, pending[1], xcnn_size(shape), context)
         if weight and Bool(py=py_get(fields, "_gw_1d")):
             shape = [shape[0], shape[1], shape[3]]
-        py_setitem(fields, "grad_weight_" if weight else "grad_bias_", xcnn_reshape(value, shape))
+        py_setitem(fields, "grad_weight_" if weight else "grad_bias_", xcnn_reshape(value, shape, context))
         py_setitem(fields, names[i], PythonObject(None))
         if weight:
             py_setitem(fields, "_gw_1d", PythonObject(False))
@@ -535,7 +552,7 @@ def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: Pytho
         for i in range(len(words)):  # small-loop(mask shape words)
             mshape.append(Int(py=words[i]))
         var host = xcnn_download(dev, PythonObject(Int(py=mask)), xcnn_size(mshape), context)
-        py_setitem(fields, "_mask_host", xcnn_reshape(host, mshape))
+        py_setitem(fields, "_mask_host", xcnn_reshape(host, mshape, context))
     for name in ["_idx_dev", "_mask_dev", "_chain", "_gdev_for", "_gdev_g"]:  # small-loop(fields naming old handles)
         if py_contains(fields, PythonObject(name)):
             py_setitem(fields, PythonObject(name), PythonObject(None))
