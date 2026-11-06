@@ -139,6 +139,17 @@ def _sequence_values(mut mods: NativeModules, value: PythonObject, depth: Int, m
                      mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject,
                      float_target: Bool = False) raises:
     var b = mods.module("builtins")
+    # Exact builtin containers and numbers (the common nested-list input)
+    # take their branch by type identity: none of them is an ndarray, NumPy
+    # scalar, Array or buffer, so the isinstance chain below would reach the
+    # same branch after up to ten Python calls per element.
+    var cls = py_type(value)
+    if cls is b.list or cls is b.tuple or cls is b.range:
+        _nested_values(mods, value, depth, dims, values, kind, size, leaf_depth, context, float_target)
+        return
+    if cls is b.float or cls is b.int or cls is b.bool:
+        _scalar_values(mods, value, depth, dims, values, kind, size, leaf_depth, context, float_target)
+        return
     # A NumPy-free context connects no ndarray: its sequences hold Python
     # numbers only, and an array leaf is refused below as a non-number.
     var numpy = py_get(context, "ndarray") is not None
@@ -160,31 +171,46 @@ def _sequence_values(mut mods: NativeModules, value: PythonObject, depth: Int, m
         var array = _buffer(mods, value, context, False)
         _array_values(mods, array, depth, dims, values, kind, size, leaf_depth, context)
     elif Bool(py=py_call(b.isinstance, value, b.list)) or Bool(py=py_call(b.isinstance, value, b.tuple)) or py_type(value) is b.range:
-        var n = len(value)
-        if depth >= 8 or n == 0:
-            raise Error("input sequences must be nonempty and have rank at most eight")
-        if leaf_depth >= 0 and depth >= leaf_depth:
-            raise Error("input sequences must be rectangular")
-        if depth == len(dims):
-            dims.append(n)
-        elif dims[depth] != n:
-            raise Error("input sequences must be rectangular")
-        # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
-        for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-            _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+        _nested_values(mods, value, depth, dims, values, kind, size, leaf_depth, context, float_target)
     else:
-        _leaf_shape(Python.tuple(), depth, dims, leaf_depth)
-        if Bool(py=py_call(b.isinstance, value, b.bool)):
-            _promote(kind, size, "b", 1)
-        elif Bool(py=py_call(b.isinstance, value, b.float)):
-            _promote(kind, size, "f", 8)
-        elif Bool(py=py_call(b.isinstance, value, b.int)):
-            if not float_target and (Bool(py=value < context["int64_min"]) or Bool(py=value > context["uint64_max"])):
-                raise Error("TypeError: input integers exceed the supported numeric array range")
-            _promote(kind, size, "f" if float_target else ("u" if Bool(py=value > context["int64_max"]) else "i"), 8)
-        else:
-            raise Error("TypeError: inputs must contain numeric scalars")
-        py_call(values.append, value)
+        _scalar_values(mods, value, depth, dims, values, kind, size, leaf_depth, context, float_target)
+
+
+def _nested_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
+                   mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject,
+                   float_target: Bool) raises:
+    var n = len(value)
+    if depth >= 8 or n == 0:
+        raise Error("input sequences must be nonempty and have rank at most eight")
+    if leaf_depth >= 0 and depth >= leaf_depth:
+        raise Error("input sequences must be rectangular")
+    if depth == len(dims):
+        dims.append(n)
+    elif dims[depth] != n:
+        raise Error("input sequences must be rectangular")
+    # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
+    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+
+
+def _scalar_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
+                   mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject,
+                   float_target: Bool) raises:
+    var b = mods.module("builtins")
+    _leaf_shape(Python.tuple(), depth, dims, leaf_depth)
+    var cls = py_type(value)
+    # Exact builtin types answer by identity; subclasses keep isinstance.
+    if cls is b.bool or (cls is not b.float and cls is not b.int and Bool(py=py_call(b.isinstance, value, b.bool))):
+        _promote(kind, size, "b", 1)
+    elif cls is b.float or (cls is not b.int and Bool(py=py_call(b.isinstance, value, b.float))):
+        _promote(kind, size, "f", 8)
+    elif cls is b.int or Bool(py=py_call(b.isinstance, value, b.int)):
+        if not float_target and (Bool(py=value < context["int64_min"]) or Bool(py=value > context["uint64_max"])):
+            raise Error("TypeError: input integers exceed the supported numeric array range")
+        _promote(kind, size, "f" if float_target else ("u" if Bool(py=value > context["int64_max"]) else "i"), 8)
+    else:
+        raise Error("TypeError: inputs must contain numeric scalars")
+    py_call(values.append, value)
 
 
 def sequential_input(mut mods: NativeModules, value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:

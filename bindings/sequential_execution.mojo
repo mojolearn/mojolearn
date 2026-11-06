@@ -26,12 +26,18 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
     var entries = context["bindings"][mode]
     if Bool(py=py_call(b.isinstance, entries, b.str)):
         raise Error(String(entries))
-    var actual_mode = Int(py=entries["x_sequence_numeric_mode"]())
-    var actual_vendor = String(entries["x_sequence_vendor"]())
-    if actual_mode != (1 if String(mode) == "identical" else 0):
-        raise Error("RuntimeError: Sequential native numerical mode differs from the requested mode")
-    if actual_vendor != String(context["vendor"]):
-        raise Error("RuntimeError: Sequential native vendor differs from the selected execution route")
+    # The compiled mode/vendor of a connected binding cannot change within a
+    # process: read them on the first operation, then reuse the verdict
+    # stored next to the provider (two native metadata calls per predict).
+    var checked = py_get(entries, "_sequential_checked_vendor")
+    if checked is None or String(checked) != String(context["vendor"]):
+        var actual_mode = Int(py=entries["x_sequence_numeric_mode"]())
+        var actual_vendor = String(entries["x_sequence_vendor"]())
+        if actual_mode != (1 if String(mode) == "identical" else 0):
+            raise Error("RuntimeError: Sequential native numerical mode differs from the requested mode")
+        if actual_vendor != String(context["vendor"]):
+            raise Error("RuntimeError: Sequential native vendor differs from the selected execution route")
+        py_setitem(entries, "_sequential_checked_vendor", PythonObject(actual_vendor))
     # Connection/metadata admission only. Exact compiled factory/module identity
     # owns the shared provider; no per-model pointer cache or Python callable is
     # used by the subsequent native fit/predict execution.
