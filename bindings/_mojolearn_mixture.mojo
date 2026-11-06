@@ -187,7 +187,10 @@ def _rebuild_model(
     var lower_bound = Float32(Float64(py=params[4]))
     var weights = read_f32(Int(py=addrs[0]), max(0, k))
     var means = read_f32(Int(py=addrs[1]), max(0, k * d))
-    var covariances = read_f32(Int(py=addrs[2]), max(0, k * d * d))
+    # covariances_ (k*d*d) is read by no scoring, predict or sample kernel
+    # (they use precisions_chol, means, weights and log_det_chol): it is not
+    # copied (p3 rank 296; the address stays in the entry's word layout).
+    var covariances = List[Float32]()
     var precisions = read_f32(Int(py=addrs[3]), max(0, k * d * d))
     var log_det = read_f32(Int(py=addrs[4]), max(0, k))
     return GaussianMixtureModel(
