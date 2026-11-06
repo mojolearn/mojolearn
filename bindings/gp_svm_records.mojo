@@ -27,6 +27,7 @@
 # Not noticed (as before: the full admissions never read them either): in-place
 # writes into a fitted ndarray's elements. Nothing here computes on data or
 # changes an arithmetic or fold order.
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
@@ -330,6 +331,60 @@ def gp_state_remember(model: PythonObject, fields: PythonObject, context: Python
     _gp_kernel_classes_admit(mods, classes)
     var key = _gp_state_key(mods, fields, nodes, context)
     _ = trees_side_put(_GP_STATE_SLOT, model, Python.tuple(key, nodes, classes))
+
+
+# ------------------------------------------------------------ admitted X
+#
+# The GP public door admits X with classical_check_x (C-order float32, the
+# scikit-learn refusals) and the numerical owner converted the same X again
+# (`family_as_f32`, a second full metadata snapshot). The door registers its
+# admitted X here for the duration of its operation; the owner skips its
+# conversion only for a registered exact ndarray or Array. Any other caller's
+# X is converted as before. Entries are strong references (no address reuse
+# while registered); the door releases its own entry when the operation ends,
+# and a concurrent release only causes the conversion to run.
+
+
+struct GpAdmittedInputs(Defaultable, Movable):
+    var items: List[PythonObject]
+
+    def __init__(out self):
+        self.items = List[PythonObject]()
+
+
+comptime GP_ADMITTED_X = _Global[StorageType=GpAdmittedInputs, name="MojolearnGpAdmittedInputsV1",
+                                 init_fn=GpAdmittedInputs.__init__]
+
+
+def gp_x_mark(value: PythonObject) raises:
+    var g = GP_ADMITTED_X.get_or_create_ptr()
+    g[].items.append(value)
+
+
+def gp_x_known(value: PythonObject, context: PythonObject) raises -> Bool:
+    """`value` is the C-order float32 X the running public door admitted."""
+    var cls = py_type(value)
+    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+        return False
+    var g = GP_ADMITTED_X.get_or_create_ptr()
+    for i in range(len(g[].items)):  # small-loop(items: the running doors' admitted inputs, usually one)
+        if g[].items[i] is value:
+            return True
+    return False
+
+
+def gp_x_release(value: PythonObject) raises:
+    var g = GP_ADMITTED_X.get_or_create_ptr()
+    var found = -1
+    for i in range(len(g[].items)):  # small-loop(items: the running doors' admitted inputs, usually one)
+        if g[].items[i] is value:
+            found = i
+    if found < 0:
+        return
+    # Hold a reference while the registry changes, so no destructor runs
+    # inside the update.
+    var held = g[].items.pop(found)
+    _ = held^
 
 
 # ------------------------------------------------------------ class tables

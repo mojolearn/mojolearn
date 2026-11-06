@@ -25,6 +25,7 @@ from bindings.gp_kernel_public_native import gp_admit_kernel
 from bindings.gp_regressor_native import gp_regressor_operation
 from bindings.gp_classifier_native import gp_classifier_operation
 from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
+from bindings.gp_svm_records import gpsvm_no_fit_callbacks, gp_state_forget, gp_state_admitted, gp_state_remember, gp_x_mark, gp_x_release
 from bindings.optimizer_public_words import stash_python_error
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode
@@ -37,22 +38,30 @@ def _gp_admit_state(model: PythonObject, context: PythonObject, classifier: Bool
     var fields = _fields(model)
     if classifier or py_contains(fields, "estimators_"):
         _gp_admit_binary_class(context)
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: Python post-fit hooks are not native lifecycle operations
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: native GP operations cannot invoke Python fit callbacks")
-    if py_contains(fields, "_mojolearn_after_fit"):
-        raise Error("TypeError: native GP operations cannot invoke Python fit callbacks")
+    # The ancestry scan runs once per class state (bindings/gp_svm_records.mojo).
+    gpsvm_no_fit_callbacks(model, fields, "TypeError: native GP operations cannot invoke Python fit callbacks")
+    var scalar_names = Python.tuple("numeric_mode", "_alpha", "_optimizer", "_n_restarts_optimizer", "_normalize_y", "_random_state", "_max_iter_predict", "n_features_in_", "n_classes_", "info_", "normalize_y_", "_y_train_mean", "_y_train_std", "log_marginal_likelihood_value_", "_mojolearn_fitted", "_mojolearn_fitting")
+    var array_names = Python.tuple("X_train_", "y_train_", "L_", "alpha_", "pi_", "W_sr_", "feature_names_in_")
+    var member_arrays = Python.tuple("y_train_", "L_", "pi_", "W_sr_")
+    var member_scalars = Python.tuple("log_marginal_likelihood_value_", "n_iter_", "nb_")
+    if fitting:
+        # A refit replaces the fitted state: release its record now.
+        gp_state_forget(model)
+    elif gp_state_admitted(model, fields, scalar_names, array_names, member_scalars, member_arrays, context):
+        # The fitted state is the one a full admission accepted (identity
+        # record per model); only identity-insufficient values were admitted
+        # again. Every predict-side call used to re-admit it all.
+        return fields
     # Constructor settings are consumed by fit. Prediction uses fitted state;
     # changing an unused constructor parameter must not change its behavior.
     if fitting:
         _gp_scalar_fields(fields, Python.tuple("alpha", "optimizer", "n_restarts_optimizer", "normalize_y", "copy_X_train", "n_targets", "max_iter_predict", "warm_start", "multi_class", "n_jobs"), context)
         if not classifier:
             _gp_scalar_fields(fields, Python.tuple("random_state"), context)
-    _gp_scalar_fields(fields, Python.tuple("numeric_mode", "_alpha", "_optimizer", "_n_restarts_optimizer", "_normalize_y", "_random_state", "_max_iter_predict", "n_features_in_", "n_classes_", "info_", "normalize_y_", "_y_train_mean", "_y_train_std", "log_marginal_likelihood_value_", "_mojolearn_fitted", "_mojolearn_fitting"), context)
+    _gp_scalar_fields(fields, scalar_names, context)
     # GPC stores random_state unchanged and never consumes it; RandomState
     # objects remain accepted without asking them for a scalar protocol.
-    _gp_array_fields(fields, Python.tuple("X_train_", "y_train_", "L_", "alpha_", "pi_", "W_sr_", "feature_names_in_"), context)
+    _gp_array_fields(fields, array_names, context)
     for name in ["kernel", "_kernel", "kernel_"]:  # small-loop(fixed kernel state fields)
         if name != "kernel" or fitting:
             var value = py_get(fields, name)
@@ -68,8 +77,10 @@ def _gp_admit_state(model: PythonObject, context: PythonObject, classifier: Bool
             if py_type(fits[i]) is not context["family_gp_binary_laplace"]:
                 raise Error("TypeError: GP binary state requires its native-connected storage class")
             var own = _fields(fits[i])
-            _gp_array_fields(own, Python.tuple("y_train_", "L_", "pi_", "W_sr_"), context)
-            _gp_scalar_fields(own, Python.tuple("log_marginal_likelihood_value_", "n_iter_", "nb_"), context)
+            _gp_array_fields(own, member_arrays, context)
+            _gp_scalar_fields(own, member_scalars, context)
+    if not fitting:
+        gp_state_remember(model, fields, context)
     return fields
 
 
@@ -222,8 +233,10 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     var rows = 0
     var columns = 0
     var input_copied = False
+    var admitted_x = PythonObject(None)
     if guarded:
         var x = classical_check_x(source, name, context)
+        admitted_x = x
         input_copied = not (x is source)
         rows = Int(py=x.shape[0])
         columns = Int(py=x.shape[1])
@@ -256,6 +269,10 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
+    if admitted_x is not None:
+        # The owner reuses this admitted C-order float32 X instead of
+        # converting it a second time (bindings/gp_svm_records.mojo).
+        gp_x_mark(admitted_x)
     try:
         if classifier:
             result = gp_classifier_operation(model, operation, prepared, context)
@@ -267,6 +284,8 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
             raise refused^
         raise error^
     finally:
+        if admitted_x is not None:
+            gp_x_release(admitted_x)
         if fitting:
             estimator_fit_end(model, depth)
     if fitting:
