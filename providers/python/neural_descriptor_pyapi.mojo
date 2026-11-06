@@ -134,8 +134,10 @@ def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject
     # a primitive operation resolves its entry on every call, and walking the
     # whole binding namespace each time repeated the same verdict. The walk
     # runs again whenever the module, its dictionary or the dictionary size
-    # changes (an inserted key changes the size; binding namespaces are filled
-    # at module init and never edited in place by Mojolearn).
+    # changes. An inserted key changes the size; only a same-step delete plus
+    # insert keeps it, which no Mojolearn code does to a compiled binding's
+    # namespace (filled once at module init). Exact per-edit detection would
+    # need CPython dict watchers (3.12+), recorded as owed for the 3.10 floor.
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
     if not raw:
