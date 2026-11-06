@@ -38,6 +38,7 @@ from bindings.xseq_native_common import (
 from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token
+from core.identity_trace import FNV_OFFSET, FNV_PRIME, fnv1a64_bytes
 
 
 def _attr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -213,11 +214,19 @@ def _buffer_address(value: PythonObject) raises -> PythonObject:
 # predict on an unchanged model skips the per-layer admission, private views,
 # dtype casts and the weight repacking. Any replaced field (refit, set
 # attribute, a list item swapped, unpickling) misses the identity compare and
-# takes the full path, which also writes the new record. Not noticed: values
-# or headers edited in place inside the SAME ndarray objects (`coefs_[0][:] = 0`,
-# `params_.shape = ...`); the MLP keeps its packed copy, the recurrent model
-# its admitted view (which still sees in-place value edits of a float32
-# C-ordered `params_`).
+# takes the full path, which also writes the new record.
+#
+# pass2-seq-trees-decomp (2026-11-06, pass 2 H2): the record also keeps a
+# native FNV-1a64 stamp of the fitted host bytes it was built from
+# (`_xseq_params_stamp`, the identity-trace hash `core/identity_trace.mojo`).
+# Every predict re-hashes those bytes (one pass over host memory, no Python
+# per value, no upload); a different stamp drops the record and takes the
+# full path, which repacks and mints a new resident token, so an in-place
+# value edit (`coefs_[0][:] = W`, `params_[:] = p`) is seen on every column
+# and the device copy is uploaded again, as 0.8.55 did. A fitted array that
+# exports no C-contiguous buffer is never recorded (full path every call).
+# Still not noticed: header edits inside the SAME ndarray objects
+# (`params_.shape = ...`, `coefs_[0].strides`), which no public API performs.
 
 comptime _MLP_PACKED_SLOT = "xseq_mlp_packed_v1"
 comptime _RNN_PARAMS_SLOT = "xseq_rnn_params_v1"
@@ -263,17 +272,75 @@ def _record_put(mut mods: NativeModules, slot: String, model: PythonObject, firs
     prepared_put(mods, slot, model, py_call(native_loaded_module("builtins").tuple, record))
 
 
+comptime _HB = UnsafePointer[UInt8, MutUntrackedOrigin]
+
+
+def _xseq_hash_into(value: PythonObject, mut h: UInt64) raises -> Bool:
+    """Fold the bytes of `value`'s C-contiguous buffer (an ndarray or an
+    `array.array`) into `h`; False, with the export error cleared, when it
+    exports none (a non-contiguous or object array)."""
+    ref cpy = Python().cpython()
+    var view = List[Int](length=10, fill=0)  # one Py_buffer: buf, obj, len, ...
+    var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    # flags 0 (PyBUF_SIMPLE): only a C-contiguous exporter succeeds
+    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0))
+    if status != 0:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        _ = view^
+        return False
+    var address = view[0]
+    var length = view[2]
+    if length > 0:
+        h = fnv1a64_bytes(h, _HB(unsafe_from_address=address), length)
+    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    _ = view^  # the Py_buffer outlives its release
+    return True
+
+
+def _xseq_stamp_add(value: PythonObject, mut h: UInt64) raises -> Bool:
+    """Fold one fitted field: an array, or the arrays of an exact list or
+    tuple (`coefs_`, `intercepts_`) in order."""
+    var b = native_loaded_module("builtins")
+    var kind = py_type(value)
+    if kind is b.list or kind is b.tuple:
+        var count = len(value)
+        h = (h ^ UInt64(count)) * FNV_PRIME  # the item count, so a moved boundary changes the stamp
+        for i in range(count):  # driver-loop: over fitted layer arrays
+            if not _xseq_hash_into(value[i], h):
+                return False
+        return True
+    return _xseq_hash_into(value, h)
+
+
+def _xseq_params_stamp(first: PythonObject, second: PythonObject) raises -> Int:
+    """The record stamp of the fitted host bytes of `first` (and `second`,
+    unless None): FNV-1a64 as a nonzero Int, or 0 when a field exports no
+    C-contiguous buffer (then nothing is recorded)."""
+    var h = FNV_OFFSET
+    if not _xseq_stamp_add(first, h):
+        return 0
+    if second is not None and not _xseq_stamp_add(second, h):
+        return 0
+    var stamp = Int(h.cast[DType.int64]())
+    return stamp if stamp != 0 else 1
+
+
 def _record_put_token(mut mods: NativeModules, slot: String, model: PythonObject, first: PythonObject,
-                      second: PythonObject, operands: PythonObject) raises -> Int:
-    """`_record_put` of `(*operands, token)` with a new resident-block token
-    (perf3-seq-neural, sequence/perf3_seq_resident_words.mojo); the token,
-    or 0 when no record was kept (a self-referential field): an unrecorded
-    block is never named, so it is uploaded per call as before."""
+                      second: PythonObject, operands: PythonObject, stamp: Int) raises -> Int:
+    """`_record_put` of `(*operands, token, stamp)` with a new resident-block
+    token (perf3-seq-neural, sequence/perf3_seq_resident_words.mojo) and the
+    host-bytes stamp of `first` / `second`; the token, or 0 when no record was
+    kept (a self-referential field, or `stamp` 0: fitted bytes that cannot be
+    hashed): an unrecorded block is never named, so it is uploaded per call
+    as before."""
+    if stamp == 0:
+        return 0
     var token = seq_resident_token()
     var record = Python.list()
     for i in range(len(operands)):  # small-loop(record operands)
         _ = py_call(record.append, operands[i])
     _ = py_call(record.append, PythonObject(token))
+    _ = py_call(record.append, PythonObject(stamp))
     _record_put(mods, slot, model, first, second, record)
     if prepared_get(mods, slot, model) is None:
         return 0
@@ -400,13 +467,18 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var source_params = fields["params_"]
     var params: PythonObject
     var record = _record_get(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None))
+    # the fitted bytes now; a record built from other values is stale (H2)
+    var stamp = _xseq_params_stamp(source_params, PythonObject(None))
+    if record is not None and (stamp == 0 or Int(py=record[3]) != stamp):
+        prepared_drop(mods, _RNN_PARAMS_SLOT, model)
+        record = PythonObject(None)
     var token = 0
     if record is not None:
         params = record[1]
         token = Int(py=record[2])
     else:
         params = xseq_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
-        token = _record_put_token(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params))
+        token = _record_put_token(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params), stamp)
     var ip = _rnn_ints(model, fields)
     var network = net_of(ip)
     if Int(py=params.size) != network.n_params():
@@ -733,6 +805,11 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     var packed = _record_get(mods, _MLP_PACKED_SLOT, model, coefs, intercepts)
     if packed is not None and Int(py=packed[3]) != columns:
         packed = PythonObject(None)
+    # the fitted bytes now; a packed copy of other values is stale (H2)
+    var stamp = _xseq_params_stamp(coefs, intercepts)
+    if packed is not None and (stamp == 0 or Int(py=packed[6]) != stamp):
+        prepared_drop(mods, _MLP_PACKED_SLOT, model)
+        packed = PythonObject(None)
     var operands: PythonObject
     var token = 0
     if packed is not None:
@@ -740,7 +817,7 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
         token = Int(py=packed[5])
     else:
         operands = _mlp_pack(coefs, intercepts, columns, context)
-        token = _record_put_token(mods, _MLP_PACKED_SLOT, model, coefs, intercepts, operands)
+        token = _record_put_token(mods, _MLP_PACKED_SLOT, model, coefs, intercepts, operands, stamp)
     var params = operands[0]
     var hidden_widths = operands[1]
     var input_width = Int(py=operands[3])
