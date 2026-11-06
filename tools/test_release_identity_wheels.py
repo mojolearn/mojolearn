@@ -78,6 +78,7 @@ def test_the_option_refuses_the_gpu_smoke_columns(tmp_path, monkeypatch):
 def test_one_box_job_per_vendor_records_the_columns(tmp_path, monkeypatch):
     monkeypatch.setenv("MOJOLEARN_IDENTITY_LABEL_NVIDIA", "l40s")
     r = make(tmp_path, identity_on_wheels=True, nvidia_columns="nvidia,ptx")
+    monkeypatch.setattr(r, "units_plan", lambda vendor: None)   # no packed wheels here: no units plan to offer
     assert r.gate_identity_args("nvidia") == ["--identity-columns", "nvidia,ptx", "--label-device", "l40s"]
     assert r.gate_identity_args("amd") == ["--identity-columns", "amd", "--label-device", "mi325x"]
 

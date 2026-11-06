@@ -4,7 +4,7 @@
 """THE ONE IDENTITY RUN, ON THE BUILT RELEASE WHEELS (Andrew 2026-11-05; tools/release.py --identity-on-wheels).
 
     python3 tools/identity_wheel_record.py --columns nvidia,ptx --label-device l40s \\
-        --wheel CORE.whl --wheel NVIDIA.whl --wheel NVIDIA_PTX.whl --sha256 <name>=<hex> ... \\
+        --wheel CORE.whl --wheel NVIDIA.whl --sha256 <name>=<hex> ... \\
         --out DIR [--gpus N] [--workers-per-gpu auto|K] [--venv DIR] [--python python3]
 
 Runs in a clean tree at the wheels' source commit (tools/ and the harness are that commit's), on the device the
@@ -44,6 +44,8 @@ RECORDER = ROOT / "tools" / "record_identity_column.sh"
 #: derives the backend from (nvidia-*, nvidia-ptx-*-sm80, amd-*, apple-*, cpu).
 COLUMNS = {
     "nvidia": ("nvidia-{device}", "CUDA_VISIBLE_DEVICES"),
+    # ONE NVIDIA WHEEL (lane nvidia-one-wheel-simple): the ptx column installs the same core + nvidia wheels;
+    # record_identity_column.sh loads the PTX set for an nvidia-ptx-* label (MOJOLEARN_GPU_ARCH=sm_80)
     "ptx": ("nvidia-ptx-{device}-sm80", "CUDA_VISIBLE_DEVICES"),
     "amd": ("amd-{device}", "HIP_VISIBLE_DEVICES"),
     "apple": ("apple-{device}", None),

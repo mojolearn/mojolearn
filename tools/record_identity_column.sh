@@ -160,7 +160,8 @@ if [ "$INSTALLED" = 1 ]; then
     [ -n "${PYTHON:-}" ] || die "RECORD_FROM_INSTALLED=1 needs PYTHON=<the venv interpreter the wheels are installed in>"
     [ -n "${INSTALLED_WHEELS:-}" ] && [ -f "$INSTALLED_WHEELS" ] \
         || die "RECORD_FROM_INSTALLED=1 needs INSTALLED_WHEELS=<file of '<wheel> <sha256>' lines>"
-    INSTALLED_LINE=$(awk 'NF == 2 && $2 ~ /^[0-9a-f]{64}$/ {printf "%s%s:%s", (n++ ? "," : ""), $1, $2} END {if (!n) exit 1}' \
+    # no regex interval ({64}): mawk (Debian/Ubuntu's default awk) does not support it
+    INSTALLED_LINE=$(awk 'NF == 2 && length($2) == 64 && $2 ~ /^[0-9a-f]+$/ {printf "%s%s:%s", (n++ ? "," : ""), $1, $2} END {if (!n) exit 1}' \
         "$INSTALLED_WHEELS") || die "INSTALLED_WHEELS $INSTALLED_WHEELS holds no '<wheel> <sha256>' line"
     unset PYTHONPATH   # the installed package, never the source tree's python/
 else

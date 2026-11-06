@@ -2430,7 +2430,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         right before it would launch lanes on a device: once any platform of this release is published, it
         refuses (a read of an existing receipt is never refused; only a launch is)."""
         for publish in PUBLISH_STEPS:
-            rec = (self.state.get("steps") or {}).get(publish)
+            # defensive: partial Releases (tests' fakes) carry no state, and then nothing is published
+            rec = ((getattr(self, "state", None) or {}).get("steps") or {}).get(publish)
             if rec and rec.get("done") and not str(rec.get("result", "")).startswith("none"):
                 raise StepFailed(f"{step} would run identity lanes on a device after {publish} published "
                                  f"({rec.get('at')}: {str(rec.get('result', ''))[:120]}); identity runs once, before "
