@@ -113,7 +113,9 @@ class IdentityOnWheels:
 
     # ------------------------------------------------------------------ the option
     def single(self):
-        return bool(getattr(self.args, "identity_on_wheels", False))
+        # read defensively: partial Releases (tests' fakes, a publisher called directly) carry no args; the new
+        # behaviour applies only when the option is explicitly on
+        return bool(getattr(getattr(self, "args", None), "identity_on_wheels", False))
 
     def nvidia_columns(self):
         text = getattr(self.args, "nvidia_columns", "") or ",".join(DEFAULT_NVIDIA_COLUMNS)
