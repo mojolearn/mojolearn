@@ -159,10 +159,15 @@ def seq_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
     _ = seq_class(owner, context)
     var fields = py_fields(owner)
     var b = native_loaded_module("builtins")
-    var keys = py_call(b.list, fields)
-    for i in range(len(keys)):  # driver-loop: over stored owner field names before native dictionary lookups
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: sequence optimizer metadata requires native string keys")
+    # Key admission kept per dictionary under the dict watcher
+    # (bindings/native_class_admission.mojo); Python 3.10/3.11 scan per call.
+    if py_type(fields) is not b.dict or not dict_keys_admitted(fields):
+        var keys = py_call(b.list, fields)
+        for i in range(len(keys)):  # driver-loop: over stored owner field names before native dictionary lookups
+            if py_type(keys[i]) is not b.str:
+                raise Error("TypeError: sequence optimizer metadata requires native string keys")
+        if py_type(fields) is b.dict:
+            dict_keys_admit(fields)
     for name in ["numeric_mode", "lr", "n_total", "_kind", "_flags", "_fp", "beta2_decay", "d", "weight_decay", "eps", "betas", "max_grad_norm"]:  # driver-loop: over fixed native optimizer configuration fields
         opt_scalar(py_get(fields, PythonObject(name)), context)
     opt_schedule(py_get(fields, "lr_schedule"), context)
