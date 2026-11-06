@@ -2,6 +2,7 @@
 # Explicit CPU logistic decisions, labels and probability links retain their
 # established numerical entries; every surrounding operation is native.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_type_fields
@@ -21,7 +22,7 @@ from core.host_sparse_impl import host_sparse_uint64_bound
 def _logistic_label_kind(value: PythonObject, context: PythonObject) raises -> Int:
     # 1=integer, 2=real, 0=object labels. Only exact native scalar slots can
     # enter a numeric conversion; object labels are returned by reference.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.int:
         return 1
@@ -43,7 +44,7 @@ def _logistic_label_kind(value: PythonObject, context: PythonObject) raises -> I
 
 
 def _logistic_label_dtype(dtype: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var types = py_call(b.list, context["numeric_dtypes"].values())
     for i in range(len(types)):  # driver-loop: primitive native dtype identities before scalar reads
         if py_type(dtype) is py_type(types[i]):
@@ -57,7 +58,7 @@ def _logistic_label_dtype(dtype: PythonObject, context: PythonObject) raises:
 
 
 def host_logistic_classes(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(source)
     var labels = Python.list()
     if cls is py_get(context, "host_inference_class_labels"):
@@ -98,7 +99,7 @@ def _host_logistic_selected(labels: PythonObject, indices: List[Int]) raises -> 
 
 
 def _host_logistic_decode(labels: PythonObject, indices: List[Int], array_labels: Bool, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var integers = True
     var numbers = True
     for i in range(len(labels)):  # driver-loop: distinct label result-type metadata
@@ -236,5 +237,5 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
     _ = scores^
     if operation == "host_infer_predict":
         out = _host_logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return classical_input(out, context, "logistic result") if py_type(out) is not b.list and public and py_get(context, "ndarray") is not None else out

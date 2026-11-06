@@ -2,6 +2,7 @@
 # CPU IsolationForest rebuilds and scores through its existing numerical ABI.
 # Preparation, resolved controls, state readback and output publication stay native.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.sequential_admission import _one_of
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind, classical_f64
@@ -37,7 +38,7 @@ def host_iforest_admit_option(value: PythonObject, context: PythonObject) raises
 def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
     # A fitted instance assembled without a resolved seed historically resolves
     # its constructor knobs on first score. Resolve exactly those stored options.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var native_int = py_type(PythonObject(0))
     var native_float = py_type(PythonObject(Float64(0.0)))
     var names = Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "verbose")
@@ -155,7 +156,7 @@ def _host_resident_entries(entry: PythonObject, context: PythonObject) raises ->
 
 def host_iforest_inference(model: PythonObject, fields: PythonObject, source: PythonObject, want: Int,
                            context: PythonObject, public: Bool) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var name = py_call(b.type.__dict__["__name__"].__get__, py_type(model))
     if host_sparse_format(source).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + String(name) + " takes dense X only.)")

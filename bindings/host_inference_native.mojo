@@ -2,6 +2,7 @@
 # Explicit CPU model operations. Each connected family enters one native
 # owner; other families remain unchanged until their full contract is ported.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact
@@ -37,7 +38,7 @@ def host_inference_entry(name: String, context: PythonObject) raises -> PythonOb
 def host_inference_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject, error_context: PythonObject, public: Bool) raises -> PythonObject:
     classical_connect_numpy(context)
     var fields = host_tree_constructor_fields(model, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     var kind = PythonObject(None)
     for i in range(len(mro)):  # driver-loop: fixed explicit CPU class ancestry

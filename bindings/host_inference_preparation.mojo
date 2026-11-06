@@ -3,6 +3,7 @@
 # cast. Finite f64 values that overflow f32 remain valid, as in the existing
 # wrapper's separate pre-cast validation and inference preparation.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get, _pd_values
 from bindings.classical_arrays import classical_address
@@ -19,7 +20,7 @@ def host_inference_pandas_finite(source: PythonObject, context: PythonObject) ra
     if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
         raise Error("TypeError: pandas prediction requires native block metadata")
     var blocks = _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)
-    if py_type(blocks) is not Python.import_module("builtins").tuple:
+    if py_type(blocks) is not native_loaded_module("builtins").tuple:
         raise Error("TypeError: pandas prediction requires native storage blocks")
     var owned = Python.list()
     var kind = String()

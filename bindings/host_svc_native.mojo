@@ -34,7 +34,7 @@ def _svc_numeric_storage(value: PythonObject, context: PythonObject) raises:
 
 
 def host_svc_admit_state(fields: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _svc_numeric_storage(py_get(fields, "dual_coef_"), context)
     _svc_numeric_storage(py_get(fields, "support_vectors_"), context)
     var names = Python.tuple("n_features_in_", "_gamma", "_hp_cache_size", "_hp_degree", "_hp_coef0", "_label0", "_label1")
@@ -71,7 +71,7 @@ def host_svc_probability(model: PythonObject, fields: PythonObject, name: Python
     var probability = py_get(fields, "probability", False)
     host_inference_scalar(probability, context, True)
     if not Bool(py=probability):
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var cls_name = String(py_call(b.type.__dict__["__name__"].__get__, py_type(model)))
         raise Error("AttributeError: This '" + cls_name + "' has no attribute '" + String(name) + "'")
 
@@ -98,7 +98,7 @@ def _svc_input(source: PythonObject, context: PythonObject) raises -> PythonObje
 def _svc_binary_support(value: PythonObject, count: Int, columns: Int, context: PythonObject) raises -> PythonObject:
     # Binary SVC historically calls support_.tolist() before _i32; unlike
     # pair machines, even an Array's wider scalar storage is converted.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.list or py_type(value) is b.tuple:
         raise Error("AttributeError: SVC support_ requires native array storage with tolist")
     var array = classical_input(value, context, "support_")
@@ -142,7 +142,7 @@ def _svc_machine(query: PythonObject, dual_value: PythonObject, support_value: P
         else:
             support = _svr_matrix(support_value, count, features, context)
     var params = Python.list(rows, features, count, bias, label0, label1, code, fields["_gamma"], Int(classify),
-        fields["_hp_cache_size"], py_call(Python.import_module("builtins").int, fields["_hp_degree"]), Float64(py=fields["_hp_coef0"]))
+        fields["_hp_cache_size"], py_call(native_loaded_module("builtins").int, fields["_hp_degree"]), Float64(py=fields["_hp_coef0"]))
     _ = py_call(_kernel_entry("svc_predict", context), classical_address(x),
         classical_address(dual) if count > 0 else PythonObject(0),
         classical_address(support) if count > 0 else PythonObject(0), destination, params)
@@ -197,7 +197,7 @@ def _svc_calibration_array(value: PythonObject, count: Int, vector: Bool, contex
 
 
 def _svc_calibration(value: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.list and py_type(value) is not b.tuple:
         return _svc_calibration_array(value, count, False, context)
     if len(value) != count:
@@ -299,7 +299,7 @@ def host_svc_inference(model: PythonObject, fields: PythonObject, labels: Python
     _ = decisions^
     _ = codes^
     _ = ab^
-    return classical_input(out, context, "SVC result") if py_type(out) is not Python.import_module("builtins").list and public and py_get(context, "ndarray") is not None else out
+    return classical_input(out, context, "SVC result") if py_type(out) is not native_loaded_module("builtins").list and public and py_get(context, "ndarray") is not None else out
 
 
 def _svc_coefficients(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -350,7 +350,7 @@ def host_svc_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -
         var context = args[0]
         var model = args[1]
         var name = args[2]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         classical_connect_numpy(context)
         classical_check_layout(model, context)
         if py_type(name) is not b.str:

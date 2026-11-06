@@ -2,6 +2,7 @@
 # Whole-operation CPU tree inference: native input admission, saved-state
 # validation, buffer ownership, kernel calls and completed output publication.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import _ordinary_torch, _one_of
@@ -67,7 +68,7 @@ def host_tree_array(fields: PythonObject, name: String, dtype: String, context: 
 
 def host_tree_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
     host_archive_check_layout(py_type(model), context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     var known = False
     for i in range(len(mro)):  # driver-loop: connected CPU tree class ancestry
@@ -88,7 +89,7 @@ def host_tree_fields(model: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def host_tree_groves(fields: PythonObject, addresses: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cached = fields["_groves"]
     if cached is not None:
         if py_type(cached) is not b.tuple or len(cached) != 2 or py_type(cached[0]) is not b.int or cached[1] is not None:
@@ -150,7 +151,7 @@ def host_tree_wide(value: PythonObject, context: PythonObject) raises -> PythonO
 
 def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonObject) raises -> PythonObject:
     var vote_owner = vote
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(classes) is not b.list or len(classes) != Int(py=vote.shape[1]):
         raise Error("stored forest classes do not match its output count")
     classical_admit_value(classes, context)
@@ -271,7 +272,7 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
 def host_tree_constructor_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
     host_archive_check_layout(py_type(model), context)
     var fields = sequential_fields(model)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var keys = py_call(py_type(Python.list()), fields.keys())
     for i in range(len(keys)):  # driver-loop: native constructor dictionary admission
         if py_type(keys[i]) is not b.str:
@@ -282,7 +283,7 @@ def host_tree_constructor_fields(model: PythonObject, context: PythonObject) rai
 def host_tree_scalar(value: PythonObject, context: PythonObject) raises:
     # Conversions below call only native scalar slots. Container formatting
     # can transitively invoke element repr hooks and is not a scalar contract.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if not _one_of(cls, Python.tuple(b.str, b.bytes, b.bytearray, b.int, b.float, b.bool, py_type(PythonObject(None)))) and not _one_of(cls, context["scalar_types"]):
         raise Error("TypeError: tree scalar options require native scalar values without Python conversion hooks")
@@ -406,14 +407,14 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     # exact loaded types without a Python setup callback or ndarray iteration.
     var numpy = py_get(context["modules"], "numpy")
     if numpy is not None and py_type(numpy) is context["native_module_type"]:
-        var scalars = py_call(Python.import_module("builtins").list, context["scalar_types"])
+        var scalars = py_call(native_loaded_module("builtins").list, context["scalar_types"])
         var dtype_class = native_numpy_dtype(context)
         var codes = Python.tuple("U", "S")
         for i in range(2):  # driver-loop: fixed native label scalar ABI types
             var cls = py_call(dtype_class, codes[i]).type
             if not _one_of(cls, context["scalar_types"]):
                 _ = py_call(scalars.append, cls)
-        py_setitem(context, "scalar_types", py_call(Python.import_module("builtins").tuple, scalars))
+        py_setitem(context, "scalar_types", py_call(native_loaded_module("builtins").tuple, scalars))
     classical_admit_value(args, context)
     if operation == "host_tree_init_forest":
         host_tree_initialize_forest(model, args, context)
@@ -423,7 +424,7 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         return PythonObject(None)
     if operation == "host_tree_parse" or operation == "host_tree_ctr_dim":
         host_tree_scalar(args[0], context)
-        var text = py_call(Python.import_module("builtins").str, args[0])
+        var text = py_call(native_loaded_module("builtins").str, args[0])
         var state = host_archive_gbdt_state(text, context["output_context"])
         return state["dim"] if operation == "host_tree_ctr_dim" else state
     if operation == "host_tree_ctr_predict":
@@ -432,7 +433,7 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         return host_gbdt_predict(sequential_fields(restored), args[0], context)
     if operation == "host_tree_setstate":
         host_archive_check_layout(py_type(model), context)
-        if py_type(args[0]) is not Python.import_module("builtins").dict:
+        if py_type(args[0]) is not native_loaded_module("builtins").dict:
             raise Error("TypeError: saved tree state must be a native dictionary")
         var restored = sequential_fields(model)
         _ = py_call(restored.update, args[0])
@@ -442,7 +443,7 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     var fields = host_tree_fields(model, context)
     var gbdt = py_contains(fields, "_arrays")
     if operation == "host_tree_getstate":
-        var state = py_call(Python.import_module("builtins").dict, fields)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
         py_setitem(state, "_groves", PythonObject(None))
         _ = py_call(state.pop, "_binding", PythonObject(None))
         return state
