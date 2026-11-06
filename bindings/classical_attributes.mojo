@@ -48,19 +48,26 @@ def _public_plan(model: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 def classical_check_layout(model: PythonObject, context: PythonObject) raises:
+    # Callers without an operation handle keep their own module view.
+    var mods = NativeModules()
+    _ = classical_check_layout(mods, model, context)
+
+
+def classical_check_layout(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Returns the connected public plan it admitted (None when no installer
+    # metadata exists), so classical_getattribute does not resolve it again.
     # Existing private-owner callers have no installer metadata. Once public
     # installation is requested, the complete layout is mandatory and checked.
     if py_get(context, "classical_public_layouts") is None:
         if Bool(py=py_get(context, "classical_public_installed", False)):
             raise Error("RuntimeError: native public model metadata was removed")
-        return
-    var b = native_loaded_module("builtins")
+        return PythonObject(None)
+    var b = mods.module("builtins")
     var cls = model if py_type(model) is b.type else py_type(model)
     var plan = _public_plan(model, context)
     # Prepared class admission: the ancestry, hook, finalizer and dictionary
     # descriptor checks run on first use per class and again whenever the
     # class stamp changes; instance keys are admitted on every call.
-    var mods = NativeModules()
     var finalizer = py_get(context, "host_archive_finalizer_descriptor")
     var peer_finalizer = py_get(context, "host_archive_peer_finalizer_descriptor")
     var admitted = prepared_get(mods, _LAYOUT_CLASS_SLOT, cls)
@@ -74,7 +81,7 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     if (admitted is not None and watched is not None and watched[0] is plan
             and watched[1] is finalizer and watched[2] is peer_finalizer):
         _classical_check_instance(model, context, cls, plan)
-        return
+        return plan
     if admitted is None or not prepared_class_matches(mods, cls, [plan, finalizer, peer_finalizer], admitted):
         _classical_check_class(model, context, cls, plan)
         var stamp = prepared_class_stamp(mods, cls, Python.list(plan, finalizer, peer_finalizer))
@@ -84,11 +91,33 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     if class_watch_ready():
         class_admit(mods, _LAYOUT_WATCH_SLOT, cls, Python.tuple(plan, finalizer, peer_finalizer))
     _classical_check_instance(model, context, cls, plan)
+    return plan
 
 
 comptime _LAYOUT_CLASS_SLOT = "classical_layout_class_v1"
 comptime _LAYOUT_NAMES_SLOT = "classical_layout_names_v1"
 comptime _LAYOUT_WATCH_SLOT = "classical_layout_watch_v1"
+comptime _DESCRIPTOR_KIND_SLOT = "classical_descriptor_kind_v1"
+
+
+def _descriptor_kind(mut mods: NativeModules, member_type: PythonObject) raises -> Int:
+    # Bit 1: the member's class defines __get__; 3: it also defines __set__ or
+    # __delete__ (a data descriptor). An exact Python function (every method
+    # lookup) is answered by identity: its static type defines __get__ only.
+    # Other member classes are walked once per watched class state (three
+    # ancestry walks per read before).
+    if member_type is mods.module("types").FunctionType:
+        return 1
+    var record = class_record(mods, _DESCRIPTOR_KIND_SLOT, member_type)
+    if record is not None:
+        return Int(py=record)
+    var kind = 0
+    if _descriptor_slot(member_type, "__get__"):
+        kind = 1
+        if _descriptor_slot(member_type, "__set__") or _descriptor_slot(member_type, "__delete__"):
+            kind = 3
+    class_admit(mods, _DESCRIPTOR_KIND_SLOT, member_type, PythonObject(kind))
+    return kind
 
 
 def _layout_class_names(mut mods: NativeModules, cls: PythonObject, plan: PythonObject) raises -> PythonObject:
@@ -224,12 +253,16 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     # `layout_checked`: the caller ran classical_check_layout on this model in
     # the same native call (classical_c does, before every instance
     # operation), so the class and instance-key admission is not repeated.
-    var b = native_loaded_module("builtins")
+    # One module view and one plan resolution for the whole read.
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     if py_type(name) is not b.str:
         raise Error("TypeError: native model attribute name must be an exact string")
+    var plan = PythonObject(None)
     if not layout_checked:
-        classical_check_layout(model, context)
-    var plan = _public_plan(model, context)
+        plan = classical_check_layout(mods, model, context)
+    if plan is None:
+        plan = _public_plan(model, context)
     var cls = py_type(model)
     # Instance dictionary first. A name no connected class row defines has
     # no class member, so no descriptor can take precedence: Python's lookup
@@ -237,7 +270,6 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     # dictionary or raises AttributeError. One dict probe replaces the member
     # walk and the three descriptor-slot ancestry walks for every fitted
     # field and parameter read.
-    var mods = NativeModules()
     var names = _layout_class_names(mods, cls, plan)
     if names is not None and not py_contains(names, name):
         var stored = py_call(plan["fields_get"], model, cls)
@@ -256,8 +288,9 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     var binding = py_get(plan["bindings"], name)
     var known = binding is not None and member is binding[0]
     var member_type = py_type(member)
-    var descriptor = present and _descriptor_slot(member_type, "__get__")
-    var data_descriptor = descriptor and (_descriptor_slot(member_type, "__set__") or _descriptor_slot(member_type, "__delete__"))
+    var kind = _descriptor_kind(mods, member_type) if present else 0
+    var descriptor = kind != 0
+    var data_descriptor = kind == 3
     if data_descriptor:
         if not known:
             raise Error("TypeError: Python model property/descriptor hooks are not accepted")
