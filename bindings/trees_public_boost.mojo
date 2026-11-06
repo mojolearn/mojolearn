@@ -30,6 +30,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
+from bindings.trees_staged_input import trees_stage_members, trees_unstage
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_need,
@@ -824,9 +825,14 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
     var rows_all = _arange(xt, n, context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
-    for i in range(len(members)):  # driver-loop: over the member estimators
-        var xs = _sub_x(xt, x, xa, features[i], rows_all, context)
-        _acc_cols(xt, acc, _member_proba(members[i], xs, context), _sub_cols(members[i], context), n, k, context)
+    # One device copy of X for the full-width members (trees_staged_input).
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    try:
+        for i in range(len(members)):  # driver-loop: over the member estimators
+            var xs = _sub_x(xt, x, xa, features[i], rows_all, context)
+            _acc_cols(xt, acc, _member_proba(members[i], xs, context), _sub_cols(members[i], context), n, k, context)
+    finally:
+        trees_unstage(staged)
     _scale(xt, acc, Float64(len(members)))
     return trees_reshape(acc, Python.tuple(n, k), context)
 
@@ -859,8 +865,12 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
     var rows_all = _arange(xt, n, context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
-    for i in range(len(members)):  # driver-loop: over the member estimators
-        _acc(xt, acc, _member_predict(members[i], _sub_x(xt, x, xa, features[i], rows_all, context), context), n, context)
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    try:
+        for i in range(len(members)):  # driver-loop: over the member estimators
+            _acc(xt, acc, _member_predict(members[i], _sub_x(xt, x, xa, features[i], rows_all, context), context), n, context)
+    finally:
+        trees_unstage(staged)
     _scale(xt, acc, Float64(len(members)))
     return acc
 
@@ -1105,10 +1115,15 @@ def _ada_decision(fields: PythonObject, x: TreesMatrix, xt: PythonObject, contex
     var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
     var members = fields["estimators_"]
     var alphas = fields["estimator_weights_"]
-    for i in range(len(members)):  # driver-loop: over the member estimators
-        var pred = _i32_codes(_member_predict(members[i], xa, context), context)
-        var a = Float64(py=_float(alphas[i]))
-        _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
+    # One device copy of X for every one-tree member (trees_staged_input).
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    try:
+        for i in range(len(members)):  # driver-loop: over the member estimators
+            var pred = _i32_codes(_member_predict(members[i], xa, context), context)
+            var a = Float64(py=_float(alphas[i]))
+            _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
+    finally:
+        trees_unstage(staged)
     _scale(xt, acc, _fsum(alphas, context))
     return acc
 
@@ -1171,11 +1186,15 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
     var m = len(members)
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
     var preds = trees_vector(m * n, "<f4", context)
-    for j in range(m):  # driver-loop: over the member estimators
-        var p = _f32_vector(_member_predict(members[j], xa, context), context)
-        _ = py_call_typed(_x(xt, "x_trees_put_f32"), _A(preds), _P(p.addr), Python.list(_P(j * n), _P(n)))
-        _ = p  # keep the Python object alive through the native call above
-        _ = preds  # keep the Python object alive through the native call above
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    try:
+        for j in range(m):  # driver-loop: over the member estimators
+            var p = _f32_vector(_member_predict(members[j], xa, context), context)
+            _ = py_call_typed(_x(xt, "x_trees_put_f32"), _A(preds), _P(p.addr), Python.list(_P(j * n), _P(n)))
+            _ = p  # keep the Python object alive through the native call above
+            _ = preds  # keep the Python object alive through the native call above
+    finally:
+        trees_unstage(staged)
     var b = trees_builtins()
     var weights_store = py_call(context["array_type"], PythonObject("d"), py_call(b.map, b.float, fields["estimator_weights_"]))
     var weights = classical_wrap_array(weights_store, Python.tuple(m), "<f8", "C", context)

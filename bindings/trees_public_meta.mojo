@@ -48,6 +48,7 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_storage import native_array_from_values
 from bindings.msel_inputs import msel_admit, msel_input_count
 from bindings.trees_meta_admission import meta_admit_configuration
+from bindings.trees_staged_input import trees_stage_members, trees_unstage
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -1717,6 +1718,31 @@ def meta_operation(model: PythonObject, operation: String, args: PythonObject,
     return meta_admitted_operation(model, meta_kind(model, context), operation, args, context)
 
 
+def _member_list(model: PythonObject, kind: String) raises -> PythonObject:
+    """The fitted members a prediction of `model` runs on X itself."""
+    if kind == "calibrated":
+        var pairs = _attr(model, "calibrated_classifiers_", Python.list())
+        var members = Python.list()
+        for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+            _ = py_call(members.append, pairs[i][0])
+        return members
+    return _attr(model, "estimators_", Python.list())
+
+
+def _staged_input(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`(Xa, staged)`: X converted once (`_check_x`, which every prediction
+    path runs first; on the converted Array it returns that Array) and staged
+    as the one device copy its forest members share (bindings/trees_staged_input.mojo).
+    Any refusal here leaves `(X, [])`: the operation then raises it itself,
+    in its own order and words."""
+    try:
+        var Xa = _check_x(model, X, context)
+        var staged = trees_stage_members(_member_list(model, kind), trees_address(Xa), _rows(Xa), _cols(Xa), context)
+        return Python.tuple(Xa, staged)
+    except:
+        return Python.tuple(X, Python.list())
+
+
 def meta_admitted_operation(model: PythonObject, kind: String, operation: String, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     """`meta_operation` after its admission. The public door
@@ -1724,7 +1750,26 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
     model, its constructor configuration (a native clone of the meta-estimator
     and every member) and the arguments, and read `kind`; it calls this
     directly (lane perf-meta-estimators, 2026-11-05: every public call used
-    to pay that admission twice, the second time inside meta_operation)."""
+    to pay that admission twice, the second time inside meta_operation).
+    A prediction (predict, predict_proba, transform, score) stages X once
+    for its forest members (lane perf-sweep-trees, 2026-11-05)."""
+    if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
+            or operation == "trees_meta_transform" or operation == "trees_meta_score"):
+        var prepared = _staged_input(model, kind, args[0], context)
+        var call = Python.list(prepared[0])
+        for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
+            _ = py_call(call.append, args[i])
+        var result = PythonObject(None)
+        try:
+            result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
+        finally:
+            trees_unstage(prepared[1])
+        return result
+    return _meta_dispatch(model, kind, operation, args, context)
+
+
+def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
     if operation == "trees_meta_fit":
         return _meta_fit(model, kind, args[0], args[1], args[2], context)
     if operation == "trees_meta_predict":
