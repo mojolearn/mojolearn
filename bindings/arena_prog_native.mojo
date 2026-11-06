@@ -28,7 +28,7 @@ from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address
-from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _cached_slot
+from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
 from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -294,6 +294,14 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var out = PythonObject(None)
     var nst = 0
     var t_in = 0
+    # Per run, not per input (perf3-prep-shared, the helpers perf2-prep added
+    # for xprep_run): the resident scope admission and the resident cache's
+    # state admission are read once, at the first input that needs them,
+    # with the same checks and refusals `_resident` / `_cached_slot` ran per
+    # input. Within one run only this runner inserts native keys.
+    var scope_read = False
+    var scope = PythonObject(None)
+    var cache_state = PythonObject(None)
     try:
         for k in range(len(inputs)):  # driver-loop: over the program's input buffers
             var record = inputs[k]
@@ -315,9 +323,14 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
                 if src < 0:
                     value = _values(value, context, True)
             if src < 0 and ranges and not is_inout:
-                var cache = _resident(entries, size, False, context, "x_prep")
-                if cache is not None:
-                    src = _cached_slot(cache, value, entries, context, "x_prep")
+                if not scope_read:
+                    scope = _resident_scope(entries, context, "x_prep")
+                    scope_read = True
+                if scope is not None and size >= Int(py=scope[0]):
+                    if cache_state is None:
+                        var cache = _resident_cache(entries, scope[1], context, "x_prep")
+                        cache_state = _cache_state(cache, entries, context, "x_prep")
+                    src = _cached_slot_in(cache_state, value, entries, "x_prep")
                 elif direct_ok and size >= PREP_DIRECT_MIN_WORDS:
                     # TOMBSTONE: lane fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP, x_prep_run_ranges_host host spans) deleted 2026-10-09
                     # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
@@ -551,6 +564,10 @@ def _metrics_execute[native_plan: Bool](
     var input_count = len(native_inputs) if native_plan else len(inputs)
     var ins = List[Int32]()
     var owned = List[Int](capacity=2 * input_count)
+    # Resident scope and cache state admitted once per run (as in _prep_run).
+    var scope_read = False
+    var scope = PythonObject(None)
+    var cache_state = PythonObject(None)
     try:
         for k in range(input_count):  # driver-loop: over the program's input buffers
             var off = 0
@@ -576,9 +593,14 @@ def _metrics_execute[native_plan: Bool](
             if src < 0 and ranges:
                 # resident (lane py-shared): the device copies it from the
                 # store; the host arena's words stay zero and are never read
-                var cache = _resident(entries, size_k, False, context, "x_metrics")
-                if cache is not None:
-                    src = _cached_slot(cache, value, entries, context, "x_metrics")
+                if not scope_read:
+                    scope = _resident_scope(entries, context, "x_metrics")
+                    scope_read = True
+                if scope is not None and size_k >= Int(py=scope[0]):
+                    if cache_state is None:
+                        var cache = _resident_cache(entries, scope[1], context, "x_metrics")
+                        cache_state = _cache_state(cache, entries, context, "x_metrics")
+                    src = _cached_slot_in(cache_state, value, entries, "x_metrics")
             if src < 0:
                 memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
                        src=F32P(unsafe_from_address=Int(py=classical_address(value))), count=size_k)
