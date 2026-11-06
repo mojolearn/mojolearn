@@ -1202,7 +1202,9 @@ def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: 
     var est = fields["covariance_estimator"]
     var tot = NONE
     if eigen:
-        var y0 = pr.put_list(_zeros(n), context)
+        # The one-class code vector: a zeroed float32 Array put as it is (no
+        # n-word host List and per-word conversion, p3-prep). Same words.
+        var y0 = pr.put(f32_array(n, context))
         var c1 = pr.alloc(1)
         var m1 = pr.alloc(d)
         var v1 = pr.alloc(d) if Bool(shr) else NONE
@@ -1455,7 +1457,7 @@ def _kind_of(model: PythonObject, context: PythonObject) raises -> String:
 
 
 def _dispatch(model: PythonObject, operation: String, var args: PythonObject, var context: PythonObject,
-              known: String = "") raises -> PythonObject:
+              known: String = "", given: Optional[PythonObject] = None) raises -> PythonObject:
     # `known`: the kind the caller already resolved for this model (the
     # public naive Bayes / QDA door), so the MRO is not read twice.
     if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
@@ -1498,6 +1500,10 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
                 classical_admit_value(args[i], context)
         if operation == "fit" or operation == "score":
             lda_native_labels(args[1], context, operation == "fit", "GaussianNB")
+    elif given:
+        # A read-only public operation's private fields view (classes_ as the
+        # plain list), never written back into the model (p3-prep).
+        fields = given.value()
     else:
         fields = py_fields(model)
     if operation == "predict":
@@ -1559,7 +1565,11 @@ def _classifier_public(model: PythonObject, kind: String, operation: String, arg
     QDA: the former `_mode` wrappers (NotFittedError, X refusals, width and
     feature names, y admission, fit bookkeeping with ClassLabels `classes_`,
     NumPy results outside the package) around the algorithm. The solvers read
-    `classes_` as a plain list; the public ClassLabels is swapped back after."""
+    `classes_` as a plain list. A read-only operation (predict*, score,
+    decision_function) gets a private copy of the fields dict holding the
+    plain list, so the model is never mutated and a concurrent caller never
+    sees a swapped state (p3-prep); a fit / partial_fit swaps it in the
+    model (its solvers write the fitted fields there) and back after."""
     var source = args[0] if len(args) > 0 else PythonObject(None)
     # MultinomialNB and ComplementNB take CSR X (`_DiscreteNB._csr_ok`).
     var sparse_ok = kind == "mnb" or kind == "cnb"
@@ -1567,14 +1577,25 @@ def _classifier_public(model: PythonObject, kind: String, operation: String, arg
     var fields = py_fields(model)
     var public_labels = py_get(fields, "classes_")
     var plain = prep_plain_classes(public_labels, context)
-    var swapped = plain is not public_labels
+    var fitting = lifecycle_fitting(operation)
+    var swapped = plain is not public_labels and not (
+        operation == "predict" or operation == "predict_proba" or operation == "predict_log_proba"
+        or operation == "predict_joint_log_proba" or operation == "score" or operation == "decision_function")
     var result = PythonObject(None)
     try:
-        if lifecycle_fitting(operation) and len(args) > 1 and depth == 0:
+        if fitting and len(args) > 1 and depth == 0:
             lda_native_labels(args[1], lda_native_context(context), True, classical_estimator_name(model))
         if swapped:
             py_setitem(fields, "classes_", plain)
-        result = _dispatch(model, operation, args, context, kind)
+        var reading = (operation == "predict" or operation == "predict_proba" or operation == "predict_log_proba"
+                       or operation == "predict_joint_log_proba" or operation == "score"
+                       or operation == "decision_function")
+        if reading and plain is not public_labels:
+            var view = py_call(native_loaded_module("builtins").dict, fields)
+            py_setitem(view, "classes_", plain)
+            result = _dispatch(model, operation, args, context, kind, view)
+        else:
+            result = _dispatch(model, operation, args, context, kind)
     finally:
         lifecycle_end(model, operation, depth)
         if swapped:

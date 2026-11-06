@@ -8,7 +8,9 @@ from std.python import Python, PythonObject
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
+from bindings.native_loaded_module import NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.native_caller_frame import native_caller_globals
@@ -165,6 +167,9 @@ def _nan_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     return output
 
 
+comptime _STANDARD_ROWS_SLOT = "standard_transform_rows_v1"
+
+
 def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject) raises -> PythonObject:
     return scaler_transform(model, source, inverse, copy_option, context, PythonObject(None))
 
@@ -193,27 +198,55 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         raise Error("StandardScaler mean_ is missing for a centered transform")
     if with_std and scale is None:
         raise Error("StandardScaler scale_ is missing for a scaled transform")
-    if mean is None:
-        mean = classical_typed(Python.tuple(d), "<f4", context["output_context"])
-    if scale is None:
-        scale = classical_typed(Python.tuple(d), "<f4", context["output_context"])
-        scaler_fill(_ptr(scale), d, 1)
-        _ = scale  # keep the Python object alive through the native call above
-    mean = _statistic(mean, d, "mean_", context)
-    scale = _statistic(scale, d, "scale_", context)
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    memcpy(dest=ap, src=_ptr(mean), count=d)
-    _ = mean  # keep the Python object alive through the native call above
-    memcpy(dest=ap+d, src=_ptr(scale), count=d)
-    _ = scale  # keep the Python object alive through the native call above
-    arena[7*d+4] = 1
-    var program = List[Int32]()
-    _stage(program, 264, d, 0, d, Int(with_mean), Int(with_std), 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
-    _stage(program, 248, 1, 4*d, d, 7*d)
-    _stage(program, 248, 1, 5*d, d, 7*d+1)
-    _stage(program, 248, 1, 6*d, d, 7*d+2)
-    _run(arena, program, entries)
+    # The derived and validated rows of the fitted statistics (the stage 264
+    # + 248 program, a separate crossing) are kept per model in the
+    # prepared-owner registry (weakly keyed, outside __dict__), keyed by the
+    # identity of mean_ and scale_ (or None), d, with_mean, with_std and the
+    # numeric mode (p3-prep). When the record is taken the fitted Arrays are
+    # made read-only (hazard class A): an in-place write through the public
+    # view raises NumPy's read-only error; replacing a statistic (refit,
+    # partial_fit, load, assignment) misses and rebuilds.
+    var mods = NativeModules()
+    var mode_text = String(fields["numeric_mode_"])
+    var held = prepared_get(mods, _STANDARD_ROWS_SLOT, model)
+    if (held is not None and held[0] is mean and held[1] is scale and Int(py=held[3]) == d
+            and String(held[4]) == mode_text and Bool(py=held[5]) == with_mean and Bool(py=held[6]) == with_std):
+        memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
+        _ = held  # keep the Python object alive through the copy above
+    else:
+        var mean_raw = mean
+        var scale_raw = scale
+        if mean is None:
+            mean = classical_typed(Python.tuple(d), "<f4", context["output_context"])
+        if scale is None:
+            scale = classical_typed(Python.tuple(d), "<f4", context["output_context"])
+            scaler_fill(_ptr(scale), d, 1)
+            _ = scale  # keep the Python object alive through the native call above
+        mean = _statistic(mean, d, "mean_", context)
+        scale = _statistic(scale, d, "scale_", context)
+        memcpy(dest=ap, src=_ptr(mean), count=d)
+        _ = mean  # keep the Python object alive through the native call above
+        memcpy(dest=ap+d, src=_ptr(scale), count=d)
+        _ = scale  # keep the Python object alive through the native call above
+        arena[7*d+4] = 1
+        var program = List[Int32]()
+        _stage(program, 264, d, 0, d, Int(with_mean), Int(with_std), 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
+        _stage(program, 248, 1, 4*d, d, 7*d)
+        _stage(program, 248, 1, 5*d, d, 7*d+1)
+        _stage(program, 248, 1, 6*d, d, 7*d+2)
+        _run(arena, program, entries)
+        if bitcast[DType.int32](arena[7*d+1]) == 0 and bitcast[DType.int32](arena[7*d+2]) == 0:
+            var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
+            memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
+            _ = rows  # keep the Python object alive through the copy above
+            if mean_raw is not None:
+                py_setattr(mean_raw, "_readonly", PythonObject(True))
+            if scale_raw is not None:
+                py_setattr(scale_raw, "_readonly", PythonObject(True))
+            prepared_put(mods, _STANDARD_ROWS_SLOT, model, Python.tuple(
+                mean_raw, scale_raw, rows, d, mode_text, PythonObject(with_mean), PythonObject(with_std)))
     if bitcast[DType.int32](arena[7*d+1]) != 0:
         raise Error("StandardScaler mean_ and scale_ must remain finite (NaN: a feature never seen)")
     if bitcast[DType.int32](arena[7*d+2]) != 0:
@@ -627,11 +660,13 @@ def scaler_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var name = args[2]
         classical_connect_numpy(context)
         var value = classical_getattribute(model,name,context)
-        if not _outside(context,0):
-            var fields = py_fields(model)
-            var original = py_get(fields,name)
-            if classical_is_array(original,context):
-                value = original
+        # The caller frame is walked only when the stored value is an Array
+        # that the public conversion changed (p3-prep): method lookups and
+        # plain fields return without the frame walk.
+        var fields = py_fields(model)
+        var original = py_get(fields,name)
+        if original is not value and classical_is_array(original,context) and not _outside(context,0):
+            value = original
         return value.steal_data()
     except error:
         if String(error).startswith("AttributeError:"):

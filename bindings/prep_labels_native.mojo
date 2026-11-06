@@ -30,6 +30,7 @@ from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
 from bindings.str_labels_native import str_lookup
 from bindings.user_objects_native import _Env, _f32_exact, _indicator
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -369,18 +370,35 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
     walks over the labels that read it back."""
     var env = _Env()
     var integral = context["labels_integral_type"] if count_ints else PythonObject(None)
+    # Exact int and float labels (the common case) are read by type pointer
+    # and PyFloat_AsDouble (the same double float(v) returns, the same
+    # OverflowError for an int too large); an exact int is integral, an
+    # exact float is not. Other classes keep the ABC checks (p3-prep).
+    var int_type = env.b.int
+    var float_type = env.b.float
     all_ints = count_ints
     var n = len(values)
     words.reserve(n)
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
         var v = values[i]
-        if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
-            return False
-        var x = Float64(py=py_call(env.b.float, v))
+        var cls = py_type(v)
+        var x: Float64
+        var is_int: Bool
+        if cls is int_type:
+            x = Float64(py=v)
+            is_int = True
+        elif cls is float_type:
+            x = Float64(py=v)
+            is_int = False
+        else:
+            if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
+                return False
+            x = Float64(py=py_call(env.b.float, v))
+            is_int = all_ints and Bool(py=py_call(env.b.isinstance, v, integral))
         if x != x or Float64(Float32(x)) != x:
             return False
         words.append(x)
-        if all_ints and not Bool(py=py_call(env.b.isinstance, v, integral)):
+        if all_ints and not is_int:
             all_ints = False
     return True
 
@@ -965,8 +983,11 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
         total += len(row)
     if total == 0 or total > LABEL_WORDS_MAX or 2 * total > LABEL_WORDS_MAX:
         return None
-    var lo = PythonObject(-9223372036854775807 - 1)
-    var hi = PythonObject(9223372036854775807)
+    # Each exact int is read with PyLong_AsLongLong (an int outside int64
+    # sets OverflowError, which is cleared and takes the label input step):
+    # no Python rich comparison or Int conversion per label (p3-prep).
+    ref cpy = Python().cpython()
+    var table = perf2_cpython_table()
     var nw = 2 * total
     var words = classical_wrap_array(native_array_zeros("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
     var dest = I64P(unsafe_from_address=Int(py=classical_address(words)))
@@ -979,9 +1000,11 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
         var row = rows[i]
         for j in range(len(row)):  # cpu-route: Python label objects, the explicit label input step
             var v = row[j]
-            if Bool(py=v < lo) or Bool(py=hi < v):
+            var word = table[].PyLong_AsLongLong(v._obj_ptr)
+            if word == -1 and cpy.PyErr_Occurred():
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return None
-            dest[at] = Int64(Int(py=v))
+            dest[at] = word
             _ = words  # keep the Python object alive through the native call above
             at += 1
         od[i + 1] = Int32(at)
@@ -1111,6 +1134,58 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
     return _take_i32(ran, out, n, K, context)
 
 
+def _mlb_inverse_direct(classes: PythonObject, k: Int, yt: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_mlb_inverse` of a C-ordered 2-D numeric indicator (a mojolearn Array
+    or an ndarray, int32 / int64 / float32 / float64, (n, k) wide): the set
+    cells are found by one native scan of the buffer and only the picked
+    classes and the row tuples become Python objects (p3-prep). None for any
+    other input (the general walk below). A nonzero or NaN cell is set, as
+    the Python truth test reads it."""
+    var b = _builtins()
+    var ndarray = py_get(context, "ndarray")
+    var is_array = py_type(yt) is context["array_class"]
+    if not is_array and (ndarray is None or py_type(yt) is not ndarray):
+        return None
+    if Int(py=yt.ndim) != 2 or Int(py=yt.shape[1]) != k:
+        return None
+    var dtype = String(yt.dtype) if is_array else String(yt.dtype.str)
+    var c_order = (String(yt.order) == "C") if is_array else Bool(py=yt.flags.c_contiguous)
+    if not c_order:
+        return None
+    var code = 0
+    if dtype == "<i4":
+        code = 1
+    elif dtype == "<i8":
+        code = 2
+    elif dtype == "<f4":
+        code = 3
+    elif dtype == "<f8":
+        code = 4
+    else:
+        return None
+    var n = Int(py=yt.shape[0])
+    var address = Int(py=classical_address(yt))
+    var out = Python.list()
+    for i in range(n):  # cpu-route: builds the user list of Python label tuples (object output)
+        var picked = Python.list()
+        for j in range(k):  # cpu-route: one native read per indicator cell; Python objects only for the hits
+            var at = i * k + j
+            var hit: Bool
+            if code == 1:
+                hit = I32P(unsafe_from_address=address)[at] != 0
+            elif code == 2:
+                hit = I64P(unsafe_from_address=address)[at] != 0
+            elif code == 3:
+                hit = F32P(unsafe_from_address=address)[at] != 0
+            else:
+                hit = F64P(unsafe_from_address=address)[at] != 0
+            if hit:
+                _ = py_call(picked.append, classes[j])
+        _ = yt  # keep the Python object alive through the native reads above
+        _ = py_call(out.append, py_call(b.tuple, picked))
+    return out
+
+
 def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) raises -> PythonObject:
     # One tuple of labels per row: the user list of Python label tuples.
     var b = _builtins()
@@ -1118,6 +1193,9 @@ def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) r
     _check_fitted(fields, "MultiLabelBinarizer")
     var classes = fields["_classes"]
     var k = len(classes)
+    var direct = _mlb_inverse_direct(classes, k, yt, context)
+    if direct is not None:
+        return direct
     var rows = py_call(yt.tolist) if Bool(py=py_call(b.hasattr, yt, "tolist")) else py_call(b.list, yt)
     var out = Python.list()
     for i in range(len(rows)):  # cpu-route: builds the user list of Python label tuples (object output)

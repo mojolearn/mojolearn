@@ -18,6 +18,7 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.x_prep_native_inputs import _target
 from bindings.scaler_native import _input, _ptr, _stage
+from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
 from gemm.f16_widen import f16_bits_to_f32
@@ -31,11 +32,11 @@ def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _complex_warning(context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var module = py_get(context["modules"],"numpy.exceptions")
     if module is None:
         module = py_get(context["modules"],"numpy")
-    if module is None or py_type(module) is not py_type(Python.import_module("sys")):
+    if module is None or py_type(module) is not py_type(native_loaded_module("sys")):
         raise Error("TypeError: complex quantiles require native NumPy warning metadata")
     var category = py_get(_warning_fields(py_fields(module)),"ComplexWarning")
     if py_type(category) is not b.type:
@@ -261,11 +262,11 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
     var center = fields["center_"]
     var scale = fields["scale_"]
     if center is not None:
-        center = _input(center,1,False,context)
+        center = prep_fitted_vector(center,context)  # exact fitted Array: no re-admission (p3-prep)
         if Int(py=center.size) != d:
             raise Error("RobustScaler center_ must hold one value per feature")
     if scale is not None:
-        scale = _input(scale,1,False,context)
+        scale = prep_fitted_vector(scale,context)  # exact fitted Array: no re-admission (p3-prep)
         if Int(py=scale.size) != d:
             raise Error("RobustScaler scale_ must hold one divisor per feature")
     var center_at = n*d if center is not None else -1

@@ -26,7 +26,7 @@ from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -47,6 +47,11 @@ from core.mojolearn_preprocessing_host_impl import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address and parameter the package passes) is read
+    # natively: no class-name read, module stamp walk or operator.index
+    # call (p3-prep). bool is its own class and takes the refusal below.
+    if _py_type(value) is native_loaded_module("builtins").int:
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("preprocessing host: integers expected, not booleans")

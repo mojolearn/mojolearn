@@ -14,6 +14,7 @@ from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _input, _ptr, _stage, _copy_row
+from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
@@ -107,6 +108,10 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     py_setitem(fields,"_mojolearn_fitted",True)
     if py_contains(fields,"feature_names_in_"):
         _ = py_call(fields.pop,"feature_names_in_")
+    if project and scaled is None:
+        # fit_transform without the fused projection (the direct entry, or
+        # n*d >= 2^27): the transform runs on the values prepared above.
+        return _maxabs_apply(fields,values^,entries,context)
     _ = values^
     return scaled if project else model
 
@@ -120,13 +125,21 @@ def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonO
         raise Error("RuntimeError: mojolearn: this MaxAbsScaler instance is not fitted yet")
     var entries = _entries(fields["numeric_mode_"],context)
     var values = xprep_values(source,entries,context)
+    return _maxabs_apply(fields,values,entries,context)
+
+
+def _maxabs_apply(fields: PythonObject, var values: PythonObject, entries: PythonObject,
+                  context: PythonObject) raises -> PythonObject:
+    # The transform program over already prepared `values` (the transform's
+    # own, or the ones fit_transform's fit prepared: X is not validated,
+    # converted and uploaded a second time, p3-prep).
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     if py_type(fields["n_features_in_"]) is not native_loaded_module("builtins").int or Int(py=fields["n_features_in_"]) != d:
         raise Error("MaxAbsScaler input feature count differs from fit")
     var scale = fields["scale_"]
     if scale is not None:
-        scale = _input(scale,1,False,context)
+        scale = prep_fitted_vector(scale,context)  # exact fitted Array: no re-admission (p3-prep)
         if Int(py=scale.size) != d:
             raise Error("MaxAbsScaler scale_ must hold one divisor per feature")
     var dest = n*d+(d if scale is not None else 0)

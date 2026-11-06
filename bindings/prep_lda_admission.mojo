@@ -265,13 +265,28 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
             numeric_float = String(value.dtype.kind) == "f"
         elif py_type(value) is b.list or py_type(value) is b.tuple:
             numeric_float = len(flat) > 0 and metric_is_real(flat[0], context) and not metric_is_integral(flat[0], context)
-        for i in range(len(flat)):  # driver-loop: preserve the public classifier target admission before encoding
-            if numeric_float and metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
-                var number = metric_float(flat[i], context)
-                if not isfinite(number):
-                    raise Error("Input y contains NaN or infinity (" + name + ").")
-                if floor(number) != number:
-                    raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+        # Exact int / bool / float labels are classified by type pointer and
+        # a float read natively (p3-prep); other classes keep the metric
+        # real / integral checks. Same refusals at the same first label.
+        var int_type = b.int
+        var bool_type = b.bool
+        var float_type = b.float
+        for i in range(len(flat) if numeric_float else 0):  # driver-loop: preserve the public classifier target admission before encoding
+            var item = flat[i]
+            var cls = py_type(item)
+            if cls is int_type or cls is bool_type:
+                continue
+            var number: Float64
+            if cls is float_type:
+                number = Float64(py=item)
+            elif metric_is_real(item, context) and not metric_is_integral(item, context):
+                number = metric_float(item, context)
+            else:
+                continue
+            if not isfinite(number):
+                raise Error("Input y contains NaN or infinity (" + name + ").")
+            if floor(number) != number:
+                raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
 
 
 def lda_require_fitted(model: PythonObject, operation: String, context: PythonObject) raises:

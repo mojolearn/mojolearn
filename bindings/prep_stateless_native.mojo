@@ -20,10 +20,12 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _stage, _ptr, _input
+from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.py_typed_call import py_call_typed
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.prep_support_native import prep_support
 from bindings.prep_normalizer_lifecycle import normalizer_transform
 from bindings.prep_normalizer_fit import normalizer_fit
@@ -441,6 +443,32 @@ def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObje
     py_setitem(fields, "n_features_in_", d)
 
 
+def _support_columns(mask_value: PythonObject) raises -> List[Int]:
+    """The kept column indices of a fitted support mask. An exact list or
+    tuple of exact bools (what fit stores) is read through its C storage by
+    pointer (no Python call per feature, no list copy, p3-prep); any other
+    item takes its truth test, any other container a list() copy first."""
+    var b = native_loaded_module("builtins")
+    var mask = mask_value
+    var kind = py_type(mask)
+    if kind is not b.list and kind is not b.tuple:
+        mask = py_call(b.list, mask_value)
+        kind = b.list
+    var is_list = kind is b.list
+    var table = perf2_cpython_table()
+    var true_ptr = PythonObject(True)._obj_ptr
+    var false_ptr = PythonObject(False)._obj_ptr
+    var keep = List[Int]()
+    for j in range(len(mask)):  # driver-loop: over the fitted support mask (feature metadata)
+        var raw = table[].PyList_GetItem(mask._obj_ptr, j) if is_list else table[].PyTuple_GetItem(mask._obj_ptr, j)
+        if raw == true_ptr:
+            keep.append(j)
+        elif raw != false_ptr and Bool(py=PythonObject(from_borrowed=raw)):
+            keep.append(j)
+    _ = mask^
+    return keep^
+
+
 def _select_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """_SelectorMixin.transform: the fitted support's columns of X, by one
     gather_cols stage."""
@@ -452,11 +480,7 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var fitted = fields["n_features_in_"]
     if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
-    var mask = py_call(native_loaded_module("builtins").list, fields["_mask"])
-    var keep = List[Int]()
-    for j in range(len(mask)):  # driver-loop: over the fitted support mask (feature metadata)
-        if Bool(py=mask[j]):
-            keep.append(j)
+    var keep = _support_columns(fields["_mask"])
     if len(keep) == 0:
         raise Error("mojolearn: no features were selected")
     var k = len(keep)
@@ -583,8 +607,8 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
     var entries = _entries(fields["numeric_mode_"], context)
     var nq = Int(py=fields["n_quantiles_"])
-    var quantiles = _input(fields["_q"], 1, False, context)
-    var references = _input(fields["references_"], 1, False, context)
+    var quantiles = prep_fitted_vector(fields["_q"], context)  # exact fitted Array: no re-admission (p3-prep)
+    var references = prep_fitted_vector(fields["references_"], context)
     if Int(py=quantiles.size) != nq * d or Int(py=references.size) != nq:
         raise Error("RuntimeError: QuantileTransformer fitted quantiles do not match n_quantiles_")
     var normal = String(fields["output_distribution"]) == "normal"
@@ -799,7 +823,7 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var words = n * d
     var inputs = Python.list(Python.tuple(0, values))
     var host = words
-    var lambdas = _input(fields["lambdas_"], 1, False, context)
+    var lambdas = prep_fitted_vector(fields["lambdas_"], context)  # exact fitted Array: no re-admission (p3-prep)
     var lo = host
     host += d
     _ = py_call(inputs.append, Python.tuple(lo, Python.tuple(0, lambdas, PythonObject(None), d, 1)))
@@ -808,8 +832,8 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var mean = PythonObject(None)
     var scale = PythonObject(None)
     if standardize:
-        mean = _input(fields["_mean"], 1, False, context)
-        scale = _input(fields["_scale"], 1, False, context)
+        mean = prep_fitted_vector(fields["_mean"], context)
+        scale = prep_fitted_vector(fields["_scale"], context)
         mo = host
         host += d
         so = host
@@ -826,8 +850,8 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var anchor_values = PythonObject(None)
     var kind_values = PythonObject(None)
     if anchor is not None:
-        anchor_values = _input(anchor, 1, False, context)
-        kind_values = _input(fields["_pt_anchor_kind"], 1, False, context)
+        anchor_values = prep_fitted_vector(anchor, context)
+        kind_values = prep_fitted_vector(fields["_pt_anchor_kind"], context)
         ao = host
         host += d
         ko = host
