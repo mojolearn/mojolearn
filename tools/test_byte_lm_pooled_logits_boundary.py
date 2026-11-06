@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_logits_captures_output_native_address_once():
     source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
     body = source.split('def byte_lm_logits(')[1].split('def _registry(')[0]
-    assert body.count('_logits_output_address(out, context)') == 1
+    assert body.count('_logits_output_address(mods, out, context)') == 1
     assert 'classical_address(out)' not in body
     assert 'unsafe_from_address=output_address' in body
     assert 'neural_copy_row_prefixes(Int(py=classical_address(result)), output_address,' in body
@@ -23,4 +23,4 @@ def test_pooled_hooks_are_pinned_after_native_finalizer_and_checked_before_write
     assert source.index('_PooledLogits.__del__ = module.classical_attribute_descriptor') < source.index('layout = tuple((base, tuple((name, vars(base).get(name))')
     native = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
     pooled = native.split('def _pooled_logits(')[1].split('def byte_lm_pooled_finalize(')[0]
-    assert pooled.index('_admit_pooled_logits_layout(context)') < pooled.index('classical_wrap_array(')
+    assert pooled.index('_admit_pooled_logits_layout(mods, context)') < pooled.index('classical_wrap_array(')
