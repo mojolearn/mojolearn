@@ -74,7 +74,18 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
 def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
                      mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int) raises:
     var b = native_loaded_module("builtins")
-    if Bool(py=py_call(b.isinstance, a, b.list)) or Bool(py=py_call(b.isinstance, a, b.tuple)):
+    _sequence_values(a, depth, dims, values, ids, integer, leaf_depth, b.list, b.tuple)
+
+
+def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
+                     mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int,
+                     list_type: PythonObject, tuple_type: PythonObject) raises:
+    # The value already passed the exact-type admission walk
+    # (program_admit_value: lists and tuples are admitted only as their exact
+    # builtin types), so a type identity compare decides the container case
+    # without two isinstance calls and two module reads per element.
+    var cls = py_type(a)
+    if cls is list_type or cls is tuple_type:
         var n = len(a)
         if depth >= 8 or n == 0:
             raise Error("ValueError: program input sequences must be nonempty and have rank at most eight")
@@ -83,7 +94,7 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
         elif dims[depth] != n:
             raise Error("ValueError: program input sequences must be rectangular")
         for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-            _sequence_values(a[k], depth + 1, dims, values, ids, integer, leaf_depth)
+            _sequence_values(a[k], depth + 1, dims, values, ids, integer, leaf_depth, list_type, tuple_type)
     else:
         if not program_numeric_scalar(a):
             raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
