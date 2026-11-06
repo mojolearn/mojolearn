@@ -81,6 +81,9 @@ comptime _P3DictGetItemWithError = ExternalFunction[
 # PyObject *PyErr_Occurred(void)  (borrowed)
 comptime _P3ErrOccurred = ExternalFunction[
     "PyErr_Occurred", def() thin abi("C") -> PyObjectPtr]
+# double PyFloat_AsDouble(PyObject *o)  (-1.0 with an error set on failure)
+comptime _P3FloatAsDouble = ExternalFunction[
+    "PyFloat_AsDouble", def(PyObjectPtr) thin abi("C") -> Float64]
 # PyObject *PyDict_Copy(PyObject *p)  (new)
 comptime _P3DictCopy = ExternalFunction[
     "PyDict_Copy", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
@@ -104,6 +107,7 @@ struct P3Table(Movable):
     var dict_get: _P3DictGetItemWithError.type
     var err_occurred: _P3ErrOccurred.type
     var dict_copy: _P3DictCopy.type
+    var float_as: _P3FloatAsDouble.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -125,6 +129,7 @@ struct P3Table(Movable):
         self.dict_get = _P3DictGetItemWithError.load(lib)
         self.err_occurred = _P3ErrOccurred.load(lib)
         self.dict_copy = _P3DictCopy.load(lib)
+        self.float_as = _P3FloatAsDouble.load(lib)
 
 
 # Shared by every Mojo extension in the process; bump the version on any
