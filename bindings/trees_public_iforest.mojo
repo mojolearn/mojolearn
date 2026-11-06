@@ -26,12 +26,13 @@
 # read-back); `fit_predict` is ONE `iforest_run` (fit a fresh forest and
 # predict X with it) instead of the fit's one-row run and a second run for
 # predict, and X is converted and handed over once.
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.trees_public_inputs import (
-    TreesMatrix, trees_builtins, trees_table, trees_entry, trees_vector, trees_address, trees_f32,
+    TreesMatrix, trees_builtins, trees_table, trees_entry, trees_vector, trees_empty, trees_address, trees_f32,
     trees_all_finite, trees_call,
 )
 from bindings.trees_lifetime import trees_resident_new
@@ -215,6 +216,12 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
     # The held record: (token, the training matrix it was minted for, its
     # lifetime). A record for another training matrix is not this forest's.
     var held = trees_side_get(_TOKEN_SLOT, model) if resident else PythonObject(None)
+    # Hazard C: the token is minted by one binding (one numeric mode's svm
+    # table). After a mode switch the other binding must never receive it,
+    # so the record also holds the table that minted it, and a record from
+    # another table is not this forest's.
+    if held is not None and (len(held) < 4 or held[3] is not svm):
+        held = PythonObject(None)
     var held_token = Int(py=held[0]) if held is not None else 0
     var same_train = held is not None and held[1] is train
     if resident:
@@ -252,7 +259,7 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
                     lifetime = trees_resident_new(release, token)
             # A model without weak references keeps no record: the record
             # (and its lifetime) is dropped here, releasing the token.
-            _ = trees_side_put(_TOKEN_SLOT, model, Python.list(PythonObject(token), train, lifetime))
+            _ = trees_side_put(_TOKEN_SLOT, model, Python.list(PythonObject(token), train, lifetime, svm))
     _ = x.keep
     return labels if want == _WANT_PREDICT else values
 
@@ -311,11 +318,28 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     var fields = py_fields(model)
     iforest_validate(model, fields, context)
     var x = trees_f32(X, 2, "C", "X", context)
-    py_setitem(fields, "input_copied_", PythonObject(_copied(x, X if copy_source is None else copy_source)))
+    var copied = _copied(x, X if copy_source is None else copy_source)
+    py_setitem(fields, "input_copied_", PythonObject(copied))
     var device_scan = _device_scan(fields, context)
     if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
         raise Error(_NONFINITE)
     _ = x  # keep the Python object alive through the native calls above
+    # Caller-aliased input (hazard A, p3-trees): a float32 C-order X arrives
+    # as the caller's own buffer. The resident forest token is keyed on the
+    # training matrix object, so keeping the caller's buffer as `_x` let an
+    # in-place edit of X after fit diverge the device forest from `_x`,
+    # save() and pickle. The fit now owns its training matrix: one native
+    # copy of the same float32 bytes (the forest and the scores keep their
+    # bits). `input_copied_` still reports whether the conversion copied.
+    if not copied:
+        var count = x.rows * x.cols
+        var owned = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context)
+        var dst = trees_address(owned)
+        if count > 0:
+            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst),
+                   src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x.addr), count=count)
+        _ = x  # keep the caller's buffer alive through the copy above
+        x = TreesMatrix(owned, dst, x.rows, x.cols, True)
     var had = Python.dict()
     var kept = Python.tuple("_x", "n_features_in_")
     for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal
