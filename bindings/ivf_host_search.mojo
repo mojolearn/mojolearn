@@ -61,10 +61,23 @@ def _ivf_host_search_arrays(
     var k = ext[1]
     var n_probes = ext[2]
     var queries = read_f32(Int(py=addrs[5]), m * arrays.dim)
+    # compile-fix-1: each list moves out and its field is refilled empty, so
+    # `arrays` stays whole and is destroyed as one value (moving fields out of
+    # the middle of it does not compile); still no copy of the index arrays.
+    var taken_centers = arrays.centers^
+    arrays.centers = List[Float32]()
+    var taken_center_norms = arrays.center_norms^
+    arrays.center_norms = List[Float32]()
+    var taken_offsets = arrays.offsets^
+    arrays.offsets = List[Int32]()
+    var taken_list_indices = arrays.list_indices^
+    arrays.list_indices = List[UInt32]()
+    var taken_list_data = arrays.list_data^
+    arrays.list_data = List[Float32]()
     var index = IvfHostIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers^, arrays.center_norms^, arrays.offsets^,
-        arrays.list_indices^, arrays.list_data^,
+        taken_centers^, taken_center_norms^, taken_offsets^,
+        taken_list_indices^, taken_list_data^,
     )
     var dist = List[Float32]()
     var idx = List[UInt32]()
@@ -116,10 +129,23 @@ def ivf_flat_extend_binding(
     var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_extend"), 10, 5)
     var n_new = ivf_extend_count(params, arrays.n_rows, arrays.dim)
     var new_x = read_f32(Int(py=addrs[5]), n_new * arrays.dim)
+    # compile-fix-1: each list moves out and its field is refilled empty, so
+    # `arrays` stays whole and is destroyed as one value (moving fields out of
+    # the middle of it does not compile); still no copy of the index arrays.
+    var taken_centers = arrays.centers^
+    arrays.centers = List[Float32]()
+    var taken_center_norms = arrays.center_norms^
+    arrays.center_norms = List[Float32]()
+    var taken_offsets = arrays.offsets^
+    arrays.offsets = List[Int32]()
+    var taken_list_indices = arrays.list_indices^
+    arrays.list_indices = List[UInt32]()
+    var taken_list_data = arrays.list_data^
+    arrays.list_data = List[Float32]()
     var index = IvfHostIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers^, arrays.center_norms^, arrays.offsets^,
-        arrays.list_indices^, arrays.list_data^,
+        taken_centers^, taken_center_norms^, taken_offsets^,
+        taken_list_indices^, taken_list_data^,
     )
     var labels = List[UInt32]()
     var out = host_ivf_extend(index, new_x, n_new, labels)
@@ -204,10 +230,23 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
     var arrays = ivf_read_index_arrays(
         addrs, params, String("ivf_flat_search"), 5, 5, partial_storage=partial
     )
+    # compile-fix-1: each list moves out and its field is refilled empty, so
+    # `arrays` stays whole and is destroyed as one value (moving fields out of
+    # the middle of it does not compile); still no copy of the index arrays.
+    var taken_centers = arrays.centers^
+    arrays.centers = List[Float32]()
+    var taken_center_norms = arrays.center_norms^
+    arrays.center_norms = List[Float32]()
+    var taken_offsets = arrays.offsets^
+    arrays.offsets = List[Int32]()
+    var taken_list_indices = arrays.list_indices^
+    arrays.list_indices = List[UInt32]()
+    var taken_list_data = arrays.list_data^
+    arrays.list_data = List[Float32]()
     var index = IvfHostIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers^, arrays.center_norms^, arrays.offsets^,
-        arrays.list_indices^, arrays.list_data^,
+        taken_centers^, taken_center_norms^, taken_offsets^,
+        taken_list_indices^, taken_list_data^,
     )
     var entry = ArcPointer[HostIvfResident](HostIvfResident(index^, partial))
     var state = _host_ivf_registry()
