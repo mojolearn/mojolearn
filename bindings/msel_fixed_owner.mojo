@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_attributes import classical_check_layout, _type_fields
 from bindings.classical_pandas import classical_admit_value
-from bindings.prep_lda_admission import lda_native_context
+from bindings.native_typed_context import native_typed_context
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.sequential_admission import _one_of
 
@@ -23,10 +23,8 @@ def _parameter(name: PythonObject, value: PythonObject, context: PythonObject) r
 
 
 def fixed_owner_context(context: PythonObject) raises -> PythonObject:
-    var result = lda_native_context(context)
-    py_setitem(result, "trees_real_type", result["labels_real_type"])
-    py_setitem(result, "trees_integral_type", result["labels_integral_type"])
-    return result
+    # Cached per connected context (bindings/native_typed_context.mojo).
+    return native_typed_context(context, True, True)
 
 
 def fixed_owner_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:

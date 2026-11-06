@@ -14,6 +14,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral, metric_warn
 from bindings.classical_warnings import COLUMN_WARNING, _warning_category
 from bindings.label_integer_storage import labels_integer_storage
+from bindings.native_typed_context import native_typed_context
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -148,12 +149,7 @@ def lda_require_fitted(model: PythonObject, operation: String, context: PythonOb
 def lda_native_context(context: PythonObject) raises -> PythonObject:
     # The established label algorithms use isinstance against their connected
     # real/integral classes. Concrete native type tuples preserve those tests
-    # without executing numbers.Real/Integral's Python ABC machinery.
-    var b = native_loaded_module("builtins")
-    var result = py_call(b.dict, context)
-    var types = Python.list()
-    _ = py_call(types.extend, Python.tuple(b.int, b.float, b.bool))
-    _ = py_call(types.extend, context["scalar_types"])
-    py_setitem(result, "labels_real_type", py_call(b.tuple, types))
-    py_setitem(result, "labels_integral_type", context["integer_types"])
-    return result
+    # without executing numbers.Real/Integral's Python ABC machinery. Built
+    # once per connected class context (bindings/native_typed_context.mojo),
+    # not copied and rebuilt on every public call.
+    return native_typed_context(context, True, False)

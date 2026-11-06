@@ -2,6 +2,7 @@
 # Public GBDT adapter boundary. The compiled tree owners retain training and
 # prediction; this envelope replaces _mode's Python validation, fit tracking,
 # feature-name checks and output conversion. NaN X remains the learner's policy.
+from bindings.native_typed_context import native_typed_context
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
@@ -27,15 +28,10 @@ from bindings.trees_public_mixin_score import gbdt_adapter_score
 
 
 def _context(context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    var result = py_call(b.dict, context)
-    var real = py_call(b.list, Python.tuple(b.int, b.float, b.bool))
-    _ = py_call(real.extend, context["scalar_types"])
     # Existing numerical/label checks use isinstance. Concrete native type
     # tuples prevent numbers.Real/Integral ABC hooks from executing in Python.
-    py_setitem(result, "trees_real_type", py_call(b.tuple, real))
-    py_setitem(result, "trees_integral_type", context["integer_types"])
-    return result
+    # Cached per connected context (bindings/native_typed_context.mojo).
+    return native_typed_context(context, False, True)
 
 
 def _learner_state(learner: PythonObject, context: PythonObject) raises:
