@@ -24,6 +24,7 @@ from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.py_typed_call import py_call_typed
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.prep_support_native import prep_support
 from bindings.prep_normalizer_lifecycle import normalizer_transform
 from bindings.prep_normalizer_fit import normalizer_fit
@@ -441,6 +442,32 @@ def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObje
     py_setitem(fields, "n_features_in_", d)
 
 
+def _support_columns(mask_value: PythonObject) raises -> List[Int]:
+    """The kept column indices of a fitted support mask. An exact list or
+    tuple of exact bools (what fit stores) is read through its C storage by
+    pointer (no Python call per feature, no list copy, p3-prep); any other
+    item takes its truth test, any other container a list() copy first."""
+    var b = native_loaded_module("builtins")
+    var mask = mask_value
+    var kind = py_type(mask)
+    if kind is not b.list and kind is not b.tuple:
+        mask = py_call(b.list, mask_value)
+        kind = b.list
+    var is_list = kind is b.list
+    var table = perf2_cpython_table()
+    var true_ptr = PythonObject(True)._obj_ptr
+    var false_ptr = PythonObject(False)._obj_ptr
+    var keep = List[Int]()
+    for j in range(len(mask)):  # driver-loop: over the fitted support mask (feature metadata)
+        var raw = table[].PyList_GetItem(mask._obj_ptr, j) if is_list else table[].PyTuple_GetItem(mask._obj_ptr, j)
+        if raw == true_ptr:
+            keep.append(j)
+        elif raw != false_ptr and Bool(py=PythonObject(from_borrowed=raw)):
+            keep.append(j)
+    _ = mask^
+    return keep^
+
+
 def _select_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """_SelectorMixin.transform: the fitted support's columns of X, by one
     gather_cols stage."""
@@ -452,11 +479,7 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var fitted = fields["n_features_in_"]
     if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
-    var mask = py_call(native_loaded_module("builtins").list, fields["_mask"])
-    var keep = List[Int]()
-    for j in range(len(mask)):  # driver-loop: over the fitted support mask (feature metadata)
-        if Bool(py=mask[j]):
-            keep.append(j)
+    var keep = _support_columns(fields["_mask"])
     if len(keep) == 0:
         raise Error("mojolearn: no features were selected")
     var k = len(keep)
