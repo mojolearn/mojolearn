@@ -278,7 +278,7 @@ mismatch is a bug to fix, never a reason to rerun).
 pixi run release <version> --dry-run          # the plan, every command, and what is already done
 pixi run release <version> --status           # per pipeline, leg and column: done, failed (log), owed; runs nothing
 pixi run release <version>                    # everything up to publication
-pixi run release <version> --publish pypi     # ... then publish each wheel as its pipeline passes, finish line, record
+pixi run release <version> --publish pypi     # ... then the TestPyPI rehearsal, publish each wheel as its pipeline passes, finish line, record
 ```
 
 `tools/release.py` walks this whole checklist. Write the CHANGELOG entry
@@ -321,11 +321,28 @@ FIVE PIPELINES AT ONCE, each publishing as soon as its own gates pass:
   (linux-joint-diff, the macOS cross-diff).
 
 A failure in one pipeline never blocks or undoes the other. The run ends with
-every outcome and exits non-zero unless every package published. The finish line
-checks each published platform (`pip install` on this Mac for macOS; `pip
-download` of the Linux file with its sha256 compared) and the
-`bench/results/release_verification/<date>_pypi_<v>/` record covers what is
-published; both run again when the other platform publishes.
+every outcome and exits non-zero unless every package published.
+
+**Everything that can be checked before the real publish is checked before it
+(Andrew, 2026-11-06).** With `--publish pypi`, the `testpypi-rehearsal` step
+runs after both gates and every check a publish needs, and before the first
+publish step: it uploads the exact gated wheels to TestPyPI (a file already
+there with the same sha256 is not uploaded again; the same file name with other
+bytes stops the release, because TestPyPI never takes a file name twice, so a
+re-freeze needs the next version), resolves `mojolearn`, each
+`mojolearn[<extra>]`, `mojolearn-core`, `mojolearn-nvidia` and `mojolearn-amd`
+for every platform tag and Python version the wheels declare with our project
+names served by TestPyPI only, compares every file's sha256 with the gated
+wheel's, and installs and imports the macOS wheel in a fresh venv on this Mac.
+Any failure stops the release before the real PyPI sees anything
+(`tools/release_testpypi_rehearsal.py`; report under
+`<commit12>/testpypi-rehearsal/`).
+
+After the publish nothing installs or runs anything. The finish line compares
+the sha256 of each file the real PyPI serves (`pip download --no-deps`) with
+the shipped wheel, `published-<vendor>` does the same with RECORD checks, and
+the `bench/results/release_verification/<date>_pypi_<v>/` record covers what is
+published; they run again when another platform publishes.
 
 **The shipped source and the release tooling are two commits.** The freeze
 pins the source commit in `state.json`; it never moves because main moved,
@@ -1143,12 +1160,11 @@ and PyPI refuses a second upload of the same filename.
 
 ## Finish line
 
-```sh
-python3 -m venv /tmp/v && /tmp/v/bin/pip install mojolearn==<version> \
-  && /tmp/v/bin/python -c "import mojolearn; print(mojolearn.__version__)"
-```
-
-Run it on a Linux GPU box and on a Mac. Both wheels are listed at
+The install and import ran before the publish, from TestPyPI, in the
+`testpypi-rehearsal` step. After the publish, only the bytes are compared: the
+`finish-line` step downloads each published file from https://pypi.org/simple
+(`pip download --no-deps` for the wheel's own platform tag) and its sha256 must
+equal the shipped wheel's. The files are listed at
 https://pypi.org/project/mojolearn/#files.
 
 ## The release gate: smoke and measurement on the boxes (the `gate-nvidia` and `gate-amd` steps)

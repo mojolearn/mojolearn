@@ -8,7 +8,7 @@
     pixi run release 0.8.15 --report           one row per requirement and step: passed, reused, failed,
                                                missing-execution, blocked-provenance, not-applicable, waived
     pixi run release 0.8.15                    everything up to publication
-    pixi run release 0.8.15 --publish pypi     ... and publish, finish line, record
+    pixi run release 0.8.15 --publish pypi     ... and the TestPyPI rehearsal, publish, finish line (hashes), record
 
 NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked
 before merge on NVIDIA, AMD, Apple and CPU; the release only builds, checks
@@ -162,15 +162,29 @@ THE STEPS
   gpu-column-amd     } tools/release_wheel_smoke.sh, the core and both plugins
                        installed, verified against the admitted table; no
                        second identity pass of the changed lanes)
+  testpypi-rehearsal BEFORE THE FIRST PUBLISH, inside --publish pypi only (Andrew 2026-11-06: everything that
+                     can be checked before the real publish is checked before it). After both gates, the one
+                     verification round and every check a publish needs: the exact gated wheels go to TestPyPI
+                     through the release's own publisher (Trusted Publishing, environments testpypi[-core|
+                     -nvidia|-amd]; no token); a file TestPyPI already holds with the same sha256 is not
+                     uploaded again, the same file name with other bytes FAILS (TestPyPI never takes a name
+                     twice: a re-freeze needs the next version). Then, with our project names served by
+                     TestPyPI ONLY (a per-project routing index on 127.0.0.1; third-party projects from PyPI):
+                     pip resolves `mojolearn`, every `mojolearn[<extra>]`, `mojolearn-core`, `mojolearn-nvidia`
+                     and `mojolearn-amd` for each platform tag and Python version the wheels declare, to exactly
+                     the expected set at the gated sha256; every file downloaded from TestPyPI hashes to the
+                     gated wheel; the macOS wheel installs (hash-pinned) into a fresh venv on this Mac and
+                     imports. A file over TestPyPI's upload limit is reported OWED and checked from the local
+                     file. Any failure stops here: the real PyPI has seen nothing. Report at
+                     <commit12>/testpypi-rehearsal/rehearsal.json (tools/release_testpypi_rehearsal.py)
   publish-core-linux }
   publish-nvidia     } tools/release_linux_publish.sh ... --preverified|--light-smoke, only
   publish-amd        }   with --publish (--preverified by default); the core first,
-  publish-meta-linux }   the vendors next, the Linux mojolearn last
-  publish-macos      }
-  finish-line        per published platform: pip install on this Mac (macOS);
-                     pip download of the Linux file, sha256 compared (Linux), and
-                     the package set pip resolves for `mojolearn`,
-                     `mojolearn-nvidia` and `mojolearn-amd` (Linux)
+  publish-meta-linux }   the vendors next, the Linux mojolearn last; with --publish pypi each
+  publish-macos      }   needs a passed testpypi-rehearsal of its exact bytes
+  finish-line        HASH ONLY: per published platform, `pip download --no-deps` from the real PyPI, the
+                     sha256 compared with the shipped wheel. NOTHING AFTER THE FIRST PUBLISH INSTALLS OR RUNS
+                     ANYTHING: the install, the import and the package-set resolution ran in testpypi-rehearsal
   gate-boxes         ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1; it rents): the boxes the selected box
                      steps (gate-*) still need: the shared NVIDIA pod
                      (tools/nvidia_central.sh up 1, out of stock retried there; lane release-gate synced to
@@ -6079,7 +6093,10 @@ def main(argv=None):
                     help="per pipeline, leg and column: done / failed (with its log) / owed, and what a rerun "
                          "would do; runs nothing, writes nothing")
     ap.add_argument("--publish", choices=PUBLISH_CHOICES,
-                    help="publish the two wheels (none = the workflow's checks without uploading)")
+                    help="publish the wheels: none = the workflow's checks without uploading; testpypi = publish "
+                         "to TestPyPI only; pypi = rehearse every package on TestPyPI first (testpypi-rehearsal: "
+                         "upload, resolve, hash, macOS install + import), then publish to PyPI and compare "
+                         "hashes only")
     ap.add_argument("--only", default="", help="comma-separated step names to run (others are skipped)")
     ap.add_argument("--redo", default="", help="comma-separated steps whose record is discarded first")
     ap.add_argument("--rerun-reason", help="specific invalidation/failure reason required with --redo")
