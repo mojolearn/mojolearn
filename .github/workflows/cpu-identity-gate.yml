@@ -276,7 +276,7 @@ jobs:
           echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)"
           python3 tools/identity_wheel_record.py --columns cpu \
             --wheel "$RUNNER_TEMP/wheels/$WHEEL_NAME" --sha256 "$WHEEL_NAME=$WHEEL_SHA256" \
-            --shard "${{ matrix.shard }}/${{ inputs.shards }}" --out "$GITHUB_WORKSPACE/wheel-out/identity" \
+            --shard "${{ matrix.shard }}/${{ inputs.shards }}" --out "$RUNNER_TEMP/wheel-out/identity" \
             --venv "$RUNNER_TEMP/identity-venv" 2>&1 | tee "$RUNNER_TEMP/identity.log" | grep -E '^identity-wheels:'
           exit "${PIPESTATUS[0]}"
       - name: Upload the cpu column records
@@ -284,7 +284,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cpu-wheel-identity-${{ matrix.shard }}
-          path: wheel-out/identity/
+          path: ${{ runner.temp }}/wheel-out/identity/
           if-no-files-found: warn
 
   wheel-checks:
@@ -327,16 +327,16 @@ jobs:
           WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
         run: |
           bash tools/cpu_wheel_checks.sh "$RUNNER_TEMP/wheels/$WHEEL_NAME" "$WHEEL_SHA256" "${{ inputs.source_commit }}" \
-            "$GITHUB_WORKSPACE/wheel-out/checks" "$RUNNER_TEMP/prior/cpu-linux-x86_64"
+            "$RUNNER_TEMP/wheel-out/checks" "$RUNNER_TEMP/prior/cpu-linux-x86_64"
       - name: Upload the CPU check reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cpu-wheel-checks
           path: |
-            wheel-out/checks/
-            !wheel-out/checks/install/venv/
-            !wheel-out/checks/adapters/smoke/venv/
+            ${{ runner.temp }}/wheel-out/checks/
+            !${{ runner.temp }}/wheel-out/checks/install/venv/
+            !${{ runner.temp }}/wheel-out/checks/adapters/smoke/venv/
           if-no-files-found: warn
 
   gate:
