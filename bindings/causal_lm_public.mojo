@@ -1412,6 +1412,16 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
 
 
 def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    var verdict = -1
+    var blocks = List[PythonObject]()
+    return _use_native_generation_engine(mods, model, state, verdict, blocks)
+
+
+def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, state: PythonObject,
+                                  mut resident_verdict: Int, mut resident_blocks: List[PythonObject]) raises -> Bool:
+    # `resident_verdict` receives 1/0 when the resident check ran (else stays
+    # -1) and `resident_blocks` its admitted layers, so the caller decides the
+    # route once per public call.
     # Select once at a public operation boundary, never in the token/layer
     # loop. No failed native admission/execution is caught and retried through
     # the object route: a selected engine keeps its original refusal semantics.
@@ -1439,10 +1449,15 @@ def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, 
     # Existing resident execution already owns a separate supported native
     # program. Its route, distributed execution and packed arithmetic remain
     # supported; they are explicit remaining migration scopes, not refusals.
-    return not _resident_forward_ok(mods, model, state)
+    var resident = _resident_forward_ok(mods, model, state, resident_blocks)
+    resident_verdict = 1 if resident else 0
+    return not resident
 
 
-def _engine_admission(mut mods: NativeModules, model: PythonObject, state: PythonObject, batch: Int, length: Int) raises -> GenerationEngineAdmission:
+def _engine_admission(mut mods: NativeModules, model: PythonObject, state: PythonObject, batch: Int, length: Int,
+                      resident_refused: Bool = False) raises -> GenerationEngineAdmission:
+    # `resident_refused`: the caller's route decision for this same call
+    # already found the resident route unavailable; skip the repeat check.
     # Once selected, admission failures propagate. The boundary selector
     # handles unsupported routes before execution, without exception fallback.
     _state(mods, model, state, batch, length)
@@ -1450,7 +1465,7 @@ def _engine_admission(mut mods: NativeModules, model: PythonObject, state: Pytho
         var entries = model._native_entries
         if py_get(entries, "parallel_call") is not None:
             raise Error("CausalLM: native generation engine distributed execution is pending")
-        if _resident_forward_ok(mods, model, state):
+        if not resident_refused and _resident_forward_ok(mods, model, state):
             raise Error("CausalLM: native generation engine does not replace the existing resident route")
         if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1":
             raise Error("CausalLM: native generation engine requires the supported session setup")
@@ -1468,12 +1483,13 @@ def _engine_admission(mut mods: NativeModules, model: PythonObject, state: Pytho
         raise problem
 
 
-def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
+                resident_refused: Bool = False) raises -> PythonObject:
     _causal_array_guard()
     var shape = ids.shape
     var batch = Int(py=shape[0])
     var length = Int(py=shape[1])
-    var owner = _engine_admission(mods, model, state, batch, length)
+    var owner = _engine_admission(mods, model, state, batch, length, resident_refused)
     var keep = List[PythonObject]()
     var address = _addr(ids, keep)
     var logits = List[Float32]()
@@ -1676,16 +1692,21 @@ def _legacy_read_captured(mut mods: NativeModules, model: PythonObject, state: P
 
 
 def _run(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
-    if _use_native_generation_engine(mods, model, state):
-        return _run_engine(mods, model, ids, state)
+    # The route is decided once here; the resident verdict and its admitted
+    # layers are passed down instead of re-running the check.
+    var verdict = -1
+    var resident_blocks = List[PythonObject]()
+    if _use_native_generation_engine(mods, model, state, verdict, resident_blocks):
+        return _run_engine(mods, model, ids, state, verdict == 0)
     var snapshot: Optional[GenerationOperationSnapshot] = None
     var read_plan: Optional[LegacyGenerationReadPlan] = None
-    return _run_prepared(mods, model, ids, state, snapshot, read_plan, remote_step)
+    return _run_prepared(mods, model, ids, state, snapshot, read_plan, remote_step, False, False, verdict, resident_blocks)
 
 
 def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
                   mut snapshot: Optional[GenerationOperationSnapshot], mut read_plan: Optional[LegacyGenerationReadPlan], remote_step: Bool = False,
-                  admitted: Bool = False, retain_resident: Bool = False) raises -> PythonObject:
+                  admitted: Bool = False, retain_resident: Bool = False, resident_verdict: Int = -1,
+                  resident_blocks: List[PythonObject] = List[PythonObject]()) raises -> PythonObject:
     # `admitted`: the caller (the generation loop) already guarded the Array
     # class for this GIL-release window; do not repeat the full guard.
     if not admitted:
@@ -1707,7 +1728,15 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
         # Layer fields admitted by the resident check; the resident forward
         # (and, with a read plan, every later forward of this read) reuses them.
         var admitted_blocks = List[PythonObject]()
-        var resident = read_plan.value().resident if read_plan else _resident_forward_ok(mods, model, state, admitted_blocks)
+        var resident: Bool
+        if read_plan:
+            resident = read_plan.value().resident
+        elif resident_verdict >= 0:
+            # Decided by the caller for this same call (no state change since).
+            resident = resident_verdict == 1
+            admitted_blocks = resident_blocks.copy()
+        else:
+            resident = _resident_forward_ok(mods, model, state, admitted_blocks)
         if not read_plan and admitted and _legacy_read_captured(mods, model, state):
             read_plan = LegacyGenerationReadPlan(model, state, b, resident)
             if resident:
