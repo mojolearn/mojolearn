@@ -17,7 +17,9 @@ from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from bindings.classical_arrays import classical_address
 from bindings.classical_labels import labels_shape_of, _flatten_labels
-from bindings.label_integer_storage import labels_integer_storage
+from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
+from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage, labels_text_storage
+from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
@@ -216,7 +218,25 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
     # An exact integer/bool ndarray or Array holds no complex, non-finite or
     # Python-object element, so the element walk cannot refuse it: admit it
     # from its dtype metadata instead of label by label (nothing is returned).
-    if not labels_integer_storage(source, context):
+    # perf3-label-doors: a numpy-backed pandas Series is read through its
+    # stored exact ndarray (same labels, same order); an exact flat list /
+    # tuple of exact ints or bools and an exact '<U' ndarray (exact str only)
+    # hold nothing the walk refuses; a float32/float64 buffer reduces the walk
+    # to its finite test, judged in one native pass at the first non-finite
+    # element in C order (bindings/label_integer_storage.mojo).
+    var stored = labels_storage_source(source, context)
+    var walk = True
+    if stored is not None and labels_integer_storage(stored, context):
+        walk = False
+    elif labels_list_integer_storage(source) or labels_text_storage(source, context):
+        walk = False
+    elif stored is not None:
+        var refusal = labels_float_storage(stored, context, False)
+        if refusal == LABELS_FLOAT_NONFINITE:
+            raise Error("ValueError: Input y contains NaN or infinity")
+        if refusal == LABELS_FLOAT_OK:
+            walk = False
+    if walk:
         var flat = _flatten_labels(source, context)
         classical_admit_value(flat, context)
         for i in range(len(flat)):  # driver-loop: admitted label storage, never Python element protocols

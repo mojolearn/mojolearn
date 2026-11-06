@@ -14,7 +14,7 @@ from bindings.classical_validate import classical_estimator_name, classical_chec
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
-from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage
+from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage, labels_text_storage
 from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE, LABELS_FLOAT_CONTINUOUS
 from bindings.classical_warnings import classical_warn_column
 from bindings.host_inference_scalars import host_inference_scalar
@@ -150,6 +150,11 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     # An exact flat list / tuple of exact ints or bools: every label passes
     # every check below and a list is returned unchanged by the walk.
     if labels_list_integer_storage(source):
+        return source
+    # An exact '<U' ndarray lists exact str only, which the walk admits and
+    # never tests as real; any shape but the flattened column is returned
+    # unchanged by the walk.
+    if stored is not None and labels_text_storage(source, context):
         return source
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
