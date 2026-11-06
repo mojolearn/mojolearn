@@ -8,6 +8,7 @@ from bindings.classical_labels import _pandas_values
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_scalar_decode import NativeScalarBuffer
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
+from bindings.p3_labels_metrics_native import p3_array_numbers, p3_item, p3_type_word
 
 
 def metric_shape(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -63,6 +64,15 @@ def _metric_array_flat(value: PythonObject) raises -> PythonObject:
     for axis in range(rank):  # driver-loop: over the array's axes
         sizes.append(Int(py=shape[axis]))
         steps.append(Int(py=strides[axis]))
+    # p3-labels-metrics: integer (at most 32-bit unsigned, any signed) and
+    # float32 / float64 words become exact Python ints / floats by C calls
+    # into one presized list (the same numbers `to_python_number` made, which
+    # parsed each int from text and appended it by a Python call). Other
+    # dtypes (float16, uint64) keep the general decoder below.
+    var fast = p3_array_numbers(Int(py=classical_address(value)), sizes, steps, count, kind, width)
+    if fast is not None:
+        _ = value  # keep the storage owner alive through every raw word read
+        return fast
     for index in range(count):  # driver-loop: materialize explicit label scalars in logical C order
         var residual = index
         var offset = 0
@@ -110,19 +120,26 @@ def metric_flatten_admitted(value: PythonObject, context: PythonObject) raises -
     if py_type(item) is not list_type and py_type(item) is not tuple_type:
         return Python.list(item)
     var items = py_call(list_type, item)
+    var list_word = Int(list_type._obj_ptr)
+    var tuple_word = Int(tuple_type._obj_ptr)
     for _ in range(64):  # driver-loop: preserve the existing homogeneous-level flattening rule
         if len(items) == 0:
             break
+        # p3-labels-metrics: item classes read by pointer from the list's C
+        # storage, stopping at the first label that is not a container (the
+        # level is nested only when every item is one).
         var nested = True
-        for index in range(len(items)):  # driver-loop: exact native sequence element types
-            cls = py_type(items[index])
-            nested = nested and (cls is list_type or cls is tuple_type)
+        for index in range(len(items)):  # driver-loop: exact native sequence element classes, early exit
+            var child = p3_type_word(p3_item(items, index, False))
+            if child != list_word and child != tuple_word:
+                nested = False
+                break
         if not nested:
             break
+        # One C-level list.extend per exact list/tuple row (it was one
+        # Python append call per element).
         var flattened = Python.list()
-        for index in range(len(items)):  # driver-loop: flatten one admitted container level in Mojo
-            var row = items[index]
-            for column in range(len(row)):  # driver-loop: admitted native list/tuple storage
-                py_call(flattened.append, row[column])
+        for index in range(len(items)):  # driver-loop: flatten one admitted container level, one extend per row
+            py_call(flattened.extend, items[index])
         items = flattened
     return items
