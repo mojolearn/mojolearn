@@ -174,7 +174,8 @@ def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObje
     # field storage was admitted. Test the actual native type ancestry.
     ref cpy = Python().cpython()
     var cls = py_type(block)
-    if cpy.lib.get_function[Int32]("PyType_IsSubtype")(
+    # The process-wide CPython table, not a by-name symbol lookup per call.
+    if cpython_table()[].PyType_IsSubtype(
         cls._obj_ptr, context["block_classes"]["cpu"]["mamba3"]._obj_ptr) != 0:
         var entries = _model_bindings(mods, PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
         var block_provider = PythonObject(None)
