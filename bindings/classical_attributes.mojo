@@ -3,6 +3,7 @@
 # descriptors may bind; arbitrary Python properties/hooks are never called.
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.cpython_table import cpython_table
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp, prepared_class_matches
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -63,15 +64,29 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     var finalizer = py_get(context, "host_archive_finalizer_descriptor")
     var peer_finalizer = py_get(context, "host_archive_peer_finalizer_descriptor")
     var admitted = prepared_get(mods, _LAYOUT_CLASS_SLOT, cls)
+    # Python >= 3.12: the type watchers of native_class_admission report any
+    # change of the class or an ancestor (every namespace edit goes through
+    # type attribute assignment, which notifies them). While the class is
+    # unchanged since the stamp last matched and the three admission inputs
+    # are the same objects, the stamp still matches: skip its row-by-row
+    # comparison. Python 3.10/3.11 (no watcher) keep the comparison.
+    var watched = class_record(mods, _LAYOUT_WATCH_SLOT, cls)
+    if (admitted is not None and watched is not None and watched[0] is plan
+            and watched[1] is finalizer and watched[2] is peer_finalizer):
+        _classical_check_instance(model, context, cls, plan)
+        return
     if admitted is None or not prepared_class_matches(mods, cls, [plan, finalizer, peer_finalizer], admitted):
         _classical_check_class(model, context, cls, plan)
         var stamp = prepared_class_stamp(mods, cls, Python.list(plan, finalizer, peer_finalizer))
         prepared_put(mods, _LAYOUT_CLASS_SLOT, cls, stamp)
+    # The payload holds the admission inputs only, never the class.
+    class_admit(mods, _LAYOUT_WATCH_SLOT, cls, Python.tuple(plan, finalizer, peer_finalizer))
     _classical_check_instance(model, context, cls, plan)
 
 
 comptime _LAYOUT_CLASS_SLOT = "classical_layout_class_v1"
 comptime _LAYOUT_NAMES_SLOT = "classical_layout_names_v1"
+comptime _LAYOUT_WATCH_SLOT = "classical_layout_watch_v1"
 
 
 def _layout_class_names(mut mods: NativeModules, cls: PythonObject, plan: PythonObject) raises -> PythonObject:
