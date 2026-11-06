@@ -136,10 +136,12 @@ def _match_into(held: PythonObject, mut pos: Int, value: PythonObject, context: 
         var at = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
+        # main's compiled form (bindings/causal_model_config.mojo:75); the
+        # shared tables carry no PyDict_Next entry (pass 2, C3). The symbol
+        # is resolved once per dictionary, not once per entry (p3-trees).
+        var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
         for _ in range(size):  # driver-loop: constructor parameter mapping entries
-            # main's compiled form (bindings/causal_model_config.mojo:75); the
-            # shared tables carry no PyDict_Next entry (pass 2, C3).
-            if cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=at), MutPointer(to=key), MutPointer(to=item)) == 0:
+            if dict_next(value._obj_ptr, MutPointer(to=at), MutPointer(to=key), MutPointer(to=item)) == 0:
                 return False
             if not _match_into(held, pos, PythonObject(from_borrowed=key), context, depth + 1):
                 return False
