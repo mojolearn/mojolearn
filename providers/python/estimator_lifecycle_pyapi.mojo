@@ -2,6 +2,7 @@
 # Shared native estimator lifecycle/output boundary. Algorithm owners perform
 # their numerical work; this common helper preserves the former public wrappers.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_estimator_name
@@ -43,11 +44,11 @@ def estimator_feature_check(model: PythonObject, fields: PythonObject, source: P
     var names = _feature_names(source, context)
     if fitted is None:
         if names is not None:
-            var b = Python.import_module("builtins")
+            var b = native_loaded_module("builtins")
             metric_warn("X has feature names, but " + classical_estimator_name(model) + " was fitted without feature names", b.UserWarning, context)
         return
     if names is None:
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         metric_warn("X does not have valid feature names, but " + classical_estimator_name(model) + " was fitted with feature names", b.UserWarning, context)
         return
     classical_admit_value(fitted, context)

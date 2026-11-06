@@ -28,6 +28,7 @@
 # Device: the session's shared sequence context, the process's GPU 0; the
 # caller routes only tensors on that GPU here.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.sys.info import has_apple_gpu_accelerator
 from bindings.py_balanced import py_call
 from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
@@ -74,7 +75,7 @@ def ops_imported_run_device_py[KIND: Int](
     comptime if has_apple_gpu_accelerator():
         raise Error("ValueError: ops_imported_run_device takes CUDA or ROCm device buffers; on Apple GPUs "
                     + "pass host arrays to ops_imported_run")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var declared = program.inputs
     var declared_out = program.outputs
     if len(inputs) != len(declared):

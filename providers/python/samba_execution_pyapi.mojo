@@ -2,6 +2,7 @@
 # Whole-operation Samba admission/publication over the common native provider.
 # The executor receives only native endpoints, pointers and stable metadata.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.os import getenv
 from std.memory import memcpy
 from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_type
@@ -56,7 +57,7 @@ struct SambaLayerPublication(Movable):
 
 
 def _samba_native_fields(value: PythonObject) raises -> PythonObject:
-    return py_call(Python.import_module("builtins").object.__getattribute__, value, "__dict__")
+    return py_call(native_loaded_module("builtins").object.__getattribute__, value, "__dict__")
 
 
 def _samba_native_copy(values: List[Float32], shape: List[Int]) raises -> PythonObject:
@@ -81,7 +82,7 @@ struct AdmittedSambaExecution(Movable):
 
     def __init__(out self, fields: PythonObject, config: PythonObject, state: PythonObject,
                  primitive: PythonObject, b: Int, l: Int, step: Bool, context: PythonObject) raises:
-        var bi = Python.import_module("builtins")
+        var bi = native_loaded_module("builtins")
         self.owners = List[AdmittedNativeExecution]()
         self.keep = List[PythonObject]()
         self.pins = List[AdmittedBorrowedBuffer]()
@@ -318,7 +319,7 @@ struct AdmittedSambaExecution(Movable):
             self.native.layers.append(layer^)
 
     def configure_training(mut self) raises:
-        var bi = Python.import_module("builtins")
+        var bi = native_loaded_module("builtins")
         for i in range(len(self.native.layers)):  # driver-loop: admit backward/tape owners before whole native execution
             ref layer = self.native.layers[i]
             ref publication = self.publications[i]
@@ -477,7 +478,7 @@ struct AdmittedSambaExecution(Movable):
 
 def samba_provider_eligible(fields: PythonObject) raises -> Bool:
     var blocks = fields["_blocks"]
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     for i in range(len(blocks)):  # driver-loop: route eligibility at the single operation boundary
         var block = _samba_native_fields(blocks[i])
         if String(block["numeric_mode"]) != "identical":
@@ -521,7 +522,7 @@ def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries
     var admitted = AdmittedSambaExecution(fields, config, PythonObject(None), primitive,
         Int(py=shape[0]), Int(py=shape[1]), False, context)
     admitted.configure_training()
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fused = Bool(py=py_call(bi.hasattr, entries, "samba_head_loss"))
     var chunked = neural_descriptor_execute(primitive, 28, [], [], [], False) != 0
     var probability = Float64(py=config["dropout"])
@@ -549,7 +550,7 @@ def samba_provider_accumulated_gradients(fields: PythonObject, config: PythonObj
     var length = Int(py=shape[1])
     var admitted = AdmittedSambaExecution(fields, config, PythonObject(None), primitive, batch, length, False, context)
     admitted.configure_training()
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fused = Bool(py=py_call(bi.hasattr, entries, "samba_head_loss"))
     var chunked = neural_descriptor_execute(primitive, 28, [], [], [], False) != 0
     var tied = Bool(py=config["tie_embeddings"])

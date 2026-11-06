@@ -2,13 +2,14 @@
 # Python door for the gradient diagnostics (gradient_diagnostics.mojo): it
 # converts the native report rows to the established dict rows, nothing else.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem
 from sequence.exec_trait import Exec
 from autograd.gradient_diagnostics import ValueSummary, gradient_report
 
 
 def _summary_dict(summary: ValueSummary) raises -> PythonObject:
-    var out = Python.import_module("builtins").dict()
+    var out = native_loaded_module("builtins").dict()
     py_setitem(out, "has_nan", summary.has_nan)
     py_setitem(out, "has_infinity", summary.has_infinity)
     py_setitem(out, "has_zero", summary.has_zero)
@@ -21,7 +22,7 @@ def gradient_report_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: Int, handles: List[Int], values: Bool,
 ) raises -> PythonObject:
     var report = gradient_report[E, KIND](sid, handles, values)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var rows = Python.list()
     for j in range(len(report)):  # driver-loop: over requested gradient diagnostics
         ref r = report[j]

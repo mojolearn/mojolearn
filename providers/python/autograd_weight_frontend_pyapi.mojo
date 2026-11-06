@@ -3,6 +3,7 @@
 # Checkpoint files use native mmap ownership; no Python safetensors reader,
 # NumPy conversion, tensor conversion or package callback executes here.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.native_torch_admission import native_torch_metadata
 from sequence.exec_trait import Exec
@@ -38,7 +39,7 @@ def _file_header(path: PythonObject) raises -> PythonObject:
         count |= UInt64(py=raw[k]) << UInt64(8 * k)
     if count > UInt64(len(raw) - 8):
         raise Error("ValueError: safetensors header exceeds the file")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var header = native_json_parse(raw[py_call(b.slice, 8, 8 + Int(count))])
     if py_type(header) is not b.dict:
         raise Error("ValueError: safetensors header must be an object")
@@ -50,7 +51,7 @@ def _file_header(path: PythonObject) raises -> PythonObject:
 
 
 def _checkpoint(path: PythonObject, mut owners: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var file = native_path(path)
     var files = Python.list()
     var weight_map = b.dict()
@@ -72,7 +73,7 @@ def _checkpoint(path: PythonObject, mut owners: PythonObject) raises -> PythonOb
         elif native_path_exists(PythonObject(base + "/model.safetensors")):
             _ = py_call(files.append, base + "/model.safetensors")
         else:
-            var names = py_call(Python.import_module("os").listdir, file)
+            var names = py_call(native_loaded_module("os").listdir, file)
             for k in range(len(names)):  # driver-loop: over checkpoint directory entries
                 if String(names[k]).endswith(".safetensors"):
                     _ = py_call(files.append, base + "/" + String(names[k]))
@@ -106,7 +107,7 @@ def _checkpoint(path: PythonObject, mut owners: PythonObject) raises -> PythonOb
 
 def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, checkpoint: Bool,
             mut scalar_owners: List[ProgramInput]) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var addr = 0
     var offset = 0
     var dtype = 0
@@ -183,7 +184,7 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
 def ops_weights_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, obj: PythonObject, names: PythonObject, source: PythonObject,
 ) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var path = Bool(py=py_call(b.isinstance, obj, b.str)) or Bool(py=py_call(b.isinstance, obj, b.bytes)) or Bool(py=py_call(b.hasattr, obj, "__fspath__"))
     var kind = ("safetensors" if path else "torch") if source is PythonObject(None) else String(source)
     if kind != "torch" and kind != "safetensors":
