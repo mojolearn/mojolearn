@@ -360,6 +360,18 @@ def _suspend(mut mods: NativeModules, fields: PythonObject, shape: _Shape, conte
 def _binding(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
     """`_binding()`: a binding change suspends the open session first; the
     run metadata is then computed on its next read (`run_metadata`)."""
+    # A compiled binding's profile, vendor and numeric-mode answers are fixed
+    # for the module object. Once this trainer admitted the same binding for
+    # the same mode and shape profile, reuse that admission instead of five
+    # native queries per train step / generated token.
+    var mode = _mode(mods, context)
+    var selected = context["byte_lm_bindings"][mode]
+    var shape_profile = shape.profile(String(py=context["byte_lm_profile"]))
+    var key = py_get(fields, "_admitted_binding_key")
+    if (key is not None and selected is fields["_runtime_binding"] and key[0] is selected
+            and String(py=key[1]) == String(py=mode) and String(py=key[2]) == shape_profile
+            and py_get(fields, "_admitted_binding_metadata") is not None):
+        return selected
     var admitted = _load_snapshot(mods, shape, context)
     var binding = admitted[0]
     py_setitem(fields, "_admitted_binding_metadata", admitted[3])
@@ -367,6 +379,7 @@ def _binding(mut mods: NativeModules, fields: PythonObject, shape: _Shape, conte
         _suspend(mods, fields, shape, context)
         py_setitem(fields, "_runtime", PythonObject(None))
         py_setitem(fields, "_runtime_binding", binding)
+    py_setitem(fields, "_admitted_binding_key", Python.tuple(binding, admitted[1], PythonObject(shape_profile)))
     return binding
 
 
@@ -448,13 +461,17 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
     if lost is not None:
         raise Error("RuntimeError: Byte-LM session lost at step " + _text(mods, lost[0]) + "; last exported state is step "
                     + _text(mods, lost[1]))
-    var names = context["byte_lm_session_entries"]
-    var missing = String("")
-    for i in range(len(names)):  # small-loop(the session entry names)
-        if not _has(binding, String(py=names[i])):
-            missing += (", " if missing != "" else "") + String(py=names[i])
-    if missing != "":
-        raise Error("ImportError: Byte-LM binding lacks owned sessions (" + missing + "); rebuild bindings/build_byte_lm.sh")
+    # The session entries of one binding object never change; check them
+    # once per admitted binding, not on every step.
+    if py_get(fields, "_session_entries_binding") is not binding:
+        var names = context["byte_lm_session_entries"]
+        var missing = String("")
+        for i in range(len(names)):  # small-loop(the session entry names)
+            if not _has(binding, String(py=names[i])):
+                missing += (", " if missing != "" else "") + String(py=names[i])
+        if missing != "":
+            raise Error("ImportError: Byte-LM binding lacks owned sessions (" + missing + "); rebuild bindings/build_byte_lm.sh")
+        py_setitem(fields, "_session_entries_binding", binding)
     var state = fields["_state"]
     var completed = Int(py=state["completed_steps"])
     if train and completed >= _MAX_STEP:
