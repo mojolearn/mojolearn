@@ -120,7 +120,10 @@ def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises
     raise Error("TypeError: optimizer requires native buffers and lists/tuples; Python protocols and callbacks cannot execute")
 
 
-def opt_owner(owner: PythonObject, context: PythonObject) raises:
+def _opt_owner_keys(owner: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`opt_owner`'s first half: the exact owner class and native string
+    field names (so a keyed lookup runs no key `__eq__`). Returns the
+    instance dictionary."""
     if not opt_exact(py_type(owner), context["owners"]):
         raise Error("TypeError: optimizer requires an exact SGD, Adam or AdamW native owner")
     var fields = py_fields(owner)
@@ -129,6 +132,25 @@ def opt_owner(owner: PythonObject, context: PythonObject) raises:
     for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: optimizer metadata requires native string keys")
+    return fields
+
+
+def opt_owner_mode(owner: PythonObject, context: PythonObject) raises:
+    """The part of `opt_owner` a router needs before it hands the owner to a
+    compiled door that runs the full `opt_owner` itself as its first step
+    (`door_step`, `door_state`, `door_zero` in
+    bindings/optimizer_public_door.mojo): the exact owner class, native
+    string field names and the `numeric_mode` word the router reads to pick
+    the binding. The door's admission is the one that walks every field and
+    buffer collection, so the owner is walked once per call, not twice; the
+    first refusal and its message are the same, since nothing else reads the
+    owner between the two."""
+    var fields = _opt_owner_keys(owner, context)
+    opt_scalar(py_get(fields, "numeric_mode"), context)
+
+
+def opt_owner(owner: PythonObject, context: PythonObject) raises:
+    var fields = _opt_owner_keys(owner, context)
     for name in ["_where", "_KIND", "_res", "_res_host", "_resident_wanted", "_host_fresh", "_pristine", "_p_dev", "_g_dev", "n_total", "t", "numeric_mode", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
         opt_scalar(py_get(fields, PythonObject(name)), context)
     opt_schedule(py_get(fields, "lr_schedule"), context)
