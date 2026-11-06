@@ -16,7 +16,7 @@ from bindings.mode_metadata_native import _class_fields
 from bindings.family_raw_attr import family_raw_get_or
 from bindings.classical_labels import labels_cast
 from providers.python.classical_family_admission_pyapi import classical_family_admit
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, _neural_descriptor_module_fields, _neural_descriptor_function_owner
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete, estimator_feature_check
 from providers.python.estimator_tabular_boundary_pyapi import _refusal
 from std.python._cpython import PyObjectPtr
@@ -209,9 +209,21 @@ def _entry_table(entries: PythonObject, metrics: Bool) raises:
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: QN provider names require exact strings")
     var module = entries["_module"]
+    # neural_descriptor_entry's checks, with the module dictionary read and
+    # its keys admitted ONCE for the whole table (it re-admitted every module
+    # key for every entry on every call).
+    if py_type(module) is not py_type(b):
+        raise Error("TypeError: native provider requires an exact compiled module")
+    var module_fields = _neural_descriptor_module_fields(module, b)
+    var builtin_function = py_type(b.len)
     for i in range(len(keys)):  # driver-loop: every called entry belongs to the retained compiled provider
         var name = String(keys[i])
-        if name != "_module" and entries[keys[i]] is not neural_descriptor_entry(module, name):
+        if name == "_module":
+            continue
+        var entry = py_get(module_fields, keys[i])
+        if entry is None or py_type(entry) is not builtin_function or _neural_descriptor_function_owner(entry) != module._obj_ptr:
+            raise Error("TypeError: native provider requires compiled entry " + name)
+        if entries[keys[i]] is not entry:
             raise Error("TypeError: QN provider entry changed after connection")
 
 
