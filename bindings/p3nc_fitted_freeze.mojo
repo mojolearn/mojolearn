@@ -16,7 +16,8 @@ ndarray) cannot be frozen this way, so callers keep the per-call upload for it.
 No content hash anywhere. Not noticed: writes through a NumPy view that was
 taken BEFORE the first resident copy (that view keeps its writeable flag)."""
 from std.python import PythonObject
-from bindings.py_balanced import py_type, py_setattr
+from bindings.py_balanced import py_type, py_setattr, py_get
+from bindings.native_loaded_module import native_loaded_module
 
 
 def fitted_is_freezable(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -29,6 +30,28 @@ def fitted_freeze(value: PythonObject, context: PythonObject) raises -> Bool:
     """Mark an exact mojolearn Array read-only; False (nothing done) for any
     other storage."""
     if py_type(value) is not context["array_class"]:
+        return False
+    py_setattr(value, "_readonly", PythonObject(True))
+    return True
+
+
+def _array_class() raises -> PythonObject:
+    var module = py_get(native_loaded_module("sys").modules, "mojolearn._array")
+    if module is None:
+        return PythonObject(None)
+    return module.Array
+
+
+def fitted_is_freezable_any(value: PythonObject) raises -> Bool:
+    """`fitted_is_freezable` where no connected context is at hand: the Array
+    class is read from the loaded `mojolearn._array` module."""
+    var cls = _array_class()
+    return cls is not None and py_type(value) is cls
+
+
+def fitted_freeze_any(value: PythonObject) raises -> Bool:
+    """`fitted_freeze` without a connected context."""
+    if not fitted_is_freezable_any(value):
         return False
     py_setattr(value, "_readonly", PythonObject(True))
     return True

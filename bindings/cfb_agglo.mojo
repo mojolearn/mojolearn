@@ -348,7 +348,10 @@ def _agglo_predict(fields: PythonObject, settings: PythonObject, binding: Python
     var labels_snapshot = array_metadata_once(labels, labels_shape^, "labels_", context)
     if labels_snapshot.source.kind != 1 or labels_snapshot.source.itemsize != 4 or not labels_snapshot.c_order or labels_snapshot.count != refs.shape[0]:
         raise Error("TypeError: hierarchy fitted labels require one native contiguous int32 value per reference row")
-    var result = hierarchy_reference_labels(fields, binding, refs.keep, labels, refs.source.addr, labels_snapshot.source.addr,
+    # p3-neighbors-cluster: the resident record is keyed by the STORED field
+    # objects (`_fit_X`, `labels_`), the ones fit minted it for; the per-call
+    # snapshot and view objects were new every call, so it never hit.
+    var result = hierarchy_reference_labels(fields, binding, refs_source, fields["labels_"], refs.source.addr, labels_snapshot.source.addr,
                                            query.source.addr, refs.shape[0], query.shape[0], query.shape[1], context)
     _ = refs^
     _ = labels_snapshot^
