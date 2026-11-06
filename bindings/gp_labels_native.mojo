@@ -10,7 +10,9 @@
 # float classes decode through the base binding's `gather_i64` / `gather_f64`;
 # str and bool classes decode to the label objects. The shell hands over the
 # base binding (`_backend.binding("_mojolearn", "identical")`, `_buffer._native`'s).
+from std.ffi import c_int
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
@@ -367,13 +369,31 @@ def _gp_decode_with(classes: PythonObject, kind: String, table: PythonObject, co
         _ = table
         return out
     var rows = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(codes)))
-    var result = Python.list()
-    for i in range(n):  # driver-loop: native code-to-label gather retains output objects
+    # One PyList_New(n) and direct slot stores of the class objects (lane
+    # p3-svm-gp-kernel, row 79): the k class pointers are read once, every
+    # row stores a new reference to its class, no Python call per row.
+    var table = List[PythonObject](capacity=k)
+    for j in range(k):  # driver-loop: over the distinct classes (k pointers read once)
+        table.append(classes[j])
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # The NULL-filled list stays private until complete; its owner releases
+    # every stored slot on failure (CPython skips NULL slots).
+    var result = PythonObject(from_owned=raw)
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    for i in range(n):  # driver-loop: native code-to-label gather stores retained class objects
         var index = Int(rows[i])
         if index < 0 or index >= k:
             raise Error("IndexError: GP class code is outside its retained class table")
-        _ = py_call(result.append, classes[index])
-        _ = codes
+        var item = table[index]._obj_ptr
+        cpy.Py_IncRef(item)
+        # SetItem steals the new reference on BOTH success and failure.
+        if set_item(result._obj_ptr, i, item) != 0:
+            raise cpy.unsafe_get_error()
+    _ = codes
+    _ = table^
     return result
 
 
