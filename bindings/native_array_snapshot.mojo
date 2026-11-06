@@ -21,7 +21,7 @@ def native_array_slots(mut mods: NativeModules, context: PythonObject) raises ->
     var cls = context["array_class"]
     if py_type(cls) is not b.type:
         raise Error("TypeError: neural arrays require their native storage class")
-    var namespace = _class_fields(cls)
+    var namespace = _class_fields(mods, cls)
     var names = Python.tuple("_store", "_base", "_pin", "_mv", "_addr", "_readonly",
         "shape", "dtype", "ndim", "size", "nbytes", "itemsize", "strides", "order")
     var slots = Python.dict()
@@ -34,7 +34,7 @@ def native_array_slots(mut mods: NativeModules, context: PythonObject) raises ->
         py_setitem(slots, names[i], slot)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for i in range(len(mro)):  # small-loop(mro: Array ancestry): fixed native storage class hierarchy
-        var row = _class_fields(mro[i])
+        var row = _class_fields(mods, mro[i])
         if py_contains(row, "__getattr__") or py_contains(row, "__del__"):
             raise Error("TypeError: neural Array metadata hooks are not supported")
         for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry

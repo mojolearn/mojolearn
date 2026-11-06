@@ -19,6 +19,7 @@ from std.math import isfinite
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
 from bindings.native_json import native_json_parse
+from bindings.native_buffer_address import native_buffer_address
 from bindings.native_transport import _transport_json, transport_initialize
 from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_execute
 from training.parallel_byte_impl import (
@@ -347,18 +348,30 @@ def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False,
         if Int(py=shape[i]) != dims[i]:
             raise Error("parallel input has wrong shape")
     var output = generation_array(dims, "i" if integer else "f")
-    var store = py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].arrays, "i" if integer else "f")
-    _ = py_call(store.frombytes, py_call(view.tobytes, "C"))
     var n = Int(py=output.size)
-    if len(store) != n:
-        raise Error("parallel input byte count differs from shape")
-    var src_addr = Int(py=store.buffer_info()[0])
     var dst_addr = Int(py=output._addr)
-    parallel_copy_words(src_addr, dst_addr, dims, n,
-                        own_array and String(value.order) == "F" and len(dims) > 1)
+    var transposed = own_array and String(value.order) == "F" and len(dims) > 1
+    if Bool(py=view.c_contiguous):
+        # A contiguous buffer is read in place: its bytes in storage order
+        # are what `tobytes("C")` copied into the staging store, so the one
+        # native copy below reads them from the caller's buffer directly
+        # (it was tobytes, frombytes, then this copy).
+        if Int(py=view.nbytes) != n * 4:
+            raise Error("parallel input byte count differs from shape")
+        if n > 0:
+            parallel_copy_words(native_buffer_address(view), dst_addr, dims, n, transposed)
+        _ = view
+        _ = value
+    else:
+        var store = py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].arrays, "i" if integer else "f")
+        _ = py_call(store.frombytes, py_call(view.tobytes, "C"))
+        if len(store) != n:
+            raise Error("parallel input byte count differs from shape")
+        var src_addr = Int(py=store.buffer_info()[0])
+        parallel_copy_words(src_addr, dst_addr, dims, n, transposed)
+        _ = store^
     if not integer and finite:
         parallel_require_finite_f32(Int(py=output._addr), n)
-    _ = store^
     return output
 
 

@@ -36,7 +36,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_setitem
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
@@ -150,7 +150,7 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     # unseen values in first-seen order
     var index = Python.dict()
     for i in range(len(classes)):  # cpu-route: Python list of class objects read once by user_objects_c (lookup)
-        _ = py_call(py_attr(index, "__setitem__"), classes[i], PythonObject(i))
+        py_setitem(index, classes[i], PythonObject(i))
     var n = len(values)
     var codes = env.store("i", n, 4)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
@@ -302,7 +302,7 @@ def _transpose(env: _Env, cols: PythonObject) raises -> PythonObject:
 def _scatter(env: _Env, rows: PythonObject, address: Int, count: Int, vals: PythonObject) raises -> PythonObject:
     var n = min(count, len(vals))
     for k in range(n):  # cpu-route: Python prediction objects read once by user_objects_c (scatter)
-        _ = py_call(py_attr(rows, "__setitem__"), PythonObject(_index_at(address, k, 8)), vals[k])
+        py_setitem(rows, PythonObject(_index_at(address, k, 8)), vals[k])
     return PythonObject(None)
 
 
@@ -484,7 +484,7 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
         width *= 2
     var code = Python.dict()
     for r in range(m):  # driver-loop: over the distinct classes
-        _ = py_call(py_attr(code, "__setitem__"), keys[order[r]][1], PythonObject(r))
+        py_setitem(code, keys[order[r]][1], PythonObject(r))
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
@@ -536,7 +536,7 @@ def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: P
         var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(p))
         _ = p  # keep the Python object alive through the native call above
         for a in range(m):  # cpu-route: Python label objects read once by user_objects_c (group_permute)
-            _ = py_call(py_attr(out, "__setitem__"), PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
+            py_setitem(out, PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
             _ = p  # keep the Python object alive through the native call above
             _ = r  # keep the Python object alive through the native call above
     return out

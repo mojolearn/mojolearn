@@ -295,6 +295,21 @@ def _transport_send_bytes(socket: PythonObject, value: PythonObject) raises:
 
 
 def transport_send(socket: PythonObject, header: PythonObject, payload: PythonObject) raises:
+    _transport_send_frame(socket, header, PythonObject(None), payload)
+
+
+def transport_send_parts(socket: PythonObject, header: PythonObject, first: PythonObject, payload: PythonObject) raises:
+    """One frame whose payload is `first` followed by `payload`, written
+    back to back from the two buffers: the same bytes on the wire as
+    `transport_send(socket, header, first + payload)` without building the
+    joined copy (a full copy of every pool request and reply)."""
+    var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
+    if py_type(first) is not t[].bi.bytes:
+        raise Error("transport: the leading frame part must be bytes")
+    _transport_send_frame(socket, header, first, payload)
+
+
+def _transport_send_frame(socket: PythonObject, header: PythonObject, first: PythonObject, payload: PythonObject) raises:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
     _ = _transport_state(socket)
     if py_type(header) is not t[].bi.dict:
@@ -309,8 +324,9 @@ def transport_send(socket: PythonObject, header: PythonObject, payload: PythonOb
         if py_type(header_keys[i]) is not t[].bi.str:
             raise Error("transport: JSON header keys must be strings")
     var bytes = t[].bi.bytes() if payload is None else py_call(py_call(t[].bi.memoryview, payload).cast, "B")
+    var lead = 0 if first is None else len(first)
     var envelope = py_call(t[].bi.dict, header)
-    py_setitem(envelope, "nbytes", PythonObject(len(bytes)))
+    py_setitem(envelope, "nbytes", PythonObject(lead + len(bytes)))
     var raw = py_call(PythonObject(_transport_json(envelope)).encode, "ascii")
     var n = len(raw)
     if n > (1 << 20):
@@ -320,11 +336,20 @@ def transport_send(socket: PythonObject, header: PythonObject, payload: PythonOb
         py_setitem(prefix, i, PythonObject((n >> (24 - i * 8)) & 255))
     _transport_send_bytes(socket, prefix)
     _transport_send_bytes(socket, raw)
+    if lead > 0:
+        _transport_send_bytes(socket, first)
     _transport_send_bytes(socket, bytes)
+    _ = first
     _ = payload
 
 
 def _transport_exact(socket: PythonObject, count: Int) raises -> PythonObject:
+    return py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi.bytes, _transport_exact_owned(socket, count))
+
+
+def _transport_exact_owned(socket: PythonObject, count: Int) raises -> PythonObject:
+    """`count` bytes received into a fresh bytearray, returned as is (no
+    second copy into bytes)."""
     if count < 0:
         raise Error("transport: negative receive size")
     var state = _transport_state(socket)
@@ -333,10 +358,20 @@ def _transport_exact(socket: PythonObject, count: Int) raises -> PythonObject:
     var address = native_buffer_address(owner)
     posix_transfer(state[0], PosixBytes(unsafe_from_address=address), count, timeout, False)
     _ = socket
-    return py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi.bytes, owner)
+    return owner
 
 
 def transport_receive(socket: PythonObject, max_payload: Int) raises -> PythonObject:
+    return _transport_receive(socket, max_payload, False)
+
+
+def transport_receive_owned(socket: PythonObject, max_payload: Int) raises -> PythonObject:
+    """`transport_receive` whose payload is the received bytearray itself,
+    not a bytes copy of it (the process pool decodes it in place)."""
+    return _transport_receive(socket, max_payload, True)
+
+
+def _transport_receive(socket: PythonObject, max_payload: Int, owned: Bool) raises -> PythonObject:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
     _ = _transport_state(socket)
     if max_payload < 0:
@@ -358,7 +393,7 @@ def transport_receive(socket: PythonObject, max_payload: Int) raises -> PythonOb
         raise Error("transport: payload exceeds caller bound")
     var result = t[].bi.list()
     _ = py_call(result.append, header)
-    _ = py_call(result.append, _transport_exact(socket, n))
+    _ = py_call(result.append, _transport_exact_owned(socket, n) if owned else _transport_exact(socket, n))
     return py_call(t[].bi.tuple, result)
 
 

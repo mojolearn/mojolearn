@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """JSON parsing owned by Mojo, returning ordinary native CPython containers."""
 from bindings.native_loaded_module import native_loaded_module
+from bindings.native_buffer_address import native_buffer_address
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
@@ -19,7 +21,16 @@ struct NativeJSON(Movable):
         if py_type(raw) is not self.bi.str and py_type(raw) is not self.bi.bytes and py_type(raw) is not self.bi.bytearray:
             raise Error("TypeError: JSON requires str or bytes")
         self.raw = py_call(raw.encode, "utf-8") if Bool(py=py_call(self.bi.isinstance, raw, self.bi.str)) else raw
-        self.buf = json_latin1_bytes(String(py=py_call(self.raw.decode, "latin-1")))
+        # The document's bytes in one copy from the exact bytes/bytearray
+        # buffer (it was a latin-1 decode, a String copy and a per-codepoint
+        # rebuild of the same bytes).
+        var n = len(self.raw)
+        var buf = List[UInt8](unsafe_uninit_length=n)
+        if n > 0:
+            memcpy(dest=buf.unsafe_ptr(),
+                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(self.raw)),
+                   count=n)
+        self.buf = buf^
         self.at = 0
 
     def peek(self) raises -> Int:
@@ -35,9 +46,9 @@ struct NativeJSON(Movable):
         self.at += 1
 
     def literal(mut self, token: String) raises:
-        var bytes = py_call(PythonObject(token).encode, "ascii")
+        var bytes = token.as_bytes()
         for i in range(len(bytes)):  # driver-loop: over the bytes of one JSON literal
-            if self.peek() != Int(py=bytes[i]):
+            if self.peek() != Int(bytes[i]):
                 raise Error("JSON: invalid literal at " + String(self.at))
             self.at += 1
 
@@ -202,9 +213,14 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
     var bytes: List[UInt8]
     with open(String(path), "r") as stream:
         bytes = stream.read_bytes()
-    var raw = native_loaded_module("builtins").bytearray()
-    for i in range(len(bytes)):  # driver-loop: over serialized JSON file bytes for the native parse buffer
-        _ = py_call(raw.append, Int(bytes[i]))
+    # One bytearray of the file's size, filled by one memcpy (it was one
+    # Python append call per file byte).
+    var n = len(bytes)
+    var raw = py_call(native_loaded_module("builtins").bytearray, PythonObject(n))
+    if n > 0:
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(raw)),
+               src=bytes.unsafe_ptr(), count=n)
+    _ = bytes^
     return native_json_parse(raw)
 
 

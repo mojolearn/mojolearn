@@ -133,6 +133,32 @@ def _codec_captured_bytes(pin: AdmittedBorrowedBuffer, maximum: Int) raises -> P
     return PythonObject(from_owned=result)
 
 
+def _codec_append_captured(pin: AdmittedBorrowedBuffer, payload: PythonObject, maximum: Int) raises -> PythonObject:
+    """`_codec_buffer(_codec_captured_bytes(pin, maximum - len(payload)),
+    payload, "array", maximum)` in one copy: the payload bytearray grows by
+    the tensor's size and the admitted layout writes its logical C-order
+    bytes straight into the new tail (it went through a List, then a bytes
+    object, then extend)."""
+    var layout = pin.layout.value().copy()
+    var begin = len(payload)
+    var count = layout.count * layout.itemsize
+    if count > maximum - begin:
+        raise Error("codec: payload exceeds its byte limit")
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyByteArray_Resize")(payload._obj_ptr, begin + count) != 0:
+        raise cpy.unsafe_get_error()
+    if count > 0:
+        var base = cpy.lib.get_function[Int]("PyByteArray_AsString")(payload._obj_ptr)
+        if base == 0:
+            raise cpy.unsafe_get_error()
+        layout.copy_to(base + begin)
+    var item = CODEC_BOUNDARY.get_or_create_ptr()[].bi.dict()
+    py_setitem(item, "kind", PythonObject("array"))
+    py_setitem(item, "begin", PythonObject(begin))
+    py_setitem(item, "size", PythonObject(count))
+    return item
+
+
 def _codec_code(dtype: String) raises -> String:
     if dtype == "<f4":
         return "f"
@@ -279,8 +305,7 @@ def _codec_encode(value: PythonObject, payload: PythonObject, maximum: Int,
                 _ = py_call(shape.append, pin.layout.value().shape[i])
         var order = _codec_text(captured.order) if native else String("C")
         var readonly = captured._readonly if native else PythonObject(pin.layout.value().readonly)
-        var raw = _codec_captured_bytes(pin, maximum - len(payload))
-        result = _codec_buffer(raw, payload, "array", maximum)
+        result = _codec_append_captured(pin, payload, maximum)
         py_setitem(result, "dtype", PythonObject(dtype))
         py_setitem(result, "shape", shape)
         py_setitem(result, "order", PythonObject(order))
@@ -303,7 +328,9 @@ def _codec_slice(item: PythonObject, payload: PythonObject, maximum: Int,
     if begin != cursor or size > len(payload) - begin:
         raise Error("codec: tensor ranges must be contiguous and inside payload")
     cursor += size
-    return payload[py_call(c[].bi.slice, begin, cursor)]
+    # A memoryview window, not a copy: the array or bytes built from it below
+    # takes the one copy of these bytes.
+    return py_call(c[].bi.memoryview, payload)[py_call(c[].bi.slice, begin, cursor)]
 
 
 def _codec_array(item: PythonObject, raw: PythonObject, maximum: Int) raises -> PythonObject:
@@ -435,6 +462,14 @@ def _codec_decode(item: PythonObject, payload: PythonObject, maximum: Int,
 
 
 def codec_pack(value: PythonObject, max_bytes: Int) raises -> PythonObject:
+    var packed = codec_pack_owned(value, max_bytes)
+    var c = CODEC_BOUNDARY.get_or_create_ptr()
+    return Python.tuple(packed[0], py_call(c[].bi.bytes, packed[1]))
+
+
+def codec_pack_owned(value: PythonObject, max_bytes: Int) raises -> PythonObject:
+    """`codec_pack` whose payload is the encoder's bytearray itself, not a
+    bytes copy of it (the process pool writes it to the socket directly)."""
     if max_bytes < 0:
         raise Error("codec: maximum bytes must be nonnegative")
     var c = CODEC_BOUNDARY.get_or_create_ptr()
@@ -446,7 +481,7 @@ def codec_pack(value: PythonObject, max_bytes: Int) raises -> PythonObject:
     var descriptor = _codec_encode(value, payload, max_bytes, 0, budget)
     var result = bi.list()
     _ = py_call(result.append, descriptor)
-    _ = py_call(result.append, py_call(bi.bytes, payload))
+    _ = py_call(result.append, payload)
     return py_call(bi.tuple, result)
 
 
@@ -455,7 +490,13 @@ def codec_unpack(descriptor: PythonObject, payload: PythonObject, max_bytes: Int
     if c[].array_cls is None:
         raise Error("codec: native storage classes are not connected")
     var bi = c[].bi
-    if max_bytes < 0 or (py_type(payload) is not bi.bytes and py_type(payload) is not bi.bytearray):
+    var cls = py_type(payload)
+    if max_bytes < 0 or (cls is not bi.bytes and cls is not bi.bytearray and cls is not bi.memoryview):
+        raise Error("codec: invalid or oversized binary payload")
+    # A memoryview is admitted only as a flat byte view (the process pool's
+    # zero-copy window onto a received frame), so len() counts bytes.
+    if cls is bi.memoryview and (String(payload.format) != "B" or Int(py=payload.ndim) != 1
+                                 or not Bool(py=payload.c_contiguous)):
         raise Error("codec: invalid or oversized binary payload")
     if len(payload) > max_bytes:
         raise Error("codec: invalid or oversized binary payload")

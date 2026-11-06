@@ -81,7 +81,12 @@ def _instance_fields(b: PythonObject, model: PythonObject) raises -> PythonObjec
 
 
 def _truth(value: PythonObject) raises -> Bool:
-    var b = native_loaded_module("builtins")
+    var mods = NativeModules()
+    return _truth(mods, value)
+
+
+def _truth(mut mods: NativeModules, value: PythonObject) raises -> Bool:
+    var b = mods.module("builtins")
     var kind = py_type(value)
     if value is None:
         return False
@@ -92,15 +97,19 @@ def _truth(value: PythonObject) raises -> Bool:
 
 
 def _fitted(model: PythonObject) raises -> PythonObject:
-    var fields = _fields(model)
-    if _truth(py_get(fields, "_mojolearn_fitted")) or _truth(py_get(fields, "_mojolearn_fitting")):
+    # One admitted module view for the whole check (no GIL release inside):
+    # the field read, both flag tests and the name scans share it instead of
+    # re-stamping builtins four times per guarded predict/transform.
+    var mods = NativeModules()
+    var fields = _fields(mods, model)
+    if _truth(mods, py_get(fields, "_mojolearn_fitted")) or _truth(mods, py_get(fields, "_mojolearn_fitting")):
         return PythonObject(True)
     var reset = py_get(fields, "_mojolearn_params_reset")
     if reset is not None:
         # A native setter keeps unrelated user fields, including names ending
         # in '_'. After reset only the owner's learned fields establish fitted
         # state; a subsequent legacy fit need not set an explicit fitted flag.
-        var b = native_loaded_module("builtins")
+        var b = mods.module("builtins")
         if py_type(reset) is not b.tuple:
             raise Error("TypeError: native parameter reset metadata requires an ordinary tuple")
         for i in range(len(reset)):  # driver-loop: over connected fitted-field metadata names
@@ -111,7 +120,7 @@ def _fitted(model: PythonObject) raises -> PythonObject:
                     and py_contains(fields, reset[i]) and fields[reset[i]] is not None):
                 return PythonObject(True)
         return PythonObject(False)
-    var names = py_call(native_loaded_module("builtins").list, fields.keys())
+    var names = py_call(mods.module("builtins").list, fields.keys())
     for i in range(len(names)):  # driver-loop: over fitted public attribute metadata names
         var name = String(names[i])
         if name.endswith("_") and not name.startswith("_") and fields[names[i]] is not None:
@@ -133,8 +142,8 @@ def _class_fields(mut mods: NativeModules, cls: PythonObject) raises -> PythonOb
     return fields
 
 
-def _plan(model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native metadata refuses Python metaclass protocols")
@@ -147,7 +156,7 @@ def _plan(model: PythonObject, state: PythonObject, context: PythonObject) raise
     for i in range(len(ancestry)):  # driver-loop: over class ancestry to resolve the native route
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: native metadata refuses Python metaclass protocols")
-        var fields = _class_fields(ancestry[i])
+        var fields = _class_fields(mods, ancestry[i])
         if binding is None and py_contains(fields, "_BINDING"):
             binding = fields["_BINDING"]
         if bind is None and py_contains(fields, "_bind"):
@@ -161,8 +170,8 @@ def _plan(model: PythonObject, state: PythonObject, context: PythonObject) raise
     return plan
 
 
-def _mode(value: PythonObject) raises -> String:
-    if py_type(value) is not native_loaded_module("builtins").str:
+def _mode(mut mods: NativeModules, value: PythonObject) raises -> String:
+    if py_type(value) is not mods.module("builtins").str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var result = String(py_call(py_call(value.strip).lower))
     if result != "identical" and result != "fast":
@@ -170,17 +179,18 @@ def _mode(value: PythonObject) raises -> String:
     return result
 
 
-def _configuration_value(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: PythonObject,
+                         name: String) raises -> PythonObject:
+    var b = mods.module("builtins")
     var cls = py_type(model)
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var inherited = PythonObject(None)
     for i in range(len(ancestry)):  # driver-loop: over class ancestry for plain metadata defaults
-        var namespace = _class_fields(ancestry[i])
+        var namespace = _class_fields(mods, ancestry[i])
         if py_contains(namespace, PythonObject(name)):
             inherited = namespace[name]
             var kind = py_type(inherited)
-            if kind is native_loaded_module("types").MemberDescriptorType:
+            if kind is mods.module("types").MemberDescriptorType:
                 if inherited.__objclass__ is not ancestry[i] or String(inherited.__name__) != name:
                     raise Error("TypeError: native mode metadata refuses a foreign slot descriptor")
                 ref cpy = Python().cpython()
@@ -196,7 +206,7 @@ def _configuration_value(model: PythonObject, fields: PythonObject, name: String
                 return PythonObject(from_owned=value)
             var value_ancestry = py_call(b.type.__dict__["__mro__"].__get__, kind)
             for j in range(len(value_ancestry)):  # driver-loop: over descriptor class ancestry before attribute access
-                if py_contains(_class_fields(value_ancestry[j]), "__get__"):
+                if py_contains(_class_fields(mods, value_ancestry[j]), "__get__"):
                     raise Error("TypeError: native mode metadata cannot invoke Python properties; store " + name + " as a native value")
             break
     if py_contains(fields, PythonObject(name)):
@@ -205,10 +215,13 @@ def _configuration_value(model: PythonObject, fields: PythonObject, name: String
 
 
 def _readback(model: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    var fields = _fields(model)
-    var plan = _plan(model, fields, context)
-    var requested = _configuration_value(model, fields, "numeric_mode")
+    # One admitted module view for the metadata reads below (no GIL release
+    # until the route's read-back entry is called).
+    var mods = NativeModules()
+    var b = mods.module("builtins")
+    var fields = _fields(mods, model)
+    var plan = _plan(mods, model, fields, context)
+    var requested = _configuration_value(mods, model, fields, "numeric_mode")
     var route = String(plan["route"])
     var selected = String()
     if route == "host" or route == "host_gp":
@@ -224,13 +237,13 @@ def _readback(model: PythonObject, operation: String, context: PythonObject) rai
             for i in range(len(names)):  # driver-loop: over connected process metadata names
                 if py_type(names[i]) is not b.str:
                     raise Error("TypeError: native default mode requires exact string module keys")
-            selected = _mode(defaults["_DEFAULT_MODE"])
+            selected = _mode(mods, defaults["_DEFAULT_MODE"])
         else:
-            selected = _mode(requested)
+            selected = _mode(mods, requested)
         if route == "forest":
-            var captured = _configuration_value(model, fields, "_fit_numeric_mode")
+            var captured = _configuration_value(mods, model, fields, "_fit_numeric_mode")
             if captured is not None:
-                var locked = _mode(captured)
+                var locked = _mode(mods, captured)
                 if requested is not None and selected != locked:
                     raise Error("ValueError: this forest was fitted with numeric_mode=" + locked
                                 + "; refit or use set_params before changing numeric_mode")

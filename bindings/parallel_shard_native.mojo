@@ -754,6 +754,13 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     _ = shard_ranges(0, holder["query_rows_per_shard"], "query_rows_per_shard", "")
     var step = Int(py=holder["query_rows_per_shard"])
     var n_ranges = len(ranges) // 2
+    # Each reference block is cut from the fitted rows once for the whole
+    # query, not once per query row block (the same bytes every time).
+    var blocks = b.list()
+    for r in range(n_ranges):  # driver-loop: one copy per reference block
+        var start = ranges[2 * r]
+        var shift = shard_read_shift(r, start, n_devices)
+        _ = py_call(blocks.append, shard_rows(index, start - shift, ranges[2 * r + 1] - shift, context))
     var outputs = b.list()
     var diagnostics = b.list()
     var first = 0
@@ -767,9 +774,8 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
             for r in range(wave, min(wave + n_devices, n_ranges)):  # driver-loop: one request per reference block
                 var start = ranges[2 * r]
                 var stop = ranges[2 * r + 1]
-                var shift = shard_read_shift(r, start, n_devices)
                 _ = py_call(requests.append, _native_request("reference_shard", Python.tuple(
-                    params, shard_rows(index, start - shift, stop - shift, context), query, min(k, stop - start))))
+                    params, blocks[r], query, min(k, stop - start))))
             _ = py_call(parts.extend, _map(pool, requests))
             wave += n_devices
         var merge = _t("reference_merge")

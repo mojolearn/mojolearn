@@ -15,6 +15,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_contains
 from bindings.native_array_snapshot import native_array_slots, native_array_snapshot
 from bindings.native_array_storage import native_array_zeros
+from bindings.native_buffer_address import native_buffer_address
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
@@ -191,14 +192,23 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
     var fmt = String(view.format)
     if fmt != "i" and fmt != "q" and fmt != "l" and fmt != "h" and fmt != "b" and fmt != "I" and fmt != "Q" and fmt != "L" and fmt != "H" and fmt != "B":
         raise Error("TypeError: generation ids must be integer (a native-endian integer buffer)")
+    var out = generation_array([b, l], "i")
+    var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
+    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
+    if Bool(py=view.c_contiguous):
+        # A contiguous buffer is read in place: its storage-order bytes are
+        # what `tobytes("C")` copied into the staging store (twice, through
+        # the bytes object and the slice assignment) before this one native
+        # conversion, which now reads the caller's buffer directly.
+        generation_ids_into(native_buffer_address(view), Int(py=view.itemsize), signed, b, l, column_major, vocab, dst)
+        _ = view
+        _ = captured_owner
+        return out
     # Pack strided buffer inputs with the CPython buffer implementation; all
     # validation and conversion below is a Mojo loop over native storage.
     var packed = native_array_zeros(fmt, Int(py=view.nbytes) // Int(py=view.itemsize))
     var destination = py_call(py_call(g[].bi.memoryview, packed).cast, "B")
     py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.tobytes, "C"))
-    var out = generation_array([b, l], "i")
-    var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
     generation_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l, column_major, vocab, dst)
     _ = packed^
     _ = captured_owner

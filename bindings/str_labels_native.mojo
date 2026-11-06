@@ -51,16 +51,21 @@ def _is_str(value: PythonObject) raises -> Bool:
 
 
 def _read(labels: PythonObject, mut table: StrTable) raises -> Bool:
-    # Every label's code points; False when one is not a str.
+    # Every label's code points; False when one is not a str. The C API
+    # entries are resolved once per call, not once per label.
     ref cpy = Python().cpython()
+    var get_flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")
+    var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
+    var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
+    var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
     for i in range(len(labels)):  # driver-loop: the explicit label input step, one read per label
         var value = labels[i]
-        if not _is_str(value):
+        if (get_flags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
             return False
-        var count = cpy.lib.get_function[Int]("PyUnicode_GetLength")(value._obj_ptr)
+        var count = get_length(value._obj_ptr)
         if count < 0:
             raise cpy.unsafe_get_error()
-        var address = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")(value._obj_ptr)
+        var address = as_ucs4(value._obj_ptr)
         if address == 0:
             raise cpy.unsafe_get_error()
         var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)
@@ -68,7 +73,7 @@ def _read(labels: PythonObject, mut table: StrTable) raises -> Bool:
         table.lengths.append(count)
         for k in range(count):  # driver-loop: over one label's code points
             table.points.append(source[k])
-        cpy.lib.get_function[NoneType]("PyMem_Free")(address)
+        mem_free(address)
     return True
 
 
@@ -178,13 +183,33 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     var missing = Python.list()
     var count = 0
     ref cpy = Python().cpython()
+    # One reused one-label table and the C API entries resolved once: each
+    # value used to build a Python list, a fresh table and four symbol
+    # lookups.
+    var get_flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")
+    var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
+    var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
+    var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
+    var single = StrTable()
     for i in range(n):  # driver-loop: the explicit label input step, one lookup per label
         var value = values[i]
         var found = -1
-        if _is_str(value):
-            var single = StrTable()
-            var one = Python.list(value)
-            _ = _read(one, single)
+        if (get_flags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) != 0:
+            var length = get_length(value._obj_ptr)
+            if length < 0:
+                raise cpy.unsafe_get_error()
+            var ucs4 = as_ucs4(value._obj_ptr)
+            if ucs4 == 0:
+                raise cpy.unsafe_get_error()
+            var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=ucs4)
+            single.points.clear()
+            single.starts.clear()
+            single.lengths.clear()
+            single.starts.append(0)
+            single.lengths.append(length)
+            for k in range(length):  # driver-loop: over one label's code points
+                single.points.append(source[k])
+            mem_free(ucs4)
             # binary search of the distinct classes, by code point
             var lo = 0
             var hi = len(distinct)

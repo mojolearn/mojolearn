@@ -352,10 +352,13 @@ def _fitted_w(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     return w
 
 
-def logistic_decision(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def logistic_decision(model: PythonObject, fields: PythonObject, mut entries: PythonObject, source: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
     """`decision_function`: (n,) float32 scores for two classes, (n, C)
-    for more."""
-    var fields = logistic_fields(model, context)
+    for more. `fields` is the admitted `logistic_fields` snapshot the public
+    entry took once for this call; `entries` is the mode's estimators table
+    when the caller already has it (None: resolved here, at the same point
+    as before, and handed back for the caller's next step)."""
     if not py_contains(fields, "_w"):
         raise Error("mojolearn LogisticRegression: call fit first")
     var x = classical_host_f32(source, 2, "X", context)
@@ -364,7 +367,8 @@ def logistic_decision(model: PythonObject, source: PythonObject, context: Python
     if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
         raise Error("mojolearn LogisticRegression feature count differs from fit")
     var n_targets = _n_targets(model, fields)
-    var entries = _entries(model, fields, context)
+    if entries is None:
+        entries = _entries(model, fields, context)
     var intercept = 1 if Bool(py=fields["fit_intercept"]) else 0
     var out = PythonObject(None)
     var params = Python.list(rows, cols, intercept)
@@ -381,10 +385,9 @@ def logistic_decision(model: PythonObject, source: PythonObject, context: Python
     return out
 
 
-def logistic_predict(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict`: the device threshold (two classes) or row argmax (more)
     beside the scores, decoded to `classes_`."""
-    var fields = logistic_fields(model, context)
     var n_targets = _n_targets(model, fields)
     if n_targets == 1:
         var x = classical_host_f32(source, 2, "X", context)
@@ -428,20 +431,20 @@ def logistic_predict(model: PythonObject, source: PythonObject, context: PythonO
         return classical_decode_labels(fields["classes_"], codes, context)
     # A binding without the device argmax keeps the host scan, the same
     # first-maximum rule (`_labels.argmax_rows`).
-    var scores = logistic_decision(model, source, context)
+    var scores = logistic_decision(model, fields, entries, source, context)
     var rows = Int(py=scores.shape[0])
     var codes = labels_argmax_rows(scores, rows, n_targets, False, context)
     _ = scores^
     return classical_decode_labels(fields["classes_"], codes, context)
 
 
-def logistic_proba(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def logistic_proba(model: PythonObject, fields: PythonObject, mut entries: PythonObject, source: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
     """`predict_proba`: the sigmoid (two classes) or softmax (more) of the
-    decision scores, in float64."""
-    var scores = logistic_decision(model, source, context)
-    var fields = logistic_fields(model, context)
+    decision scores, in float64. One fields snapshot and one estimators
+    table serve the decision and the link."""
+    var scores = logistic_decision(model, fields, entries, source, context)
     var n_targets = _n_targets(model, fields)
-    var entries = _entries(model, fields, context)
     var rows = Int(py=scores.shape[0])
     var out = PythonObject(None)
     if n_targets == 1:
@@ -460,11 +463,11 @@ def logistic_proba(model: PythonObject, source: PythonObject, context: PythonObj
     return out
 
 
-def logistic_log_proba(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def logistic_log_proba(model: PythonObject, fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict_log_proba`: `_log_or_inf` of every probability in the
     estimators binding (py2mojo_rows ROWS_LOG)."""
-    var proba = logistic_proba(model, source, context)
-    var entries = _entries(model, logistic_fields(model, context), context)
+    var entries = PythonObject(None)
+    var proba = logistic_proba(model, fields, entries, source, context)
     var flags = py_get(entries, "py2mojo_linear_flags")
     var bits = Int(py=py_call_typed(flags)) if flags is not None else 0
     if (bits & PY2MOJO_ROWS) == 0:
@@ -484,7 +487,7 @@ def logistic_log_proba(model: PythonObject, source: PythonObject, context: Pytho
     return out
 
 
-def logistic_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def logistic_score(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`score`: the mean accuracy of predict(X) against y, the prediction
     handed straight to the native accuracy program (`_accuracy_host`)."""
     var prediction = PythonObject(None)
@@ -495,7 +498,7 @@ def logistic_score(model: PythonObject, args: PythonObject, context: PythonObjec
         prediction = py_call_typed(host_predict[0], model, PythonObject("host_infer_predict"), Python.tuple(args[0]),
                                    host_predict[1])
     else:
-        prediction = logistic_predict(model, args[0], context)
+        prediction = logistic_predict(model, fields, args[0], context)
     var y = args[1]
     var shape = labels_shape_of(y, context)
     # `len(pred)`: the Array's row count from its slots, or a list's length.
@@ -553,18 +556,24 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             classical_admit_value(args[2], context)
             result = logistic_fit(model, Python.tuple(args[0], target, args[2]), context)
             classifier_after_fit(logistic_storage(model, context), args[0], context)
+        # `fields` (above) is the one admitted snapshot of this call: the
+        # operations below read it instead of re-admitting every parameter,
+        # the fitted state and the class labels again (two to four times per
+        # predict_proba / predict_log_proba before).
         elif operation == "decision_function":
-            result = logistic_decision(model, args[0], context)
+            var entries = PythonObject(None)
+            result = logistic_decision(model, fields, entries, args[0], context)
         elif operation == "predict":
-            result = logistic_predict(model, args[0], context)
+            result = logistic_predict(model, fields, args[0], context)
         elif operation == "predict_proba":
-            result = logistic_proba(model, args[0], context)
+            var entries = PythonObject(None)
+            result = logistic_proba(model, fields, entries, args[0], context)
         elif operation == "predict_log_proba":
-            result = logistic_log_proba(model, args[0], context)
+            result = logistic_log_proba(model, fields, args[0], context)
         elif operation == "score":
             var target = classifier_label_list(args[1], context)
             lda_native_labels(target, context, False, "LogisticRegression")
-            result = logistic_score(model, Python.tuple(args[0], target), context)
+            result = logistic_score(model, fields, Python.tuple(args[0], target), context)
         else:
             raise Error("unknown native LogisticRegression operation")
         result = _public_result(result, context)
