@@ -10,15 +10,29 @@ struct ManifoldDevice(Movable, Writable):
     var release: PythonObject
     var identifier: PythonObject
     var count: Int
+    # The binding's alloc / upload / download / move entries, resolved once
+    # by the kit that made this buffer (None for an entry the binding does
+    # not export): every later buffer, download and move on the same binding
+    # reuses them instead of a module-namespace scan per call
+    # (lane perf-manifold-kit).
+    var alloc: PythonObject
+    var upload: PythonObject
+    var download: PythonObject
+    var move: PythonObject
 
     def __init__(out self, binding: PythonObject, release: PythonObject,
-                 identifier: PythonObject, count: Int):
+                 identifier: PythonObject, count: Int, alloc: PythonObject,
+                 upload: PythonObject, download: PythonObject, move: PythonObject):
         # Both callables were admitted from the exact module's dictionary by
         # spectral_umap_entry. Retain the original module as well as its cell.
         self.binding = binding
         self.release = release
         self.identifier = identifier
         self.count = count
+        self.alloc = alloc
+        self.upload = upload
+        self.download = download
+        self.move = move
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ManifoldDevice(count=", self.count, ")")
@@ -47,16 +61,37 @@ struct ManifoldDevice(Movable, Writable):
 
 
 struct ManifoldMatrix(Movable, Writable):
+    # A matrix: `store` is its host words holder (None while the values are
+    # only on the device) and `device` its pooled device buffer (None on the
+    # host). Views share one holder, as `_M` views shared one array.array.
+    # A words holder is a ManifoldMatrix too (the registered native type),
+    # whose `words` own `count` float32 values (one spare word keeps an empty
+    # holder's address valid, as `_M._one` did); its other fields are unused.
+    # Native words replace the array.array store (lane perf-manifold-kit): no
+    # Python allocation, len() or buffer_info() call per matrix or operation.
     var store: PythonObject
     var device: PythonObject
     var rows: Int
     var cols: Int
+    var words: List[Float32]
+    var count: Int
 
     def __init__(out self, store: PythonObject, device: PythonObject, rows: Int, cols: Int):
         self.store = store
         self.device = device
         self.rows = rows
         self.cols = cols
+        self.words = List[Float32]()
+        self.count = 0
+
+    def __init__(out self, *, words_of: Int):
+        """A words holder of `words_of` zero float32 values."""
+        self.store = PythonObject(None)
+        self.device = PythonObject(None)
+        self.rows = 0
+        self.cols = 0
+        self.words = List[Float32](length=max(words_of, 1), fill=Float32(0))
+        self.count = words_of
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ManifoldMatrix(shape=(", self.rows, ", ", self.cols, "))")
@@ -97,3 +132,37 @@ def device_binding(value: PythonObject) raises -> PythonObject:
 
 def device_identifier(value: PythonObject) raises -> PythonObject:
     return value.downcast_value_ptr[ManifoldDevice]()[].identifier
+
+
+def device_alloc(value: PythonObject) raises -> PythonObject:
+    return value.downcast_value_ptr[ManifoldDevice]()[].alloc
+
+
+def device_release(value: PythonObject) raises -> PythonObject:
+    return value.downcast_value_ptr[ManifoldDevice]()[].release
+
+
+def device_upload(value: PythonObject) raises -> PythonObject:
+    return value.downcast_value_ptr[ManifoldDevice]()[].upload
+
+
+def device_download(value: PythonObject) raises -> PythonObject:
+    return value.downcast_value_ptr[ManifoldDevice]()[].download
+
+
+def device_move(value: PythonObject) raises -> PythonObject:
+    return value.downcast_value_ptr[ManifoldDevice]()[].move
+
+
+def words_new(count: Int) raises -> PythonObject:
+    """A words holder of `count` zero float32 values."""
+    return PythonObject(alloc=ManifoldMatrix(words_of=count))
+
+
+def words_count(holder: PythonObject) raises -> Int:
+    return holder.downcast_value_ptr[ManifoldMatrix]()[].count
+
+
+def words_address(holder: PythonObject) raises -> Int:
+    """The holder's first word (valid for an empty holder: its spare word)."""
+    return Int(holder.downcast_value_ptr[ManifoldMatrix]()[].words.unsafe_ptr())
