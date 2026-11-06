@@ -615,6 +615,31 @@ def write_error_sidecar(json_path):
     return path
 
 
+#: The timing series marker (timing_env.harness_timing; TIMING RECORD ONLY,
+#: nothing hashed reads it). 1: every record before 2026-11-06, whose `batch`
+#: and `batchscale` stages also held the harness's own per-row Python (one
+#: row array, bytes, compare and two digest updates per result row; 1.1-4.8 us
+#: a row by host CPU). 2: that work is whole-array and booked to
+#: `<stage>-harness` (HARNESS_STAGE_SUFFIX), not to the stage. A stage time
+#: of version 1 is not like for like with one of version 2:
+#: tools/identity_timing_compare.py treats a change as a break in the series.
+HARNESS_TIMING_VERSION = 2
+HARNESS_STAGE_SUFFIX = "-harness"
+_HARNESS_SECONDS = [0.0]
+
+
+@contextmanager
+def _harness_work():
+    """Harness work inside a timed stage (row form, compares, digests of
+    host arrays): CellTimer books it to `<stage>-harness`. Never around a
+    library call or the `np.asarray` that copies its result down."""
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        _HARNESS_SECONDS[0] += time.perf_counter() - started
+
+
 class CellTimer:
     def __init__(self, label):
         self.label = label
@@ -624,13 +649,19 @@ class CellTimer:
     @contextmanager
     def stage(self, name):
         started = time.perf_counter()
+        harness0 = _HARNESS_SECONDS[0]
         print(f"# START {self.label} {name}", flush=True)
         try:
             yield
         finally:
             seconds = time.perf_counter() - started
-            self.stages[name] = self.stages.get(name, 0.0) + seconds
-            print(f"# DONE {self.label} {name} {seconds:.3f}s", flush=True)
+            harness = _HARNESS_SECONDS[0] - harness0
+            self.stages[name] = self.stages.get(name, 0.0) + (seconds - harness)
+            if harness > 0.0:
+                hname = name + HARNESS_STAGE_SUFFIX
+                self.stages[hname] = self.stages.get(hname, 0.0) + harness
+            print(f"# DONE {self.label} {name} {seconds - harness:.3f}s"
+                  + (f" (+{harness:.3f}s harness)" if harness > 0.0 else ""), flush=True)
 
     def result(self):
         return dict(total_seconds=time.perf_counter() - self.started, stages=dict(self.stages))
@@ -805,7 +836,7 @@ def timing_environment():
     except (AttributeError, OSError):
         affinity = None
     return dict(
-        schema=TIMING_ENV_SCHEMA, cpu_model=cpu_model(), arch=platform.machine(),
+        schema=TIMING_ENV_SCHEMA, harness_timing=HARNESS_TIMING_VERSION, cpu_model=cpu_model(), arch=platform.machine(),
         logical_cpus=os.cpu_count(), affinity_cpus=affinity, cgroup_cpu_quota=cgroup_cpu_quota(),
         threads={k: os.environ.get(k) for k in TIMING_THREAD_ENV},
         concurrency=os.environ.get(TIMING_CONCURRENCY_ENV),
@@ -7863,26 +7894,151 @@ def _prefix_lengths(full):
     return sorted(p for p in {1, 7, full - 1} if 1 <= p < full)
 
 
+def _first_byte_diff(x, y):
+    """Index of the first differing byte of two equal-length byte strings
+    (the caller knows they differ): one vectorised compare, the same index
+    the per-byte `next(j for j in range(len(x)) if x[j] != y[j])` gave."""
+    return int(np.flatnonzero(np.frombuffer(x, dtype=np.uint8) != np.frombuffer(y, dtype=np.uint8))[0])
+
+
+#: 1-D output kinds whose row form (`np.ascontiguousarray(a[i])`, a NumPy
+#: scalar boxed back into a (1,) array) is the element's own bytes, so the
+#: whole output's buffer IS the rows. Not here, so read row by row: the text
+#: and object kinds (refused or converted per element), and floats or complex
+#: wider than 8 / 16 bytes (long double carries padding a scalar need not keep).
+#: A 1-D bool is dense too, with the scalar's normalisation (any nonzero byte
+#: is True, boxed back as 1) applied to the whole buffer.
+_DENSE_ROW_KINDS = "biufcmM"
+
+
+class _OutRows:
+    """One output of one call in row form. DENSE: the whole C-contiguous
+    array, every row of one dtype and shape, the row bytes the rows of the
+    uint8 matrix `u` (n x row bytes). LISTED: one contiguous array per row
+    (a _PerRow output, or an array whose rows are not its buffer's rows)."""
+    __slots__ = ("dt", "shape", "u", "items")
+
+    def __init__(self, dt=None, shape=None, u=None, items=None):
+        self.dt, self.shape, self.u, self.items = dt, shape, u, items
+
+    def row(self, i):
+        if self.items is None:
+            return (self.dt, self.shape, self.u[i].tobytes())
+        v = self.items[i]
+        return (v.dtype.str, v.shape, v.tobytes())
+
+    def meta(self, i):
+        """(dtype string, row byte count) of row i."""
+        if self.items is None:
+            return self.dt, self.u.shape[1]
+        v = self.items[i]
+        return v.dtype.str, v.nbytes
+
+    def flip(self, i):
+        """The sabotage bit: the lowest bit of row i's first byte, on a copy
+        (the dense matrix may be the library's own output buffer)."""
+        if self.items is None:
+            self.u = self.u.copy()
+            self.u[i, 0] ^= 1
+        else:
+            v = self.items[i]
+            flipped = bytearray(v.tobytes())
+            flipped[0] ^= 1
+            self.items[i] = np.frombuffer(bytes(flipped), dtype=v.dtype).reshape(v.shape)
+
+
+def _listed_rows(items, k, what):
+    for v in items:
+        if v.dtype == object or v.dtype.kind in "OUSV":
+            raise TypeError(f"{what}: output {k} is dtype={v.dtype}; pass the numeric arrays")
+    return _OutRows(items=items)
+
+
+def _dense_rows(a, n, k, what):
+    """Row form of an (n, ...) array without a Python step per row, or the
+    per-row form when the array's rows are not its buffer's rows (see
+    _DENSE_ROW_KINDS). The row dtype and shape are read from row 0 as the
+    per-row form reads every row: `np.ascontiguousarray(a[i])`, so a 1-D
+    output's rows are shape (1,)."""
+    kind, size = a.dtype.kind, a.dtype.itemsize
+    if (n == 0 or kind not in _DENSE_ROW_KINDS or (kind == "f" and size > 8) or (kind == "c" and size > 16)):
+        return _listed_rows([np.ascontiguousarray(a[i]) for i in range(n)], k, what)
+    r0 = np.ascontiguousarray(a[0])
+    want = a.shape[1:] if a.ndim > 1 else (1,)
+    if r0.dtype != a.dtype or r0.dtype.str != a.dtype.str or r0.shape != want:
+        # a non-native byte order (a 1-D scalar comes back native) or any
+        # other dtype whose element is not its own row: the per-row form
+        return _listed_rows([np.ascontiguousarray(a[i]) for i in range(n)], k, what)
+    A = np.ascontiguousarray(a)
+    rb = r0.nbytes
+    if rb == 0:
+        u = np.zeros((n, 0), dtype=np.uint8)
+    else:
+        u = A.reshape(-1).view(np.uint8).reshape(n, rb)
+        if kind == "b" and a.ndim == 1:
+            # np.bool_(a[i]) boxes any nonzero byte as 1
+            u = (u != 0).view(np.uint8)
+    return _OutRows(dt=r0.dtype.str, shape=tuple(r0.shape), u=u)
+
+
+class _Rows:
+    """Per-row form of a call's outputs: `rows[i]` is row i as a list of
+    (dtype, shape, bytes) per output, the form the per-row harness built for
+    every row (`for r in rows` reads them in order). Dense outputs keep the
+    whole buffer, so building, comparing and hashing touch no row in Python;
+    `rows[i]` builds one row on demand (the mismatch message, the rows asked
+    alone)."""
+    __slots__ = ("n", "outs")
+
+    def __init__(self, n, outs):
+        self.n, self.outs = n, outs
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, i):
+        if not -self.n <= i < self.n:
+            raise IndexError(i)
+        return [o.row(i % self.n) for o in self.outs]
+
+    def __iter__(self):
+        return (self[i] for i in range(self.n))
+
+    def dense(self):
+        return all(o.items is None for o in self.outs)
+
+
 def _as_rows(outputs, n, what):
-    """Per-row form of a call's outputs: a list of n rows, each a tuple of
-    (dtype, shape, bytes) per output. Refuses an output whose leading axis
+    """Per-row form of a call's outputs (a _Rows of n rows, each a list of
+    (dtype, shape, bytes) per output). Refuses an output whose leading axis
     is not the n rows, and an object or text array (as `_h` does)."""
-    rows = [[] for _ in range(n)]
+    outs = []
     for k, o in enumerate(outputs):
         if isinstance(o, _PerRow):
             if len(o) != n:
                 raise ValueError(f"{what}: output {k} has {len(o)} rows, expected {n}")
-            items = [np.ascontiguousarray(np.asarray(v)) for v in o]
+            outs.append(_listed_rows([np.ascontiguousarray(np.asarray(v)) for v in o], k, what))
         else:
             a = np.asarray(o)
             if a.ndim == 0 or a.shape[0] != n:
                 raise ValueError(f"{what}: output {k} has shape {a.shape}, expected leading axis {n}")
-            items = [np.ascontiguousarray(a[i]) for i in range(n)]
-        for i, v in enumerate(items):
-            if v.dtype == object or v.dtype.kind in "OUSV":
-                raise TypeError(f"{what}: output {k} is dtype={v.dtype}; pass the numeric arrays")
-            rows[i].append((v.dtype.str, v.shape, v.tobytes()))
-    return rows
+            outs.append(_dense_rows(a, n, k, what))
+    return _Rows(n, outs)
+
+
+def _host_outputs(outputs):
+    """A call's outputs as host arrays (`np.asarray`, which is where a lazy or
+    device result is copied down): LIBRARY work, kept inside the stage clock;
+    _as_rows, the compares and the digest after it are the harness's own."""
+    out = []
+    for o in outputs:
+        if not isinstance(o, _PerRow):
+            try:
+                o = np.asarray(o)
+            except Exception:
+                pass  # _as_rows raises it again, in output order, as before
+        out.append(o)
+    return out
 
 
 def _elem_hex(b, itemsize, e):
@@ -7897,8 +8053,7 @@ def _row_mismatch(whole, other, name_other):
             return f"output {k}: whole {dw}{list(sw)} vs {name_other} {do}{list(so)}"
         if bw != bo:
             size = np.dtype(dw).itemsize
-            first = next(j for j in range(len(bw)) if bw[j] != bo[j])
-            e = first // size
+            e = _first_byte_diff(bw, bo) // size
             return (f"output {k} element {e}: whole {_elem_hex(bw, size, e)} "
                     f"vs {name_other} {_elem_hex(bo, size, e)}")
     if len(whole) != len(other):
@@ -7906,21 +8061,73 @@ def _row_mismatch(whole, other, name_other):
     return None
 
 
+def _first_moved_row(whole, at, part):
+    """The first row i of `part` (rows `at`.. of `whole`) for which
+    `_row_mismatch(whole[at + i], part[i])` is not None, else None, with no
+    Python step per row for dense outputs: a dtype or shape difference moves
+    every row, and the bytes are compared as two uint8 matrices."""
+    m = part.n
+    if m == 0:
+        return None
+    if len(whole.outs) != len(part.outs):
+        return 0  # every row reads a differing output or the output count
+    bad = np.zeros(m, dtype=bool)
+    for W, P in zip(whole.outs, part.outs):
+        if W.items is None and P.items is None:
+            if W.dt != P.dt or W.shape != P.shape:
+                return 0
+            if W.u.shape[1]:
+                bad |= (W.u[at:at + m] != P.u).any(axis=1)
+        else:
+            # a listed output (ragged rows): the per-row compare, as before
+            for i in range(m):
+                if not bad[i] and W.row(at + i) != P.row(i):
+                    bad[i] = True
+    hit = np.flatnonzero(bad)
+    return int(hit[0]) if hit.size else None
+
+
+def _digest_rows(digest, rows):
+    """`digest.update(f"{dt}{shape}")` then `digest.update(bytes)` per row and
+    output, in row order: for dense outputs the same byte stream laid out as
+    one (rows x (header + row bytes)) matrix and hashed in one update."""
+    if not rows.dense():
+        for r in rows:
+            for dt, shape, b in r:
+                digest.update(f"{dt}{shape}".encode())
+                digest.update(b)
+        return
+    if rows.n == 0:
+        return
+    blocks = []
+    for o in rows.outs:
+        head = np.frombuffer(f"{o.dt}{o.shape}".encode(), dtype=np.uint8)
+        blk = np.empty((rows.n, head.size + o.u.shape[1]), dtype=np.uint8)
+        blk[:, :head.size] = head
+        blk[:, head.size:] = o.u
+        blocks.append(blk)
+    stream = blocks[0] if len(blocks) == 1 else np.concatenate(blocks, axis=1)
+    digest.update(np.ascontiguousarray(stream).data)
+
+
 def _sabotage_rows(rows):
     """Flip the lowest bit of the first element of the first floating output
     of the whole-batch rows (one ulp for a float; an integer output is used
     when none floats), in place. A byte flip and not `np.nextafter`, which
     on NumPy 1.x promotes a float32 scalar against a Python float to float64
-    and can round back to the same bits, and which leaves a NaN a NaN."""
+    and can round back to the same bits, and which leaves a NaN a NaN.
+    The first row, then output, that holds a byte of the kind: with dense
+    outputs only, every row has row 0's dtype and size, so row 0 decides."""
     for kinds in ("f", "iub"):
-        for r in rows:
-            for k, (dt, shape, b) in enumerate(r):
-                if np.dtype(dt).kind not in kinds or not b:
+        for i in range(rows.n):
+            for o in rows.outs:
+                dt, nb = o.meta(i)
+                if np.dtype(dt).kind not in kinds or not nb:
                     continue
-                flipped = bytearray(b)
-                flipped[0] ^= 1
-                r[k] = (dt, shape, bytes(flipped))
+                o.flip(i)
                 return
+            if rows.dense():
+                break
 
 
 def _split_bounds(n, min_batch=1):
@@ -7950,31 +8157,40 @@ def _eval_batch_rows(call, alone, sabotage, digest):
         else:
             raise RuntimeError(f"{call.label}: a batch of {mb - 1} no longer refuses ({call.refusal!r} was "
                                f"declared); the refusal was lifted, so drop min_batch and ask rows alone")
-    whole = _as_rows(call.fn(np.ascontiguousarray(call.R)), n, f"{call.label} whole")
-    if sabotage:
-        _sabotage_rows(whole)
+    # The library calls and their `np.asarray` run on the stage clock; the
+    # row form, the compares and the digest run under _harness_work, which
+    # CellTimer books to `<stage>-harness` (HARNESS_TIMING_VERSION 2).
+    out = _host_outputs(call.fn(np.ascontiguousarray(call.R)))
+    with _harness_work():
+        whole = _as_rows(out, n, f"{call.label} whole")
+        if sabotage:
+            _sabotage_rows(whole)
     for i in range(min(alone, n)):
         a = min(i, n - mb)
-        one = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + mb])), mb,
-                       f"{call.label} row {i} alone" if mb == 1 else f"{call.label} rows [{a},{a + mb})")
-        where = "alone" if mb == 1 else f"in a batch of {mb}"
-        m = _row_mismatch(whole[i], one[i - a], where)
+        out = _host_outputs(call.fn(np.ascontiguousarray(call.R[a:a + mb])))
+        with _harness_work():
+            one = _as_rows(out, mb, f"{call.label} row {i} alone" if mb == 1 else f"{call.label} rows [{a},{a + mb})")
+            where = "alone" if mb == 1 else f"in a batch of {mb}"
+            m = _row_mismatch(whole[i], one[i - a], where)
         if m:
             return f"BATCH_MOVED:{call.label}:row {i} of {n} {where}:{m}"
     bounds = _split_bounds(n, mb)
     got = []
     for a, b in zip(bounds, bounds[1:]):
-        got.extend(_as_rows(call.fn(np.ascontiguousarray(call.R[a:b])), b - a, f"{call.label} chunk [{a},{b})"))
+        out = _host_outputs(call.fn(np.ascontiguousarray(call.R[a:b])))
+        with _harness_work():
+            got.append((a, _as_rows(out, b - a, f"{call.label} chunk [{a},{b})")))
     split_name = "split " + ",".join(str(b - a) for a, b in zip(bounds, bounds[1:]))
-    for i in range(n):
-        m = _row_mismatch(whole[i], got[i], split_name)
-        if m:
-            return f"BATCH_MOVED:{call.label}:row {i} of {n} in {split_name}:{m}"
-    digest.update((f"rows:{call.label}:{n}" + (f":min_batch={mb}" if mb > 1 else "")).encode())
-    for r in whole:
-        for dt, shape, b in r:
-            digest.update(f"{dt}{shape}".encode())
-            digest.update(b)
+    with _harness_work():
+        # the chunks in row order: the first moved row of the first chunk
+        # holding one is the first row the per-row walk reported
+        for a, part in got:
+            i = _first_moved_row(whole, a, part)
+            if i is not None:
+                m = _row_mismatch(whole[a + i], part[i], split_name)
+                return f"BATCH_MOVED:{call.label}:row {a + i} of {n} in {split_name}:{m}"
+        digest.update((f"rows:{call.label}:{n}" + (f":min_batch={mb}" if mb > 1 else "")).encode())
+        _digest_rows(digest, whole)
     return None
 
 
@@ -8004,7 +8220,7 @@ def _eval_batch_prefix(call, sabotage, digest):
             wb, pb = want.tobytes(), P.tobytes()
             if wb != pb:
                 size = want.dtype.itemsize
-                e = next(j for j in range(len(wb)) if wb[j] != pb[j]) // size
+                e = _first_byte_diff(wb, pb) // size
                 idx = np.unravel_index(e, want.shape)
                 pos = int(idx[call.axis])
                 return (f"{where}:position {pos} output {k} element {e}: whole {_elem_hex(wb, size, e)} "
@@ -8960,7 +9176,7 @@ def _first_diff(a, b):
     if a.shape != b.shape or a.dtype != b.dtype:
         return f"whole {a.dtype.str}{list(a.shape)} vs {b.dtype.str}{list(b.shape)}"
     size = a.dtype.itemsize
-    e = next(j for j in range(len(ab)) if ab[j] != bb[j]) // size
+    e = _first_byte_diff(ab, bb) // size
     return f"element {e}: whole {_elem_hex(ab, size, e)} vs {_elem_hex(bb, size, e)}"
 
 
@@ -9267,9 +9483,11 @@ class _ScaleRows:
 
 def _eval_scale_rows(call, sabotage, digest, notes):
     n = call.R.shape[0]
-    whole = _as_rows(call.fn(call.R), n, f"{call.label} whole B={n}")
-    if sabotage:
-        _sabotage_rows(whole)
+    out = _host_outputs(call.fn(call.R))
+    with _harness_work():
+        whole = _as_rows(out, n, f"{call.label} whole B={n}")
+        if sabotage:
+            _sabotage_rows(whole)
     # THE BATCHES THIS CALL ACTUALLY ASKED, not SCALE_BATCHES (2026-09-20).
     # A sub-batch wider than the whole call cannot be taken, and until this
     # date the skip was silent: the digest was seeded with the whole tuple
@@ -9286,16 +9504,16 @@ def _eval_scale_rows(call, sabotage, digest, notes):
             continue
         asked.append(b)
         for a in sorted({0, (n - b) // 2, n - b}):
-            got = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + b])), b, f"{call.label} B={b} at {a}")
-            for i in range(b):
-                m = _row_mismatch(whole[a + i], got[i], f"B={b} starting at row {a}")
-                if m:
+            out = _host_outputs(call.fn(np.ascontiguousarray(call.R[a:a + b])))
+            with _harness_work():
+                got = _as_rows(out, b, f"{call.label} B={b} at {a}")
+                i = _first_moved_row(whole, a, got)
+                if i is not None:
+                    m = _row_mismatch(whole[a + i], got[i], f"B={b} starting at row {a}")
                     return f"BATCH_MOVED:{call.label}:row {a + i} of {n} in B={b} starting at row {a}:{m}"
-    digest.update(f"scale:{call.label}:{n}:{','.join(map(str, asked))}".encode())
-    for r in whole:
-        for dt, shape, raw in r:
-            digest.update(f"{dt}{shape}".encode())
-            digest.update(raw)
+    with _harness_work():
+        digest.update(f"scale:{call.label}:{n}:{','.join(map(str, asked))}".encode())
+        _digest_rows(digest, whole)
     return None
 
 
@@ -9464,7 +9682,7 @@ def _eval_ragged(call, sabotage, digest):
             if ax is not None:
                 pad = np.ascontiguousarray(O[i, n:])
                 if pad.tobytes() != bytes(pad.nbytes):
-                    first = next(j for j, c in enumerate(pad.tobytes()) if c) // pad.dtype.itemsize
+                    first = int(np.flatnonzero(np.frombuffer(pad.tobytes(), dtype=np.uint8))[0]) // pad.dtype.itemsize
                     return f"{where}: padding output element {first} is not +0.0"
     digest.update(f"ragged:{call.label}:{list(call.x.shape)}:{call.lengths}".encode())
     for o in outs:
