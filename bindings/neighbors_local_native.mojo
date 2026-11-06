@@ -522,27 +522,34 @@ def _lof_predict(model: PythonObject, args: PythonObject, context: PythonObject)
 def _class_array(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_class_array(classes, codes)`: int or bool classes an int64 Array,
     real classes a float64 Array, other labels a list (`decode_labels`)."""
+    # Perf (perf2-neighbors): an exact int/bool/float label answers the kind
+    # tests by its type, and `int()`/`float()` of an exact int/float is the
+    # object itself, so only other labels pay the Python calls.
     var b = _b()
     var k = len(classes)
     var all_int = True
     for i in range(k):  # driver-loop: over the k class labels (kind test)
-        if not family_isinstance(classes[i], Python.tuple(b.bool, b.int)):
+        var cls = py_type(classes[i])
+        if cls is not b.int and cls is not b.bool and not family_isinstance(classes[i], Python.tuple(b.bool, b.int)):
             all_int = False
             break
     if all_int:
         var ints = Python.list()
         for i in range(k):  # driver-loop: over the k class values
-            _ = py_call(ints.append, family_call(b.int, classes[i]))
+            var label = classes[i]
+            _ = py_call(ints.append, label if py_type(label) is b.int else family_call(b.int, label))
         return classical_decode_labels(ints, codes, context)
     var all_real = True
     for i in range(k):  # driver-loop: over the k class labels (kind test)
-        if not family_isinstance(classes[i], Python.tuple(b.int, b.float)):
+        var cls = py_type(classes[i])
+        if cls is not b.int and cls is not b.float and not family_isinstance(classes[i], Python.tuple(b.int, b.float)):
             all_real = False
             break
     if all_real:
         var reals = Python.list()
         for i in range(k):  # driver-loop: over the k class labels as floats
-            _ = py_call(reals.append, family_call(b.float, classes[i]))
+            var label = classes[i]
+            _ = py_call(reals.append, label if py_type(label) is b.float else family_call(b.float, label))
         return classical_decode_labels(reals, codes, context)
     return classical_decode_labels(classes, codes, context)
 
