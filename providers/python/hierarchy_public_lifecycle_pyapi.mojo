@@ -13,7 +13,9 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_estimator_name, classical_check_width
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_labels import labels_shape_of, _flatten_labels
-from bindings.label_integer_storage import labels_integer_storage
+from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
+from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage
+from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE, LABELS_FLOAT_CONTINUOUS
 from bindings.classical_warnings import classical_warn_column
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_array_view import native_array_ndarray_view
@@ -120,6 +122,34 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     # walk below cannot refuse it and the vector is returned unchanged either
     # way: admit it from its dtype metadata instead of label by label.
     if len(shape) == 1 and labels_integer_storage(source, context):
+        return source
+    # perf3-label-doors: any rank is admitted from the buffer except the
+    # non-multioutput (n, 1) column, which the walk flattens with a warning:
+    # every other shape is returned unchanged by the walk, and the buffer
+    # check reads in C order, the walk's flatten order. A numpy-backed pandas
+    # Series is checked through its stored exact ndarray (same labels, same
+    # order, 1-D) and returned unchanged, as the walk returns it.
+    var column = not multioutput and len(shape) == 2 and shape[1] == 1
+    var stored = PythonObject(None)
+    if len(shape) >= 1 and not column:
+        stored = labels_storage_source(source, context)
+    if stored is not None and labels_integer_storage(stored, context):
+        return source
+    # An exact float32/float64 buffer holds only real floats: the walk reduces
+    # to its finite (and, for a classifier, integral) test, judged at the
+    # first refused element in C order with the same wording, in one native
+    # pass (bindings/label_integer_storage.mojo).
+    if stored is not None:
+        var refusal = labels_float_storage(stored, context, classifier)
+        if refusal == LABELS_FLOAT_NONFINITE:
+            raise Error("Input y contains NaN or infinity (" + name + ").")
+        if refusal == LABELS_FLOAT_CONTINUOUS:
+            raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+        if refusal == LABELS_FLOAT_OK:
+            return source
+    # An exact flat list / tuple of exact ints or bools: every label passes
+    # every check below and a list is returned unchanged by the walk.
+    if labels_list_integer_storage(source):
         return source
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
