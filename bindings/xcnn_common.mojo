@@ -161,8 +161,10 @@ def xcnn_size(shape: List[Int]) -> Int:
 def xcnn_tuple(shape: List[Int]) raises -> PythonObject:
     var b = xcnn_builtins()
     var out = Python.list()
+    # The bound `append` is looked up once per tuple, not once per word.
+    var append = py_call(b.getattr, out, "append")
     for i in range(len(shape)):  # driver-loop: over shape words
-        _ = py_call(py_call(b.getattr, out, "append"), PythonObject(shape[i]))
+        _ = py_call(append, PythonObject(shape[i]))
     return py_call(b.tuple, out)
 
 
@@ -211,6 +213,26 @@ def xcnn_tensor_layout(context: PythonObject) raises:
             raise Error("TypeError: CNN tensor storage descriptors changed")
 
 
+def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """A tensor storage slot read after this operation ran
+    `xcnn_tensor_layout` (which already compared every slot descriptor with
+    its import-time identity): the exact-class check and the member
+    descriptor read only. No Python code runs between that check and this
+    read, so the class and its descriptors cannot have changed."""
+    var cls = context["xcnn_tensor_class"]
+    if py_type(value) is not cls:
+        raise Error("TypeError: CNN tensor requires the connected native storage class")
+    return py_call(context["xcnn_tensor_slots"][PythonObject(name)].__get__, value, cls)
+
+
+def _xcnn_set_raw(value: PythonObject, name: String, item: PythonObject, context: PythonObject) raises:
+    """A tensor storage slot write after `xcnn_tensor_layout` (see
+    `_xcnn_slot_raw`)."""
+    if py_type(value) is not context["xcnn_tensor_class"]:
+        raise Error("TypeError: CNN tensor requires the connected native storage class")
+    _ = py_call(context["xcnn_tensor_slots"][PythonObject(name)].__set__, value, item)
+
+
 def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     xcnn_tensor_layout(context)
     var cls = context["xcnn_tensor_class"]
@@ -235,39 +257,55 @@ def xcnn_tensor_set(value: PythonObject, name: String, item: PythonObject, conte
 
 
 def xcnn_tensor_admit(value: PythonObject, context: PythonObject) raises:
+    # One layout check for the whole admission; the slot reads below are raw.
+    xcnn_tensor_layout(context)
+    _xcnn_tensor_admit_raw(value, context)
+
+
+def _xcnn_tensor_admit_raw(value: PythonObject, context: PythonObject) raises:
+    """`xcnn_tensor_admit` after this operation's `xcnn_tensor_layout`."""
     var b = xcnn_builtins()
-    var shape = xcnn_tensor_slot(value, "shape", context)
+    var shape = _xcnn_slot_raw(value, "shape", context)
     if py_type(shape) is not b.tuple:
         raise Error("TypeError: CNN tensor shape requires an exact tuple")
     for i in range(len(shape)):  # driver-loop: native tensor dimensions before arithmetic
         if py_type(shape[i]) is not b.int or Int(py=shape[i]) < 0:
             raise Error("TypeError: CNN tensor dimensions require nonnegative integers")
-    var handle = xcnn_tensor_slot(value, "h", context)
+    var handle = _xcnn_slot_raw(value, "h", context)
     if handle is not None and (py_type(handle) is not b.int or Int(py=handle) < 1):
         raise Error("TypeError: CNN tensor handle requires a positive native integer")
-    _ = xcnn_module_entries(xcnn_tensor_slot(value, "b", context), context)
+    _ = xcnn_module_entries(_xcnn_slot_raw(value, "b", context), context)
     if handle is None:
-        sequential_admit_value(xcnn_tensor_slot(value, "_host", context), context)
+        sequential_admit_value(_xcnn_slot_raw(value, "_host", context), context)
 
 
 def xcnn_on_dev(entries: PythonObject, value: PythonObject, context: PythonObject) raises -> Bool:
     """`_on_dev(b, value)`: a tensor resident on this mixed binding."""
     if not xcnn_mixed(entries) or not xcnn_is_t(value, context):
         return False
-    xcnn_tensor_admit(value, context)
-    return xcnn_tensor_slot(value, "h", context) is not None and xcnn_tensor_slot(value, "b", context) is entries["module"]
+    # `xcnn_is_t` ran the layout check; the admission and slot reads reuse it.
+    _xcnn_tensor_admit_raw(value, context)
+    return _xcnn_slot_raw(value, "h", context) is not None and _xcnn_slot_raw(value, "b", context) is entries["module"]
 
 
 def xcnn_tensor(module: PythonObject, shape: PythonObject, h: PythonObject, host: PythonObject, base: PythonObject,
                 context: PythonObject) raises -> PythonObject:
     """`DeviceTensor(binding, shape, h, host, base)`, its slots set here."""
+    xcnn_tensor_layout(context)
+    return _xcnn_tensor_raw(module, shape, h, host, base, context)
+
+
+def _xcnn_tensor_raw(module: PythonObject, shape: PythonObject, h: PythonObject, host: PythonObject, base: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`xcnn_tensor` after this operation's `xcnn_tensor_layout`: the five
+    slots written without re-walking the class layout once per slot."""
     var b = xcnn_builtins()
     var t = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_tensor_class"])
-    xcnn_tensor_set(t, "b", module, context)
-    xcnn_tensor_set(t, "shape", shape, context)
-    xcnn_tensor_set(t, "h", h, context)
-    xcnn_tensor_set(t, "_host", host, context)
-    xcnn_tensor_set(t, "_base", base, context)
+    _xcnn_set_raw(t, "b", module, context)
+    _xcnn_set_raw(t, "shape", shape, context)
+    _xcnn_set_raw(t, "h", h, context)
+    _xcnn_set_raw(t, "_host", host, context)
+    _xcnn_set_raw(t, "_base", base, context)
     return t
 
 
@@ -294,8 +332,13 @@ def xcnn_reshape_t(value: PythonObject, shape: List[Int], context: PythonObject)
     var old = xcnn_shape(value)
     if xcnn_size(old) != xcnn_size(shape):
         raise Error("mojolearn: cannot reshape " + xcnn_shape_text(old) + " to " + xcnn_shape_text(shape))
-    return xcnn_tensor(xcnn_tensor_slot(value, "b", context), xcnn_tuple(shape),
-                       xcnn_tensor_slot(value, "h", context), xcnn_tensor_slot(value, "_host", context), value, context)
+    # One layout check covers the three reads and the five writes.
+    xcnn_tensor_layout(context)
+    var module = _xcnn_slot_raw(value, "b", context)
+    var dims = xcnn_tuple(shape)
+    var handle = _xcnn_slot_raw(value, "h", context)
+    var host = _xcnn_slot_raw(value, "_host", context)
+    return _xcnn_tensor_raw(module, dims, handle, host, value, context)
 
 
 def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -332,9 +375,10 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
     xcnn_numpy(context)
     xcnn_tensor_admit(value, context)
     var shape = xcnn_shape(value)
-    var handle = xcnn_tensor_slot(value, "h", context)
+    # The admission above ran the layout check; no Python code ran since.
+    var handle = _xcnn_slot_raw(value, "h", context)
     if handle is None:
-        var source = xcnn_f32(xcnn_tensor_slot(value, "_host", context), "tensor host", context)
+        var source = xcnn_f32(_xcnn_slot_raw(value, "_host", context), "tensor host", context)
         if xcnn_size(shape) != Int(py=source.size):
             raise Error("ValueError: CNN tensor host storage has the wrong size")
         var out = xcnn_host_f32(shape, context)
@@ -346,7 +390,7 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
     var out = xcnn_host_f32(shape, context)
     var size = xcnn_size(shape)
     if size:
-        var entries = xcnn_module_entries(xcnn_tensor_slot(value, "b", context), context)
+        var entries = xcnn_module_entries(_xcnn_slot_raw(value, "b", context), context)
         _ = py_call_typed(entries["symbols"]["x_cnn_res_download"], handle, xcnn_addr(out), PythonObject(size))
         _ = out
     return out
@@ -460,7 +504,9 @@ def xcnn_dev_get(layer: PythonObject, entries: PythonObject, name: String, count
     reallocated only when its size changes."""
     var n = max(count, 1)
     var dev = xcnn_dev(layer, entries, context)
-    var table = xcnn_dev_fields(dev, context)["h"]
+    # `xcnn_dev` admitted an existing owner (or made a fresh one with an
+    # empty table) and no Python code ran since: its table is read directly.
+    var table = _fields(dev)["h"]
     var cur = py_get(table, PythonObject(name))
     if cur is not None and Int(py=cur[1]) == n:
         return cur[0]
