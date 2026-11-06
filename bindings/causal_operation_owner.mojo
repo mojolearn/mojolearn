@@ -675,15 +675,18 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
             elif hit is not None:
                 prepared = PythonObject(None)
                 break
-    var stamp = NativeIdentityKey(mods)
+    # The stamp is built only when the prepared views missed (a hit needs no
+    # new identity key).
+    var stamp = Optional[NativeIdentityKey](None)
     var stamped = False
     if prepared is None:
+        stamp = NativeIdentityKey(mods)
         try:
             for i in range(len(buffers)):  # driver-loop: over state buffers retained in the native metadata stamp
                 var value = py_get(fields, buffers[i])
                 if value is not None and py_type(value) is context["array_class"]:
-                    stamp.add_identity(value)
-            stamp.watch_arrays(mods, context)
+                    stamp.value().add_identity(value)
+            stamp.value().watch_arrays(mods, context)
             stamped = True
         except:
             stamped = False
@@ -706,11 +709,11 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
     if prepared is None and stamped:
         var unchanged = False
         try:
-            unchanged = stamp.arrays_match(mods, context)
+            unchanged = stamp.value().arrays_match(mods, context)
         except:
             unchanged = False
-        if unchanged and not stamp.retains(state):
-            prepared_put(mods, _CAUSAL_LAYER_SLOT, state, Python.list(views, PythonObject(alloc=stamp^)))
+        if unchanged and not stamp.value().retains(state):
+            prepared_put(mods, _CAUSAL_LAYER_SLOT, state, Python.list(views, PythonObject(alloc=stamp.take())))
     py_setitem(fields, "_causal_original", state)
     py_setitem(fields, "_native_state_identity", state)
     py_setitem(fields, "_causal_live_fields", live)
