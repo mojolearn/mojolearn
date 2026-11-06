@@ -218,8 +218,8 @@ SECRET_PATTERNS = (
     ("token", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), 0),
     ("token", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)"), 0),
     ("token", re.compile(r"(?i)\bbearer\s+([A-Za-z0-9._~+/=-]{16,})"), 1),
-    ("token", re.compile(r"(?i)[\"']?\b[a-z_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key)[\"']?"
-                         r"\s*[:=]\s*[\"']?([^\"'\s,}\]]{8,})"), 1),
+    ("token", re.compile(r"(?i)\b[a-z_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key)\\?[\"']?"
+                         r"\s*[:=]\s*\\?[\"']?(?!\[REDACTED)([^\"'\\\s,}\]]{8,})"), 1),
     ("signed-url", re.compile(r"(?i)\bhttps?://[^\s\"'<>]+?(\?[^\s\"'<>]*?\b(?:x-amz-signature|x-amz-credential|"
                               r"x-amz-security-token|signature|sig|token|access_token|expires|se|sv|sp)=[^\s\"'<>]*)"), 1),
     ("email", re.compile(r"(?<![\w.+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b"), 0),
