@@ -433,6 +433,17 @@ struct DecompKit(Movable):
         var n = rows * cols
         if self.owner is None or not self.resident or n < 1:
             return -1
+        # Hazard class A (p3 brief): a device copy is served only while the
+        # host words cannot change under it. The stored operand is made
+        # read-only at the buffer level here (its `_readonly` flag and a
+        # read-only memoryview, so `np.asarray(m.coef_)[:] = W` and
+        # `m.coef_[...] = v` raise NumPy's read-only error instead of
+        # diverging from the device copy); replacing the attribute is still
+        # noticed by identity below. An operand that cannot be frozen (a
+        # NumPy array or a view of another owner the caller assigned) keeps
+        # the per-call upload: correct first.
+        if not self._freeze(source):
+            return -1
         var mods = NativeModules()
         var record = prepared_get(mods, _DK_RESIDENT_SLOT, self.owner)
         if record is None:
@@ -455,7 +466,10 @@ struct DecompKit(Movable):
             var capsule = _resident_capsule(free, handle)
             _ = py_call(upload, handle, PythonObject(address), n)
             _ = keep  # keep the host owner alive through the upload above
-            held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle), capsule)
+            # Word 7: the uploaded words are the frozen source's own (no cast
+            # copy), so `resident_hit` may serve it without re-admission.
+            held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle), capsule,
+                                PythonObject(host is source))
             py_setitem(record, key, held)
         # The kit holds the entry (and its capsule) until it is dropped, so
         # the buffer outlives this operation even when the model cannot be
@@ -465,6 +479,47 @@ struct DecompKit(Movable):
         var index = self.add(host, rows, cols, handle, address)
         self.matrices[index].on_device = False
         return index
+
+    def resident_hit(mut self, source: PythonObject, name: String) raises -> Int:
+        """A fitted operand already resident on this kit's binding, served
+        before the per-call admission (view, float32 cast, finite scan):
+        the stored `source` is the same frozen float32 Array whose own
+        words were uploaded, so neither its values nor its shape can have
+        changed since. -1 on any miss: the caller admits it and calls
+        `resident_input` as before."""
+        if self.owner is None or not self.resident:
+            return -1
+        var record = prepared_get(NativeModules(), _DK_RESIDENT_SLOT, self.owner)
+        if record is None:
+            return -1
+        var held = py_get(record, PythonObject(name))
+        if held is None or held[0] is not source or not Bool(py=held[7]):
+            return -1
+        if (held[1] is not self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc")
+                or held[2] is not self._entry(_DK_DEV_FREE, "x_decomp_dev_free")):
+            return -1
+        if not Bool(py=source._readonly) or not Bool(py=source._mv.readonly):
+            return -1
+        self.input_owners.append(held)
+        var index = self.add(source, Int(py=held[3]), Int(py=held[4]), Int(py=held[5]), Int(py=source._addr))
+        self.matrices[index].on_device = False
+        return index
+
+    def _freeze(self, source: PythonObject) raises -> Bool:
+        # A mojolearn Array (the class of the kit's own zero matrix) that owns
+        # its words (`_base` None) is frozen in place; anything else is not.
+        if py_type(source) is not py_type(self.matrices[self.one_host].host):
+            return False
+        if source._base is not None:
+            return False
+        var view = source._mv
+        if not Bool(py=view.readonly):
+            # `memoryview.toreadonly()`: NumPy views made from it from now on
+            # are writeable=False and cannot be turned writable again.
+            py_setattr(source, "_mv", py_call(view.toreadonly))
+        if not Bool(py=source._readonly):
+            py_setattr(source, "_readonly", PythonObject(True))
+        return True
 
     def const(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
         # `_M.of([v] * (r * c), r, c)`: the value rounded once to float32.

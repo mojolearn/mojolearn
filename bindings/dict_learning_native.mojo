@@ -112,6 +112,9 @@ def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: Pyt
 def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted operand: converted per call as before; on a query its device
     # copy is kept across calls (DecompKit.resident_input), else as _matrix.
+    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+    if hit >= 0:
+        return hit
     var array = decomp_input(source, name, context)
     var rows = Int(py=array.shape[0])
     var cols = Int(py=array.shape[1])
@@ -123,6 +126,9 @@ def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, conte
 
 def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector as a 1 x n matrix, resident as _fitted_matrix.
+    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+    if hit >= 0:
+        return hit
     var array = classical_host_f32(source, 1, name, context)
     var cols = Int(py=array.shape[0])
     var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, 1, cols)
