@@ -51,15 +51,10 @@ def _guard_cpu_training(method):
     # Import-time native-method declaration: the complete operation already
     # owns its validation and lifecycle. require_training has no runtime
     # refusal, so adding a Python wrapper would only reintroduce orchestration.
-    if (getattr(method, "_mojolearn_validates", False)
-            and getattr(method, "_mojolearn_tracks_fit", False)):
-        return method
-    @functools.wraps(method)
-    def guarded(self, *args, **kwargs):
-        from ._cpu_reference import require_training
-        require_training(self)
-        return method(self, *args, **kwargs)
-    return guarded
+    # CPU training is public: `_cpu_reference.require_training` refuses
+    # nothing, so the former per-fit wrapper (an import statement and a no-op
+    # call on every fit) is gone and the method is returned unchanged.
+    return method
 
 
 def sklearn_tags(est):
@@ -395,6 +390,11 @@ def _public_result(est, name, out):
     # Array: this wrapper runs inside `_needs_fit`'s guard, so the guard's
     # own `after_call` only ever sees the NumPy view made below.
     out = _sk_validate.after_call(est, name, out)
+    if (name == "predict" and type(out) is _Array and out.dtype == "<f4"
+            and getattr(est, "_estimator_type", None) == "regressor"):
+        # The float64 regression output is widened by the native Array cast
+        # (exact), before the NumPy view: no NumPy pass in Python.
+        out = out.astype("<f8")
     out = _ndarray(out, np)
     if (name == "predict" and type(out) is np.ndarray and out.dtype.kind == "f"
             and out.dtype.itemsize < 8 and getattr(est, "_estimator_type", None) == "regressor"):
