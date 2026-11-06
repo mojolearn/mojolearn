@@ -31,11 +31,11 @@ def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _complex_warning(context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var module = py_get(context["modules"],"numpy.exceptions")
     if module is None:
         module = py_get(context["modules"],"numpy")
-    if module is None or py_type(module) is not py_type(Python.import_module("sys")):
+    if module is None or py_type(module) is not py_type(native_loaded_module("sys")):
         raise Error("TypeError: complex quantiles require native NumPy warning metadata")
     var category = py_get(_warning_fields(py_fields(module)),"ComplexWarning")
     if py_type(category) is not b.type:
