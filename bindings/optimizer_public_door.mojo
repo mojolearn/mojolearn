@@ -162,13 +162,22 @@ def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises ->
 
 def as_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
+    var scalars = OPT_DOOR.get_or_create_ptr()[].context["scalar_types"]
+    # An exact float is admitted by type identity and read natively (the
+    # same double `float(value)` returns); no second admission or call.
+    if py_type(value) is scalars[3]:
+        return Float64(py=value)
     opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Float64(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][3], value))
+    return Float64(py=py_call(scalars[3], value))
 
 
 def truth(value: PythonObject) raises -> Bool:
+    var scalars = OPT_DOOR.get_or_create_ptr()[].context["scalar_types"]
+    # Exact bool: the value is one of the two singletons; compare pointers.
+    if py_type(value) is scalars[1]:
+        return value is PythonObject(True)
     opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Bool(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][1], value))
+    return Bool(py=py_call(scalars[1], value))
 
 
 def py_repr(value: PythonObject) raises -> String:
