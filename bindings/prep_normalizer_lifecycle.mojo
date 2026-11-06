@@ -13,6 +13,7 @@ from bindings.metrics_native_support import metric_warn
 from bindings.scaler_native import _stage
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_run
 from bindings.parallel_public_result import parallel_public_result
+from bindings.prep_entry_cache import prep_mode_checked
 from providers.python.prep_transform_pyapi import prep_transform_snapshot, prep_transform_values
 
 
@@ -138,7 +139,9 @@ def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonO
     if _truth(py_get(context, "scaler_explicit_host", False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
     var expected = 1 if String(mode) == "identical" else 0
-    if Int(py=py_call_typed(captured["preprocessing_numeric_mode"])) != expected or Int(py=py_call_typed(captured["x_prep_numeric_mode"])) != expected:
+    # The entries were matched to the import-time identities above; their two
+    # mode probes run once per binding (prep_entry_cache).
+    if not prep_mode_checked(entries, expected):
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
     return captured
 

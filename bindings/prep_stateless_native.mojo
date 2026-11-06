@@ -21,6 +21,7 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
+from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.py_typed_call import py_call_typed
 from bindings.prep_support_native import prep_support
@@ -356,9 +357,7 @@ def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObj
     var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
     var fam = 0
     if String(mode) == "identical":
-        var entry = py_get(entries, "x_prep_idn_fam")
-        if entry is not None:
-            fam = Int(py=py_call_typed(entry))
+        fam = prep_entry_word(entries, "x_prep_idn_fam")  # read once per binding
     if blocked and (fam & IDN_STATS_BLOCKED) != 0:
         var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
         var part = layout.work_words(5 * nb * d)
@@ -611,16 +610,14 @@ def _fam(mode: PythonObject, entries: PythonObject) raises -> Int:
     # `_idn_fam`: the IDENTICAL binding's family switches, 0 on another tier.
     if String(mode) != "identical":
         return 0
-    var entry = py_get(entries, "x_prep_idn_fam")
-    return Int(py=py_call_typed(entry)) if entry is not None else 0
+    return prep_entry_word(entries, "x_prep_idn_fam")  # read once per binding
 
 
 def _pt_flags(mode: PythonObject, entries: PythonObject) raises -> Int:
     # `_ptimpute_flags`: the FAST binding's x_prep_ptimpute_flags, else 0.
     if String(mode) != "fast":
         return 0
-    var entry = py_get(entries, "x_prep_ptimpute_flags")
-    return Int(py=py_call_typed(entry)) if entry is not None else 0
+    return prep_entry_word(entries, "x_prep_ptimpute_flags")  # read once per binding
 
 
 def _pt_spec_depth(n: Int, d: Int) -> Int:

@@ -25,6 +25,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order
 from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
+from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate import classical_estimator_name
@@ -511,8 +512,7 @@ def _qselect(mode: PythonObject, entries: PythonObject, context: PythonObject) r
         return False
     if py_get(entries, "x_prep_host_column") is not None:
         return False
-    var vendor = py_get(entries, "x_prep_vendor")
-    return vendor is not None and String(py_call_typed(vendor)) == "metal"
+    return prep_entry_text(entries, "x_prep_vendor") == "metal"  # read once per binding
 
 
 def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
@@ -976,8 +976,7 @@ def _cls2_cat(mode: PythonObject, entries: PythonObject) raises -> Int:
     # `_cls2_cat`: bit 1 PACK, bit 2 PRESENT on the FAST binding built with them.
     if String(mode) != "fast":
         return 0
-    var entry = py_get(entries, "x_prep_cls2_cat")
-    return Int(py=py_call_typed(entry)) if entry is not None else 0
+    return prep_entry_word(entries, "x_prep_cls2_cat")  # read once per binding
 
 
 def _label_chunk(n: Int) -> Int:
@@ -1100,8 +1099,7 @@ def _c08_route(mode: PythonObject, entries: PythonObject, bit: Int) raises -> Bo
     # `_c08_route`: the IDENTICAL binding's x_prep_c08_routes bit.
     if String(mode) != "identical":
         return False
-    var entry = py_get(entries, "x_prep_c08_routes")
-    return entry is not None and (Int(py=py_call_typed(entry)) & bit) != 0
+    return (prep_entry_word(entries, "x_prep_c08_routes") & bit) != 0  # read once per binding
 
 
 def _user_values(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1841,8 +1839,7 @@ def _target_scratch(mode: PythonObject, entries: PythonObject) raises -> Bool:
     # `_target_scratch`: the FAST binding's x_prep_target_scratch.
     if String(mode) != "fast":
         return False
-    var entry = py_get(entries, "x_prep_target_scratch")
-    return entry is not None and _truth(py_call_typed(entry))
+    return prep_entry_word(entries, "x_prep_target_scratch") != 0  # read once per binding
 
 
 def _target_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:

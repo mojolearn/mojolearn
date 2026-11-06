@@ -18,6 +18,7 @@ from bindings.x_prep_native_inputs import _rows_fields, _values
 from bindings.classical_labels import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
 from bindings.sequential_admission import _one_of
+from bindings.prep_entry_cache import prep_entry_word
 
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -120,10 +121,10 @@ def cls_entry(mode: PythonObject, name: String, context: PythonObject) raises ->
 def _bits(mode: PythonObject, name: String, context: PythonObject) raises -> Int:
     if String(mode) != "identical":
         return 0
-    var entry = cls_entry(mode, name, context)
-    if entry is None:
+    var entries = py_get(context["cls_bindings"], mode)
+    if entries is None or py_type(entries) is cls_builtins().str:
         return 0
-    return Int(py=py_call_typed(entry))
+    return prep_entry_word(entries, name)  # read once per binding
 
 
 def idn_int(mode: PythonObject, context: PythonObject) raises -> Int:

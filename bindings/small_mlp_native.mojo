@@ -709,28 +709,26 @@ def _fused(mut state: MlpState, entries: MlpOperationMetadata, x: List[Float32],
     #                dw1, db1, dw2, db2, dx, info
     #     params:    rows, mode, t, lr, beta1, beta2, eps, weight_decay,
     #                want_input_grad
-    var addresses = Python.list(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), state.params_addr(0),
-                                state.params_addr(1), state.params_addr(2), state.params_addr(3),
-                                m, v, flags, Int(loss.unsafe_ptr()), logits._addr,
-                                g0._addr if grads else PythonObject(sg + 4 * mlp_offset(0)),
-                                g1._addr if grads else PythonObject(sg + 4 * mlp_offset(1)),
-                                g2._addr if grads else PythonObject(sg + 4 * mlp_offset(2)),
-                                g3._addr if grads else PythonObject(sg + 4 * mlp_offset(3)),
-                                dx._addr if want_dx else PythonObject(Int(scratch.unsafe_ptr())),
-                                Int(info.unsafe_ptr()))
+    # The seventeen buffer addresses as native words: the provider route takes
+    # them as they are, and only the legacy entry receives a Python list.
+    var native_addresses: List[Int] = [
+        Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), state.params_addr(0),
+        state.params_addr(1), state.params_addr(2), state.params_addr(3),
+        m, v, flags, Int(loss.unsafe_ptr()), Int(py=logits._addr),
+        Int(py=g0._addr) if grads else sg + 4 * mlp_offset(0),
+        Int(py=g1._addr) if grads else sg + 4 * mlp_offset(1),
+        Int(py=g2._addr) if grads else sg + 4 * mlp_offset(2),
+        Int(py=g3._addr) if grads else sg + 4 * mlp_offset(3),
+        Int(py=dx._addr) if want_dx else Int(scratch.unsafe_ptr()),
+        Int(info.unsafe_ptr())]
     _ = logits  # keep the Python object alive through the native call above
     _ = g0  # keep the Python object alive through the native call above
     _ = g1  # keep the Python object alive through the native call above
     _ = g2  # keep the Python object alive through the native call above
     _ = g3  # keep the Python object alive through the native call above
     _ = dx  # keep the Python object alive through the native call above
-    var params = Python.list(rows, mode, t, state.lr, state.beta1, state.beta2, state.eps,
-                             state.weight_decay, 1 if want_dx else 0)
     var written = 0
     if entries.provider is not None:
-        var native_addresses = List[Int]()
-        for i in range(17):  # small-loop(the fixed fused-step buffer descriptor)
-            native_addresses.append(Int(py=addresses[i]))
         try:
             written = neural_descriptor_execute(entries.provider, 1, native_addresses,
                 [rows, mode, t, 1 if want_dx else 0],
@@ -738,6 +736,11 @@ def _fused(mut state: MlpState, entries: MlpOperationMetadata, x: List[Float32],
         except error:
             raise _step_error(error)
     else:
+        var addresses = Python.list()
+        for i in range(len(native_addresses)):  # small-loop(the fixed fused-step buffer descriptor)
+            _ = py_call(addresses.append, PythonObject(native_addresses[i]))
+        var params = Python.list(rows, mode, t, state.lr, state.beta1, state.beta2, state.eps,
+                                 state.weight_decay, 1 if want_dx else 0)
         written = _native_step(entries.legacy["mlp_train_step"], addresses, params)
     _ = dx  # keep the Python object alive through the native call above
     _ = g3  # keep the Python object alive through the native call above

@@ -17,6 +17,7 @@ from core.scaler_fit_impl import scaler_cast, scaler_all_finite, scaler_check_st
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
+from bindings.prep_entry_cache import prep_mode_checked
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -122,7 +123,8 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     if py_get(entries,"standard_fit") is None:
         raise Error("ImportError: HostStandardScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,"scaler_training_error","standard_fit is unavailable")))
     var expected = 1 if String(mode) == "identical" else 0
-    if Int(py=py_call_typed(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call_typed(entries["x_prep_numeric_mode"])) != expected:
+    # The two mode probes run once per binding (prep_entry_cache).
+    if not prep_mode_checked(entries, expected):
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()

@@ -23,6 +23,7 @@ from bindings.classical_labels import (
     labels_helper, _numeric_label_view, _flatten_labels, _sorted_classes)
 from bindings.scaler_native import _stage
 from bindings.scaler_lifecycle_native import _entries
+from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_values
 from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
@@ -274,10 +275,7 @@ def _label_present_enabled(mode: PythonObject, entries: PythonObject) raises -> 
     var m = String(mode)
     if m != "fast" and m != "identical":
         return False
-    var entry = py_get(entries, "x_prep_label_present")
-    if entry is None:
-        return False
-    return _truth(py_call_typed(entry))
+    return prep_entry_word(entries, "x_prep_label_present") != 0  # read once per binding
 
 
 def _label_fit_present(entries: PythonObject, lb: LabelBuf, codes: Bool, context: PythonObject) raises -> Optional[LabelFit]:
@@ -359,33 +357,44 @@ def _label_codes_device(mut p: EncProg, lb: LabelBuf, cats: PythonObject, contex
 
 
 # ---------------------------------------------------------------- the label input step
-def _numeric_labels(values: PythonObject) raises -> PythonObject:
-    # `_numeric_labels`: the labels as floats when every one is a real
-    # number float32 holds exactly, else None (user_objects f32_exact).
+def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all_ints: Bool,
+                         count_ints: Bool, context: PythonObject) raises -> Bool:
+    """`_numeric_labels` (user_objects f32_exact) in one pass that keeps the
+    words: True when every label is a real number, not a bool, that float32
+    holds exactly and none is NaN, with `words` the labels' float values
+    (what float(v) returns, the value the codes are looked up by). With
+    `count_ints`, `all_ints` tells whether every label is integral. This
+    replaces the Python float list f32_exact built and the one or two further
+    walks over the labels that read it back."""
     var env = _Env()
-    return _f32_exact(env, values)
+    var integral = context["labels_integral_type"] if count_ints else PythonObject(None)
+    all_ints = count_ints
+    var n = len(values)
+    words.reserve(n)
+    for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
+        var v = values[i]
+        if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
+            return False
+        var x = Float64(py=py_call(env.b.float, v))
+        if x != x or Float64(Float32(x)) != x:
+            return False
+        words.append(x)
+        if all_ints and not Bool(py=py_call(env.b.isinstance, v, integral)):
+            all_ints = False
+    return True
 
 
 def _label_classes(mode: PythonObject, values: PythonObject, context: PythonObject) raises -> LabelFit:
     """`_label_classes`: numeric labels by a device sort and run scan
     (`_fit_categories`), anything else by the ORDER RULE (sorted_classes)."""
-    var nums = _numeric_labels(values)
-    if nums is None or len(nums) == 0:
+    var words = List[Float64]()
+    var all_ints = False
+    if not _numeric_label_words(values, words, all_ints, True, context) or len(words) == 0:
         var ordered = _sorted_classes(values, context)
         return LabelFit(ordered.classes, PythonObject(None), PythonObject(None))
-    var m = len(nums)
-    var words = List[Float64]()
-    for i in range(m):  # cpu-route: Python label objects, the explicit label input step
-        words.append(Float64(py=nums[i]))
+    var m = len(words)
     var arr = _f32_matrix(words, m, 1, context)
     var cats = _fit_categories(Python.tuple(0, arr, PythonObject(None), m, 1), mode, _entries(mode, context), context)[0]
-    var b = _builtins()
-    var integral = context["labels_integral_type"]
-    var ints = 0
-    for i in range(len(values)):  # cpu-route: Python label objects, the explicit label input step
-        if Bool(py=py_call(b.isinstance, values[i], integral)):
-            ints += 1
-    var all_ints = ints == len(values)
     var K = Int(py=cats.size)
     var source = F32P(unsafe_from_address=Int(py=classical_address(cats)))
     var classes = Python.list()
@@ -400,14 +409,11 @@ def _label_classes(mode: PythonObject, values: PythonObject, context: PythonObje
     return LabelFit(classes, cats, PythonObject(None))
 
 
-def _label_codes(mut p: EncProg, values: PythonObject, cats: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
+def _label_codes(mut p: EncProg, words: List[Float64], cats: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
     """`_label_codes`: each label's index among `cats` (or -1) from its
-    float64 value rounded to float32. Returns (codes, unknown count)."""
-    var b = _builtins()
-    var n = len(values)
-    var words = List[Float64]()
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        words.append(Float64(py=py_call(b.float, values[i])))
+    float64 value (the words `_numeric_label_words` read) rounded to
+    float32. Returns (codes, unknown count)."""
+    var n = len(words)
     var arr = _f32_matrix(words, n, 1, context)
     return _codes(p, Python.tuple(0, arr, PythonObject(None), n, 1), Python.list(cats), context)
 
@@ -646,7 +652,9 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
     var n = len(values)
     if n == 0:
         return classical_wrap_array(native_array_empty("i"), Python.tuple(0), "<i4", "C", _out(context))
-    if cats is None or _numeric_labels(values) is None:
+    var words = List[Float64]()
+    var unused_ints = False
+    if cats is None or not _numeric_label_words(values, words, unused_ints, False, context):
         var native = _str_codes(classes, values, False, context)
         if native is not None:
             if Int(py=native[2]) != 0:
@@ -672,7 +680,7 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
         return codes
     var entries = _entries(mode, context)
     var p = EncProg()
-    var lc = _label_codes(p, values, cats, context)
+    var lc = _label_codes(p, words, cats, context)
     var out = p.alloc(n)
     _stage(p.program, OP_F2I, n, lc[0], out)
     var ran = p.run(entries, context)
@@ -804,14 +812,16 @@ def _lb_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
     var entries = _entries(mode, context)
     var p = EncProg()
     var codes = NONE
-    if cats is None or _numeric_labels(values) is None:
+    var words = List[Float64]()
+    var unused_ints = False
+    if cats is None or not _numeric_label_words(values, words, unused_ints, False, context):
         var native = _str_codes(classes, values, True, context) if n > 0 else PythonObject(None)
         if native is not None:
             codes = p.put(native[0], n)
         else:
             codes = _object_codes(p, classes, values, context)
     else:
-        codes = _label_codes(p, values, cats, context)[0]
+        codes = _label_codes(p, words, cats, context)[0]
     if K == 1:
         var none = List[Float64]()
         for _ in range(n):  # driver-loop: one absent code per label (one class)
@@ -1082,14 +1092,16 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
         var ran_empty = p.run(entries, context)
         return _take_i32(ran_empty, empty, n, K, context)
     var codes = NONE
-    if cats is None or _numeric_labels(flat) is None:
+    var words = List[Float64]()
+    var unused_ints = False
+    if cats is None or not _numeric_label_words(flat, words, unused_ints, False, context):
         var native = _str_codes(classes, flat, True, context)
         if native is not None:
             codes = p.put(native[0], m)
         else:
             codes = _object_codes(p, classes, flat, context)
     else:
-        codes = _label_codes(p, flat, cats, context)[0]
+        codes = _label_codes(p, words, cats, context)[0]
     var ro = p.put_floats(owner, context)
     var out = p.output(n * max(K, 1), entries)
     _stage(p.program, OP_SCATTER_ONES, m, codes, ro, K, out)
