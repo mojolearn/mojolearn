@@ -51,10 +51,26 @@ def test_computation_transport_reuses_common_provider_and_resource():
 
 def test_compound_transform_reuses_admitted_x_and_provider():
     source = read('bindings/kernel_methods_native.mojo')
+    # X is admitted once per public operation by the dispatcher and handed to
+    # the bodies as x_meta (312223206b, c251819d8a); no body re-admits it.
     for name, operation in [('_nys_fit', 'nystroem_transform'), ('_rbf_fit', 'rbf_sampler_transform')]:
         part = body(source, name)
-        assert part.count('family_f32_snapshot(args[1]') == 1
+        assert 'x_meta: ArrayMetadata' in part
+        assert part.count('family_f32_snapshot(args[1]') == 0
         assert f'kernel_method_execute(native, "{operation}"' in part
+    _assert_x_admitted_once_per_operation(source)
+
+
+def _assert_x_admitted_once_per_operation(source):
+    admit = 'family_f32_snapshot(args[1], 2, "X", context, True)'
+    for door in ('kernel_methods_operation', '_km_par_fit', '_km_par_apply'):
+        assert body(source, door).count(admit) == 1, door
+    inner = body(source, '_kernel_methods_operation')
+    assert 'family_f32_snapshot(args[1]' not in inner
+    for call in ('_krr_fit(model, args, context, x)', '_nys_fit(model, args, context, x)',
+                 '_nys_transform(model, args, context, x)', '_rbf_transform(model, args, context, x)',
+                 '_rbf_fit(model, args, False, context, x)', '_rbf_fit(model, args, True, context, x)'):
+        assert call in inner, call
 
 def test_native_transport_preserves_existing_numerical_owners_and_route_defines():
     native = read('kernel_methods/native_descriptor_dispatch.mojo')
@@ -84,14 +100,24 @@ def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
     assert 'var keep: PythonObject' in source and 'var source: CastIn' in source
     for field in ('value.shape', 'value.dtype', 'value.itemsize', 'value.strides'):
         assert source.count(field) == 1, field
-    conversion = body(read('bindings/family_common.mojo'), 'family_f32_snapshot')
-    assert conversion.count('array_shape_once(view, context)') == 1
-    assert 'family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in conversion
-    assert 'snapshot.replace_f32(result, address)' in conversion
+    # c251819d8a split family_f32_snapshot into the one-shot input snapshot and
+    # the float32 pack from that snapshot; both halves stay single-capture.
+    family = read('bindings/family_common.mojo')
+    conversion = body(family, 'family_f32_snapshot')
+    assert 'family_input_snapshot(source, ndim, name, context, dense)' in conversion
+    assert 'family_snapshot_f32(snapshot, context)' in conversion
+    capture = body(family, 'family_input_snapshot')
+    assert capture.count('array_shape_once(view, context)') == 1
+    assert 'array_metadata_once(view, shape^, name, context)' in capture
+    pack = body(family, 'family_snapshot_f32')
+    assert 'family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in pack
+    assert 'snapshot.replace_f32(result, address)' in pack
     source = read('bindings/kernel_methods_native.mojo')
+    _assert_x_admitted_once_per_operation(source)
     for name in ('_krr_fit', '_krr_predict', '_nys_fit', '_nys_transform', '_rbf_fit', '_rbf_transform'):
         part = body(source, name)
-        assert part.count('family_f32_snapshot(args[1]') == 1, name
+        assert re.search(r'\bx(?:q)?_meta: ArrayMetadata', part.split(' raises', 1)[0]), name
+        assert part.count('family_f32_snapshot(args[1]') == 0, name
         for text in ('x.shape', 'xq.shape', 'x.size', 'xq.size', 'classical_address(x)', 'classical_address(xq)'):
             assert text not in part, (name, text)
     assert 'family_owned_snapshot(x_meta, context)' in source
