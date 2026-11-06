@@ -5039,9 +5039,11 @@ def lane_sources():
                         # (the rule `binding_seeds` keeps for a binding every
                         # lane reaches): its loads stay the source alone
                         used |= names
-                    if rel in seeds_of[lane]:
+                    if rel in seeds_of[lane] and rel not in ubiquitous_py:
                         # the lane's own door (`_followed_seeds`): "no export
                         # named" stays wide for what it loads, as for any seed
+                        # (`_backend.py`, seeded by every lane that calls
+                        # `ml.vendor()`, is every lane's: narrow, as above)
                         whole |= loads
                     continue
                 nodes = regions[rel]
