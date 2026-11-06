@@ -287,11 +287,26 @@ def _archive_read_repr(value: PythonObject, context: PythonObject) raises -> Str
 
 
 def _read_uint(raw: PythonObject, at: Int, width: Int) raises -> Int:
-    if at < 0 or width < 1 or at > len(raw) - width:
+    # perf2-neural: one simple-buffer export of the header bytes (a `bytes`
+    # from the archive file's read or the codec), then a native little-endian
+    # decode; formerly one Python index and one int conversion per byte.
+    ref cpy = Python().cpython()
+    var storage = List[Int](length=10, fill=0)
+    var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    if cpython_table()[].PyObject_GetBuffer(raw._obj_ptr, pointer, Int32(0)) != 0:
+        raise cpy.unsafe_get_error()
+    var address = storage[0]
+    var size = storage[2]
+    if at < 0 or width < 1 or at > size - width:
+        cpython_table()[].PyBuffer_Release(pointer)
         raise Error("truncated checkpoint record")
+    var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
     var result = UInt64(0)
-    for k in range(width):  # driver-loop: over a bounded archive header integer
-        result |= UInt64(Int(py=raw[at + k])) << UInt64(8 * k)
+    for k in range(width):  # small-loop(width: at most eight header bytes)
+        result |= UInt64(data[at + k]) << UInt64(8 * k)
+    cpython_table()[].PyBuffer_Release(pointer)
+    _ = storage^
+    _ = raw  # the exporter stays alive through the read above
     if result > UInt64(0x7FFFFFFFFFFFFFFF):
         raise Error("checkpoint size exceeds the supported address range")
     return Int(result)
