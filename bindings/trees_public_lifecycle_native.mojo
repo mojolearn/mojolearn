@@ -4,6 +4,7 @@
 # use this envelope instead of the Python _mode/_sk_validate decorators.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields
+from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_arrays import classical_is_array
 from bindings.classical_pandas import classical_admit_value
@@ -23,7 +24,7 @@ from bindings.trees_public_state import forest_restore_state, tree_is_fitted
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(values) is not b.dict:
         raise Error("TypeError: native forest parameter updates require an ordinary dictionary")
     if len(values) == 0:
@@ -65,7 +66,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         # Array/tuple-of-Arrays even externally with NumPy loaded. Preserve
         # that boundary and Float32 means, including regressors.
         return forest_auxiliary(model, method, args, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var names = py_type(model)._parameter_names
     for i in range(len(names)):  # driver-loop: stored constructor arguments before native conversions

@@ -19,6 +19,7 @@ from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
@@ -45,7 +46,11 @@ comptime TREES_NONFINITE = "X contains NaN or infinity; the forest has no missin
 
 
 def trees_builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    # The admitted builtins module (one stamp compare per call) instead of
+    # `Python.import_module`, which ran the import machinery's `__import__`
+    # on every call (lane perf-sweep-trees, 2026-11-05: dozens of calls per
+    # public predict).
+    return native_loaded_module("builtins")
 
 
 def trees_table(context: PythonObject, mode: String, name: String) raises -> PythonObject:
