@@ -5,22 +5,29 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_type
 from bindings.native_loaded_module import native_loaded_module
+from bindings.p3_labels_metrics_native import p3_table
 
 
 struct MetricPlanOpcodes(Movable):
     var values: PythonObject
     var codes: Dict[String, Int]
+    var int_type: PythonObject
 
     def __init__(out self, values: PythonObject) raises:
         var bi = native_loaded_module("builtins")
         if py_type(values) is not bi.dict:
             raise Error("TypeError: metric opcodes require an exact string-keyed dictionary")
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_Copy")(values._obj_ptr)
+        # p3-labels-metrics: PyDict_Copy from the process-wide table (it was
+        # resolved by name, dlsym, per program). The per-program snapshot
+        # stays: it is what protects a running program from an edited table.
+        var raw = p3_table()[].dict_copy(values._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         self.values = PythonObject(from_owned=raw)
         self.codes = Dict[String, Int]()
+        # The int class is read once per program, not per opcode name.
+        self.int_type = bi.int
         _ = values
 
     def get(mut self, name: String) raises -> Int:
@@ -29,7 +36,7 @@ struct MetricPlanOpcodes(Movable):
         # every metric call.
         if name not in self.codes:
             var value = self.values[PythonObject(name)]
-            if py_type(value) is not native_loaded_module("builtins").int:
+            if py_type(value) is not self.int_type:
                 raise Error("TypeError: metric opcode entries require exact string keys and integers")
             self.codes[name] = Int(py=value)
         return self.codes[name]
