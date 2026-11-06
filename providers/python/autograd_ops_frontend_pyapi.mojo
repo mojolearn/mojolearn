@@ -357,104 +357,106 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     var hs = List[Int]()
     var ints = List[Int]()
     var fs = List[Float32]()
+    # One exclusive chain: each operation name matches at most one branch, so
+    # after a match no later name is compared (was ~90 independent `if`s).
     if name == "copy":
         code = 31
         hs.append(_int(args[0], "handle", 1))
-    if name == "detach":
+    elif name == "detach":
         code = 29
         hs.append(_int(args[0], "handle", 1))
-    if name == "matmul":
+    elif name == "matmul":
         code = 1
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "add":
+    elif name == "add":
         code = 2
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "sub":
+    elif name == "sub":
         code = 3
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "mul":
+    elif name == "mul":
         code = 4
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "div":
+    elif name == "div":
         code = 5
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "relu":
+    elif name == "relu":
         code = 6
         hs.append(_int(args[0], "handle", 1))
-    if name == "sigmoid":
+    elif name == "sigmoid":
         code = 7
         hs.append(_int(args[0], "handle", 1))
-    if name == "tanh":
+    elif name == "tanh":
         code = 8
         hs.append(_int(args[0], "handle", 1))
-    if name == "exp":
+    elif name == "exp":
         code = 9
         hs.append(_int(args[0], "handle", 1))
-    if name == "log":
+    elif name == "log":
         code = 10
         hs.append(_int(args[0], "handle", 1))
-    if name == "sqrt":
+    elif name == "sqrt":
         code = 11
         hs.append(_int(args[0], "handle", 1))
-    if name == "erf":
+    elif name == "erf":
         code = 48
         hs.append(_int(args[0], "handle", 1))
-    if name == "softplus":
+    elif name == "softplus":
         code = 50
         hs.append(_int(args[0], "handle", 1))
-    if name == "silu":
+    elif name == "silu":
         code = 51
         hs.append(_int(args[0], "handle", 1))
-    if name == "hard_swish":
+    elif name == "hard_swish":
         code = 55
         hs.append(_int(args[0], "handle", 1))
-    if name == "abs":
+    elif name == "abs":
         code = 57
         hs.append(_int(args[0], "handle", 1))
-    if name == "floor":
+    elif name == "floor":
         code = 58
         hs.append(_int(args[0], "handle", 1))
-    if name == "ceil":
+    elif name == "ceil":
         code = 59
         hs.append(_int(args[0], "handle", 1))
-    if name == "round":
+    elif name == "round":
         code = 60
         hs.append(_int(args[0], "handle", 1))
-    if name == "sin":
+    elif name == "sin":
         code = 61
         hs.append(_int(args[0], "handle", 1))
-    if name == "cos":
+    elif name == "cos":
         code = 62
         hs.append(_int(args[0], "handle", 1))
-    if name == "sign":
+    elif name == "sign":
         code = 63
         hs.append(_int(args[0], "handle", 1))
-    if name == "reciprocal":
+    elif name == "reciprocal":
         code = 64
         hs.append(_int(args[0], "handle", 1))
-    if name == "pow":
+    elif name == "pow":
         code = 65
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "minimum":
+    elif name == "minimum":
         code = 66
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "maximum":
+    elif name == "maximum":
         code = 67
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    if name == "where":
+    elif name == "where":
         code = 68
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
         hs.append(_int(args[2], "handle", 1))
-    if name == "full" or name == "expand":
+    elif name == "full" or name == "expand":
         code = 30 if name == "full" else 71
         ints = _ints(args[0 if name == "full" else 1], "shape", 1)
         if len(ints) < 1 or len(ints) > 8:
@@ -463,27 +465,27 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             fs.append(_float(args[1], "value"))
         else:
             hs.append(_int(args[0], "handle", 1))
-    if name == "scale" or name == "leaky_relu" or name == "elu" or name == "pow_scalar":
+    elif name == "scale" or name == "leaky_relu" or name == "elu" or name == "pow_scalar":
         code = 12 if name == "scale" else (52 if name == "leaky_relu" else (53 if name == "elu" else 65))
         hs.append(_int(args[0], "handle", 1))
         fs.append(_float(args[1], "factor" if name == "scale" else ("exponent" if name == "pow_scalar" else "alpha")))
-    if name == "hard_sigmoid":
+    elif name == "hard_sigmoid":
         code = 54
         hs.append(_int(args[0], "handle", 1))
         fs = [_float(args[1], "alpha"), _float(args[2], "beta")]
-    if name == "transpose":
+    elif name == "transpose":
         hs.append(_int(args[0], "handle", 1))
         var a = _int(args[1], "a")
         var b = _int(args[2], "b")
         code = 13 if a == -2 and b == -1 else 34
         if code == 34:
             ints = [1, a, b]
-    if name == "permute":
+    elif name == "permute":
         code = 34
         hs.append(_int(args[0], "handle", 1))
         ints.append(0)
         _append(ints, _axes(args[1]))
-    if name == "reshape":
+    elif name == "reshape":
         hs.append(_int(args[0], "handle", 1))
         var dims = _ints(args[1], "shape")
         if len(dims) < 1 or len(dims) > 8:
@@ -496,7 +498,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         else:
             ints.append(0)
         _append(ints, dims)
-    if name == "flatten" or name == "squeeze" or name == "unsqueeze":
+    elif name == "flatten" or name == "squeeze" or name == "unsqueeze":
         code = 33
         hs.append(_int(args[0], "handle", 1))
         if name == "flatten":
@@ -506,27 +508,27 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             _append(ints, _axes(args[1]))
         else:
             ints = [3, _int(args[1], "axis")]
-    if name == "sum" or name == "mean" or name == "max" or name == "any" or name == "all":
+    elif name == "sum" or name == "mean" or name == "max" or name == "any" or name == "all":
         code = 35 if name == "sum" else (36 if name == "mean" else (37 if name == "max" else 74))
         hs.append(_int(args[0], "handle", 1))
         if code == 74:
             ints.append(1 if name == "all" else 0)
         ints.append(_keep(args[2]))
         _append(ints, _axes(args[1]))
-    if name == "softmax" or name == "log_softmax":
+    elif name == "softmax" or name == "log_softmax":
         hs.append(_int(args[0], "handle", 1))
         var axis = _int(args[1], "axis")
         code = 17 if name == "softmax" else 18
         if axis != -1:
             code = 42 if name == "softmax" else 43
             ints.append(axis)
-    if name == "concat":
+    elif name == "concat":
         code = 39
         hs = _ints(args[0], "handle", 1)
         if len(hs) == 0:
             raise Error("ValueError: concat needs at least one tensor")
         ints.append(_int(args[1], "axis"))
-    if name == "split":
+    elif name == "split":
         hs.append(_int(args[0], "handle", 1))
         var axis = _int(args[2], "axis")
         var count: Int
@@ -546,7 +548,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(views)):  # small-loop(views: one handle per requested section): result packing, no data
             _ = py_call(out.append, views[k])
         return out
-    if name == "embedding" or name == "take":
+    elif name == "embedding" or name == "take":
         code = 32 if name == "embedding" else 41
         hs.append(_int(args[0], "handle", 1))
         var option = -1 if name == "embedding" and _nil(args[2]) else _int(args[2], "padding_idx" if name == "embedding" else "axis")
@@ -569,7 +571,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             var out = s[].op(code, hs, ints, fs)
             _ = input^  # scalar sequence owner remains alive through upload
             return PythonObject(out)
-    if name == "conv2d" or name == "linear":
+    elif name == "conv2d" or name == "linear":
         code = 44 if name == "conv2d" else 19
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
         if not _nil(args[2]):
@@ -590,24 +592,24 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             elif act != "none":
                 raise Error("ValueError: activation must be None, 'relu', 'sigmoid', 'tanh' or 'softmax'")
             ints.append(activation)
-    if name == "max_pool2d" or name == "avg_pool2d":
+    elif name == "max_pool2d" or name == "avg_pool2d":
         code = 45 if name == "max_pool2d" else 46
         hs.append(_int(args[0], "handle", 1))
         var kernel = _int(args[1], "kernel_size", 1)
         ints = [kernel, kernel if _nil(args[2]) else _int(args[2], "stride", 1)]
-    if name == "gelu":
+    elif name == "gelu":
         code = 49
         hs.append(_int(args[0], "handle", 1))
         var approx = String(args[1])
         if approx != "none" and approx != "tanh":
             raise Error("ValueError: approximate must be 'none' or 'tanh'")
         ints.append(1 if approx == "tanh" else 0)
-    if name == "clip":
+    elif name == "clip":
         code = 56
         hs.append(_int(args[0], "handle", 1))
         fs.append(clip_low_unbounded() if _nil(args[1]) else _float(args[1], "min"))
         fs.append(clip_high_unbounded() if _nil(args[2]) else _float(args[2], "max"))
-    if name == "equal" or name == "not_equal" or name == "greater" or name == "greater_equal" or name == "less" or name == "less_equal":
+    elif name == "equal" or name == "not_equal" or name == "greater" or name == "greater_equal" or name == "less" or name == "less_equal":
         code = 69
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         var comparison = 0
@@ -622,28 +624,28 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         elif name == "less_equal":
             comparison = 4
         ints.append(comparison)
-    if name == "logical_not" or name == "logical_and" or name == "logical_or":
+    elif name == "logical_not" or name == "logical_and" or name == "logical_or":
         code = 70
         hs.append(_int(args[0], "handle", 1))
         if name != "logical_not":
             hs.append(_int(args[1], "handle", 1))
         ints.append(0 if name == "logical_not" else (1 if name == "logical_and" else 2))
-    if name == "argmax":
+    elif name == "argmax":
         code = 72
         hs.append(_int(args[0], "handle", 1))
         ints = [_int(args[1], "axis"), Int(Bool(py=args[2])), Int(not Bool(py=args[3]))]
-    if name == "pad":
+    elif name == "pad":
         code = 73
         hs.append(_int(args[0], "handle", 1))
         ints = _ints(args[1], "pads")
         if len(ints) < 1 or len(ints) > 16:
             raise Error("ValueError: pads must list two counts for each of one to eight axes")
         fs.append(_float(args[2], "value"))
-    if name == "cumsum":
+    elif name == "cumsum":
         code = 75
         hs.append(_int(args[0], "handle", 1))
         ints = [_int(args[1], "axis"), Int(Bool(py=args[2])), Int(Bool(py=args[3]))]
-    if name == "index":
+    elif name == "index":
         code = 76
         hs.append(_int(args[0], "handle", 1))
         var indices = _ints(args[1], "indices", 1)
@@ -657,27 +659,27 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             ints = _ints(args[2], "axes")
         if len(ints) != len(indices):
             raise Error("ValueError: index takes one axis for each index tensor")
-    if name == "layer_norm":
+    elif name == "layer_norm":
         code = 20
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1), _int(args[2], "bias", 1)]
         var eps = _float(args[3], "eps")
         if not eps > 0:
             raise Error("ValueError: eps must be positive")
         fs.append(eps)
-    if name == "transformer_softmax":
+    elif name == "transformer_softmax":
         var b = native_loaded_module("builtins")
         if not (py_type(args[0]) is b.int):
             raise Error("TypeError: transformer handles must be exact native integers")
         code = 80
         hs = [_int(args[0], "input", 1)]
-    if name == "transformer_linear":
+    elif name == "transformer_linear":
         var b = native_loaded_module("builtins")
         for j in range(2):  # small-loop(2: projection handles): exact native scalar admission
             if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: transformer handles must be exact native integers")
         code = 79
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
-    if name == "rms_norm":
+    elif name == "rms_norm":
         var b = native_loaded_module("builtins")
         for j in range(2):  # small-loop(2: RMSNorm handles): exact native scalar admission
             if not (py_type(args[j]) is b.int):
@@ -688,7 +690,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         code = 77
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
         fs.append(Float32(py=args[2]))
-    if name == "rotary":
+    elif name == "rotary":
         var b = native_loaded_module("builtins")
         for j in range(3):  # small-loop(3: rotary handle/position metadata): exact native scalar admission
             if not (py_type(args[j]) is b.int):
@@ -700,7 +702,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs = [_int(args[0], "input", 1)]
         ints = [_int(args[1], "head_dim", 1), _int(args[2], "offset", 0)]
         fs.append(_float(args[3], "theta"))
-    if name == "dropout":
+    elif name == "dropout":
         code = 21
         hs.append(_int(args[0], "handle", 1))
         var prob = _float(args[1], "p")
@@ -709,16 +711,16 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         fs.append(prob)
         ints = _seed_words(args[2])
         ints.append(_int(args[3], "counter", 0))
-    if name == "permutation":
+    elif name == "permutation":
         code = 23
         ints.append(_int(args[0], "n", 1))
         _append(ints, _seed_words(args[1]))
         ints.append(_int(args[2], "epoch", 0))
-    if name == "gather_rows":
+    elif name == "gather_rows":
         code = 22
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         ints = [_int(args[2], "start", 0), 0 if _nil(args[3]) else _int(args[3], "count", 1)]
-    if name == "mse" or name == "mae" or name == "huber" or name == "bce_with_logits" or name == "cross_entropy":
+    elif name == "mse" or name == "mae" or name == "huber" or name == "bce_with_logits" or name == "cross_entropy":
         code = 24 if name == "mse" else (25 if name == "mae" else (26 if name == "huber" else (27 if name == "bce_with_logits" else 28)))
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         var reduction = String(args[3 if name == "huber" else 2])
@@ -730,7 +732,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             if not delta > 0:
                 raise Error("ValueError: delta must be positive")
             fs.append(delta)
-    if name == "accuracy" or name == "log_loss" or name == "roc_auc":
+    elif name == "accuracy" or name == "log_loss" or name == "roc_auc":
         var metric = 1 if name == "accuracy" else (2 if name == "log_loss" else 3)
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         return PythonObject(Float64(s[].metric(metric, hs)))

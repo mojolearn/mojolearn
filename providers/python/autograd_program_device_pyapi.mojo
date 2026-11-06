@@ -117,14 +117,22 @@ def ops_imported_run_device_py[KIND: Int](
     for k in range(len(declared_out)):  # driver-loop: over the model's declared outputs
         var shape = py_call(b.tuple, declared_out[k][1])
         var count = 1
+        # The refusal text Python's repr gives an int tuple, built natively
+        # from the same words (no repr call per output on every run).
+        var text = String("(")
         for j in range(len(shape)):  # small-loop(shape: a declared output's rank): shape metadata, never array elements
-            count *= Int(py=shape[j])
+            var dim = Int(py=shape[j])
+            count *= dim
+            if j > 0:
+                text += ", "
+            text += String(dim)
+        text += String(",)") if len(shape) == 1 else String(")")
         var addr = Int(py=outputs[k])
         if count > 0 and addr == 0:
             raise Error("ValueError: output buffer " + String(k) + " has a null device address")
         out_counts.append(count)
         out_addrs.append(addr)
-        out_texts.append(_imported_repr(shape))
+        out_texts.append(text)
     var session = program._s
     if session._id is None:
         raise Error("ValueError: this session is closed")

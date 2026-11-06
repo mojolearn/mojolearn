@@ -2,7 +2,9 @@
 """Native admission before Samba can encounter a Python-defined protocol."""
 from std.python import Python, PythonObject
 from std.ffi import _Global
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.p3_numpy_types import numpy_admitted_type
+from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 
 
@@ -14,20 +16,10 @@ def _samba_exact(cls: PythonObject, types: PythonObject) raises -> Bool:
 
 
 def _samba_numpy(cls: PythonObject, admission: PythonObject, bi: PythonObject) raises -> Bool:
-    var module = py_get(admission["modules"], "numpy")
-    if module is None or py_type(module) is not admission["module_type"]:
-        return False
-    # NumPy's admitted ndarray/scalar types are static extension types.
-    # A Python subclass substituted into module metadata cannot pass by name.
-    var flags = Int(py=py_call(admission["type_flags"], cls))
-    if (flags & 512) != 0:
-        return False
-    var fields = py_call(bi.object.__getattribute__, module, "__dict__")
-    var names = admission["numpy_names"]
-    for i in range(len(names)):  # driver-loop: over supported native NumPy type identities
-        if cls is py_get(fields, names[i]):
-            return True
-    return False
+    # NumPy's admitted ndarray/scalar types are static extension types; a
+    # Python subclass is a heap type and is never in the resolved set. The set
+    # is resolved once per NumPy module object (bindings/p3_numpy_types.mojo).
+    return numpy_admitted_type(cls, admission)
 
 
 def samba_admit_schedule(value: PythonObject, admission: PythonObject) raises:
@@ -347,12 +339,24 @@ def _samba_remember(value: PythonObject, admission: PythonObject, bi: PythonObje
     py_setitem(table, py_call(bi.id, value), Python.tuple(admission, _samba_shadow(value, admission, bi)))
 
 
+# Class-watcher slot of a passed Samba layout guard (one record per class).
+comptime _SAMBA_GUARD_SLOT = "p3_samba_layout_guard_v1_"
+
+
 def samba_admit(operation: String, values: PythonObject, context: PythonObject) raises:
     # One checked builtin connection for this GIL-held recursive admission.
     var bi = native_loaded_module("builtins")
     var admission = context["admission"]
     var guards = admission["guards"]
+    var mods = NativeModules()
     for i in range(len(guards)):  # driver-loop: over registered runtime record/Array layouts
+        # A guard depends only on its class rows (own namespace and MRO). Once
+        # it passed, the class-watcher record (bindings/native_class_admission.mojo)
+        # stays valid until the class or an ancestor is modified, which bumps
+        # its epoch; Python 3.10/3.11 have no watcher and keep the full check.
+        var guarded = guards[i][2]
+        if guard_row_admitted(mods, _SAMBA_GUARD_SLOT, i, guarded, guards[i]):
+            continue
         if py_call(admission["type_mro"], guards[i][2]) is not guards[i][3]:
             raise Error("TypeError: Samba native owner inheritance has changed")
         var namespace = guards[i][0]
@@ -360,6 +364,7 @@ def samba_admit(operation: String, values: PythonObject, context: PythonObject) 
         for j in range(len(pairs)):  # driver-loop: over descriptors that native execution reads or writes
             if py_get(namespace, pairs[j][0]) is not pairs[j][1]:
                 raise Error("TypeError: Samba native owner layout has a replaced Python descriptor or attribute hook")
+        guard_row_admit(mods, _SAMBA_GUARD_SLOT, i, guarded, guards[i])
     if operation == "construct":
         # The public wrapper creates exact tuples; check this before indexing
         # so a direct C-boundary call cannot execute an arbitrary __getitem__.

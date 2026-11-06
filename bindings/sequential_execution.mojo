@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_loaded_module import NativeModules
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from core.cast_in import CastIn
 from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT
 from autograd.model_execution import model_counts_native
@@ -19,26 +19,35 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
     var mode = sequential_fields(model)["numeric_mode"]
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if not Bool(py=py_call(b.isinstance, mode, b.str)):
+    var word = String()
+    if py_type(mode) is b.str:
+        # An exact canonical spelling needs no isinstance, strip or lower call.
+        word = String(mode)
+    if word != "identical" and word != "fast":
+        if not Bool(py=py_call(b.isinstance, mode, b.str)):
+            raise Error("numeric_mode must be fast, identical or None")
+        mode = mode.strip().lower()
+        word = String(mode)
+    if word != "identical" and word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    mode = mode.strip().lower()
-    if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
-    var entries = context["bindings"][mode]
-    if Bool(py=py_call(b.isinstance, entries, b.str)):
+    var entries = context["bindings"][PythonObject(word)]
+    if py_type(entries) is not b.dict and Bool(py=py_call(b.isinstance, entries, b.str)):
         raise Error(String(entries))
     # The compiled mode/vendor of a connected binding cannot change within a
     # process: read them on the first operation, then reuse the verdict
     # stored next to the provider (two native metadata calls per predict).
+    # The verdict keeps the context's own vendor object, so the usual check
+    # is one identity compare instead of two String conversions.
+    var vendor = context["vendor"]
     var checked = py_get(entries, "_sequential_checked_vendor")
-    if checked is None or String(checked) != String(context["vendor"]):
+    if checked is None or (checked is not vendor and String(checked) != String(vendor)):
         var actual_mode = Int(py=entries["x_sequence_numeric_mode"]())
         var actual_vendor = String(entries["x_sequence_vendor"]())
-        if actual_mode != (1 if String(mode) == "identical" else 0):
+        if actual_mode != (1 if word == "identical" else 0):
             raise Error("RuntimeError: Sequential native numerical mode differs from the requested mode")
-        if actual_vendor != String(context["vendor"]):
+        if actual_vendor != String(vendor):
             raise Error("RuntimeError: Sequential native vendor differs from the selected execution route")
-        py_setitem(entries, "_sequential_checked_vendor", PythonObject(actual_vendor))
+        py_setitem(entries, "_sequential_checked_vendor", vendor)
     # Connection/metadata admission only. Exact compiled factory/module identity
     # owns the shared provider; no per-model pointer cache or Python callable is
     # used by the subsequent native fit/predict execution.

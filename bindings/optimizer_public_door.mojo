@@ -32,6 +32,7 @@ from std.memory import memcpy
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_buffer_owner import native_storage_allocate
 
@@ -162,13 +163,22 @@ def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises ->
 
 def as_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
+    var scalars = OPT_DOOR.get_or_create_ptr()[].context["scalar_types"]
+    # An exact float is admitted by type identity and read natively (the
+    # same double `float(value)` returns); no second admission or call.
+    if py_type(value) is scalars[3]:
+        return Float64(py=value)
     opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Float64(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][3], value))
+    return Float64(py=py_call(scalars[3], value))
 
 
 def truth(value: PythonObject) raises -> Bool:
+    var scalars = OPT_DOOR.get_or_create_ptr()[].context["scalar_types"]
+    # Exact bool: the value is one of the two singletons; compare pointers.
+    if py_type(value) is scalars[1]:
+        return value is PythonObject(True)
     opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Bool(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][1], value))
+    return Bool(py=py_call(scalars[1], value))
 
 
 def py_repr(value: PythonObject) raises -> String:
@@ -425,19 +435,20 @@ def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
 def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
     """`PyObject_GetBuffer(obj, view, PyBUF_FULL_RO)`; False (indicator
     cleared) when `obj` does not export a buffer."""
-    ref cpy = Python().cpython()
+    # Symbols from the process-wide table (bindings/cpython_table.mojo),
+    # resolved once, not a dlsym per tensor; the clear runs only on refusal.
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var rc = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
+    var rc = cpython_table()[].PyObject_GetBuffer(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
     if rc != 0:
+        ref cpy = Python().cpython()
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return False
     return True
 
 
 def _release_buffer(mut view: List[Int]) raises:
-    ref cpy = Python().cpython()
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(p)
+    cpython_table()[].PyBuffer_Release(p)
 
 
 def _array_view(obj: PythonObject, context: PythonObject, mut v: TensorView) raises:
@@ -926,7 +937,9 @@ def door_step[K: OptKernels](
     Python glue, the ONE kernel call, the assignments of its result.
     Returns the pre-clip total norm, or None."""
     door_ready()
-    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    # Host parameters are admitted one by one by tensor_view below, before
+    # any read; only device-resident parameters need the list walk here.
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context, True)
     # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
     var d = OPT_DOOR.get_or_create_ptr()
@@ -935,6 +948,8 @@ def door_step[K: OptKernels](
     var where = String("step") if op == OP_STEP else (
         String("step_device") if op == OP_STEP_DEVICE else String("step_accumulated"))
     var p_dev = truth(getattr_or(opt, "_p_dev", PythonObject(False)))
+    if p_dev:
+        opt_value(fields["params"], d[].context)
     var parts = PythonObject(None)
     var t_tokens = -1
     if op == OP_STEP_DEVICE and not p_dev:

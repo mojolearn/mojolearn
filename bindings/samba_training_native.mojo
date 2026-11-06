@@ -14,6 +14,7 @@ from bindings.byte_perf_helpers import byte_view_bytes
 from bindings.neural_prefill_native import neural_prefill_forward, neural_prefill_backward, neural_prefill_close
 from bindings.neural_block_public import neural_block_backward_binding
 from bindings.causal_lm_public import _native_function
+from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_AFN, SAMBA_CAP_HEAD_LOSS, SAMBA_CAP_CHUNKED
 from bindings.py_balanced import py_call, py_setitem, py_type, py_get
 
 
@@ -125,13 +126,12 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     var tie_embeddings = Bool(py=config["tie_embeddings"])
     var head = arrays["embed.weight"] if tie_embeddings else arrays["lm_head.weight"]
     var norm = arrays["norm_f.weight"]
-    var afn = True
-    for name in [String("samba_afn_norm_head_forward"), String("samba_afn_tail_train"), String("samba_afn_embedding_backward_tied")]:  # driver-loop: over the optional fused-tail capability tuple
-        afn = afn and Bool(py=py_call(bi.hasattr, entries, name))
-    var fused = not afn and Bool(py=py_call(bi.hasattr, entries, "samba_head_loss"))
-    var chunked = False
-    if not afn and Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")):
-        chunked = Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")())
+    # Optional entries and compile-time switches are fixed per binding: one
+    # record read (bindings/p3_samba_caps.mojo), not five probes per call.
+    var caps = samba_caps(entries)
+    var afn = Bool(py=caps[SAMBA_CAP_AFN])
+    var fused = not afn and Bool(py=caps[SAMBA_CAP_HEAD_LOSS])
+    var chunked = not afn and Bool(py=caps[SAMBA_CAP_CHUNKED])
     var dropout_probability = Float64(py=config["dropout"])
     var dropout = dropout_probability > 0.0 and stream is not None
     var dropout_metadata: Optional[SambaDropoutMetadata] = None

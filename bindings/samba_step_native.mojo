@@ -10,7 +10,7 @@ from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, n
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_get, prepared_put
+from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_ACCUMULATED, SAMBA_CAP_CHUNKED
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -83,16 +83,12 @@ def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObj
     if fields["max_norm"] is not None and not (max_norm > 0.0):
         raise Error("Samba: max_norm must be positive or None")
     py_setitem(opt, "t", step + 1)
-    var plan = py_ints([len(opt["params"]), 2, step + 1, 0])
-    _ = py_call(plan.append, opt["lr"])
-    _ = py_call(plan.append, opt["betas"][0])
-    _ = py_call(plan.append, opt["betas"][1])
-    _ = py_call(plan.append, opt["eps"])
-    _ = py_call(plan.append, opt["weight_decay"])
-    _ = py_call(plan.append, 0.0)
-    _ = py_call(plan.append, 0.0)
-    _ = py_call(plan.append, max_norm)
-    _ = py_call(plan.append, 1 if Bool(py=py_get(opt, "maximize", PythonObject(False))) else 0)
+    # One list build (the 13-word plan the step entry reads), not 9 appends.
+    var betas = opt["betas"]
+    var plan = Python.list(PythonObject(len(opt["params"])), PythonObject(2), PythonObject(step + 1), PythonObject(0),
+                           opt["lr"], betas[0], betas[1], opt["eps"], opt["weight_decay"],
+                           PythonObject(0.0), PythonObject(0.0), PythonObject(max_norm),
+                           PythonObject(1 if Bool(py=py_get(opt, "maximize", PythonObject(False))) else 0))
     return plan
 
 
@@ -112,10 +108,6 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
     return py_call(native_loaded_module("builtins").dict, result)
 
 
-# Prepared-registry slot of the resident ABI probe verdict (per entries object).
-comptime _SAMBA_RESIDENT_ABI_SLOT = "samba_resident_abi_v1"
-
-
 def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
                          device_plan: DevicePlan, schedule: PythonObject, accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
@@ -123,24 +115,19 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)
     var provider = samba_resident_provider(fields, entries)
-    # The resident ABI of one connected entry namespace is fixed: probe it once
-    # per entries object, not with four hasattr calls on every step. The
-    # verdict lives in the native prepared registry, weakly keyed by the
-    # entries object (never in the model's `__dict__`, so a pickle of the
-    # model carries no binding reference).
-    var abi_mods = NativeModules()
-    if prepared_get(abi_mods, _SAMBA_RESIDENT_ABI_SLOT, entries) is None:
-        var enabled = True
-        for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
-            enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
-        if not enabled:
-            return PythonObject(None)
-        prepared_put(abi_mods, _SAMBA_RESIDENT_ABI_SLOT, entries, PythonObject(True))
-    if (provider is None and not Bool(py=_native_function(entries, "samba_resident_enabled")())) or (provider is not None and neural_descriptor_execute(provider, 24, [], [], [], False) == 0):
+    # The resident ABI and the compile-time switches of one connected binding
+    # are fixed: read them from the per-binding capability record
+    # (bindings/p3_samba_caps.mojo, weakly keyed by the binding module). The
+    # former record was keyed on the `entries` SimpleNamespace, which cannot
+    # be weakly referenced, so it never stored and every step re-probed.
+    var caps = samba_caps(entries)
+    if provider is None and not (Bool(py=caps[SAMBA_CAP_RESIDENT_ABI]) and Bool(py=caps[SAMBA_CAP_RESIDENT_ON])):
         return PythonObject(None)
-    if accumulation > 1 and not Bool(py=py_call(bi.hasattr, entries, "samba_resident_accumulated_step")):
+    if provider is not None and (not Bool(py=caps[SAMBA_CAP_RESIDENT_ABI]) or neural_descriptor_execute(provider, 24, [], [], [], False) == 0):
         return PythonObject(None)
-    if provider is None and Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")) and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")()):
+    if accumulation > 1 and not Bool(py=caps[SAMBA_CAP_ACCUMULATED]):
+        return PythonObject(None)
+    if provider is None and Bool(py=caps[SAMBA_CAP_CHUNKED]):
         return PythonObject(None)
     _samba_open_optimizer(opt, entries, context, provider, device_plan)
     if opt["_res"] is None:

@@ -9,6 +9,8 @@ from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from std.ffi import _Global
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_get, py_fields, py_type, py_setitem
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.native_torch_admission import (
@@ -191,13 +193,64 @@ def _torch_native_type(cls: PythonObject, b: PythonObject, module: String, name:
     return String(cls.__module__) == module and String(cls.__name__) == name
 
 
+struct TorchArtifactBase(Defaultable, Movable):
+    # The module-derived part of the artifact context and the three
+    # dictionaries it was read from (strong references, so their addresses
+    # cannot be recycled while they are the key).
+    var base: PythonObject
+    var modules: PythonObject
+    var torch_namespace: PythonObject
+    var native_namespace: PythonObject
+
+    def __init__(out self):
+        self.base = PythonObject(None)
+        self.modules = PythonObject(None)
+        self.torch_namespace = PythonObject(None)
+        self.native_namespace = PythonObject(None)
+
+
+comptime TORCH_ARTIFACT_BASE = _Global[StorageType=TorchArtifactBase,
+    name="MojolearnP3TorchArtifactBaseV1", init_fn=TorchArtifactBase.__init__]
+
+
 def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
-    # Resolve only loaded framework native entries. No capture, model callbacks,
-    # weight-version polling or export runs when executing an artifact snapshot.
+    # The framework part depends only on sys.modules and the torch / torch._C
+    # namespaces (every admitted type is a static extension type, so its
+    # metadata cannot change). Reuse it while the dictionary watcher reports
+    # none of the three changed since they passed their key admission
+    # (bindings/native_class_admission.mojo; Python 3.10/3.11 rebuild per run).
     var b = native_loaded_module("builtins")
     var sys = native_loaded_module("sys")
-    var module_type = py_type(sys)
     var modules = sys.modules
+    var g = TORCH_ARTIFACT_BASE.get_or_create_ptr()
+    var base = PythonObject(None)
+    if (g[].base is not None and modules is g[].modules and dict_keys_admitted(g[].modules)
+            and dict_keys_admitted(g[].torch_namespace) and dict_keys_admitted(g[].native_namespace)):
+        base = g[].base
+    else:
+        base = _torch_artifact_base(b, sys, modules)
+        g[].base = base
+        g[].modules = modules
+        g[].torch_namespace = base["torch_namespace"]
+        g[].native_namespace = base["native_namespace"]
+        dict_keys_admit(modules)
+        dict_keys_admit(g[].torch_namespace)
+        dict_keys_admit(g[].native_namespace)
+    var context = py_call(b.dict, base)
+    var count = len(snapshot[2])
+    var free = Python.list()
+    for index in range(count):  # driver-loop: declared graph input positions
+        py_call(free.append, index)
+    py_setitem(context, "free", free)
+    py_setitem(context, "n_args", count)
+    py_setitem(context, "sequence", len(snapshot[3]) != 1)
+    return context
+
+
+def _torch_artifact_base(b: PythonObject, sys: PythonObject, modules: PythonObject) raises -> PythonObject:
+    # Resolve only loaded framework native entries. No capture, model callbacks,
+    # weight-version polling or export runs when executing an artifact snapshot.
+    var module_type = py_type(sys)
     if py_type(modules) is not b.dict or not native_namespace_string_keys(modules._obj_ptr, b.str):
         raise Error("TypeError: Torch program execution requires the ordinary loaded-module dictionary")
     var torch = _torch_loaded_namespace(modules, b, module_type, "torch")
@@ -235,13 +288,6 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     py_setitem(context, "cpu", py_call(device_type, "cpu"))
     py_setitem(context, "f32", f32)
     py_setitem(context, "i32", i32)
-    var count = len(snapshot[2])
-    var free = Python.list()
-    for index in range(count):  # driver-loop: declared graph input positions
-        py_call(free.append, index)
-    py_setitem(context, "free", free)
-    py_setitem(context, "n_args", count)
-    py_setitem(context, "sequence", len(snapshot[3]) != 1)
     return context
 
 

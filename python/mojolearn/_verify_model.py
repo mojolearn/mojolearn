@@ -131,33 +131,10 @@ def _names(entries, items, stem):
     return [f"{stem}{k}" for k, _ in enumerate(items)]  # glue: one label per model input or output
 
 
-# ------------------------------------------------------------ at save time
-
-def record_program(program, path):
-    """Run ``program`` on the seeded inputs and write its report beside the
-    file ``path`` that ``Program.save`` just wrote."""
-    s = program._s
-    b = s._b
-    arrays = _seeded(b, program.input_shapes, DEFAULT_SEED, getattr(program, "input_kinds", None))
-    outs = s.run(program, *arrays)
-    outs = outs if isinstance(outs, tuple) else (outs,)
-    names_in = _names([e[0] for e in getattr(program, "inputs", ())], arrays, "input")  # glue: the model's input names
-    names_out = _names([e[0] for e in getattr(program, "outputs", ())], outs, "output")  # glue: the model's output names
-    rep = _report(b, path, s.numeric_mode, names_in, arrays, "seeded", DEFAULT_SEED, names_out, outs)
-    _write(rep, sidecar_path(path))
-    return rep
-
-
-def record_sequential(model, path):
-    """Run a fitted ``Sequential`` on the seeded inputs and write its report
-    beside the file ``path`` that ``save_checkpoint`` or ``export`` just
-    wrote."""
-    b = model._binding()
-    (X,) = _seeded(b, [(SEQUENTIAL_ROWS, model.n_features_in_)], DEFAULT_SEED)
-    out = model._forward(X, _OUT_RAW)
-    rep = _report(b, path, model.numeric_mode, ["X"], [X], "seeded", DEFAULT_SEED, ["output"], [out])
-    _write(rep, sidecar_path(path))
-    return rep
+# The save-time report is written natively beside the saved file
+# (autograd/program_save.mojo, bindings/sequential_checkpoint.mojo); the
+# Python copies record_program / record_sequential were never called and
+# could drift from the native writer, so they were removed.
 
 
 # ------------------------------------------------------------ at verify time

@@ -2,7 +2,8 @@
 # Shared native graph/import metadata admission and error translation.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_public_words import stash_python_error
 from providers.python.autograd_python_errors_pyapi import graph_int
 from providers.python.neural_descriptor_pyapi import NativeDescriptorResource
@@ -13,23 +14,47 @@ def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
     var cls = py_type(value)
     if cls is not layout["cls"] or py_type(cls) is not b.type:
         raise Error("TypeError: artifact import requires exact native storage classes")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    if len(mro) != len(layout["mro"]):
-        raise Error("TypeError: artifact import class ancestry changed")
-    for i in range(len(mro)):  # driver-loop: over connected class ancestry
-        if mro[i] is not layout["mro"][i]:
+    # The ancestry and hook checks depend only on class rows. When every
+    # hook row is a class in the ancestry, a passed check is kept per class
+    # under the type watcher (bindings/native_class_admission.mojo; any
+    # ancestor modification notifies the class); otherwise, and on Python
+    # 3.10/3.11, the full check runs per call.
+    var mods = NativeModules()
+    var record = class_record(mods, _IMPORT_LAYOUT_SLOT, cls)
+    if record is None or Int(py=record) != Int(layout._obj_ptr):
+        var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+        if len(mro) != len(layout["mro"]):
             raise Error("TypeError: artifact import class ancestry changed")
-    var hooks = layout["hooks"]
-    for i in range(len(hooks)):  # driver-loop: over fixed native storage identities
-        var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[i][0])
-        if py_get(row, hooks[i][1]) is not hooks[i][2]:
-            raise Error("TypeError: artifact import refuses changed Python storage hooks")
+        for i in range(len(mro)):  # driver-loop: over connected class ancestry
+            if mro[i] is not layout["mro"][i]:
+                raise Error("TypeError: artifact import class ancestry changed")
+        var hooks = layout["hooks"]
+        var covered = True
+        for i in range(len(hooks)):  # driver-loop: over fixed native storage identities
+            var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[i][0])
+            if py_get(row, hooks[i][1]) is not hooks[i][2]:
+                raise Error("TypeError: artifact import refuses changed Python storage hooks")
+            var in_mro = False
+            for j in range(len(mro)):  # driver-loop: over connected class ancestry
+                if mro[j] is hooks[i][0]:
+                    in_mro = True
+            covered = covered and in_mro
+        if covered:
+            class_admit(mods, _IMPORT_LAYOUT_SLOT, cls, PythonObject(Int(layout._obj_ptr)))
     var fields = py_call(layout["fields_get"], value, cls)
-    var keys = py_call(b.list, fields)
-    for i in range(len(keys)):  # driver-loop: over safe keys before field lookup
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: artifact state requires exact string keys")
+    if py_type(fields) is not b.dict or not dict_keys_admitted(fields):
+        var keys = py_call(b.list, fields)
+        for i in range(len(keys)):  # driver-loop: over safe keys before field lookup
+            if py_type(keys[i]) is not b.str:
+                raise Error("TypeError: artifact state requires exact string keys")
+        if py_type(fields) is b.dict:
+            dict_keys_admit(fields)
     return fields
+
+
+# Class-watcher slot of an import layout verdict (payload: the address of the
+# connected layout record it was checked against; the import context keeps it).
+comptime _IMPORT_LAYOUT_SLOT = "p3_autograd_import_layout_v1"
 
 
 def _program_specs(value: PythonObject) raises -> PythonObject:

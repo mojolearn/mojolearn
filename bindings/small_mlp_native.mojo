@@ -17,6 +17,7 @@ Python descriptors. Shared exact input admission precedes native buffer reads;
 balanced call helpers retain original owners without leaking references.
 """
 from std.ffi import _Global
+from std.os import getenv
 from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -26,6 +27,8 @@ from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, p
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
 from providers.python.lowbit_weight_pyapi import low_materialize, low_formats
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -185,13 +188,41 @@ def _mode_entries() raises -> MlpOperationMetadata:
         provider = neural_descriptor_reuse(py_get(entries, "_native_provider"),
             entries["small_mlp_api_v1"], "mojolearn.training.small_mlp.v1", 8)
         py_setitem(entries, "_native_provider", provider)
-    var compiled = neural_descriptor_execute(provider, 0, List[Int](), List[Int](), List[Float64]()) if provider is not None else Int(py=entries["training_numeric_mode"]())
-    if compiled != (1 if String(py=mode) == "identical" else 0):
-        raise Error(_MODE_REFUSAL)
-    for name in [String("mlp_bias_activation"), String("mlp_relu_backward"), String("mlp_sum_rows")]:  # small-loop(the three required entry names)
-        if not py_contains(entries, name):
-            raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing " + name)
+    # The compiled mode word and the required entries are fixed per
+    # connected entries table and provider object: verify them once per
+    # (entries, provider, mode) and skip the extra provider crossing after.
+    var v = SMALL_MLP_MODE_VERIFIED.get_or_create_ptr()
+    var verified = (v[].entries is not None and v[].entries is entries and v[].provider is provider
+                    and v[].mode == String(py=mode))
+    if not verified:
+        var compiled = neural_descriptor_execute(provider, 0, List[Int](), List[Int](), List[Float64]()) if provider is not None else Int(py=entries["training_numeric_mode"]())
+        if compiled != (1 if String(py=mode) == "identical" else 0):
+            raise Error(_MODE_REFUSAL)
+        for name in [String("mlp_bias_activation"), String("mlp_relu_backward"), String("mlp_sum_rows")]:  # small-loop(the three required entry names)
+            if not py_contains(entries, name):
+                raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing " + name)
+        v[].entries = entries
+        v[].provider = provider
+        v[].mode = String(py=mode)
     return MlpOperationMetadata(entries, provider, String(py=mode))
+
+
+struct SmallMlpModeVerified(Defaultable, Movable):
+    # The last (entries table, provider, mode) whose compiled mode word and
+    # required entries passed. Holds strong references, so neither object's
+    # address can be recycled while it is the key.
+    var entries: PythonObject
+    var provider: PythonObject
+    var mode: String
+
+    def __init__(out self):
+        self.entries = PythonObject(None)
+        self.provider = PythonObject(None)
+        self.mode = String()
+
+
+comptime SMALL_MLP_MODE_VERIFIED = _Global[StorageType=SmallMlpModeVerified,
+    name="MojolearnP3SmallMlpModeVerifiedV1", init_fn=SmallMlpModeVerified.__init__]
 
 
 def _mode_name(entries: MlpOperationMetadata) raises -> String:
@@ -199,9 +230,12 @@ def _mode_name(entries: MlpOperationMetadata) raises -> String:
 
 
 def _env(name: String, default: String) raises -> String:
-    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    var raw = py_get(b[].environ, py_call(PythonObject(name).encode, "ascii"), py_call(PythonObject(default).encode, "ascii"))
-    return String(py=py_call(raw.decode, "latin-1"))
+    # The process environment read natively, as bindings/parallel_mlp_native.mojo
+    # (_mlp_fused_enabled) does: os.environ assignment (and monkeypatch.setenv)
+    # updates the C environment through putenv, so this reads the same values
+    # the os.environ._data lookup did, with no str.encode, mapping get and
+    # bytes.decode calls per step.
+    return getenv(name, default)
 
 
 def _fused_enabled(entries: MlpOperationMetadata) raises -> Bool:
@@ -1438,7 +1472,25 @@ def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObje
 
 # ------------------------------------------------------------ passive public owners
 
+# Class-watcher slot of an owner class that passed `_small_class` (payload:
+# the address of the connected class it was checked against).
+comptime _SMALL_CLASS_SLOT = "p3_small_mlp_owner_class_v1"
+
+
 def _small_class(cls: PythonObject, required: PythonObject) raises:
+    # The verdict depends only on the class rows (metaclass, MRO, namespaces)
+    # and connected constants: keep it per class under the type watcher
+    # (bindings/native_class_admission.mojo) and re-walk only after the class
+    # or an ancestor changed. Python 3.10/3.11 keep the full walk per call.
+    var mods = NativeModules()
+    var record = class_record(mods, _SMALL_CLASS_SLOT, cls)
+    if record is not None and Int(py=record) == Int(required._obj_ptr):
+        return
+    _small_class_walk(cls, required)
+    class_admit(mods, _SMALL_CLASS_SLOT, cls, PythonObject(Int(required._obj_ptr)))
+
+
+def _small_class_walk(cls: PythonObject, required: PythonObject) raises:
     var boundary = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var bi = boundary[].bi
     if py_type(cls) is not bi.type:

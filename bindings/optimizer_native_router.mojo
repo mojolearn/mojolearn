@@ -2,6 +2,7 @@
 # Native public-operation routing, constructors, state preparation and resident IO.
 from bindings.embedding_layer_native import emblayer_operation
 from std.os import getenv
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -36,15 +37,42 @@ def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> Pytho
         selected = context["backend"]["_DEFAULT_MODE"]
     if py_type(selected) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    selected = py_call(py_call(selected.strip).lower)
-    if String(selected) != "fast" and String(selected) != "identical":
+    var word = String(selected)
+    if word != "fast" and word != "identical":
+        # Only a spelled variant (" Fast ") pays the two Python string calls.
+        selected = py_call(py_call(selected.strip).lower)
+        word = String(selected)
+    if word != "fast" and word != "identical":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var entries = context["bindings"][selected]
+    var entries = context["bindings"][PythonObject(word)]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
-    if Int(py=py_call_typed(entries["training_numeric_mode"])) != (1 if String(selected) == "identical" else 0):
-        raise Error("ImportError: optimizer binary numeric mode disagrees with the requested mode")
+    # The binary's mode word is fixed per compiled entry: check it once per
+    # entries table and entry object, not with a binding crossing per call.
+    var g = OPT_MODE_CHECKED.get_or_create_ptr()
+    if g[].table is None:
+        g[].table = Python.dict()
+    var key = PythonObject(Int(entries._obj_ptr))
+    var entry = entries["training_numeric_mode"]
+    var checked = py_get(g[].table, key)
+    if checked is None or checked[0] is not entry or String(checked[1]) != word:
+        if Int(py=py_call_typed(entry)) != (1 if word == "identical" else 0):
+            raise Error("ImportError: optimizer binary numeric mode disagrees with the requested mode")
+        py_setitem(g[].table, key, Python.tuple(entry, PythonObject(word)))
     return entries
+
+
+struct OptModeChecked(Defaultable, Movable):
+    # {address of a connected entries dict: (its training_numeric_mode entry, mode word)}
+    # The entries dicts live in the import-time context for the process.
+    var table: PythonObject
+
+    def __init__(out self):
+        self.table = PythonObject(None)
+
+
+comptime OPT_MODE_CHECKED = _Global[StorageType=OptModeChecked,
+    name="MojolearnP3OptimizerModeCheckedV1", init_fn=OptModeChecked.__init__]
 
 
 def optimizer_step_entry(entry: PythonObject, arguments: PythonObject, context: PythonObject) raises -> PythonObject:

@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Optimizer admission runs before native code encounters any Python hook.
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.p3_numpy_types import numpy_admitted_type
+from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
@@ -13,23 +16,25 @@ def opt_exact(cls: PythonObject, classes: PythonObject) raises -> Bool:
 
 
 def opt_numpy(cls: PythonObject, context: PythonObject) raises -> Bool:
-    var module = py_get(context["modules"], "numpy")
-    if module is None or py_type(module) is not context["module_type"]:
-        return False
-    if (Int(py=py_call(context["type_flags"], cls)) & 512) != 0:
-        return False
-    var fields = py_fields(module)
-    var names = context["numpy_names"]
-    for i in range(len(names)):  # driver-loop: over fixed native NumPy buffer/scalar types
-        if cls is py_get(fields, names[i]):
-            return True
-    return False
+    # Static NumPy type identities resolved once per NumPy module
+    # (bindings/p3_numpy_types.mojo), not a flags call, a module dictionary
+    # read and up to 16 name lookups per admitted value.
+    return numpy_admitted_type(cls, context)
+
+
+# Class-watcher slot family of a passed optimizer layout guard row
+# (bindings/p3_guard_records.mojo): a row is re-checked only after its class
+# or an ancestor was modified, instead of on every door call.
+comptime _OPT_GUARD_SLOT = "p3_opt_layout_guard_v1_"
 
 
 def opt_guards(context: PythonObject) raises:
     var guards = context["guards"]
+    var mods = NativeModules()
     for i in range(len(guards)):  # driver-loop: over registered public native object layouts
         var guard = guards[i]
+        if guard_row_admitted(mods, _OPT_GUARD_SLOT, i, guard[0], guard):
+            continue
         if py_call(context["type_mro"], guard[0]) is not guard[1]:
             raise Error("TypeError: optimizer native owner inheritance has changed")
         var fields = guard[2]
@@ -37,6 +42,7 @@ def opt_guards(context: PythonObject) raises:
         for j in range(len(pairs)):  # driver-loop: over retained native descriptors and attribute hooks
             if py_get(fields, pairs[j][0]) is not pairs[j][1]:
                 raise Error("TypeError: optimizer native owner has a replaced descriptor or Python attribute hook")
+        guard_row_admit(mods, _OPT_GUARD_SLOT, i, guard[0], guard)
 
 
 def opt_scalar(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -128,10 +134,15 @@ def _opt_owner_keys(owner: PythonObject, context: PythonObject) raises -> Python
         raise Error("TypeError: optimizer requires an exact SGD, Adam or AdamW native owner")
     var fields = py_fields(owner)
     var b = native_loaded_module("builtins")
-    var keys = py_call(context["container_types"][0], fields)
-    for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: optimizer metadata requires native string keys")
+    # Key admission kept per dictionary under the dict watcher
+    # (bindings/native_class_admission.mojo); Python 3.10/3.11 scan per call.
+    if py_type(fields) is not b.dict or not dict_keys_admitted(fields):
+        var keys = py_call(context["container_types"][0], fields)
+        for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
+            if py_type(keys[i]) is not b.str:
+                raise Error("TypeError: optimizer metadata requires native string keys")
+        if py_type(fields) is b.dict:
+            dict_keys_admit(fields)
     return fields
 
 
@@ -150,9 +161,26 @@ def opt_owner_mode(owner: PythonObject, context: PythonObject) raises:
 
 
 def opt_owner(owner: PythonObject, context: PythonObject) raises:
+    opt_owner(owner, context, False)
+
+
+def opt_owner(owner: PythonObject, context: PythonObject, defer_params: Bool) raises:
+    """With `defer_params`, the `params` entry is admitted as an exact
+    list/tuple only: the caller admits each element itself before it reads it
+    (`door_step` reads every host parameter through `tensor_view`, which runs
+    the same element admission, and admits the whole list with `opt_value`
+    when the parameters are device-resident). Each tensor is admitted once
+    per step instead of twice."""
     var fields = _opt_owner_keys(owner, context)
     for name in ["_where", "_KIND", "_res", "_res_host", "_resident_wanted", "_host_fresh", "_pristine", "_p_dev", "_g_dev", "n_total", "t", "numeric_mode", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
         opt_scalar(py_get(fields, PythonObject(name)), context)
     opt_schedule(py_get(fields, "lr_schedule"), context)
-    for name in ["params", "offsets", "buf_initialized", "_m", "_v"]:  # driver-loop: over five parameter/state buffer collections
+    var params = py_get(fields, "params")
+    if defer_params:
+        var cls = py_type(params)
+        if not (cls is context["container_types"][0] or cls is context["container_types"][1]):
+            opt_value(params, context)  # the full walk raises its usual refusal
+    else:
+        opt_value(params, context)
+    for name in ["offsets", "buf_initialized", "_m", "_v"]:  # driver-loop: over four parameter/state buffer collections
         opt_value(py_get(fields, PythonObject(name)), context)

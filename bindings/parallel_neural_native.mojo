@@ -9,7 +9,7 @@ from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy
 from bindings.parallel_byte_native import _parallel_int, _parallel_view
 from bindings.parallel_mlp_native import (
-    mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state,
+    mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state, mlp_gradients_from_checked, mlp_validate_state,
     mlp_apply_from_state, mlp_batch, mlp_targets, neural_ordered_sum,
     neural_cooperative_admit,
 )
@@ -21,6 +21,7 @@ from bindings.native_transport import transport_close
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.parallel_neural_admission import neural_admit
 from core.sha256 import Sha256
+from bindings.cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text
 
 
@@ -162,15 +163,39 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("mojolearn.SambaStack: inputs and targets must be native integer buffers")
     var packed = py_call(g[].arrays, fmt)
-    _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+    var item = Int(py=packed.itemsize)
     var out = generation_array([rows, columns], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-    _ = out  # keep the Python object alive through the native call above
     var column_major = own and String(value.order) == "F"
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
-    samba_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, columns, column_major, dst)
+    # A native-order C-contiguous export whose item size matches the packing
+    # array's is already the packed buffer tobytes + frombytes would build:
+    # widen from it in place while the export is held. Other layouts keep the
+    # packing copy.
+    var done = False
+    if Int(py=view.itemsize) == item and Bool(py=view.c_contiguous):
+        var buffer = List[Int](length=10, fill=0)
+        var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+        # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
+        if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, bp, Int32(0x38)) == 0:
+            if buffer[2] == rows * columns * item:
+                try:
+                    samba_ids_into(buffer[0], item, signed, rows, columns, column_major, dst)
+                except error:
+                    # release the export before the refusal propagates
+                    cpython_table()[].PyBuffer_Release(bp)
+                    raise error^
+                done = True
+            cpython_table()[].PyBuffer_Release(bp)
+            _ = buffer^  # the Py_buffer words stay alive through the release above
+        else:
+            ref cpy = Python().cpython()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    if not done:
+        _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+        samba_ids_into(Int(py=packed.buffer_info()[0]), item, signed, rows, columns, column_major, dst)
+    _ = view  # the exporter stays alive through the reads above
     _ = out  # keep the Python object alive through the native call above
-    _ = packed  # keep the Python object alive through the native call above
     _ = packed^
     return out
 
@@ -188,6 +213,24 @@ comptime _CACHE_MISS = "parallel neural: worker cache miss"
 #: how many committed steps a delta request carries (a worker further behind
 #: takes the full state again)
 comptime _CACHE_HISTORY = 4
+
+
+def _digest_array_bytes(mut h: Sha256, view: PythonObject) raises:
+    """`h.update(view.tobytes("C"))` without the two copies: a C-contiguous
+    export is hashed in place (the same bytes tobytes would build), while
+    the export is held; any other layout keeps the copy."""
+    var buffer = List[Int](length=10, fill=0)
+    var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
+    if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, bp, Int32(0x38)) == 0:
+        h.update(buffer[0], buffer[2])
+        cpython_table()[].PyBuffer_Release(bp)
+        _ = buffer^  # the Py_buffer words stay alive through the release above
+        _ = view  # the exporter stays alive through the hash above
+        return
+    ref cpy = Python().cpython()
+    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    sha256_update(h, py_call(view.tobytes, "C"))
 
 
 def _digest_into(mut h: Sha256, value: PythonObject) raises -> Bool:
@@ -219,7 +262,7 @@ def _digest_into(mut h: Sha256, value: PythonObject) raises -> Bool:
     if py_type(value) is g[].array_cls:
         sha256_update_text(h, value.shape)
         sha256_update_text(h, value.dtype)
-        sha256_update(h, py_call(value._mv.tobytes, "C"))
+        _digest_array_bytes(h, value._mv)
         return True
     if py_type(value) is b[].bi.bytes or py_type(value) is b[].bi.bytearray:
         sha256_update(h, value)
@@ -457,7 +500,17 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var state = request[1]
     var args = request[2]
     if operation == "mlp_gradient_cached":
-        return mlp_gradients_from_state(_worker_model(state, False)["state"], args[0], args[1])
+        # The worker's resident state is replaced (never edited in place) when
+        # a full state or a committed delta arrives: validate each resident
+        # state object once and reuse the checked copy for every shard.
+        var cache = _worker_model(state, False)
+        var resident = cache["state"]
+        var checked = py_get(cache, "checked")
+        if checked is None or py_get(cache, "checked_of") is not resident:
+            checked = mlp_validate_state(resident)
+            py_setitem(cache, "checked", checked)
+            py_setitem(cache, "checked_of", resident)
+        return mlp_gradients_from_checked(checked, args[0], args[1])
     if operation == "samba_gradient_cached":
         var cache = _worker_model(state, True)
         var values = _neural_values(cache["model"])

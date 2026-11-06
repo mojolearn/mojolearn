@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time canonical module and native-export connections."""
 import array
+import _struct
 import _thread
 import builtins
 import itertools
@@ -97,6 +98,10 @@ connect_module('warnings', warnings, ())  # warning filters are mutable native c
 # TargetEncoder's user-cv test reads numbers.Integral through this connection
 # instead of importing the module on every fit_transform.
 connect_module('numbers', numbers, ('Integral',))
+# SmallMLP item iteration over a 1-D float16 Array reads _struct.unpack through
+# this connection (bindings/small_mlp_items.mojo); it was never connected, so
+# that input was always refused.
+connect_module('_struct', _struct, ('unpack',))
 
 
 # glue: exact standard path identities, connected before any product operation.
