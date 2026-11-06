@@ -995,9 +995,25 @@ def _order_digest(value: PythonObject, name: String, context: PythonObject) rais
     if py_type(value) is b.list:
         return _digest(Python.tuple(_ascii("list"), _canonical(value, context)))
     var arr = msel_materialize(value, name, context)
-    var raw = py_call(b.bytes, arr._mv)
-    return _digest(Python.tuple(_ascii("array"), py_call(arr.dtype.encode, PythonObject("ascii")),
-                                _canonical(py_call(b.list, arr.shape), context), raw))
+    # pass 3 (rank 580): the values are hashed in place from the admitted
+    # C-order storage (the same bytes `bytes(arr._mv)` held, after the same
+    # 8-byte little-endian length prefix), not copied into a Python bytes
+    # object and then into the hasher's store.
+    var hasher = Sha256()
+    var head = Python.tuple(_ascii("array"), py_call(arr.dtype.encode, PythonObject("ascii")),
+                            _canonical(py_call(b.list, arr.shape), context))
+    for i in range(len(head)):  # small-loop(three descriptor chunks)
+        sha256_update(hasher, py_call(PythonObject(len(head[i])).to_bytes, 8, "little"))
+        sha256_update(hasher, head[i])
+    var nbytes = Int(py=arr._mv.nbytes)
+    var prefix = List[UInt8](length=8, fill=0)
+    for k in range(8):  # small-loop(eight length bytes, little-endian)
+        prefix[k] = UInt8((nbytes >> (8 * k)) & 0xFF)
+    hasher.update_list(prefix)
+    if nbytes > 0:
+        hasher.update(msel_addr(arr), nbytes)
+    _ = arr  # keep the storage alive through the hash above
+    return PythonObject(hasher.hexdigest())
 
 
 def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> PythonObject:
