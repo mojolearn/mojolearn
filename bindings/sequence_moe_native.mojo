@@ -3,7 +3,8 @@
 # weight ownership, native execution and finished result publication. Numerical
 # forward/backward kernels and their resident weight ABI remain unchanged.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields
@@ -25,9 +26,19 @@ def _b() raises -> PythonObject:
 
 
 
+# The class admission below depends only on the class rows and the
+# import-connected layout: kept per class (native_class_admission, re-run when
+# the class or an ancestor changes; every call on Python < 3.12). Lane
+# p3-neural-blocks: it was an MRO walk with 18 name tests per row per call.
+comptime _MOE_CLASS_SLOT = "seqmoe_class_admitted_v1"
+
+
 def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    var layout = context["seqmoe_layout"]
     var cls = py_type(owner)
+    var mods = NativeModules()
+    if class_record(mods, _MOE_CLASS_SLOT, cls) is not None:
+        return _fields(mods, owner)
+    var layout = context["seqmoe_layout"]
     var b = _b()
     if py_type(cls) is not b.type:
         raise Error("TypeError: MoEBlock refuses Python metaclass protocols")
@@ -52,7 +63,8 @@ def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
         for name in ["D", "F", "E", "k", "norm_topk_prob", "numeric_mode", "router", "gate_up_proj", "down_proj", "_wver", "_wdev", "_routing", "router_grad_", "gate_up_proj_grad_", "down_proj_grad_"]:  # driver-loop: over native state schema
             if py_contains(namespace, name):
                 raise Error("TypeError: MoEBlock state cannot be replaced by class descriptors")
-    return _fields(owner)
+    class_admit(mods, _MOE_CLASS_SLOT, cls, PythonObject(True))
+    return _fields(mods, owner)
 
 
 def _integer(value: PythonObject, context: PythonObject) raises -> Int:
