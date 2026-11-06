@@ -87,5 +87,4 @@ def test_a_ptx_only_wheel_kind_no_longer_exists(tmp_path):
     sets = make_sets(tmp_path, sets=(('cuda', 'sm_80'),), include_byte_lm=True)
     args = [a for directory in sets for a in ('--set', directory)]
     with pytest.raises(SystemExit, match='name each'):
-        pw.main(args + ['--profile', 'release-split', '--wheels', 'nvidia-ptx',
-                       '--build-proof', 'cuda-sm_80.json', '--out', str(tmp_path / 'out')], _gates=False)
+        pw.main(args + ['--wheels', 'nvidia-ptx', '--out', str(tmp_path / 'out')], _gates=False)
