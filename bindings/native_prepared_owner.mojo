@@ -28,6 +28,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -92,10 +93,11 @@ def _prepared_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -
     # as argument two. No Python function implementation is invoked.
     try:
         ref cpy = Python().cpython()
-        if cpy.lib.get_function[Int]("PyTuple_Size")(args_ptr) != 2:
+        var table = perf2_cpython_table()
+        if table[].PyTuple_Size(args_ptr) != 2:
             raise Error("prepared owner cleanup requires its native ID and weakref")
-        var raw_id = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(args_ptr, 0)
-        var identifier = cpy.lib.get_function[Int64]("PyLong_AsLongLong")(raw_id)
+        var raw_id = table[].PyTuple_GetItem(args_ptr, 0)
+        var identifier = table[].PyLong_AsLongLong(raw_id)
         if cpy.PyErr_Occurred():
             raise cpy.unsafe_get_error()
         _prepared_release(Int(identifier))
@@ -142,25 +144,19 @@ def prepared_get(mut mods: NativeModules, slot: String, owner: PythonObject) rai
     # Weakref admission uses public native APIs, never Python-object call
     # dispatch. Keep this check even with prompt cleanup: an exceptional
     # failure invoking a destruction callback must not admit a recycled address.
+    # The weak reference is an exact weakref.ref made by PyWeakref_NewRef
+    # below; calling it with no arguments is CPython's own C referent read
+    # (weakref_call: a new reference to the referent, or None once it died).
+    # It needs no per-call symbol lookup and is the same function on every
+    # interpreter from 3.10 (PyWeakref_GetRef starts at 3.13 and
+    # PyWeakref_GetObject ends at 3.15; both were looked up per call).
     var weak = g[].entries[identifier].weak._obj_ptr
-    if g[].weakref_get_ref:
-        var raw = PyObjectPtr()
-        var status = cpy.lib.get_function[Int32]("PyWeakref_GetRef")(weak, Pointer(to=raw))
-        if status < 0:
-            raise cpy.unsafe_get_error()
-        if status == 0:
-            return PythonObject(None)
-        var held = PythonObject(from_owned=raw)
-        if held is not owner:
-            return PythonObject(None)
-    else:
-        # <=3.12 only. Borrowed referent is safe while GIL is held and the
-        # public call strongly owns the supplied owner argument.
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyWeakref_GetObject")(weak)
-        if not raw:
-            raise cpy.unsafe_get_error()
-        if raw != owner._obj_ptr:
-            return PythonObject(None)
+    var raw = perf2_cpython_table()[].PyObject_CallNoArgs(weak)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var held = PythonObject(from_owned=raw)
+    if held._obj_ptr != owner._obj_ptr:
+        return PythonObject(None)
     return g[].entries[identifier].record
 
 
@@ -177,11 +173,12 @@ def prepared_put(mut mods: NativeModules, slot: String, owner: PythonObject, rec
     # it; PyWeakref_NewRef invokes the native callback promptly on owner death.
     # https://docs.python.org/3/c-api/method.html#c.PyMethod_New
     # https://docs.python.org/3/c-api/weakref.html#c.PyWeakref_NewRef
-    var raw_callback = cpy.lib.get_function[PyObjectPtr]("PyMethod_New")(function._obj_ptr, token._obj_ptr)
+    var table = perf2_cpython_table()
+    var raw_callback = table[].PyMethod_New(function._obj_ptr, token._obj_ptr)
     if not raw_callback:
         raise cpy.unsafe_get_error()
     var callback = PythonObject(from_owned=raw_callback)
-    var raw_weak = cpy.lib.get_function[PyObjectPtr]("PyWeakref_NewRef")(owner._obj_ptr, callback._obj_ptr)
+    var raw_weak = table[].PyWeakref_NewRef(owner._obj_ptr, callback._obj_ptr)
     if not raw_weak:
         cpy.PyErr_Clear()
         return
@@ -293,10 +290,10 @@ def prepared_namespace_admit(mut mods: NativeModules, module: PythonObject, fiel
 
 
 def _class_stamp_identity(stamp: PythonObject, value: PythonObject, mut offset: Int) raises -> Bool:
-    ref cpy = Python().cpython()
-    if offset >= cpy.lib.get_function[Int]("PyList_Size")(stamp._obj_ptr):
+    var table = perf2_cpython_table()
+    if offset >= table[].PyList_Size(stamp._obj_ptr):
         return False
-    var current = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(stamp._obj_ptr, offset)
+    var current = table[].PyList_GetItem(stamp._obj_ptr, offset)
     offset += 1
     return current == value._obj_ptr
 
@@ -349,12 +346,12 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         # retained stamp to avoid another iterator or temporary Python list.
         offset = row_offset
         for field_index in range(field_count):  # small-loop(field_count: class fields): compare admitted namespace values second
-            var raw_key = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(stamp._obj_ptr, offset)
+            var raw_key = perf2_cpython_table()[].PyList_GetItem(stamp._obj_ptr, offset)
             offset += 1
-            var raw_value = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(fields._obj_ptr, raw_key)
+            var raw_value = cpython_table()[].PyObject_GetItem(fields._obj_ptr, raw_key)
             if not raw_value:
                 raise cpy.unsafe_get_error()
             var value = PythonObject(from_owned=raw_value)
             if not _class_stamp_identity(stamp, value, offset):
                 return False
-    return offset == cpy.lib.get_function[Int]("PyList_Size")(stamp._obj_ptr)
+    return offset == perf2_cpython_table()[].PyList_Size(stamp._obj_ptr)

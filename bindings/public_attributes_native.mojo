@@ -5,6 +5,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
@@ -30,7 +31,8 @@ def _string_keys(fields: PythonObject) raises:
 
 def _outside() raises -> Bool:
     ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyEval_GetFrame")()
+    var table = perf2_cpython_table()
+    var pointer = table[].PyEval_GetFrame()
     if not pointer:
         return True
     var frame = PythonObject(from_borrowed=pointer)
@@ -40,7 +42,7 @@ def _outside() raises -> Bool:
         var module = py_get(fields, "__name__")
         var skip = False
         if py_type(module) is py_type(PythonObject("")) and String(module) == "mojolearn._mode":
-            pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetCode")(frame._obj_ptr)
+            pointer = table[].PyFrame_GetCode(frame._obj_ptr)
             if not pointer:
                 raise cpy.unsafe_get_error()
             var code = PythonObject(from_owned=pointer)
@@ -60,7 +62,7 @@ def _outside() raises -> Bool:
                 raise Error("TypeError: native output caller module name must be a string")
             var name = String(module)
             return name != "mojolearn" and not name.startswith("mojolearn.") and not name.startswith("mojolearn_verify_all_")
-        pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(frame._obj_ptr)
+        pointer = table[].PyFrame_GetBack(frame._obj_ptr)
         _ = frame
         if not pointer:
             if cpython_table()[].PyErr_Occurred():
@@ -208,7 +210,7 @@ def _bound_function(function: PythonObject, model: PythonObject) raises -> Pytho
     if py_type(function) is not native_loaded_module("types").FunctionType:
         raise Error("TypeError: native method binding requires an exact function")
     ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyMethod_New")(function._obj_ptr, model._obj_ptr)
+    var pointer = perf2_cpython_table()[].PyMethod_New(function._obj_ptr, model._obj_ptr)
     if not pointer:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=pointer)
@@ -247,7 +249,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
     ref cpy = Python().cpython()
     # Direct CPython function metadata access avoids the object.__getattr__
     # audit event emitted by Python's function.__code__ getset descriptor.
-    var code = cpy.lib.get_function[PyObjectPtr]("PyFunction_GetCode")(schema["check"]._obj_ptr)
+    var code = perf2_cpython_table()[].PyFunction_GetCode(schema["check"]._obj_ptr)
     if not code:
         raise cpy.unsafe_get_error()
     if PythonObject(from_borrowed=code) is not schema["code"]:
@@ -484,7 +486,8 @@ def public_attribute_generic_slot_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr)
 def _public_attribute_generic_entry[slot: Bool](args_ptr: PyObjectPtr) -> PyObjectPtr:
     try:
         ref cpy = Python().cpython()
-        if cpy.lib.get_function[Int]("PyTuple_Size")(args_ptr) != 3:
+        var table = perf2_cpython_table()
+        if table[].PyTuple_Size(args_ptr) != 3:
             raise Error("TypeError: generic public attribute expects model, name and native context")
         # CPython owns this METH_VARARGS tuple throughout the C call. Borrow
         # its items directly, so a failed lookup has no PythonObject tuple/item
@@ -496,7 +499,7 @@ def _public_attribute_generic_entry[slot: Bool](args_ptr: PyObjectPtr) -> PyObje
         # internal cause remains unconfirmed.
         var model_ptr = cpy.PyTuple_GetItem(args_ptr, 1 if slot else 0)
         var name_ptr = cpy.PyTuple_GetItem(args_ptr, 2 if slot else 1)
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model_ptr, name_ptr)
+        var raw = table[].PyObject_GenericGetAttr(model_ptr, name_ptr)
         if not raw:
             # This is already a CPython error boundary. Return its original
             # exception directly, as array_native does; no fetch/restore or

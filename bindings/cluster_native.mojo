@@ -14,7 +14,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_c_bytes
 from core.family_cast_impl import family_fill_i32, family_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.perf2_shared_fitted_field import native_fitted_get
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
     family_shape_repr,
@@ -25,16 +26,17 @@ comptime _E_DISTANCES = 1
 comptime _E_BISECT_PREDICT = 4
 
 
-def _xc_fitted(model: PythonObject, attr: String) raises -> PythonObject:
+def _xc_fitted(mut mods: NativeModules, model: PythonObject, attr: String) raises -> PythonObject:
     """`_XCluster._check_fitted`: the attribute, or the refusal."""
-    var b = native_loaded_module("builtins")
-    var value = py_call(b.getattr, model, PythonObject(attr), PythonObject(None))
+    # Package-internal read: the instance field without the public
+    # attribute hook (bindings/perf2_shared_fitted_field.mojo).
+    var value = native_fitted_get(mods, model, attr, PythonObject(None))
     if value is None:
         raise Error("RuntimeError: this " + String(py_type(model).__name__) + " is not fitted yet")
     return value
 
 
-def _xc_input(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _xc_input(mut mods: NativeModules, model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_XCluster._input_like_fit`: `_f32(X)` (as_f32_c, nonempty, finite)
     and the fitted feature count."""
     var x = PythonObject(None)
@@ -45,8 +47,7 @@ def _xc_input(model: PythonObject, source: PythonObject, context: PythonObject) 
             raise Error("mojolearn: X contains NaN or infinity")
         raise Error(String(error))
     var d = Int(py=x.shape[1])
-    var b = native_loaded_module("builtins")
-    var fitted = py_call(b.getattr, model, PythonObject("n_features_in_"))
+    var fitted = native_fitted_get(mods, model, "n_features_in_")
     if d != Int(py=fitted):
         raise Error("mojolearn: X has " + String(d) + " features, " + String(py_type(model).__name__)
                     + " was fitted with " + String(Int(py=fitted)))
@@ -141,14 +142,18 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
                     context: PythonObject) raises -> PythonObject:
     """`DBSCAN.predict`: the nearest core sample's label within eps."""
     var b = native_loaded_module("builtins")
-    if not Bool(py=family_call(b.hasattr, model, PythonObject("labels_"))):
+    # Package-internal reads of the model's own fields skip the public
+    # attribute hook (bindings/perf2_shared_fitted_field.mojo).
+    var mods = NativeModules()
+    var absent = py_call(b.object)
+    if native_fitted_get(mods, model, "labels_", absent) is absent:
         raise Error("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-    var components = py_call(b.getattr, model, PythonObject("components_"), PythonObject(None))
-    if not Bool(py=py_call(b.bool, py_call(b.getattr, model, PythonObject("prediction_data")))) or components is None:
+    var components = native_fitted_get(mods, model, "components_", PythonObject(None))
+    if not Bool(py=py_call(b.bool, native_fitted_get(mods, model, "prediction_data"))) or components is None:
         raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
                     + "DBSCAN(prediction_data=True), which keeps the core samples this "
                     + "rule needs (DEVIATION 2740)")
-    var n_features = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
+    var n_features = Int(py=native_fitted_get(mods, model, "n_features_in_"))
     var q = _reference_queries(source, n_features, "DBSCAN.predict", context)
     var nq = Int(py=q.shape[0])
     var n_core = Int(py=components.shape[0])
@@ -157,11 +162,11 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
         family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
         _ = labels  # keep the Python object alive through the native call above
         return labels
-    var metric_name = py_call(py_call(b.str, py_call(b.getattr, model, PythonObject("metric"))).lower)
+    var metric_name = py_call(py_call(b.str, native_fitted_get(mods, model, "metric")).lower)
     var metric = Int(py=context["family_dbscan_metrics"][metric_name])
-    var eps = family_call(b.float, py_call(b.getattr, model, PythonObject("eps")))
-    var result = _labeled_reference(binding, components, py_call(b.getattr, model, PythonObject("core_sample_indices_")),
-                                    py_call(b.getattr, model, PythonObject("_core_labels")), q, n_core, n_features,
+    var eps = family_call(b.float, native_fitted_get(mods, model, "eps"))
+    var result = _labeled_reference(binding, components, native_fitted_get(mods, model, "core_sample_indices_"),
+                                    native_fitted_get(mods, model, "_core_labels"), q, n_core, n_features,
                                     metric, eps, 1, context)
     _ = q^
     return result
@@ -174,13 +179,14 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     var b = native_loaded_module("builtins")
     # One attribute read for `labels_`: the fitted check (`hasattr`) and the
     # value used below. A fresh sentinel keeps "absent" apart from a stored None.
+    var mods = NativeModules()
     var absent = py_call(b.object)
-    var labels = py_call(b.getattr, model, PythonObject("labels_"), absent)
+    var labels = native_fitted_get(mods, model, "labels_", absent)
     if labels is absent:
         raise Error("mojolearn AgglomerativeClustering.predict: this instance is not "
                     + "fitted yet; call fit first")
-    var linkage = py_call(b.getattr, model, PythonObject("linkage"))
-    var metric = py_call(b.getattr, model, PythonObject("metric"))
+    var linkage = native_fitted_get(mods, model, "linkage")
+    var metric = native_fitted_get(mods, model, "metric")
     # `_predicts`: single linkage under a euclidean metric name.
     var predicts = py_type(linkage) is b.str and String(linkage) == "single"
     if predicts:
@@ -190,12 +196,12 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
                     + ", metric=" + family_repr(metric) + " has no predict rule; DEVIATION 2740 is single "
                     + "linkage's own criterion (the nearest training row's cluster) under "
                     + "the euclidean metric only")
-    var refs = py_call(b.getattr, model, PythonObject("_fit_X"), PythonObject(None))
+    var refs = native_fitted_get(mods, model, "_fit_X", PythonObject(None))
     if refs is None:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not "
                     + "stored. Fit with AgglomerativeClustering(prediction_data=True), "
                     + "which keeps the training rows this rule needs (DEVIATION 2740)")
-    var n_features = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
+    var n_features = Int(py=native_fitted_get(mods, model, "n_features_in_"))
     var q = _reference_queries(source, n_features, "AgglomerativeClustering.predict", context)
     # The key of every training row is its label: ties go to the lowest
     # cluster label, then the lowest training index.
@@ -218,18 +224,20 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
     """args[0] is the resolved binding, args[1] X."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
+    # One module handle for every fitted-field read of this call.
+    var mods = NativeModules()
     var binding = args[0]
     if operation == "family_xc_dbscan_predict":
         return _dbscan_predict(model, binding, args[1], context)
     if operation == "family_xc_agglo_predict":
         return _agglo_predict(model, binding, args[1], context)
     if operation == "family_xc_predict":
-        var centers = _xc_fitted(model, "cluster_centers_")
-        var x = _xc_input(model, args[1], context)
+        var centers = _xc_fitted(mods, model, "cluster_centers_")
+        var x = _xc_input(mods, model, args[1], context)
         return _xc_nearest(model, binding, x, centers, context)
     if operation == "family_xc_transform":
-        var centers_field = _xc_fitted(model, "cluster_centers_")
-        var x = _xc_input(model, args[1], context)
+        var centers_field = _xc_fitted(mods, model, "cluster_centers_")
+        var x = _xc_input(mods, model, args[1], context)
         var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
@@ -239,8 +247,8 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
         _ = centers^
         return _xc_array(result[0][0], Python.tuple(n, k), "<f4", "f", context)
     if operation == "family_xc_score":
-        var centers_field = _xc_fitted(model, "cluster_centers_")
-        var x = _xc_input(model, args[1], context)
+        var centers_field = _xc_fitted(mods, model, "cluster_centers_")
+        var x = _xc_input(mods, model, args[1], context)
         var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
@@ -251,8 +259,8 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
         _ = centers^
         return family_call(native_loaded_module("operator").neg, result[2][0])
     if operation == "family_xc_bisect_predict":
-        _ = _xc_fitted(model, "cluster_centers_")
-        var x = _xc_input(model, args[1], context)
+        _ = _xc_fitted(mods, model, "cluster_centers_")
+        var x = _xc_input(mods, model, args[1], context)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         var fields = py_fields(model)
@@ -263,12 +271,12 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
         var result = _xc_call(binding, _E_BISECT_PREDICT, x, fields["_tree_centers"], ints, context)
         return _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
     if operation == "family_xc_ap_predict":
-        _ = _xc_fitted(model, "labels_")
-        var affinity = py_call(b.getattr, model, PythonObject("affinity"))
+        _ = _xc_fitted(mods, model, "labels_")
+        var affinity = native_fitted_get(mods, model, "affinity")
         if py_type(affinity) is b.str and String(affinity) == "precomputed":
             raise Error("Predict method is not supported when affinity='precomputed'.")
-        var x = _xc_input(model, args[1], context)
-        var centers = py_call(b.getattr, model, PythonObject("cluster_centers_"))
+        var x = _xc_input(mods, model, args[1], context)
+        var centers = native_fitted_get(mods, model, "cluster_centers_")
         if Int(py=centers.shape[0]) == 0:
             var labels = family_array(Python.tuple(Int(py=x.shape[0])), "<i4", context)
             var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels)))

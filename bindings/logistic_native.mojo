@@ -10,7 +10,7 @@
 # the decoded prediction is handed straight to the native accuracy program
 # (bindings/classical_labels.mojo `classical_accuracy`).
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -31,7 +31,7 @@ from bindings.classical_arrays import classical_address, classical_host_f32
 from bindings.classical_labels import (
     ClassicalLabels, LabelsMatrix, classical_encode_labels, classical_decode_labels, classical_accuracy,
     labels_check_sample_weight, labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
-    labels_empty, labels_vector, labels_address,
+    labels_empty, labels_vector, labels_address, labels_cast,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -66,10 +66,15 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "identical" and String(mode) != "fast":
+    # `mode.strip().lower()` in native string operations, once. A word that
+    # is not then exactly "identical" or "fast" takes Python's Unicode-aware
+    # strip/lower (same refusal, same accepted spellings).
+    var name = String(String(String(mode).strip()).lower())
+    if name != "identical" and name != "fast":
+        name = String(py_call(py_call(mode.strip).lower))
+    if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    return mode
+    return PythonObject(name)
 
 
 def _table(tables: PythonObject, mode: PythonObject) raises -> PythonObject:
@@ -96,12 +101,25 @@ def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) r
     var host = py_get(context, "lr_host_model")
     var mode = _host_mode(model, fields) if host is not None else _mode(fields, context)
     var entries = _table(context["lr_bindings"], mode)
+    # The compiled mode of a connected entry table is fixed when its binding
+    # loads: check it once per (mode, entry table identity) and keep the
+    # verdict in the long-lived connection context, as classical_entries
+    # does. A reconnection installs a new table, so the check runs again.
+    var verdicts = py_get(context, "lr_entries_admitted")
+    if verdicts is not None:
+        var seen = py_get(verdicts, mode)
+        if seen is not None and seen is entries:
+            return entries
     var compiled = Int(py=py_call_typed(entries["estimators_numeric_mode"]))
     var expected = 1 if String(mode) == "identical" else 0
     if compiled != expected:
         var name = String("identical") if compiled == 1 else (String("fast") if compiled == 0 else String("unknown"))
         raise Error("RuntimeError: mojolearn: _mojolearn_estimators was compiled for " + name
                     + ", but this call requested " + String(mode) + "; rebuild the " + String(mode) + " binding")
+    if verdicts is None:
+        verdicts = Python.dict()
+        py_setitem(context, "lr_entries_admitted", verdicts)
+    py_setitem(verdicts, mode, entries)
     return entries
 
 
@@ -244,12 +262,10 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     var loss = QN_LOSS_LOGISTIC if n_targets == 1 else QN_LOSS_SOFTMAX
     # The dense codes as float32 (codes < 2**24: exact), `codes.astype('<f4')`.
     var y_enc = labels_vector(rows, "<f4", context)
-    var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=labels_address(labels.codes))
-    var target = _F32P(unsafe_from_address=labels_address(y_enc))
+    # One native cast of the int32 codes (exact below 2**24), as
+    # LogisticRegressionCV does; no host loop over rows in this owner.
+    labels_cast(labels_address(labels.codes), "<i4", labels_address(y_enc), "<f4", rows, context)
     _ = y_enc  # keep the Python object alive through the native call above
-    for i in range(rows):  # cpu-route: the label codes as solver targets, the explicit label input step
-        target[i] = Float32(codes[i])
-        _ = y_enc  # keep the Python object alive through the native call above
     var strengths = _qn_params(fields, l1_ratio)
     var l1 = strengths[0]
     var l2 = strengths[1]
@@ -547,14 +563,16 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             return result.steal_data()
         if operation != "fit":
             classical_require_fitted(model, False, operation, context)
-        classical_admit_value(args[0], context)
+        # One module handle for this call's input admissions.
+        var mods = NativeModules()
+        classical_admit_value(mods, args[0], context)
         if operation == "fit":
             var target = classifier_label_list(args[1], context)
             lda_native_labels(target, context, True, "LogisticRegression")
             var shape = labels_shape_of(target, context)
             if len(shape) == 2 and shape[1] == 1:
                 target = _flatten_labels(target, context)
-            classical_admit_value(args[2], context)
+            classical_admit_value(mods, args[2], context)
             result = logistic_fit(model, Python.tuple(args[0], target, args[2]), context)
             classifier_after_fit(logistic_storage(model, context), args[0], context)
         # `fields` (above) is the one admitted snapshot of this call: the

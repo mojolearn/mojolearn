@@ -10,7 +10,7 @@ from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
 from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
 from bindings.sequential_inputs import _promote
 from bindings.sequential_arrays import sequential_array, sequential_address
-from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value
+from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 
@@ -75,6 +75,20 @@ struct _ClassicalAdmitTypes(Movable):
         self.frame = PythonObject(None)
         self.series = PythonObject(None)
 
+    def __init__(out self, seq: _SequentialValueTypes) raises:
+        # The list and tuple identities the admission type vectors already
+        # hold (the builtins' exact types): no temporary containers.
+        self.list_type = seq.list_type
+        self.tuple_type = seq.tuple_type
+        self.int_type = py_type(PythonObject(0))
+        self.float_type = py_type(PythonObject(0.0))
+        self.bool_type = py_type(PythonObject(True))
+        self.str_type = py_type(PythonObject(""))
+        self.none_type = py_type(PythonObject(None))
+        self.pandas_read = False
+        self.frame = PythonObject(None)
+        self.series = PythonObject(None)
+
     def builtin_scalar(self, cls: PythonObject) -> Bool:
         return (cls is self.int_type or cls is self.float_type or cls is self.bool_type
                 or cls is self.str_type or cls is self.none_type)
@@ -106,14 +120,21 @@ def _classical_admit(mut mods: NativeModules, seq: _SequentialValueTypes, mut ki
 
 
 def classical_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    var mods = NativeModules()
+    classical_admit_value(mods, value, context, depth)
+
+
+def classical_admit_value(mut mods: NativeModules, value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: classical input nesting exceeds the supported depth")
     # Once per admitted value, not per element: one module handle, one set of
     # sequential admission type vectors, one set of builtin/pandas types.
-    var mods = NativeModules()
-    _ = mods.module("builtins")
-    var seq = _SequentialValueTypes(mods, context)
-    var kinds = _ClassicalAdmitTypes()
+    # The type vectors come from the per-context cache sequential admission
+    # keeps (an identity check of the six connected context entries) instead
+    # of five context reads and vector rebuilds per call; the builtins
+    # connection check runs first inside the cache, as before.
+    var seq = _cached_value_types(mods, context)
+    var kinds = _ClassicalAdmitTypes(seq)
     _classical_admit(mods, seq, kinds, value, context, depth)
 
 
@@ -122,7 +143,12 @@ def classical_admit_fields(fields: PythonObject, names: PythonObject, context: P
     holds, with one module handle and one set of admission type vectors for
     the whole pass (they were rebuilt for every field on every call)."""
     var mods = NativeModules()
-    var seq = _SequentialValueTypes(mods, context)
+    classical_admit_fields(mods, fields, names, context)
+
+
+def classical_admit_fields(mut mods: NativeModules, fields: PythonObject, names: PythonObject, context: PythonObject) raises:
+    """The same pass with the caller's module handle."""
+    var seq = _cached_value_types(mods, context)
     for k in range(len(names)):  # driver-loop: over connected estimator metadata fields
         if py_contains(fields, names[k]):
             _sequential_admit_value(mods, fields[names[k]], context, seq, 0)

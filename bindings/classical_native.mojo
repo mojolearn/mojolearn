@@ -33,7 +33,7 @@ from bindings.classical_validate import classical_refuse_sparse, classical_estim
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_caller_frame import native_caller_globals
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 
 
@@ -70,10 +70,16 @@ def classical_entries(model: PythonObject, context: PythonObject) raises -> Pyth
     var b = native_loaded_module("builtins")
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    mode = mode.strip().lower()
-    var mode_name = String(mode)
+    # `mode.strip().lower()` in native string operations, once: no Python
+    # method lookups or calls. ASCII whitespace and case are handled here; a
+    # word that is not then exactly "identical" or "fast" takes Python's
+    # Unicode-aware strip/lower (same refusal, same accepted spellings).
+    var mode_name = String(String(String(mode).strip()).lower())
+    if mode_name != "identical" and mode_name != "fast":
+        mode_name = String(mode.strip().lower())
     if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    mode = PythonObject(mode_name)
     var entries = context["classical_bindings"][mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
@@ -218,22 +224,24 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "predict_score" or operation == "score_public":
             # scikit-learn's sparse refusal comes before input admission.
             classical_refuse_sparse(args[0], classical_estimator_name(model))
+        # One module handle for this call's input and field admissions.
+        var mods = NativeModules()
         if (operation == "ridge_fit" or operation == "ols_fit") and len(args) == 3:
             # Same order as the whole-tuple admission (X, y, then the
             # weight); a refused sample_weight names the accepted types
             # (9bdccfa76) instead of the shared admission's generic text.
-            classical_admit_value(args[0], context, 1)
-            classical_admit_value(args[1], context, 1)
+            classical_admit_value(mods, args[0], context, 1)
+            classical_admit_value(mods, args[1], context, 1)
             try:
-                classical_admit_value(args[2], context, 1)
+                classical_admit_value(mods, args[2], context, 1)
             except error:
                 var refusal = classical_weight_refusal(args[2], error)
                 raise refusal
         elif operation != "save":
-            classical_admit_value(args, context)
+            classical_admit_value(mods, args, context)
         var fields = sequential_fields(model)
         # One admission pass with one set of type vectors for every field.
-        classical_admit_fields(fields, context["classical_fields"], context)
+        classical_admit_fields(mods, fields, context["classical_fields"], context)
         var result = PythonObject(None)
         if operation == "initialize":
             result = classical_initialize(model, args, ridge, context)
