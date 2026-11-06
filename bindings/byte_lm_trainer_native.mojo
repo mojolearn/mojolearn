@@ -27,6 +27,7 @@ from core.cast_in import CAST_KIND_SIGNED
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.byte_lm_state_admission import byte_state_admit
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.neural_block_public import _neural_lengths
 from core.neural_block_public_impl import neural_copy_row_prefixes
@@ -1059,6 +1060,9 @@ def _logits_input(mut mods: NativeModules, source: PythonObject, lengths: Python
     return (tokens, batch, length, sizes^)
 
 
+comptime _POOLED_LAYOUT_SLOT = "byte_lm_pooled_layout_v1"
+
+
 def _admit_pooled_logits_layout(mut mods: NativeModules, context: PythonObject) raises:
     # Only the exact connected pooled class is admitted. Read type dictionaries
     # through pinned native descriptors; do not trigger class/Python hooks while
@@ -1066,6 +1070,10 @@ def _admit_pooled_logits_layout(mut mods: NativeModules, context: PythonObject) 
     var cls = context["byte_lm_pooled_class"]
     if py_type(cls) is not _b(mods).type:
         raise Error("TypeError: Byte-LM pooled logits require the connected native storage class")
+    # The check is class-level: keep its verdict per class epoch (type
+    # watcher; any change to the class or an ancestor re-runs it).
+    if class_record(mods, _POOLED_LAYOUT_SLOT, cls) is not None:
+        return
     var mro = py_call(context["byte_lm_type_mro_getter"], cls)
     var expected = context["byte_lm_pooled_mro"]
     if len(mro) != len(expected):
@@ -1079,6 +1087,7 @@ def _admit_pooled_logits_layout(mut mods: NativeModules, context: PythonObject) 
         for j in range(len(hooks)):  # driver-loop: over fixed connected native storage descriptors
             if py_get(namespace, hooks[j][0]) is not hooks[j][1]:
                 raise Error("TypeError: Byte-LM pooled logits storage hook changed")
+    class_admit(mods, _POOLED_LAYOUT_SLOT, cls, PythonObject(True))
 
 
 def _logits_output_address(mut mods: NativeModules, output: PythonObject, context: PythonObject) raises -> Int:
