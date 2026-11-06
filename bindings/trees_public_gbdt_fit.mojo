@@ -1380,10 +1380,8 @@ def _adapter_params(model: PythonObject, context: PythonObject) raises -> Python
     return _read(model, False, context["trees_gbdt_parameter_metadata"], Python.list())
 
 
-def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_GBDTAdapter._new_learner(mode)`: the GradientBoosting learner the
-    adapter fits, built by the native constructor (its refusals are the
-    learner's)."""
+def _check_learner_mode(mode: PythonObject) raises:
+    """`_GBDTAdapter._new_learner`'s numeric_mode refusal."""
     var b = _b()
     if mode is not None:
         var ok = Bool(py=py_call(b.isinstance, mode, b.str))
@@ -1392,6 +1390,14 @@ def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject)
             ok = clean == "fast" or clean == "identical"
         if not ok:
             raise Error("numeric_mode must be fast, identical or None")
+
+
+def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_GBDTAdapter._new_learner(mode)`: the GradientBoosting learner the
+    adapter fits, built by the native constructor (its refusals are the
+    learner's)."""
+    var b = _b()
+    _check_learner_mode(mode)
     var loss = _resolved(py_type(model), "_loss", PythonObject(None))
     classical_admit_value(loss, context)
     if _eq(loss, "RMSE") and _field(py_fields(model), model, "class_weights") is not None:
@@ -1492,17 +1498,28 @@ def _adapter_eval(eval_set: PythonObject) raises -> PythonObject:
     return pair
 
 
-def _fit_native(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
-                eval_set: PythonObject, context: PythonObject) raises -> PythonObject:
+def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y: PythonObject,
+                sample_weight: PythonObject, eval_set: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_GBDTAdapter._fit_native`: the learner in the resolved mode, the
     binding's compiled mode checked, the native learner fit, the fitted
-    attributes copied."""
+    attributes copied.
+
+    `validated` is the learner the fit's parameter check already built
+    (`_validate_params`: `_new_learner(self.numeric_mode)`). The 0.8.55
+    adapter built a second one here with the resolved mode; the two differ
+    only in the `numeric_mode` field (the constructor's `init_names` do not
+    include it, so gbdt_initialize reads and stores the same parameters,
+    which nothing between the two builds changes: `_clear_fit` drops only
+    fitted `_` names), and that field is overwritten below. So the checked
+    learner is reused and one full constructor admission per fit is saved
+    (lane perf2-trees, 2026-11-06). The resolved mode keeps its refusal."""
     var b = _b()
     var fields = py_fields(model)
     var raw = _field(fields, model, "numeric_mode")
     if raw is None:
         raw = context["backend_fields"]["_DEFAULT_MODE"]
-    var learner = _new_learner(model, raw, context)
+    _check_learner_mode(raw)
+    var learner = validated
     var mode = String(py_call(py_call(raw.strip).lower))
     var learner_fields = py_fields(learner)
     py_setitem(learner_fields, "numeric_mode", PythonObject(mode))
@@ -1526,7 +1543,7 @@ def _fit_native(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
 def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GradientBoostingClassifier.fit(X, y, sample_weight, eval_set)`."""
     var fields = py_fields(model)
-    _ = _new_learner(model, _field(fields, model, "numeric_mode"), context)
+    var learner = _new_learner(model, _field(fields, model, "numeric_mode"), context)
     _clear_fit(fields, context)
     var y = args[1]
     var labels = trees_encode_labels(y, context)
@@ -1570,7 +1587,7 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
         _ = mapped  # keep the Python object alive through the native call above
         _ = eval_y  # keep the Python object alive through the native call above
         eval_set = Python.tuple(pair[0], eval_y)
-    _ = _fit_native(model, args[0], encoded, args[2], eval_set, context)
+    _ = _fit_native(model, learner, args[0], encoded, args[2], eval_set, context)
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "n_classes_", PythonObject(2))
     py_setitem(fields, "_label_kind_", kind[0])
@@ -1593,7 +1610,7 @@ def _regression_target(source: PythonObject, name: String, context: PythonObject
 def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GradientBoostingRegressor.fit(X, y, sample_weight, eval_set)`."""
     var fields = py_fields(model)
-    _ = _new_learner(model, _field(fields, model, "numeric_mode"), context)
+    var learner = _new_learner(model, _field(fields, model, "numeric_mode"), context)
     _clear_fit(fields, context)
     var target = _regression_target(args[1], "y", context)
     var eval_set = args[3]
@@ -1602,7 +1619,7 @@ def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: Pyth
         var pair = _adapter_eval(eval_set)
         eval_target = _regression_target(pair[1], "eval_set y", context)
         eval_set = Python.tuple(pair[0], _as_array(eval_target.value(), context))
-    return _fit_native(model, args[0], _as_array(target, context), args[2], eval_set, context)
+    return _fit_native(model, learner, args[0], _as_array(target, context), args[2], eval_set, context)
 
 
 def _as_array(m: TreesMatrix, context: PythonObject) raises -> PythonObject:
