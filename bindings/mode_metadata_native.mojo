@@ -35,6 +35,11 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
     # release window instead of one per field read).
     var b = mods.module("builtins")
     var cls = py_type(model)
+    # The storage-descriptor admission depends only on the class rows: run it
+    # once per class state (native_class_admission), then read the instance
+    # dictionary directly.
+    if class_record(mods, _STORAGE_CLASS_SLOT, cls) is not None:
+        return _instance_fields(b, model)
     # Native type descriptors read actual MRO/storage, including buffers with
     # native metaclasses. They do not consult a metaclass's Python hooks.
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
@@ -46,7 +51,11 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
                     or descriptor.__objclass__ is not ancestry[i] or String(descriptor.__name__) != "__dict__"):
                 raise Error("TypeError: native metadata refuses Python dictionary properties; use ordinary instance storage")
             break
+    class_admit(mods, _STORAGE_CLASS_SLOT, cls, PythonObject(True))
     return _instance_fields(b, model)
+
+
+comptime _STORAGE_CLASS_SLOT = "class_instance_storage_v1"
 
 
 def _fields_from_admitted_rows(mut mods: NativeModules, model: PythonObject,
