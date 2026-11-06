@@ -834,7 +834,7 @@ def resident_stage_input[RF_INPUT: Bool](x: MutPointer[Float32, MutAnyOrigin], n
         return io[].stage_input(process_ctx[ET_CTX_SLOT](), x, n)
 
 
-def resident_unstage_input[RF_INPUT: Bool]():
+def resident_unstage_input[RF_INPUT: Bool]() raises:
     """Drop the staged-input mark; the buffer stays for the next call."""
     var io = RF_IO.get_or_create_ptr()
     comptime if not RF_INPUT:
