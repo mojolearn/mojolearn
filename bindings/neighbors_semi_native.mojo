@@ -161,7 +161,11 @@ def _semi_kfeat_flags(binding: PythonObject, context: PythonObject) raises -> In
     if not xn_is_module(binding):
         return _semi_kfeat_flags_read(binding, context)
     var module = xn_module(binding)
-    var table = context["backend_fields"]["_CODE_MODE"]
+    var table = PythonObject(None)
+    try:
+        table = context["backend_fields"]["_CODE_MODE"]
+    except:
+        return _semi_kfeat_flags_read(binding, context)
     var cache = _SEMI_KFEAT_CACHE.get_or_create_ptr()
     if cache[].module is not None and cache[].module is module and cache[].table is table:
         return cache[].flags
