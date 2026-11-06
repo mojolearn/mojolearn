@@ -711,8 +711,21 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
         _ = dy
         _ = grad
         return seq_device_make(entries["module"], [v, d], handle, PythonObject(None), context)
-    var gradient = _float_owned(dy, "dy", context)
-    _require_shape(gradient, expected, "dy", context)
+    # A contiguous native-order float32 dy is read in place for the call
+    # (its pin retains the storage); only other layouts and dtypes pay the
+    # pack-and-cast copy (lane p3-neural-blocks). The kernel only reads dy.
+    var dy_pin = EmbeddingInput(dy, context)
+    var dy_layout = dy_pin.layout.copy()
+    var gradient = PythonObject(None)
+    var dy_address = 0
+    if base_format(dy_pin.format) == "f" and dy_layout.itemsize == 4 and dy_layout.contiguous():
+        if not same_shape(dy_layout.shape, expected):
+            raise Error("ValueError: mojolearn Embedding: dy has an unexpected shape")
+        dy_address = dy_layout.address
+    else:
+        gradient = _float_owned(dy, "dy", context)
+        _require_shape(gradient, expected, "dy", context)
+        dy_address = Int(py=gradient._addr)
     var previous = grad
     if _is_device(previous, context):
         previous = sequence_device_operation("seqdev_host", previous, Python.tuple(), PythonObject(None), context)
@@ -722,9 +735,11 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
         plan = 0
     if not py_contains(entries, "embedding_backward"):
         raise Error("RuntimeError: this Embedding install has no training entry")
-    _ = py_call_typed(entries["embedding_backward"], Python.list(gradient._addr, admitted[1], out._addr), Python.list(v, d, t, pad, accumulate, plan))
+    _ = py_call_typed(entries["embedding_backward"], Python.list(dy_address, admitted[1], out._addr), Python.list(v, d, t, pad, accumulate, plan))
     _ = admitted^
     _ = gradient^
+    _ = dy_pin^
+    _ = dy
     return out
 
 
