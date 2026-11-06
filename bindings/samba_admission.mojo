@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.p3_numpy_types import numpy_admitted_type
 from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 
@@ -15,20 +16,10 @@ def _samba_exact(cls: PythonObject, types: PythonObject) raises -> Bool:
 
 
 def _samba_numpy(cls: PythonObject, admission: PythonObject, bi: PythonObject) raises -> Bool:
-    var module = py_get(admission["modules"], "numpy")
-    if module is None or py_type(module) is not admission["module_type"]:
-        return False
-    # NumPy's admitted ndarray/scalar types are static extension types.
-    # A Python subclass substituted into module metadata cannot pass by name.
-    var flags = Int(py=py_call(admission["type_flags"], cls))
-    if (flags & 512) != 0:
-        return False
-    var fields = py_call(bi.object.__getattribute__, module, "__dict__")
-    var names = admission["numpy_names"]
-    for i in range(len(names)):  # driver-loop: over supported native NumPy type identities
-        if cls is py_get(fields, names[i]):
-            return True
-    return False
+    # NumPy's admitted ndarray/scalar types are static extension types; a
+    # Python subclass is a heap type and is never in the resolved set. The set
+    # is resolved once per NumPy module object (bindings/p3_numpy_types.mojo).
+    return numpy_admitted_type(cls, admission)
 
 
 def samba_admit_schedule(value: PythonObject, admission: PythonObject) raises:

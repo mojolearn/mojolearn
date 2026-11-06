@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Optimizer admission runs before native code encounters any Python hook.
 from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.p3_numpy_types import numpy_admitted_type
 from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
@@ -14,17 +15,10 @@ def opt_exact(cls: PythonObject, classes: PythonObject) raises -> Bool:
 
 
 def opt_numpy(cls: PythonObject, context: PythonObject) raises -> Bool:
-    var module = py_get(context["modules"], "numpy")
-    if module is None or py_type(module) is not context["module_type"]:
-        return False
-    if (Int(py=py_call(context["type_flags"], cls)) & 512) != 0:
-        return False
-    var fields = py_fields(module)
-    var names = context["numpy_names"]
-    for i in range(len(names)):  # driver-loop: over fixed native NumPy buffer/scalar types
-        if cls is py_get(fields, names[i]):
-            return True
-    return False
+    # Static NumPy type identities resolved once per NumPy module
+    # (bindings/p3_numpy_types.mojo), not a flags call, a module dictionary
+    # read and up to 16 name lookups per admitted value.
+    return numpy_admitted_type(cls, context)
 
 
 # Class-watcher slot family of a passed optimizer layout guard row
