@@ -31,7 +31,7 @@ from bindings.classical_arrays import classical_address, classical_host_f32
 from bindings.classical_labels import (
     ClassicalLabels, LabelsMatrix, classical_encode_labels, classical_decode_labels, classical_accuracy,
     labels_check_sample_weight, labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
-    labels_empty, labels_vector, labels_address,
+    labels_empty, labels_vector, labels_address, labels_cast,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -244,12 +244,10 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     var loss = QN_LOSS_LOGISTIC if n_targets == 1 else QN_LOSS_SOFTMAX
     # The dense codes as float32 (codes < 2**24: exact), `codes.astype('<f4')`.
     var y_enc = labels_vector(rows, "<f4", context)
-    var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=labels_address(labels.codes))
-    var target = _F32P(unsafe_from_address=labels_address(y_enc))
+    # One native cast of the int32 codes (exact below 2**24), as
+    # LogisticRegressionCV does; no host loop over rows in this owner.
+    labels_cast(labels_address(labels.codes), "<i4", labels_address(y_enc), "<f4", rows, context)
     _ = y_enc  # keep the Python object alive through the native call above
-    for i in range(rows):  # cpu-route: the label codes as solver targets, the explicit label input step
-        target[i] = Float32(codes[i])
-        _ = y_enc  # keep the Python object alive through the native call above
     var strengths = _qn_params(fields, l1_ratio)
     var l1 = strengths[0]
     var l2 = strengths[1]
