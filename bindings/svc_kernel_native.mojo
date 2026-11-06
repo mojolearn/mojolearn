@@ -542,9 +542,11 @@ def _solve(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int
 def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual: PythonObject, sv: PythonObject,
              n_support: Int, bias: Float64, label0: Float64, label1: Float64, predict_class: Bool,
              support: PythonObject, out_addr: Int, context: PythonObject,
-             settings: SvcOperationSettings, native: PythonObject, n_rows: Int, query_cols: Int, query_address: Int) raises:
+             settings: SvcOperationSettings, native: PythonObject, n_rows: Int, query_cols: Int, query_address: Int,
+             predict_entry: PythonObject) raises:
     """`SVC._machine`: one machine's decisions (or labels) on q, written at
-    `out_addr` (n float32)."""
+    `out_addr` (n float32). `predict_entry` is the binding's resolved
+    `svc_predict` (None: resolved here), so a pair loop looks it up once."""
     var n_features = settings.features
     var query = q
     var query_addr = query_address
@@ -571,7 +573,8 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
     else:
         var params = Python.list(n_rows, n_features, n_support, bias, label0, label1, settings.kernel,
             settings.gamma, 1 if predict_class else 0, settings.cache_mib, settings.degree, settings.coef0)
-        _ = family_call(_entry(binding, "svc_predict", context), PythonObject(query_addr),
+        var entry = predict_entry if predict_entry is not None else _entry(binding, "svc_predict", context)
+        _ = family_call(entry, PythonObject(query_addr),
             classical_address(dual) if n_support > 0 else PythonObject(0),
             classical_address(vectors) if n_support > 0 else PythonObject(0), PythonObject(out_addr), params)
     _ = query  # keep the Python object alive through the native call above
@@ -762,7 +765,8 @@ def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, c
                 _ = sub_c  # keep the Python object alive through the native call above
                 _ = lab  # keep the Python object alive through the native call above
                 _machine(fields, binding, q, dual, sv, n_sv, svc_round_f32(svc_read_f64(solved[4], 0)), 0.0, 1.0, False,
-                         support, _addr(dec_perm) + 4 * begin, context, settings, native, h, nt if precomputed else x_cols, _addr(q))
+                         support, _addr(dec_perm) + 4 * begin, context, settings, native, h, nt if precomputed else x_cols, _addr(q),
+                         PythonObject(None))
                 _ = sub_c  # keep the Python object alive through the native call above
                 _ = lab  # keep the Python object alive through the native call above
                 _ = dec_perm  # keep the Python object alive through the native call above
@@ -1053,7 +1057,8 @@ def _run(fields: PythonObject, binding: PythonObject, source: PythonObject, pred
     _machine(fields, binding, q, svc_field(fields, "dual_coef_"), svc_field(fields, "support_vectors_"),
              svc_int(svc_field(fields, "n_support_")), svc_read_f32(svc_field(fields, "intercept_"), 0),
              svc_float(svc_field(fields, "_label0")), svc_float(svc_field(fields, "_label1")), predict_class,
-             svc_field(fields, "support_"), _addr(out), context, settings, native, n_rows, query_cols, q_meta.source.addr)
+             svc_field(fields, "support_"), _addr(out), context, settings, native, n_rows, query_cols, q_meta.source.addr,
+             PythonObject(None))
     _ = out  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
@@ -1075,11 +1080,16 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
     var dec = family_array(Python.tuple(PythonObject(len(pairs)), PythonObject(n_rows)), "<f4", context)
     var base = _addr(dec)
     _ = dec  # keep the Python object alive through the native call above
+    # One entry lookup per call, not one per pair machine (lane perf-sweep-msel-nbr-svc).
+    var predict_entry = PythonObject(None)
+    if native is None and len(pairs) > 0:
+        predict_entry = _entry(binding, "svc_predict", context)
     for pno in range(len(pairs)):  # driver-loop: over the class pairs (one machine each)
         var p = pairs[pno]
         var dual = p["dual"]
         _machine(fields, binding, q, dual, p["sv"], Int(py=dual.shape[1]), svc_float(p["b"]), 0.0, 1.0, False,
-                 p["support"], base + 4 * n_rows * pno, context, settings, native, n_rows, query_cols, q_meta.source.addr)
+                 p["support"], base + 4 * n_rows * pno, context, settings, native, n_rows, query_cols, q_meta.source.addr,
+                 predict_entry)
         _ = dec  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
