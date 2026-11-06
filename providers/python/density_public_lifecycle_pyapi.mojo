@@ -154,7 +154,7 @@ def _record_key(model: PythonObject, names: PythonObject, dbscan: Bool) raises -
 
 
 def _admit(model: PythonObject, names: PythonObject, dbscan: Bool, fitting: Bool, context: PythonObject,
-           key: PythonObject = PythonObject(None)) raises -> Bool:
+           key: PythonObject) raises -> Bool:
     """The public admission. Perf (lane perf2-cluster): a query whose `key`
     matches this model's admission record skips the per-value admissions of
     every setting, fitted field and the residency holder; the flag checks and

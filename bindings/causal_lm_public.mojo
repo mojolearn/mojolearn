@@ -1705,9 +1705,9 @@ def _run(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state:
 
 
 def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
-                  mut snapshot: Optional[GenerationOperationSnapshot], mut read_plan: Optional[LegacyGenerationReadPlan], remote_step: Bool = False,
-                  admitted: Bool = False, retain_resident: Bool = False, resident_verdict: Int = -1,
-                  resident_blocks: List[PythonObject] = List[PythonObject]()) raises -> PythonObject:
+                  mut snapshot: Optional[GenerationOperationSnapshot], mut read_plan: Optional[LegacyGenerationReadPlan], remote_step: Bool,
+                  admitted: Bool, retain_resident: Bool, resident_verdict: Int,
+                  resident_blocks: List[PythonObject]) raises -> PythonObject:
     # `admitted`: the caller (the generation loop) already guarded the Array
     # class for this GIL-release window; do not repeat the full guard.
     if not admitted:
@@ -2677,7 +2677,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
             if not admission:
                 admission = NativeArrayAdmission(generation_array_context())
             var l = Int(py=s.current.shape[1])
-            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, read_plan, s.produced > 0, True, reuse_sampling_uploads and not legacy_resident)
+            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, read_plan, s.produced > 0, True, reuse_sampling_uploads and not legacy_resident, -1, List[PythonObject]())
             # Post-release re-check for this forward's GIL-release window (not redundant).
             admission.value().recheck(generation_array_context())
             var raw = f32_ptr(Int(py=logits._addr))

@@ -72,7 +72,7 @@ def _arrays() raises -> PythonObject:
     return Python.tuple("labels_", "probabilities_", "core_distances_", "_prediction_data", "_raw_data", "feature_names_in_")
 
 
-def _admit(model: PythonObject, context: PythonObject, fitting: Bool, key: PythonObject = PythonObject(None)) raises -> Bool:
+def _admit(model: PythonObject, context: PythonObject, fitting: Bool, key: PythonObject) raises -> Bool:
     """The public admission. Perf (lane perf2-cluster): the ancestry walk runs
     once per class state, and a query whose `key` matches this model's
     admission record skips the per-value admissions of every setting and
@@ -132,7 +132,7 @@ def _buffer(source: PythonObject, name: String, dtype: String, count: Int, conte
 
 
 def _inference(model: PythonObject, method: String, args: PythonObject, fields: PythonObject,
-               binding: PythonObject, context: PythonObject, key: PythonObject = PythonObject(None)) raises -> PythonObject:
+               binding: PythonObject, context: PythonObject, key: PythonObject) raises -> PythonObject:
     """approximate_predict, membership_vector or all_points_membership_vectors.
 
     Perf (lane perf2-cluster): the prediction-data walk, the count checks,

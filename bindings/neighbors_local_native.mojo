@@ -770,7 +770,7 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
 
 
 def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
-                labels: PythonObject = PythonObject(None)) raises -> PythonObject:
+                labels: PythonObject) raises -> PythonObject:
     """`NearestCentroid.predict(X)`. `labels`: the label list of `classes_`
     `_admit_local_state` built and admitted for this call, if any."""
     var fields = py_fields(model)
@@ -858,7 +858,7 @@ def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: Pyth
 
 
 def _nc_score(model: PythonObject, args: PythonObject, context: PythonObject,
-              labels: PythonObject = PythonObject(None)) raises -> PythonObject:
+              labels: PythonObject) raises -> PythonObject:
     """`NearestCentroid.score(X, y, sample_weight)`: accuracy_fraction of
     `predict(X)` (the process-default metrics mode)."""
     var prediction = _nc_predict(model, Python.tuple(args[0], args[1]), context, labels)
