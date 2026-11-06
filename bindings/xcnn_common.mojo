@@ -19,7 +19,8 @@ from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.xseq_native_common import xseq_f32
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_numpy_metadata import native_numpy_type
@@ -70,7 +71,11 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    var key = PythonObject(String(mode).strip().lower())
+    # p3-cnn-sequence-tsa: an exact "identical" / "fast" is used as it is
+    var text = String(py=mode)
+    var key = mode
+    if text != "identical" and text != "fast":
+        key = PythonObject(String(mode).strip().lower())
     if String(py=key) != "identical" and String(py=key) != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     var entries = context["xcnn_bindings"][key]
@@ -88,9 +93,12 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         if previous is not None and current is None:
             raise Error("mojolearn: CNN numerical profile differs from this model's recorded "
                         + "profile; use a matching binding or a fresh model for the new version")
-        if current is not None:
+        if current is not None and previous is None:
+            # equal to `previous` otherwise (checked above): written once
             py_setitem(fields, "numerical_profile_", current)
-    py_setitem(fields, "numeric_mode_", key)
+    var recorded = py_get(fields, "numeric_mode_")
+    if recorded is None or py_type(recorded) is not b.str or String(py=recorded) != String(py=key):
+        py_setitem(fields, "numeric_mode_", key)
     return entries
 
 
@@ -189,8 +197,18 @@ def xcnn_is_t(value: PythonObject, context: PythonObject) raises -> Bool:
     return True
 
 
+comptime _XCNN_TENSOR_LAYOUT_SLOT = "xcnn_tensor_layout_v1"
+
+
 def xcnn_tensor_layout(context: PythonObject) raises:
     var cls = context["xcnn_tensor_class"]
+    # p3-cnn-sequence-tsa: the verdict is kept per class under a type watcher
+    # (`class_record`; any edit of the class or an ancestor misses), so the
+    # MRO / namespace / slot walk runs once, not 3-8 times per layer call.
+    # Python 3.10/3.11 keep the full walk on every call.
+    var mods = NativeModules()
+    if class_record(mods, _XCNN_TENSOR_LAYOUT_SLOT, cls) is not None:
+        return
     var b = xcnn_builtins()
     if py_type(cls) is not b.type:
         raise Error("TypeError: CNN tensor refuses Python metaclass hooks")
@@ -211,6 +229,7 @@ def xcnn_tensor_layout(context: PythonObject) raises:
     for name in ["b", "shape", "h", "_host", "_base"]:  # driver-loop: native connected tensor member descriptors
         if py_get(namespace, PythonObject(name)) is not slots[PythonObject(name)]:
             raise Error("TypeError: CNN tensor storage descriptors changed")
+    class_admit(mods, _XCNN_TENSOR_LAYOUT_SLOT, cls, PythonObject(True))
 
 
 def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -445,6 +464,55 @@ def xcnn_reshape(value: PythonObject, shape: List[Int]) raises -> PythonObject:
     return py_call(cls, xcnn_tuple(shape), dtype=value.dtype, buffer=value)
 
 
+def xcnn_readonly(value: PythonObject, original: PythonObject, context: PythonObject) raises -> PythonObject:
+    """p3-cnn-sequence-tsa (hazard A, the read-only scheme): a read-only
+    float32 ndarray over the words of `value` (a contiguous float32 ndarray,
+    the snapshot just uploaded to a resident copy). Its base is a read-only
+    memoryview, so `arr[:] = W` or `arr -= lr * g` raises NumPy's read-only
+    error and `arr.flags.writeable = True` is refused: the device copy can
+    never silently diverge from the host words. `original` (the array the
+    layer held, which other references may share) is marked read-only too.
+    Replacing the attribute stays allowed; callers key on its identity."""
+    if py_type(original) is context["ndarray"]:
+        py_setattr(original.flags, "writeable", PythonObject(False))
+    if py_type(value) is not context["ndarray"]:
+        raise Error("TypeError: CNN resident weights require an exact native ndarray")
+    py_setattr(value.flags, "writeable", PythonObject(False))
+    # memoryview of a non-writeable ndarray is itself read-only
+    var view = native_buffer_view(value)
+    return py_call(context["ndarray"], xcnn_tuple(xcnn_shape(value)), dtype=context["float32"], buffer=view)
+
+
+def xcnn_writable_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A fresh writeable float32 copy of a contiguous float32 ndarray (the
+    host weights handed back when a layer's resident copy is dropped)."""
+    var shape = xcnn_shape(value)
+    var out = xcnn_host_f32(shape, context)
+    var count = xcnn_size(shape)
+    if count:
+        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
+               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(value))), count=count)
+    _ = value
+    return out
+
+
+def xcnn_reshape(value: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
+    """`xcnn_reshape` with the operation's connected `context["ndarray"]`
+    (p3-cnn-sequence-tsa: the two-argument form builds a fresh module dict
+    and resolves the ndarray type again on every call)."""
+    var cls = py_get(context, "ndarray")
+    if cls is None:
+        return xcnn_reshape(value, shape)
+    if py_type(value) is not cls:
+        raise Error("TypeError: CNN reshape requires an exact ndarray")
+    admit_native_buffer_exporter(value)
+    var view = AdmittedBorrowedBuffer(value)
+    var layout = view.layout.value().copy()
+    if layout.count != xcnn_size(shape):
+        raise Error("ValueError: CNN reshape changes the number of elements")
+    return py_call(cls, xcnn_tuple(shape), dtype=value.dtype, buffer=value)
+
+
 def xcnn_addr(value: PythonObject) raises -> PythonObject:
     admit_native_buffer_exporter(value)
     return PythonObject(native_buffer_address(value))
@@ -461,6 +529,12 @@ def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonOb
     var b = xcnn_builtins()
     if py_type(table) is not b.dict:
         raise Error("TypeError: CNN resident handles require an exact dictionary")
+    # p3-cnn-sequence-tsa: a handle table that passed the full check below and
+    # has not changed since (a dictionary watcher sees every insert, replace,
+    # delete and deallocation) is not walked again; a BasicBlock forward read
+    # it about ten times per call. Python 3.10/3.11 keep the walk.
+    if dict_keys_admitted(table):
+        return fields
     var names = py_call(b.list, table.keys())
     for i in range(len(names)):  # driver-loop: native resident buffer allocation metadata
         if py_type(names[i]) is not b.str:
@@ -470,7 +544,44 @@ def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonOb
         if (py_type(item) is not b.tuple or len(item) != 2 or py_type(item[0]) is not b.int
                 or py_type(item[1]) is not b.int or Int(py=item[0]) < 1 or Int(py=item[1]) < 1):
             raise Error("TypeError: CNN resident buffers require native handle/capacity pairs")
+    dict_keys_admit(table)
     return fields
+
+
+def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: PythonObject) raises:
+    """Before layer owner `dev` (another binding's) frees its handles: a
+    pending resident weight gradient (`_gw_dev` / `_gb_dev`, a (dev, handle)
+    pair) becomes the host `grad_weight_` / `grad_bias_` it would have
+    downloaded on first read (the `_conv_gradient` shapes), a resident
+    dropout mask becomes `_mask_host`, and every other field holding an old
+    handle number (`_idx_dev`, `_mask_dev`, `_chain`, `_gdev_for`) is
+    cleared."""
+    var b = xcnn_builtins()
+    var names = Python.tuple("_gw_dev", "_gb_dev")
+    for i in range(2):  # small-loop(the two pending gradient fields)
+        var pending = py_get(fields, names[i])
+        if pending is None or py_type(pending) is not b.tuple or len(pending) != 2 or pending[0] is not dev:
+            continue
+        var weight = i == 0
+        var shape = xcnn_shape(fields["weight_"]) if weight else [Int(py=fields["out_channels"])]
+        var value = xcnn_download(dev, pending[1], xcnn_size(shape), context)
+        if weight and Bool(py=py_get(fields, "_gw_1d")):
+            shape = [shape[0], shape[1], shape[3]]
+        py_setitem(fields, "grad_weight_" if weight else "grad_bias_", xcnn_reshape(value, shape, context))
+        py_setitem(fields, names[i], PythonObject(None))
+        if weight:
+            py_setitem(fields, "_gw_1d", PythonObject(False))
+    var mask = py_get(fields, "_mask_dev")
+    if mask is not None and py_get(fields, "_mask_host") is None and py_get(fields, "_mask_shape") is not None:
+        var mshape = List[Int]()
+        var words = fields["_mask_shape"]
+        for i in range(len(words)):  # small-loop(mask shape words)
+            mshape.append(Int(py=words[i]))
+        var host = xcnn_download(dev, PythonObject(Int(py=mask)), xcnn_size(mshape), context)
+        py_setitem(fields, "_mask_host", xcnn_reshape(host, mshape, context))
+    for name in ["_idx_dev", "_mask_dev", "_chain", "_gdev_for", "_gdev_g"]:  # small-loop(fields naming old handles)
+        if py_contains(fields, PythonObject(name)):
+            py_setitem(fields, PythonObject(name), PythonObject(None))
 
 
 def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -482,6 +593,11 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
     if dev is not None and xcnn_dev_fields(dev, context)["b"] is entries["module"]:
         return dev
     if dev is not None:
+        # p3-cnn-sequence-tsa (hazard C): fields that name a handle of the
+        # old owner are settled before its handles are freed (pending weight
+        # gradients and a dropout mask downloaded to the host, the rest
+        # cleared), so no later read uses a freed or reused handle number.
+        _xcnn_settle_old_dev(fields, dev, context)
         # `_Dev.free()`: every handle of the old binding released, the table emptied
         var old = xcnn_dev_fields(dev, context)
         var table = old["h"]

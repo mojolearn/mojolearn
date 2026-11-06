@@ -8,7 +8,10 @@ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call
+from bindings.py_balanced import py_call, py_type
+from bindings.cpython_table import cpython_table
+
+comptime _TPFLAGS_LIST_SUBCLASS = UInt64(1) << 25  # Py_TPFLAGS_LIST_SUBCLASS
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import alloc, memcpy, memset_zero
@@ -416,15 +419,20 @@ def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject
         # lane/cnn-apple2: the list form (one handle per parameter), the
         # per-parameter entry in the caller's order
         var cnt = _list_counts(w_addr, g_addr, v_addr, params)
+        # p3-cnn-sequence-tsa: the handle lists are read once, then one
+        # GIL release covers every parameter (it was one per parameter)
+        var qws = List[FP]()
+        var qgs = List[FP]()
+        var qvs = List[FP]()
         for j in range(len(cnt)):  # driver-loop: over the model's parameters
-            var qw = fp(w_addr[j])
-            var qg = fp(g_addr[j])
-            var qv = fp(v_addr[j])
-            var nj = cnt[j]
-            with GILReleased(Python()):
-                sgd_into(qw, qg, qv, h, nj)
-                out_f32(qw, nj)
-                out_f32(qv, nj)
+            qws.append(fp(w_addr[j]))
+            qgs.append(fp(g_addr[j]))
+            qvs.append(fp(v_addr[j]))
+        with GILReleased(Python()):
+            for j in range(len(cnt)):  # driver-loop: over the model's parameters
+                sgd_into(qws[j], qgs[j], qvs[j], h, cnt[j])
+                out_f32(qws[j], cnt[j])
+                out_f32(qvs[j], cnt[j])
         return PythonObject(len(cnt))
     var n = _count(params)
     var pw = fp(w_addr)
@@ -682,15 +690,19 @@ def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObje
     if _is_list(w_addr):
         # lane/cnn-apple2: the list form (one handle per parameter)
         var cnt = _list_counts(w_addr, g_addr, mv_addr, params)
+        # p3-cnn-sequence-tsa: handle lists read once, one GIL release
+        var qws = List[FP]()
+        var qgs = List[FP]()
+        var qms = List[FP]()
         for j in range(len(cnt)):  # driver-loop: over the model's parameters
-            var qw = fp(w_addr[j])
-            var qg = fp(g_addr[j])
-            var qm = fp(mv_addr[j])
-            var nj = cnt[j]
-            with GILReleased(Python()):
-                adam_into(qw, qg, qm, h, nj)
-                out_f32(qw, nj)
-                out_f32(qm, 2 * nj)
+            qws.append(fp(w_addr[j]))
+            qgs.append(fp(g_addr[j]))
+            qms.append(fp(mv_addr[j]))
+        with GILReleased(Python()):
+            for j in range(len(cnt)):  # driver-loop: over the model's parameters
+                adam_into(qws[j], qgs[j], qms[j], h, cnt[j])
+                out_f32(qws[j], cnt[j])
+                out_f32(qms[j], 2 * cnt[j])
         return PythonObject(len(cnt))
     var n = _count(params)
     var pw = fp(w_addr)
@@ -752,7 +764,8 @@ def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonOb
     if n > 0 and k > 0:
         var src = FP(unsafe_from_address=Int(py=h))
         var dst = IP(unsafe_from_address=Int(py=dst_addr))
-        argmax_rows_into(src, dst, n, k)
+        with GILReleased(Python()):  # p3-cnn-sequence-tsa
+            argmax_rows_into(src, dst, n, k)
     return PythonObject(n)
 
 
@@ -786,8 +799,11 @@ def conv_block_backward_r_binding(
 
 
 def _is_list(o: PythonObject) raises -> Bool:
-    var bi = native_loaded_module("builtins")
-    return Bool(py=py_call(bi.isinstance, o, bi.list))
+    """`isinstance(o, list)` as CPython's PyList_Check: the type's
+    Py_TPFLAGS_LIST_SUBCLASS bit (p3-cnn-sequence-tsa: it ran a builtins
+    module lookup and two Python calls per optimizer step and per gather)."""
+    var cls = py_type(o)
+    return (cpython_table()[].PyType_GetFlags(cls._obj_ptr) & _TPFLAGS_LIST_SUBCLASS) != 0
 
 
 def _list_counts(a: PythonObject, b: PythonObject, c: PythonObject, params: PythonObject) raises -> List[Int]:
@@ -811,17 +827,23 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
         if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
             raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
         var rq = i32_ptr(Int(py=rows_addr))
-        for t in range(2):  # small-loop(the two arrays of the pair form)
-            var d2 = f32_ptr(Int(py=dst[t]))
-            var s2 = f32_ptr(Int(py=src[t]))
-            var rw = Int(py=params[1 + t])
-            gather_rows_f32(d2, s2, rq, n, rw)
+        var d0 = f32_ptr(Int(py=dst[0]))
+        var s0 = f32_ptr(Int(py=src[0]))
+        var d1 = f32_ptr(Int(py=dst[1]))
+        var s1 = f32_ptr(Int(py=src[1]))
+        var r0 = Int(py=params[1])
+        var r1 = Int(py=params[2])
+        # p3-cnn-sequence-tsa: the copies run with the GIL released
+        with GILReleased(Python()):
+            gather_rows_f32(d0, s0, rq, n, r0)
+            gather_rows_f32(d1, s1, rq, n, r1)
         return PythonObject(n)
     var row = Int(py=params[1])
     var d = f32_ptr(Int(py=dst))
     var sr = f32_ptr(Int(py=src))
     var rp = i32_ptr(Int(py=rows_addr))
-    gather_rows_f32(d, sr, rp, n, row)
+    with GILReleased(Python()):
+        gather_rows_f32(d, sr, rp, n, row)
     return PythonObject(n)
 
 

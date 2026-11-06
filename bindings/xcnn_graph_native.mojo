@@ -59,12 +59,20 @@ def _slice(source: PythonObject, offset: Int, count: Int, integer: Bool, context
 def _graph_key(n: Int, arrays: PythonObject, views: PythonObject, context: PythonObject) raises -> PythonObject:
     # Original references establish graph identity; metadata is read only from
     # admitted native views retained for this call. No input protocol lookup.
+    # p3-cnn-sequence-tsa (hazard A, caller-aliased input): the key also
+    # holds an owned byte snapshot of each admitted buffer (one C-level copy
+    # through the buffer protocol, compared by memcmp in `_keys_equal`), so an
+    # in-place edit of edge_index / edge_weight (same object, same address)
+    # misses and rebuilds the graph and its resident copy. The copy and the
+    # compare are far cheaper than the CSR build they guard.
+    var bi = xcnn_builtins()
     var sig = Python.list()
     for i in range(len(views)):  # small-loop(one or two graph inputs)
         var a = views[i]
         var item = PythonObject(None)
         if a is not None:
-            item = Python.tuple(a[1], a[6], a[3]) if i == 0 else Python.tuple(xcnn_tuple(xcnn_shape(a)), String(a.dtype.str), xcnn_addr(a))
+            item = (Python.tuple(a[1], a[6], a[3], py_call(bi.bytes, a[0])) if i == 0
+                    else Python.tuple(xcnn_tuple(xcnn_shape(a)), String(a.dtype.str), xcnn_addr(a), py_call(bi.bytes, a)))
         _ = py_call(sig.append, item)
     return Python.tuple(n, arrays, py_call(xcnn_builtins().tuple, sig))
 
@@ -861,7 +869,7 @@ def _gcn_backward(layer: PythonObject, gradient: PythonObject, context: PythonOb
     var d = Int(py=fields["in_channels"])
     var f = Int(py=fields["out_channels"])
     var gb = _gemm(entries, g, _ones(n, context), f, 1, n, 2, context) if Bool(py=fields["bias"]) else xcnn_host_f32([f], context)
-    py_setitem(fields, "grad_bias_", xcnn_reshape(gb, [f]))
+    py_setitem(fields, "grad_bias_", xcnn_reshape(gb, [f], context))
     var graph = fields["_g"]
     var dh = _spmm(entries, graph, _vals_t(entries, graph, fields["_vals"], context), g, 0, context, True)
     py_setitem(fields, "grad_weight_", _gemm(entries, dh, fields["_x"], f, d, n, 2, context))

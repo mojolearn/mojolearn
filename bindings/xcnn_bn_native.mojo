@@ -291,7 +291,7 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     var hw = xcnn_size(shape) // max(n * c, 1) if n * c != 0 else 0
     if len(shape) == 2:
         hw = 1
-    var x3 = xcnn_reshape(a, [n, c, hw])
+    var x3 = xcnn_reshape(a, [n, c, hw], context)
     var b = xcnn_entries(fields, context)
     var y = xcnn_host_f32([n, c, hw], context)
     if xcnn_mixed(b):
@@ -335,7 +335,7 @@ def _bn_rows(fields: PythonObject, source: PythonObject, context: PythonObject) 
         var given = py_call(xcnn_builtins().tuple, declared)
         for i in range(len(given)):  # driver-loop: over the declared sample shape words
             dims.append(Int(py=given[i]))
-        return xcnn_reshape(a, dims)
+        return xcnn_reshape(a, dims, context)
     return a
 
 
@@ -476,7 +476,7 @@ def xcnn_bn_layers(layer: PythonObject, operation: String, args: PythonObject, c
         var rest = 1
         for i in range(1, len(s)):  # driver-loop: over shape words
             rest *= s[i]
-        return xcnn_reshape(out, [s[0], rest])
+        return xcnn_reshape(out, [s[0], rest], context)
     if operation == "bn_fit":
         var was = fields["training"]
         _set(fields, "training", PythonObject(True))

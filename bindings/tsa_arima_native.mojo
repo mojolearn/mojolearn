@@ -17,7 +17,8 @@ from the module table.
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from x_metrics.epilogue import portable_log_c
-from bindings.native_loaded_module import native_loaded_module, _loaded_fields
+from bindings.native_loaded_module import native_loaded_module, _loaded_fields, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
 from providers.python.arima_lifecycle_pyapi import arima_order
 from providers.python.autoarima_lifecycle_pyapi import _buffer, _packed, _integer, _integer_object
@@ -32,6 +33,7 @@ from core.xseq_marshal import xseq_cast_nd, xseq_widen_f32_f64
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _A = "mojolearn ARIMA: "
+comptime _HOST_ONLY_SLOT = "tsa_arima_host_only_v1"
 
 
 def _b() raises -> PythonObject:
@@ -53,13 +55,21 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
     loaded forecast host binding."""
     var b = _b()
     var cls = py_type(model)
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    # p3-cnn-sequence-tsa: the class flag is kept per class under the type
+    # watcher (an edit of the class or an ancestor misses)
+    var mods = NativeModules()
+    var kept = class_record(mods, _HOST_ONLY_SLOT, cls)
     var host_only = False
-    for i in range(len(ancestry)):  # driver-loop: native MRO metadata, never class lookup protocols
-        var namespace = _class_fields(ancestry[i])
-        if py_contains(namespace, "_HOST_INFERENCE_ONLY"):
-            host_only = _truth(namespace["_HOST_INFERENCE_ONLY"])
-            break
+    if kept is not None:
+        host_only = Bool(py=kept)
+    else:
+        var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+        for i in range(len(ancestry)):  # driver-loop: native MRO metadata, never class lookup protocols
+            var namespace = _class_fields(ancestry[i])
+            if py_contains(namespace, "_HOST_INFERENCE_ONLY"):
+                host_only = _truth(namespace["_HOST_INFERENCE_ONLY"])
+                break
+        class_admit(mods, _HOST_ONLY_SLOT, cls, PythonObject(host_only))
     if host_only:
         var saved = py_get(fields, "numeric_mode")
         if saved is not None and (py_type(saved) is not b.str or not Bool(py=saved == "identical")):
@@ -84,7 +94,10 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var want = py_call(py_call(mode.strip).lower)
+    var want = mode
+    var text = String(py=mode)
+    if text != "identical" and text != "fast":  # exact modes skip two Python calls
+        want = py_call(py_call(mode.strip).lower)
     if String(py=want) != "identical" and String(py=want) != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var entries = context["arima_bindings"][want]

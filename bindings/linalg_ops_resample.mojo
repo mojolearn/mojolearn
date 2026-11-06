@@ -42,7 +42,11 @@ def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: Pyt
         want = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(want) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    want = want.strip().lower()
+    # p3-cnn-sequence-tsa: an exact "fast" / "identical" (every default and
+    # documented value) skips the two Python string calls
+    var text = String(py=want)
+    if text != "fast" and text != "identical":
+        want = want.strip().lower()
     var fn_obj = neural_descriptor_entry(binding, "resample_numeric_mode", False)
     if fn_obj is not None:
         var got = Int(py=family_call(fn_obj))
@@ -113,6 +117,13 @@ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
         value = classical_view(value, context, name)
     var admitted = LinAdmission(value, context)
     var rank = len(admitted.view.shape)
+    # p3-cnn-sequence-tsa: the shape text is built only on a refusal
+    if (ndim >= 0 and rank != ndim) or admitted.view.count() == 0:
+        _rs_refuse_shape(admitted, rank, ndim, name)
+    return lin_admitted_c(admitted^, typestr, name, context)
+
+
+def _rs_refuse_shape(admitted: LinAdmission, rank: Int, ndim: Int, name: String) raises:
     var shape = family_repr(lin_tuple(admitted.view.shape))
     if ndim >= 0 and rank != ndim:
         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(rank) + "-D shape " + shape)
@@ -122,7 +133,6 @@ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
             what = "feature(s)"
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
                     + " (shape=" + shape + ") while a minimum of 1 is required.")
-    return lin_admitted_c(admitted^, typestr, name, context)
 
 
 def _rs_word(scalars: LinBuf, i: Int) -> Float64:

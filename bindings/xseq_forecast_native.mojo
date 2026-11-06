@@ -32,7 +32,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import (
     XF32P, XI64P, xseq_entries, xseq_base, xseq_input, xseq_f32, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
-    xseq_float, xseq_truth,
+    xseq_float, xseq_truth, xseq_mode,
 )
 from core.xseq_marshal import xseq_var_blocks, xseq_cast_nd
 
@@ -164,9 +164,11 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
     var models = context["xseq_theta_models"]
     var chosen = py_get(fields, "model")
     # the fit runs inside the forecast call; a repeat of the same call on
-    # the same fitted series returns the stored answer
+    # the same fitted series returns the stored answer. p3-cnn-sequence-tsa:
+    # the key holds the RESOLVED mode (which also names the binding), so a
+    # change of the process default between two predicts recomputes.
     var key = Python.tuple(h, fields["season_length"], fields["decomposition_type"], chosen,
-                           fields["initial_smoothed"], fields["alpha"], fields["theta"], py_get(fields, "numeric_mode"))
+                           fields["initial_smoothed"], fields["alpha"], fields["theta"], xseq_mode(fields, context))
     var cached = py_get(fields, "_fitted_h")
     _cache_record(cached, context)
     var forecast: PythonObject
@@ -349,8 +351,9 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
         _ = py_call(_getattr(ip, "append"), xseq_int(stall[0]))
         _ = py_call(_getattr(fp, "append"), xseq_float(stall[1]))
     # the fit runs inside the forecast call; a repeat of the same call on
-    # the same fitted series returns the stored answer
-    var key = Python.tuple(py_call(b.tuple, ip), py_call(b.tuple, fp), py_get(fields, "numeric_mode"))
+    # the same fitted series returns the stored answer (key: the resolved
+    # mode, which also names the binding; p3-cnn-sequence-tsa)
+    var key = Python.tuple(py_call(b.tuple, ip), py_call(b.tuple, fp), xseq_mode(fields, context))
     var last = py_get(fields, "_last")
     _cache_record(last, context)
     var forecast: PythonObject

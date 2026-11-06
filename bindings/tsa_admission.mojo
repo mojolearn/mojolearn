@@ -2,7 +2,8 @@
 # Passive scalar/storage admission shared by the legacy TSA public owners.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_validate import classical_view
 from bindings.classical_arrays import classical_address
@@ -101,6 +102,9 @@ def tsa_hw_class(model: PythonObject, context: PythonObject) raises -> Bool:
     raise Error("TypeError: ExponentialSmoothing requires its connected native model class")
 
 
+comptime _HW_LAYOUT_SLOT = "tsa_hw_layout_v1"  # p3-cnn-sequence-tsa class record
+
+
 def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = tsa_hw_class(model, context)
     var b = native_loaded_module("builtins")
@@ -109,20 +113,39 @@ def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
         raise Error("TypeError: ExponentialSmoothing requires a native model metaclass")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var fields = PythonObject(None)
-    for i in range(len(mro)):  # driver-loop: exact class dictionaries and native instance storage
-        var own = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
-        if not _tsa_str_items(py_call(b.list, own), b):
-            raise Error("TypeError: ExponentialSmoothing class keys must be native strings")
-        if py_get(own, "__del__") is not None:
-            raise Error("TypeError: ExponentialSmoothing cannot invoke lifecycle callbacks")
-        var descriptor = py_get(own, "__dict__")
-        if fields is None and descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
-            fields = py_call(descriptor.__get__, model)
+    # p3-cnn-sequence-tsa: the class walk's verdict (the MRO row whose
+    # `__dict__` descriptor serves the instance storage) is kept per class
+    # under the type watcher (any edit of the class or an ancestor misses),
+    # and the instance keys are re-checked only after the instance dict
+    # changed (dictionary watcher). Python 3.10/3.11 keep the full walk.
+    var mods = NativeModules()
+    var kept = class_record(mods, _HW_LAYOUT_SLOT, cls)
+    if kept is not None:
+        var own = py_call(b.type.__dict__["__dict__"].__get__, mro[Int(py=kept)])
+        fields = py_call(py_get(own, "__dict__").__get__, model)
+    else:
+        var row = -1
+        for i in range(len(mro)):  # driver-loop: exact class dictionaries and native instance storage
+            var own = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
+            if not _tsa_str_items(py_call(b.list, own), b):
+                raise Error("TypeError: ExponentialSmoothing class keys must be native strings")
+            if py_get(own, "__del__") is not None:
+                raise Error("TypeError: ExponentialSmoothing cannot invoke lifecycle callbacks")
+            var descriptor = py_get(own, "__dict__")
+            if fields is None and descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
+                fields = py_call(descriptor.__get__, model)
+                row = i
+        if row >= 0:
+            class_admit(mods, _HW_LAYOUT_SLOT, cls, PythonObject(row))
     if py_type(fields) is not b.dict:
         raise Error("TypeError: ExponentialSmoothing requires native instance storage")
+    if dict_keys_admitted(fields):
+        return fields
     if not _tsa_str_items(py_call(b.list, fields), b):
         raise Error("TypeError: ExponentialSmoothing state keys must be native strings")
+    dict_keys_admit(fields)
     return fields
+
 
 
 def _tsa_str_items(keys: PythonObject, b: PythonObject) raises -> Bool:

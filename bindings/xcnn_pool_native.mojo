@@ -23,6 +23,9 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.sequential_inputs import sequential_input
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
+from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.xcnn_common import (
     XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
     xcnn_size, xcnn_tuple, xcnn_module_entries, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new, xcnn_reshape_t, xcnn_wrap,
@@ -45,12 +48,13 @@ def _set(fields: PythonObject, name: String, value: PythonObject) raises:
 
 def _is(model: PythonObject, key: String, context: PythonObject) raises -> Bool:
     """`isinstance(model, <connected layer class>)`."""
-    var b = xcnn_builtins()
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: native MRO, no instance/subclass protocol
-        if ancestry[i] is context[PythonObject(key)]:
-            return True
-    return False
+    # p3-cnn-sequence-tsa: CPython's own MRO test (PyType_IsSubtype, no
+    # instance/subclass protocol), not a Python-level walk of the MRO tuple
+    var target = context[PythonObject(key)]
+    var cls = py_type(model)
+    if cls is target:
+        return True
+    return cpython_table()[].PyType_IsSubtype(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def _class_name(model: PythonObject) raises -> String:
@@ -189,14 +193,14 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
         var o = xcnn_shape(out)
         if xcnn_is_t(out, context):
             return xcnn_reshape_t(out, [o[0], o[1], o[3]], context)
-        return xcnn_reshape(out, [o[0], o[1], o[3]])
+        return xcnn_reshape(out, [o[0], o[1], o[3]], context)
     var a = xcnn_f32(x, "x", context)
     var s = xcnn_shape(a)
     if len(s) != 3:
         raise Error("mojolearn: " + name + ".forward takes (N, C, L)")
-    var out = _pool2d_forward(model, xcnn_reshape(a, [s[0], s[1], 1, s[2]]), context)
+    var out = _pool2d_forward(model, xcnn_reshape(a, [s[0], s[1], 1, s[2]], context), context)
     var o = xcnn_shape(out)
-    return xcnn_reshape(out, [o[0], o[1], o[3]])
+    return xcnn_reshape(out, [o[0], o[1], o[3]], context)
 
 
 # ---------------------------------------------------------------- passive settings and backward
@@ -365,11 +369,11 @@ def xcnn_pool_backward(model: PythonObject, source: PythonObject, context: Pytho
     var shape = xcnn_shape(g)
     if len(shape) != 3:
         raise Error("mojolearn: one-dimensional pool backward takes (N, C, L)")
-    var expanded = xcnn_reshape_t(g, [shape[0], shape[1], 1, shape[2]], context) if tensor else xcnn_reshape(g, [shape[0], shape[1], 1, shape[2]])
+    var expanded = xcnn_reshape_t(g, [shape[0], shape[1], 1, shape[2]], context) if tensor else xcnn_reshape(g, [shape[0], shape[1], 1, shape[2]], context)
     var out = _pool_backward2d(model, expanded, context)
     var result_shape = xcnn_shape(out)
     var compact: List[Int] = [result_shape[0], result_shape[1], result_shape[3]]
-    return xcnn_reshape_t(out, compact, context) if tensor else xcnn_reshape(out, compact)
+    return xcnn_reshape_t(out, compact, context) if tensor else xcnn_reshape(out, compact, context)
 
 
 # ---------------------------------------------------------------- row inputs
@@ -391,7 +395,7 @@ def xcnn_rows(model: PythonObject, source: PythonObject, required: Bool, context
         var given = _pool_shape_words(shape, "input_shape", context)
         for i in range(len(given)):  # driver-loop: over the admitted sample shape words
             dims.append(given[i])
-        return xcnn_reshape(a, dims)
+        return xcnn_reshape(a, dims, context)
     return a
 
 
@@ -403,7 +407,7 @@ def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObj
         rest *= s[i]
     if xcnn_is_t(out_buf, context):
         return xcnn_reshape_t(out_buf, [s[0], rest], context)
-    return xcnn_reshape(out_buf, [s[0], rest])
+    return xcnn_reshape(out_buf, [s[0], rest], context)
 
 
 def xcnn_conv_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -486,7 +490,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         s4.append(xs[i])
     var prm = _dropout_words(fields, probability, s4[0], s4[1], s4[2] * s4[3], context)
     _ = fields  # keep the Python object alive through the native call above
-    var x4 = xcnn_reshape(a, s4)
+    var x4 = xcnn_reshape(a, s4, context)
     var y = xcnn_host_f32(s4, context)
     var entries = xcnn_entries(fields, context)
     if xcnn_mixed(entries):
@@ -498,16 +502,16 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         _set(fields, "_mask_host", PythonObject(None))
         _set(fields, "_mask_dev", h)
         _set(fields, "_mask_shape", xcnn_tuple(xs))
-        return xcnn_reshape(y, xs)
+        return xcnn_reshape(y, xs, context)
     var mask = xcnn_host_f32(s4, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d"), xcnn_addr(x4), xcnn_addr(y), xcnn_addr(mask), prm, fields["p"])
     _ = mask  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = x4  # keep the Python object alive through the native call above
     # the `mask_` setter: the host mask, no resident copy
-    _set(fields, "_mask_host", xcnn_reshape(mask, xs))
+    _set(fields, "_mask_host", xcnn_reshape(mask, xs, context))
     _set(fields, "_mask_dev", PythonObject(None))
-    return xcnn_reshape(y, xs)
+    return xcnn_reshape(y, xs, context)
 
 
 # ---------------------------------------------------------------- adaptive pools
@@ -528,6 +532,10 @@ def _pool_layer(model: PythonObject, entries: PythonObject, k: List[Int], maxed:
         if len(cached_shape) != 2:
             raise Error("TypeError: adaptive pool cache must contain two dimensions")
         if cached_shape[0] == k[0] and cached_shape[1] == k[1] and py_type(hit[1]) is cls:
+            # p3-cnn-sequence-tsa (hazard C): the inner pool resolves its
+            # binding from its own numeric_mode, so a hit takes the adaptive
+            # layer's current mode (a changed mode no longer runs the old one).
+            py_setitem(_fields(hit[1]), "numeric_mode", py_get(fields, "numeric_mode"))
             return hit[1]
     var layer = py_call(py_call(b.getattr, b.object, "__new__"), cls)
     var state = _fields(layer)
@@ -725,16 +733,29 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     return out
 
 
+comptime _ADAPTIVE_MAX_SLOT = "xcnn_adaptive_max_v1"
+
+
 def _adaptive_max(model: PythonObject, context: PythonObject) raises -> Bool:
+    # p3-cnn-sequence-tsa: the class flag is kept per class under the type
+    # watcher (`class_record`; an edit of the class or an ancestor misses)
+    var cls = py_type(model)
+    var mods = NativeModules()
+    var kept = class_record(mods, _ADAPTIVE_MAX_SLOT, cls)
+    if kept is not None:
+        return Bool(py=kept)
     var b = xcnn_builtins()
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var result = False
     for i in range(len(ancestry)):  # driver-loop: native class metadata without descriptors/metaclass hooks
         var namespace = _class_fields(ancestry[i])
         var flag = py_get(namespace, "_max")
         if flag is not None:
             _pool_scalar(flag, context)
-            return Bool(py=flag)
-    return False
+            result = Bool(py=flag)
+            break
+    class_admit(mods, _ADAPTIVE_MAX_SLOT, cls, PythonObject(result))
+    return result
 
 
 def _adaptive_output(fields: PythonObject, context: PythonObject) raises -> List[Int]:

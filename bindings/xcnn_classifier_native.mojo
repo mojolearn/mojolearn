@@ -20,9 +20,13 @@ launch order as the Python bodies, so the bits do not move.
 from std.math import sqrt
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from std.ffi import c_int
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_f32, xcnn_addr
+from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_f32, xcnn_addr, xcnn_readonly
+from bindings.native_identity_key import NativeIdentityKey
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.xseq_native_common import XseqStream
 from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
 from bindings.mode_metadata_native import _fields
@@ -36,6 +40,7 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit
 from core.array_helpers_impl import nsum_f64
 
 comptime _PREDICT_ROWS = 2048
+comptime _PREDICT_SLOT = "xcnn_clf_predict_v1"  # p3-cnn-sequence-tsa resident predict record
 
 
 def _b() raises -> PythonObject:
@@ -88,11 +93,23 @@ def _contiguous(source: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 def _float_words(values: PythonObject) raises -> PythonObject:
+    """`values.tolist()` of a float64 array: one PyList_New and a stolen
+    PyList_SetItem per word (p3-cnn-sequence-tsa: it was a bound `append`
+    call per word)."""
     var count = Int(py=values.size)
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(values)))
-    var result = Python.list()
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # Own the NULL-filled list at once: a failure releases every stored slot.
+    var result = PythonObject(from_owned=raw)
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     for i in range(count):  # driver-loop: native loss/optimizer scalar result publication
-        _ = py_call(result.append, PythonObject(words[i]))
+        var item = PythonObject(words[i])
+        # SetItem steals the reference on both success and failure.
+        if set_item(result._obj_ptr, i, item.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
     _ = values
     return result
 
@@ -540,7 +557,7 @@ def _images(fields: PythonObject, source: PythonObject, context: PythonObject) r
         raise Error("ValueError: classifier images require a row dimension")
     var full: List[Int] = [shape[0], Int(py=given[0]), Int(py=given[1]), Int(py=given[2])]
     if len(shape) == 2:
-        return xcnn_reshape(x, full)
+        return xcnn_reshape(x, full, context)
     if len(shape) != 4:
         raise Error("ValueError: classifier images must have rank two or four")
     for i in range(1, 4):  # small-loop(image channel/height/width metadata)
@@ -568,6 +585,10 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     if Int(py=yi.size) != Int(py=x.shape[0]):
         raise Error("ValueError: X and y must contain the same number of rows")
     var k = len(encoded[0])
+    # p3-cnn-sequence-tsa: the refit publishes new weights; free the old
+    # resident predict state now rather than at the next predict
+    var drop_mods = NativeModules()
+    prepared_drop(drop_mods, _PREDICT_SLOT, model)
     _build(fields, k, context)
     var optimizer = String(py=fields["optimizer"])
     var per = 1 if optimizer == "sgd" else 2
@@ -610,7 +631,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         _put(entries, xall, x, context)
         _put(entries, yall, yi, context)
         var step = 0
-        var epoch_entry = Bool(py=context["xcnn_epoch_entry"]) and _has(entries, "x_cnn_fit_epoch_r")
+        var epoch_entry = Bool(py=context["xcnn_epoch_entry"]) and _has(entries, "x_cnn_fit_epoch_d")
         var seed_lo = Int(seed64 & 0xFFFFFFFF)
         var seed_hi = Int(seed64 >> 32)
         var max_iter = Int(py=fields["max_iter"])
@@ -782,7 +803,9 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
             var layer = params[i][0]
             var lf = _fields(layer)
             var arr = lf[params[i][1]]
-            py_setitem(lf, params[i][1], _get(entries, hp[i], arr.shape, context))
+            # p3-cnn-sequence-tsa: published read-only (the resident predict
+            # record keys on these objects; an in-place edit raises)
+            py_setitem(lf, params[i][1], xcnn_readonly(_get(entries, hp[i], arr.shape, context), PythonObject(None), context))
             py_setitem(lf, params[i][2], _get(entries, hg[i], arr.shape, context))
         var bufs = b.list()
         for i in range(len(params)):  # driver-loop: reads back each optimizer buffer handle
@@ -790,6 +813,8 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         py_setitem(fields, "_bufs", bufs)
         py_setitem(fields, "_rw", b.dict())
     except error:
+        # p3-cnn-sequence-tsa: no field names a freed handle after a failure
+        py_setitem(fields, "_rw", b.dict())
         _free_all(entries, handles)
         raise error^
     _free_all(entries, handles)
@@ -800,9 +825,93 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
 
 # ---------------------------------------------------------------- predict
 
+def _predict_layers(fields: PythonObject) raises -> PythonObject:
+    """The layers whose weights a predict uploads: every block's conv, then
+    the head (`_run_predict`'s order)."""
+    var layers = _b().list()
+    var blocks = fields["_blocks"]
+    for i in range(len(blocks)):  # driver-loop: over the conv layers
+        _ = py_call(layers.append, blocks[i][0])
+    _ = py_call(layers.append, fields["head_"])
+    return layers
+
+
+def _weights_frozen(layers: PythonObject, freeze: Bool, context: PythonObject) raises -> Bool:
+    """Whether every layer's `weight_` / `bias_` is a read-only exact ndarray
+    (marked so first when `freeze`). One flags read per array."""
+    var b = _b()
+    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
+        var lf = _fields(layers[i])
+        for name in ["weight_", "bias_"]:  # small-loop(the two learned arrays)
+            var arr = lf[PythonObject(name)]
+            if py_type(arr) is not context["ndarray"]:
+                return False
+            var flags = arr.flags
+            if freeze and Bool(py=flags.writeable):
+                _ = py_call(b.setattr, flags, "writeable", PythonObject(False))
+            if Bool(py=flags.writeable):
+                return False
+    return True
+
+
+def _predict_key(mut mods: NativeModules, fields: PythonObject, layers: PythonObject,
+                 entries: PythonObject) raises -> NativeIdentityKey:
+    var key = NativeIdentityKey(mods)
+    key.add_identity(entries["module"])
+    key.add_identity(fields["_blocks"])
+    key.add_identity(fields["head_"])
+    key.add_identity(fields["classes_"])
+    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
+        var lf = _fields(layers[i])
+        key.add_identity(layers[i])
+        key.add_identity(lf["weight_"])
+        key.add_identity(lf["bias_"])
+    return key^
+
+
+def _predict_key_matches(record: PythonObject, fields: PythonObject, layers: PythonObject,
+                         entries: PythonObject) raises -> Bool:
+    var key = record[0].downcast_value_ptr[NativeIdentityKey]()
+    var offset = 0
+    if not key[].matches_identity(entries["module"], offset) or not key[].matches_identity(fields["_blocks"], offset):
+        return False
+    if not key[].matches_identity(fields["head_"], offset) or not key[].matches_identity(fields["classes_"], offset):
+        return False
+    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
+        var lf = _fields(layers[i])
+        if (not key[].matches_identity(layers[i], offset) or not key[].matches_identity(lf["weight_"], offset)
+                or not key[].matches_identity(lf["bias_"], offset)):
+            return False
+    return key[].complete(offset)
+
+
+def _predict_owner(entries: PythonObject, handles: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A layer-resident owner (`_Dev`, freed with the object) that takes over
+    `handles`, so a dropped or collected record releases them."""
+    var b = _b()
+    var dev = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_dev_class"])
+    var state = _fields(dev)
+    py_setitem(state, "b", entries["module"])
+    var table = b.dict()
+    for i in range(len(handles)):  # driver-loop: over the resident buffer handles
+        py_setitem(table, PythonObject("r" + String(i)), Python.tuple(Int(py=handles[i]), 1))
+    py_setitem(state, "h", table)
+    return dev
+
+
 def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context: PythonObject) raises -> PythonObject:
     """`_run_predict(X, codes)`: probabilities (n, k) float32, or with
-    `codes` each row's class index (int32), on the device."""
+    `codes` each row's class index (int32), on the device.
+
+    p3-cnn-sequence-tsa: the fitted weights and the work arrays stay
+    resident between predicts in a native record (prepared registry, weak on
+    the model, outside its `__dict__`): (identity key of the binding, the
+    layers and their `weight_` / `bias_`, the owner of every handle, the row
+    capacity, the weight handles, the work arrays). It is reused while the
+    key matches, the weights are still read-only (fit publishes them so) and
+    its capacity covers this call; otherwise everything is uploaded and a
+    new record kept. The record is taken out of the registry while a call
+    uses it, so concurrent predicts never share work arrays."""
     var b = _b()
     var fields = _classifier_fields(model, context, True)
     var x = _images(fields, source, context)
@@ -812,24 +921,42 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
     var cap = max(1, min(n, _PREDICT_ROWS))
     var proba = PythonObject(None) if codes else _empty(Python.tuple(n, k), "float32", context)
     var lab = _empty(Python.tuple(n), "int32", context) if codes else PythonObject(None)
-    var handles = b.list()
-    var rw = b.dict()
+    var mods = NativeModules()
+    var layers = _predict_layers(fields)
+    var record = prepared_get(mods, _PREDICT_SLOT, model)
+    if record is not None:
+        prepared_drop(mods, _PREDICT_SLOT, model)  # this call owns it now
+        if (Int(py=record[2]) < cap or not _predict_key_matches(record, fields, layers, entries)
+                or not _weights_frozen(layers, False, context)):
+            record = PythonObject(None)  # its owner frees the old handles
+    var owner = PythonObject(None)
+    var rw = PythonObject(None)
+    var a = PythonObject(None)
+    var alloc_cap = cap  # the rows the work arrays hold
+    if record is not None:
+        alloc_cap = Int(py=record[2])
+        owner = record[1]
+        rw = record[3]
+        a = record[4]
+    else:
+        var handles = b.list()
+        rw = b.dict()
+        try:
+            for i in range(len(layers)):  # driver-loop: the layer list for device copies
+                var lf = _fields(layers[i])
+                var hw = _new(entries, handles, Int(py=lf["weight_"].size))
+                var hb = _new(entries, handles, Int(py=lf["bias_"].size))
+                _put(entries, hw, lf["weight_"], context)
+                _put(entries, hb, lf["bias_"], context)
+                py_setitem(rw, py_call(b.id, layers[i]), Python.tuple(hw, hb))
+            a = _resident(fields, entries, handles, cap, False, False, context)
+            _put(entries, a["y"], _minus_one(cap, context), context)
+        except error:
+            _free_all(entries, handles)
+            raise error^
+        owner = _predict_owner(entries, handles, context)
     py_setitem(fields, "_rw", rw)
     try:
-        var layers = b.list()
-        var blocks = fields["_blocks"]
-        for i in range(len(blocks)):  # driver-loop: over the conv layers
-            _ = py_call(layers.append, blocks[i][0])
-        _ = py_call(layers.append, fields["head_"])
-        for i in range(len(layers)):  # driver-loop: the layer list for device copies
-            var lf = _fields(layers[i])
-            var hw = _new(entries, handles, Int(py=lf["weight_"].size))
-            var hb = _new(entries, handles, Int(py=lf["bias_"].size))
-            _put(entries, hw, lf["weight_"], context)
-            _put(entries, hb, lf["bias_"], context)
-            py_setitem(rw, py_call(b.id, layers[i]), Python.tuple(hw, hb))
-        var a = _resident(fields, entries, handles, cap, False, False, context)
-        _put(entries, a["y"], _minus_one(cap, context), context)
         var ishape = fields["input_shape"]
         var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
         var base = Int(py=xcnn_addr(x))
@@ -860,9 +987,20 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
             s += m
         py_setitem(fields, "_rw", b.dict())
     except error:
-        _free_all(entries, handles)
+        # no field names a handle after a failure; the owner frees them
+        py_setitem(fields, "_rw", b.dict())
         raise error^
-    _free_all(entries, handles)
+    # keep the state for the next predict when every weight can stay
+    # read-only; otherwise `owner` is released here and frees its handles
+    if record is not None:
+        prepared_put(mods, _PREDICT_SLOT, model, record)
+        return lab if codes else proba
+    if not _weights_frozen(layers, True, context):
+        return lab if codes else proba
+    var key = _predict_key(mods, fields, layers, entries)
+    if key.retains(model):
+        return lab if codes else proba
+    prepared_put(mods, _PREDICT_SLOT, model, Python.tuple(PythonObject(alloc=key^), owner, alloc_cap, rw, a))
     return lab if codes else proba
 
 

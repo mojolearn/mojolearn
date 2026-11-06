@@ -20,7 +20,7 @@ from bindings.xcnn_common import (
     XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed,
     xcnn_idn, xcnn_resident, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new,
     xcnn_reshape_t, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr, xcnn_dev, xcnn_dev_get,
-    xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32,
+    xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32, xcnn_readonly, xcnn_writable_copy,
 )
 from bindings.xcnn_bn_native import xcnn_bn_forward_dev, xcnn_bn_forward, xcnn_bn_layers, xcnn_bn_backward, xcnn_bn_backward_dev, _bn_admit
 from bindings.xseq_native_common import xseq_f32
@@ -51,7 +51,7 @@ def _snapshot(value: PythonObject, name: String, context: PythonObject) raises -
     var admitted = xcnn_f32(value, name, context)
     # A fresh native view freezes the shape/strides for this operation while
     # retaining the admitted buffer's original storage owner.
-    return xcnn_reshape(admitted, xcnn_shape(admitted))
+    return xcnn_reshape(admitted, xcnn_shape(admitted), context)
 
 
 def _weight_pair(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -228,10 +228,10 @@ def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObj
     var expected: List[Int] = [outc, inc, k[0], k[1]]
     var w = xcnn_f32(args[0], "weight", context)
     if one:
-        w = xcnn_reshape(w, expected)
+        w = xcnn_reshape(w, expected, context)
     if not _same_shape(xcnn_shape(w), expected):
         raise Error("mojolearn: weight shape differs from the configured convolution shape")
-    var new_w = xcnn_reshape(xcnn_slice_f32(w, 0, xcnn_size(expected), context), expected)
+    var new_w = xcnn_reshape(xcnn_slice_f32(w, 0, xcnn_size(expected), context), expected, context)
     var bias = args[1]
     var new_b = py_get(fields, "bias_")
     if bias is not None:
@@ -261,7 +261,7 @@ def _conv_gradient(fields: PythonObject, weight: Bool, context: PythonObject) ra
         var value = xcnn_download(pending[0], pending[1], xcnn_size(shape), context)
         if weight and _truth(py_get(fields, "_gw_1d")):
             shape = [shape[0], shape[1], shape[3]]
-        value = xcnn_reshape(value, shape)
+        value = xcnn_reshape(value, shape, context)
         _set(fields, key, value)
         _set(fields, pending_key, PythonObject(None))
     if not py_contains(fields, PythonObject(key)):
@@ -426,7 +426,7 @@ def _to_four(value: PythonObject, context: PythonObject) raises -> PythonObject:
     if len(s) != 3:
         raise Error("mojolearn: expected (N, C, L)")
     var shape: List[Int] = [s[0], s[1], 1, s[2]]
-    return xcnn_reshape_t(v, shape, context) if xcnn_is_t(v, context) else xcnn_reshape(v, shape)
+    return xcnn_reshape_t(v, shape, context) if xcnn_is_t(v, context) else xcnn_reshape(v, shape, context)
 
 
 def _conv_backward(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -467,10 +467,10 @@ def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: Pytho
         else:
             var dw = fields["grad_weight_"]
             var ws = xcnn_shape(dw)
-            _set(fields, "grad_weight_", xcnn_reshape(dw, [ws[0], ws[1], ws[3]]))
+            _set(fields, "grad_weight_", xcnn_reshape(dw, [ws[0], ws[1], ws[3]], context))
         var os = xcnn_shape(out)
         var shape: List[Int] = [os[0], os[1], os[3]]
-        return xcnn_reshape_t(out, shape, context) if xcnn_is_t(out, context) else xcnn_reshape(out, shape)
+        return xcnn_reshape_t(out, shape, context) if xcnn_is_t(out, context) else xcnn_reshape(out, shape, context)
     return out
 
 
@@ -540,7 +540,7 @@ def _host_rows(source: PythonObject, start: Int, stop: Int, context: PythonObjec
     var width = xcnn_size(shape) // max(shape[0], 1)
     var out = xcnn_slice_f32(a, start * width, (stop - start) * width, context)
     shape[0] = stop - start
-    return xcnn_reshape(out, shape)
+    return xcnn_reshape(out, shape, context)
 
 
 # ---------------------------------------------------------------- pinned weights (G3)
@@ -558,8 +558,18 @@ def _pin_values(layer: PythonObject, fields: PythonObject, entries: PythonObject
         var h = xcnn_dev_upload(layer, entries, "pin_" + String(py=names[i]), a, context)
         py_setitem(handles, names[i], Python.tuple(h, xcnn_size(xcnn_shape(a))))
     _set(fields, "_pins", Python.tuple(entries["module"], handles))
+    # p3-cnn-sequence-tsa (hazard A): the host words just uploaded become the
+    # layer's `weight_` / `bias_` as read-only arrays (`xcnn_readonly`), so an
+    # in-place edit (`weight_ -= lr * g`, `weight_[:] = W`) raises NumPy's
+    # read-only error instead of running on the stale device copy. Assigning
+    # a new array (or `set_weights`) is the way to change weights; it is
+    # noticed by identity below and uploaded again. No per-call host hash.
+    var ro_w = xcnn_readonly(values[0], py_get(fields, "weight_"), context)
+    var ro_b = xcnn_readonly(values[1], py_get(fields, "bias_"), context)
+    _set(fields, "weight_", ro_w)
+    _set(fields, "bias_", ro_b)
     # the arrays pinned, so a reassigned `weight_` / `bias_` is uploaded again
-    _set(fields, "_pin_src", Python.tuple(py_get(fields, "weight_"), py_get(fields, "bias_")))
+    _set(fields, "_pin_src", Python.tuple(ro_w, ro_b))
 
 
 def _pin_weights(layer: PythonObject, fields: PythonObject, entries: PythonObject, context: PythonObject) raises:
@@ -786,9 +796,9 @@ def xcnn_conv_forward(layer: PythonObject, fields: PythonObject, x: PythonObject
     var s = xcnn_shape(a)
     if len(s) != 3:
         raise Error("mojolearn: Conv1d.forward takes (N, C, L)")
-    var out = xcnn_conv2d_forward_fields(layer, fields, xcnn_reshape(a, [s[0], s[1], 1, s[2]]), context)
+    var out = xcnn_conv2d_forward_fields(layer, fields, xcnn_reshape(a, [s[0], s[1], 1, s[2]], context), context)
     var o = xcnn_shape(out)
-    return xcnn_reshape(out, [o[0], o[1], o[3]])
+    return xcnn_reshape(out, [o[0], o[1], o[3]], context)
 
 
 # ---------------------------------------------------------------- ReLU and add
@@ -1236,7 +1246,7 @@ def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObj
         rest *= s[i]
     if xcnn_is_t(out_buf, context):
         return xcnn_reshape_t(out_buf, [s[0], rest], context)
-    return xcnn_reshape(out_buf, [s[0], rest])
+    return xcnn_reshape(out_buf, [s[0], rest], context)
 
 
 def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: PythonObject) raises -> PythonObject:
@@ -1255,7 +1265,7 @@ def _rows(fields: PythonObject, source: PythonObject, required: Bool, context: P
         var given = declared
         for i in range(len(given)):  # driver-loop: over the declared sample shape words
             dims.append(Int(py=given[i]))
-        return xcnn_reshape(a, dims)
+        return xcnn_reshape(a, dims, context)
     return a
 
 
@@ -1273,6 +1283,13 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         return layer
     if operation == "conv_init" or operation == "conv_init1d":
         return _conv_init(layer, args, operation == "conv_init1d", context)
+    # p3-cnn-sequence-tsa: the BasicBlock operations come before the Conv2d
+    # field admission (it admitted 15 conv fields of the block object, which
+    # `_block_fields` then admitted again as a block)
+    if operation == "block_forward":
+        return xcnn_block_forward(layer, args[0], context)
+    if operation == "block_transform":
+        return _flat_rows(xcnn_block_forward(layer, _rows(_fields(layer), args[0], False, context), context), context)
     # One admission per call: every conv handler below takes these fields
     # (they re-admitted the same layer 2-4 times per call before). This line
     # stays first, so the first error a bad layer raises is unchanged.
@@ -1285,7 +1302,14 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         _pin_weights(layer, fields, xcnn_entries(fields, context), context)
         return layer
     if operation == "conv_unpin":
+        if py_get(fields, "_pins") is not None:
+            # p3-cnn-sequence-tsa: no resident copy any more, so the host
+            # weights are handed back writeable (fresh copies of the words).
+            var values = _weight_pair(fields, context)
+            _set(fields, "weight_", xcnn_writable_copy(values[0], context))
+            _set(fields, "bias_", xcnn_writable_copy(values[1], context))
         _set(fields, "_pins", PythonObject(None))
+        _set(fields, "_pin_src", PythonObject(None))
         return layer
     if operation == "conv_grad_weight" or operation == "conv_grad_bias":
         return _conv_gradient(fields, operation == "conv_grad_weight", context)
@@ -1299,7 +1323,7 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
     if operation == "conv_weight1d":
         var w = xcnn_f32(fields["weight_"], "weight_", context)
         var s = xcnn_shape(w)
-        return xcnn_reshape(w, [s[0], s[1], s[3]])
+        return xcnn_reshape(w, [s[0], s[1], s[3]], context)
     if operation == "conv_fit":
         var a = _rows(fields, args[0], True, context)
         var shape = xcnn_shape(a)
@@ -1312,8 +1336,4 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         return xcnn_conv_forward(layer, fields, args[0], context)
     if operation == "conv_transform":
         return _flat_rows(xcnn_conv_forward(layer, fields, _rows(fields, args[0], True, context), context), context)
-    if operation == "block_forward":
-        return xcnn_block_forward(layer, args[0], context)
-    if operation == "block_transform":
-        return _flat_rows(xcnn_block_forward(layer, _rows(fields, args[0], False, context), context), context)
     raise Error("RuntimeError: unknown CNN layer operation " + operation)
