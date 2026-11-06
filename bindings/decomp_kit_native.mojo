@@ -15,6 +15,7 @@
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
 from std.ffi import _Global, external_call, c_size_t
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
@@ -97,11 +98,11 @@ def decomp_is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
     # Python indexing per call). An MRO holds classes only, so anything
     # that is not a class is never found, as before.
     var meta = py_type(py_type(PythonObject(0)))  # the builtin `type`
-    ref cpy = Python().cpython()
-    var subtype = cpy.lib.get_function[Int32]("PyType_IsSubtype")
-    if subtype(py_type(cls)._obj_ptr, meta._obj_ptr) == 0:
+    # Resolved once per process in the shared table (pass 2), not by name per call.
+    var t = cpython_table()
+    if t[].PyType_IsSubtype(py_type(cls)._obj_ptr, meta._obj_ptr) == 0:
         return False
-    return subtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
+    return t[].PyType_IsSubtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
 
 
 def decomp_class_attr(model: PythonObject, name: String) raises -> PythonObject:
@@ -234,7 +235,7 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
         var raw = cpy.lib.get_function[Optional[_ResidentBytes]]("PyCapsule_GetPointer")(
             capsule, names[].capsule_name.as_c_string_slice().unsafe_ptr())
         if not raw:
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
             return None
         var words = _ResidentWords(unsafe_from_address=Int(raw.value()))
         var free = words[0]
@@ -244,11 +245,13 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
             var pending = cpy.PyErr_FetchTriple()
             var argument = cpy.lib.get_function[PyObjectPtr]("PyLong_FromSsize_t")(handle)
             if argument:
-                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(free, argument)
+                # both arguments as address words, as words[0] is (no call
+                # on main mixes an Int and a PyObjectPtr argument; pass 2 C8)
+                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(free, Int(argument))
                 if result:
                     cpy.lib.get_function[NoneType]("Py_DecRef")(result)
                 cpy.lib.get_function[NoneType]("Py_DecRef")(argument)
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
             cpy.lib.get_function[NoneType]("Py_DecRef")(free)
             cpy.PyErr_Restore(pending[0], pending[1], pending[2])
         external_call["free", NoneType](raw.value())

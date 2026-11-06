@@ -13,6 +13,7 @@
 # uploaded once, and the dictionary, mean and components are not downloaded
 # and re-uploaded between the two.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -87,8 +88,9 @@ def _is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
     if py_type(cls) is b.type:
         # CPython's own subtype test walks the same tp_mro by identity in one
         # native call (no MRO tuple fetch or per-row Python indexing).
-        ref cpy = Python().cpython()
-        return cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(model)._obj_ptr, cls._obj_ptr) != 0
+        # Resolved once per process in the shared table (pass 2), not by name per call.
+        var t = cpython_table()
+        return t[].PyType_IsSubtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         if mro[k] is cls:

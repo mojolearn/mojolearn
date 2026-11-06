@@ -11,9 +11,15 @@ context (the context every `DeviceExec` runs on, `sequence_ctx`), and later
 predicts launch on it directly. The copy is the same bytes, so no result
 changes.
 
-A slot is found by the model's identity word and replaced when the binding
-names a new token for it (a refit, or a replaced `params_` / `coefs_` /
-`intercepts_`), so a refit frees the old block at the model's next predict.
+A slot is found by the model's identity word and the device index of the
+executor's context, and replaced when the binding names a new token for it
+(a refit, a replaced `params_` / `coefs_` / `intercepts_`, or an in-place
+edit of their values: the binding keeps a native FNV-1a64 of the fitted
+host bytes in its record, `bindings/xseq_neural_native.mojo`
+`_xseq_params_stamp`, and mints a new token when it changes), so a stale
+device copy is never launched on and a refit frees the old block at the
+model's next predict. A slot made on another device is never served (pass 2,
+H2 / H8).
 The store keeps at most `_SLOTS` blocks and `_KEEP_BYTES` bytes; past either
 it frees the least recently used one. Both caps are memory reasoning (a
 handful of fitted sequence models in one process, their parameters a small
@@ -36,6 +42,7 @@ comptime _KEEP_BYTES = 1 << 30
 
 struct _SeqResidentStore(Defaultable, Movable):
     var owners: List[Int]
+    var devices: List[Int]
     var tokens: List[Int]
     var counts: List[Int]
     var used: List[Int]
@@ -45,6 +52,7 @@ struct _SeqResidentStore(Defaultable, Movable):
 
     def __init__(out self):
         self.owners = List[Int]()
+        self.devices = List[Int]()
         self.tokens = List[Int]()
         self.counts = List[Int]()
         self.used = List[Int]()
@@ -68,6 +76,7 @@ def _evict(mut ex: DeviceExec, i: Int) raises:
     ex.ctx.synchronize()
     store[].bytes -= store[].counts[i] * 4
     _ = store[].owners.pop(i)
+    _ = store[].devices.pop(i)
     _ = store[].tokens.pop(i)
     _ = store[].counts.pop(i)
     _ = store[].used.pop(i)
@@ -79,12 +88,13 @@ def _resident_params(mut ex: DeviceExec, owner: Int, token: Int, src: Int, n: In
     address `src` named (`owner`, `token`); 0 when the block is not kept."""
     var store = _STORE.get_or_create_ptr()
     store[].tick += 1
+    var device = Int(ex.ctx.id())
     for i in range(len(store[].owners)):  # driver-loop: over resident fitted-model slots (at most _SLOTS), owner lookup
         if store[].owners[i] == owner:
-            if store[].tokens[i] == token and store[].counts[i] == n:
+            if store[].tokens[i] == token and store[].counts[i] == n and store[].devices[i] == device:
                 store[].used[i] = store[].tick
                 return Int(store[].bufs[i].unsafe_ptr())
-            _evict(ex, i)  # refit or replaced fitted block of this model
+            _evict(ex, i)  # refit, replaced or edited fitted block of this model, or another device
             break
     if token <= 0 or n <= 0 or src == 0 or n * 4 > _KEEP_BYTES:
         return 0
@@ -105,6 +115,7 @@ def _resident_params(mut ex: DeviceExec, owner: Int, token: Int, src: Int, n: In
     ex.staged.append(host^)
     var address = Int(buf.unsafe_ptr())
     store[].owners.append(owner)
+    store[].devices.append(device)
     store[].tokens.append(token)
     store[].counts.append(n)
     store[].used.append(store[].tick)

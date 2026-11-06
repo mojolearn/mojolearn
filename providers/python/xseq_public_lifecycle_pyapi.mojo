@@ -59,7 +59,7 @@ def _owner_record_hit(mut mods: NativeModules, model: PythonObject, fields: Pyth
     return same
 
 
-def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: PythonObject) raises:
+def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: PythonObject, lifecycle: PythonObject) raises:
     var key = NativeIdentityKey(mods)
     key.add_identity(py_type(model))
     key.fields(fields, List[String]())
@@ -67,11 +67,16 @@ def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: Pyth
         return  # a self-referential field must not keep its weak owner alive
     # A defaultdict can change its own factory in place (the admission
     # checks it), so a model holding one is admitted in full on every call,
-    # as bindings/sequential_admission.mojo does.
-    var defaultdict = mods.module("collections").defaultdict
-    for k in range(len(key.objects)):  # driver-loop: over captured field ownership references
-        if py_type(key.objects[k]) is defaultdict:
-            return
+    # as bindings/sequential_admission.mojo:375 does. The class comes from
+    # the connected lifecycle context (`defaultdict_class`, set by
+    # _native_classical_bridge._numpy_free_context): `collections` is not
+    # an import-time connected module, so asking native_loaded_module for
+    # it raised ImportError on every non-fit call (pass 2, B1/H1).
+    var defaultdict = py_get(lifecycle, PythonObject("defaultdict_class"))
+    if defaultdict is not None:
+        for k in range(len(key.objects)):  # driver-loop: over captured field ownership references
+            if py_type(key.objects[k]) is defaultdict:
+                return
     prepared_put(mods, _OWNER_SLOT, model, PythonObject(alloc=key^))
 
 
@@ -117,7 +122,7 @@ def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool 
         if py_contains(fields, name):
             classical_admit_value(fields[PythonObject(name)], lifecycle)
     if not fitting:
-        _owner_record_put(mods, model, fields)
+        _owner_record_put(mods, model, fields, lifecycle)
     return fields
 
 

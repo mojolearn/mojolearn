@@ -18,7 +18,7 @@ from bindings.family_common import family_cast_view_f64
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.trees_public_iforest import iforest_operation_with_source
 from bindings.trees_public_state import _release_tree_values
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_same, trees_key_shallow
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
@@ -75,7 +75,11 @@ def _admit(model: PythonObject, context: PythonObject, fitting: Bool) raises -> 
     # The record lives in the native side table, never in `__dict__`.
     var inputs_key = _fitted_inputs_key(fields)
     var inputs_known = False
-    if not fitting:
+    if fitting:
+        # Pass 2 H7: a fit replaces both fields, so the old record (which
+        # holds the previous training X) is dropped now, not at the next query.
+        trees_side_drop(_IFOREST_FITTED_SLOT, model)
+    else:
         var held = trees_side_get(_IFOREST_FITTED_SLOT, model)
         inputs_known = held is not None and trees_key_same(held, inputs_key)
     if not inputs_known:

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The native PCA owner: every public PCA operation is one call into pca_c.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
@@ -30,8 +31,9 @@ def _pca_admitted(b: PythonObject, model: PythonObject, loading: Bool, context: 
         return False
     # CPython's own subtype test walks the same tp_mro by identity in one
     # native call (no MRO tuple fetch or per-row Python indexing).
-    ref cpy = Python().cpython()
-    return cpy.lib.get_function[Int32]("PyType_IsSubtype")(cls._obj_ptr, target._obj_ptr) != 0
+    # Resolved once per process in the shared table (pass 2), not by name per call.
+    var t = cpython_table()
+    return t[].PyType_IsSubtype(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

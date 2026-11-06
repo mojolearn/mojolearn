@@ -137,7 +137,9 @@ def _match_into(held: PythonObject, mut pos: Int, value: PythonObject, context: 
         var key = PyObjectPtr()
         var item = PyObjectPtr()
         for _ in range(size):  # driver-loop: constructor parameter mapping entries
-            if cpy.PyDict_Next(value._obj_ptr, Pointer(to=at).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+            # main's compiled form (bindings/causal_model_config.mojo:75); the
+            # shared tables carry no PyDict_Next entry (pass 2, C3).
+            if cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=at), MutPointer(to=key), MutPointer(to=item)) == 0:
                 return False
             if not _match_into(held, pos, PythonObject(from_borrowed=key), context, depth + 1):
                 return False
@@ -150,6 +152,13 @@ def _match_into(held: PythonObject, mut pos: Int, value: PythonObject, context: 
             return False
         var is_list = kind is b.list
         for k in range(size):  # driver-loop: constructor parameter container items
+            # Pass 2 H12: each borrowed item becomes an owned reference
+            # (`from_borrowed` takes one) before anything else runs, and the
+            # walk below runs no Python code (exact-type dict lookups and the
+            # `__dict__` descriptor). A list is still re-measured before each
+            # read, so a list that shrank can never hand back a NULL item.
+            if is_list and k >= len(value):
+                return False
             var entry = PythonObject(from_borrowed=table[].PyList_GetItem(value._obj_ptr, k)) if is_list else PythonObject(from_borrowed=table[].PyTuple_GetItem(value._obj_ptr, k))
             if not _match_into(held, pos, entry, context, depth + 1):
                 return False
