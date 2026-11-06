@@ -66,7 +66,7 @@ def _loaded_fields(module: PythonObject, pinned_hook: Bool = False) raises -> Py
     ref cpy = Python().cpython()
     var fields = cpy.PyModule_GetDict(module._obj_ptr)
     if not fields:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         raise Error("TypeError: native module connection is not a native module")
     var cls = _loaded_type(module)
     var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
@@ -102,7 +102,7 @@ def _native_loaded_module_full(name: String) raises -> PythonObject:
     # target modules and the exports actually consumed remain checked below.
     var fields = cpy.PyModule_GetDict(metadata._obj_ptr)
     if not fields:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         raise Error("TypeError: native module connection metadata is not a module")
     var raw = _loaded_lookup(fields, "CONNECTIONS")
     if not raw:
@@ -232,7 +232,7 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     var t = cpython_table()
     var modules = t[].PyImport_GetModuleDict()
     if not modules:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return False
     var found = t[].PyDict_GetItem(modules, entry.name_key._obj_ptr)
     if not found or found != entry.module._obj_ptr:
@@ -244,7 +244,7 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
         return False
     var fields = cpy.PyModule_GetDict(entry.module._obj_ptr)
     if not fields or fields != entry.fields._obj_ptr:
-        cpy.PyErr_Clear()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return False
     if t[].PyDict_Size(fields) != entry.size:
         return False
@@ -271,7 +271,7 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
             var j = entry.unslotted[k]
             var current = cpy.PyDict_GetItemWithError(fields, entry.key_ptrs[j])
             if not current or current != entry.value_ptrs[j]:
-                cpy.PyErr_Clear()
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return False
     return True
 
