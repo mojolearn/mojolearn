@@ -191,7 +191,7 @@ def test_native_sequential_export_prediction_and_training_state_refusals(loss, t
 
 
 def test_native_sequential_checkpoint_and_import_do_not_call_python_helpers(monkeypatch, tmp_path):
-    from mojolearn import _verify_model, _weight_import
+    from mojolearn import _weight_import
     x, y = dataset("mse")
     fitted = training_model("mse").fit(x, y, epochs=1)
     imported = model()
@@ -202,7 +202,6 @@ def test_native_sequential_checkpoint_and_import_do_not_call_python_helpers(monk
         raise AssertionError("Python helper reached in native Sequential operation")
 
     with monkeypatch.context() as patch:
-        patch.setattr(_verify_model, "record_sequential", forbidden)
         patch.setattr(_weight_import, "WeightSource", forbidden)
         patch.setattr(_backend, "binding", forbidden)
         for name in ("empty", "zeros", "asarray", "ascontiguousarray", "array"):
