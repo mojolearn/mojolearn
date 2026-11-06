@@ -70,7 +70,9 @@ class ParallelQueries:
     # voting or density reduction. Only query rows are partitioned: the complete
     # host input and each worker's reference index must fit in memory. Use as a
     # context manager, or call close(). Calls on one driver must be serialized.
-    # Estimator state is sent afresh on each call; fit the estimator normally.
+    # Estimator state is sent once and kept resident on the workers until the
+    # estimator is refit (any carried fitted value replaced) or the driver is
+    # closed; fit the estimator normally.
     #
     # The state travels ONCE per worker per call (lane/py-decomp-nbrs,
     # 2026-09-28): `query` sends one `neighbor_state` request to every worker,
@@ -79,8 +81,9 @@ class ParallelQueries:
     # its query slice and that token. Before, every shard pickled the whole
     # index and its worker uploaded it again (about 1 TB pickled for 1M
     # queries on a 1M x 32 index at 128 rows per shard). The shard cut, the
-    # per-shard call and the merge are unchanged, so the bytes are too. The
-    # workers drop the snapshot when the call ends.
+    # per-shard call and the merge are unchanged, so the bytes are too. Since
+    # 2026-11-05 the snapshot stays on the workers across calls while the
+    # fitted state is unchanged (bindings/parallel_shard_native.mojo).
     def __init__(self, estimator, *, devices=(0,), rows_per_shard=128):
         _native_parallel_shard('queries_init', (self, estimator, devices, rows_per_shard))
 
