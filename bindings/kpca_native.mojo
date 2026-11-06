@@ -8,6 +8,7 @@
 # reports); transform's fused (or itemized) x_neighbors chain. Same bits.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_host_f32
@@ -24,7 +25,7 @@ def _f32_scalar(value: Float64) -> Float64:
 
 def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     # NumericModeMixin's `numeric_mode` as `_backend.binding` resolves it.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -40,7 +41,7 @@ def _near(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """The x_neighbors entries of `mode`, checked against the selected vendor
     and mode."""
     var entries = context["decomp_neighbors"][mode]
-    if py_type(entries) is Python.import_module("builtins").str:
+    if py_type(entries) is native_loaded_module("builtins").str:
         raise Error(String(entries))
     if String(entries["x_neighbors_vendor"]()) != String(context["vendor"]):
         raise Error("RuntimeError: KernelPCA native vendor differs from selected execution")
@@ -51,7 +52,7 @@ def _near(mode: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _decomp(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var entries = context["decomp_entries"][mode]
-    if py_type(entries) is Python.import_module("builtins").str:
+    if py_type(entries) is native_loaded_module("builtins").str:
         raise Error(String(entries))
     if py_get(entries, "x_decomp_kpca_eig") is None:
         raise Error("NotImplementedError: mojolearn KernelPCA: this build of _mojolearn_x_decomp does not export "
@@ -70,12 +71,12 @@ def _kind(kernel: PythonObject, context: PythonObject) raises -> Int:
 
 def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`KernelPCA.fit`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var kernel = fields["kernel"]
     var precomputed = decomp_eq(kernel, PythonObject("precomputed"))
     if Bool(py=py_call(b.callable, kernel)) or (
-            not Bool(py=py_call(Python.import_module("operator").contains, context["kpca_kernels"], kernel))
+            not Bool(py=py_call(native_loaded_module("operator").contains, context["kpca_kernels"], kernel))
             and not precomputed):
         raise Error("NotImplementedError: KernelPCA: kernel=" + decomp_repr(kernel) + " is not implemented")
     if Bool(py=fields["fit_inverse_transform"]):

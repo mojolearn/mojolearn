@@ -7,6 +7,7 @@
 # bindings/decomp_kit_native.mojo: the same x_decomp entries with the same
 # words in the same order, so the bits are unchanged.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
@@ -45,7 +46,7 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var n = kit.nrows(r)
         var m = kit.ncols(r)
         var alpha = fields["alpha"]
-        var unit = Bool(py=py_call(Python.import_module("operator").eq, alpha, PythonObject(1.0)))
+        var unit = Bool(py=py_call(native_loaded_module("operator").eq, alpha, PythonObject(1.0)))
         var c = r if unit else kit.ew(XD_SCALE, r, scalar=decomp_float(alpha))
         var seed = decomp_seed_word(decomp_seed(fields["random_state"]))
         var f = decomp_int(fields["factors"])
@@ -170,7 +171,7 @@ def als_query(model: PythonObject, operation: String, args: PythonObject, contex
             var s = kit.mm(u, items, tb=True)
             var count = decomp_int(args[2])
             if count < 0:
-                raise Error("recommend: N must be non-negative, got " + String(py=py_call(Python.import_module("builtins").str, args[2])))
+                raise Error("recommend: N must be non-negative, got " + String(py=py_call(native_loaded_module("builtins").str, args[2])))
             var skip = -1
             if Bool(py=args[3]) and args[1] is not None:
                 var r = _matrix(kit, args[1], "user_items", context)
@@ -192,7 +193,7 @@ def als_query(model: PythonObject, operation: String, args: PythonObject, contex
             var s = kit.mm(row, unit, tb=True)
             var count = decomp_int(args[1])
             if count < 0:
-                raise Error("similar_items: N must be non-negative, got " + String(py=py_call(Python.import_module("builtins").str, args[1])))
+                raise Error("similar_items: N must be non-negative, got " + String(py=py_call(native_loaded_module("builtins").str, args[1])))
             return _topn(kit, s, count, -1, context)
         raise Error("unknown native AlternatingLeastSquares operation")
     finally:
@@ -204,7 +205,7 @@ def als_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var call = PythonObject(from_borrowed=args_ptr)
         if len(call) != 4:
             raise Error("TypeError: als_native_call requires model, operation, arguments and connected context")
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple or py_type(call[3]) is not b.dict:
             raise Error("TypeError: native AlternatingLeastSquares requires an operation, an argument tuple and its context")
         var context = call[3]

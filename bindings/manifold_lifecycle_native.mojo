@@ -3,11 +3,12 @@
 # supervised target owner is separate; this envelope validates ignored y.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.manifold_settings_native import ManifoldSettings
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view, RESHAPE_HINT
-from bindings.classical_pandas import classical_admit_value, native_pandas_exact
+from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _classical_admit, _ClassicalAdmitTypes
+from bindings.sequential_admission import _SequentialValueTypes
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_warnings import _warning_category, COLUMN_WARNING
 from bindings.classifier_public_lifecycle import _feature_names
@@ -167,18 +168,28 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
     return result^
 
 
-def _target_leaves(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+def _target_leaves(value: PythonObject, context: PythonObject) raises:
+    # One module handle and one set of admission type vectors for the whole
+    # ignored target (classical_admit_value rebuilt them for every leaf).
+    var mods = NativeModules()
+    var b = mods.module("builtins")
+    var seq = _SequentialValueTypes(mods, context)
+    var kinds = _ClassicalAdmitTypes()
+    _target_leaves(mods, b, seq, kinds, value, context, 0)
+
+
+def _target_leaves(mut mods: NativeModules, b: PythonObject, seq: _SequentialValueTypes,
+                   mut kinds: _ClassicalAdmitTypes, value: PythonObject, context: PythonObject, depth: Int) raises:
     if depth > 64:
         raise Error("TypeError: manifold target nesting exceeds the supported depth")
-    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.list or cls is b.tuple:
         for i in range(len(value)):  # driver-loop: ignored target references, never conversion hooks
-            _target_leaves(value[i], context, depth + 1)
+            _target_leaves(mods, b, seq, kinds, value[i], context, depth + 1)
         return
     if cls is b.complex or cls is b.bytes:
         return
-    classical_admit_value(value, context)
+    _classical_admit(mods, seq, kinds, value, context, 0)
 
 
 def _target_list_kind(value: PythonObject, context: PythonObject) raises -> Int:

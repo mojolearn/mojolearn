@@ -5,6 +5,7 @@
 # kit steps the Python shell sequenced, the same entries, operands and order,
 # so the same bits), and the fitted attributes stored as the shell stored them.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_host_f32
@@ -19,7 +20,7 @@ def _whiten_code(whiten: PythonObject) raises -> Int:
     # False -> 0, 'unit-variance' -> 1, 'arbitrary-variance' -> 2, by the
     # shell's `in` / `==` / truthiness tests.
     var allowed = Python.tuple(False, "unit-variance", "arbitrary-variance")
-    if not Bool(py=py_call(Python.import_module("operator").contains, allowed, whiten)):
+    if not Bool(py=py_call(native_loaded_module("operator").contains, allowed, whiten)):
         raise Error("whiten=" + decomp_repr(whiten) + " is not supported")
     if not Bool(py=whiten):
         return 0
@@ -28,7 +29,7 @@ def _whiten_code(whiten: PythonObject) raises -> Int:
 
 def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: PythonObject) raises -> PythonObject:
     """`FastICA._fit(X, project)`: self, or the sources with `project`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     decomp_set_mode(fields, context)
     var entries = decomp_entries(model, fields, Python.tuple("x_decomp_ica_fit"), context)
@@ -37,7 +38,7 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     var d = Int(py=x.shape[1])
     decomp_min_samples(n, d, "FastICA")
     var algorithm = fields["algorithm"]
-    if not Bool(py=py_call(Python.import_module("operator").contains, Python.tuple("parallel", "deflation"), algorithm)):
+    if not Bool(py=py_call(native_loaded_module("operator").contains, Python.tuple("parallel", "deflation"), algorithm)):
         raise Error("algorithm must be 'parallel' or 'deflation'")
     var whiten = fields["whiten"]
     var code = _whiten_code(whiten)

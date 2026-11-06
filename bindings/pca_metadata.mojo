@@ -2,16 +2,25 @@
 # Native PCA constructor and scalar-parameter metadata. Public activation is
 # separate: this private owner does not replace inherited Python API wrappers.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 
 
 def pca_dictionary(context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = context["pca_class"]
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var descriptor = context["pca_dictionary_descriptor"]
+    # The finalizer and dictionary-descriptor checks read only the PCA class
+    # rows: run them once per class state (native_class_admission) and
+    # descriptor identity, not on every PCA call.
+    var mods = NativeModules()
+    var record = class_record(mods, _PCA_DICTIONARY_SLOT, cls)
+    if record is not None and record is descriptor:
+        return descriptor
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var found = False
     for k in range(len(mro)):  # driver-loop: over native MRO dictionary descriptors before stored-field access
         var class_fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
@@ -23,11 +32,15 @@ def pca_dictionary(context: PythonObject) raises -> PythonObject:
             found = True
     if not found:
         raise Error("TypeError: PCA native instance dictionary is unavailable")
+    class_admit(mods, _PCA_DICTIONARY_SLOT, cls, descriptor)
     return descriptor
 
 
+comptime _PCA_DICTIONARY_SLOT = "pca_dictionary_descriptor_v1"
+
+
 def pca_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = context["pca_class"]
     var descriptor = pca_dictionary(context)
     var fields = py_call(descriptor.__get__, model, cls)
@@ -67,7 +80,7 @@ def pca_get_params(model: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def pca_set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(values) is not b.dict:
         raise Error("TypeError: PCA parameters must be a native dict")
     if len(values) == 0:
@@ -97,7 +110,7 @@ def pca_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not Python.import_module("builtins").str:
+    if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("TypeError: numeric_mode must be identical, fast or None")
     mode = mode.strip().lower()
     if String(mode) != "identical" and String(mode) != "fast":
@@ -108,7 +121,7 @@ def pca_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject
 def pca_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var mode = pca_mode(fields, context)
     var entries = context["pca_bindings"][mode]
-    if py_type(entries) is Python.import_module("builtins").str:
+    if py_type(entries) is native_loaded_module("builtins").str:
         raise Error("ImportError: " + String(entries))
     if String(entries["estimators_vendor"]()) != String(context["vendor"]):
         raise Error("RuntimeError: PCA native vendor differs from selected execution")

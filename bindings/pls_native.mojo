@@ -13,6 +13,7 @@
 # `_x_std`, `_y_mean`, `_y_std`, scikit-learn's names), the values the
 # Python shell held as device matrices.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -51,7 +52,7 @@ def _name(model: PythonObject) raises -> String:
 
 
 def _pls_scalar(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes:
         return value
@@ -73,7 +74,7 @@ def _pls_scalar(value: PythonObject, name: String, context: PythonObject) raises
 
 def _pls_settings(model: PythonObject, state: PythonObject, operation: String,
                   context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     # Exact-dict copy captures references atomically while admission holds the
     # GIL. Keep model writes separate; no later numerical stage reads live
     # instance settings or invokes a scalar conversion protocol.
@@ -118,7 +119,7 @@ def _pls_settings(model: PythonObject, state: PythonObject, operation: String,
 def _pls_require_fitted(fields: PythonObject, operation: String, context: PythonObject) raises:
     var fitted = Bool(py=py_get(fields, "_mojolearn_fitted", PythonObject(False))) or Bool(py=py_get(fields, "_mojolearn_fitting", PythonObject(False)))
     if not fitted:
-        var keys = py_call(Python.import_module("builtins").list, fields)
+        var keys = py_call(native_loaded_module("builtins").list, fields)
         for index in range(len(keys)):  # driver-loop: existing fitted-public-attribute compatibility rule
             var key = String(keys[index])
             if key.endswith("_") and not key.startswith("_") and fields[key] is not None:
@@ -235,7 +236,7 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
     var xs = _center_scale(kit, x, scale)
     var ys = _center_scale(kit, ym, scale)
     var algorithm = py_get(fields, "algorithm", PythonObject("nipals"))
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var svd_algo = Bool(py=py_call(b.isinstance, algorithm, b.str)) and String(py=algorithm) == "svd"
     var pmode = fields["_pmode"]
     if py_type(pmode) is not py_type(PythonObject("")):
@@ -345,7 +346,7 @@ def _score_binding(fields: PythonObject, context: PythonObject) raises -> Python
     # Use the import-connected provider and preserve its metrics-specific
     # mode refusals/readback before invoking the existing native metric owner.
     var mode = py_get(fields, "numeric_mode")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if mode is not None:
         if py_type(mode) is not b.str:
             raise Error("numeric_mode must be 'fast' or 'identical'")
@@ -377,7 +378,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         var y = args[1] if args[1] is not None else args[2]
         if Bool(py=fields["_pls_canonical"]):
             var algorithm = fields["algorithm"]
-            var b = Python.import_module("builtins")
+            var b = native_loaded_module("builtins")
             var is_str = Bool(py=py_call(b.isinstance, algorithm, b.str))
             if not is_str or (String(py=algorithm) != "nipals" and String(py=algorithm) != "svd"):
                 raise Error("PLSCanonical: algorithm must be 'nipals' or 'svd'")
@@ -453,7 +454,7 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
     # inspecting model settings; caller inputs are admitted before metadata.
     var state = classical_family_admit(model)
     var fields = _pls_settings(model, state, operation, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fitting = operation == "fit" or operation == "fit_transform"
     var name = String(fields["_pls_name"])
     var sparse = Bool(py=fields["_pls_regression"])
@@ -515,7 +516,7 @@ def pls_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var call = PythonObject(from_borrowed=args_ptr)
         if len(call) != 4:
             raise Error("TypeError: pls_native_call requires model, operation, arguments and connected context")
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple or py_type(call[3]) is not b.dict:
             raise Error("TypeError: native PLS requires an operation, an argument tuple and its context")
         var context = call[3]

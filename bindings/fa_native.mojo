@@ -5,6 +5,7 @@
 # the Python shell sequenced, the same entries, operands and order, so the
 # same bits), and the fitted attributes stored as the shell stored them.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_host_f32
@@ -21,12 +22,12 @@ comptime _SCORE = 4
 
 
 def _contains(options: PythonObject, value: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("operator").contains, options, value))
+    return Bool(py=py_call(native_loaded_module("operator").contains, options, value))
 
 
 def _psi_init(fields: PythonObject, d: Int, context: PythonObject) raises -> PythonObject:
     """`_psi_init`: ones, or the noise_variance_init values as float32."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var given = fields["noise_variance_init"]
     if given is None:
         var ones = decomp_f32(Python.tuple(d), context)
@@ -52,7 +53,7 @@ def _psi_init(fields: PythonObject, d: Int, context: PythonObject) raises -> Pyt
 
 def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`FactorAnalysis.fit`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     decomp_set_mode(fields, context)
     if not _contains(Python.tuple("lapack", "randomized"), fields["svd_method"]):
