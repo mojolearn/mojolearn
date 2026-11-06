@@ -5,6 +5,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 
 
 def byte_int_list_from_i32(address: Int, count: Int) raises -> PythonObject:
@@ -45,3 +46,24 @@ def byte_int_list_from_i64(address: Int, count: Int) raises -> PythonObject:
         if set_item(out._obj_ptr, i, item) != 0:
             raise cpy.unsafe_get_error()
     return out
+
+
+def byte_view_bytes(view: PythonObject, minimum: Int) raises -> List[UInt8]:
+    """The C-order bytes of an admitted memoryview (what `view.tobytes("C")`
+    returns), copied once by native code under one buffer pin, instead of a
+    Python bytes copy followed by a second `array.frombytes` copy. Refuses a
+    buffer holding fewer than `minimum` bytes, which a reader would overrun."""
+    var pin = AdmittedBorrowedBuffer(view)
+    var count = pin.layout.value().count * pin.layout.value().itemsize
+    if count < minimum:
+        pin.release()
+        raise Error("Samba: token id buffer is smaller than its (B, L) shape")
+    var out = List[UInt8](length=count, fill=0)
+    try:
+        pin.layout.value().copy_to(Int(out.unsafe_ptr()))
+    except error:
+        pin.release()
+        raise error
+    pin.release()
+    _ = view
+    return out^
