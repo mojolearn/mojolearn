@@ -19,7 +19,7 @@ from bindings.metrics_native_support import metric_warn, metric_is_integral, met
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
-from bindings.gp_svm_records import gp_kernel_arrays_reused, gp_x_known
+from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view

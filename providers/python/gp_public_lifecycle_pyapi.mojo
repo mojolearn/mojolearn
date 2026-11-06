@@ -25,7 +25,8 @@ from bindings.gp_kernel_public_native import gp_admit_kernel
 from bindings.gp_regressor_native import gp_regressor_operation
 from bindings.gp_classifier_native import gp_classifier_operation
 from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
-from bindings.gp_svm_records import gpsvm_no_fit_callbacks, gp_state_forget, gp_state_admitted, gp_state_remember, gp_x_mark, gp_x_release
+from bindings.gp_svm_records import gpsvm_no_fit_callbacks
+from bindings.gp_svm_gp_state import gp_state_forget, gp_state_admitted, gp_state_remember, gp_x_mark, gp_x_release
 from bindings.optimizer_public_words import stash_python_error
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode

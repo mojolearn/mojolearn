@@ -24,7 +24,7 @@ from bindings.family_common import (
 from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32, HP_I64
 from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
-from bindings.gp_svm_records import gp_kernel_arrays_reused, gp_x_known
+from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.mcls_classify import mcls_accuracy_fraction
 from bindings.mcls_common import mc_shape_of
 from bindings.host_inference_scalars import host_inference_scalar
