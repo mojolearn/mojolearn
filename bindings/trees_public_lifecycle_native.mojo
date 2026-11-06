@@ -21,6 +21,7 @@ from bindings.trees_public_score import forest_score
 from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast
 from bindings.trees_public_auxiliary import forest_auxiliary, forest_shape
 from bindings.trees_public_state import forest_restore_state, tree_is_fitted
+from bindings.trees_side_records import trees_admit_parameters
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -68,10 +69,10 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         return forest_auxiliary(model, method, args, context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var names = py_type(model)._parameter_names
-    for i in range(len(names)):  # driver-loop: stored constructor arguments before native conversions
-        if py_contains(fields, names[i]):
-            classical_admit_value(fields[names[i]], context)
+    # Once per configuration, not per call (lane perf-trees-owed): the
+    # identity record of the stored constructor arguments lives in the
+    # native side table (bindings/trees_side_records.mojo).
+    trees_admit_parameters(model, fields, py_type(model)._parameter_names, context)
     var fitting = operation == "trees_public_forest_fit"
     if fitting:
         # Parameter validation precedes input admission and conversion.

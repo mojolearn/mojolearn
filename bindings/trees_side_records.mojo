@@ -22,7 +22,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.classical_pandas import classical_admit_value
 
 comptime _MAX_DEPTH = 64
 
@@ -140,3 +141,44 @@ def _key_shallow(mut mods: NativeModules, key: PythonObject, value: PythonObject
     elif not (cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes):
         # A class can be reassigned on an instance: its admission is by type.
         _ = py_call(key.append, cls)
+
+
+comptime _PARAMS_SLOT = "trees_forest_params_v1"
+
+
+def trees_admit_parameters(model: PythonObject, fields: PythonObject, names: PythonObject,
+                           context: PythonObject) raises:
+    """`classical_admit_value` of every stored constructor parameter in
+    `names`, once per configuration.
+
+    Each forest public call (fit, predict, predict_proba, score) admitted all
+    ~26 parameters, each a full value admission (~40-60 C-API calls,
+    bindings/classical_pandas.mojo). The parameters are recorded by identity
+    (exact scalars, exact containers item by item); while the record matches,
+    those admissions would accept again, so only values whose admission can
+    depend on more than their identity (ndarrays, RandomState, container
+    subclasses, ...) are admitted again. A `set_params`, an assignment or an
+    in-place container edit changes the key and the full admission runs, in
+    the original order, with its original refusals."""
+    var mods = NativeModules()
+    var key = Python.list(names)
+    var residual = Python.list()
+    var recordable = True
+    for i in range(len(names)):  # driver-loop: stored constructor arguments (identity record)
+        var name = names[i]
+        if py_contains(fields, name):
+            _ = py_call(key.append, name)
+            if not trees_key_value(mods, key, residual, fields[name], 0):
+                recordable = False
+                break
+    if recordable:
+        var held = trees_side_get(_PARAMS_SLOT, model)
+        if held is not None and trees_key_same(held, key):
+            for i in range(len(residual)):  # driver-loop: parameters admitted by more than identity
+                classical_admit_value(residual[i][0], context, Int(py=residual[i][1]))
+            return
+    for i in range(len(names)):  # driver-loop: stored constructor arguments before native conversions
+        if py_contains(fields, names[i]):
+            classical_admit_value(fields[names[i]], context)
+    if recordable:
+        _ = trees_side_put(_PARAMS_SLOT, model, key)
