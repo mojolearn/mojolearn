@@ -27,6 +27,8 @@ from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, p
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
 from providers.python.lowbit_weight_pyapi import low_materialize, low_formats
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -1470,7 +1472,25 @@ def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObje
 
 # ------------------------------------------------------------ passive public owners
 
+# Class-watcher slot of an owner class that passed `_small_class` (payload:
+# the address of the connected class it was checked against).
+comptime _SMALL_CLASS_SLOT = "p3_small_mlp_owner_class_v1"
+
+
 def _small_class(cls: PythonObject, required: PythonObject) raises:
+    # The verdict depends only on the class rows (metaclass, MRO, namespaces)
+    # and connected constants: keep it per class under the type watcher
+    # (bindings/native_class_admission.mojo) and re-walk only after the class
+    # or an ancestor changed. Python 3.10/3.11 keep the full walk per call.
+    var mods = NativeModules()
+    var record = class_record(mods, _SMALL_CLASS_SLOT, cls)
+    if record is not None and Int(py=record) == Int(required._obj_ptr):
+        return
+    _small_class_walk(cls, required)
+    class_admit(mods, _SMALL_CLASS_SLOT, cls, PythonObject(Int(required._obj_ptr)))
+
+
+def _small_class_walk(cls: PythonObject, required: PythonObject) raises:
     var boundary = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var bi = boundary[].bi
     if py_type(cls) is not bi.type:
