@@ -1064,12 +1064,15 @@ def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, context: P
     var k = _xl_count(out, d + 3)
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    var active = Python.list()
+    # the active feature indices read natively, published as one list
+    # (py_list_int), not a bound `append` call per feature
+    var active_words = List[Int](capacity=max(k, 0))
     for i in range(k):  # driver-loop: over the active features (model structure)
-        _ = py_call(active.append, PythonObject(_xl_count(out, d + 4 + i)))
-        _ = y  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "active_", active)
+        active_words.append(_xl_count(out, d + 4 + i))
+    _ = out  # keep the result words alive through the reads above
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    py_setitem(fields, "active_", py_list_int(active_words))
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
     _ = y^
