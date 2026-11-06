@@ -13,6 +13,7 @@ from bindings.classical_metadata import classical_is_fitted
 from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral, metric_warn
 from bindings.classical_warnings import COLUMN_WARNING, _warning_category
+from bindings.label_integer_storage import labels_integer_storage
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -96,6 +97,18 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
     if fitting and value is None:
         raise Error(name + " requires y to be passed, but the target y is None.")
     classical_admit_value(value, context)
+    # An exact integer/bool ndarray or Array holds no element any check below
+    # can refuse (tolist yields exact ints/bools; the float loop never runs for
+    # it), so it is admitted from its dtype metadata, not label by label: the
+    # flatten + per-label admission cost scales with the rows of every
+    # LDA/QDA/NB/logistic/forest/GBDT-adapter classifier fit. Same refusals,
+    # same warning, nothing returned, so no bits change.
+    if labels_integer_storage(value, context):
+        if fitting:
+            var shape = labels_shape_of(value, context)
+            if len(shape) == 2 and shape[1] == 1:
+                metric_warn(COLUMN_WARNING, _warning_category(context), context)
+        return
     # An exact object ndarray may still hold arbitrary Python scalar objects.
     # Reading/flattening the references is native; admission precedes hashing,
     # sorting, equality and numeric conversion in the label encoder.

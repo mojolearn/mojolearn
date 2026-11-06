@@ -10,7 +10,8 @@ from bindings.mode_metadata_native import _fields, _class_fields, _plan, _config
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
-from bindings.classical_labels import _flatten_labels
+from bindings.classical_labels import _flatten_labels, labels_shape_of
+from bindings.label_integer_storage import labels_integer_storage
 from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_exceptions import classical_require_fitted
@@ -94,6 +95,18 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
     var kind = py_type(source)
     if kind is b.str or kind is b.bytes:
         raise Error("mojolearn: y must be a sequence of labels")
+    # A rank-1 integer ndarray or Array goes to the encoder unchanged:
+    # gp_encode_labels reads it with one native prepare_targets call. The
+    # snapshot below boxes, admits and converts every label as a Python object
+    # (about 2.3 s per 20000-label fit); it cannot refuse an integer label and
+    # yields the same Python-int classes and codes, so no bits change. Bool,
+    # float, 2-D, list, torch and object targets keep the snapshot.
+    if labels_integer_storage(source, context, False):
+        var target_shape = labels_shape_of(source, context)
+        if len(target_shape) == 1:
+            if target_shape[0] != rows:
+                raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(target_shape[0]) + "]")
+            return source
     # A single native container snapshot retains label identities and integer
     # precision. All following shape/finite/integral checks use that snapshot;
     # the numerical owner sees the finished native list, never the user input.

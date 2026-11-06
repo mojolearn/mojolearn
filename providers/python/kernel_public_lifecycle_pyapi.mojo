@@ -17,6 +17,7 @@ from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from bindings.classical_arrays import classical_address
 from bindings.classical_labels import labels_shape_of, _flatten_labels
+from bindings.label_integer_storage import labels_integer_storage
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
@@ -128,15 +129,19 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
     if len(shape) > 0 and shape[0] != rows:
         raise Error("ValueError: Found input variables with inconsistent numbers of samples: ["
                     + String(rows) + ", " + String(shape[0]) + "]")
-    var flat = _flatten_labels(source, context)
-    classical_admit_value(flat, context)
-    for i in range(len(flat)):  # driver-loop: admitted label storage, never Python element protocols
-        if py_type(flat[i]) is b.complex:
-            raise Error("ValueError: Complex data not supported: kernel method got a complex y.")
-        host_inference_scalar(flat[i], context)
-        if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
-            if not isfinite(metric_float(flat[i], context)):
-                raise Error("ValueError: Input y contains NaN or infinity")
+    # An exact integer/bool ndarray or Array holds no complex, non-finite or
+    # Python-object element, so the element walk cannot refuse it: admit it
+    # from its dtype metadata instead of label by label (nothing is returned).
+    if not labels_integer_storage(source, context):
+        var flat = _flatten_labels(source, context)
+        classical_admit_value(flat, context)
+        for i in range(len(flat)):  # driver-loop: admitted label storage, never Python element protocols
+            if py_type(flat[i]) is b.complex:
+                raise Error("ValueError: Complex data not supported: kernel method got a complex y.")
+            host_inference_scalar(flat[i], context)
+            if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
+                if not isfinite(metric_float(flat[i], context)):
+                    raise Error("ValueError: Input y contains NaN or infinity")
     var cls = py_type(source)
     var reshape = cls is py_get(context, "ndarray") or cls is context["array_class"] or _ordinary_torch(cls, context)
     if len(shape) == 2 and shape[1] == 1 and reshape:

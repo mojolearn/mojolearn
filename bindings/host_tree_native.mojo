@@ -13,7 +13,7 @@ from bindings.host_archive_native import host_archive_check_layout, host_archive
 from bindings.host_archive_lifetime import host_archive_finalize
 from bindings.native_numpy_metadata import native_numpy_dtype
 from core.scaler_fit_impl import scaler_cast
-from core.host_tree_impl import host_tree_widen, host_tree_argmax, host_tree_column_copy
+from core.host_tree_impl import host_label_first_unconverted, host_label_gather_i64, host_label_gather_f64, host_tree_widen, host_tree_argmax, host_tree_column_copy
 from core.sha256 import Sha256
 
 
@@ -174,12 +174,37 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
     var indices = host_tree_argmax(Int(py=classical_address(vote)), rows, Int(py=vote.shape[1]))
     _ = vote_owner^
     if (integers and fits) or (numbers and not integers):
-        var out = host_archive_typed(Python.tuple(rows), "<i8" if integers else "<f8", context["output_context"])
-        for i in range(rows):  # driver-loop: publish completed native label selections
+        # Each saved class is converted once (the same int()/float() of the
+        # same object the per-row conversion made), then the rows are gathered
+        # from native words: no Python object per predicted row, same bits.
+        # A class that fails to convert raises only when a row selects it, as
+        # before (integer classes were all range-checked above).
+        var k = len(classes)
+        var words_i = List[Int64](length=k, fill=0)
+        var words_f = List[Float64](length=k, fill=0.0)
+        var converted = List[Bool](length=k, fill=True)
+        for c in range(k):  # driver-loop: over the saved class labels (model structure)
+            try:
+                if integers:
+                    words_i[c] = Int64(Int(py=classes[c]))
+                else:
+                    words_f[c] = Float64(py=classes[c])
+            except:
+                converted[c] = False
+        var failed = host_label_first_unconverted(indices, converted)
+        if failed >= 0:
+            # Re-run the selected class's conversion for its own error.
             if integers:
-                MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))[i] = Int64(Int(py=classes[indices[i]]))
+                _ = Int(py=classes[indices[failed]])
             else:
-                MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))[i] = Float64(py=classes[indices[i]])
+                _ = Float64(py=classes[indices[failed]])
+            raise Error("TypeError: a saved class label has no native numeric word")
+        var out = host_archive_typed(Python.tuple(rows), "<i8" if integers else "<f8", context["output_context"])
+        if integers:
+            host_label_gather_i64(indices, words_i, Int(py=classical_address(out)))
+        else:
+            host_label_gather_f64(indices, words_f, Int(py=classical_address(out)))
+        _ = out  # keep the Python object alive through the native gather above
         return out
     var out = Python.list()
     for i in range(rows):  # driver-loop: publish completed native string/bool/large-integer labels

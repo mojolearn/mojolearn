@@ -14,7 +14,7 @@ from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
 from core.host_inference_impl import host_inference_raw_finite
-from core.host_tree_impl import host_tree_argmax
+from core.host_tree_impl import host_tree_argmax, host_label_codes_in_range, host_label_first_unconverted, host_label_gather_i64, host_label_gather_f64
 from core.host_sparse_impl import host_sparse_uint64_bound
 
 
@@ -89,7 +89,15 @@ def host_logistic_classes(source: PythonObject, context: PythonObject) raises ->
     return labels
 
 
-def _logistic_decode(labels: PythonObject, indices: List[Int], array_labels: Bool, context: PythonObject) raises -> PythonObject:
+def _host_logistic_selected(labels: PythonObject, indices: List[Int]) raises -> PythonObject:
+    """The list of selected label references (object-label result)."""
+    var selected = Python.list()
+    for i in range(len(indices)):  # cpu-route: object-label output, one stored class reference per predicted row
+        _ = py_call(selected.append, labels[indices[i]])
+    return selected
+
+
+def _host_logistic_decode(labels: PythonObject, indices: List[Int], array_labels: Bool, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var integers = True
     var numbers = True
@@ -97,34 +105,47 @@ def _logistic_decode(labels: PythonObject, indices: List[Int], array_labels: Boo
         var kind = _logistic_label_kind(labels[i], context)
         integers = integers and kind == 1
         numbers = numbers and kind != 0
-    var selected = Python.list()
-    for i in range(len(indices)):  # driver-loop: native publication of selected label references
-        if indices[i] < 0 or indices[i] >= len(labels):
-            raise Error("predicted class index exceeds the fitted class table")
-        _ = py_call(selected.append, labels[indices[i]])
+    var k = len(labels)
+    if not host_label_codes_in_range(indices, k):
+        raise Error("predicted class index exceeds the fitted class table")
     if not numbers:
-        return selected
+        return _host_logistic_selected(labels, indices)
     if array_labels:
         # The established decode's numeric gather tests `not classes`.
         # Multi-element ndarrays reject that truth conversion; preserve the
         # existing refusal without invoking a NumPy or element truth slot.
         raise Error("The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()")
-    var out = host_archive_typed(Python.tuple(len(indices)), "<i8" if integers else "<f8", context["output_context"])
+    # Each class is converted once, not once per predicted row: the k words
+    # and whether each converts are exactly what the per-row conversion of a
+    # selected reference produced (same int()/float() of the same object), so
+    # the result and its fallback are unchanged; rows are gathered natively.
+    var words_i = List[Int64](length=k, fill=0)
+    var words_f = List[Float64](length=k, fill=0.0)
+    var fits = List[Bool](length=k, fill=True)
+    for i in range(k):  # driver-loop: over the fitted classes (model structure)
+        try:
+            if integers:
+                var value = py_call(b.int, labels[i])
+                if Bool(py=value < PythonObject(-9223372036854775807 - 1)) or Bool(py=value > PythonObject(9223372036854775807)):
+                    fits[i] = False
+                else:
+                    words_i[i] = Int64(Int(py=value))
+            else:
+                words_f[i] = Float64(py=labels[i])
+        except:
+            # All conversions above have exact native scalar admission. This is
+            # only the established numeric-overflow result contract, no callback.
+            fits[i] = False
     # The old decode returns an Array when the selected labels fit, even if
     # an unselected table label does not. Otherwise it returns the label list.
-    try:
-        for i in range(len(indices)):  # driver-loop: completed native label result publication
-            if integers:
-                var value = py_call(b.int, selected[i])
-                if Bool(py=value < PythonObject(-9223372036854775807 - 1)) or Bool(py=value > PythonObject(9223372036854775807)):
-                    return selected
-                MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))[i] = Int64(Int(py=value))
-            else:
-                MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))[i] = Float64(py=selected[i])
-    except:
-        # All conversions above have exact native scalar admission. This is
-        # only the established numeric-overflow result contract, no callback.
-        return selected
+    if host_label_first_unconverted(indices, fits) >= 0:
+        return _host_logistic_selected(labels, indices)
+    var out = host_archive_typed(Python.tuple(len(indices)), "<i8" if integers else "<f8", context["output_context"])
+    if integers:
+        host_label_gather_i64(indices, words_i, Int(py=classical_address(out)))
+    else:
+        host_label_gather_f64(indices, words_f, Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native gather above
     return out
 
 
@@ -214,6 +235,6 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
     _ = weights^
     _ = scores^
     if operation == "host_infer_predict":
-        out = _logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
+        out = _host_logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
     var b = Python.import_module("builtins")
     return classical_input(out, context, "logistic result") if py_type(out) is not b.list and public and py_get(context, "ndarray") is not None else out
