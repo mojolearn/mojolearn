@@ -19,7 +19,7 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points and C builtins connected at import
 # (python/mojolearn/_native_labels_bridge.py `label_context`).
-from bindings.native_array_storage import native_array_from_bytes, native_array_from_values, native_array_zeros
+from bindings.native_array_storage import native_array_from_bytes, native_array_from_values, native_array_zeros, native_array_empty
 from bindings.native_loaded_module import native_loaded_module
 from std.math import isfinite
 from std.memory import bitcast, memcpy
@@ -39,6 +39,11 @@ from bindings.arena_prog_native import _metrics_run
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list, LabelTypeKinds
 from bindings.label_snapshot_native import label_array_list
+from bindings.label_integer_storage import _ndarray_buffer_address
+from bindings.label_input_sources import (
+    labels_list_scalar_kind, labels_series_values, labels_text_storage,
+    LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
+from bindings.str_labels_native import StrTable, _read, _sorted
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -816,6 +821,210 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
     return view^
 
 
+def _encode_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[LabelsView]:
+    """The numeric label block `labels_encode_labels` encodes with one
+    native `prepare_targets` call, or None for what only the label input
+    step reads. Admits `y` (`classical_admit_value`) exactly once, as
+    `_numeric_label_view` does.
+
+    Takes everything `_numeric_label_view` takes, and also (perf2-labels,
+    2026-11-06), each with exactly the classes and codes the label input
+    step gives it: that step lists the same values in the same C order
+    (`tolist`, then the depth-first flatten) and encodes the flat list of
+    exact ints / floats natively (`_list_labels`) or by the ORDER RULE,
+    whose sorted distinct values and dense codes are the same:
+    - a numpy-backed pandas Series: its stored ndarray, what `tolist()`
+      lists (`labels_series_values`; a DataFrame or extension storage still
+      takes the label input step);
+    - a C-ordered matrix: its storage order is the flatten order (an
+      F-ordered one still takes the label input step);
+    - a bool Array: bytes 0/1 read as uint8, the classes returned as bools
+      (`bool_source`), as a bool buffer already is;
+    - one-byte '|' Array typestrs ('|u1', '|i1');
+    - int8 / uint16 / float16 storage, widened once to int64 / float64 by
+      the native cast: the exact Python ints / floats `tolist()` gives.
+    `_numeric_label_view` itself is unchanged (LabelEncoder's device route
+    reads it with its own dtype table)."""
+    classical_admit_value(y, context)
+    var b = labels_builtins()
+    var cls = py_type(y)
+    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes:
+        return None
+    var source = y
+    if native_pandas_exact(y):
+        source = labels_series_values(y, context)
+        if source is None:
+            return None
+        cls = py_type(source)
+    var found: Optional[LabelsView] = None
+    try:
+        if cls is context["array_class"]:
+            found = _view_of_array(source)
+        else:
+            var probe = native_buffer_view(source)
+            bool_source = String(probe.format) == "?"
+            found = _view_of_buffer(source, "y", context)
+    except:
+        bool_source = False
+        return None
+    var view = found.value().copy()
+    var n = view.size()
+    var big = 0
+    for k in range(view.ndim()):  # driver-loop: over array rank metadata
+        if view.shape[k] > big:
+            big = view.shape[k]
+    if n == 0 or (n != big and not view.c_order()):
+        bool_source = False
+        return None
+    var typestr = view.typestr
+    if typestr.startswith("|"):
+        typestr = "<" + String(typestr[byte=1:typestr.byte_length()])
+    if typestr == "<b1":
+        # A bool's bytes are 0 and 1, read as uint8 (as `_buffer_typestr`
+        # reads a '?' buffer); the classes come back as bools.
+        bool_source = True
+        typestr = "<u1"
+    if typestr != view.typestr:
+        view = LabelsView(view.keep, view.addr, view.shape.copy(), view.strides.copy(), typestr, view.item)
+    if _encode_code(view.typestr) < 0:
+        if view.typestr != "<i1" and view.typestr != "<u2" and view.typestr != "<f2":
+            bool_source = False
+            return None
+        # Every element of this contiguous block widens exactly; the copy
+        # runs in storage order, which is the C order checked above.
+        var target = String("<f8") if view.typestr == "<f2" else String("<i8")
+        var wide = labels_vector(n, target, context)
+        labels_cast(view.addr, view.typestr, labels_address(wide), target, n, context)
+        _ = view.keep  # keep the source owner alive through the native cast above
+        _ = source
+        view = _view_of_array(wide)
+    _ = source  # the Series' stored ndarray is kept alive by the view's owner
+    return view^
+
+
+def _flat_list_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
+    """An exact flat list or tuple of exact ints, exact floats or exact
+    bools, encoded by one native `prepare_targets` call without the label
+    input step's walks (flatten + per-label admission, then the
+    `_list_labels` type walk): the item classes are read once through the
+    container's C storage (`labels_list_scalar_kind`). Ints and floats get
+    exactly `_list_labels`' result (the same native array of the same
+    values). Bools: the ORDER RULE sorts them False < True with dense codes,
+    which is what the native encoder gives their 0/1 values with the classes
+    returned as bools. None for anything else, and for an int outside int64
+    (the label input step then refuses or encodes it as before)."""
+    var kind = labels_list_scalar_kind(y)
+    if kind == LABELS_LIST_OTHER:
+        return None
+    var n = len(y)
+    var integral = kind != LABELS_LIST_FLOAT
+    var store = PythonObject(None)
+    try:
+        store = native_array_empty(String("q" if integral else "d"))
+        # array.extend over an exact list or tuple whose items were all
+        # checked exact int / float / bool above: C conversion per item, no
+        # Python hook (native_array_from_values' own rule).
+        _ = py_call(store.extend, y)
+    except:
+        return None  # an int outside int64: a class only Python can hold
+    var array = classical_wrap_array(store, Python.tuple(n), "<i8" if integral else "<f8", "C", context)
+    return _native_labels(_view_of_array(array), kind == LABELS_LIST_BOOL, context)
+
+
+def _text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
+    """An exact ndarray of native unicode ('<U', rank >= 1, nonempty)
+    encoded from its buffer: each element's UCS4 code points are read in C
+    order (trailing NULs dropped, as `tolist()` drops them), the distinct
+    labels ordered by code point (Python's str order) with the stable merge
+    sort of `bindings/str_labels_native.mojo`, and the dense codes written
+    natively. Only the k class strings are made, by `ndarray.item` at each
+    class's first C-order index (the str `tolist()` gives there). The
+    ORDER RULE's `sorted(dict.fromkeys(labels))` over the listed strs gives
+    the same classes and codes. None for anything else."""
+    if not labels_text_storage(y, context):
+        return None
+    var ndarray = context["ndarray"]
+    var rank = Int(py=y.ndim)
+    var pyshape = y.shape
+    var pystrides = y.strides
+    var shape = List[Int]()
+    var strides = List[Int]()
+    var n = 1
+    for k in range(rank):  # driver-loop: over array rank metadata
+        shape.append(Int(py=pyshape[k]))
+        strides.append(Int(py=pystrides[k]))
+        n *= shape[k]
+    if n == 0:
+        return None
+    var width = Int(py=y.itemsize) // 4
+    var address = _ndarray_buffer_address(y)
+    var table = StrTable()
+    var index = List[Int](length=rank, fill=0)
+    var offset = 0
+    for _ in range(n):  # driver-loop: the explicit label input step, one native read per label
+        var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address + offset)
+        var count = width
+        while count > 0 and source[count - 1] == 0:  # driver-loop: over one label's trailing NUL padding
+            count -= 1
+        table.starts.append(len(table.points))
+        table.lengths.append(count)
+        for c in range(count):  # driver-loop: over one label's code points
+            table.points.append(source[c])
+        var axis = rank - 1
+        while axis >= 0:  # driver-loop: over array rank metadata (C-order index step)
+            index[axis] += 1
+            offset += strides[axis]
+            if index[axis] < shape[axis]:
+                break
+            offset -= strides[axis] * shape[axis]
+            index[axis] = 0
+            axis -= 1
+    _ = y  # the caller's ndarray owns the buffer read above
+    var order = _sorted(table, n)
+    var classes = Python.list()
+    var codes = labels_vector(n, "<i4", context)
+    var out = _I32P(unsafe_from_address=labels_address(codes))
+    var item = ndarray.item
+    var current = -1
+    for t in range(n):  # driver-loop: over the sorted labels; a Python str only per distinct class
+        var i = order[t]
+        if t == 0 or table.compare(order[t - 1], i) != 0:
+            current += 1
+            _ = py_call(classes.append, py_call(item, y, PythonObject(i)))
+        out[i] = Int32(current)
+    _ = codes  # keep the Python object alive through the native writes above
+    return ClassicalLabels(classes, codes, n)
+
+
+def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
+    """A flat list of admitted str labels (exact str or NumPy's str scalar,
+    the only text kinds the flatten admits) encoded by the native str-label
+    reader: code points read once per label through the C API, ordered by
+    code point with a stable merge sort, so each class is the first label
+    of its run, as `dict.fromkeys` keeps the first. Same classes and codes
+    as the ORDER RULE; None when a label is not a str (numbers and mixed
+    lists keep the ORDER RULE's own refusals and encodings)."""
+    var n = len(flat)
+    if n == 0:
+        return None
+    var table = StrTable()
+    if not _read(flat, table):
+        return None
+    var order = _sorted(table, n)
+    var classes = Python.list()
+    var codes = labels_vector(n, "<i4", context)
+    var out = _I32P(unsafe_from_address=labels_address(codes))
+    var current = -1
+    for t in range(n):  # driver-loop: over the sorted labels
+        var i = order[t]
+        if t == 0 or table.compare(order[t - 1], i) != 0:
+            current += 1
+            _ = py_call(classes.append, flat[i])
+        out[i] = Int32(current)
+    _ = codes  # keep the Python object alive through the native writes above
+    return ClassicalLabels(classes, codes, n)
+
+
 def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
     """`_labels._encode_label_list_native`: a flat list or tuple whose every
     label is exactly an int, or exactly a float, through the native encoder;
@@ -830,6 +1039,8 @@ def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[Clas
         var t = py_type(y[i])
         all_int = all_int and t is b.int
         all_float = all_float and t is b.float
+        if not all_int and not all_float:
+            break  # the answer is already None; str/object lists stop at their first label
     if not all_int and not all_float:
         return None
     var store = PythonObject(None)
@@ -848,13 +1059,27 @@ def labels_encode_labels(var y: PythonObject, context: PythonObject) raises -> C
     var b = labels_builtins()
     y = classifier_label_list(y, context)
     var bool_source = False
-    var numeric = _numeric_label_view(y, context, bool_source)
+    # perf2-labels: a numpy-backed Series, a C-ordered matrix, a bool Array
+    # and int8/uint16/float16 storage join the numeric buffers here; flat
+    # lists of exact ints/floats/bools and '<U' ndarrays skip the label input
+    # step's per-label walks. Each gives the classes and codes that step
+    # gives (see each helper); everything else takes that step unchanged.
+    var numeric = _encode_label_view(y, context, bool_source)
     if numeric:
         return _native_labels(numeric.value(), bool_source, context)
+    var direct = _flat_list_labels(y, context)
+    if direct:
+        return direct.value().copy()
+    var text = _text_buffer_labels(y, context)
+    if text:
+        return text.value().copy()
     var flat = _flatten_labels(y, context)
     var listed = _list_labels(flat, context)
     if listed:
         return listed.value().copy()
+    var named = _text_list_labels(flat, context)
+    if named:
+        return named.value().copy()
     return _sorted_classes(flat, context)
 
 
