@@ -123,16 +123,24 @@ comptime OPT_DOOR = _Global[StorageType=OptDoor, name="MojoOptimizerPublicDoor",
 
 
 def door_ready() raises:
+    door_ready(PythonObject(None))
+
+
+def door_ready(guarded: PythonObject) raises:
     """Resolve the builtins, `mojolearn.Array`, `TrainDeviceArray`, the
-    `array` type and the refusal tables once per process."""
+    `array` type and the refusal tables once per process. `guarded` is a
+    context its caller has just run `opt_guards` on (the router): when it
+    is the door's own context the guards are not walked a second time."""
     var d = OPT_DOOR.get_or_create_ptr()
     if d[].ready:
-        opt_guards(d[].context)
+        if d[].context is not guarded:
+            opt_guards(d[].context)
         return
     d[].bi = Python.import_module("builtins")
     var training = Python.import_module("mojolearn._training_impl")
     d[].context = py_fields(training)["_OPT_CONTEXT"]
-    opt_guards(d[].context)
+    if d[].context is not guarded:
+        opt_guards(d[].context)
     # Keep the import connection's guarded Array layout and native storage
     # type even when a module field is replaced before the first operation.
     d[].array_cls = d[].context["array_class"]

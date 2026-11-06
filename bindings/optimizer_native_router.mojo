@@ -244,7 +244,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     opt_guards(context)
     if operation == "seqdev_finalize":
         return sequence_device_finalize(owner, values, context)
-    door_ready()
+    # opt_guards just ran on this context; when it is the door's own
+    # (training._OPT_CONTEXT, as connected) the door does not walk it again.
+    door_ready(context)
     var b = Python.import_module("builtins")
     if py_type(values) is not b.tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
