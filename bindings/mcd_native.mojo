@@ -13,6 +13,7 @@
 # private `_precision` (kept also when store_precision=False, for
 # get_precision), the values the Python shell held as device matrices.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.math import ceil, floor, inf
@@ -367,7 +368,7 @@ def mcd_operation(model: PythonObject, operation: String, args: PythonObject, co
     if operation == "fit" or operation == "fit_predict":
         if envelope:
             var c = fields["contamination"]
-            var op = Python.import_module("operator")
+            var op = native_loaded_module("operator")
             if not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c, PythonObject(0.5)))):
                 raise Error("contamination must be in (0, 0.5]")
         var mode = decomp_mode(fields["numeric_mode"], context)
@@ -454,7 +455,7 @@ def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var call = PythonObject(from_borrowed=args_ptr)
         if len(call) != 4:
             raise Error("TypeError: mcd_native_call requires model, operation, arguments and connected context")
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple or py_type(call[3]) is not b.dict:
             raise Error("TypeError: native MinCovDet requires an operation, an argument tuple and its context")
         var context = call[3]

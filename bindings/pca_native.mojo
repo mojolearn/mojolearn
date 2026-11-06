@@ -24,11 +24,13 @@ def _pca_admitted(model: PythonObject, loading: Bool, context: PythonObject) rai
     var cls = model if loading else py_type(model)
     if py_type(cls) is not b.type:
         return False
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        if mro[k] is context["pca_class"]:
-            return True
-    return False
+    var target = context["pca_class"]
+    if py_type(target) is not b.type:
+        return False
+    # CPython's own subtype test walks the same tp_mro by identity in one
+    # native call (no MRO tuple fetch or per-row Python indexing).
+    ref cpy = Python().cpython()
+    return cpy.lib.get_function[Int32]("PyType_IsSubtype")(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

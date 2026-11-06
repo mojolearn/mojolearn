@@ -13,6 +13,7 @@
 # uploaded once, and the dictionary, mean and components are not downloaded
 # and re-uploaded between the two.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
@@ -34,22 +35,35 @@ def _name(model: PythonObject) raises -> String:
     return String(py=py_type(model).__name__)
 
 
+def _str_instance(value: PythonObject) raises -> Bool:
+    # `isinstance(value, str)` through CPython's own native entry (the same
+    # protocol, without a Python-level builtins.isinstance call).
+    ref cpy = Python().cpython()
+    var found = cpy.lib.get_function[Int32]("PyObject_IsInstance")(value._obj_ptr, native_loaded_module("builtins").str._obj_ptr)
+    if found < 0:
+        raise cpy.unsafe_get_error()
+    return found == 1
+
+
 def _is_str(value: PythonObject, text: String) raises -> Bool:
-    var b = Python.import_module("builtins")
-    return Bool(py=py_call(b.isinstance, value, b.str)) and String(py=value) == text
+    return _str_instance(value) and String(py=value) == text
 
 
 def _algo_index(value: PythonObject) raises -> Int:
-    # The position in `_SPARSE_ALGOS`, -1 when not one of them.
-    if _is_str(value, "lasso_lars"):
+    # The position in `_SPARSE_ALGOS`, -1 when not one of them. One instance
+    # check and one string read for the five names.
+    if not _str_instance(value):
+        return -1
+    var text = String(py=value)
+    if text == "lasso_lars":
         return 0
-    if _is_str(value, "lasso_cd"):
+    if text == "lasso_cd":
         return 1
-    if _is_str(value, "lars"):
+    if text == "lars":
         return 2
-    if _is_str(value, "omp"):
+    if text == "omp":
         return 3
-    if _is_str(value, "threshold"):
+    if text == "threshold":
         return 4
     return -1
 
@@ -69,7 +83,12 @@ def _fit_index(fit_algorithm: PythonObject) raises -> Int:
 
 def _is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
     # The model's class MRO, read through type's own descriptor, holds cls.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
+    if py_type(cls) is b.type:
+        # CPython's own subtype test walks the same tp_mro by identity in one
+        # native call (no MRO tuple fetch or per-row Python indexing).
+        ref cpy = Python().cpython()
+        return cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(model)._obj_ptr, cls._obj_ptr) != 0
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         if mro[k] is cls:
@@ -116,7 +135,7 @@ def _sparse_encode(mut kit: DecompKit, x: Int, d: Int, algorithm: PythonObject, 
     # `_expansion_decomp._sparse_encode`.
     var index = _algo_index(algorithm)
     if index < 0:
-        raise Error("algorithm=" + String(py=py_call(Python.import_module("builtins").repr, algorithm))
+        raise Error("algorithm=" + String(py=py_call(native_loaded_module("builtins").repr, algorithm))
                     + " is not carried; one of " + String(XD_SPARSE_ALGOS))
     var n = kit.nrows(x)
     var m = kit.ncols(x)
@@ -541,7 +560,7 @@ def dict_learning_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var call = PythonObject(from_borrowed=args_ptr)
         if len(call) != 4:
             raise Error("TypeError: dict_learning_native_call requires model, operation, arguments and connected context")
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple or py_type(call[3]) is not b.dict:
             raise Error("TypeError: native dictionary learning requires an operation, an argument tuple and its context")
         var model = call[0]

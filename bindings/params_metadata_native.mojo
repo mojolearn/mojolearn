@@ -4,7 +4,8 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -13,13 +14,35 @@ from bindings.optimizer_public_words import stash_python_error, optimizer_python
 
 
 def _resolved(cls: PythonObject, name: PythonObject, missing: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    var mods = NativeModules()
+    return _resolved(mods, cls, name, missing)
+
+
+def _resolved(mut mods: NativeModules, cls: PythonObject, name: PythonObject, missing: PythonObject) raises -> PythonObject:
+    # `mods`: one module admission per parameter read instead of one per
+    # ancestry row; _class_fields reuses its per-class key admission.
+    var b = mods.module("builtins")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: raw class namespaces, without descriptor calls
-        var fields = _class_fields(ancestry[i])
+        var fields = _class_fields(mods, ancestry[i])
         if py_contains(fields, name):
             return fields[name]
     return missing
+
+
+comptime _PARAMS_CLASS_SLOT = "params_metadata_class_v1"
+comptime _PARAMS_GETTER_SLOT = "params_metadata_getter_v1"
+
+
+def _has_getter(mut mods: NativeModules, kind: PythonObject, missing: PythonObject) raises -> Bool:
+    # Whether a value's class defines __get__: depends only on that class's
+    # rows, so it is resolved once per class state.
+    var record = class_record(mods, _PARAMS_GETTER_SLOT, kind)
+    if record is not None:
+        return Bool(py=record)
+    var found = _resolved(mods, kind, PythonObject("__get__"), missing) is not missing
+    class_admit(mods, _PARAMS_GETTER_SLOT, kind, PythonObject(found))
+    return found
 
 
 def _connected_plan(cls: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -51,20 +74,42 @@ def _loaded_data_class(module_name: String, name: String) raises -> PythonObject
     return cls if cls is not None and py_type(cls) is b.type else PythonObject(None)
 
 
+def _plan_reused(mut mods: NativeModules, cls: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The class part of _plan (connected plan and pinned descriptor
+    # identities) reads only the class rows, watched through
+    # native_class_admission, plus the plan's own pinned table. Reuse it
+    # while the class state, the plans mapping and the plan object and its
+    # pinned table are unchanged. The record never holds the class itself.
+    var record = class_record(mods, _PARAMS_CLASS_SLOT, cls)
+    if record is None:
+        return PythonObject(None)
+    if record[1] is not context["plans"] or record[2] is not context["missing"]:
+        return PythonObject(None)
+    var plan = _connected_plan(cls, context)
+    if plan is not record[0] or plan["pinned"] is not record[3] or len(record[3]) != Int(py=record[4]):
+        return PythonObject(None)
+    return plan
+
+
 def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    var mods = NativeModules()
+    var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameters refuse Python metaclass protocols")
-    var plan = _connected_plan(cls, context)
+    var plan = _plan_reused(mods, cls, context)
     if plan is None:
-        if py_contains(context["pending"], cls):
-            raise Error("RuntimeError: " + String(context["pending"][cls]))
-        raise Error("TypeError: Python parameter callbacks are not accepted; use a connected native estimator")
-    var pinned = plan["pinned"]
-    for i in range(len(pinned)):  # driver-loop: verify connected method/parameter descriptor identities
-        if _resolved(cls, pinned[i][0], context["missing"]) is not pinned[i][1]:
-            raise Error("TypeError: native parameter methods or descriptors changed after connection")
+        plan = _connected_plan(cls, context)
+        if plan is None:
+            if py_contains(context["pending"], cls):
+                raise Error("RuntimeError: " + String(context["pending"][cls]))
+            raise Error("TypeError: Python parameter callbacks are not accepted; use a connected native estimator")
+        var pinned = plan["pinned"]
+        for i in range(len(pinned)):  # driver-loop: verify connected method/parameter descriptor identities
+            if _resolved(mods, cls, pinned[i][0], context["missing"]) is not pinned[i][1]:
+                raise Error("TypeError: native parameter methods or descriptors changed after connection")
+        class_admit(mods, _PARAMS_CLASS_SLOT, cls,
+                    Python.tuple(plan, context["plans"], context["missing"], pinned, PythonObject(len(pinned))))
     for name in ["get_params", "_get_param_names", "__getattribute__", "__getattr__"]:  # driver-loop: refuse instance protocol overrides before lookup
         if py_contains(fields, PythonObject(name)):
             raise Error("TypeError: native parameters cannot invoke instance protocol overrides")
@@ -73,9 +118,9 @@ def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) rais
 
 def _value(model: PythonObject, fields: PythonObject, name: PythonObject,
            context: PythonObject, missing_error: String) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    var mods = NativeModules()
     var cls = py_type(model)
-    var value = _resolved(cls, name, context["missing"])
+    var value = _resolved(mods, cls, name, context["missing"])
     if value is not context["missing"]:
         var kind = py_type(value)
         if kind is native_loaded_module("types").MemberDescriptorType:
@@ -88,7 +133,7 @@ def _value(model: PythonObject, fields: PythonObject, name: PythonObject,
                 var failure = stash_python_error()
                 raise failure^
             return PythonObject(from_owned=raw)
-        if _resolved(kind, PythonObject("__get__"), context["missing"]) is not context["missing"]:
+        if _has_getter(mods, kind, context["missing"]):
             raise Error("TypeError: native parameters cannot invoke Python properties; store constructor parameters as native fields")
     if py_contains(fields, name):
         # See native_instance_item for the retained Mojo subscript failure.

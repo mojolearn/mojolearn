@@ -333,26 +333,46 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     if d != fitted:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(fitted))
     var x_fit_obj = family_field(fields, "X_fit_")
-    var x_fit_meta = family_f32_snapshot(x_fit_obj, 2, "X_fit_", context)
-    var x_fit = x_fit_meta.keep
-    var n = x_fit_meta.source.rows
     var t = _km_int(family_field(fields, "n_targets_"), "n_targets_")
     var kp = _km_params(fields, True, context)
     var kernel = Int(py=kp[0])
     _km_chi2_input(xq_meta, kernel, where)
     var dual_obj = family_field(fields, "dual_coef_")
-    var dual_meta = family_f32_snapshot(dual_obj, -1, "dual_coef_", context)
-    var dual = dual_meta.keep
-    if t < 1 or x_fit_meta.source.cols != d or dual_meta.count != n * t:
-        raise Error("ValueError: KernelRidge fitted arrays do not match the fitted dimensions")
     var squeeze = _km_bool(family_field(fields, "_squeeze"), "_squeeze")
-    var out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
     var admission = _km_extension(fields, args[0], where, context)
     var binding = admission[0]
     var native = admission[1]
     var flags = admission[2]
+    var info = PythonObject(_km_int(family_field(fields, "info_"), "info_"))
+    if resident:
+        # Resident hit first: the held key retains X_fit_ and dual_coef_ by
+        # identity with the shape they were admitted with at upload, so the
+        # two fitted-array snapshots are needed only to upload again.
+        var held_rows = _km_resident_hit(model, binding, native, flags, x_fit_obj, dual_obj, d, t, context)
+        if held_rows >= 0:
+            var hit_handle = py_get(py_get(py_fields(model), PythonObject(_HOLDER)), PythonObject("index"))[1]
+            var hit_out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
+            var hit_params = Python.list(PythonObject(held_rows), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
+                                         info, PythonObject(q))
+            var hit_addresses = Python.list(PythonObject(xq_meta.source.addr), classical_address(hit_out))
+            if native is not None:
+                _ = kernel_method_execute(native, "kernel_ridge_predict_resident", hit_addresses, hit_params, Int(py=hit_handle))
+            else:
+                _ = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), hit_handle, hit_addresses, hit_params)
+            _ = hit_out  # keep the Python object alive through the native call above
+            _ = xq  # keep the Python object alive through the native call above
+            _ = xq_meta
+            return hit_out
+    var x_fit_meta = family_f32_snapshot(x_fit_obj, 2, "X_fit_", context)
+    var x_fit = x_fit_meta.keep
+    var n = x_fit_meta.source.rows
+    var dual_meta = family_f32_snapshot(dual_obj, -1, "dual_coef_", context)
+    var dual = dual_meta.keep
+    if t < 1 or x_fit_meta.source.cols != d or dual_meta.count != n * t:
+        raise Error("ValueError: KernelRidge fitted arrays do not match the fitted dimensions")
+    var out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
-                             PythonObject(_km_int(family_field(fields, "info_"), "info_")), PythonObject(q))
+                             info, PythonObject(q))
     var handle = PythonObject(None)
     if resident:
         handle = _km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit_meta, dual_meta, n, d, t, context, native, flags)
@@ -674,6 +694,36 @@ def _km_release(model: PythonObject, release: String) raises:
         _ = py_call(neural_descriptor_entry(held[2], release), PythonObject(_km_int(held[1], "resident handle")))
     except:
         pass
+
+
+def _km_resident_hit(model: PythonObject, binding: PythonObject, native: PythonObject, flags: Int,
+                     x_fit_obj: PythonObject, dual_obj: PythonObject, d: Int, t: Int,
+                     context: PythonObject) raises -> Int:
+    """The held resident upload's row count when it matches exactly what
+    `_km_resident_krr` would accept for these fitted objects, else -1. Never
+    releases or raises on a malformed holder: the full path does that."""
+    if native is None:
+        if _km_door(binding, "kernel_ridge_resident_prepare", context) is None:
+            return -1
+    elif (flags & 1) == 0:
+        return -1
+    var b = native_loaded_module("builtins")
+    var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
+    if holder is None or py_type(holder) is not b.dict:
+        return -1
+    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    if held is None or py_type(held) is not b.tuple or (len(held) != 3 and len(held) != 5):
+        return -1
+    var key = held[0]
+    if py_type(key) is not b.tuple or len(key) != 5 or py_type(held[1]) is not b.int:
+        return -1
+    if py_type(key[2]) is not b.int or py_type(key[3]) is not b.int or py_type(key[4]) is not b.int:
+        return -1
+    if (key[0] is x_fit_obj and key[1] is dual_obj and held[2] is binding
+            and Int(py=key[3]) == d and Int(py=key[4]) == t and t >= 1
+            and ((native is None and len(held) == 3) or (native is not None and len(held) == 5 and held[4] is native))):
+        return Int(py=key[2])
+    return -1
 
 
 def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: PythonObject, dual_obj: PythonObject,

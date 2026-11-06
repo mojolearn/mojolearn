@@ -9,6 +9,7 @@
 # shell published. fit_transform projects the X the fit converted.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -26,19 +27,21 @@ comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
     # IncrementalPCA itself or a subclass: its MRO holds the connected class.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         return False
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        if mro[k] is context["ipca_class"]:
-            return True
-    return False
+    var target = context["ipca_class"]
+    if py_type(target) is not b.type:
+        return False
+    # CPython's own subtype test walks the same tp_mro by identity in one
+    # native call (no MRO tuple fetch or per-row Python indexing).
+    ref cpy = Python().cpython()
+    return cpy.lib.get_function[Int32]("PyType_IsSubtype")(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def _int(value: PythonObject) raises -> Int:
-    return Int(py=py_call(Python.import_module("builtins").int, value))
+    return Int(py=py_call(native_loaded_module("builtins").int, value))
 
 
 def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
@@ -51,7 +54,7 @@ def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> Pyt
 def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected _mojolearn_x_decomp IncrementalPCA drivers of the
     fitted numeric mode (`numeric_mode_`), as `_Kit(mode)` resolved it."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = _attr(model, fields, "numeric_mode_")
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
@@ -277,7 +280,7 @@ def ipca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if len(call) != 4:
             raise Error("TypeError: ipca_native_call requires model, operation, arguments and connected context")
         var model = call[0]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
             raise Error("TypeError: native IncrementalPCA operation and argument tuple are required")
         var operation = String(call[1])

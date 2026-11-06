@@ -4,6 +4,7 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 
 
 def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
@@ -15,11 +16,16 @@ def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
     if not pointer:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_borrowed=pointer)
+    # The key scan walks the whole module namespace (hundreds of names for
+    # NumPy). It runs again only after the namespace was edited (watched).
+    if dict_keys_admitted(fields):
+        return fields
     var keys = py_call(py_type(Python.list()),fields)
     var string_type = py_type(PythonObject(""))
     for i in range(len(keys)):  # driver-loop: over dictionary lookup must not invoke a custom key's equality
         if py_type(keys[i]) is not string_type:
             raise Error("TypeError: NumPy native module fields require native string keys")
+    dict_keys_admit(fields)
     return fields
 
 
@@ -35,6 +41,15 @@ def native_numpy_type(name: String, context: PythonObject) raises -> PythonObjec
     if numpy is None or owner is None or py_type(numpy) is not module_type or py_type(owner) is not module_type:
         raise Error("TypeError: ndarray dtype requires NumPy's native extension metadata")
     var dtype = py_get(native_numpy_module_fields(owner), PythonObject(name))
+    var key = PythonObject("native_numpy_" + name)
+    var retained = py_get(context, key)
+    if retained is not None and dtype is retained:
+        # This exact static extension type already passed the flag, name and
+        # owner checks below; a static type's flags, metaclass, __name__ and
+        # __module__ cannot change. Only the public namespace binding can.
+        if py_get(native_numpy_module_fields(numpy), PythonObject(name)) is not dtype:
+            raise Error("TypeError: np." + name + " must remain NumPy's native type; Python callbacks cannot execute")
+        return dtype
     # The type descriptor itself refuses non-types without invoking them.
     # Python-created types/metaclasses carry HEAPTYPE; the supported NumPy
     # dtype constructor and its metaclass are static extension types.
@@ -43,8 +58,6 @@ def native_numpy_type(name: String, context: PythonObject) raises -> PythonObjec
         raise Error("TypeError: np." + name + " must be NumPy's native type")
     if String(py_call(type_class.__getattribute__, dtype, "__name__")) != name or String(py_call(type_class.__getattribute__, dtype, "__module__")) != "numpy":
         raise Error("TypeError: np." + name + " must be owned by NumPy's native extension")
-    var key = PythonObject("native_numpy_" + name)
-    var retained = py_get(context, key)
     if retained is not None and retained is not dtype:
         raise Error("TypeError: NumPy's native " + name + " type has been replaced")
     if py_get(native_numpy_module_fields(numpy), PythonObject(name)) is not dtype:

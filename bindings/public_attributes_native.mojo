@@ -7,7 +7,8 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
-from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _class_fields, _truth
+from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _class_fields, _truth, _instance_fields
+from bindings.native_class_admission import class_record, class_admit
 from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
 from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -71,11 +72,53 @@ struct _AttributeAdmission(Movable):
     var plan: PythonObject
     var ancestry: PythonObject
     var rows: List[PythonObject]
+    # Index of the ancestry row whose connected plan was selected.
+    var plan_row: Int
+    # True when the class's storage-descriptor admission is part of a reused
+    # class record: the instance dictionary is then read directly.
+    var storage_admitted: Bool
 
-    def __init__(out self, plan: PythonObject, ancestry: PythonObject, var rows: List[PythonObject]):
+    def __init__(out self, plan: PythonObject, ancestry: PythonObject, var rows: List[PythonObject],
+                 plan_row: Int, storage_admitted: Bool):
         self.plan = plan
         self.ancestry = ancestry
         self.rows = rows^
+        self.plan_row = plan_row
+        self.storage_admitted = storage_admitted
+
+
+comptime _ATTRIBUTE_CLASS_SLOT = "public_attribute_class_v1"
+comptime _DESCRIPTOR_KIND_SLOT = "public_attribute_descriptor_kind_v1"
+
+
+def _namespace(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
+    # Raw class namespace of an ancestry row whose keys were admitted with
+    # the reused class record.
+    return py_call(mods.module("builtins").type.__dict__["__dict__"].__get__, cls)
+
+
+def _plan_reused(mut mods: NativeModules, cls: PythonObject, mro: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The full admission in _plan reads only the class rows (watched through
+    # native_class_admission) and three import-connected context objects.
+    # Reuse its record while the class state and those identities are
+    # unchanged; the plan lookups up to the selected row are repeated, so a
+    # plan connected later for a nearer row is still found. None: run the
+    # full admission.
+    var record = class_record(mods, _ATTRIBUTE_CLASS_SLOT, cls)
+    if record is None:
+        return PythonObject(None)
+    var plans = context["plans"]
+    if record[1] is not context["missing"] or record[2] is not context["descriptor"] or record[3] is not plans:
+        return PythonObject(None)
+    var plan_row = Int(py=record[4])
+    if plan_row < 0 or plan_row >= len(mro):
+        return PythonObject(None)
+    for i in range(plan_row):  # driver-loop: over nearer ancestry rows without a connected plan
+        if py_get(plans, mro[i]) is not None:
+            return PythonObject(None)
+    if py_get(plans, mro[plan_row]) is not record[0]:
+        return PythonObject(None)
+    return record
 
 
 def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> _AttributeAdmission:
@@ -84,8 +127,15 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
     if py_type(cls) is not b.type:
         raise Error("TypeError: native attributes refuse Python metaclass protocols")
     var mro = _type_mro(cls)
+    var reused = _plan_reused(mods, cls, mro, context)
+    if reused is not None:
+        var admitted_rows = List[PythonObject](capacity=len(mro))
+        for i in range(len(mro)):  # driver-loop: over admitted ancestry rows
+            admitted_rows.append(_namespace(mods, mro[i]))
+        return _AttributeAdmission(reused[0], mro, admitted_rows^, Int(py=reused[4]), True)
     var rows = List[PythonObject](capacity=len(mro))
     var plan = PythonObject(None)
+    var plan_row = -1
     var getter = context["missing"]
     for i in range(len(mro)):  # driver-loop: validate native slot and passive subclass ancestry
         if py_type(mro[i]) is not b.type:
@@ -98,17 +148,48 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
             getter = namespace["__getattribute__"]
         if plan is None:
             plan = py_get(context["plans"], mro[i])
+            if plan is not None:
+                plan_row = i
     if plan is None or getter is not context["descriptor"]:
         raise Error("TypeError: native attribute class has no connected slot")
-    return _AttributeAdmission(plan, mro, rows^)
+    return _AttributeAdmission(plan, mro, rows^, plan_row, False)
 
 
-def _has_slot(cls: PythonObject, name: String) raises -> Bool:
+def _plan_admit(mut mods: NativeModules, model: PythonObject, admission: _AttributeAdmission,
+                context: PythonObject) raises:
+    # Called after the full class admission and the storage-descriptor check
+    # both passed. The record holds the plan and the context objects, never
+    # the class itself; a connected class reachable through context["plans"]
+    # is already retained by that import-time context for the process.
+    if admission.storage_admitted:
+        return
+    class_admit(mods, _ATTRIBUTE_CLASS_SLOT, py_type(model),
+                Python.tuple(admission.plan, context["missing"], context["descriptor"], context["plans"],
+                             PythonObject(admission.plan_row)))
+
+
+def _has_slot(mut mods: NativeModules, cls: PythonObject, name: String) raises -> Bool:
     var ancestry = _type_mro(cls)
     for i in range(len(ancestry)):  # driver-loop: descriptor metadata without foreign key equality hooks
-        if py_contains(_class_fields(ancestry[i]), name):
+        if py_contains(_class_fields(mods, ancestry[i]), name):
             return True
     return False
+
+
+def _descriptor_kind(mut mods: NativeModules, member_type: PythonObject) raises -> Int:
+    # Bit 1: the member's class defines __get__; bit 2: it also defines
+    # __set__ or __delete__ (a data descriptor). Depends only on the member
+    # class's rows: computed once per class state.
+    var record = class_record(mods, _DESCRIPTOR_KIND_SLOT, member_type)
+    if record is not None:
+        return Int(py=record)
+    var kind = 0
+    if _has_slot(mods, member_type, "__get__"):
+        kind = 1
+        if _has_slot(mods, member_type, "__set__") or _has_slot(mods, member_type, "__delete__"):
+            kind = 3
+    class_admit(mods, _DESCRIPTOR_KIND_SLOT, member_type, PythonObject(kind))
+    return kind
 
 
 def _member(admission: _AttributeAdmission, name: PythonObject) raises -> PythonObject:
@@ -132,10 +213,10 @@ def _bound_function(function: PythonObject, model: PythonObject) raises -> Pytho
     return PythonObject(from_owned=pointer)
 
 
-def _availability_member(cls: PythonObject, name: PythonObject, missing: PythonObject) raises -> PythonObject:
+def _availability_member(mut mods: NativeModules, cls: PythonObject, name: PythonObject, missing: PythonObject) raises -> PythonObject:
     var ancestry = _type_mro(cls)
     for i in range(len(ancestry)):  # driver-loop: raw descriptor protocol metadata only
-        var fields = _class_fields(ancestry[i])
+        var fields = _class_fields(mods, ancestry[i])
         if py_contains(fields, name):
             return fields[name]
     return missing
@@ -152,8 +233,10 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
         if ancestry[i] is not schema["mro"][i]:
             raise Error("TypeError: native availability descriptor ancestry changed")
     var hooks = schema["hooks"]
+    var mods = NativeModules()
+    var member_class = py_type(member)
     for i in range(len(hooks)):  # driver-loop: changed Python descriptor hooks are never executed
-        if _availability_member(py_type(member), hooks[i][0], context["missing"]) is not hooks[i][1]:
+        if _availability_member(mods, member_class, hooks[i][0], context["missing"]) is not hooks[i][1]:
             raise Error("TypeError: native availability descriptor hooks changed")
     var metadata = _fields(member)
     if (py_get(metadata, "check") is not schema["check"]
@@ -290,8 +373,12 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
     var member = found[1]
     var cls = py_type(model)
     var member_type = py_type(member)
-    var descriptor = present and _has_slot(member_type, "__get__")
-    var data = descriptor and (_has_slot(member_type, "__set__") or _has_slot(member_type, "__delete__"))
+    var descriptor_kind = 0
+    if present:
+        var mods = NativeModules()
+        descriptor_kind = _descriptor_kind(mods, member_type)
+    var descriptor = descriptor_kind != 0
+    var data = descriptor_kind == 3
     var binding = py_get(plan["bindings"], name)
     var known = binding is not None and member is binding[0]
     if data:
@@ -345,7 +432,12 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         # its builtins connection across plan and instance-storage validation.
         var mods = NativeModules()
         var admission = _plan(mods, model, context)
-        var fields = _fields_from_admitted_rows(mods, model, admission.ancestry, admission.rows)
+        var fields = PythonObject(None)
+        if admission.storage_admitted:
+            fields = _instance_fields(mods.module("builtins"), model)
+        else:
+            fields = _fields_from_admitted_rows(mods, model, admission.ancestry, admission.rows)
+            _plan_admit(mods, model, admission, context)
         var result = _lookup(model, name, fields, admission, context)
         var text = String(name)
         if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")

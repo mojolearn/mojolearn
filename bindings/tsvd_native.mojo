@@ -13,6 +13,8 @@
 # fit_transform projects the X the fit converted (tsvd_transform), with no
 # second conversion and no Python between the two.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -32,33 +34,48 @@ comptime _QFIX_TSVD = 2
 
 
 def _repr(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").repr, value))
+    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
     # TruncatedSVD itself or a subclass: its MRO, read through type's own
     # descriptor, holds the connected class.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         return False
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        if mro[k] is context["tsvd_class"]:
-            return True
-    return False
+    var target = context["tsvd_class"]
+    if py_type(target) is not b.type:
+        return False
+    # CPython's own subtype test walks the same tp_mro by identity in one
+    # native call (no MRO tuple fetch or per-row Python indexing).
+    ref cpy = Python().cpython()
+    return cpy.lib.get_function[Int32]("PyType_IsSubtype")(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def _host_only(model: PythonObject) raises -> Bool:
     # An explicit host inference class (`_HOST_INFERENCE_ONLY` in its class
     # dictionaries) transforms a saved model; it never fits.
-    var b = Python.import_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    # Depends only on the class rows: resolved once per class state
+    # (native_class_admission re-checks after any class modification).
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var record = class_record(mods, _HOST_ONLY_SLOT, cls)
+    if record is not None:
+        return Bool(py=record)
+    var b = native_loaded_module("builtins")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var found = False
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var class_fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
         if py_get(class_fields, "_HOST_INFERENCE_ONLY") is not None:
-            return True
-    return False
+            found = True
+            break
+    class_admit(mods, _HOST_ONLY_SLOT, cls, PythonObject(found))
+    return found
+
+
+comptime _HOST_ONLY_SLOT = "tsvd_host_inference_only_v1"
 
 
 def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
@@ -69,13 +86,13 @@ def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> Pyt
 
 
 def _int(value: PythonObject) raises -> Int:
-    return Int(py=py_call(Python.import_module("builtins").int, value))
+    return Int(py=py_call(native_loaded_module("builtins").int, value))
 
 
 def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     # The estimator's numeric mode (None: the process mode), as
     # `_backend.binding` resolves it.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -91,7 +108,7 @@ def _entries(mode: String, context: PythonObject) raises -> PythonObject:
     # The connected _mojolearn_estimators entries of `mode`, checked against
     # the selected vendor and mode.
     var entries = context["tsvd_bindings"][PythonObject(mode)]
-    if py_type(entries) is Python.import_module("builtins").str:
+    if py_type(entries) is native_loaded_module("builtins").str:
         raise Error(String(entries))
     if String(entries["estimators_vendor"]()) != String(context["vendor"]):
         raise Error("RuntimeError: TruncatedSVD native vendor differs from selected execution")
@@ -132,7 +149,7 @@ def _f32(shape: PythonObject, context: PythonObject) raises -> PythonObject:
 def _algorithm(fields: PythonObject) raises -> String:
     """The algorithm name ('' for a non-str value, which no arm accepts)."""
     var value = fields["algorithm"]
-    if py_type(value) is Python.import_module("builtins").str:
+    if py_type(value) is native_loaded_module("builtins").str:
         return String(value)
     return ""
 
@@ -141,7 +158,7 @@ def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows
                 mode: String, context: PythonObject) raises:
     """algorithm='randomized': `_randomized_decompose(x, nc, center=False,
     ...)` as one x_decomp call, its arrays stored as the shell stored them."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var decomp = _decomp(mode, context)
     if py_type(decomp) is b.str:
         raise Error(String(decomp))
@@ -185,7 +202,7 @@ def _tsqr_route(decomp: PythonObject, rows: Int, cols: Int, nc: Int) raises -> B
     """`_tsvd_tsqr_components`'s gate: the binding carries TSVD_QFIX (FAST;
     0 on an IDENTICAL or host binding, or when the kit is unavailable) and
     X is a TSQR shape (`_tsqr_on`: tall, at most _TS_MAX_N wide)."""
-    if py_type(decomp) is Python.import_module("builtins").str:
+    if py_type(decomp) is native_loaded_module("builtins").str:
         return False
     var flags_entry = py_get(decomp, "x_decomp_qfix_flags")
     if flags_entry is None:
@@ -252,7 +269,7 @@ def _exact(model: PythonObject, fields: PythonObject, x: PythonObject, rows: Int
 
 def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`TruncatedSVD.fit`; returns the converted X (kept for fit_transform)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     if Float64(py=py_call(b.float, _attr(model, fields, "tol"))) != 0.0:
         raise Error("NotImplementedError: mojolearn TruncatedSVD: tol is ARPACK's convergence tolerance "
@@ -285,7 +302,7 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     var mode = _mode(fields, context)
     # the host class trains on the CPU: the estimators host binding of its
     # `_bind` serves the same entry names (CPU TRAINING IS PUBLIC)
-    var entries = (py_call(Python.import_module("builtins").vars, py_call(model._bind, "_mojolearn_estimators"))
+    var entries = (py_call(native_loaded_module("builtins").vars, py_call(model._bind, "_mojolearn_estimators"))
                    if host else _entries(mode, context))
     if algorithm == "randomized":
         _randomized(model, fields, x, rows, cols, nc, mode, context)
@@ -353,7 +370,7 @@ def tsvd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if len(call) != 4:
             raise Error("TypeError: tsvd_native_call requires model, operation, arguments and connected context")
         var model = call[0]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
             raise Error("TypeError: native TruncatedSVD operation and argument tuple are required")
         var operation = String(call[1])

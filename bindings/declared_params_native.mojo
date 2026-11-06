@@ -43,6 +43,13 @@ def _release(value: PythonObject, context: PythonObject) raises:
     while cursor < len(todo):  # driver-loop: cycle-safe native ownership traversal before each replacement
         var item = todo[cursor]
         cursor += 1
+        # Exact immutable scalar leaves own nothing and take no weak
+        # references; native_release_admit accepts them unconditionally.
+        # Skip the identity record, retained-owner scan and weakref probe.
+        var leaf = py_type(item)
+        if (item is None or leaf is b.str or leaf is b.int or leaf is b.float or leaf is b.bool
+                or leaf is b.bytes or leaf is b.complex):
+            continue
         var identity = PythonObject(Int(item._obj_ptr))
         if py_contains(seen, identity):
             continue

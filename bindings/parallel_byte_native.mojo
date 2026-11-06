@@ -538,7 +538,10 @@ def _parallel_shape(state: PythonObject) raises -> PythonObject:
     return result
 
 
-def _parallel_validate_state(value: PythonObject, shape: PythonObject) raises -> PythonObject:
+def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported: Bool = False) raises -> PythonObject:
+    # exported: the four state arrays are the exact contiguous float32/int32
+    # Arrays _parallel_export just allocated and filled. They are kept as
+    # they are (no second copy each); the value checks still run on them.
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     if py_type(value) is not p[].bi.dict:
         raise Error("Byte-LM state must be a dict")
@@ -590,9 +593,16 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject) raises ->
         raise Error("Byte-LM schedule cursor must match completed_steps")
     var result = py_call(p[].bi.dict, value)
     var n = Int(py=shape["n_total"])
-    for name in [String("parameters"), String("m"), String("v")]:  # small-loop(names: three state arrays)
-        py_setitem(result, name, _parallel_array(value[name], [n]))
-    var flags = _parallel_array(value["flags"], [Int(py=shape["n_tensors"])], True)
+    var flags = PythonObject(None)
+    if exported:
+        for name in [String("parameters"), String("m"), String("v")]:  # small-loop(names: three state arrays)
+            parallel_require_finite_f32(Int(py=value[name]._addr), n)
+            py_setitem(result, name, value[name])
+        flags = value["flags"]
+    else:
+        for name in [String("parameters"), String("m"), String("v")]:  # small-loop(names: three state arrays)
+            py_setitem(result, name, _parallel_array(value[name], [n]))
+        flags = _parallel_array(value["flags"], [Int(py=shape["n_tensors"])], True)
     parallel_require_nonnegative_f32(Int(py=result["v"]._addr), n)
     parallel_require_binary_i32(Int(py=flags._addr), Int(py=shape["n_tensors"]))
     py_setitem(result, "flags", flags)
@@ -813,7 +823,7 @@ def parallel_byte_state(owner: PythonObject, rank: PythonObject) raises -> Pytho
     var rec = _parallel_record(owner)
     var state = py_call(p[].bi.dict, rec.downcast_value_ptr[ParallelByteOwner]()[].state)
     _ = py_call(state.update, arrays)
-    return _parallel_validate_state(state, rec.downcast_value_ptr[ParallelByteOwner]()[].shape)
+    return _parallel_validate_state(state, rec.downcast_value_ptr[ParallelByteOwner]()[].shape, True)
 
 
 def parallel_byte_train_step(owner: PythonObject, shards: PythonObject) raises -> PythonObject:

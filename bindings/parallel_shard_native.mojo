@@ -44,6 +44,8 @@ from bindings.native_process_pool import (
 )
 from bindings.native_transport import transport_close
 from bindings.native_codec import codec_initialize
+from bindings.native_loaded_module import NativeModules
+from bindings.native_prepared_owner import prepared_key_add, prepared_key_same
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
     shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
@@ -855,12 +857,47 @@ def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k:
     return Python.tuple(distances, indices)
 
 
+def _pool_pids(pool: PythonObject) raises -> PythonObject:
+    var b = shard_b()
+    var pids = b.list()
+    var workers = pool["workers"]
+    for i in range(len(workers)):  # driver-loop: over the pool's worker processes
+        _ = py_call(pids.append, workers[i]["pid"])
+    return pids
+
+
+def _pool_pids_same(recorded: PythonObject, pool: PythonObject) raises -> Bool:
+    var workers = pool["workers"]
+    if len(workers) != len(recorded) or len(workers) == 0:
+        return False
+    for i in range(len(workers)):  # driver-loop: over the pool's worker processes
+        if Int(py=workers[i]["pid"]) != Int(py=recorded[i]):
+            return False
+    return True
+
+
+def _release_query_state(pool: PythonObject, token: String, name: PythonObject, workers: Int) raises:
+    # Best-effort release of a stored query snapshot on every worker; a
+    # failed release closes the pool, exactly as the per-query release did.
+    if Bool(py=pool["closed"]):
+        return
+    var b = shard_b()
+    var releases = b.list()
+    for i in range(workers):  # driver-loop: one release request per worker
+        _ = py_call(releases.append, _native_request("query_state", Python.tuple(token, name, PythonObject(None))))
+    try:
+        _ = _map(pool, releases)
+    except:
+        process_pool_close(pool)
+
+
 def _parallel_queries(args: PythonObject) raises -> PythonObject:
     """args (queries object, X, method, kwargs): `ParallelQueries.query`.
-    Every worker stores one snapshot of the estimator under a fresh token;
-    whole query rows in `rows_per_shard` blocks are answered by the plain
-    query method (block i on worker i % len(devices)); the snapshots are
-    released; the blocks joined in input order."""
+    Every worker stores one snapshot of the estimator under the holder's
+    token, kept resident until the fitted state or the pool changes (the
+    pool's close releases it); whole query rows in `rows_per_shard` blocks
+    are answered by the plain query method (block i on worker
+    i % len(devices)); the blocks joined in input order."""
     var b = shard_b()
     var context = _ctx()
     var holder = _driver_fields(args[0], "query_driver_class")
@@ -898,16 +935,38 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         ranges.append(0)
     var state = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder")), context)
     py_setitem(state, "numeric_mode", "identical")
-    var counter = Int(py=py_get(holder, PythonObject("_native_tokens"), PythonObject(0))) + 1
-    py_setitem(holder, "_native_tokens", counter)
-    var token = String("nq-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
     var devices = pool["devices"]
     var workers = len(devices)
     var name = py_type(model).__name__
-    var stores = b.list()
-    for i in range(workers):  # driver-loop: one snapshot request per worker
-        _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
-    _ = _map(pool, stores)
+    # Resident fitted state: the workers keep the snapshot stored under the
+    # holder's token across queries. It is sent again only when the
+    # estimator, its fitted state (identity of every carried value, nested
+    # containers included) or the pool's worker processes changed. The old
+    # code stored and released the full fitted index on every worker for
+    # every query call.
+    var mods = NativeModules()
+    var key = b.list()
+    _ = py_call(key.append, model)
+    _ = py_call(key.append, name)
+    prepared_key_add(mods, key, state)
+    var resident = py_get(holder, PythonObject("_resident_query"), PythonObject(None))
+    var token = String()
+    if (resident is not None and resident[1] is pool and not Bool(py=pool["closed"])
+            and _pool_pids_same(resident[2], pool) and prepared_key_same(resident[3], key)):
+        token = String(resident[0])
+    else:
+        if resident is not None:
+            py_setitem(holder, "_resident_query", PythonObject(None))
+            _release_query_state(pool, String(resident[0]), resident[4], workers)
+        var counter = Int(py=py_get(holder, PythonObject("_native_tokens"), PythonObject(0))) + 1
+        py_setitem(holder, "_native_tokens", counter)
+        token = String("nq-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
+        var stores = b.list()
+        for i in range(workers):  # driver-loop: one snapshot request per worker
+            _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
+        _ = _map(pool, stores)
+        # The pool starts its workers on the first map: record their IDs now.
+        py_setitem(holder, "_resident_query", Python.tuple(token, pool, _pool_pids(pool), key, name))
     var results = PythonObject(None)
     var n_devices = workers
     try:
@@ -919,15 +978,12 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
             _ = py_call(requests.append, _native_request("query_rows", Python.tuple(
                 token, shard_rows(data, lo - shift, hi - shift, context), method, args[3])))
         results = _map(pool, requests)
-    finally:
-        if not Bool(py=pool["closed"]):
-            var releases = b.list()
-            for i in range(workers):  # driver-loop: one release request per worker
-                _ = py_call(releases.append, _native_request("query_state", Python.tuple(token, name, PythonObject(None))))
-            try:
-                _ = _map(pool, releases)
-            except:
-                process_pool_close(pool)
+    except error:
+        # A failed query leaves no resident claim: release the snapshot (as
+        # before) and send it again on the next call.
+        py_setitem(holder, "_resident_query", PythonObject(None))
+        _release_query_state(pool, token, name, workers)
+        raise error^
     var outputs = b.list()
     var diagnostics = b.list()
     for r in range(len(results)):  # driver-loop: one result and diagnostic per query row block

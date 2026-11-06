@@ -124,7 +124,12 @@ struct _Input(Movable):
         if Int(py=view.nbytes) != self.count * itemsize or Int(py=view.itemsize) != itemsize:
             raise Error("fast BF16: buffer span and shape disagree")
         self.store = py_call(state[].array_type, "H" if self.bf16 else "f")
-        _ = py_call(self.store.frombytes, py_call(view.tobytes, "C"))
+        # A C-contiguous view packs straight from its buffer (one copy); only
+        # a strided view goes through tobytes("C") first.
+        if Bool(py=view.c_contiguous):
+            _ = py_call(self.store.frombytes, view)
+        else:
+            _ = py_call(self.store.frombytes, py_call(view.tobytes, "C"))
         self.address = Int(py=self.store.buffer_info()[0])
 
 
@@ -176,7 +181,6 @@ def fast_to_bf16_binding(value: PythonObject) raises -> PythonObject:
         ctx.synchronize()
         _ = src^
         _ = dst^
-        ctx.synchronize()
     # Host copies enqueue asynchronously. Mojo's last-use destruction must
     # not free the packed array immediately after its address is consumed.
     # Keep its owner through the final wait, on every shape.
@@ -199,7 +203,6 @@ def fast_from_bf16_binding(value: PythonObject) raises -> PythonObject:
         ctx.synchronize()
         _ = src^
         _ = dst^
-        ctx.synchronize()
     _ = source^
     return result
 
@@ -314,18 +317,24 @@ def fast_matmul_bf16_binding(
     var op = OP_TN if transpose_a else (OP_NT if transpose_b else OP_NN)
     var state = _BOUNDARY.get_or_create_ptr()
     var shape = Python.tuple(PythonObject(m), PythonObject(n))
-    var result = _new_array(shape, False)
     var out_view = PythonObject(None)
+    var direct = False
     if out is not PythonObject(None):
         if py_type(out) is state[].array_class:
             if out.shape != shape or String(out.dtype) != "<f4" or String(out.order) != "C" or Bool(out._readonly):
                 raise Error("fast matmul_bf16: out must be writable C-contiguous float32 with the output shape")
             out_view = out._mv
+            # A writable C-contiguous float32 Array of the output shape that
+            # owns its storage (no base, no pin: _addr is the start of _mv)
+            # holds exactly m * n words there: download into it directly.
+            direct = (Int(py=out_view.nbytes) == m * n * 4 and out._base is PythonObject(None)
+                      and out._pin is PythonObject(None))
         else:
             out_view = py_call(state[].builtins.memoryview, out)
             var format = String(out_view.format)
             if out_view.shape != shape or not Bool(out_view.c_contiguous) or Bool(out_view.readonly) or (format != "f" and format != "@f" and format != "=f" and format != "<f"):
                 raise Error("fast matmul_bf16: out must be writable C-contiguous float32 with the output shape")
+    var result = out if direct else _new_array(shape, False)
     var dst_address = Int(py=result._addr)
     with GILReleased(Python()):
         var ctx = process_ctx["MojoAppleFastBf16PublicContext"]()
@@ -349,12 +358,13 @@ def fast_matmul_bf16_binding(
         ctx.synchronize()
         _ = db^
         _ = dc^
-        ctx.synchronize()
     # These own the host-pointer upload bytes. Explicit destruction after
     # the wait prevents last-use release at enqueue_copy (a particularly
     # visible use-after-free for small allocator bins, not a shape rule).
     _ = left^
     _ = right^
+    if direct:
+        return out
     if out is not PythonObject(None):
         var bytes_view = py_call(out_view.cast, "B")
         py_setitem(bytes_view, py_call(state[].builtins.slice, PythonObject(None)), py_call(result._mv.cast, "B"))

@@ -7,6 +7,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_error_class import error_without_class
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
@@ -34,6 +35,11 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
     # release window instead of one per field read).
     var b = mods.module("builtins")
     var cls = py_type(model)
+    # The storage-descriptor admission depends only on the class rows: run it
+    # once per class state (native_class_admission), then read the instance
+    # dictionary directly.
+    if class_record(mods, _STORAGE_CLASS_SLOT, cls) is not None:
+        return _instance_fields(b, model)
     # Native type descriptors read actual MRO/storage, including buffers with
     # native metaclasses. They do not consult a metaclass's Python hooks.
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
@@ -45,7 +51,11 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
                     or descriptor.__objclass__ is not ancestry[i] or String(descriptor.__name__) != "__dict__"):
                 raise Error("TypeError: native metadata refuses Python dictionary properties; use ordinary instance storage")
             break
+    class_admit(mods, _STORAGE_CLASS_SLOT, cls, PythonObject(True))
     return _instance_fields(b, model)
+
+
+comptime _STORAGE_CLASS_SLOT = "class_instance_storage_v1"
 
 
 def _fields_from_admitted_rows(mut mods: NativeModules, model: PythonObject,
@@ -134,11 +144,20 @@ def _class_fields(cls: PythonObject) raises -> PythonObject:
     return _class_fields(mods, cls)
 
 
+comptime _CLASS_KEYS_SLOT = "class_string_keys_v1"
+
+
 def _class_fields(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
     var b = mods.module("builtins")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
+    # The exact-string key scan walks the whole class namespace. A class's
+    # keys change only through a type modification, which bumps its watched
+    # epoch (native_class_admission), so the scan runs once per class state.
+    if class_record(mods, _CLASS_KEYS_SLOT, cls) is not None:
+        return fields
     if not native_mapping_string_keys(fields, b.str):
         raise Error("TypeError: native metadata requires exact string class keys")
+    class_admit(mods, _CLASS_KEYS_SLOT, cls, PythonObject(True))
     return fields
 
 
