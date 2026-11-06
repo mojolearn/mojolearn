@@ -25,7 +25,7 @@ The Python entry points are in `providers/python/svm_host_svc_proba_pyapi.mojo`.
 from std.memory import bitcast
 
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count, host_predict_task_count_work
 from core.shuffle_iterator import FeistelBijection
 from checks.soft_f64 import sf64_log
 from svm.impl.svc_rows import (
@@ -65,7 +65,9 @@ def pair_epilogue(
     label1: UInt64, out_addr: Int,
 ) raises:
     """`epilogue_row` over the n rows, split across host tasks."""
-    var tasks = host_predict_task_count(n)
+    # perf-host-grain: rows are independent (each owns its epilogue row);
+    # the grain floor on rows x pairs x classes
+    var tasks = host_predict_task_count_work(n, n * max(n_pairs, 1) * max(k, 1))
     if tasks < 1:
         tasks = 1
     if tasks > n:
