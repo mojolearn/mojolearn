@@ -14,6 +14,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral, metric_warn
 from bindings.classical_warnings import COLUMN_WARNING, _warning_category
 from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
+from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage, labels_text_storage
 from bindings.native_typed_context import native_typed_context
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
@@ -196,15 +197,20 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
     if fitting and value is None:
         raise Error(name + " requires y to be passed, but the target y is None.")
     classical_admit_value(value, context)
+    # The exact ndarray / Array itself, or the stored ndarray of a numpy-backed
+    # pandas Series (1-D, its labels in the same order, so the same refusals at
+    # the same first label and never the column warning, as the walk), else
+    # None (perf3-label-doors; bindings/label_input_sources.mojo).
+    var source = labels_storage_source(value, context)
     # An exact integer/bool ndarray or Array holds no element any check below
     # can refuse (tolist yields exact ints/bools; the float loop never runs for
     # it), so it is admitted from its dtype metadata, not label by label: the
     # flatten + per-label admission cost scales with the rows of every
     # LDA/QDA/NB/logistic/forest/GBDT-adapter classifier fit. Same refusals,
     # same warning, nothing returned, so no bits change.
-    if labels_integer_storage(value, context):
+    if source is not None and labels_integer_storage(source, context):
         if fitting:
-            var shape = labels_shape_of(value, context)
+            var shape = labels_shape_of(source, context)
             if len(shape) == 2 and shape[1] == 1:
                 metric_warn(COLUMN_WARNING, _warning_category(context), context)
         return
@@ -214,16 +220,32 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
     # core/label_storage_impl.mojo) instead of tolist + admission + three
     # scalar calls per label (~0.15 s per 20000-label fit). Same warning, same
     # refusals at the same first label, nothing returned: no bits change.
-    var float_refusal = labels_float_storage(value, context)
+    var float_refusal = -1
+    if source is not None:
+        float_refusal = labels_float_storage(source, context)
     if float_refusal >= 0:
         if fitting:
-            var shape = labels_shape_of(value, context)
+            var shape = labels_shape_of(source, context)
             if len(shape) == 2 and shape[1] == 1:
                 metric_warn(COLUMN_WARNING, _warning_category(context), context)
             if float_refusal == 1:
                 raise Error("Input y contains NaN or infinity (" + name + ").")
             if float_refusal == 2:
                 raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+        return
+    # An exact flat list/tuple of exact ints (or bools): every label is admitted
+    # and the float loop below never fires for it (its first label is
+    # integral), and a list/tuple never takes the column warning. Read through
+    # the container's C storage, one type compare per label.
+    if labels_list_integer_storage(value):
+        return
+    # An exact '<U' ndarray lists exact str only: admitted, and not numeric
+    # float, so the walk refuses nothing; only its column warning remains.
+    if labels_text_storage(value, context):
+        if fitting:
+            var shape = labels_shape_of(value, context)
+            if len(shape) == 2 and shape[1] == 1:
+                metric_warn(COLUMN_WARNING, _warning_category(context), context)
         return
     # An exact object ndarray may still hold arbitrary Python scalar objects.
     # Reading/flattening the references is native; admission precedes hashing,

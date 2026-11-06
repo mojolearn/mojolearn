@@ -14,6 +14,7 @@ from bindings.classical_validate import classical_estimator_name, classical_chec
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.label_integer_storage import labels_integer_storage, labels_float_storage
+from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage, labels_text_storage
 from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE, LABELS_FLOAT_CONTINUOUS
 from bindings.classical_warnings import classical_warn_column
 from bindings.classifier_public_lifecycle import _public_labels
@@ -93,7 +94,20 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     # non-integral element and no Python object, so the element walk below
     # cannot refuse it and it is returned unchanged either way: admit it from
     # its dtype metadata instead of label by label.
-    if buffered and labels_integer_storage(source, context):
+    # perf3-label-doors: a numpy-backed pandas Series is checked through its
+    # stored exact ndarray (the same labels in the same order, 1-D, so never
+    # the column case) and returned unchanged, as the walk returns it.
+    var stored = labels_storage_source(source, context) if buffered else PythonObject(None)
+    if stored is not None and labels_integer_storage(stored, context):
+        return source
+    # An exact flat list / tuple of exact ints or bools: every label passes
+    # every check below and a list is returned unchanged by the walk.
+    if labels_list_integer_storage(source):
+        return source
+    # An exact '<U' ndarray lists exact str only, which the walk admits and
+    # never tests as real; any shape but the flattened column is returned
+    # unchanged by the walk.
+    if stored is not None and labels_text_storage(source, context):
         return source
     # Perf: an exact float32/float64 ndarray or Array vector holds only real
     # floats, so the element walk below reduces to its finite (and, for a
@@ -101,8 +115,8 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     # (bindings/label_integer_storage.mojo, also the label door's) refuses at
     # the first refused element in C order with the same wording, instead of
     # one Python float and three scalar checks per label.
-    if buffered:
-        var refusal = labels_float_storage(source, context, classifier)
+    if stored is not None:
+        var refusal = labels_float_storage(stored, context, classifier)
         if refusal == LABELS_FLOAT_NONFINITE:
             raise Error("Input y contains NaN or infinity (" + name + ").")
         if refusal == LABELS_FLOAT_CONTINUOUS:
