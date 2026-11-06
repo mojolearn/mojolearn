@@ -65,6 +65,13 @@ def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: Pyth
     key.fields(fields, List[String]())
     if key.retains(model):
         return  # a self-referential field must not keep its weak owner alive
+    # A defaultdict can change its own factory in place (the admission
+    # checks it), so a model holding one is admitted in full on every call,
+    # as bindings/sequential_admission.mojo does.
+    var defaultdict = mods.module("collections").defaultdict
+    for k in range(len(key.objects)):  # driver-loop: over captured field ownership references
+        if py_type(key.objects[k]) is defaultdict:
+            return
     prepared_put(mods, _OWNER_SLOT, model, PythonObject(alloc=key^))
 
 
