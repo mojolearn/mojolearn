@@ -82,9 +82,7 @@ RETIRED_COLUMNS = ("ptx",)
 #: What each column's own job runs, so the plan prints the selection the job will make.
 #:   table  ONLY_CHANGED=table (box_merged_verify.sh), backend-filtered
 #:   class  record_identity_column.sh's default auto reuse from the class's newest good evidence
-#: (ptx: identity_columns.CLASS_BACKEND ptx=cuda, the class record_identity_column.sh gives nvidia-ptx-* labels)
-SELECTION = dict(nvidia=("table", "cuda"), amd=("table", "hip"), cpu=("class", "cpu"), ptx=("class", "cuda"),
-                 apple=("class", "metal"))
+SELECTION = dict(nvidia=("table", "cuda"), amd=("table", "hip"), cpu=("class", "cpu"), apple=("class", "metal"))
 #: The release's supported surface is every lane the harness ships (identity_columns.py --scope all = the
 #: routine lanes + the neural-training lanes). These narrower scopes need a --reason.
 SURFACE_SCOPE = "all"
