@@ -43,15 +43,26 @@ def _rd_operand(value: PythonObject, name: String, mut view: TensorView) raises 
 
 
 def _rd_uint(value: PythonObject, name: String, bits: Int, b: PythonObject,
-             index_fn: PythonObject) raises -> PythonObject:
-    """`_residual_dropout_impl._uint`. `b` and `index_fn` (builtins and
-    operator.index) are looked up once by the caller, not per word."""
+             index_fn: PythonObject) raises -> UInt64:
+    """`_residual_dropout_impl._uint`, read into a native word (lane
+    p3-neural-blocks: the range checks and the low/high split were about
+    twelve Python integer operations per call). `b` and `index_fn`
+    (builtins and operator.index) are looked up once by the caller; an exact
+    int skips operator.index. Same refusals: a bool is a TypeError, a value
+    outside [0, 2**bits) a ValueError."""
     if py_type(value) is b.bool:
         raise Error("TypeError: " + name + " must be an unsigned integer")
-    var index = py_call_typed(index_fn, value)
-    if Bool(py=index < PythonObject(0)) or Bool(py=index >= PythonObject(1).__lshift__(PythonObject(bits))):
+    var index = value if py_type(value) is b.int else py_call_typed(index_fn, value)
+    ref cpy = Python().cpython()
+    var word = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLong")(index._obj_ptr)
+    if word == UInt64(0xFFFFFFFFFFFFFFFF) and cpy.PyErr_Occurred():
+        # Negative or wider than 64 bits.
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         raise Error("ValueError: " + name + " is outside its unsigned integer range")
-    return index
+    if bits < 64 and word >= (UInt64(1) << UInt64(bits)):
+        raise Error("ValueError: " + name + " is outside its unsigned integer range")
+    _ = index
+    return word
 
 
 def _rd_params(count: Int, p: PythonObject, seed: PythonObject, stream: PythonObject,
@@ -63,13 +74,14 @@ def _rd_params(count: Int, p: PythonObject, seed: PythonObject, stream: PythonOb
     var s = _rd_uint(seed, "seed", 64, b, index_fn)
     var st = _rd_uint(stream, "stream", 32, b, index_fn)
     var off = _rd_uint(offset, "offset", 63, b, index_fn)
-    var limit = PythonObject(1).__lshift__(PythonObject(63)) - PythonObject(1) - PythonObject(count)
-    if Bool(py=off > limit):
+    # offset < 2**63 here, so the comparison against 2**63 - 1 - count is exact
+    # in signed words (count is a nonnegative element count).
+    if Int(off) > 9223372036854775807 - count:
         raise Error("ValueError: offset plus element count exceeds the native Philox range")
     if py_type(p) is b.bool:
         raise Error("TypeError: p must be a real dropout probability")
     # p admission, FP32 rounding and scale arithmetic are the entry's
-    return Python.list(count, off, s.__and__(PythonObject(4294967295)), s.__rshift__(PythonObject(32)), st,
+    return Python.list(count, Int(off), Int(s & UInt64(4294967295)), Int(s >> UInt64(32)), Int(st),
                        py_call_typed(b.float, p))
 
 
