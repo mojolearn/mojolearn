@@ -93,7 +93,10 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
               # --units-plan: the device-check unit records and their summary (tools/release_check_units.py)
               "units",
               # the one-GPU multi-device gate (tools/logical_shard_identity.py), run unconditionally by every job
-              "shardcheck")
+              "shardcheck",
+              # the measurement smoke (tools/release_measurement_smoke.py), run unconditionally by every job: the
+              # summary, the failure list and the batch logs (the batch smoke boards and caches stay on the box)
+              "measuresmoke/measuresmoke.json", "measuresmoke/measuresmoke.txt", "measuresmoke/logs")
 #: THE GATE RUNNER OVERLAY: the tooling checkout's copy of each of these files whose bytes differ from the
 #: source commit's ships with the job (route-overlay.tgz, tools/release_tooling.py write_overlay) and is
 #: applied over the source tree AFTER the autograd build (the build and its reuse proof read the clean tree)
@@ -102,8 +105,25 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
 #: tools/logical_shard_identity.py (the one-GPU multi-device gate) is one of them: the Mac judges its record with
 #: its own LANES / COUNTS / SCHEMA (tools/release_identity_wheels.py `single_gate_ok`), so the box must run the same
 #: copy; release_gate_job.sh runs its phase right after the overlay.
+#: tools/release_measurement_smoke.py (the measurement smoke) likewise: the Mac judges its summary with its own
+#: SCHEMA / summary_errors, and release_gate_job.sh runs its phase right after shardcheck.
 GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/release_gate_profiles.py",
-                "tools/logical_shard_identity.py")
+                "tools/logical_shard_identity.py", "tools/release_measurement_smoke.py")
+#: the measurement smoke's venv (release_gate_job.sh phase measuresmoke): the exact wheels plus these harness packages
+#: (the board harness and its data prep read NumPy; the two causal-LM recipes fetch their public checkpoints with
+#: huggingface_hub). Harness only: nothing here is an opponent library and nothing reaches the runtime.
+#: The untimed quality references some of our cells are scored against are part of that harness (pinned as the board
+#: pins them, tools/opponent_wheels.sh and bench_board_algos.PINS_COMMON): scikit-learn (the algos preprocessing
+#: oracle, rfe, the hdbscan scorer), scipy (the als input split, the NB count matrix), statsmodels (select-d). They
+#: are never raced: the smoke runs no opponent arm.
+MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub", "scikit-learn==1.7.2", "scipy==1.17.1", "statsmodels==0.15.0")
+#: the fixture generator's own venv (tools/neural_fixtures_box.sh NF_TORCH / NF_PYG, CPU index): it writes the layer
+#: lanes' inputs once before the batches; never the measured venv, never raced
+MEASURE_SMOKE_FIXTURE_PIP = ("numpy", "torch==2.13.0", "torch-geometric==2.8.0.post1")
+#: the measurement smoke's ceiling (minutes); see tools/release_measurement_smoke.py for the expected duration
+MEASURE_SMOKE_MINUTES = 90
+#: the presigned-GET data plan the measurement smoke stages from R2 (tools/release_measurement_smoke.py data-plan)
+MEASURE_SMOKE_DATA = "measuresmoke-data.json"
 TERMINAL_NV = ("done", "failed", "cancelled", "timeout", "interrupted")
 
 
@@ -289,7 +309,10 @@ class Plan:
                  bash_array("GATE_IDENTITY_SHA256", [f"{w.name}={sha256(w) if w.is_file() else 'DRY-RUN'}"
                                                      for w in self.wheels] if self.identity_columns else []),
                  f"GATE_UNITS={1 if self.units_plan else 0}", f"GATE_BUILD_AUTOGRAD={1 if self.build_autograd else 0}",
-                 f"GATE_REUSE_UNCHANGED={1 if self.reuse_unchanged else 0}"]
+                 f"GATE_REUSE_UNCHANGED={1 if self.reuse_unchanged else 0}",
+                 bash_array("MEASURE_SMOKE_PIP", MEASURE_SMOKE_PIP),
+                 bash_array("MEASURE_SMOKE_FIXTURE_PIP", MEASURE_SMOKE_FIXTURE_PIP),
+                 f"GATE_MEASURE_SMOKE_MINUTES={MEASURE_SMOKE_MINUTES}"]
         return "\n".join(lines) + "\n"
 
     def uploads(self):
@@ -305,6 +328,8 @@ class Plan:
             out.append((self.staged / RUNTIME_PRIOR_TGZ, f"{self.indir}/{RUNTIME_PRIOR_TGZ}", False))
         if self.units_plan:
             out.append((self.units_plan, f"{self.indir}/units-plan.json", False))
+        # the measurement smoke's data: presigned GETs minted on the Mac (Runner.main writes it before gate.env)
+        out.append((self.staged / MEASURE_SMOKE_DATA, f"{self.indir}/{MEASURE_SMOKE_DATA}", False))
         out.append((self.staged / "gate.env", f"{self.indir}/gate.env", False))
         names = [r for _, r, _ in out]
         if len(set(names)) != len(names):
@@ -690,6 +715,12 @@ class Runner:
                 _, plan.runtime_prior_sha256 = write_runtime_prior(plan.runtime_prior, plan.staged)
                 say(f"runtime unit receipts to reuse: {sum(1 for _ in plan.runtime_prior.rglob('*.json'))} "
                     f"from {plan.runtime_prior}")
+            # the measurement smoke's data plan: one presigned GET per file the plan reads (the R2 secret stays here)
+            import release_measurement_smoke as MS
+            files = MS.write_data_plan(a.vendor, plan.staged / MEASURE_SMOKE_DATA, presign=lambda key, secs: (self.call(
+                ["sh", ROOT / "tools/dataset_store.sh", "presign", key, secs]).stdout or "").strip())
+            say(f"measurement smoke data plan: {len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.2f} GB "
+                f"(presigned GETs; files already at their pins on the box are kept)")
             (plan.staged / "gate.env").write_text(plan.env_text())
             self.stage(plan)
             record = dict(key=key, plan_tag=tag, vendor=a.vendor, launched_at=dt.datetime.now(

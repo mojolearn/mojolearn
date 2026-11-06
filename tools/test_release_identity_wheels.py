@@ -209,8 +209,21 @@ def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monke
     lanes = {n: dict(verdict="MATCH", reason="") for n in LS.lane_names()}
     (out / "shardcheck" / LS.SUMMARY).write_text(json.dumps(dict(schema=LS.SCHEMA, ok=True, counts=list(LS.COUNTS),
                                                                  lanes=lanes)))
+    # the measurement smoke is unconditional too: identity, units and shardcheck alone never pass the box job
     ok, why = r.single_gate_ok("amd", out)
-    assert ok and "12 runtime cases" in why and "logical-shard gate MATCH" in why
+    assert not ok and "measuresmoke: no measurement-smoke summary" in why
+    import release_measurement_smoke as MS
+    ids = ["algos/a/taxi/rows=2000", "neural/b/gaussian/shape=small"]
+    (out / "measuresmoke").mkdir(parents=True)
+    failing = MS.summarize("amd", ids, {ids[0]: dict(verdict=MS.PASS, reason="", batch=0),
+                                        ids[1]: dict(verdict=MS.FAIL, reason="not run", batch=0)}, {})
+    (out / "measuresmoke" / MS.SUMMARY).write_text(json.dumps(failing))
+    ok, why = r.single_gate_ok("amd", out)
+    assert not ok and "measuresmoke: 1 of 2 recipes failed" in why and ids[1] in why
+    passing = MS.summarize("amd", ids, {i: dict(verdict=MS.PASS, reason="", batch=0) for i in ids}, {})
+    (out / "measuresmoke" / MS.SUMMARY).write_text(json.dumps(passing))
+    ok, why = r.single_gate_ok("amd", out)
+    assert ok and "12 runtime cases" in why and "logical-shard gate MATCH" in why and "measurement smoke 2/2" in why
 
 
 def test_a_vendor_that_owes_nothing_is_composed_on_the_mac_and_rents_nothing(tmp_path, monkeypatch):

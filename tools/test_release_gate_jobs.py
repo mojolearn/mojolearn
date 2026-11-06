@@ -228,11 +228,18 @@ def recorded():
     fixture.doCleanups()
 
 
+def passing_measure_smoke(vendor, ids=("algos/a/taxi/rows=2000", "neural/b/gaussian/shape=small")):
+    """A passing out/measuresmoke/measuresmoke.json (tools/release_measurement_smoke.py summarize)."""
+    import release_measurement_smoke as MS
+    return MS.summarize(vendor, list(ids), {i: dict(verdict=MS.PASS, reason="", batch=0) for i in ids}, {})
+
+
 class FakeBox:
     """The wrappers and R2 as one fake: uploads land in .files, the submit queues, fetch serves REPORT."""
 
-    def __init__(self, report, vendor, polls_before_final=1, job_exit="0", runtime=None):
+    def __init__(self, report, vendor, polls_before_final=1, job_exit="0", runtime=None, measure="pass"):
         self.report, self.vendor, self.files, self.calls = report, vendor, {}, []
+        self.measure = passing_measure_smoke(vendor) if measure == "pass" else measure
         # the installed-runtime qualifier's report the job fetches (out/runtime-<vendor>/runtime-report.json)
         self.runtime = dict(status="passed", exit_code=0, cases=7300) if runtime is None else runtime
         self.lists, self.polls_before_final, self.job_exit = 0, polls_before_final, job_exit
@@ -246,6 +253,8 @@ class FakeBox:
         if argv[:2] == ["bash", "tools/nvidia_central.sh"] and argv[2] == "submit":
             out.stdout = "nvc1-0007\n"
             out.stderr = f"box_persist: job {self.ptag} persists to R2 measurements/box-jobs/x/ (fetch: ...)\n"
+        elif argv[0] == "sh" and argv[1].endswith("dataset_store.sh") and argv[2] == "presign":
+            out.stdout = "https://r2.example/%s?signed\n" % argv[3]   # the measurement smoke's data plan
         elif argv[2] in ("sh", "ssh") and command.startswith("cat > "):
             self.files[command[len("cat > "):]] = stdin.read()
             out.stdout = b""
@@ -264,6 +273,9 @@ class FakeBox:
             final = Path(argv[argv.index("--dest") + 1]) / "final"
             (final / "out").mkdir(parents=True)
             (final / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
+            if self.measure is not None:   # the measurement smoke's summary (phase measuresmoke)
+                (final / "out" / "measuresmoke").mkdir()
+                (final / "out" / "measuresmoke" / "measuresmoke.json").write_text(json.dumps(self.measure))
             if self.runtime:
                 (final / "out" / f"runtime-{self.vendor}").mkdir()
                 (final / "out" / f"runtime-{self.vendor}" / "runtime-report.json").write_text(json.dumps(self.runtime))

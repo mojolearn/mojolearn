@@ -55,6 +55,20 @@ CPU_SHARDS = 4
 REFERENCE_ENV = "MOJOLEARN_IDENTITY_REFERENCE_AT"
 
 
+
+def measure_smoke_errors(output):
+    """['measuresmoke: ...'] unless the box job's measurement smoke summary passes (tools/release_measurement_smoke.py)."""
+    import release_measurement_smoke as MS
+    return ["measuresmoke: " + e for e in MS.summary_errors(read_json(Path(output) / "measuresmoke" / MS.SUMMARY))]
+
+
+def measure_smoke_note(output):
+    """'<passed>/<plan> recipes' of a passing measurement smoke summary (for the PASS line)."""
+    import release_measurement_smoke as MS
+    doc = read_json(Path(output) / "measuresmoke" / MS.SUMMARY) or {}
+    c = doc.get("counts") or {}
+    return "%s/%s recipes (%s unsupported)" % (c.get(MS.PASS), doc.get("plan_count"), c.get(MS.UNSUPPORTED, 0))
+
 class StepFailed(RuntimeError):
     """Replaced by tools/release.py with its own StepFailed (release.py binds it at import), so a refusal here
     is the release's ordinary failed step."""
@@ -350,6 +364,9 @@ class IdentityOnWheels:
         # tools/logical_shard_identity.py on these wheel bytes whatever changed; no reuse or selector waives it.
         import logical_shard_identity as LS
         errors += ["shardcheck: " + e for e in LS.summary_errors(read_json(Path(output) / "shardcheck" / LS.SUMMARY))]
+        # THE MEASUREMENT SMOKE, UNCONDITIONAL (Andrew 2026-11-06): every box job runs every measurement recipe once at
+        # its smoke shape, ours only, on these wheel bytes (tools/release_measurement_smoke.py); nothing waives it.
+        errors += measure_smoke_errors(output)
         runtime, cases = self.gate_runtime_error(vendor, output)
         if runtime:
             errors.append(runtime)
@@ -357,7 +374,7 @@ class IdentityOnWheels:
             return False, "; ".join(errors)
         self.keep_unit_records(Path(output) / "units")
         return True, ("PASS: identity recorded once from these wheels; device-check units passed or reused; "
-                      "logical-shard gate MATCH; %s runtime cases" % cases)
+                      "logical-shard gate MATCH; measurement smoke %s; %s runtime cases" % (measure_smoke_note(output), cases))
 
     def gate_identity_errors(self, vendor, output, correctness):
         """Under --identity-on-wheels: the box job's column record must be complete (or nothing owed) and its gate
