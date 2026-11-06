@@ -273,9 +273,12 @@ class FakeBox:
             final = Path(argv[argv.index("--dest") + 1]) / "final"
             (final / "out").mkdir(parents=True)
             (final / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
-            if self.measure is not None:   # the measurement smoke's summary (phase measuresmoke)
-                (final / "out" / "measuresmoke").mkdir()
-                (final / "out" / "measuresmoke" / "measuresmoke.json").write_text(json.dumps(self.measure))
+            if self.measure is not None:
+                # the measurement smoke's own job lands in <gate out>/measuresmoke-job (release.py run_gate launches
+                # it after this job); faked into this fetch so the verdict sees both
+                smoke = final / "out" / "measuresmoke-job" / "measuresmoke"
+                smoke.mkdir(parents=True)
+                (smoke / "measuresmoke.json").write_text(json.dumps(self.measure))
             if self.runtime:
                 (final / "out" / f"runtime-{self.vendor}").mkdir()
                 (final / "out" / f"runtime-{self.vendor}" / "runtime-report.json").write_text(json.dumps(self.runtime))

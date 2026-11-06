@@ -195,7 +195,10 @@ def test_a_full_pass_is_accepted_and_carries_no_timing():
 
 
 def test_any_failure_or_gap_fails_the_release():
-    assert MS.summary_errors(None) == ["no measurement-smoke summary"]
+    assert MS.summary_errors(None) == [MS.NO_SUMMARY]
+    # the refusal says plainly what to do: it comes only from a box job, never from --reuse-unchanged on the Mac
+    assert "--job measuresmoke" in MS.NO_SUMMARY and "--reuse-unchanged" in MS.NO_SUMMARY
+    assert "rerun the gate-<vendor> step" in MS.NO_SUMMARY
     one = summary({IDS[0]: dict(verdict=MS.FAIL, reason="status failed", batch=0),
                    IDS[1]: dict(verdict=MS.PASS, reason="", batch=0), IDS[2]: dict(verdict=MS.PASS, reason="", batch=0)})
     assert not one["ok"] and one["failures"] == [dict(id=IDS[0], reason="status failed")]
@@ -271,18 +274,164 @@ def test_staging_keeps_a_file_at_its_pin_and_refuses_one_without(tmp_path):
 JOB = (ROOT / "tools" / "ops" / "release_gate_job.sh").read_text()
 
 
-def test_the_box_job_runs_it_unconditionally_after_shardcheck_and_it_decides_the_exit():
+def test_only_the_smokes_own_job_runs_it_and_that_job_runs_nothing_else():
     lines = JOB.splitlines()
-    overlay, shard, measure, gate = (lines.index("PHASE=" + p) for p in ("overlay", "shardcheck", "measuresmoke", "gate"))
-    assert overlay < shard < measure < gate
-    block = JOB[JOB.index("\nPHASE=measuresmoke"):JOB.index("\nPHASE=gate")]
+    overlay, measure, shard, gate = (lines.index("PHASE=" + p) for p in ("overlay", "measuresmoke", "shardcheck", "gate"))
+    assert overlay < measure < shard < gate          # after the overlay: the box runs the Mac's copy of the tool
+    block = JOB[JOB.index("\nPHASE=measuresmoke"):JOB.index("\nPHASE=shardcheck")]
+    code = block[block.index('if [ "$GATE_JOB" = measuresmoke ]; then'):]
     for word in ("GATE_REUSE", "GATE_UNITS", "changed", "selector", "GATE_IDENTITY_COLUMNS"):
-        assert word not in block.split("# THE MEASUREMENT SMOKE")[0] + block.split("mrc=0", 1)[1], word
-    assert "tools/release_measurement_smoke.py run" in block and '--work "$GATE_WORK/measuresmoke-work"' in block
-    assert JOB.rstrip().endswith('[ "$grc" != 0 ] || grc=$mrc\nexit "$grc"')
+        assert word not in code, word                # no change detection decides whether it runs
+    assert "tools/release_measurement_smoke.py run" in code and '--work "$GATE_WORK/measuresmoke-work"' in code
+    assert code.rstrip().endswith('exit "$mrc"\nfi')   # the smoke's job ends there: no shardcheck, gate or qualifier
+    assert "grc=$mrc" not in JOB                     # the gate job's exit no longer carries it
+    # the smoke's job builds nothing: pixi and the autograd build run in the gate job only
+    pixi = JOB[JOB.index("\nPHASE=pixi"):JOB.index("\nPHASE=overlay")]
+    assert pixi.split("\n")[3].startswith('if [ "$GATE_JOB" = gate ]; then')
+    assert '[[ "$GATE_JOB" =~ ^(gate|measuresmoke)$ ]]' in JOB
+    # its setup steps run at once, and its busy-cores lines reach the job log as they happen
+    assert code.count("> \"$J/") >= 3 and 'wait "$vpid"' in code and 'wait "$fpid"' in code
+    assert "MEASURESMOKE (plan|busy|vendor=)" in code and "${PIPESTATUS[0]}" in code
 
 
-def test_the_tool_is_overlaid_its_summary_comes_home_and_the_job_gets_its_inputs(tmp_path):
+def test_the_smoke_is_its_own_persisted_job_with_its_own_cap(tmp_path):
+    sys.path.insert(0, str(ROOT / "tools" / "ops"))
+    import release_gate as RG
+    out = tmp_path / "abc-release-light-v1"
+    gate = RG.Plan("nvidia", "0.8.67", "a" * 40, tmp_path, out, [tmp_path / "w.whl"], "t1")
+    smoke = RG.Plan("nvidia", "0.8.67", "a" * 40, tmp_path, out / "measuresmoke-job", [tmp_path / "w.whl"], "t2",
+                    job="measuresmoke", identity_columns=["nvidia"], label_device="l40s")
+    assert gate.launch()[gate.launch().index("--cap") + 1] == str(RG.NV_CAP_MIN) == "240"
+    assert smoke.launch()[smoke.launch().index("--cap") + 1] == str(RG.MEASURE_SMOKE_CAP_MIN)
+    assert RG.MEASURE_SMOKE_CAP_MIN >= RG.MEASURE_SMOKE_MINUTES + 30 and RG.MEASURE_SMOKE_CAP_MIN <= 240
+    assert smoke.launch()[:3] == ["bash", "tools/nvidia_central.sh", "submit"]   # the persisted-job entry point
+    assert smoke.indir != gate.indir and smoke.work != gate.work and "abc-release-light-v1-measuresmoke" in smoke.indir
+    env = smoke.env_text()
+    assert "GATE_JOB=measuresmoke" in env and "GATE_IDENTITY_COLUMNS=\n" in env and "GATE_BUILD_AUTOGRAD=0" in env
+    assert "GATE_JOB=gate" in gate.env_text() and "GATE_RUNTIME_CPU=0" in env
+    assert "MEASURE_SMOKE_PIP=(" in env and "MEASURE_SMOKE_FIXTURE_PIP=(" in env
+    assert "GATE_MEASURE_SMOKE_MINUTES=%d" % RG.MEASURE_SMOKE_MINUTES in env
+    assert any(r.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for _, r, _ in smoke.uploads())
+    assert not any(r.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for _, r, _ in gate.uploads())
+    amd = RG.Plan("amd", "0.8.67", "a" * 40, tmp_path, out / "measuresmoke-job", [tmp_path / "w.whl"], "t3",
+                  job="measuresmoke")
+    assert amd.launch()[:3] == ["bash", "tools/do_amd_steward.sh", "run"]
+    with pytest.raises(SystemExit):
+        RG.Plan("amd", "0.8.67", "a" * 40, tmp_path, out, [], "t4", job="other")
+    assert RG.parse(["amd", "0.8.67", "--source-commit", "a" * 40, "--source-tree", ".", "--out", "o",
+                     "--candidate-wheel", "w", "--job", "measuresmoke"]).job == "measuresmoke"
+
+
+def test_release_runs_the_smoke_job_after_the_gate_job_and_only_what_is_missing(tmp_path, monkeypatch):
+    import release as R
+    calls = []
+    r = R.Release.__new__(R.Release)
+    r.dry = False
+    out = tmp_path / "gate"
+    state = {"gate": False, "smoke": False}
+    monkeypatch.setattr(r, "readiness_status", lambda write: None, raising=False)
+    monkeypatch.setattr(r, "readiness", lambda: type("X", (), dict(begin=lambda s, k: "id", record=lambda s, *a, **k: None))(),
+                        raising=False)
+    monkeypatch.setattr(r, "record_candidate_requirement", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr(R.Release, "rel", tmp_path, raising=False)
+    monkeypatch.setattr(r, "gate_out", lambda vendor: out, raising=False)
+
+    def gate_ok(vendor, measure=True):
+        if not state["gate"]:
+            return False, "no gate report"
+        if measure and not state["smoke"]:
+            return False, "measuresmoke: no summary"
+        return True, "PASS"
+
+    def gate_job(vendor, run_id, work, output):
+        calls.append("gate")
+        state["gate"] = True
+
+    def smoke_job(vendor, work, output):
+        assert state["gate"], "the smoke job starts only after the gate job has ended"
+        calls.append("smoke")
+        state["smoke"] = True
+    monkeypatch.setattr(r, "gate_ok", gate_ok, raising=False)
+    monkeypatch.setattr(r, "launch_gate_job", gate_job, raising=False)
+    monkeypatch.setattr(r, "launch_measure_smoke_job", smoke_job, raising=False)
+    assert r.run_gate("nvidia") == "PASS" and calls == ["gate", "smoke"]
+    calls.clear()
+    state["smoke"] = False                       # a gate job that already passed is not launched again
+    assert r.run_gate("nvidia") == "PASS" and calls == ["smoke"]
+    calls.clear()
+    assert r.run_gate("nvidia") == "PASS" and calls == []
+    state.update(gate=True, smoke=False)
+    monkeypatch.setattr(r, "launch_measure_smoke_job", lambda *a: calls.append("smoke"), raising=False)
+    with pytest.raises(R.StepFailed, match="measuresmoke"):
+        r.run_gate("nvidia")                     # a smoke that did not pass fails the step (and so the release)
+
+
+def test_the_smoke_job_command(tmp_path, monkeypatch):
+    import release as R
+    r = R.Release.__new__(R.Release)
+    r.dry = True
+    monkeypatch.setattr(R.Release, "commit", "a" * 40, raising=False)
+    monkeypatch.setattr(R.Release, "version", "0.8.67", raising=False)
+    monkeypatch.setattr(r, "source_checkout", lambda create=True: tmp_path, raising=False)
+    monkeypatch.setattr(r, "candidate_gate_wheels", lambda vendor: [tmp_path / "w.whl"], raising=False)
+    cmd = r.measure_smoke_cmd("amd", tmp_path / "gates", tmp_path / "x-release-light-v1")
+    assert cmd[cmd.index("--job") + 1] == "measuresmoke"
+    assert cmd[cmd.index("--out") + 1] == str(tmp_path / "x-release-light-v1" / "measuresmoke-job")
+    assert "--identity-columns" not in cmd and "--units-plan" not in cmd and "--autograd-prior" not in cmd
+
+
+def test_boxes_down_waits_for_the_gate_steps_that_hold_both_jobs():
+    import release as R
+    assert {"gate-nvidia", "gate-amd"} <= set(R.AFTER["boxes-down"])
+
+
+def test_the_busy_cores_figure():
+    assert MS.busy_cores((100, 1000), (600, 2000), 20) == 10.0
+    assert MS.busy_cores(None, (1, 2), 4) is None and MS.busy_cores((5, 10), (5, 10), 4) is None
+
+
+# ------------------------------------------------------------------ the two scorer gaps, closed in the harness
+# macOS Accelerate's matmul raises spurious floating-point flags under NumPy 2.x (the values are exact; asserted below)
+@pytest.mark.filterwarnings("ignore:.*encountered in matmul:RuntimeWarning")
+def test_mlp_predict_scores_ours_alone_against_the_fp64_forward():
+    import numpy as np
+    import bench_board_neural as N
+    rng = np.random.default_rng(7)
+    data = {"w:" + n: rng.uniform(-0.3, 0.3, d).astype(np.float32) for n, d in zip(N.MLP_NAMES, N.MLP_DIMS)}
+    data["X"] = rng.standard_normal((2, 64, 8)).astype(np.float32)
+    w1, b1, w2, b2 = (data["w:" + n] for n in N.MLP_NAMES)
+    x = data["X"][0].astype(np.float64)
+    y = (np.maximum(x @ w1.T.astype(np.float64) + b1, 0) @ w2.T.astype(np.float64) + b2).astype(np.float32)  # ours
+    q = N.quality("mlp-predict", data, {"ours": {"y": y.astype(np.float32)}})
+    err = q["ours"]["max_rel_err_vs_fp64"]
+    assert isinstance(err, float) and 0 <= err < 1e-5
+    bad = N.quality("mlp-predict", data, {"ours": {"y": (y + 1).astype(np.float32)}})["ours"]["max_rel_err_vs_fp64"]
+    assert bad > 0.01                             # a wrong output is visible, not a constant
+    assert MS.own_cell_errors(dict(cell(), quality=q["ours"]), False) == []
+
+
+def test_jl_min_dim_gets_its_untimed_sklearn_reference_when_ours_races_alone():
+    import bench_board_algos as A
+    assert A.quality_kind("jl-min-dim") == "x-jl"
+    assert A.independent_reference_arm("jl-min-dim") == "sklearn-cpu"
+    # the outlier lanes keep their rule (an "sk" lane), and a lane naming no sklearn arm gets none
+    assert all(A.independent_reference_arm(l) in (None, "sklearn-cpu") for l in A.LANES
+               if A.quality_kind(l) == "outlier")
+
+
+def test_the_release_verdict_requires_it_in_both_gate_paths():
+    riw = (ROOT / "tools" / "release_identity_wheels.py").read_text()
+    single = riw[riw.index("def single_gate_ok"):riw.index("def gate_identity_errors")]
+    assert "measure_smoke_errors(output)" in single
+    rel = (ROOT / "tools" / "release.py").read_text()
+    light = rel[rel.index("    def gate_ok(self, vendor, measure=True):"):rel.index("RUNTIME_GATE_FAILED = ")]
+    assert "measure_smoke_errors(output)" in light
+    import release_identity_wheels as RIW
+    assert RIW.measure_smoke_errors(pathlib.Path("/nonexistent")) == ["measuresmoke: " + MS.NO_SUMMARY]
+    assert str(RIW.measure_smoke_summary(pathlib.Path("/g"))) == "/g/measuresmoke-job/measuresmoke/" + MS.SUMMARY
+
+
+def test_the_tool_is_overlaid_and_its_summary_comes_home():
     sys.path.insert(0, str(ROOT / "tools" / "ops"))
     import release_gate as RG
     assert "tools/release_measurement_smoke.py" in RG.GATE_OVERLAY
@@ -294,20 +443,3 @@ def test_the_tool_is_overlaid_its_summary_comes_home_and_the_job_gets_its_inputs
         assert name not in ("cuml", "cupy", "xgboost", "lightgbm", "catboost", "transformers", "mamba-ssm",
                             "faiss-cpu", "implicit", "cuvs", "cugraph", "gpytorch"), pkg
     assert "torch" not in [p.split("=")[0] for p in RG.MEASURE_SMOKE_PIP]   # torch only in the fixture venv
-    plan = RG.Plan("amd", "0.8.67", "a" * 40, tmp_path, tmp_path / "out", [tmp_path / "w.whl"], "t1")
-    env = plan.env_text()
-    assert "MEASURE_SMOKE_PIP=(" in env and "MEASURE_SMOKE_FIXTURE_PIP=(" in env
-    assert "GATE_MEASURE_SMOKE_MINUTES=%d" % RG.MEASURE_SMOKE_MINUTES in env
-    assert any(r.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for _, r, _ in plan.uploads())
-
-
-def test_the_release_verdict_requires_it_in_both_gate_paths():
-    riw = (ROOT / "tools" / "release_identity_wheels.py").read_text()
-    single = riw[riw.index("def single_gate_ok"):riw.index("def gate_identity_errors")]
-    assert "measure_smoke_errors(output)" in single
-    rel = (ROOT / "tools" / "release.py").read_text()
-    light = rel[rel.index("    def gate_ok(self, vendor):"):rel.index("RUNTIME_GATE_FAILED = ")]
-    assert "measure_smoke_errors(output)" in light
-    import release_identity_wheels as RIW
-    assert RIW.measure_smoke_errors(pathlib.Path("/nonexistent")) == ["measuresmoke: no measurement-smoke summary"]
-
