@@ -3110,9 +3110,9 @@ def _fit_weights(model: PythonObject, args: PythonObject, operation: String) rai
     var position = 0
     var raw_key = PyObjectPtr()
     var raw_value = PyObjectPtr()
-    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+    # The standard library's typed PyDict_Next (no dlsym per call).
     for i in range(len(params)):  # driver-loop: native keyword insertion order, without iterator/list dispatch
-        if next_item(params._obj_ptr, Pointer(to=position), Pointer(to=raw_key), Pointer(to=raw_value)) == 0:
+        if cpy.PyDict_Next(params._obj_ptr, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
             break
         var key = PythonObject(from_owned=cpy.Py_NewRef(raw_key))
         # Check before String/repr: a supplied name subclass must not invoke
@@ -3139,8 +3139,8 @@ def _no_fit_params(model: PythonObject, args: PythonObject) raises:
     var raw_value = PyObjectPtr()
     # Only the first keyword can be consumed: any keyword refuses. Native
     # iteration reads no value and invokes no mapping/key protocol hooks.
-    if cpy.lib.get_function[Int32]("PyDict_Next")(
-            params._obj_ptr, Pointer(to=position), Pointer(to=raw_key), Pointer(to=raw_value)) != 0:
+    if cpy.PyDict_Next(
+            params._obj_ptr, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=raw_value).unsafe_origin_cast[MutAnyOrigin]()) != 0:
         var key = PythonObject(from_owned=cpy.Py_NewRef(raw_key))
         _ = params
         if py_type(key) is not b.str:
