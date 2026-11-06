@@ -231,8 +231,23 @@ def _msel_admit_labels(values: PythonObject, context: PythonObject) raises:
 
 def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.encode_labels(value)`: (classes, int32 codes)."""
-    var flat = msel_flatten(value, context)
-    _msel_admit_labels(flat, context)
+    # A C-contiguous int32/int64/uint32 ndarray vector is encoded straight from
+    # its buffer (labels_encode_labels' one prepare_targets call). Flattening
+    # it first boxed and admitted every label as a Python int, which only
+    # rebuilt the same int64 vector (_list_labels) for the same encoder: same
+    # Python-int classes and codes, so no bits change. Every other input keeps
+    # the label input step below.
+    var direct = False
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is not None and py_type(value) is ndarray:
+        msel_admit(value, context)
+        var typestr = String(value.dtype.str)
+        direct = (Int(py=value.ndim) == 1 and Int(py=value.size) > 0 and Bool(py=value.flags.c_contiguous)
+                  and (typestr == "<i4" or typestr == "<i8" or typestr == "<u4"))
+    var flat = value
+    if not direct:
+        flat = msel_flatten(value, context)
+        _msel_admit_labels(flat, context)
     var labels_context = py_call(msel_b().dict, context)
     var real = Python.list()
     _ = py_call(real.extend, Python.tuple(msel_b().int, msel_b().float, msel_b().bool))
