@@ -74,10 +74,14 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     # device (x_linear/device.mojo SGD_IDN_DEV_FINITE; the same error)
     # lane/fam-linear: every other route does the same on the X it uploads
     # (x_linear/finite_device.mojo XLIN_IDN_DEV_FINITE; the same error)
-    if not ((SGD_IDN_DEV_FINITE and a == ALGO_SGD) or (XLIN_IDN_DEV_FINITE and a != ALGO_SGD)):
-        _finite(x, Int(py=dims[2]), "X")
-        _finite(y, Int(py=dims[3]), "y")
+    # The fallback finite scans (builds without the device-side checks) are
+    # native device work over host pointers: they run with the GIL released,
+    # before the fit, with the same refusals.
+    var host_scan = not ((SGD_IDN_DEV_FINITE and a == ALGO_SGD) or (XLIN_IDN_DEV_FINITE and a != ALGO_SGD))
     with GILReleased(Python()):
+        if host_scan:
+            _finite(x, n_x, "X")
+            _finite(y, n_y, "y")
         fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
     return PythonObject(n_out)
 
