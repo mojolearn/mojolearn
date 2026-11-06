@@ -24,6 +24,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
+from bindings.cpython_table import cpython_table
+from bindings.optimizer_public_words import stash_python_error
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
@@ -1040,25 +1042,36 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
             _ = out  # keep the Python object alive through the native call above
             _ = wide_codes  # keep the Python object alive through the native call above
             return out
-    var values = Python.list()
     var p = _I64P(unsafe_from_address=trees_address(wide_codes))
     _ = wide_codes  # keep the Python object alive through the native call above
-    # The k class objects and the list's `append` read once (lane
-    # perf-sweep-trees, 2026-11-05: an attribute lookup and a Python index
-    # per row before). A code indexes as the Python list did: a negative code
-    # counts from the end, any other out-of-range code is refused.
+    # The k class objects read once (lane perf-sweep-trees, 2026-11-05). A
+    # code indexes as the Python list did: a negative code counts from the
+    # end, any other out-of-range code is refused. p3-trees: the output is
+    # one PyList_New(n) filled slot by slot (PyList_SetItem with a new
+    # reference), not one bound `append` call per row.
     var labels = List[PythonObject]()
     for c in range(k):  # driver-loop: over the k class objects
         labels.append(classes[c])
-    var append = values.append
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n)
+    if not raw:
+        var failure = stash_python_error()
+        raise failure^
+    # Owns the NULL-filled list: a refusal below releases the filled slots.
+    var values = PythonObject(from_owned=raw)
+    var table = cpython_table()
     for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
         var code = Int(p[i])
         if code < 0:
             code += k
         if code < 0 or code >= k:
             raise Error("IndexError: list index out of range")
-        _ = py_call(append, labels[code])
+        # SetItem steals the new reference on success and failure alike.
+        if table[].PyList_SetItem(values._obj_ptr, i, cpy.Py_NewRef(labels[code]._obj_ptr)) != 0:
+            var failure = stash_python_error()
+            raise failure^
     _ = wide_codes  # keep the Python object alive through the reads above
+    _ = labels^
     return values
 
 
