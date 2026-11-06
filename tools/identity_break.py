@@ -145,7 +145,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             on-policy RL section of Thinking Machines, "Defeating
             Nondeterminism in LLM Inference", September 2025). SAMPLER:
             RLPAIR_SEQS = 5 prompts of RLPAIR_PROMPT = 4 held-out ids are
-            prefilled and RLPAIR_DECODE = 12 tokens decoded one step at a
+            prefilled and RLPAIR_DECODE = 8 tokens decoded one step at a
             time through the lane's public state API, greedy (argmax, lowest
             index on a tie, no RNG), recording each chosen id, its logits
             row and its NLL. TRAINER: the realized sequences, teacher
@@ -159,7 +159,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             row equals it, and every further sampler (below) equals it;
             (3) CONTINUOUS BATCHING: row 4 is prefilled and decoded alone for
             3 tokens, then its state joins the batch of the other four at row
-            2; row 1 leaves after token 8; every row's tokens equal the
+            2; row 1 leaves after token 5; every row's tokens equal the
             trainer's. The state rows are gathered and joined through the
             layouts the state classes document (`_rl_take`, `_rl_cat`); the
             Mamba-2/3 states and the KV cache hold ONE cursor per batch, so a
@@ -277,13 +277,16 @@ a record, and it now says so about itself instead of looking like one.
             that moves at A = 4 is condition 5 seen biting (recorded).
     batchscale  SERVING-SCALE B. A whole call of 1024 rows
             and sub-batches of B in {1, 17, 64, 256} at its start, middle and
-            end, every sub-batch row equal to its row of the whole; for the
-            causal sequence models also B = 2 at L = 1024 against every
-            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511,
-            512, 513, 1023} (the Mamba-3 chunk 64, the GEMM leaf 128, the
-            Mamba-2 chunk 256). Lanes: the sequence blocks, the byte LM lanes
-            (the long length loads the lane's parameters into the default
-            shape with `length=1024`), Samba, and the classical serving set
+            end, every sub-batch row equal to its row of the whole (the
+            causal sequence models since 2026-11-05: a whole call of
+            SEQ_SCALE_WHOLE = 128 rows, B = 256 recorded n/a); for the
+            causal sequence models also B = 2 at L = 300 against every
+            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 299}
+            (the Mamba-3 chunk 64, the GEMM leaf 128, the Mamba-2 chunk 256;
+            L = 1024 and the prefixes 511-1023 until 2026-11-05). Lanes: the
+            sequence blocks, the byte LM lanes (the long length loads the
+            lane's parameters into the default shape with `length=300`),
+            Samba, and the classical serving set
             knn, rf-clf, rf-reg, gbdt-symmetric, gbdt-rmse, ols, ridge,
             logistic, pca. Inputs past a fixture's size wrap around it. The
             batch part's sabotage switch sabotages this part too.
@@ -1134,6 +1137,56 @@ LANE_REVISIONS = {
     # read OWED to the next record. The random-init lanes did not move.
     "gmm": "classic-kmeanspp-init-1",
     "gmm-sample": "classic-kmeanspp-init-1",
+    # THE 2026-11-05 SHRINK (lane/slow-verification-lanes, Andrew: "fixtures
+    # should be small"): correctness checks, not measurements. Each lane keeps
+    # its branches, arms, parts and fixture kinds; rows, observations,
+    # iterations, tree counts and eigh widths came down. Every committed
+    # column hashed the old input, so these cells read OWED to the next record.
+    "x-prep-da-solvers": "rows-4500-1",
+    "x-prep-nb-weights": "rows-4500-1",
+    "x-prep-rfe": "rows-4500-1",
+    "x-prep-score-edges": "rows-4500-1",
+    "x-prep-priors": "rows-4500-1",
+    "x-cluster-hdbscan-epsilon": "rows-1000-1",
+    "sequence-ets": "obs-48-1",
+    "x-metrics-permutation-test-score": "perms-4-20261105-1",
+    "x-decomp-eigh-wide-linalg": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-fastica": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-rotation": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-mincovdet": "light-fixture-20261105-1",
+    "x-decomp-umap-options": "light-fixture-20261105-1",
+    "x-decomp-manifold": "light-fixture-20261105-1",
+    "trees-calibrated": "light-fixture-20261105-1",
+    "trees-stacking-clf": "light-fixture-20261105-1",
+    "trees-voting-clf": "light-fixture-20261105-1",
+    "gbdt-symmetric": "light-fixture-20261105-1",
+    "gbdt-symmetric-eval": "light-fixture-20261105-1",
+    "gbdt-class-weights": "light-fixture-20261105-1",
+    "gbdt-multiclass-offgrid": "light-fixture-20261105-1",
+    "gbdt-ordered": "light-fixture-20261105-1",
+    "gbdt-ordered-bayesian-noise": "light-fixture-20261105-1",
+    "gbdt-binary-columns": "light-fixture-20261105-1",
+    "gbdt-catboost-defaults": "light-fixture-20261105-1",
+    "gbdt-stochastic-arms": "light-fixture-20261105-1",
+    "gbdt-multiclass": "light-fixture-20261105-1",
+    "gbdt-onevsall": "light-fixture-20261105-1",
+    "gbdt-multiclass-defaults": "light-fixture-20261105-1",
+    "gbdt-pointwise-l2-bayesian-eval": "light-fixture-20261105-1",
+    "gbdt-adapter-clf": "light-fixture-20261105-1",
+    "gbdt-yeti-rank": "light-fixture-20261105-1",
+    "kmeans-random": "rows-8192-1",
+    "kmeans-sqrt": "rows-8192-1",
+    "dbscan-weighted": "rows-2000-1",
+    "arima-seasonal-c": "obs-128-1",
+    "arima-exog-seasonal": "obs-128-1",
+    "saved-model-host-infer": "rows-4096-1",
+    "rf-reg-gamma-ig": "rows-2048-1",
+    "bootstrap": "light-fixture-20261105-1",
+    # The neural sequence lanes' 2026-11-05 change is to the batchscale and
+    # rlpair PROTOCOLS (SEQ_SCALE_WHOLE, SCALE_LONG_L, SCALE_PREFIXES,
+    # RLPAIR_DECODE, RLPAIR_LEAVE_AFTER), not to their train input; those parts
+    # carry their own protocol stamp (`_part_protocol`), so no revision here.
 }
 
 
@@ -1276,6 +1329,93 @@ NON_SIZE_REVISIONS = {
         "arithmetic, not input: GaussianMixture's init_params='kmeans' start became the classic "
         "greedy k-means++ instead of k-means|| (2026-09-26, lane/gmm-degenerate-data, DEVIATION 3133 "
         "in mixture/estimator.mojo). The lane still fits the same 6000 x 4 rows"),
+    # 2026-11-05 (lane/slow-verification-lanes): several dimensions moved at once, so no one size key.
+    "x-metrics-permutation-test-score": (
+        "x-metrics-permutation-test-score draws 4 permutations per call instead of 12 (2026-11-05, "
+        "lane/slow-verification-lanes): every permutation is three Ridge fits; the plain and grouped "
+        "counter-generator draws, the score and the p-value parts are unchanged."),
+    "x-decomp-eigh-wide-linalg": (
+        "2026-11-05 lane/slow-verification-lanes: the second eigh width moves from 128 to 65, which is the "
+        "exact-multiple panel arm and the odd-n Jacobi pad arm; 72 is kept."),
+    "x-decomp-eigh-wide-fastica": (
+        "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 and FastICA max_iter "
+        "from 8 to 4; every iteration still runs the decorrelation eigh."),
+    "x-decomp-eigh-wide-rotation": (
+        "2026-11-05 lane/slow-verification-lanes: quartimax n_components moves from 128 to 65, rows from 4d "
+        "to 2d and EM max_iter from 5 to 3; varimax stays at 72."),
+    "x-decomp-eigh-wide-factor-analysis": (
+        "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 with rows still "
+        "width - 1, and EM max_iter from 10 to 4."),
+    "x-decomp-eigh-wide-mincovdet": (
+        "2026-11-05 lane/slow-verification-lanes: the MinCovDet widths move from 72/128 to 72/65; rows stay "
+        "at 3d and every hashed part is kept."),
+    "x-decomp-umap-options": (
+        "2026-11-05 lane/slow-verification-lanes: the rows move from 384 to 192 and the epochs from 8 to 4 "
+        "(the array-init pre-fit from 4 to 2); every option arm is kept."),
+    "x-decomp-manifold": (
+        "2026-11-05 lane/slow-verification-lanes: the MDS max_iter values are halved (40/30/25 to 20/15/12) "
+        "and the shift-invert LLE moves from 300 to 240 rows, still above 200."),
+    "trees-calibrated": (
+        "2026-11-05 lane/slow-verification-lanes: both calibrators fit on the first 7001 rows (was 20000) "
+        "with depth-3 trees (was 4), batch protocol on 2001 held-out rows; methods, cv=3 and ensemble arms "
+        "unchanged"),
+    "trees-stacking-clf": (
+        "2026-11-05 lane/slow-verification-lanes: fit on the first 7001 rows (was 20000), members depth 3 "
+        "(was 4) and forest of 2 trees (was 3), batch protocol on 2001 held-out rows; folds, passthrough "
+        "and final tree unchanged"),
+    "trees-voting-clf": (
+        "2026-11-05 lane/slow-verification-lanes: fit on the first 5001 rows (was 20000), member depths "
+        "4/4/3 (was 5/5/4), forest 2 trees (was 4), bagging 2 members (was 3), batch protocol on 2001 "
+        "held-out rows; weights and soft voting unchanged"),
+    "gbdt-symmetric": (
+        "2026-11-05, lane/slow-verification-lanes: training rows 20000 -> 4000 and both fits' trees 20 -> 8; "
+        "borders254 arm, Logloss, depth 6 and both parts kept"),
+    "gbdt-symmetric-eval": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 4000, m's trees 20 -> 8 "
+        "to stay gbdt-symmetric's fit; the overfitting od/sh shape and both asserts unchanged"),
+    "gbdt-class-weights": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8 per policy; "
+        "SymmetricTree, Depthwise, Lossguide and the off-grid class weight kept"),
+    "gbdt-multiclass-offgrid": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; MultiClass with "
+        "the off-grid class weights and l2 1 kept"),
+    "gbdt-ordered": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 6000 (floored at 5000, "
+        "the min_fold_size arm) and trees 20 -> 8 for both Ordered fits"),
+    "gbdt-ordered-bayesian-noise": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000, the min_fold_size "
+        "arm) and trees 20 -> 8; Bayesian bootstrap, noise and NewtonCosine twin kept"),
+    "gbdt-binary-columns": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000) and trees 20 -> 8 "
+        "for all six fits; batch part on the first 2048 held-out rows"),
+    "gbdt-catboost-defaults": (
+        "2026-11-05, lane/slow-verification-lanes: the two capped default fits go 20000 rows x 20 trees -> "
+        "4000 x 8; the below-cap 2000-row 50-tree fit is unchanged"),
+    "gbdt-stochastic-arms": (
+        "2026-11-05, lane/slow-verification-lanes: rows stay 4000; trees 20 -> 6 per bootstrap/noise arm "
+        "and 8 -> 4 per pointwise loss; every arm and loss kept"),
+    "gbdt-multiclass": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; MultiClass with "
+        "class weights [1, 2, 0.5] on three classes kept"),
+    "gbdt-onevsall": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; "
+        "MultiClassOneVsAll on the three-class centered target kept"),
+    "gbdt-multiclass-defaults": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8 for both "
+        "multiclass losses at their Bayesian/noise defaults"),
+    "gbdt-pointwise-l2-bayesian-eval": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 4000 and trees 20 -> 8; "
+        "pointwise searcher, L2, Bayesian bootstrap, weights, od and best model kept"),
+    "gbdt-adapter-clf": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; batch "
+        "predict/predict_proba on the first 2048 held-out rows, decision_function 512 unchanged"),
+    "gbdt-yeti-rank": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and the main fit's trees 20 -> 8; "
+        "the seeded 8-tree depth-4 fit and the RANK_QUERY_SIZES grouping kept"),
+    "bootstrap": (
+        "bootstrap moved from 4096 values x 2048 replicates (1024 for the sorted arms) to 1024 values x "
+        "1024 replicates for every arm, in the lane body and its batch part, on 2026-11-05 "
+        "(lane/slow-verification-lanes)."),
 }
 
 
@@ -1529,8 +1669,16 @@ def _(ml, X, yc, yr, Xh=None):
     from its CPU column at depth 1 (taxi, AUC 0.556 vs 0.610), with every
     identity lane green. A fixture column with fewer than 129 distinct
     values quantizes to fewer borders and does not reach the arm."""
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
-    w = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. 4000 rows keep every float column far
+    # above the 255 distinct values borders254 needs, the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62).
+    # gbdt-symmetric-eval's `m` is this fit and must stay the same shape.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss").fit(X, yc)
+    w = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
               border_count=254).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      borders254=_h(w.predict_proba(X))),
@@ -1548,8 +1696,8 @@ def _(ml, X, yc, yr, Xh=None):
 
     THREE FITS, AND THE SECOND TWO HAVE A SHAPE OF THEIR OWN FOR A REASON.
 
-    `m` is gbdt-symmetric's fit exactly (20 depth-6 trees at `_gbdt`'s
-    recorded options) plus an eval set, with the detector off and
+    `m` is gbdt-symmetric's fit exactly (its rows, its 8 depth-6 trees at
+    `_gbdt`'s recorded options) plus an eval set, with the detector off and
     `use_best_model` off. Its `predict` and `proba` must therefore be
     gbdt-symmetric's, bit for bit, on every column: an eval set does not
     reach the learn cursor, the borders, the splits or the leaves on the
@@ -1570,17 +1718,25 @@ def _(ml, X, yc, yr, Xh=None):
     and the two asserts are what keep it overfitting: a change that makes
     the curve monotone again reads REFUSED on this lane rather than passing
     with nothing measured."""
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    base = dict(n_estimators=20, max_depth=6, loss="Logloss")
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 training and 20000 eval
+    # rows -> 4000 and 4000, `m` at gbdt-symmetric's 8 trees (the two lanes must
+    # stay one fit). The overfitting shape below is kept as measured; fewer rows
+    # overfit sooner, and the two asserts still refuse a fixture on which the
+    # detector or the shrink goes inert.
+    rows = 4000
+    X, yc = X[:rows], yc[:rows]
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    base = dict(n_estimators=8, max_depth=6, loss="Logloss")
     m = _gbdt(ml.GradientBoosting, use_best_model=False, **base).fit(
-        X, yc, eval_set=(Xh, ych))
+        X, yc, eval_set=(Xe, ych))
     # the overfitting shape (measured: fires and cuts on all nine fixtures)
     stop = dict(n_estimators=30, max_depth=7, loss="Logloss",
                 learning_rate=1.8, l2_leaf_reg=3.0)
     od = _gbdt(ml.GradientBoosting, od_type="Iter", od_wait=2,
-               use_best_model=False, **stop).fit(X, yc, eval_set=(Xh, ych))
+               use_best_model=False, **stop).fit(X, yc, eval_set=(Xe, ych))
     sh = _gbdt(ml.GradientBoosting, use_best_model=True,
-               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xh, ych))
+               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xe, ych))
     if not od.stopped_early_ or len(od.test_loss_curve_) >= stop["n_estimators"]:
         raise RuntimeError(
             "gbdt-symmetric-eval: the Iter detector did not fire (trees="
@@ -1636,12 +1792,20 @@ def _(ml, X, yc, yr, Xh=None):
     is untouched by it. The CPU column trains binary class_weights since
     2026-10-03 (lane/fix-cpu-column2: the weight column through the host
     search planes, WeightsCpu and the leaf oracle)."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. Lossguide still fills max_leaves=32 on
+    # 1500 rows (gbdt-lossguide-newtoncosine's floor). 4000 rows keep the root
+    # leaf above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder
+    # arms) and two BK_CHUNK 2048 partials, the second ragged
+    # (bin_keyed_stats.mojo:62); the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
     cw = [1.0, 1.3101271632087197]
     parts, first = {}, None
     for policy, kw in (("SymmetricTree", dict(max_depth=6, random_strength=1.0, bootstrap_type="No")),
                        ("Depthwise", dict(max_depth=6)),
                        ("Lossguide", dict(max_leaves=32))):
-        m = _gbdt(ml.GradientBoosting, n_estimators=20, grow_policy=policy, loss="Logloss",
+        m = _gbdt(ml.GradientBoosting, n_estimators=trees, grow_policy=policy, loss="Logloss",
                   l2_leaf_reg=1.0, class_weights=cw, **kw).fit(X, yc)
         parts[policy] = _h(m.predict(X))
         first = first or m
@@ -1654,7 +1818,15 @@ def _(ml, X, yc, yr, Xh=None):
     the CPU column carries (gbdt/host/gbdt_oracle_multiclass.mojo restates
     `snap_weights_to_grid_kernel`); gbdt-multiclass's [1, 2, 0.5] is on the
     grid and does not reach the snap's rounding (lane/sym-quality)."""
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClass", l2_leaf_reg=1.0,
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClass", l2_leaf_reg=1.0,
               class_weights=[1.0, 1.3101271632087197, 0.7]).fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -1673,20 +1845,32 @@ _GBDT_BORDER_TYPES = ("Median", "Uniform", "UniformAndQuantiles", "MaxLogSum",
 
 
 @lane("gbdt-ordered")
+@floor(rows=(5000, "5000 rows is where CatBoost's fold size reaches its min_fold_size arm "
+                   "(gbdt/methods/dynamic_boosting_folds.mojo:459-464: below 5000 it is docCount/50, "
+                   "below 500 it is the 1-document cliff), so the Ordered fold structure this lane "
+                   "hashes is the one a real fit trains; set 2026-11-05, lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """GradientBoosting(boosting_type='Ordered') at the recorded GBDT
     configuration of `_gbdt` (no bootstrap, no score noise): a Logloss fit
     (their four permutations, ten Newton steps per leaf) with an eval set,
     the Iter detector at wait 5 and use_best_model (their test cursor), and
-    an RMSE fit (boost_from_average on, as their unset default), 20 trees of
+    an RMSE fit (boost_from_average on, as their unset default), 8 trees of
     depth 6 each. The fold structure search, every (permutation, fold)
     cursor and the estimation permutation reach the train column through both
     fits' predictions and learn curves and the Logloss fit's held-out curve."""
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 training and eval rows x
+    # 20 trees -> 6000 x 8. 6000 rows sit above the floor's 5000, so the fold
+    # size is min_fold_size and the permutation block stays 1
+    # (ordered_plan.mojo:40, below 50000); the tree count is not the point.
+    rows = 6000                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    trees = 8
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
               boosting_type="Ordered", od_type="Iter", od_wait=5
-              ).fit(X, yc, eval_set=(Xh, ych))
-    r = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+              ).fit(X, yc, eval_set=(Xe, ych))
+    r = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
               boosting_type="Ordered").fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      test_loss_curve=_h(np.asarray(m.test_loss_curve_, dtype=np.float64)),
@@ -1697,14 +1881,23 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("gbdt-ordered-bayesian-noise")
+@floor(rows=(5000, "the Ordered fold size is min_fold_size only from 5000 rows up "
+                   "(gbdt/methods/dynamic_boosting_folds.mojo:459-464, docCount/50 below it), and the "
+                   "Bayesian bootstrap and score noise here ride those folds; set 2026-11-05, "
+                   "lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """Ordered boosting at CatBoost's GPU defaults for the parts `_gbdt`
     pins elsewhere: the Bayesian bootstrap at temperature 1 on the quality
     slices and random_strength 1.0 with its model-length decay, one Logloss
-    fit of 20 depth-6 trees with a NewtonCosine twin (Newton weights in the
+    fit of 8 depth-6 trees with a NewtonCosine twin (Newton weights in the
     search planes). The learning rate is pinned to 0.03 and the leaf count to
     Logloss's ten, so the lane moves only with the bootstrap and the noise."""
-    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered",
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 rows x 20 trees -> 6000 x
+    # 8, above the floor's 5000; eight trees still carry the noise's
+    # model-length decay across trees.
+    rows = 6000                                  # FLOORED, see @floor above
+    X, yc = X[:rows], yc[:rows]
+    kw = dict(n_estimators=8, max_depth=6, loss="Logloss", boosting_type="Ordered",
               learning_rate=0.03, leaf_estimation_iterations=10)
     m = ml.GradientBoosting(**kw).fit(X, yc)
     nc = ml.GradientBoosting(score_function="NewtonCosine", **kw).fit(X, yc)
@@ -1738,6 +1931,10 @@ def _gbdt_binary_columns(X):
 
 
 @lane("gbdt-binary-columns")
+@floor(rows=(5000, "four of this lane's six fits are Ordered, whose fold size is min_fold_size only "
+                   "from 5000 rows up (gbdt/methods/dynamic_boosting_folds.mojo:459-464, docCount/50 "
+                   "below it), so the Ordered fold arm's binary histograms run on real folds; set "
+                   "2026-11-05, lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """Five columns with exactly ONE border each (0/1 flags,
     `_gbdt_binary_columns`), the BinaryFeatures histogram policy
@@ -1751,12 +1948,20 @@ def _(ml, X, yc, yr, Xh=None):
 
     The fits are the configurations the small-pool host route took before
     lane hr-gbdt-small deleted it: Plain and Ordered, Logloss and
-    RMSE, at `_gbdt`'s recorded options, 20 depth-6 trees each; the Ordered
+    RMSE, at `_gbdt`'s recorded options, 8 depth-6 trees each; the Ordered
     RMSE fit again at CatBoost's GPU defaults for the bootstrap and the
     noise (Bayesian, random_strength 1), which is what an unset
     `GradientBoosting()` of 500 trees or more trains below 50,000 rows; and
     OrderedRMSE, whose host restatement shares the Ordered fold arm. The
     model and held-out columns read the Ordered Logloss fit."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 6000 x 8 per fit. 6000 rows sit above the floor's
+    # 5000 (the Ordered fold arm), keep the root leaf above GATHER_INPLACE_SIZE
+    # 1024 (split_points.mojo:829) and both flag values on every fixture (the
+    # refusal below still checks); the tree count is not what this lane checks.
+    rows = 6000                                  # FLOORED, see @floor above
+    trees = 8
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]
     X = _gbdt_binary_columns(X)
     Xh = None if Xh is None else _gbdt_binary_columns(Xh)
     for c in _GBDT_BINARY_COLUMNS:
@@ -1772,18 +1977,18 @@ def _(ml, X, yc, yr, Xh=None):
     yc = (np.asarray(yc, dtype=np.int32) ^ X[:, 5].astype(np.int32)).astype(np.int32)
     yr = (np.asarray(yr, dtype=np.float32) + np.float32(1.5) * X[:, 3]
           - np.float32(1.0) * X[:, 8]).astype(np.float32)
-    pc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    pc = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
                boosting_type="Plain").fit(X, yc)
-    pr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+    pr = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
                boosting_type="Plain").fit(X, yr)
-    oc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    oc = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
                boosting_type="Ordered").fit(X, yc)
-    orr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+    orr = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
                 boosting_type="Ordered").fit(X, yr)
-    od = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE",
+    od = ml.GradientBoosting(n_estimators=trees, max_depth=6, loss="RMSE",
                              boosting_type="Ordered", learning_rate=0.03).fit(X, yr)
     perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
-    ormse = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
+    ormse = ml.OrderedRMSE(n_estimators=trees, max_depth=6).fit(X, yr, permutation=perm)
     return _fit(dict(plain_logloss=_h(pc.predict(X), pc.predict_proba(X)),
                      plain_rmse=_h(pr.predict(X)),
                      plain_curves=_h(np.asarray(pc.loss_curve_, dtype=np.float64),
@@ -1804,14 +2009,23 @@ def _(ml, X, yc, yr, Xh=None):
     the loss: the auto learning rate off the GPU coefficient rows (read back
     as `learning_rate_`), the Bayesian bootstrap at temperature 1,
     random_strength 1 with its model-length decay, and the small-iteration
-    leaf rule (one Newton step below 200 trees and 20 features). 20 trees,
+    leaf rule (one Newton step below 200 trees and 20 features). 8 trees,
     Plain (below 500 trees), Logloss, and the same fit through
-    GradientBoostingClassifier, which defers every default. At 20 trees the
+    GradientBoostingClassifier, which defers every default. At 8 trees the
     auto rate is capped at 0.5 on every fixture, so a third fit, 50 depth-2
     trees on the first 2000 rows, reads the formula below its cap (0.475 on
     the GPU rows; 0.216 on the CPU rows the sabotage arm swaps in)."""
-    m = ml.GradientBoosting(n_estimators=20, loss="Logloss").fit(X, yc)
-    c = ml.GradientBoostingClassifier(n_estimators=20).fit(X, yc)
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"): the
+    # two capped fits go 20000 rows x 20 trees -> 4000 x 8. The GPU Logloss row
+    # (python/mojolearn/ensemble.py:275) gives 0.031 * (1000/8) ^0.896 = 2.4 at
+    # 4000 rows and 8 trees, still far above the 0.5 cap, and 8 trees are still
+    # below the 200-tree one-Newton-step rule. The below-cap fit keeps its
+    # measured 2000 rows and 50 depth-2 trees (the prefix of a prefix: its bytes
+    # do not move).
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = ml.GradientBoosting(n_estimators=trees, loss="Logloss").fit(X, yc)
+    c = ml.GradientBoostingClassifier(n_estimators=trees).fit(X, yc)
     a = ml.GradientBoosting(n_estimators=50, max_depth=2, loss="Logloss").fit(X[:2000], yc[:2000])
     lr = np.asarray([m.learning_rate_, a.learning_rate_], dtype=np.float64)
     return _fit(dict(predict=_h(m.predict(X)), learning_rate=_h(lr),
@@ -1824,26 +2038,32 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The bootstrap and the score noise on every arm a default fit or a
     `bootstrap_type` reaches, Logloss and RMSE (lane/gbdt-cpu-default-parity,
-    2026-09-20). 20 trees each, everything else unset. SymmetricTree: the
+    2026-09-20). 6 trees each, everything else unset. SymmetricTree: the
     default RMSE fit (Bayesian bootstrap, random_strength 1, its leaves read
     off the bootstrapped planes), the same through GradientBoostingRegressor,
     and Bernoulli and No for both losses (No keeps the noise). Depthwise and
     Lossguide: RMSE at the policy defaults, the Bayesian and Bernoulli
     bootstraps for both losses, and Depthwise with random_strength 1 under
     the Bayesian bootstrap. Then the ten pointwise losses at their defaults
-    (Bayesian bootstrap, random_strength 1), eight trees each. Poisson keeps
+    (Bayesian bootstrap, random_strength 1), four trees each. Poisson keeps
     ten leaf iterations so its backtracking can handle the wide fixture's
     large counts; the small-fit one-step shortcut overflows on both devices.
     The first 4000 rows of the fixture."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # rows stay 4000; 20 trees -> 6 per arm and 8 -> 4 per pointwise loss. On
+    # the Apple column a fit costs per tree, not per row, and this lane runs 28
+    # fits. Six trees still sample six bootstraps and six points of the score
+    # noise's model-length decay; every arm and loss is kept.
     rows = 4000
+    trees, loss_trees = 6, 4
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]
-    m = ml.GradientBoosting(n_estimators=20, loss="RMSE").fit(X, yr)
-    reg = ml.GradientBoostingRegressor(n_estimators=20).fit(X, yr)
+    m = ml.GradientBoosting(n_estimators=trees, loss="RMSE").fit(X, yr)
+    reg = ml.GradientBoostingRegressor(n_estimators=trees).fit(X, yr)
     parts = dict(predict=_h(m.predict(X)), regressor=_h(reg.predict(X)))
     curves = [np.asarray(m.loss_curve_, dtype=np.float64)]
 
     def add(name, y, **kw):
-        g = ml.GradientBoosting(n_estimators=20, **kw).fit(X, y)
+        g = ml.GradientBoosting(n_estimators=trees, **kw).fit(X, y)
         parts[name] = _h(g.predict(X))
         curves.append(np.asarray(g.loss_curve_, dtype=np.float64))
 
@@ -1863,9 +2083,9 @@ def _(ml, X, yc, yr, Xh=None):
     for loss, kw in (("Quantile", {}), ("MAE", {}), ("LogLinQuantile", {}), ("MAPE", {}),
                      ("Poisson", dict(leaf_estimation_iterations=10)), ("Lq", dict(loss_q=3.0)), ("Expectile", dict(loss_alpha=0.3)),
                      ("Tweedie", dict(loss_variance_power=1.5)), ("Huber", dict(loss_delta=1.0))):
-        g = ml.GradientBoosting(n_estimators=8, loss=loss, **kw).fit(X, ypos)
+        g = ml.GradientBoosting(n_estimators=loss_trees, loss=loss, **kw).fit(X, ypos)
         parts["sym-%s" % loss] = _h(g.predict(X))
-    ce = ml.GradientBoosting(n_estimators=8, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+    ce = ml.GradientBoosting(n_estimators=loss_trees, loss="CrossEntropy").fit(X, yc.astype(np.float32))
     parts["sym-CrossEntropy"] = _h(ce.predict(X))
     parts["loss_curves"] = _h(np.concatenate(curves))
     return _fit(parts, m, lambda e: (e.predict(Xh),))
@@ -3080,6 +3300,10 @@ def _lane_refuses(fn, text):
 
 
 @lane("saved-model-host-infer")
+@floor(rows=(4096, "4096 rows are the rows the host readers were already asked to predict, and they "
+                   "still let a depth-8 forest and a depth-6 GBDT grow full depth; the lane checks the "
+                   "saved-model readers, not the builders. Chosen 2026-11-05 on "
+                   "lane/slow-verification-lanes; no smaller fit measured."))
 def _(ml, X, yc, yr, Xh=None):
     """THE PUBLIC SAVED-MODEL CPU INFERENCE SURFACE by its own names:
     `mojolearn.HostForest`, `mojolearn.HostGBDT`, `mojolearn.host_predict`
@@ -3108,8 +3332,8 @@ def _(ml, X, yc, yr, Xh=None):
     `gbdt-symmetric` lane's GradientBoosting and a RandomForestRegressor
     saved with `inference_engine="parallel_groves"`, each written with
     `save` and read back with `HostForest.from_file` / `HostGBDT.from_file`.
-    Same fits, same fixture, so a cell here and the cell in those lanes are
-    the same arithmetic reached two ways.
+    The same estimator parameters as those lanes, fitted on the fixture's
+    first 4096 rows (2026-11-05; until then the full fixture).
 
     THE PARTS. `rf`, `gbdt` and `groves` are the host predictions (and the
     two probability columns) on training rows. `sha` is each host model's
@@ -3141,12 +3365,19 @@ def _(ml, X, yc, yr, Xh=None):
     the clean value. `sha` does not move under either, and that is correct:
     it hashes the ARCHIVE the estimator wrote, which the host binding only
     reads."""
-    rows = np.ascontiguousarray(X[:4096])
+    # The three fits on 4096 rows, not 20000 (2026-11-05,
+    # lane/slow-verification-lanes): the host predictions were already asked
+    # on X[:4096], and this lane checks the saved-model READERS, not the
+    # builders (the rf-clf and gbdt-symmetric lanes fit the full fixture).
+    # Depth 8 needs at most 256 leaves, so 4096 rows still fill both forests'
+    # depth; the groves engine's 32 fixed groups do not depend on rows.
+    rows = 4096                                  # FLOORED, see @floor above
+    Xr = np.ascontiguousarray(X[:rows])
     held = np.ascontiguousarray(Xh[:512])
-    rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    gb = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
+    rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(Xr, yc[:rows])
+    gb = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(Xr, yc[:rows])
     gr = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
-                                  inference_engine="parallel_groves").fit(X, yr)
+                                  inference_engine="parallel_groves").fit(Xr, yr[:rows])
     with tempfile.TemporaryDirectory(prefix="ib-saved-model-host-") as d:
         paths = {}
         for tag, est in (("rf", rf), ("gbdt", gb), ("groves", gr)):
@@ -3190,9 +3421,9 @@ def _(ml, X, yc, yr, Xh=None):
     ], dtype=np.int64)
     shas = np.frombuffer(b"".join(bytes.fromhex(m.model_sha256())
                                   for m in (hrf, hgb, hgr)), dtype=np.uint8)
-    return _fit(dict(rf=_h(np.asarray(hrf.predict(rows)), np.asarray(hrf.predict_proba(rows))),
-                     gbdt=_h(np.asarray(hgb.predict(rows)), np.asarray(hgb.predict_proba(rows))),
-                     groves=_h(np.asarray(hgr.predict(rows))),
+    return _fit(dict(rf=_h(np.asarray(hrf.predict(Xr)), np.asarray(hrf.predict_proba(Xr))),
+                     gbdt=_h(np.asarray(hgb.predict(Xr)), np.asarray(hgb.predict_proba(Xr))),
+                     groves=_h(np.asarray(hgr.predict(Xr))),
                      sha=_h(shas), flags=_h(flags)),
                 hrf, lambda e: (np.asarray(e.predict(held)), np.asarray(e.predict_proba(held)),
                                 np.asarray(hgb.predict(held)), np.asarray(hgb.predict_proba(held)),
@@ -3603,8 +3834,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("rf-reg-gamma-ig")
+@floor(rows=(2048, "2048 rows still let both depth-8 forests reach 256 leaves and keep every node's "
+                   "histogram multi-block (1 + batch + rows / TPB_DEFAULT blocks, ensemble/decisiontree/"
+                   "batched_levelalgo/builder.mojo:757); the identical route has no row gate. Set "
+                   "2026-11-05 on lane/slow-verification-lanes, near the measured 1500 rf floors."))
 def _(ml, X, yc, yr, Xh=None):
     """Two fits, gamma and inverse gaussian, on a strictly positive target."""
+    # 2048 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # two criteria are the point, and the host column's fit is linear in rows.
+    rows = 2048                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim
     y = _pos(yr)
     g = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7, criterion="gamma").fit(X, y)
     i = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
@@ -3633,8 +3872,16 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-multiclass")
 def _(ml, X, yc, yr, Xh=None):
     """MultiClass with class weights on the three-class target."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
     t = _three_class_centered(X)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClass",
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClass",
                             class_weights=[1.0, 2.0, 0.5]).fit(X, t)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -3642,7 +3889,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-onevsall")
 def _(ml, X, yc, yr, Xh=None):
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -3650,11 +3905,19 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-multiclass-defaults")
 def _(ml, X, yc, yr, Xh=None):
     """Public multiclass defaults: Bayesian bootstrap and random strength one."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. Eight trees still carry eight
+    # bootstraps and the noise's model-length decay. 4000 rows keep the root
+    # leaf above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder
+    # arms) and two BK_CHUNK 2048 partials, the second ragged
+    # (bin_keyed_stats.mojo:62); the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
     target = _three_class_centered(X)
     parts = {}
     m = None
     for loss in ("MultiClass", "MultiClassOneVsAll"):
-        m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss=loss,
+        m = ml.GradientBoosting(n_estimators=trees, max_depth=6, loss=loss,
                                 class_weights=[1.0, 2.0, 0.5]).fit(X, target)
         parts[loss] = _h(m.predict(X), m.predict_proba(X))
     return _fit(parts, m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -3712,12 +3975,21 @@ def _(ml, X, yc, yr, Xh=None):
     temperature, boost from average on Logloss, an eval set with
     iteration-based early stopping and best-model truncation, and row
     weights: one symmetric fit."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. The eval set is cut to the same 4000
+    # held-out rows. 4000 rows keep the root leaf above GATHER_INPLACE_SIZE 1024
+    # (split_points.mojo:829, both reorder arms) and two BK_CHUNK 2048 partials,
+    # the second ragged (bin_keyed_stats.mojo:62); the tree count is not what
+    # this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
     w = _hw((X.shape[0],), "gbdt-eval:sample_weight", 0.5, 1.5)
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", score_function="L2",
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss", score_function="L2",
                             use_pointwise_searcher=True, bootstrap_type="Bayesian", bagging_temperature=0.5,
                             boost_from_average=True, od_type="Iter", od_wait=5, use_best_model=True
-                            ).fit(X, yc, sample_weight=w, eval_set=(Xh, ych))
+                            ).fit(X, yc, sample_weight=w, eval_set=(Xe, ych))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -3929,7 +4201,14 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The sklearn-style classifier adapter, the only caller of the binary
     probability and class entries. It refuses save, so no model column."""
-    m = _gbdt(ml.GradientBoostingClassifier, n_estimators=20, max_depth=6).fit(X, yc)
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = _gbdt(ml.GradientBoostingClassifier, n_estimators=trees, max_depth=6).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      decision=_h(m.decision_function(X[:512]))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
@@ -4045,9 +4324,17 @@ def _(ml, X, yc, yr, Xh=None):
     column refuses sample_weight on every loss. YetiRank has no loss value
     (the target writes 0), so `loss_curve_` is hashed only to pin that.
     Predict is row-wise, so the held-out probe and the batch part apply."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows -> 4000 and the main fit's 20 trees -> 8. 4000 rows carry about
+    # 465 of the uneven RANK_QUERY_SIZES queries (gbdt-pair-logit's floor
+    # measured 178 at 1500 still mixing every grade) and keep the root leaf
+    # above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829). The seeded fit
+    # keeps its 8 depth-4 trees.
+    rows, trees = 4000, 8
+    X, yr = X[:rows], yr[:rows]
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
     e = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
         X, rel, group_id=g)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
@@ -4428,9 +4715,19 @@ def _(ml, X, yc, yr, Xh=None):
 # -- classical
 
 @lane("kmeans-random")
+@floor(rows=(8192, "8192 is the smallest fit that keeps the GPU centroid update on the privatized "
+                   "accumulators: the per-cluster weight sum takes that arm only at n_samples >= "
+                   "PRIVATE_MIN_WORK = 8192 (cluster/checks/reduce_by_key.mojo:102, :511). Chosen by "
+                   "reading that guard on 2026-11-05 (lane/slow-verification-lanes), not by a sweep."))
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X)
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X, Xh))
+    # 8192 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # random init, the three restarts and both accumulation arms are the
+    # same; the host oracle's cost is linear in rows, so the CPU column
+    # drops about 2.4x. predict(X) in the probe is held to labels_ on the
+    # same 8192 rows.
+    rows = 8192                                  # FLOORED, see @floor above
+    m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X[:rows])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X[:rows], Xh))
 
 
 @lane("kmeans-array")
@@ -4454,9 +4751,18 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("dbscan-weighted")
+@floor(rows=(2000, "2000 rows keeps one adjacency batch on every device (dbscan/impl/dbscan.mojo:159, the "
+                   "budget gives far more rows than this), and at eps=0.9 in four columns the weighted "
+                   "fit still has core, border and noise points. Chosen 2026-11-05 on "
+                   "lane/slow-verification-lanes from that reading; not measured below."))
 def _(ml, X, yc, yr, Xh=None):
-    w = _hw((6000,), "dbscan:sample_weight", 0.5, 1.5)
-    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4], sample_weight=w)
+    # 2000 rows, not 6000 (2026-11-05, lane/slow-verification-lanes): the
+    # brute adjacency is quadratic in rows, which was 1.1 s a cell on the M4.
+    # The weights are a fresh _hw draw of length rows (the stream is keyed on
+    # the length, so they are not the old 6000's prefix).
+    rows = 2000                                  # FLOORED, see @floor above
+    w = _hw((rows,), "dbscan:sample_weight", 0.5, 1.5)
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:rows, :4], sample_weight=w)
     return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
@@ -4786,11 +5092,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("arima-seasonal-c")
+@floor(observations=(128, "128 observations are 32 periods of the seasonal 4, ample for the seasonal AR start "
+                          "and the rd = 5 Kalman recursion this lane hashes; the identical-mode filter walks "
+                          "every step on one thread per series, so its cost is linear in them. Chosen "
+                          "2026-11-05 on lane/slow-verification-lanes; nothing below 128 measured."))
 def _(ml, X, yc, yr, Xh=None):
     """A seasonal AR block (period 4, so rd = 5 stays inside the
     implemented Kalman kernel; period 12 is refused by name at rd = 13)
     and an explicit intercept."""
-    series = np.ascontiguousarray(X[:512, :4].T)
+    # 128 observations, not 512 (2026-11-05, lane/slow-verification-lanes).
+    # The steady-state chunked scan (arima/impl/fast_kalman_scan.mojo) is
+    # FAST only; identical runs the serial per-series loop at any length.
+    observations = 128                           # FLOORED, see @floor above
+    series = np.ascontiguousarray(X[:observations, :4].T)
     m = ml.ARIMA(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c").fit(series)
     return _fit(dict(ar=_h(m.ar_), sar=_h(m.sar_), mu=_h(m.mu_), sigma2=_h(m.sigma2_), forecast=_h(m.forecast(24))),
                 m, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
@@ -4848,13 +5162,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("arima-exog-seasonal")
+@floor(observations=(128, "128 observations keep 32 periods of the seasonal 4 and 127 differenced steps for "
+                          "the least-squares beta start, the regressors' differencing and the rd = 6 Kalman "
+                          "walk, whose identical-mode cost is linear in steps (19.5 s on the MI300X at 512). "
+                          "Set 2026-11-05 on lane/slow-verification-lanes; nothing below 128 measured."))
 def _(ml, X, yc, yr, Xh=None):
     """Differenced, seasonal, with two regressors (lane/arima-exog,
     2026-09-15): ARIMA(1, 1, 0)(1, 0, 0)_4, so the regressors are differenced
     beside y, their future values are differenced against their past
     (prepare_future_data) and the forecast is undifferenced after the
     observation intercept; rd = 6, r = 5, the implemented Kalman arms."""
-    series, exog, fut24 = _arima_exog_inputs(X)
+    # 128 observations, not the arima-exog lane's 512 (2026-11-05,
+    # lane/slow-verification-lanes): the same layout as _arima_exog_inputs,
+    # built here so arima-exog keeps its inputs. The forecast regressors are
+    # the 24 rows after the training ones, so no train cell reads Xh.
+    observations = 128                           # FLOORED, see @floor above
+    series = np.ascontiguousarray(X[:observations, :4].T)
+    exog = _arima_exog_block(X[:observations], observations)
+    fut24 = _arima_exog_block(X[observations:], 24)
     m = ml.ARIMA(order=(1, 1, 0), seasonal_order=(1, 0, 0, 4)).fit(series, exog)
     return _fit(dict(beta=_h(m.beta_), ar=_h(m.ar_), sar=_h(m.sar_), sigma2=_h(m.sigma2_),
                      forecast=_h(m.forecast(24, exog=fut24))),
@@ -6316,22 +6641,27 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("bootstrap")
 def _(ml, X, yc, yr, Xh=None):
-    """resample.bootstrap over the first 4096 values of yr, 2048
+    """resample.bootstrap over the first 1024 values of yr, 1024
     replicates: the Philox index map, the per-replicate folds (mean,
     std), the segmented sort (quantile), the paired two-column statistics
     (pearson, diff_means), the percentile and basic intervals and the
     standard error. Every distribution and every scalar is hashed; the
     r_first slice equality is asserted, as the surface promises it.
 
-    The two SORTED statistics (quantile, trimmed_mean) take 1024
-    replicates, 1024 * 4096 = RESAMPLE_MAX_SORT_CELLS (1 << 22,
-    resample/checks/statistics.mojo), the largest run the sort path admits;
-    at 2048 the lane read REFUSED by name on the M4 on every fixture
-    (2026-09-14 night), and the limit is a comptime constant, so it
-    refused on every vendor and the lane had no cell anywhere."""
+    The two SORTED statistics (quantile, trimmed_mean) are bounded by
+    RESAMPLE_MAX_SORT_CELLS (1 << 22, resample/checks/statistics.mojo);
+    at 2048 replicates of 4096 values the lane read REFUSED by name on
+    every vendor (2026-09-14 night). 1024 * 1024 = 1 << 20 is inside it."""
+    # 1024 values and 1024 replicates, not 4096 and 2048 (2026-11-05,
+    # lane/slow-verification-lanes). Branch reasons: each replicate's fold is
+    # one RESAMPLE_TPB = 256 block (resample/estimator.mojo:173), so 1024
+    # draws still give every thread four; the segmented sort's SORT_BLOCK is
+    # 512 (core/segmented_sort.mojo:98), so a 1024-draw replicate segment and
+    # the 1024-replicate sorted_distribution each still span two sort blocks;
+    # the r_first slice below is unchanged. The cost is n_resamples * n.
     rs = ml.resample
-    x = np.ascontiguousarray(yr[:4096])
-    two = np.ascontiguousarray(np.stack([yr[:4096], X[:4096, 3]], 1).astype(np.float32))
+    x = np.ascontiguousarray(yr[:1024])
+    two = np.ascontiguousarray(np.stack([yr[:1024], X[:1024, 3]], 1).astype(np.float32))
     parts = {}
     for name, kw in (("mean", dict(data=x, statistic="mean")),
                      ("std", dict(data=x, statistic="std", method="basic")),
@@ -6339,7 +6669,7 @@ def _(ml, X, yc, yr, Xh=None):
                      ("trimmed", dict(data=x, statistic="trimmed_mean", q_or_prop=0.1, alternative="greater")),
                      ("pearson", dict(data=two, statistic="pearson")),
                      ("diff", dict(data=two, statistic="diff_means", method="basic"))):
-        n_resamples = 1024 if kw["statistic"] in ("quantile", "trimmed_mean") else 2048
+        n_resamples = 1024
         b = rs.bootstrap(n_resamples=n_resamples, random_state=3, **kw)
         parts[name] = _h(b.distribution, b.sorted_distribution,
                          np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0], b.confidence_interval[1]], dtype=np.float64),
@@ -6691,15 +7021,23 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("kmeans-sqrt")
+@floor(rows=(8192, "the sqrt-expanded fit keeps its weight-per-cluster sum on the privatized GPU arm "
+                   "only while n_samples >= PRIVATE_MIN_WORK = 8192 (cluster/checks/reduce_by_key.mojo:511); "
+                   "below it the plain arm runs. Read from that guard 2026-11-05, "
+                   "lane/slow-verification-lanes; no smaller size measured."))
 def _(ml, X, yc, yr, Xh=None):
     """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken on
     the assignment's reduced distance (`metric_is_sqrt`, `identical_sqrt`,
     DEVIATION 2715) and so in the inertia, the row norms squared as under
     L2Expanded (DEVIATION 2716); a different inertia_ from the squared arm."""
-    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
+    # 8192 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # sqrt-expanded assignment and inertia are row-local, and 8192 keeps the
+    # privatized weight accumulator the 20000-row fit took.
+    rows = 8192                                  # FLOORED, see @floor above
+    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X[:rows])
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
                      inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
-                m, _km_probe(X, Xh))
+                m, _km_probe(X[:rows], Xh))
 
 
 @lane("kmeans-classic-pp")
@@ -7683,13 +8021,22 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-catboost-defaults", "gbdt-stochastic-arms")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
-_batch_decl(_rows_calls("predict", "predict_proba", prep=_gbdt_binary_columns), "gbdt-binary-columns")
+# 2026-11-05 (lane/slow-verification-lanes): gbdt-binary-columns and
+# gbdt-adapter-clf ask the first 2048 held-out rows rather than all 20000.
+# The harness's per-row compare is Python over every row, and 2048 rows are
+# still several thread blocks at any block size up to 1024, the 1/7/rest
+# split and the 16 rows alone; a derived input is still cut ONCE from the
+# whole held-out slice (`prep(Xh)[sl]`). gbdt-categorical-ctr-tables keeps
+# its whole slice: its CPU role reads checked-in GPU-saved models.
+_GBDT_BATCH_ROWS = slice(0, 2048)
+_batch_decl(_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS, prep=_gbdt_binary_columns),
+            "gbdt-binary-columns")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
-    return (_rows_calls("predict", "predict_proba")(ml, e, Xh)
+    return (_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS)(ml, e, Xh)
             + _rows_calls("decision_function", sl=slice(0, 512))(ml, e, Xh))
 
 
@@ -7703,8 +8050,12 @@ def _batch_iforest(ml, e, Xh):
 
 _batch_decl(_batch_iforest, "iforest", "iforest-tuned")
 
-_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
-            "kmeans-sqrt", "kmeans-classic-pp")
+_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-array", "kmeans-weighted",
+            "kmeans-classic-pp")
+# The same two calls on 2048 held-out rows (2026-11-05, lane/slow-verification-lanes):
+# the assignment is row-local, so the whole/alone/split protocol is unchanged and
+# the host column stops scoring 20000 rows three times per call.
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 2048)), "kmeans-random", "kmeans-sqrt")
 # The transductive clustering lanes (read 2026-09-15 against the Python
 # estimator, the GPU binding, the CPU host binding and cuML v26.08.00).
 #   DBSCAN and AgglomerativeClustering are NOT transductive since
@@ -7985,16 +8336,18 @@ def _range_rows(label, n, fn, min_batch=1, refusal=None):
 BOOTSTRAP_ONE_REFUSAL = "the standard error needs at least 2 resamples"
 
 
-def _batch_resample_inputs(Xh):
+def _batch_resample_inputs(Xh, values=4096):
     """The bootstrap and permutation-test lanes' inputs, derived from the
-    held-out rows by the same rules (labels_for's targets): yr's first 4096
-    values, yr paired with column 3, and the two label groups' first 512
-    rows (the lane's fallback when a group is short). Column 3 alone is
+    held-out rows by the same rules (labels_for's targets): yr's first
+    `values` values, yr paired with column 3, and the two label groups' first
+    512 rows (the lane's fallback when a group is short). Column 3 alone is
     constant over the first 1024 denormal rows, where pearson refuses by
-    name; the lane's pairing is not."""
+    name; the lane's pairing is not. `values` is the lane's own sample size:
+    the bootstrap lane passes 1024 (2026-11-05, lane/slow-verification-lanes),
+    the permutation-test lane keeps the default."""
     ych, yrh = labels_for(Xh, HELDOUT_SEED)
-    x = np.ascontiguousarray(yrh[:4096]).astype(np.float32)
-    two = np.ascontiguousarray(np.stack([yrh[:4096], Xh[:4096, 3]], 1).astype(np.float32))
+    x = np.ascontiguousarray(yrh[:values]).astype(np.float32)
+    two = np.ascontiguousarray(np.stack([yrh[:values], Xh[:values, 3]], 1).astype(np.float32))
     a = np.ascontiguousarray(yrh[:4096][ych[:4096] == 0][:512])
     b = np.ascontiguousarray(yrh[:4096][ych[:4096] == 1][:512])
     if a.size < 8 or b.size < 8:
@@ -8010,7 +8363,7 @@ BATCH_BOOTSTRAP_ARMS = (("mean", dict(statistic="mean")), ("std", dict(statistic
                         ("pearson", dict(statistic="pearson")), ("diff_means", dict(statistic="diff_means")))
 
 
-def _batch_resample(bootstrap, permutation_test, prefix=""):
+def _batch_resample(bootstrap, permutation_test, prefix="", values=4096):
     """resample's own batch-invariance handle (python/mojolearn/resample.py
     module docstring: "replicates [r_first, r_first + n_resamples) of one run
     are bit-identical to the corresponding slice of a whole run"): replicate
@@ -8019,7 +8372,7 @@ def _batch_resample(bootstrap, permutation_test, prefix=""):
     The point estimate, interval, standard error and p-value are reductions
     over the run and are not asked."""
     def spec(ml, e, Xh):
-        x, two, a, b = _batch_resample_inputs(Xh)
+        x, two, a, b = _batch_resample_inputs(Xh, values)
         calls = []
         for name, kw in BATCH_BOOTSTRAP_ARMS:
             data = two if kw["statistic"] in ("pearson", "diff_means") else x
@@ -8037,7 +8390,9 @@ def _batch_resample(bootstrap, permutation_test, prefix=""):
 
 
 def _batch_bootstrap_lane(ml, e, Xh):
-    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[:-1]
+    # 1024 values, the lane body's own sample size (2026-11-05,
+    # lane/slow-verification-lanes): the 126 range calls per cell scaled with it.
+    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test, values=1024)(ml, e, Xh)[:-1]
 
 
 def _batch_permutation_lane(ml, e, Xh):
@@ -8806,9 +9161,17 @@ BATCHGRAD_DEFAULT = "n/a:no-backward"
 
 SCALE_BATCHES = (1, 17, 64, 256)
 SCALE_WHOLE = 1024
-SCALE_LONG_L = 1024
-#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk
-SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1023)
+#: the long length of the causal sequence models (only their specs read it).
+#: 300, as RAGGED_LONG_LENGTHS: past the Mamba-2 chunk (256) so the long call
+#: has two chunks and an inter-chunk carry, past two v1 GEMM leaves (128) so
+#: the key-position contraction folds three leaves, and past four Mamba-3
+#: chunks (64). It was 1024 until 2026-11-05 (lane/slow-verification-lanes):
+#: the prefixes 511-1023 crossed no boundary 257 does not already cross and
+#: made this part most of the sequence lanes' wall time.
+SCALE_LONG_L = 300
+#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk: each
+#: boundary minus one, at, and plus one, then the whole length minus one
+SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 299)
 
 BATCHSCALE = {}
 
@@ -8880,9 +9243,25 @@ def _scale_prefix(label, full, fn):
     return call
 
 
+#: the whole call of the causal sequence models' serving-scale rows (the three
+#: specs below; the classical serving set keeps SCALE_WHOLE). 128 rows of
+#: SEQ_LEN = 2048 tokens: wider than the 64-row sub-batch, so B = 1, 17 and 64
+#: each run at three distinct offsets (0, middle, end), and many thread blocks
+#: on every column. B = 256 is wider than the call and `_eval_scale_rows`
+#: records it n/a in the notes and leaves it out of the digest. No sequence
+#: kernel selects a path by batch row count (the only row bound on these
+#: surfaces is a refusal, BYTE_LOGITS_MAX_BATCH = 1024 in
+#: training/byte_lm_logits.mojo), and a Mamba-2 row costs one full 256-token
+#: chunk at any L <= 256 (mamba/impl/modules/ssd_minimal.mojo, "every
+#: intra-chunk structure is ALWAYS length Q"), so the 1024-row call and its
+#: 256-row sub-batches were the bulk of this part. 1024 until 2026-11-05
+#: (lane/slow-verification-lanes).
+SEQ_SCALE_WHOLE = 128
+
+
 def _batchscale_block(ml, blk, Xh):
     dm = blk.d_model
-    x = _tiled(Xh, (SCALE_WHOLE, SEQ_LEN, dm))
+    x = _tiled(Xh, (SEQ_SCALE_WHOLE, SEQ_LEN, dm))
     xl = _tiled(Xh[::-1], (2, SCALE_LONG_L, dm))
     return [_ScaleRows(f"forward L={SEQ_LEN}", x, lambda r: (np.asarray(blk.forward(r)),)),
             _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
@@ -8910,7 +9289,7 @@ def _long_byte_lm(ml, e):
 
 def _batchscale_byte_lm(ml, e, Xh):
     shape = _byte_lm_shape(ml, e)
-    ids = _tiled_ids(Xh, SCALE_WHOLE, shape.length)
+    ids = _tiled_ids(Xh, SEQ_SCALE_WHOLE, shape.length)
     long_m = _long_byte_lm(ml, e)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L)
     return [_ScaleRows(f"logits L={shape.length}", ids, lambda r: (np.asarray(e.logits(r)),)),
@@ -8923,7 +9302,7 @@ _batchscale_decl(_batchscale_byte_lm, "byte-lm", "byte-lm-resident", "byte-lm-ho
 
 
 def _batchscale_samba(ml, st, Xh):
-    ids = _tiled_ids(Xh, SCALE_WHOLE, SEQ_LEN, st.config.vocab)
+    ids = _tiled_ids(Xh, SEQ_SCALE_WHOLE, SEQ_LEN, st.config.vocab)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L, st.config.vocab)
     return [_ScaleRows(f"forward L={SEQ_LEN}", ids, lambda r: (np.asarray(st.forward(r)),)),
             _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
@@ -9269,8 +9648,10 @@ def _part_protocol(part, alone):
                     uneven_split=GRAD_UNEVEN_SPLIT_NA, carry_splits=[list(BATCH_SPLIT) + ["n"], f"every {alone}"],
                     seq=[GRAD_SEQ_BATCH, GRAD_SEQ_LEN])
     if part == "batchscale":
-        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, long_l=SCALE_LONG_L,
-                    prefixes=list(SCALE_PREFIXES))
+        # seq_whole: the sequence lanes' whole-call rows (SEQ_SCALE_WHOLE), stamped so a
+        # column taken at another whole-call size reads "protocol differs", not DIVERGENT.
+        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, seq_whole=SEQ_SCALE_WHOLE,
+                    long_l=SCALE_LONG_L, prefixes=list(SCALE_PREFIXES))
     if part == "stepfull":
         return dict(rows=STEPFULL_ROWS, length=STEPFULL_LENGTH,
                     full="forward(x) from a zero state, one pass",
@@ -9333,8 +9714,16 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
 #: log-probability, so every hashed rlpair cell MUST read RLPAIR_MOVED
 RLPAIR_SABOTAGE_ENV = "MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE"
 
-#: sequences, prompt length and decoded tokens
-RLPAIR_SEQS, RLPAIR_PROMPT, RLPAIR_DECODE = 5, 4, 12
+#: sequences, prompt length and decoded tokens. 5, 4, 8 since 2026-11-05
+#: (lane/slow-verification-lanes; 5, 4, 12 before): every decoded token is
+#: one native step plus one cross-entropy call per sampler row set, and the
+#: five per-row samplers make most of this part's calls. Eight decoded
+#: tokens keep every event the twelve had: the joiner runs alone for 2
+#: steps, the joined batch for 3, the batch after the leaver for 2
+#: (RLPAIR_LEAVE_AFTER below), and the window-8 transformer's ring KV cache
+#: still fills during decode (positions 4-7) and wraps at position 8, inside
+#: the joined batch. 12 positions in all, the KV cache's `max_tokens`
+RLPAIR_SEQS, RLPAIR_PROMPT, RLPAIR_DECODE = 5, 4, 8
 
 #: the trainer's uneven microbatch split of the RLPAIR_SEQS rows: [0, 2), [2, 5)
 RLPAIR_SPLIT = (2,)
@@ -9344,7 +9733,9 @@ RLPAIR_SPLIT = (2,)
 #: other four at row RLPAIR_JOIN_ROW; sequence 1 leaves once its token
 #: RLPAIR_LEAVE_AFTER is chosen
 RLPAIR_JOINER, RLPAIR_JOIN_AT, RLPAIR_JOIN_ROW = 4, 3, 2
-RLPAIR_LEAVER, RLPAIR_LEAVE_AFTER = 1, 8
+#: RLPAIR_LEAVE_AFTER < RLPAIR_DECODE - 1, so the batch steps on without
+#: the leaver (8 of 12 until 2026-11-05, 5 of 8 since)
+RLPAIR_LEAVER, RLPAIR_LEAVE_AFTER = 1, 5
 
 #: the vocabulary of the head the harness puts on a bare sequence block
 RLPAIR_BLOCK_VOCAB = 48

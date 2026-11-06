@@ -1186,10 +1186,13 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("x-metrics-permutation-test-score")
 def _(ml, X, yc, yr, Xh=None):
     """model_selection.permutation_test_score: a Ridge on 600 fixture rows,
-    three folds, 12 permutations from the counter generator (random_state
+    three folds, 4 permutations from the counter generator (random_state
     3), the default score; and the same with groups (permutations within
     each of four groups). Parts: each call's score, permutation scores and
     p-value."""
+    # 4 permutations (was 12, 2026-11-05 lane/slow-verification-lanes): every
+    # permutation is three more Ridge fits; the count is not a branch, four
+    # still draws several counter-generator permutations per call
     d = _coverage_digester(ml)
     ms = ml.model_selection
     x = np.ascontiguousarray(X[:600, :8], dtype=np.float32)
@@ -1198,7 +1201,7 @@ def _(ml, X, yc, yr, Xh=None):
     parts = {}
     for tag, kw in (("plain", {}), ("groups", dict(groups=groups))):  # glue: two calls
         score, perm, p = ms.permutation_test_score(ml.Ridge(alpha=1.0), x, y, cv=ms.KFold(3),
-                                                   n_permutations=12, random_state=3, **kw)
+                                                   n_permutations=4, random_state=3, **kw)
         parts[tag] = d(np.concatenate([np.asarray([score, p], dtype=np.float64),
                                        np.asarray(perm, dtype=np.float64)]))
     return _fit(parts)

@@ -328,6 +328,10 @@ _batch_decl(_rows_calls("predict", prep=_cluster_cosine_rows, sl=np.s_[:64]), "x
 
 
 @lane("x-cluster-hdbscan-epsilon")
+@floor(rows=(513, "513 rows is more than two CORE_TPB = MR_TPB = 256 thread blocks (hdbscan/impl/detail/"
+                  "reachability.mojo:122) for the core distances and mutual reachability, still one host "
+                  "Prim chunk (hdbscan/host/hdbscan_host_oracle.mojo:136, 2048) as at 2000; cut from 2000 "
+                  "on 2026-11-05, lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
     """HDBSCAN option parity (hdbscan/NOT_IMPLEMENTED.tsv):
     cluster_selection_epsilon, cuML's epsilon search run on the host by the
@@ -337,7 +341,11 @@ def _(ml, X, yc, yr, Xh=None):
     allow_single_cluster (the walk's root arm and, at the largest, the
     labelling's epsilon branch, extract.cuh:148-153); probabilities_
     (DEVIATION 5116) on every eom fit."""
-    Z = X[:2000, :4]
+    # 1000 rows (was 2000, 2026-11-05 lane/slow-verification-lanes): the dense mutual
+    # reachability and MST are quadratic in rows; four 256-thread blocks and one host Prim
+    # chunk, as at 2000, and min_cluster_size 5 / 8 still leaves many clusters to merge
+    rows = 1000
+    Z = X[:rows, :4]
     base = ml.HDBSCAN(min_cluster_size=5).fit(Z)
     med = float(np.median(np.asarray(base.core_distances_, dtype=np.float32)))
     parts = dict(base_labels=_h(base.labels_), base_probs=_h(base.probabilities_))
