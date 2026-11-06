@@ -73,7 +73,12 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
     optional_numpy.require_numpy = lambda _operation: np
     onnx = types.ModuleType(importers.__name__ + '.onnx')
     onnx._Native = reader
-    for module in (package, importers, ops, backend, family, optional_numpy, onnx):
+    # connect() first hands the imported-program class to the Program save
+    # owner (205eab6d6c); the fixture records that hand-off.
+    save_bridge = types.ModuleType(package.__name__ + '._native_program_save_bridge')
+    save_connected = []
+    save_bridge.connect_imported = save_connected.append
+    for module in (package, importers, ops, backend, family, optional_numpy, onnx, save_bridge):
         monkeypatch.setitem(sys.modules, module.__name__, module)
     package.ops, package._backend = ops, backend
     spec = importlib.util.spec_from_file_location(importers.__name__ + '.bridge', PACKAGE / 'importers/_native_import_bridge.py')
@@ -81,6 +86,7 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
     spec.loader.exec_module(module)
     entry, context = module.connect(session, program, imported, graph, ValueError)
     assert entry is len
+    assert save_connected == [imported]
     assert context['modes']['fast'].startswith('ImportError:')
     assert set(context['layouts']) == {session, program, imported, graph, reader}
     for cls, layout in context['layouts'].items():
