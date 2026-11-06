@@ -331,16 +331,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("sequence-ets")
+@floor(observations=(36, "36 observations is n >= 3m for season_length 12, the classical decomposition's "
+                         "initial states (sequence/ets.mojo:358; below it the Fourier arm the ana30 part "
+                         "already holds), and above the 2m = 24 initial window (sequence/ets.mojo:383); "
+                         "cut from 80 on 2026-11-05, lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
-    """Four series of 80 observations (a trend plus a fixture column, a
+    """Four series of 48 observations (a trend plus a fixture column, a
     random walk, a positive level series, a fixture column): damped
     ETS(A,Ad,N), ETS(M,Ad,N) on the positive rows, undamped AAN and simple
     ANN; 12-step forecasts. Seasonal (period 12, a fixed wave added): AAA
-    and damped MAM on 80 observations (decomposition initial states), ANA
+    and damped MAM on 48 observations (decomposition initial states), ANA
     on the first 30 (the Fourier initial states), MNM with period 5 on the
     positive rows."""
-    t = np.arange(80, dtype=np.float32)
-    c = np.ascontiguousarray(X[:80, 9], dtype=np.float32)
+    # 48 observations (was 80, 2026-11-05 lane/slow-verification-lanes): four periods of 12,
+    # so AAA / MAM / MNM still take the decomposition initial states (n >= 3m) and ana30 the
+    # Fourier ones (n < 3m)
+    observations = 48
+    t = np.arange(observations, dtype=np.float32)
+    c = np.ascontiguousarray(X[:observations, 9], dtype=np.float32)
     y = np.stack([np.float32(5.0) + np.float32(0.3) * t + c, np.cumsum(c, dtype=np.float32),
                   np.float32(40.0) + c, c]).astype(np.float32)
     pos = np.ascontiguousarray(y[:1] + np.float32(10.0) - np.minimum(y[:1].min(), np.float32(0.0)))
