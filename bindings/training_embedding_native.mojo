@@ -130,6 +130,10 @@ def embedding_numpy_dtype(value: PythonObject, context: PythonObject) raises:
 def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var floating = False
+    # The native float64 scalar class is read once per call, not once per
+    # leaf (it was a dtype construction inside the leaf loop).
+    var f8_type = PythonObject(None)
+    var have_f8 = False
     for i in range(len(leaves)):  # driver-loop: validate every input scalar before any native conversion slot
         var value = leaves[i]
         var cls = py_type(value)
@@ -148,7 +152,10 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
         # The previous list door inferred f64 only from Python float or its
         # native float64 subtype. Object buffers with any NumPy real scalar
         # used f64; retain that distinct promotion before the int32 cast.
-        floating = floating or cls is b.float or (numpy and (object_array or cls is sequence_dtype_create(PythonObject("f8"), context).type))
+        if numpy and not object_array and not floating and not have_f8:
+            f8_type = sequence_dtype_create(PythonObject("f8"), context).type
+            have_f8 = True
+        floating = floating or cls is b.float or (numpy and (object_array or cls is f8_type))
     if not floating:
         for i in range(len(leaves)):  # driver-loop: preserve the list door's integer-leaf admission
             var cls = py_type(leaves[i])
