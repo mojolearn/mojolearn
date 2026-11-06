@@ -101,8 +101,10 @@ struct NativeIdentityKey(Movable, Writable):
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
+            # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
+            var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
             for _ in range(size):  # driver-loop: over exact dictionary metadata
-                if cpy.PyDict_Next(value._obj_ptr, Pointer(to=pos).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+                if dict_next(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)) == 0:
                     raise Error("native identity snapshot: dictionary changed during capture")
                 self.add(PythonObject(from_borrowed=key), depth + 1, limit)
                 self.add(PythonObject(from_borrowed=item), depth + 1, limit)
@@ -130,8 +132,10 @@ struct NativeIdentityKey(Movable, Writable):
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
+            # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
+            var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
             for _ in range(size):  # driver-loop: over exact dictionary metadata
-                if cpy.PyDict_Next(value._obj_ptr, Pointer(to=pos).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+                if dict_next(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)) == 0:
                     raise Error("native identity snapshot: dictionary changed during capture")
                 if not self.matches(PythonObject(from_borrowed=key), offset, depth + 1, limit) or not self.matches(PythonObject(from_borrowed=item), offset, depth + 1, limit):
                     return False
@@ -161,8 +165,10 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
+        # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
+        var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
         for _ in range(len(fields)):  # driver-loop: over admitted instance fields
-            if cpy.PyDict_Next(fields._obj_ptr, Pointer(to=pos).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+            if dict_next(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)) == 0:
                 raise Error("native identity snapshot: fields changed during capture")
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
@@ -180,8 +186,10 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
+        # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
+        var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
         for _ in range(len(fields)):  # driver-loop: over admitted instance fields
-            if cpy.PyDict_Next(fields._obj_ptr, Pointer(to=pos).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+            if dict_next(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)) == 0:
                 raise Error("native identity snapshot: fields changed during capture")
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
@@ -268,13 +276,13 @@ struct NativeIdentityKey(Movable, Writable):
             # dictionary-key iterator, never a caller-defined protocol.
             var iterator_raw = cpy.PyObject_GetIter(row._obj_ptr)
             if not iterator_raw:
-                cpy.PyErr_Clear()
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return False
             var iterator = PythonObject(from_owned=iterator_raw)
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over live namespace key identities before lookup
                 var key_raw = cpy.PyIter_Next(iterator._obj_ptr)
                 if not key_raw:
-                    cpy.PyErr_Clear()
+                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
                     return False
                 var key = PythonObject(from_owned=key_raw)
                 if py_type(key) is not self.str_type or key is not self.array_row_keys[i][j]:
@@ -282,7 +290,7 @@ struct NativeIdentityKey(Movable, Writable):
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over retained native namespace keys
                 var raw = cpython_table()[].PyObject_GetItem(row._obj_ptr, self.array_row_keys[i][j]._obj_ptr)
                 if not raw:
-                    cpy.PyErr_Clear()
+                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
                     return False
                 var current = PythonObject(from_owned=raw)
                 if current is not self.array_row_values[i][j]:

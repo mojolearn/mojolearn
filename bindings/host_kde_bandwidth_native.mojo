@@ -123,6 +123,9 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
             raise cpy.unsafe_get_error()
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
     var little = String(dtype.byteorder) != ">"
     var word = UInt64(0)
     for i in range(8):  # driver-loop: one signed native temporal word, either byte order

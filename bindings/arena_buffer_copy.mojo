@@ -37,5 +37,8 @@ def buffer_copy_to_array(code: String, source: PythonObject) raises -> PythonObj
                 raise failure^
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
     _ = view^
     return result

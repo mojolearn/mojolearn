@@ -109,6 +109,9 @@ def _depth_box(data: MutPointer[UInt8, MutUntrackedOrigin], dtype: PythonObject,
             destination[i] = data[i]
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
     _ = view^
     if not scalar:
         return array

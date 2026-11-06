@@ -289,6 +289,9 @@ def _transport_send_bytes(socket: PythonObject, value: PythonObject) raises:
         posix_transfer(state[0], PosixBytes(unsafe_from_address=view[0]), view[2], timeout, True)
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
     _ = view^
     _ = value
     _ = socket

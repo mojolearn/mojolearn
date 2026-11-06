@@ -116,6 +116,7 @@ comptime CPYTHON_TABLE = _Global[
 ]
 
 
-def cpython_table() raises -> Pointer[CPythonTable, MutUntrackedOrigin]:
+def cpython_table() raises -> UnsafePointer[CPythonTable, MutAnyOrigin]:
     """The process-wide table, filled at first use."""
-    return CPYTHON_TABLE.get_or_create_ptr()
+    # Same typed form as x_cnn/device.mojo `_slots` (compiles on main).
+    return CPYTHON_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()

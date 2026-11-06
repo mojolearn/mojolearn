@@ -18,7 +18,7 @@ from bindings.label_input_sources import labels_storage_source, labels_list_inte
 from bindings.native_typed_context import native_typed_context
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.label_admission_native import _labels_class as native_labels_class
 from bindings.py_attr import py_attr
 
@@ -78,7 +78,8 @@ def prep_plain_classes(value: PythonObject, context: PythonObject) raises -> Pyt
     var record = class_record(mods, _LABELS_CLASS_SLOT, cls)
     if record is None or record[0] is not connected:
         _ = native_labels_class(context)
-        class_admit(mods, _LABELS_CLASS_SLOT, cls, Python.tuple(connected))
+        if class_watch_ready():  # no payload where no record can be kept (3.10/3.11)
+            class_admit(mods, _LABELS_CLASS_SLOT, cls, Python.tuple(connected))
     # list.copy is the native list implementation, not an iterable protocol.
     return py_call(py_attr(py_type(Python.list()), "copy"), value)
 

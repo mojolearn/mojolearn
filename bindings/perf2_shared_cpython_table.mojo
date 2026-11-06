@@ -102,6 +102,7 @@ comptime PERF2_SHARED_CPYTHON_TABLE = _Global[
 ]
 
 
-def perf2_cpython_table() raises -> Pointer[Perf2SharedCPythonTable, MutUntrackedOrigin]:
+def perf2_cpython_table() raises -> UnsafePointer[Perf2SharedCPythonTable, MutAnyOrigin]:
     """The process-wide table, filled at first use."""
-    return PERF2_SHARED_CPYTHON_TABLE.get_or_create_ptr()
+    # Same typed form as x_cnn/device.mojo `_slots` (compiles on main).
+    return PERF2_SHARED_CPYTHON_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()

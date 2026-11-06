@@ -86,6 +86,9 @@ def _density_hash_update(mut hash: Sha256, value: PythonObject) raises:
             raise failure^
     except failure:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        # Keep the Py_buffer storage alive past the release on every path
+        # (ASAP destruction could free it before PyBuffer_Release reads it).
+        _ = len(view)
         raise failure^
     cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
     # The active export pinned mutable exporters through copying; this private

@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.cpython_table import cpython_table
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
@@ -120,8 +120,9 @@ def _plan(mut mods: NativeModules, model: PythonObject, fields: PythonObject, co
         for i in range(len(pinned)):  # driver-loop: verify connected method/parameter descriptor identities
             if _resolved(mods, cls, pinned[i][0], context["missing"]) is not pinned[i][1]:
                 raise Error("TypeError: native parameter methods or descriptors changed after connection")
-        class_admit(mods, _PARAMS_CLASS_SLOT, cls,
-                    Python.tuple(plan, context["plans"], context["missing"], pinned, PythonObject(len(pinned))))
+        if class_watch_ready():  # no payload where no record can be kept (3.10/3.11)
+            class_admit(mods, _PARAMS_CLASS_SLOT, cls,
+                        Python.tuple(plan, context["plans"], context["missing"], pinned, PythonObject(len(pinned))))
     for name in ["get_params", "_get_param_names", "__getattribute__", "__getattr__"]:  # driver-loop: refuse instance protocol overrides before lookup
         if py_contains(fields, PythonObject(name)):
             raise Error("TypeError: native parameters cannot invoke instance protocol overrides")
