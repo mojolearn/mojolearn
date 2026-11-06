@@ -13,26 +13,36 @@ def resample_arguments(operation: String, args: PythonObject,
     if operation == "family_rs_bootstrap" or operation == "family_rs_permutation_test":
         index -= 1
     var binding = estimator_binding_mode(args[index], "_mojolearn_resample", context, False)
-    var values = Python.list(binding)
-    for i in range(1, len(args)):  # driver-loop: fixed public resampling arguments
-        _ = py_call(values.append, args[i])
-    return py_call(py_type(Python.tuple()), values)
+    # One tuple concatenation (perf3-nbr-msel-trees), not a list built by
+    # one append per argument and copied into a tuple.
+    from bindings.py_slice_native import py_slice_from
+    return Python.tuple(binding) + py_slice_from(args, 1)
 
 
 def resample_result_layout(index: Int, context: PythonObject) raises -> PythonObject:
     from bindings.mode_metadata_native import _class_fields
     from bindings.py_balanced import py_get
-    from bindings.native_loaded_module import native_loaded_module
+    from bindings.native_loaded_module import native_loaded_module, NativeModules
+    from bindings.native_class_admission import class_record, class_admit
     var b = native_loaded_module("builtins")
     var cls = context["family_rs_result_classes"][index]
     if py_type(cls) is not b.type:
         raise Error("TypeError: resampling result metadata requires the connected ordinary type")
+    # perf3-nbr-msel-trees: the ancestry and finalizer checks read class
+    # state only; they run once per class state (native_class_admission type
+    # watcher record, payload the layout index), not on every result. Without
+    # type watchers (Python < 3.12) they run every time, as before.
+    var mods = NativeModules()
+    var held = class_record(mods, "resample_result_layout_v1", cls)
+    if held is not None and Int(py=held) == index:
+        return cls
     var bases = py_call(b.type.__dict__["__bases__"].__get__, cls)
     if len(bases) != 1 or bases[0] is not (b.tuple if index == 3 else b.object):
         raise Error("TypeError: resampling result class ancestry changed")
     var fields = _class_fields(cls)
     if py_get(fields, "__del__") is not None:
         raise Error("TypeError: resampling result storage cannot invoke Python finalizers")
+    class_admit(mods, "resample_result_layout_v1", cls, PythonObject(index))
     return cls
 
 
