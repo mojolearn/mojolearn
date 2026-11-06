@@ -28,6 +28,8 @@ from bindings.family_common import (
 from bindings.spectral_umap_routes import spectral_umap_route, spectral_umap_entry as family_entry
 from core.family_cast_impl import family_all_finite_f32
 from core.mani_impl import mani_same_words
+from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT
+from std.builtin.sort import sort
 from bindings.mani_kit import (
     MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
     mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
@@ -184,6 +186,116 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
     return Optional(a^)
 
 
+def _umap_label_i64(addr: Int, kind: Int, item: Int) -> Int64:
+    # One integer or bool label word of a CastIn kind (signed, unsigned < 8
+    # bytes, bool) widened exactly.
+    if kind == CAST_KIND_SIGNED:
+        if item == 1:
+            return Int64(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)[0])
+        if item == 2:
+            return Int64(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[0])
+        if item == 4:
+            return Int64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
+        return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[0]
+    if kind == CAST_KIND_BOOL:
+        return Int64(1) if MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[0] != 0 else Int64(0)
+    if item == 1:
+        return Int64(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[0])
+    if item == 2:
+        return Int64(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[0])
+    return Int64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
+
+
+def _umap_label_f64(addr: Int, item: Int) -> Float64:
+    if item == 4:
+        return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)[0]
+
+
+def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """(codes Array, codes address) of a 1-D numeric categorical target:
+    labels other than -1 numbered 0.. in ascending value order, -1 kept as
+    -1, exactly the codes the object path gives one-dtype labels. None when
+    the source is not a 1-D array of n words of a supported dtype or holds
+    NaN (the object path then decides, with its refusals)."""
+    var shape = array_shape_once(y, context)
+    if len(shape) != 1 or shape[0] != n:
+        return PythonObject(None)
+    var meta = array_metadata_once(y, shape^, "y", context, allow_non_native=True, allow_unsupported=True)
+    if not meta.castable or not meta.native_byte_order:
+        return PythonObject(None)
+    var kind = meta.source.kind
+    var item = meta.source.itemsize
+    var stride = meta.source.s0
+    var base = meta.source.addr
+    var is_float = kind == CAST_KIND_FLOAT
+    if is_float and item != 4 and item != 8:
+        return PythonObject(None)
+    if not is_float and kind != CAST_KIND_SIGNED and kind != CAST_KIND_BOOL and not (kind == CAST_KIND_UNSIGNED and item < 8):
+        return PythonObject(None)
+    var t = family_array(Python.tuple(n), "<f4", context)
+    var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
+    if is_float:
+        var words = List[Float64](capacity=n)
+        for i in range(n):  # cpu-route: categorical y codes from the native label words
+            var v = _umap_label_f64(base + i * stride, item)
+            if v != v:
+                _ = meta.keep
+                return PythonObject(None)
+            words.append(v)
+        var order = List[Float64](capacity=n)
+        for i in range(n):  # cpu-route: categorical y codes from the native label words
+            if words[i] != -1.0:
+                order.append(words[i])
+        sort(order)
+        var classes = List[Float64](capacity=len(order))
+        for i in range(len(order)):  # cpu-route: categorical y codes from the native label words
+            if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
+                classes.append(order[i])
+        for i in range(n):  # cpu-route: categorical y codes from the native label words
+            if words[i] == -1.0:
+                tp[i] = Float32(-1.0)
+                continue
+            var lo = 0
+            var hi = len(classes) - 1
+            while lo < hi:  # cpu-route: binary search of one label among the sorted classes
+                var mid = (lo + hi) // 2
+                if classes[mid] < words[i]:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            tp[i] = Float32(Float64(lo))
+    else:
+        var words = List[Int64](capacity=n)
+        for i in range(n):  # cpu-route: categorical y codes from the native label words
+            words.append(_umap_label_i64(base + i * stride, kind, item))
+        var order = List[Int64](capacity=n)
+        for i in range(n):  # cpu-route: categorical y codes from the native label words
+            if words[i] != -1:
+                order.append(words[i])
+        sort(order)
+        var classes = List[Int64](capacity=len(order))
+        for i in range(len(order)):  # cpu-route: categorical y codes from the native label words
+            if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
+                classes.append(order[i])
+        for i in range(n):  # cpu-route: categorical y codes from the native label words
+            if words[i] == -1:
+                tp[i] = Float32(-1.0)
+                continue
+            var lo = 0
+            var hi = len(classes) - 1
+            while lo < hi:  # cpu-route: binary search of one label among the sorted classes
+                var mid = (lo + hi) // 2
+                if classes[mid] < words[i]:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            tp[i] = Float32(Float64(lo))
+    _ = meta.keep  # keep the source alive through the reads above
+    _ = t  # keep the Python object alive through the native writes above
+    return Python.tuple(t, PythonObject(Int(tp)))
+
+
 def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_target(y, n)`: (kind, dims, codes, target_n_neighbors, weight)."""
     var b = native_loaded_module("builtins")
@@ -198,6 +310,16 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
         raise Error("UMAP target_n_neighbors must be -1 or >= 2")
     var tk_kept = py_call(b.max, tk, PythonObject(0))
     if Bool(py=py_call(b.bool, py_call(op.eq, tm, PythonObject("categorical")))):
+        # A 1-D NumPy array or mojolearn Array of one numeric dtype: the codes
+        # come from one native pass over its words (p3 rank 11). One dtype
+        # means one Python type per label, so the (type, value) order is the
+        # value order; NaN, uint64, float16 and every other source keep the
+        # object path below.
+        var y_type = py_type(y)
+        if y_type is py_get(context, "ndarray") or y_type is context["array_class"]:
+            var fast = _umap_native_codes(y, n, context)
+            if fast is not None:
+                return Python.tuple(PythonObject(1), PythonObject(1), fast[0], tk_kept, PythonObject(w), fast[0], fast[1])
         var vals: PythonObject
         if Bool(py=py_call(b.hasattr, y, PythonObject("tolist"))):
             vals = family_call(py_call(b.getattr, y, PythonObject("tolist")))
