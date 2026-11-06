@@ -84,8 +84,14 @@ def _family_entries(mode: PythonObject, family: String, context: PythonObject) r
     var refusal = String(context["prog_mode_refusal"])
     if py_type(selected) is not types["str"]:
         raise Error("ValueError: " + refusal)
-    selected = py_call(py_call(selected.strip).lower)
-    if String(selected) != "fast" and String(selected) != "identical":
+    # Only a non-canonical spelling pays the two str method calls (as in
+    # estimator_binding_mode); an exact "fast"/"identical" is its own
+    # normalization.
+    var word = String(py=selected)
+    if word != "fast" and word != "identical":
+        selected = py_call(py_call(selected.strip).lower)
+        word = String(py=selected)
+    if word != "fast" and word != "identical":
         raise Error("ValueError: " + refusal)
     var entries = context["prog_bindings"][selected]
     if py_type(entries) is types["str"]:
