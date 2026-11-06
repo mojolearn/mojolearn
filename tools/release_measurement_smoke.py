@@ -291,19 +291,20 @@ class DevicePeak(threading.Thread):
 
 def board_command(args, out, extra):
     return [args.python, str(HERE / "bench_board.py"), "--smoke", "--vendor", args.vendor, "--modes", MODE,
-            "--python-env", args.python, "--skip-install", "--cache", str(Path(args.out) / "cache"),
+            "--python-env", args.python, "--skip-install", "--cache", str(Path(args.work) / "cache"),
             "--data-root", args.data_root, "--evidence-local-only", "--out", str(out)] + extra
 
 
 def run_batch(args, k, ids, deadline, recipe_timeout):
     """One bench_board --smoke process over `ids`, bounded by its own budget and the phase deadline."""
     import release_gate_profiles as P
-    bdir = Path(args.out) / "batches"
+    bdir = Path(args.work) / "batches"
     bdir.mkdir(parents=True, exist_ok=True)
+    (Path(args.out) / "logs").mkdir(parents=True, exist_ok=True)
     idfile = bdir / ("b%03d.ids.json" % k)
     idfile.write_text(json.dumps(ids))
     out = bdir / ("b%03d" % k)
-    log = bdir / ("b%03d.log" % k)
+    log = Path(args.out) / "logs" / ("b%03d.log" % k)   # the logs come home; the smoke boards stay on the box
     budget = BATCH_SETUP_S + recipe_timeout * len(ids)
     left = deadline - time.time()
     started = time.time()
@@ -373,8 +374,9 @@ def judge(args, races, batches):
 
 
 def cmd_run(args):
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    out, work = Path(args.out), Path(args.work)
+    (out / "logs").mkdir(parents=True, exist_ok=True)
+    work.mkdir(parents=True, exist_ok=True)
     started = time.time()
     deadline = started + args.ceiling
     races = plan(args.vendor)
@@ -393,13 +395,13 @@ def cmd_run(args):
     peak.start()
     # the untimed block prep, once for the whole plan, before any batch (bench_board --prep-only)
     import release_gate_profiles as P
-    prep = P.bounded_run(board_command(args, out / "prep", ["--preflight-only", "--prep-only"]), out / "prep.log",
+    prep = P.bounded_run(board_command(args, work / "prep", ["--preflight-only", "--prep-only"]), out / "logs/prep.log",
                          max(0.0, deadline - time.time()), env=batch_env(args), cwd=str(ROOT))
     batches = []
     if prep["exit_code"] != 0:
-        reason = "the untimed data prep exited %s: %s" % (prep["exit_code"], _tail(out / "prep.log"))
+        reason = "the untimed data prep exited %s: %s" % (prep["exit_code"], _tail(out / "logs/prep.log"))
         batches = [dict(batch=k, ids=g, dir="", exit_code=None, started_late=False, ceiling_hit=False,
-                        timed_out=False, log=str(out / "prep.log"), recipes=len(g), prep_failed=reason)
+                        timed_out=False, log=str(out / "logs/prep.log"), recipes=len(g), prep_failed=reason)
                    for k, g in enumerate(groups)]
     else:
         from concurrent.futures import ThreadPoolExecutor
@@ -555,7 +557,8 @@ def main(argv=None):
     p = sub.add_parser("run")
     p.add_argument("--vendor", required=True, choices=VENDORS)
     p.add_argument("--python", required=True, help="the venv the exact release wheels are installed into")
-    p.add_argument("--out", required=True)
+    p.add_argument("--out", required=True, help="the summary and logs (fetched home)")
+    p.add_argument("--work", required=True, help="the batch smoke boards, prep and caches (stay on the box)")
     p.add_argument("--data-root", default=os.path.join(os.path.expanduser("~"), "datasets", "gbm-bench"))
     p.add_argument("--jobs", type=int, default=0, help="override the worker count (default: cores and memory)")
     p.add_argument("--ceiling", type=int, default=PHASE_CEILING_S, help="the phase ceiling, seconds")
