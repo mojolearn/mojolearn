@@ -15,6 +15,7 @@
 # same bits). Import-time switches the Python module read once
 # (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from the
 # context, where the module put them at its import.
+from core.p3nc_scan import p3nc_dense_nnz_f32, p3nc_dense_to_csr_f32
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from std.memory import bitcast
@@ -273,21 +274,28 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     if sparse:
-        # SciPy owns this optional format conversion: the dense map's
-        # float32 rows as a csr matrix, explicit zeros dropped (the values
-        # `out.tolist()` handed it, read from the same storage).
-        _ = family_call(b.__import__, PythonObject("scipy.sparse"))
-        var sp = native_loaded_module("sys").modules["scipy.sparse"]
-        var flat = family_call(b.memoryview, out._store)
-        var rows = family_call(family_call(b.getattr, flat, PythonObject("cast")), PythonObject("B"))
-        var shaped = family_call(family_call(b.getattr, rows, PythonObject("cast")), PythonObject("f"),
-                                 Python.tuple(n, width))
+        # p3-neighbors-cluster: the CSR arrays are built natively (count, then
+        # fill: the entries SciPy's dense conversion keeps, row-major, columns
+        # ascending; `eliminate_zeros` had nothing left to drop), and SciPy is
+        # handed the three finished buffers. A sparse input implies SciPy is
+        # already loaded (the input is its matrix), so no import runs here.
+        var sp = py_get(native_loaded_module("sys").modules, "scipy.sparse")
+        if sp is None:
+            _ = family_call(b.__import__, PythonObject("scipy.sparse"))
+            sp = native_loaded_module("sys").modules["scipy.sparse"]
+        var dense = FAMILY_F32P(unsafe_from_address=Int(py=_semi_addr(out)))
+        var nnz = p3nc_dense_nnz_f32(dense, n * width)
+        var data = _semi_out(Python.tuple(nnz), "<f4", context)
+        var indices = _semi_out(Python.tuple(nnz), "<i4", context)
+        var indptr = _semi_out(Python.tuple(n + 1), "<i4", context)
+        p3nc_dense_to_csr_f32(dense, n, width, FAMILY_F32P(unsafe_from_address=Int(py=_semi_addr(data))),
+                              MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=_semi_addr(indices))),
+                              MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=_semi_addr(indptr))))
+        _ = out  # keep the Python object alive through the native passes above
         var keywords = Python.dict()
-        py_setitem(keywords, "dtype", PythonObject("float32"))
-        var m = family_call_kw(family_call(b.getattr, sp, PythonObject("csr_matrix")), keywords, shaped)
-        _ = out  # keep the Python object alive through the conversion above
-        _ = family_call(family_call(b.getattr, m, PythonObject("eliminate_zeros")))
-        return m
+        py_setitem(keywords, "shape", Python.tuple(n, width))
+        return family_call_kw(family_call(b.getattr, sp, PythonObject("csr_matrix")), keywords,
+                              Python.tuple(data, indices, indptr))
     return out
 
 

@@ -66,3 +66,34 @@ def p3nc_real_labels(values: List[Float64], classifier: Bool) -> Int:
         if classifier and floor(v) != v:
             return P3NC_REAL_CONTINUOUS
     return P3NC_REAL_OK
+
+
+comptime _P3NC_I32P = MutPointer[Int32, MutUntrackedOrigin]
+
+
+def p3nc_dense_nnz_f32(p: _P3NC_F32P, n: Int) -> Int:
+    """The count of words of `p[0:n]` that compare unequal to 0 (NaN counts,
+    -0.0 does not): the entries SciPy's dense-to-CSR conversion keeps."""
+    var count = 0
+    for i in range(n):  # native output marshaling: one pass over a finished dense result
+        if p.unsafe_load(i) != Float32(0):
+            count += 1
+    return count
+
+
+def p3nc_dense_to_csr_f32(p: _P3NC_F32P, rows: Int, cols: Int, data: _P3NC_F32P,
+                          indices: _P3NC_I32P, indptr: _P3NC_I32P):
+    """`scipy.sparse.csr_matrix(dense)` of a C-order rows x cols float32
+    block into preallocated buffers (data and indices hold
+    `p3nc_dense_nnz_f32` entries, indptr rows + 1): row-major order, columns
+    ascending, the same entries and values SciPy keeps."""
+    var at = 0
+    indptr.unsafe_store(0, Int32(0))
+    for r in range(rows):  # native output marshaling: one pass over a finished dense result
+        for c in range(cols):
+            var v = p.unsafe_load(r * cols + c)
+            if v != Float32(0):
+                data.unsafe_store(at, v)
+                indices.unsafe_store(at, Int32(c))
+                at += 1
+        indptr.unsafe_store(r + 1, Int32(at))
