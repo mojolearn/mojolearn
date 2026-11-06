@@ -6,7 +6,7 @@
 # attributes. score predicts and scores in the same call: the prediction stays
 # a native buffer handed straight to the R^2 program.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_pandas import classical_admit_value
@@ -30,9 +30,11 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32, classical_dtype_str, classical_c_order
 from bindings.classical_validate import classical_view, classical_check_weights_input, classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from bindings.classical_score import classical_r2_score
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime _QN_AFTER_FIT_SLOT = "qn_no_after_fit_v1"
+comptime _QN_KNOWN_SLOT = "qn_connected_owner_v1"
 
 
 def _qn_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -309,10 +311,16 @@ def _qn_initialize(model: PythonObject, args: PythonObject, context: PythonObjec
 def _qn_admit(model: PythonObject, context: PythonObject, fitting: Bool) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: never invoke a Python post-fit hook
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: QNRegressor cannot invoke Python fit callbacks")
+    # The class rows' verdict is kept per class state (native_class_admission:
+    # any class or ancestor modification invalidates it); only a pass is kept.
+    var mods = NativeModules()
+    var cls = py_type(model)
+    if class_record(mods, _QN_AFTER_FIT_SLOT, cls) is None:
+        var ancestry = _type_mro(cls)
+        for i in range(len(ancestry)):  # driver-loop: never invoke a Python post-fit hook
+            if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+                raise Error("TypeError: QNRegressor cannot invoke Python fit callbacks")
+        class_admit(mods, _QN_AFTER_FIT_SLOT, cls, PythonObject(True))
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: QNRegressor cannot invoke Python fit callbacks")
     var names = _qn_schema(context)
@@ -343,12 +351,23 @@ def qn_public_operation(model: PythonObject, operation: String, args: PythonObje
     var b = native_loaded_module("builtins")
     if py_type(args) is not b.tuple:
         raise Error("TypeError: QN arguments require a native tuple")
-    var ancestry = _type_mro(py_type(model))
-    var known = False
-    for i in range(len(ancestry)):  # driver-loop: preserve passive subclasses of the connected owner
-        known = known or ancestry[i] is context["qn_public_class"]
-    if not known:
-        raise Error("TypeError: QNRegressor requires its connected native class")
+    # Whether the model's class descends from the connected owner depends on
+    # the class rows only: kept per class state, with the owner it matched
+    # (a reconnection installs a new owner class, so the identity differs).
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var owner = context["qn_public_class"]
+    # The owner class itself needs no walk; a subclass's verdict is recorded
+    # with the owner as payload (a record must not retain its own class).
+    var record = PythonObject(None) if cls is owner else class_record(mods, _QN_KNOWN_SLOT, cls)
+    if not (cls is owner) and (record is None or record is not owner):
+        var ancestry = _type_mro(cls)
+        var known = False
+        for i in range(len(ancestry)):  # driver-loop: preserve passive subclasses of the connected owner
+            known = known or ancestry[i] is owner
+        if not known:
+            raise Error("TypeError: QNRegressor requires its connected native class")
+        class_admit(mods, _QN_KNOWN_SLOT, cls, owner)
     if operation == "initialize":
         return _qn_initialize(model, args, context)
     var fitting = operation == "fit"
