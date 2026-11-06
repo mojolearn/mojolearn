@@ -13,7 +13,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setat
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
-from bindings.msel_common import msel_get_scorer, msel_score, msel_admit, msel_flatten
+from bindings.msel_common import msel_get_scorer, msel_score, msel_admit, msel_flatten, msel_numeric_vector
 from bindings.msel_scorer_native import msel_metric_plan, msel_scorer_call, msel_scorer_create
 from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan, msel_native_clone
 from bindings.parallel_cv_native import msel_parallel_operation
@@ -149,7 +149,11 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         var classifier = msel_flag_truth(args[2], context)
         _ = msel_flag_truth(args[3], context)
         msel_admit(args[4], context)
-        var labels = msel_flatten(args[1], context) if classifier and args[1] is not None else args[1]
+        # A numeric ndarray/Array label vector goes to msel_native_discrete as
+        # is (one buffer reduction); flattening boxed every label first.
+        var labels = args[1]
+        if classifier and labels is not None and not msel_numeric_vector(labels, False, context):
+            labels = msel_flatten(labels, context)
         return msel_check_cv(args[0], labels, classifier, args[3], args[4], context)
     if operation == "family_msel_train_test_split":
         return msel_train_test_split(args[0], args[1], args[2], args[3], args[4], args[5], context)
