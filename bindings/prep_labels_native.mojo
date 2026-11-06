@@ -1134,6 +1134,58 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
     return _take_i32(ran, out, n, K, context)
 
 
+def _mlb_inverse_direct(classes: PythonObject, k: Int, yt: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_mlb_inverse` of a C-ordered 2-D numeric indicator (a mojolearn Array
+    or an ndarray, int32 / int64 / float32 / float64, (n, k) wide): the set
+    cells are found by one native scan of the buffer and only the picked
+    classes and the row tuples become Python objects (p3-prep). None for any
+    other input (the general walk below). A nonzero or NaN cell is set, as
+    the Python truth test reads it."""
+    var b = _builtins()
+    var ndarray = py_get(context, "ndarray")
+    var is_array = py_type(yt) is context["array_class"]
+    if not is_array and (ndarray is None or py_type(yt) is not ndarray):
+        return None
+    if Int(py=yt.ndim) != 2 or Int(py=yt.shape[1]) != k:
+        return None
+    var dtype = String(yt.dtype) if is_array else String(yt.dtype.str)
+    var c_order = (String(yt.order) == "C") if is_array else Bool(py=yt.flags.c_contiguous)
+    if not c_order:
+        return None
+    var code = 0
+    if dtype == "<i4":
+        code = 1
+    elif dtype == "<i8":
+        code = 2
+    elif dtype == "<f4":
+        code = 3
+    elif dtype == "<f8":
+        code = 4
+    else:
+        return None
+    var n = Int(py=yt.shape[0])
+    var address = Int(py=classical_address(yt))
+    var out = Python.list()
+    for i in range(n):  # cpu-route: builds the user list of Python label tuples (object output)
+        var picked = Python.list()
+        for j in range(k):  # cpu-route: one native read per indicator cell; Python objects only for the hits
+            var at = i * k + j
+            var hit: Bool
+            if code == 1:
+                hit = I32P(unsafe_from_address=address)[at] != 0
+            elif code == 2:
+                hit = I64P(unsafe_from_address=address)[at] != 0
+            elif code == 3:
+                hit = F32P(unsafe_from_address=address)[at] != 0
+            else:
+                hit = F64P(unsafe_from_address=address)[at] != 0
+            if hit:
+                _ = py_call(picked.append, classes[j])
+        _ = yt  # keep the Python object alive through the native reads above
+        _ = py_call(out.append, py_call(b.tuple, picked))
+    return out
+
+
 def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) raises -> PythonObject:
     # One tuple of labels per row: the user list of Python label tuples.
     var b = _builtins()
@@ -1141,6 +1193,9 @@ def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) r
     _check_fitted(fields, "MultiLabelBinarizer")
     var classes = fields["_classes"]
     var k = len(classes)
+    var direct = _mlb_inverse_direct(classes, k, yt, context)
+    if direct is not None:
+        return direct
     var rows = py_call(yt.tolist) if Bool(py=py_call(b.hasattr, yt, "tolist")) else py_call(b.list, yt)
     var out = Python.list()
     for i in range(len(rows)):  # cpu-route: builds the user list of Python label tuples (object output)
