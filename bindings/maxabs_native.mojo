@@ -14,6 +14,7 @@ from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _input, _ptr, _stage, _copy_row
+from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
@@ -126,7 +127,7 @@ def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonO
         raise Error("MaxAbsScaler input feature count differs from fit")
     var scale = fields["scale_"]
     if scale is not None:
-        scale = _input(scale,1,False,context)
+        scale = prep_fitted_vector(scale,context)  # exact fitted Array: no re-admission (p3-prep)
         if Int(py=scale.size) != d:
             raise Error("MaxAbsScaler scale_ must hold one divisor per feature")
     var dest = n*d+(d if scale is not None else 0)

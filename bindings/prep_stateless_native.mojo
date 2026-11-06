@@ -20,6 +20,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _stage, _ptr, _input
+from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
@@ -606,8 +607,8 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
         raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
     var entries = _entries(fields["numeric_mode_"], context)
     var nq = Int(py=fields["n_quantiles_"])
-    var quantiles = _input(fields["_q"], 1, False, context)
-    var references = _input(fields["references_"], 1, False, context)
+    var quantiles = prep_fitted_vector(fields["_q"], context)  # exact fitted Array: no re-admission (p3-prep)
+    var references = prep_fitted_vector(fields["references_"], context)
     if Int(py=quantiles.size) != nq * d or Int(py=references.size) != nq:
         raise Error("RuntimeError: QuantileTransformer fitted quantiles do not match n_quantiles_")
     var normal = String(fields["output_distribution"]) == "normal"
@@ -822,7 +823,7 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var words = n * d
     var inputs = Python.list(Python.tuple(0, values))
     var host = words
-    var lambdas = _input(fields["lambdas_"], 1, False, context)
+    var lambdas = prep_fitted_vector(fields["lambdas_"], context)  # exact fitted Array: no re-admission (p3-prep)
     var lo = host
     host += d
     _ = py_call(inputs.append, Python.tuple(lo, Python.tuple(0, lambdas, PythonObject(None), d, 1)))
@@ -831,8 +832,8 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var mean = PythonObject(None)
     var scale = PythonObject(None)
     if standardize:
-        mean = _input(fields["_mean"], 1, False, context)
-        scale = _input(fields["_scale"], 1, False, context)
+        mean = prep_fitted_vector(fields["_mean"], context)
+        scale = prep_fitted_vector(fields["_scale"], context)
         mo = host
         host += d
         so = host
@@ -849,8 +850,8 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var anchor_values = PythonObject(None)
     var kind_values = PythonObject(None)
     if anchor is not None:
-        anchor_values = _input(anchor, 1, False, context)
-        kind_values = _input(fields["_pt_anchor_kind"], 1, False, context)
+        anchor_values = prep_fitted_vector(anchor, context)
+        kind_values = prep_fitted_vector(fields["_pt_anchor_kind"], context)
         ao = host
         host += d
         ko = host
