@@ -311,8 +311,10 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + String(rank) + "-D shape " + family_shape_repr(view) + "; multi-target GP fits are not "
                     + "implemented (the n_targets refusal in __init__ is this same "
                     + "boundary)")
+    # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
+    # row 878): y is not viewed and converted a second time.
+    var targets = family_owned(family_as_f32(view, 1, "y", context), context)
     _ = view^
-    var targets = family_owned(family_as_f32(args[2], 1, "y", context), context)
     if Int(py=targets.shape[0]) != n_rows:
         raise Error(String(_GPR) + ": y has " + String(Int(py=targets.shape[0]))
                     + " entries, X has " + String(n_rows) + " rows")
