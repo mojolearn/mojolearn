@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module import native_loaded_module
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_admission import opt_exact, opt_scalar, opt_value, opt_schedule
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints
 from bindings.optimizer_device_native import device_shape, shape_count
@@ -469,6 +470,28 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         return seq_construct(owner, values, mode, context)
     var kind = seq_class(owner, context)
     var b = native_loaded_module("builtins")
+    if operation == "seq_word" or operation == "seq_word_set":
+        # One state word reads or writes only the `_words` buffer: admit the
+        # owner class, its string keys and that buffer (seq_addr runs the same
+        # tensor admission), not the whole optimizer, its binding, the params
+        # list and the handle buffer.
+        var word_fields = py_fields(owner)
+        if py_type(word_fields) is not b.dict or not dict_keys_admitted(word_fields):
+            var keys = py_call(b.list, word_fields)
+            for i in range(len(keys)):  # driver-loop: over stored owner field names before native dictionary lookups
+                if py_type(keys[i]) is not b.str:
+                    raise Error("TypeError: sequence optimizer metadata requires native string keys")
+            if py_type(word_fields) is b.dict:
+                dict_keys_admit(word_fields)
+        var word_ptr = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=seq_addr(word_fields["_words"], 9, context, True))
+        opt_scalar(values, context)
+        var word_index = Int(py=values[0])
+        if word_index < 0 or word_index >= 9:
+            raise Error("ValueError: optimizer word index out of range")
+        if operation == "seq_word_set":
+            word_ptr[word_index] = Int64(Int(py=py_call(b.int, values[1])))
+            return PythonObject(None)
+        return PythonObject(word_ptr[word_index] != 0) if Bool(py=values[1]) else PythonObject(Int(word_ptr[word_index]))
     var fields = py_fields(owner) if operation == "seq_finalize" else seq_fields(owner, context)
     if operation == "seq_finalize" and py_get(fields, "_res_b") is None:
         return PythonObject(None)
