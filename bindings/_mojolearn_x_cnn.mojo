@@ -8,7 +8,10 @@ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call
+from bindings.py_balanced import py_call, py_type
+from bindings.cpython_table import cpython_table
+
+comptime _TPFLAGS_LIST_SUBCLASS = UInt64(1) << 25  # Py_TPFLAGS_LIST_SUBCLASS
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
@@ -395,8 +398,11 @@ def softmax_xent_binding[resident: Bool = False](
 
 
 def _is_list(o: PythonObject) raises -> Bool:
-    var bi = native_loaded_module("builtins")
-    return Bool(py=py_call(bi.isinstance, o, bi.list))
+    """`isinstance(o, list)` as CPython's PyList_Check: the type's
+    Py_TPFLAGS_LIST_SUBCLASS bit (p3-cnn-sequence-tsa: it ran a builtins
+    module lookup and two Python calls per optimizer step and per gather)."""
+    var cls = py_type(o)
+    return (cpython_table()[].PyType_GetFlags(cls._obj_ptr) & _TPFLAGS_LIST_SUBCLASS) != 0
 
 
 def _many(ws_: PythonObject, gs: PythonObject, bs: PythonObject, params: PythonObject) raises -> Tuple[List[Int], List[Int], List[Int], List[Int]]:
