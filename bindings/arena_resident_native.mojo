@@ -14,8 +14,9 @@ from bindings.arena_cache_release import FirstFailure
 from bindings.arena_cache_upload import _native_call
 from bindings.arena_resident_rows import arena_resident_take, arena_resident_entry
 from bindings.native_loaded_module import native_namespace_string_keys
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
-from bindings.p3_array_arena_records import P3_RESIDENT_NATIVE, p3_layout_admitted, p3_layout_admit
+from bindings.p3_array_arena_records import (
+    P3_RESIDENT_NATIVE, p3_layout_admitted, p3_layout_admit, P3_DICT_INT_IDS, p3_dict_admitted, p3_dict_admit,
+)
 
 
 def _resident_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -64,12 +65,12 @@ def _entries(fields: PythonObject, context: PythonObject) raises -> PythonObject
         raise Error("TypeError: resident entries require their native dictionary")
     # p3-array-arena: walked only after the dictionary changed since its last
     # full admission (dictionary watcher, Python >= 3.12).
-    if not dict_keys_admitted(entries):
+    if not p3_dict_admitted(P3_DICT_INT_IDS, entries):
         var keys = py_call(b["list"], entries)
         for i in range(len(keys)):  # driver-loop: lookup by identity cannot invoke a custom integer key protocol
             if py_type(keys[i]) is not b["int"]:
                 raise Error("TypeError: resident entry keys must be native integers")
-        dict_keys_admit(entries)
+        p3_dict_admit(P3_DICT_INT_IDS, entries)
     return entries
 
 

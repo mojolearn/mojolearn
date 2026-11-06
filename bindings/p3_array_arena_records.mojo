@@ -31,7 +31,7 @@ call back into Python on a hit.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready
+from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready, _dict_watcher, _dict_epoch
 
 
 # Admission kinds: one per distinct check, so one class can carry several.
@@ -169,3 +169,62 @@ def p3_numpy_dtype_class(factory: PythonObject, cls: PythonObject) raises -> Boo
         if g[].dtypes[i] == address:
             return True
     return False
+
+
+# ---------------------------------------------------------------- dictionaries
+# Key admissions of exact dictionaries (every key of one exact class, so a
+# keyed lookup cannot run a foreign __eq__), kept per (criterion, dict) and
+# re-run only after the dictionary changed: the dictionary watcher in
+# `bindings/native_class_admission.mojo` (Python >= 3.12) bumps a dict's
+# epoch on every insertion, replacement, deletion, clear and deallocation, so
+# an edit or a recycled address forces the full walk again. The criterion is
+# part of the key, so two owners that admit the same dictionary under
+# different rules never vouch for each other. Python 3.10 / 3.11 walk on
+# every call, exactly as before.
+
+comptime P3_DICT_ENTRY_TUPLE_INTS = 1   # x_prep resident cache entries: (int, int) keys
+comptime P3_DICT_BINDING_IDS = 2        # x_prep scope caches: (int, str) keys
+comptime P3_DICT_INT_IDS = 3            # model-selection resident entries: int keys
+comptime P3_DICT_STR_INT = 4            # numpy sctypeDict: str or int keys
+
+
+struct P3DictRecords(Defaultable, Movable):
+    var epochs: Dict[Int, Int]
+
+    def __init__(out self):
+        self.epochs = Dict[Int, Int]()
+
+
+comptime P3_DICT_RECORDS = _Global[
+    StorageType=P3DictRecords, name="MojolearnP3ArrayArenaDictsV1",
+    init_fn=P3DictRecords.__init__,
+]
+
+
+def p3_dict_admitted(kind: Int, fields: PythonObject) raises -> Bool:
+    """True when `fields` passed the `kind` key admission and has not changed
+    since. Always False where dictionary watchers are unavailable."""
+    var g = P3_DICT_RECORDS.get_or_create_ptr()
+    if len(g[].epochs) == 0:
+        return False
+    var address = Int(fields._obj_ptr)
+    var key = address * 16 + kind
+    if key not in g[].epochs:
+        return False
+    return g[].epochs[key] == _dict_epoch(address)
+
+
+def p3_dict_admit(kind: Int, fields: PythonObject) raises:
+    """Record that `fields` just passed the full `kind` key admission (or
+    that only this owner's own admitted keys went in since it did)."""
+    var watcher = _dict_watcher()
+    if watcher < 0:
+        return
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields._obj_ptr) < 0:
+        # Watch refused: record nothing; the full walk stays per call.
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return
+    var address = Int(fields._obj_ptr)
+    var g = P3_DICT_RECORDS.get_or_create_ptr()
+    g[].epochs[address * 16 + kind] = _dict_epoch(address)

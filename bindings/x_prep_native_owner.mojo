@@ -14,8 +14,10 @@ from bindings.sequential_admission import sequential_admit_value
 from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_namespace_string_keys
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
-from bindings.p3_array_arena_records import P3_CACHE_LAYOUT, p3_layout_admitted, p3_layout_admit
+from bindings.p3_array_arena_records import (
+    P3_CACHE_LAYOUT, p3_layout_admitted, p3_layout_admit,
+    P3_DICT_BINDING_IDS, P3_DICT_ENTRY_TUPLE_INTS, p3_dict_admitted, p3_dict_admit,
+)
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -195,13 +197,13 @@ def _resident_cache(entries: PythonObject, fields: PythonObject, context: Python
         raise Error("TypeError: resident scope requires native cache metadata")
     # p3-array-arena: the key walk runs only when the dictionary changed
     # since its last full admission (dictionary watcher, Python >= 3.12).
-    if not dict_keys_admitted(caches):
+    if not p3_dict_admitted(P3_DICT_BINDING_IDS, caches):
         var keys = py_call(b.list,caches)
         for i in range(len(keys)):  # driver-loop: admit resident binding identities before dictionary lookup
             var key = keys[i]
             if py_type(key) is not b.tuple or len(key) != 2 or py_type(key[0]) is not b.int or py_type(key[1]) is not b.str:
                 raise Error("TypeError: resident cache keys require native binding identities")
-        dict_keys_admit(caches)
+        p3_dict_admit(P3_DICT_BINDING_IDS, caches)
     var key = Python.tuple(entries["arena_binding_id"],PythonObject(prefix))
     var pair = py_get(caches,key)
     if pair is None:
@@ -215,11 +217,11 @@ def _resident_cache(entries: PythonObject, fields: PythonObject, context: Python
         py_setitem(state,"uploads",0)
         py_setitem(state,"hits",0)
         pair = Python.tuple(cache,entries["arena_binding"])
-        var admitted = dict_keys_admitted(caches)
+        var admitted = p3_dict_admitted(P3_DICT_BINDING_IDS, caches)
         py_setitem(caches,key,pair)
         if admitted:
             # Only this owner's native (int, str) key went in since the walk.
-            dict_keys_admit(caches)
+            p3_dict_admit(P3_DICT_BINDING_IDS, caches)
     if py_type(pair) is not b.tuple or len(pair) != 2 or pair[1] is not entries["arena_binding"]:
         raise Error("TypeError: resident cache binding identity changed")
     return pair[0]
@@ -249,12 +251,12 @@ def _cache_state(cache: PythonObject, entries: PythonObject, context: PythonObje
     var stored = state["_entries"]
     # p3-array-arena: O(entries) key walk only when the entries dictionary
     # changed since its last full admission (dictionary watcher).
-    if not dict_keys_admitted(stored):
+    if not p3_dict_admitted(P3_DICT_ENTRY_TUPLE_INTS, stored):
         var keys = py_call(b.list,stored)
         for i in range(len(keys)):  # driver-loop: native pointer/count keys precede dictionary lookup
             if py_type(keys[i]) is not b.tuple or len(keys[i]) != 2 or py_type(keys[i][0]) is not b.int or py_type(keys[i][1]) is not b.int:
                 raise Error("TypeError: resident cache keys require native buffer identities")
-        dict_keys_admit(stored)
+        p3_dict_admit(P3_DICT_ENTRY_TUPLE_INTS, stored)
     return state
 
 
@@ -274,11 +276,11 @@ def _cached_slot_in(state: PythonObject, value: PythonObject, entries: PythonObj
     var next_uploads = PythonObject(Int(py=state["uploads"])+1)
     var slot = Int(py=py_call_typed(entries[PythonObject(prefix+"_dev_put")],key[0],key[1]))
     try:
-        var admitted = dict_keys_admitted(stored)
+        var admitted = p3_dict_admitted(P3_DICT_ENTRY_TUPLE_INTS, stored)
         py_setitem(stored,key,Python.tuple(slot,value))
         if admitted:
             # Only this owner's native (address, size) key went in since the walk.
-            dict_keys_admit(stored)
+            p3_dict_admit(P3_DICT_ENTRY_TUPLE_INTS, stored)
     except error:
         try:
             _ = py_call_typed(entries[PythonObject(prefix+"_dev_free")],slot)

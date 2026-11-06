@@ -10,7 +10,7 @@ from bindings.arena_materialize_native import (
     _native_call, _prepare, _prepared_info, _cast, _slot, _empty, _resident_fields,
 )
 from bindings.msel_inputs import msel_input
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.p3_array_arena_records import P3_DICT_INT_IDS, p3_dict_admitted, p3_dict_admit
 
 
 def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
@@ -55,11 +55,11 @@ def _entry_info(values: PythonObject, entries: PythonObject, indices: Bool, cont
         sid = Int(py=_native_call(context["arena_msel_put"],Python.tuple(prepared["address"],nbytes)))
     try:
         var result = Python.tuple(values,array,sid)
-        var admitted = dict_keys_admitted(entries)
+        var admitted = p3_dict_admitted(P3_DICT_INT_IDS, entries)
         py_setitem(entries,key,result)
         if admitted:
             # Only this owner's native int identity key went in since the walk.
-            dict_keys_admit(entries)
+            p3_dict_admit(P3_DICT_INT_IDS, entries)
         return Python.tuple(result,prepared)
     except error:
         if sid >= 0:
@@ -78,14 +78,14 @@ def _admit_keys(entries: PythonObject, context: PythonObject) raises:
     # p3-array-arena: walked only when the dictionary changed since its last
     # full admission (dictionary watcher, Python >= 3.12); this owner's own
     # int insertions re-admit it.
-    if dict_keys_admitted(entries):
+    if p3_dict_admitted(P3_DICT_INT_IDS, entries):
         return
     var b = context["arena_native_types"]
     var keys = py_call(b["list"],entries)
     for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
         if py_type(keys[i]) is not b["int"]:
             raise Error("TypeError: resident entries require native identity keys")
-    dict_keys_admit(entries)
+    p3_dict_admit(P3_DICT_INT_IDS, entries)
 
 
 def arena_resident_take(fields: PythonObject, values: PythonObject, indices_value: PythonObject,
