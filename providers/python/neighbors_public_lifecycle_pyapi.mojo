@@ -82,11 +82,18 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     var shape = labels_shape_of(source, context)
     if len(shape) > 0 and shape[0] != rows:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(shape[0]) + "]")
-    # An exact integer/bool ndarray or Array vector holds no complex,
-    # non-finite or non-integral element and no Python object, so the element
-    # walk below cannot refuse it and the vector is returned unchanged either
-    # way: admit it from its dtype metadata instead of label by label.
-    if len(shape) == 1 and labels_integer_storage(source, context):
+    # Perf (perf2-neighbors): any rank is admitted from the buffer, not only a
+    # vector. The walk below returns `source` unchanged for every shape except
+    # the non-multioutput (n, 1) column, which it flattens with a warning, so
+    # only that case keeps the walk (a 2-D multioutput KNN y used to pay one
+    # Python object and four scalar checks per label).
+    var column = not multioutput and len(shape) == 2 and shape[1] == 1
+    var buffered = len(shape) >= 1 and not column
+    # An exact integer/bool ndarray or Array holds no complex, non-finite or
+    # non-integral element and no Python object, so the element walk below
+    # cannot refuse it and it is returned unchanged either way: admit it from
+    # its dtype metadata instead of label by label.
+    if buffered and labels_integer_storage(source, context):
         return source
     # Perf: an exact float32/float64 ndarray or Array vector holds only real
     # floats, so the element walk below reduces to its finite (and, for a
@@ -94,7 +101,7 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     # (bindings/label_integer_storage.mojo, also the label door's) refuses at
     # the first refused element in C order with the same wording, instead of
     # one Python float and three scalar checks per label.
-    if len(shape) == 1:
+    if buffered:
         var refusal = labels_float_storage(source, context, classifier)
         if refusal == LABELS_FLOAT_NONFINITE:
             raise Error("Input y contains NaN or infinity (" + name + ").")
