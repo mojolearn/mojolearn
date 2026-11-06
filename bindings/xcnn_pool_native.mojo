@@ -23,6 +23,9 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.sequential_inputs import sequential_input
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
+from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.xcnn_common import (
     XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
     xcnn_size, xcnn_tuple, xcnn_module_entries, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new, xcnn_reshape_t, xcnn_wrap,
@@ -45,12 +48,13 @@ def _set(fields: PythonObject, name: String, value: PythonObject) raises:
 
 def _is(model: PythonObject, key: String, context: PythonObject) raises -> Bool:
     """`isinstance(model, <connected layer class>)`."""
-    var b = xcnn_builtins()
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: native MRO, no instance/subclass protocol
-        if ancestry[i] is context[PythonObject(key)]:
-            return True
-    return False
+    # p3-cnn-sequence-tsa: CPython's own MRO test (PyType_IsSubtype, no
+    # instance/subclass protocol), not a Python-level walk of the MRO tuple
+    var target = context[PythonObject(key)]
+    var cls = py_type(model)
+    if cls is target:
+        return True
+    return cpython_table()[].PyType_IsSubtype(cls._obj_ptr, target._obj_ptr) != 0
 
 
 def _class_name(model: PythonObject) raises -> String:
@@ -729,16 +733,29 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     return out
 
 
+comptime _ADAPTIVE_MAX_SLOT = "xcnn_adaptive_max_v1"
+
+
 def _adaptive_max(model: PythonObject, context: PythonObject) raises -> Bool:
+    # p3-cnn-sequence-tsa: the class flag is kept per class under the type
+    # watcher (`class_record`; an edit of the class or an ancestor misses)
+    var cls = py_type(model)
+    var mods = NativeModules()
+    var kept = class_record(mods, _ADAPTIVE_MAX_SLOT, cls)
+    if kept is not None:
+        return Bool(py=kept)
     var b = xcnn_builtins()
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var result = False
     for i in range(len(ancestry)):  # driver-loop: native class metadata without descriptors/metaclass hooks
         var namespace = _class_fields(ancestry[i])
         var flag = py_get(namespace, "_max")
         if flag is not None:
             _pool_scalar(flag, context)
-            return Bool(py=flag)
-    return False
+            result = Bool(py=flag)
+            break
+    class_admit(mods, _ADAPTIVE_MAX_SLOT, cls, PythonObject(result))
+    return result
 
 
 def _adaptive_output(fields: PythonObject, context: PythonObject) raises -> List[Int]:
