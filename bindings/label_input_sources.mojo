@@ -30,6 +30,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get
+from bindings.p3_labels_metrics_native import p3_item
 
 
 # Kinds returned by `labels_list_scalar_kind`.
@@ -57,15 +58,14 @@ def labels_list_scalar_kind(value: PythonObject) raises -> Int:
     if n == 0:
         return LABELS_LIST_OTHER
     ref cpy = Python().cpython()
-    var get_item = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem" if is_tuple else "PyList_GetItem")
     var int_type = b.int
     var float_type = b.float
     var bool_type = b.bool
     var kind = LABELS_LIST_OTHER
     for i in range(n):  # driver-loop: exact list/tuple item classes by pointer, one C read per label
-        var raw = get_item(value._obj_ptr, i)
-        if not raw:
-            raise cpy.unsafe_get_error()
+        # p3-labels-metrics: the item read through the process-wide table
+        # (PyList_GetItem / PyTuple_GetItem were resolved by name per call).
+        var raw = p3_item(value, i, is_tuple)
         var item_type = cpy.PyObject_Type(raw)
         var item_kind = LABELS_LIST_OTHER
         if item_type == int_type._obj_ptr:

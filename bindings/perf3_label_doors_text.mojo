@@ -9,6 +9,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type
+from bindings.p3_labels_metrics_native import p3_item, p3_type_word
 
 
 def labels_all_exact_str(flat: PythonObject) raises -> Bool:
@@ -19,17 +20,12 @@ def labels_all_exact_str(flat: PythonObject) raises -> Bool:
     var n = len(flat)
     if n == 0 or py_type(flat) is not b.list:
         return False
-    ref cpy = Python().cpython()
-    var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
+    var str_word = Int(b.str._obj_ptr)
     var str_type = b.str
     for i in range(n):  # driver-loop: exact str label classes by pointer, one C read per label
-        var raw = get_item(flat._obj_ptr, i)
-        if not raw:
-            raise cpy.unsafe_get_error()
-        var item_type = cpy.PyObject_Type(raw)
-        var same = item_type == str_type._obj_ptr
-        cpy.Py_DecRef(item_type)
-        if not same:
+        # p3-labels-metrics: PyList_GetItem from the process-wide table (it
+        # was resolved by name, dlsym, on every call).
+        if p3_type_word(p3_item(flat, i, False)) != str_word:
             return False
     _ = flat  # keep the list alive through the borrowed item reads above
     _ = str_type
