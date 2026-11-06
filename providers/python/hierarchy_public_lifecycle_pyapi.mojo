@@ -2,6 +2,10 @@
 # AgglomerativeClustering's public lifecycle, setting admission and captured X.
 # Numerical backend extension dispatch remains explicit migration debt in the
 # dedicated owner; moving this envelope does not make those calls descriptor ABI.
+from bindings.native_class_admission import class_record, class_admit
+from bindings.cpython_table import cpython_table
+from core.p3nc_scan import p3nc_all_finite_f32, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
+from bindings.p3nc_label_lists import p3nc_float_list_verdict
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules, native_loaded_module, _loaded_fields
@@ -54,6 +58,9 @@ struct HierarchyPublicCall(Movable):
         self.depth = depth
 
 
+comptime _HIER_CLASS_SLOT = "p3nc_hierarchy_class_v1"
+
+
 def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(py_type(model)) is not b.type:
@@ -62,16 +69,22 @@ def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> Pyt
     var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
     var modules = NativeModules()
     var plan = _plan(modules, model, attributes)
-    var ancestry = _type_mro(py_type(model))
-    var setter_seen = False
-    for i in range(len(ancestry)):  # driver-loop: passive subclass storage admission
-        var names = _class_fields(ancestry[i])
-        if not setter_seen and py_contains(names, "__setattr__"):
-            if names["__setattr__"] is not b.object.__dict__["__setattr__"]:
-                raise Error("TypeError: native hierarchy execution cannot invoke Python field setters")
-            setter_seen = True
-        if py_contains(names, "_mojolearn_after_fit"):
-            raise Error("TypeError: native hierarchy execution cannot invoke Python fit callbacks")
+    # p3-neighbors-cluster: the ancestry walk is recorded per class
+    # (bindings/native_class_admission.mojo, type watchers): any change of the
+    # class or an ancestor invalidates it; without watchers it runs every call.
+    var model_class = py_type(model)
+    if class_record(modules, _HIER_CLASS_SLOT, model_class) is None:
+        var ancestry = _type_mro(model_class)
+        var setter_seen = False
+        for i in range(len(ancestry)):  # driver-loop: passive subclass storage admission
+            var names = _class_fields(ancestry[i])
+            if not setter_seen and py_contains(names, "__setattr__"):
+                if names["__setattr__"] is not b.object.__dict__["__setattr__"]:
+                    raise Error("TypeError: native hierarchy execution cannot invoke Python field setters")
+                setter_seen = True
+            if py_contains(names, "_mojolearn_after_fit"):
+                raise Error("TypeError: native hierarchy execution cannot invoke Python fit callbacks")
+        class_admit(modules, _HIER_CLASS_SLOT, model_class, PythonObject(True))
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native hierarchy execution cannot invoke Python fit callbacks")
     var settings = Python.dict()
@@ -83,8 +96,7 @@ def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> Pyt
         var name = parameters[i]
         var value = _lookup(model, name, fields, plan, attributes)
         if String(name) == "connectivity":
-            ref cpy = Python().cpython()
-            if cpy.lib.get_function[Int32]("PyCallable_Check")(value._obj_ptr) != 0:
+            if cpython_table()[].PyCallable_Check(value._obj_ptr) != 0:
                 raise Error("TypeError: connectivity callbacks cannot run inside native fit; pass the connectivity matrix explicitly")
             if host_sparse_format(value).byte_length() == 0:
                 classical_admit_value(value, context)
@@ -156,6 +168,16 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     # unchanged by the walk.
     if stored is not None and labels_text_storage(source, context):
         return source
+    # p3-neighbors-cluster: an exact flat list / tuple of exact floats is
+    # checked in one native pass (bindings/p3nc_label_lists.mojo) with the
+    # walk's verdicts; the walk returns such a list unchanged.
+    var verdict = p3nc_float_list_verdict(source, classifier)
+    if verdict == P3NC_REAL_NONFINITE:
+        raise Error("Input y contains NaN or infinity (" + name + ").")
+    if verdict == P3NC_REAL_CONTINUOUS:
+        raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+    if verdict == P3NC_REAL_OK:
+        return source
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
     for i in range(len(flat)):  # driver-loop: admitted label words, never Python element protocols
@@ -193,10 +215,9 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
     if host_sparse_format(source).byte_length() > 0:
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: sparse X is refused; pass a dense matrix")
     var x = family_f32_snapshot(source, 2, "X", context)
-    var values = FAMILY_F32P(unsafe_from_address=x.source.addr)
-    for i in range(x.count):  # driver-loop: one public finite-input scan over retained storage
-        if not isfinite(values[i]):
-            raise Error("Input X contains NaN or infinity (AgglomerativeClustering).")
+    # p3-neighbors-cluster: one eight-lane exponent-bit pass (core/p3nc_scan.mojo).
+    if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=x.source.addr), x.count):
+        raise Error("Input X contains NaN or infinity (AgglomerativeClustering).")
     if Int(py=depth) == 0:
         if fitting:
             _ = hierarchy_target(args[2], x.shape[0], "AgglomerativeClustering", False, False, False, context)
