@@ -160,8 +160,14 @@ def lifecycle_begin(model: PythonObject, method: String, source: PythonObject, x
     False for a stateless transformer. Returns the fit depth to hand back to
     `lifecycle_end` (0 for a method that does not fit)."""
     var fields = py_fields(model)
-    lifecycle_admit_state(model, fields)
-    var nested = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0))) > 0
+    # lifecycle_admit_state's checks, in its order, with the fitting depth
+    # read once (it was read again right after the admission).
+    var depth_value = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+    if py_type(depth_value) is not native_loaded_module("builtins").int:
+        raise Error("TypeError: native fitting depth requires an exact integer")
+    if py_contains(fields, "_mojolearn_after_fit"):
+        raise Error("TypeError: native fitting cannot invoke Python completion callbacks")
+    var nested = Int(py=depth_value) > 0
     if lifecycle_fitting(method):
         if x_checks and not nested and source is not None:
             lifecycle_check_x(model, source, sparse_ok, context)
