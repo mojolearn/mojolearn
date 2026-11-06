@@ -305,6 +305,12 @@ def compare(before_paths, after_paths, min_ratio=1.5, min_seconds=0.5):
     bhost = _side_host(brecs)
     ahost = _side_host(arecs)
     same_host, host_diffs = hosts_comparable(bhost, ahost)
+    bvend = sorted({r["vendor"] for r in brecs if r["timed"]})
+    avend = sorted({r["vendor"] for r in arecs if r["timed"]})
+    if bvend and avend and bvend != avend:
+        # A changed device label is a changed machine (MI325X -> MI300X).
+        same_host = False
+        host_diffs = [f"vendor: {','.join(bvend)} vs {','.join(avend)}"] + host_diffs
     return dict(
         before_records=brecs, after_records=arecs,
         before_vendors=sorted({r["vendor"] for r in brecs if r["timed"]}),
@@ -384,6 +390,7 @@ def cross(before_by_col, after_by_col, ref=None, min_ratio=1.5, min_seconds=0.5)
         row = dict(column=n, lanes=len(rep["rows"]), before_s=bt, after_s=at,
                    ratio=(at / bt) if bt > 0 else None, host_factor=rep["host_factor"],
                    regressed=len(rep["regressed"]), improved=len(rep["improved"]),
+                   above_host_factor=len(rep["outliers"]),
                    delta=dict((k, t["after"][k] - t["before"][k]) for k in BUCKETS),
                    before=rep["before_points"], after=rep["after_points"],
                    before_cpu=rep["before_host"].get("cpu_model"), after_cpu=rep["after_host"].get("cpu_model"),
@@ -405,11 +412,11 @@ def series(paths, lanes, stage="non-train", commits=None, common_only=False, col
     """One lane's seconds per (column, commit), oldest commit first. Each
     point sums the lane's `stage` buckets over the fixtures timed at EVERY
     point of that lane, so a point is never larger for holding more fixtures.
-    A point whose lane revision differs from the newest point's is marked."""
+    A point whose lane revision differs from its column's newest point is marked."""
     cells, records = load_side_grouped(paths)
     want = set(columns) if columns else None
     keys = sorted({k for k in records if want is None or k[0] in want},
-                  key=lambda k: (_date_of(k[1]) or "9999", k[1]))
+                  key=lambda k: (_date_of(k[1]) or "9999", k[1], k[0]))
     if commits:
         prefixes = [c for c in commits if c]
         keys = [k for k in keys if any(k[1].startswith(p) for p in prefixes)]
@@ -434,12 +441,15 @@ def series(paths, lanes, stage="non-train", commits=None, common_only=False, col
             out["lanes"][lane] = dict(fixtures=[], points={})
             continue
         common = set.intersection(*(set(v["fx"]) for v in pts.values()))
-        newest = pts[max(pts, key=lambda k: (_date_of(k[1]) or "", k[1]))]["rev"]
+        # Each column's newest point sets that column's lane revision.
+        newest = {}
+        for k in pts:  # keys are oldest first
+            newest[k[0]] = pts[k]["rev"]
         points = {}
         for k, v in pts.items():
             sec = sum(v["fx"][f][b] for f in common for b in buckets)
             points[f"{k[0]}@{k[1][:10]}"] = dict(column=k[0], commit=k[1][:10], seconds=sec,
-                                                 revision=v["rev"], revision_differs=v["rev"] != newest)
+                                                 revision=v["rev"], revision_differs=v["rev"] != newest[k[0]])
         out["lanes"][lane] = dict(fixtures=sorted(common), points=points)
     return out
 
@@ -534,23 +544,38 @@ def _print_text(rep, top):
           f"only after {len(rep['only_after'])}")
 
 
+def vs_text(res, row):
+    """The cross-column cell: `ref`, the ratio when the pairing rule holds
+    (marked when the column's own machine changed between its sides), or
+    NOT COMPARABLE."""
+    if row["column"] == res["ref"]:
+        return "ref"
+    if not res["pairing"]["comparable"]:
+        return "NOT COMPARABLE"
+    text = _fmt(row["vs_ref"])
+    hosts_moved = [n for n in (row["column"], res["ref"]) if not res["reports"][n]["same_host"]]
+    return text + (f" (machine changed: {', '.join(hosts_moved)})" if hosts_moved else "")
+
+
+def _cross_host(res, row):
+    rep = res["reports"][row["column"]]
+    b = ",".join(rep["before_vendors"]) + (f" [{row['before_cpu']}]" if row["before_cpu"] else "")
+    a = ",".join(rep["after_vendors"]) + (f" [{row['after_cpu']}]" if row["after_cpu"] else "")
+    return b if a == b else f"{b} -> {a}"
+
+
 def _print_cross(res, top):
     pair = res["pairing"]
     print("| column | before commit (date) | after commit (date) | host before -> after | lanes | before s "
-          "| after s | ratio | host factor | regressed | faster | d train | d infer | d other | vs " + res["ref"] + " |")
-    print("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+          "| after s | ratio | host factor | regressed | above host factor | faster | d train | d infer | d other "
+          "| vs " + res["ref"] + " |")
+    print("|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for r in res["summary"]:
-        if r["column"] == res["ref"]:
-            vs = "ref"
-        elif pair["comparable"]:
-            vs = _fmt(r["vs_ref"])
-        else:
-            vs = "NOT COMPARABLE"
-        host = f"{r['before_cpu'] or '?'} -> {r['after_cpu'] or '?'}"
-        print(f"| {r['column']} | {_point_text(r['before'])} | {_point_text(r['after'])} | {host} | {r['lanes']} "
-              f"| {r['before_s']:.0f} | {r['after_s']:.0f} | {_fmt(r['ratio'])} | {_fmt(r['host_factor'])} "
-              f"| {r['regressed']} | {r['improved']} | {r['delta']['train']:+.0f} | {r['delta']['infer']:+.0f} "
-              f"| {r['delta']['other']:+.0f} | {vs} |")
+        print(f"| {r['column']} | {_point_text(r['before'])} | {_point_text(r['after'])} | {_cross_host(res, r)} "
+              f"| {r['lanes']} | {r['before_s']:.0f} | {r['after_s']:.0f} | {_fmt(r['ratio'])} "
+              f"| {_fmt(r['host_factor'])} | {r['regressed']} | {r['above_host_factor']} | {r['improved']} "
+              f"| {r['delta']['train']:+.0f} | {r['delta']['infer']:+.0f} | {r['delta']['other']:+.0f} "
+              f"| {vs_text(res, r)} |")
     print()
     print(f"CROSS-COLUMN: {pair['verdict']}")
     for side in ("before", "after"):
@@ -584,7 +609,7 @@ def _print_series(res):
             first = False
         if first:
             print(f"| {lane} | - | " + " | ".join("-" for _ in res["commits"]) + " |")
-    print("\n* = lane revision differs from the newest point (fixture or arithmetic moved).")
+    print("\n* = lane revision differs from the column's newest point (fixture or arithmetic moved).")
     print("hosts: " + "; ".join(f"{k} {','.join(v['vendors'])}" + (f" [{','.join(v['cpu_models'])}]" if v["cpu_models"] else "")
                                 for k, v in res["hosts"].items()))
 
