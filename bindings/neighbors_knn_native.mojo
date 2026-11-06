@@ -35,6 +35,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -124,21 +125,86 @@ def knn_state_unchanged(stored: PythonObject, values: PythonObject) raises -> Bo
     return True
 
 
+def _knn_list_items_same(value: PythonObject, snapshot: PythonObject) raises -> Bool:
+    """True when the exact list `value` holds, slot by slot, the very objects
+    of the tuple `snapshot` (pointer comparison, no Python temporaries)."""
+    var b = _b()
+    if py_type(value) is not b.list or py_type(snapshot) is not b.tuple:
+        return False
+    var count = len(value)
+    if count != len(snapshot):
+        return False
+    var table = perf2_cpython_table()
+    for i in range(count):  # driver-loop: over retained class-list item identities
+        var live = PythonObject(from_borrowed=table[].PyList_GetItem(value._obj_ptr, i))
+        var kept = PythonObject(from_borrowed=table[].PyTuple_GetItem(snapshot._obj_ptr, i))
+        if live is not kept:
+            return False
+    return True
+
+
+def _knn_lists_record(fields: PythonObject, lists: PythonObject) raises -> PythonObject:
+    """The admitted class lists' record: the token, then (list, tuple of its
+    items) per name, or None when a list holds anything but exact immutable
+    scalars (str, int, float, bool), whose in-place edits identity cannot see."""
+    var b = _b()
+    var record = Python.list(_admitted_token())
+    for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
+        var value = py_get(fields, lists[i])
+        if value is None:
+            _ = py_call(record.append, PythonObject(None))
+            _ = py_call(record.append, PythonObject(None))
+            continue
+        if py_type(value) is not b.list:
+            return PythonObject(None)
+        var snapshot = py_call(b.tuple, value)
+        for j in range(len(snapshot)):  # driver-loop: over class-list items, once per recorded fit state
+            var cls = py_type(snapshot[j])
+            if cls is not b.str and cls is not b.int and cls is not b.float and cls is not b.bool:
+                return PythonObject(None)
+        _ = py_call(record.append, value)
+        _ = py_call(record.append, snapshot)
+    return py_call(b.tuple, record)
+
+
+def _knn_lists_unchanged(fields: PythonObject, lists: PythonObject, stored: PythonObject) raises -> Bool:
+    """True when `stored` is a record of the class lists `fields` holds now:
+    the same list objects holding the same item objects."""
+    if stored is None or py_type(stored) is not _b().tuple or len(stored) != 1 + 2 * len(lists):
+        return False
+    if stored[0] is not _admitted_token():
+        return False
+    for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
+        var value = py_get(fields, lists[i])
+        if stored[1 + 2 * i] is not value:
+            return False
+        if value is not None and not _knn_list_items_same(value, stored[2 + 2 * i]):
+            return False
+    return True
+
+
 def _admit_knn_state(model: PythonObject, context: PythonObject) raises:
     classical_check_layout(model, context)
     var fields = py_fields(model)
-    # Class lists are mutable containers: admitted on every call (O(classes)).
-    var lists = Python.tuple("_classes_list", "_label_names")
-    for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
-        var value = py_get(fields, lists[i])
-        if value is not None:
-            classical_admit_value(value, context)
-    var scalars = Python.tuple("algorithm", "metric", "p", "weights", "n_neighbors", "query_tile",
-        "n_features_in_", "n_samples_fit_", "outputs_2d_")
-    var buffers = Python.tuple("_index", "_y_cols")
     var holder = PythonObject(None)
     if py_get(fields, "_resident_holder") is not None:
         holder = _holder(fields)
+    # Class lists are mutable containers. Perf (perf3-nbr-msel-trees): they
+    # are admitted once per state; the holder keeps the admitted list objects
+    # and a tuple of their items, and a later call compares item identities
+    # natively (O(classes) pointer reads, no per-item admission). Lists of
+    # anything but exact str/int/float/bool are admitted on every call.
+    var lists = Python.tuple("_classes_list", "_label_names")
+    if holder is None or not _knn_lists_unchanged(fields, lists, py_get(holder, "admitted_lists")):
+        for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
+            var value = py_get(fields, lists[i])
+            if value is not None:
+                classical_admit_value(value, context)
+        if holder is not None:
+            py_setitem(holder, "admitted_lists", _knn_lists_record(fields, lists))
+    var scalars = Python.tuple("algorithm", "metric", "p", "weights", "n_neighbors", "query_tile",
+        "n_features_in_", "n_samples_fit_", "outputs_2d_")
+    var buffers = Python.tuple("_index", "_y_cols")
     var stamp = knn_state_values(fields, scalars + buffers)
     if holder is not None and knn_state_unchanged(py_get(holder, "admitted_predict"), stamp):
         return
@@ -215,11 +281,19 @@ def _holder(fields: PythonObject) raises -> PythonObject:
     if holder is None:
         holder = Python.dict()
         py_setitem(fields, "_resident_holder", holder)
+    var str_type = _b().str
     if py_type(holder) is not _b().dict:
         raise Error("TypeError: neighbor resident holder must be an exact dictionary")
-    var keys = py_call(_b().tuple, holder.keys())
-    for i in range(len(keys)):  # driver-loop: resident metadata keys before dictionary comparisons
-        if py_type(keys[i]) is not _b().str:
+    # Perf (perf3-nbr-msel-trees): the key check walks the dict natively
+    # (PyDict_Next, borrowed keys) instead of building a key tuple per call.
+    ref cpy = Python().cpython()
+    var pos = Int(0)
+    var key = PyObjectPtr()
+    var item = PyObjectPtr()
+    for _ in range(len(holder)):  # driver-loop: resident metadata keys before dictionary comparisons
+        if cpy.PyDict_Next(holder._obj_ptr, Pointer(to=pos).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+            break
+        if py_type(PythonObject(from_borrowed=key)) is not str_type:
             raise Error("TypeError: neighbor resident keys must be exact strings")
     return holder
 
