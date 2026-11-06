@@ -53,7 +53,9 @@ def test_the_identity_rule_reuses_only_the_same_key_on_the_same_class(tmp_path):
     assert U.decide(dict(key, closure_available=False), [rec(key)], "nvidia-sm_89")[0] == "run"
 
 
-def test_plan_reads_the_store_and_skips_compiled_checks_on_cpu(tmp_path):
+def test_plan_reads_the_store_and_skips_compiled_checks_on_cpu(tmp_path, monkeypatch):
+    # fast: the closure walks are the tooling's own (tested there); here a fixed closure stands in
+    monkeypatch.setattr(U, "python_closure", lambda root, seeds: ["python/mojolearn/__init__.py"])
     w = wheel(tmp_path / "a.whl")
     doc = U.plan("cpu", "cpu-linux-x86_64", ROOT, [w], tmp_path / "store")
     assert all("source" not in U.entry(r["unit"]) for r in doc["units"] if r["unit"].startswith("autograd/"))
@@ -70,3 +72,21 @@ def test_summary_errors():
     assert U.summary_errors(None) == ["no check-units summary"]
     doc = dict(schema=U.SCHEMA + "+summary", units={"adapters": dict(status="failed"), "install-load": dict(status="reused")})
     assert U.summary_errors(doc) == ["unit adapters did not pass"]
+
+
+def test_a_plan_that_owes_nothing_composes_its_summary_and_one_that_owes_refuses(tmp_path):
+    import pytest
+    plan = dict(schema=U.PLAN_SCHEMA, vendor="amd", device_class="amd-gfx942", reused=1, owed=[],
+                units=[dict(unit="adapters", decision="reuse", key=dict(digest="d" * 64))])
+    doc = U.compose_reused(plan, tmp_path / "units", "c" * 40)
+    assert U.summary_errors(json.loads((tmp_path / "units" / U.SUMMARY).read_text()), plan) == [] and doc["ok"]
+    with pytest.raises(ValueError, match="owes 1 unit"):
+        U.compose_reused(dict(plan, owed=["adapters"]), tmp_path / "u2", "c" * 40)
+
+
+def test_a_check_that_passed_outside_the_runner_gets_its_record(tmp_path):
+    key = dict(unit="adapters", digest="e" * 64, files={}, natives={}, members={}, closure_available=True)
+    plan = dict(vendor="apple", device_class="apple-m2-pro", units=[dict(unit="adapters", decision="run", key=key)])
+    U.record_passed(tmp_path, plan, "adapters", "c" * 40, "2026-11-06T00:00:00Z")
+    (got,) = U.records(tmp_path, "apple-m2-pro", "adapters")
+    assert got["status"] == "passed" and U.decide(key, [got], "apple-m2-pro")[0] == "reuse"

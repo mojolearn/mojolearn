@@ -83,6 +83,14 @@ on:
         required: false
         default: ""
         type: string
+      checks:
+        required: false
+        default: "correctness,runtime,autograd,adapters"
+        type: string
+      autograd_entries:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       confirm:
@@ -127,6 +135,16 @@ on:
         type: string
       token:
         description: "mode wheel: the release's run token (in the run name)"
+        required: false
+        default: ""
+        type: string
+      checks:
+        description: "mode wheel: the CPU check groups whose units are owed (the rest are reused)"
+        required: false
+        default: "correctness,runtime,autograd,adapters"
+        type: string
+      autograd_entries:
+        description: "mode wheel: the owed CPU autograd entries (empty: every CPU entry)"
         required: false
         default: ""
         type: string
@@ -321,10 +339,12 @@ jobs:
             curl -fsSL --retry 5 "$PRIOR_URL" -o "$RUNNER_TEMP/prior.tgz" && tar -xzf "$RUNNER_TEMP/prior.tgz" -C "$RUNNER_TEMP/prior"
             [ -z "$(cd "$RUNNER_TEMP/prior" && find . ! -type f ! -type d)" ] || { echo "refusing links in the prior units"; rm -rf "$RUNNER_TEMP/prior"; mkdir -p "$RUNNER_TEMP/prior"; }
           fi
-      - name: Every CPU check, once
+      - name: Every owed CPU check, once
         env:
           WHEEL_NAME: ${{ inputs.wheel_name }}
           WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+          CHECKS: ${{ inputs.checks }}
+          AUTOGRAD_ENTRIES: ${{ inputs.autograd_entries }}
         run: |
           bash tools/cpu_wheel_checks.sh "$RUNNER_TEMP/wheels/$WHEEL_NAME" "$WHEEL_SHA256" "${{ inputs.source_commit }}" \
             "$RUNNER_TEMP/wheel-out/checks" "$RUNNER_TEMP/prior/cpu-linux-x86_64"

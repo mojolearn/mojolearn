@@ -183,12 +183,97 @@ class IdentityOnWheels:
         ok, why = self.gate_ok(vendor)
         reused, run = self.vendor_lanes(vendor)
         plan = self.units_plan(vendor) if not ok else None
+        composed = ""
+        if not ok and run == 0 and plan is not None and not plan["owed"] and not self.dry:
+            # NOTHING OWED: no lane, no check unit; the runtime report is composed from reused unit receipts on
+            # this Mac (release_runtime_installed.py run --reused-only, which launches nothing). If every runtime
+            # unit is reused too, the box job's evidence exists without a box: no rental.
+            composed = self.compose_without_box(vendor)
+            ok, why = self.gate_ok(vendor)
         units = "" if plan is None else "; units REUSED %d / RUN %d" % (plan["reused"], len(plan["owed"]))
         self.say("  %s: REUSED %d / RUN %s lane(s)%s; %s%s" % (
             vendor, reused, "?" if run is None else run, units,
-            "done for these wheel bytes" if ok else "the installed-runtime qualifier reports on the box",
-            "; no rental" if ok else ""))
+            ("nothing owed, composed on this Mac" if composed == "composed" else "done for these wheel bytes")
+            if ok else (composed or "owed on the box"), "; no rental" if ok else ""))
         return None if ok else why
+
+    # ------------------------------------------------------------------ composing a vendor's evidence with no box
+    def runtime_prior_dir(self, vendor):
+        """A staged directory of the newest passing runtime unit receipts of VENDOR's device class, or None."""
+        import runtime_qualifier_units as units
+        gate = "gate-" + vendor if vendor != "cpu" else "gate-nvidia"
+        sources = self.runtime_unit_sources(gate)
+        if vendor == "apple":
+            sources += [self.apple_runtime_store()] if self.apple_runtime_store().is_dir() else []
+        if vendor == "cpu":
+            sources += sorted(self.base.parent.glob("*/*/identity-wheels/cpu/artifacts/cpu-wheel-checks/runtime/units"))
+        dest = self.identity_dir() / ("runtime-prior-compose-%s-%d" % (vendor, os.getpid()))
+        staged = units.stage_prior(sources, dest, (vendor,))
+        return dest if staged else None
+
+    def matching_python(self, prior):
+        """A local interpreter whose cache tag equals the reused receipts' (the reuse rule checks it), or None."""
+        tags = {}
+        for p in Path(prior).rglob("*.json"):
+            tag = (read_json(p) or {}).get("interpreter_cache_tag")
+            if tag:
+                tags[tag] = tags.get(tag, 0) + 1
+        if not tags:
+            return None
+        want = max(tags, key=tags.get)
+        m = re.fullmatch(r"cpython-(\d)(\d+)", want)
+        candidates = [sys.executable, self.smoke_python()] + (["python%s.%s" % m.groups()] if m else [])
+        for py in candidates:
+            try:
+                got = subprocess.run([py, "-c", "import sys; print(sys.implementation.cache_tag)"],
+                                     capture_output=True, text=True, timeout=60).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if got == want:
+                return py
+        return None
+
+    def compose_runtime(self, vendor, wheels, device, out):
+        """True when OUT/runtime-report.json was composed from reused receipts only (nothing launched)."""
+        prior = self.runtime_prior_dir(vendor)
+        if prior is None:
+            return False
+        py = self.matching_python(prior)
+        if py is None:
+            return False
+        tmp = Path(str(out) + ".compose-%d" % os.getpid())
+        cmd = [sys.executable, "tools/release_runtime_installed.py", "run", "--vendor", vendor, "--source-root",
+               str(self.src), "--source-commit", self.commit, "--python", py, "--device-class", device,
+               "--prior-units", str(Path(prior) / device), "--reused-only", "--out", str(tmp)]
+        for w in wheels:
+            cmd += ["--wheel", str(w)]
+        with open(self.identity_dir() / ("runtime-compose-%s.log" % vendor), "w") as log:
+            rc = subprocess.run(cmd, cwd=str(self.src), stdout=log, stderr=subprocess.STDOUT).returncode
+        report = read_json(tmp / "runtime-report.json") or {}
+        if rc != 0 or report.get("status") != "passed":
+            return False
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        if Path(out).exists():
+            Path(out).rename(Path(str(out) + ".replaced-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        tmp.rename(out)
+        return True
+
+    def compose_without_box(self, vendor):
+        """'composed' when the vendor's identity summary, unit summary and runtime report were all written from
+        reused evidence on this Mac (nothing owed anywhere), else why not."""
+        import release_check_units as U
+        plan = self.units_plan(vendor)
+        output = self.gate_out(vendor)
+        if not self.compose_runtime(vendor, self.candidate_gate_wheels(vendor), self.device_class(vendor),
+                                    output / ("runtime-" + vendor)):
+            return "runtime units owed (or no reusable receipts on this Mac): the box job runs them"
+        cols = {c: dict(label=c, owed=0, reused=self.__dict__.get("_lanes_owed", {}).get(c + ":reused"), chunks=[], rc=0)
+                for c in self.vendor_columns(vendor)}
+        write_json(output / "identity" / SUMMARY, dict(schema="mojolearn.identity-wheels.v1", ok=True, columns=cols,
+                                                       composed="nothing owed: every lane reused"))
+        U.compose_reused(plan, output / "units", self.commit)
+        return "composed"
+
 
     # ------------------------------------------------------------------ the device checks as units
     def unit_store(self):
@@ -196,7 +281,7 @@ class IdentityOnWheels:
 
     def device_class(self, vendor):
         return {"nvidia": "nvidia-sm_89", "amd": "amd-gfx942", "cpu": "cpu-linux-x86_64"}.get(
-            vendor) or "apple-" + self.label_device("apple")
+            vendor) or self.apple_device_class()
 
     def units_plan_path(self, vendor):
         return self.identity_dir() / ("units-%s.json" % vendor)
@@ -307,12 +392,57 @@ class IdentityOnWheels:
             raise StepFailed("the Apple column did not record: " + why)
         return why
 
+    # ------------------------------------------------------------------ Apple: adapters and runtime-apple as units
+    def apple_adapter_plan(self):
+        """The units plan of the macOS wheel, restricted to the adapter unit (what gate-apple runs)."""
+        plan = self.units_plan("apple")
+        if plan is None:
+            return None
+        rows = [r for r in plan["units"] if r["unit"] == "adapters"]
+        return dict(plan, units=rows, owed=[r["unit"] for r in rows if r["decision"] == "run"],
+                    reused=sum(r["decision"] == "reuse" for r in rows))
+
+    def apple_adapter_unit_ok(self):
+        plan = self.apple_adapter_plan()
+        return bool(plan) and not plan["owed"]
+
+    def apple_adapter_unit_gate(self):
+        """The Apple adapter smoke only when its unit is owed; a PASS writes the unit's record."""
+        import release_check_units as U
+        plan = self.apple_adapter_plan()
+        if plan is not None and not plan["owed"]:
+            return "adapters REUSED (unit record of the same key on %s)" % plan["device_class"]
+        result = self.apple_adapter_gate()
+        if plan is not None and not self.dry and self.apple_adapters_ok()[0]:
+            U.record_passed(self.unit_store(), plan, "adapters", self.commit,
+                            dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        return result
+
+    def apple_runtime_reused(self):
+        """runtime-apple composed from reused receipts without the Metal lock (nothing launched), or None."""
+        if self.dry or self.apple_runtime_ok()[0]:
+            return None
+        w = self.macos_wheel()
+        if not w:
+            return None
+        if self.compose_runtime("apple", [w], self.apple_device_class(), self.apple_runtime_out()):
+            ok, why = self.apple_runtime_ok()
+            if ok:
+                return "runtime-apple REUSED (every unit's receipt; nothing ran): " + why
+        return None
+
     # ------------------------------------------------------------------ CPU on GitHub
     def cpu_out(self):
         return self.identity_dir() / "cpu"
 
     def cpu_ok(self):
         out = self.cpu_out()
+        reused = read_json(out / "reused.json") or {}
+        core = self.split_final("linux")
+        if (reused.get("source_commit") == self.commit and core and reused.get("wheel_sha256") == sha256(core)
+                and (read_json(out / "runtime-cpu" / "runtime-report.json") or {}).get("status") == "passed"):
+            return True, "cpu: REUSED %s lane(s) / RUN 0, units REUSED %s / RUN 0, runtime composed; no dispatch" % (
+                reused.get("lanes_reused"), reused.get("units_reused"))
         doc = read_json(out / "run.json") or {}
         if doc.get("conclusion") != "success" or doc.get("source_commit") != self.commit:
             return False, "no successful %s run for %s" % (CPU_WORKFLOW, self.commit[:12])
@@ -342,6 +472,27 @@ class IdentityOnWheels:
         if not core and not self.dry:
             raise StepFailed("no core wheel; run linux-pack")
         out = self.cpu_out()
+        # THE UNIT RULE ON THE CPU COLUMN: nothing owed (no cpu lane, no cpu unit, every runtime-cpu unit reused)
+        # -> no dispatch at all; otherwise the run carries only the owed check groups
+        lanes = self.lanes_owed("cpu") if not self.dry else None
+        plan = self.units_plan("cpu") if core and not self.dry else None
+        if (not self.dry and lanes == [] and plan is not None and not plan["owed"]
+                and self.compose_runtime("cpu", [core], self.device_class("cpu"), out / "runtime-cpu")):
+            write_json(out / "reused.json", dict(source_commit=self.commit, wheel_sha256=sha256(core),
+                                                 lanes_reused=self.__dict__.get("_lanes_owed", {}).get("cpu:reused"),
+                                                 units_reused=plan["reused"]))
+            ok, why = self.cpu_ok()
+            if ok:
+                return why
+        owed = (plan or {}).get("owed") or []
+        groups = (sorted({"correctness" if u == "install-load" else "adapters" if u == "adapters" else "autograd"
+                          for u in owed} | {"runtime"}) if plan is not None
+                  else ["adapters", "autograd", "correctness", "runtime"])   # no plan: every group runs
+        entries = ",".join(u.split("/", 1)[1] for u in owed if u.startswith("autograd/"))
+        if plan is not None:
+            self.say("  cpu: REUSED %s / RUN %s lane(s); units REUSED %d / RUN %d (%s)" % (
+                self.__dict__.get("_lanes_owed", {}).get("cpu:reused"), "?" if lanes is None else len(lanes),
+                plan["reused"], len(plan["owed"]), ",".join(groups)))
         token = hashlib.sha256(("%s %s %s" % (self.commit, time.time(), os.getpid())).encode()).hexdigest()[:12]
         if self.dry:
             self.say("  would upload %s to R2, dispatch %s mode=wheel (%d shard(s)) on main and wait" % (
@@ -355,7 +506,7 @@ class IdentityOnWheels:
                 self.version, self.commit[:12]))
         fields = dict(confirm="RUN-HEAVY", mode="wheel", wheel_url=url, wheel_name=core.name,
                       wheel_sha256=sha256(core), source_commit=self.commit, shards=str(CPU_SHARDS),
-                      runtime_prior_url=prior_url, token=token)
+                      runtime_prior_url=prior_url, token=token, checks=",".join(groups), autograd_entries=entries)
         argv = ["workflow", "run", CPU_WORKFLOW, "--ref", "main"]
         for k, v in fields.items():
             argv += ["-f", "%s=%s" % (k, v)]
@@ -375,6 +526,11 @@ class IdentityOnWheels:
         ok, why = self.cpu_ok()
         if not ok:
             raise StepFailed("the CPU run did not pass: %s (%s)" % (why, link))
+        if plan is not None:
+            import release_check_units as U
+            at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            for unit in plan["owed"]:
+                U.record_passed(self.unit_store(), plan, unit, self.commit, at)
         return why
 
     def cpu_find_run(self, token, tries=24):

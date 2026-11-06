@@ -227,6 +227,12 @@ def run(args, *, closure_of=None, launch=None):
     interpreter = interpreter_cache_tag(args.python) if launch is None else getattr(args, "interpreter", None)
     plan = plan_units(args, out, selected, wheels, closure_of=closure_of, payload=payload, interpreter=interpreter)
     to_run = [row["unit"] for row in plan["units"] if row["decision"] == "run"]
+    if getattr(args, "reused_only", False) and to_run:
+        # --reused-only (tools/release.py --identity-on-wheels): compose the report from reused unit receipts with no
+        # device, or say what is owed and stop; nothing is launched here, ever
+        print("RUNTIME reused-only: %d unit(s) owed (e.g. %s); nothing composed" % (len(to_run), ", ".join(to_run[:5])),
+              flush=True)
+        return 3
     command = [sys.executable, str(HERE / "qualify_native_runtime_installed.py"),
                "--source-root", str(source), "--source-commit", args.source_commit,
                "--vendor", BACKEND[args.vendor], "--numeric-mode", "identical",
@@ -304,6 +310,9 @@ def main(argv=None):
     go.add_argument("--prior-units", type=Path, action="append", default=[],
                     help="read-only directories of earlier unit receipts (retained gate outputs)")
     go.add_argument("--redo", action="store_true", help="run every unit; reuse nothing")
+    go.add_argument("--reused-only", action="store_true",
+                    help="compose the report from reused unit receipts only (no qualifier launch); exit 3 when a "
+                         "unit is owed (release.py --identity-on-wheels: an unchanged vendor rents no box)")
     again = sub.add_parser("summarize")
     again.add_argument("--out", type=Path, required=True)
     compose = sub.add_parser("compose", help="re-derive disjoint complete whole-file receipts")

@@ -326,6 +326,32 @@ class Runner:
         return 0 if not bad else 1
 
 
+def compose_reused(plan_doc, out, source_commit):
+    """The check-units summary of a plan that owes nothing: every unit reused from its record, nothing run (the
+    same document a box run with no owed unit writes). Refused when the plan owes a unit."""
+    if plan_doc.get("owed"):
+        raise ValueError("the plan owes %d unit(s); a summary is composed only when nothing is owed" % len(plan_doc["owed"]))
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    summary = dict(schema=SCHEMA + "+summary", device_class=plan_doc["device_class"], vendor=plan_doc["vendor"],
+                   source_commit=source_commit, plan=plan_doc, ok=True,
+                   units={r["unit"]: dict(decision="reuse", status="reused") for r in plan_doc["units"]})
+    (out / SUMMARY).write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
+    return summary
+
+
+def record_passed(store, plan_doc, unit, source_commit, at, digest_=None):
+    """A unit record for UNIT of PLAN_DOC that passed outside Runner (gate-apple's adapter smoke, the GitHub CPU
+    checks), written straight into STORE."""
+    row = next(r for r in plan_doc["units"] if r["unit"] == unit)
+    rec = dict(schema=SCHEMA, unit=unit, device_class=plan_doc["device_class"], vendor=plan_doc["vendor"],
+               status="passed", digest=digest_, detail="", key=row["key"], source_commit=source_commit, at=at)
+    d = Path(store) / plan_doc["device_class"] / safe(unit)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / (row["key"]["digest"][:12] + ".json")).write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
+    return rec
+
+
 def summary_errors(doc, plan_doc=None):
     """Why a check-units.json does not prove every unit passed or was reused, or []."""
     if not doc or doc.get("schema") != SCHEMA + "+summary":
