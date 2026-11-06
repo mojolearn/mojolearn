@@ -8,7 +8,10 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
 from std.ffi import _Global, c_int
 from std.memory import memcpy
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
+from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_json import native_json_read, native_json_parse, native_path, native_path_exists
@@ -194,21 +197,31 @@ def _plain(value: PythonObject, depth: Int = 0) raises:
         _plain(value[i], depth + 1)
 
 
+comptime _OWNER_CLASS_SLOT = "tokenizer_owner_class_v1"
+
+
 def _owner(value: PythonObject, cls: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     if py_type(cls) is not bi.type or py_type(value) is not cls:
         raise Error("TypeError: tokenizer requires its connected class; Python subclass protocols are unsupported")
-    var bases = py_call(bi.type.__dict__["__bases__"].__get__, cls)
-    if len(bases) != 1 or bases[0] is not bi.object:
-        raise Error("TypeError: tokenizer class ancestry changed after connection")
-    var namespace = _class_fields(cls)
-    if py_contains(namespace, "__getattribute__") or py_contains(namespace, "__getattr__") or py_contains(namespace, "__setattr__"):
-        raise Error("TypeError: tokenizer attribute hooks are unsupported")
+    # The class-level checks (ancestry, attribute hooks, descriptors on the
+    # fixed state names) are kept per class under the type-watcher record:
+    # any change to the class bumps its epoch and forces them again. The
+    # instance field names are still checked on every call.
+    var mods = NativeModules()
+    var class_admitted = class_record(mods, _OWNER_CLASS_SLOT, cls) is not None
+    var namespace = _class_fields(mods, cls)
+    if not class_admitted:
+        var bases = py_call(bi.type.__dict__["__bases__"].__get__, cls)
+        if len(bases) != 1 or bases[0] is not bi.object:
+            raise Error("TypeError: tokenizer class ancestry changed after connection")
+        if py_contains(namespace, "__getattribute__") or py_contains(namespace, "__getattr__") or py_contains(namespace, "__setattr__"):
+            raise Error("TypeError: tokenizer attribute hooks are unsupported")
     # _fields checks a replaced __dict__ descriptor BEFORE storage access.
     var fields = _fields(value)
     var names = py_call(bi.list, fields.keys())
     var fixed = _owner_names()
-    for group in range(2):  # small-loop(instance field names, then the fixed state field names)
+    for group in range(1 if class_admitted else 2):  # small-loop(instance field names, then the fixed state field names)
         var group_names = names if group == 0 else fixed
         for i in range(len(group_names)):  # driver-loop: over native class and instance field metadata before access
             if py_contains(namespace, group_names[i]):
@@ -216,6 +229,8 @@ def _owner(value: PythonObject, cls: PythonObject) raises -> PythonObject:
                 var slots = _class_fields(py_type(descriptor))
                 if py_contains(slots, "__get__") or py_contains(slots, "__set__"):
                     raise Error("TypeError: tokenizer state field was replaced by a descriptor")
+    if not class_admitted:
+        class_admit(mods, _OWNER_CLASS_SLOT, cls, PythonObject(True))
     return fields
 
 
@@ -263,7 +278,9 @@ def _bytes(value: PythonObject, allow_text: Bool = True, name: String = "text") 
     return result^
 
 
-def _bytes_append(value: PythonObject, mut arena: List[UInt8], allow_text: Bool = True, name: String = "text") raises -> Int:
+def _bytes_append(value: PythonObject, mut arena: List[UInt8], allow_text: Bool = True, name: String = "text", index: Int = -1) raises -> Int:
+    # `index` >= 0 labels a batch document ("document <index>"); the label is
+    # built only when the input is refused, never on the success path.
     # One copy from the admitted buffer straight to the end of `arena`
     # (formerly a temporary List, then a byte-by-byte append). Returns the
     # number of bytes appended.
@@ -272,17 +289,27 @@ def _bytes_append(value: PythonObject, mut arena: List[UInt8], allow_text: Bool 
         if not allow_text:
             raise Error("TypeError: encode_bytes takes bytes; use encode for str")
         # Exact str uses CPython's native UTF-8 conversion, with no overridable
-        # encode attribute or arbitrary codec name.
-        ref cpy = Python().cpython()
-        var pointer = cpy.lib.get_function[PyObjectPtr]("PyUnicode_AsUTF8String")(raw._obj_ptr)
-        if not pointer:
+        # encode attribute or arbitrary codec name. PyUnicode_AsUTF8AndSize
+        # exposes the str's own UTF-8 storage (owned by the str, valid while
+        # `value` lives), so the bytes go straight into the arena: no
+        # intermediate bytes object, no buffer pin, one entry resolved per
+        # process instead of a by-name lookup per document.
+        var text_size = Int(0)
+        var text_address = lm_cpython_table()[].PyUnicode_AsUTF8AndSize(raw._obj_ptr, Int(MutPointer(to=text_size)))
+        if text_address == 0:
             var failure = stash_python_error()
             raise failure^
-        raw = PythonObject(from_owned=pointer)
+        var text_start = len(arena)
+        arena.resize(text_start + text_size, 0)
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(arena.unsafe_ptr()) + text_start),
+            src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=text_address), count=text_size)
+        _ = value
+        return text_size
     try:
         admit_native_buffer_exporter(raw)
     except:
-        raise Error("TypeError: " + name + " must be str or bytes-like, got " + _type_name(raw) + "; use exact native buffers without Python hooks")
+        var label = name + " " + String(index) if index >= 0 else name
+        raise Error("TypeError: " + label + " must be str or bytes-like, got " + _type_name(raw) + "; use exact native buffers without Python hooks")
     var pin = AdmittedBorrowedBuffer(raw)
     var count = pin.layout.value().count * pin.layout.value().itemsize
     var start = len(arena)
@@ -301,7 +328,7 @@ def _bytes_append(value: PythonObject, mut arena: List[UInt8], allow_text: Bool 
 def _py_bytes_at(address: Int, count: Int) raises -> PythonObject:
     # A bytes object straight from native storage (no temporary List).
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(address, count)
+    var raw = lm_cpython_table()[].PyBytes_FromStringAndSize(address, count)
     if not raw:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=raw)
@@ -309,7 +336,7 @@ def _py_bytes_at(address: Int, count: Int) raises -> PythonObject:
 
 def _py_bytes(values: List[UInt8]) raises -> PythonObject:
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(values.unsafe_ptr(), len(values))
+    var raw = lm_cpython_table()[].PyBytes_FromStringAndSize(Int(values.unsafe_ptr()), len(values))
     _ = values
     if not raw:
         raise cpy.unsafe_get_error()
@@ -322,7 +349,7 @@ def _tokenizer_result_list(size: Int) raises -> PythonObject:
     # immediately, so failure decrefs its initialized items and safely skips
     # unset slots through CPython's supported list destructor.
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(size)
+    var raw = lm_cpython_table()[].PyList_New(size)
     if not raw:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=raw)
@@ -331,14 +358,13 @@ def _tokenizer_result_list(size: Int) raises -> PythonObject:
 def _py_int_list(values: List[Int]) raises -> PythonObject:
     var out = _tokenizer_result_list(len(values))
     ref cpy = Python().cpython()
-    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var table = lm_cpython_table()
     for i in range(len(values)):  # cpu-route: publish completed native token ids as Python integers
-        var item = box_int(Int64(values[i]))
+        var item = table[].PyLong_FromLongLong(Int64(values[i]))
         if not item:
             raise cpy.unsafe_get_error()
         # SetItem steals this new reference on both success and failure.
-        if set_item(out._obj_ptr, i, item) != 0:
+        if table[].PyList_SetItem(out._obj_ptr, i, item) != 0:
             raise cpy.unsafe_get_error()
     _ = values
     return out
@@ -357,13 +383,26 @@ def _ids(var value: PythonObject) raises -> List[Int]:
         var bool_type = bi.bool
         var n = len(value)
         result.reserve(n)
+        # Items are read straight from the exact list/tuple storage through
+        # entries resolved once per process (no boxed index, no generic
+        # getitem); exact ints convert with PyLong_AsLongLong.
+        var shared = perf2_cpython_table()
+        var is_list = py_type(value) is list_type
+        ref cpy = Python().cpython()
         for i in range(n):  # cpu-route: capture admitted native integer input storage without scalar callbacks
-            var item = value[i]
+            var raw_item = shared[].PyList_GetItem(value._obj_ptr, i) if is_list else shared[].PyTuple_GetItem(value._obj_ptr, i)
+            if not raw_item:
+                # A list shortened by a NumPy scalar hook below.
+                raise cpy.unsafe_get_error()
+            var item = PythonObject(from_borrowed=raw_item)
             var item_type = py_type(item)
             # Exact int converts natively with no callback; only other
             # admitted integer scalars (NumPy) go through int().
             if item_type is int_type:
-                result.append(Int(py=item))
+                var word = shared[].PyLong_AsLongLong(raw_item)
+                if word == -1 and lm_cpython_table()[].PyErr_Occurred():
+                    raise cpy.unsafe_get_error()
+                result.append(Int(word))
                 continue
             if item_type is bool_type:
                 raise Error("TypeError: ids must be int, not bool, at position " + String(i))
@@ -433,7 +472,7 @@ struct TokenizerUtf8Policy(Movable):
         # Retain immutable policy admission across the batch, but check the
         # live registry immediately before EVERY decode: admission/allocation
         # between rows must not conceal register_error replacing a handler.
-        var found = cpy.lib.get_function[PyObjectPtr]("PyCodec_LookupError")(name.unsafe_ptr())
+        var found = lm_cpython_table()[].PyCodec_LookupError(Int(name.unsafe_ptr()))
         if not found:
             var failure = stash_python_error()
             raise failure^
@@ -447,8 +486,8 @@ struct TokenizerUtf8Policy(Movable):
         # byte pointer even for empty input, without reading or copying data.
         var empty_byte = UInt8(0)
         var source = Int(Pointer(to=empty_byte)) if count == 0 else address
-        var result = cpy.lib.get_function[PyObjectPtr]("PyUnicode_DecodeUTF8")(
-            source, count, name.unsafe_ptr())
+        var result = lm_cpython_table()[].PyUnicode_DecodeUTF8(
+            source, count, Int(name.unsafe_ptr()))
         _ = entry
         if not result:
             var failure = stash_python_error()
@@ -569,7 +608,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
     var text = List[UInt8]()
     var lengths = List[Int64]()
     for i in range(len(documents)):  # cpu-route: prepare native document buffers and publish completed token lists
-        lengths.append(Int64(_bytes_append(documents[i], text, not bytes_only, "document " + String(i) if batch else "text")))
+        lengths.append(Int64(_bytes_append(documents[i], text, not bytes_only, "document" if batch else "text", i if batch else -1)))
     var ids = List[Int32](length=max(len(text), 1), fill=0)
     var counts = List[Int64](length=max(len(lengths), 1), fill=0)
     var total = 0
@@ -594,8 +633,8 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
         raise Error("RuntimeError: tokenizer returned an invalid encoded count")
     var result = _tokenizer_result_list(len(lengths))
     ref cpy = Python().cpython()
-    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var box_int = lm_cpython_table()[].PyLong_FromLongLong
+    var set_item = lm_cpython_table()[].PyList_SetItem
     var at = 0
     for i in range(len(lengths)):  # cpu-route: prepare native document buffers and publish completed token lists
         var count = Int(counts[i])
@@ -634,7 +673,7 @@ def _bpe_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, b
     var count = len(sequences)
     var result = _tokenizer_result_list(count)
     ref cpy = Python().cpython()
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var set_item = lm_cpython_table()[].PyList_SetItem
     var policy = Optional[TokenizerUtf8Policy](None)
     for i in range(count):  # cpu-route: marshal admitted id sequences and publish completed decoded bytes
         var ids = _ids(sequences[i])
@@ -714,7 +753,7 @@ def _trained_finish(value: TrainedVocabulary, size: Int, frequency: Int, context
     # Preallocated result lists filled by PyList_SetItem; each token's bytes
     # come straight from the arena (no per-byte copy, no append call).
     ref cpy = Python().cpython()
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var set_item = lm_cpython_table()[].PyList_SetItem
     var base = Int(value.arena.unsafe_ptr())
     var tokens = _tokenizer_result_list(value.n_tokens())
     for i in range(value.n_tokens()):  # cpu-route: publish completed native trained vocabulary and merge records
@@ -1071,8 +1110,8 @@ def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: Pyth
     var ids = vocab_encode_ids(owner[].tok.value(), bytes, allow)
     var result = _tokenizer_result_list(len(bos) + len(ids) + len(eos))
     ref cpy = Python().cpython()
-    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var box_int = lm_cpython_table()[].PyLong_FromLongLong
+    var set_item = lm_cpython_table()[].PyList_SetItem
     var at = 0
     for i in range(len(bos)):  # cpu-route: publish completed native token ids with admitted BOS and EOS metadata
         var item = box_int(Int64(bos[i]))
@@ -1132,7 +1171,7 @@ def _vocab_pretokenize(tokenizer: PythonObject, data: PythonObject, context: Pyt
     var parts = max(len(offsets) - 1, 0)
     var result = _tokenizer_result_list(parts)
     ref cpy = Python().cpython()
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var set_item = lm_cpython_table()[].PyList_SetItem
     var base = Int(bytes.unsafe_ptr())
     for i in range(parts):  # cpu-route: publish completed native pre-token boundaries as bytes
         var part = _py_bytes_at(base + offsets[i], offsets[i + 1] - offsets[i])
