@@ -45,7 +45,8 @@ def test_payloads_cannot_publish_before_own_architecture_checks():
     # 2026-10-20 order: mojolearn-core FIRST (after both GPU columns settle),
     # then the vendors (the NVIDIA wheel carries its PTX set since 2026-11-05), then the Linux mojolearn LAST
     # e1f7f8e24: every publish also waits for both box release gates
-    gates = ['gate-nvidia', 'gate-amd']
+    # 2026-11-06: and the TestPyPI rehearsal of its bytes (release.REHEARSAL_STEP, which needs both gates)
+    gates = ['gate-nvidia', 'gate-amd', release.REHEARSAL_STEP]
     assert release.NEEDS['publish-core-linux'] == ['linux-pack'] + gates
     assert all(set(gates) <= set(n) for s, n in release.NEEDS.items() if s.startswith('publish-'))
     assert {'gpu-column-nvidia', 'gpu-column-amd'} <= set(release.AFTER['publish-core-linux'])

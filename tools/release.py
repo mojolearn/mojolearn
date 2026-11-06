@@ -1455,7 +1455,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
             # a held Hopper box (or the rented route): its column gates publish-nvidia as before
             self.NEEDS = dict(NEEDS, **{"publish-nvidia": NEEDS["publish-nvidia"] + ["gpu-column-nvidia-hopper"]})
         # the rehearsal follows the per-run graph: it waits for whatever a publish needs or waits for
-        self.NEEDS, self.AFTER = wire_rehearsal(self.NEEDS, self.AFTER)
+        needs, after = wire_rehearsal(self.NEEDS, self.AFTER)
+        self.NEEDS = self.NEEDS if needs == self.NEEDS else needs   # unchanged graph: the module's own tables
+        self.AFTER = self.AFTER if after == self.AFTER else after
         self.runner = runner
         self._linux_merged = None
         if getattr(args, "build_backend", None) is None:
