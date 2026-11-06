@@ -22,6 +22,7 @@ from bindings.metrics_native_support import metric_float
 from bindings.msel_json import msel_canonical
 from bindings.sha256_door import sha256_update, sha256_hexdigest
 from core.sha256 import Sha256
+from core.msel_fold_digest import msel_fold_digest_hex
 from bindings.msel_estimator_native import (
     msel_native_clone, msel_native_clone_planned, msel_clone_parameter, msel_estimator_call, msel_estimator_plan,
     msel_planned_call,
@@ -934,78 +935,22 @@ def _ascii(text: String) raises -> PythonObject:
     return py_call(PythonObject(text).encode, PythonObject("ascii"))
 
 
-def _put_i64(mut out: List[UInt8], value: Int64):
-    """Append the decimal digits of `value` (Python `str(int)` spelling)."""
-    var mag: UInt64
-    if value < 0:
-        out.append(UInt8(45))  # '-'
-        mag = (-(value + 1)).cast[DType.uint64]() + 1
-    else:
-        mag = value.cast[DType.uint64]()
-    var start = len(out)
-    while True:  # cpu-route: the digits of one index, least significant first
-        out.append(UInt8(48) + (mag % 10).cast[DType.uint8]())
-        mag = mag // 10
-        if mag == 0:
-            break
-    var i = start
-    var j = len(out) - 1
-    while i < j:  # cpu-route: reverse the digits in place
-        var t = out[i]
-        out[i] = out[j]
-        out[j] = t
-        i += 1
-        j -= 1
-
-
-def _put_indices(mut out: List[UInt8], array: PythonObject) raises:
-    """Append `[a,b,...]` for a C-contiguous int64 index Array."""
-    var count = Int(py=array.size)
-    var p = msel_p64(array)
-    out.append(UInt8(91))  # '['
-    for i in range(count):  # cpu-route: the fold's indices written from the int64 buffer
-        if i:
-            out.append(UInt8(44))  # ','
-        _put_i64(out, p[i])
-    out.append(UInt8(93))  # ']'
-    _ = array  # keep the buffer owner alive through the reads above
-
-
-def _put_le8(mut hasher: Sha256, count: Int):
-    var raw = List[UInt8](capacity=8)
-    for i in range(8):  # the 8-byte little-endian length prefix
-        raw.append(UInt8((count >> (8 * i)) & 0xFF))
-    hasher.update_list(raw)
-
-
 def _folds_digest(trains: List[PythonObject], tests: List[PythonObject]) raises -> PythonObject:
-    """`_digest(("folds", json.dumps(folds)))` written natively from the int64
-    index buffers: the same bytes as the canonical JSON of the list of
-    (train list, test list) pairs, `[[[a,...],[b,...]],...]`, with the same
-    8-byte length prefixes, so the digest is unchanged."""
-    var text = List[UInt8]()
-    text.append(UInt8(91))  # '['
+    """`_digest(("folds", canonical(folds)))` written natively from the int64
+    index buffers (core/msel_fold_digest.mojo): the same bytes, so the same
+    digest, without building or walking Python int lists."""
+    var train_addresses = List[Int]()
+    var train_counts = List[Int]()
+    var test_addresses = List[Int]()
+    var test_counts = List[Int]()
     for f in range(len(trains)):  # driver-loop: over folds
-        if f:
-            text.append(UInt8(44))  # ','
-        text.append(UInt8(91))  # '['
-        _put_indices(text, trains[f])
-        text.append(UInt8(44))  # ','
-        _put_indices(text, tests[f])
-        text.append(UInt8(93))  # ']'
-    text.append(UInt8(93))  # ']'
-    var tag = List[UInt8]()  # b"folds"
-    tag.append(UInt8(102))
-    tag.append(UInt8(111))
-    tag.append(UInt8(108))
-    tag.append(UInt8(100))
-    tag.append(UInt8(115))
-    var hasher = Sha256()
-    _put_le8(hasher, len(tag))
-    hasher.update_list(tag)
-    _put_le8(hasher, len(text))
-    hasher.update_list(text)
-    return PythonObject(hasher.hexdigest())
+        train_addresses.append(msel_addr(trains[f]))
+        train_counts.append(Int(py=trains[f].size))
+        test_addresses.append(msel_addr(tests[f]))
+        test_counts.append(Int(py=tests[f].size))
+    var hex = msel_fold_digest_hex(train_addresses, train_counts, test_addresses, test_counts)
+    # The caller's `trains` / `tests` lists own the index buffers for this call.
+    return PythonObject(hex)
 
 
 def _order_digest(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
