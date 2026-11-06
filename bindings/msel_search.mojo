@@ -507,10 +507,18 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     # perf-sweep-msel-nbr-svc); the same scorer object scores every fold.
     var sc = msel_get_scorer(scoring, context)
     try:
+        # pass 3 (rank 863): each fold's test rows of X and y are gathered
+        # once for every train size (they were gathered and downloaded again
+        # per size); the same rows, in the same order, score every size.
+        var x_tests = Python.list()
+        var y_tests = Python.list()
+        for f in range(nf):  # driver-loop: over folds
+            var test = folds[f][1]
+            _ = py_call(x_tests.append, _take(res, x, test, context))
+            _ = py_call(y_tests.append, _take(res, y, test, context))
         for si in range(len(sizes)):  # driver-loop: over train sizes
             var a = sizes[si]
             for f in range(nf):  # driver-loop: over folds
-                var test = folds[f][1]
                 var sub = msel_slice_i64(orders[f], 0, a, context)
                 var cloned = msel_native_clone_planned(estimator, context)
                 var est = cloned[0]
@@ -530,7 +538,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                         fitted = False
                 var t1 = msel_seconds()
                 tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)) if fitted else msel_error_value(error_score))
-                te_s.append(Float64(py=msel_score(est, _take(res, x, test, context), _take(res, y, test, context), sc, context))
+                te_s.append(Float64(py=msel_score(est, x_tests[f], y_tests[f], sc, context))
                             if fitted else msel_error_value(error_score))
                 res.release(sub)
                 ft.append(t1 - t0)
