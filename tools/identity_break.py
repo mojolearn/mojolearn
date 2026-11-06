@@ -3080,6 +3080,10 @@ def _lane_refuses(fn, text):
 
 
 @lane("saved-model-host-infer")
+@floor(rows=(4096, "4096 rows are the rows the host readers were already asked to predict, and they "
+                   "still let a depth-8 forest and a depth-6 GBDT grow full depth; the lane checks the "
+                   "saved-model readers, not the builders. Chosen 2026-11-05 on "
+                   "lane/slow-verification-lanes; no smaller fit measured."))
 def _(ml, X, yc, yr, Xh=None):
     """THE PUBLIC SAVED-MODEL CPU INFERENCE SURFACE by its own names:
     `mojolearn.HostForest`, `mojolearn.HostGBDT`, `mojolearn.host_predict`
@@ -3108,8 +3112,8 @@ def _(ml, X, yc, yr, Xh=None):
     `gbdt-symmetric` lane's GradientBoosting and a RandomForestRegressor
     saved with `inference_engine="parallel_groves"`, each written with
     `save` and read back with `HostForest.from_file` / `HostGBDT.from_file`.
-    Same fits, same fixture, so a cell here and the cell in those lanes are
-    the same arithmetic reached two ways.
+    The same estimator parameters as those lanes, fitted on the fixture's
+    first 4096 rows (2026-11-05; until then the full fixture).
 
     THE PARTS. `rf`, `gbdt` and `groves` are the host predictions (and the
     two probability columns) on training rows. `sha` is each host model's
@@ -3141,12 +3145,19 @@ def _(ml, X, yc, yr, Xh=None):
     the clean value. `sha` does not move under either, and that is correct:
     it hashes the ARCHIVE the estimator wrote, which the host binding only
     reads."""
-    rows = np.ascontiguousarray(X[:4096])
+    # The three fits on 4096 rows, not 20000 (2026-11-05,
+    # lane/slow-verification-lanes): the host predictions were already asked
+    # on X[:4096], and this lane checks the saved-model READERS, not the
+    # builders (the rf-clf and gbdt-symmetric lanes fit the full fixture).
+    # Depth 8 needs at most 256 leaves, so 4096 rows still fill both forests'
+    # depth; the groves engine's 32 fixed groups do not depend on rows.
+    rows = 4096                                  # FLOORED, see @floor above
+    Xr = np.ascontiguousarray(X[:rows])
     held = np.ascontiguousarray(Xh[:512])
-    rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    gb = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
+    rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(Xr, yc[:rows])
+    gb = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(Xr, yc[:rows])
     gr = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
-                                  inference_engine="parallel_groves").fit(X, yr)
+                                  inference_engine="parallel_groves").fit(Xr, yr[:rows])
     with tempfile.TemporaryDirectory(prefix="ib-saved-model-host-") as d:
         paths = {}
         for tag, est in (("rf", rf), ("gbdt", gb), ("groves", gr)):
@@ -3190,9 +3201,9 @@ def _(ml, X, yc, yr, Xh=None):
     ], dtype=np.int64)
     shas = np.frombuffer(b"".join(bytes.fromhex(m.model_sha256())
                                   for m in (hrf, hgb, hgr)), dtype=np.uint8)
-    return _fit(dict(rf=_h(np.asarray(hrf.predict(rows)), np.asarray(hrf.predict_proba(rows))),
-                     gbdt=_h(np.asarray(hgb.predict(rows)), np.asarray(hgb.predict_proba(rows))),
-                     groves=_h(np.asarray(hgr.predict(rows))),
+    return _fit(dict(rf=_h(np.asarray(hrf.predict(Xr)), np.asarray(hrf.predict_proba(Xr))),
+                     gbdt=_h(np.asarray(hgb.predict(Xr)), np.asarray(hgb.predict_proba(Xr))),
+                     groves=_h(np.asarray(hgr.predict(Xr))),
                      sha=_h(shas), flags=_h(flags)),
                 hrf, lambda e: (np.asarray(e.predict(held)), np.asarray(e.predict_proba(held)),
                                 np.asarray(hgb.predict(held)), np.asarray(hgb.predict_proba(held)),
@@ -3603,8 +3614,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("rf-reg-gamma-ig")
+@floor(rows=(2048, "2048 rows still let both depth-8 forests reach 256 leaves and keep every node's "
+                   "histogram multi-block (1 + batch + rows / TPB_DEFAULT blocks, ensemble/decisiontree/"
+                   "batched_levelalgo/builder.mojo:757); the identical route has no row gate. Set "
+                   "2026-11-05 on lane/slow-verification-lanes, near the measured 1500 rf floors."))
 def _(ml, X, yc, yr, Xh=None):
     """Two fits, gamma and inverse gaussian, on a strictly positive target."""
+    # 2048 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # two criteria are the point, and the host column's fit is linear in rows.
+    rows = 2048                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim
     y = _pos(yr)
     g = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7, criterion="gamma").fit(X, y)
     i = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
@@ -4428,9 +4447,19 @@ def _(ml, X, yc, yr, Xh=None):
 # -- classical
 
 @lane("kmeans-random")
+@floor(rows=(8192, "8192 is the smallest fit that keeps the GPU centroid update on the privatized "
+                   "accumulators: the per-cluster weight sum takes that arm only at n_samples >= "
+                   "PRIVATE_MIN_WORK = 8192 (cluster/checks/reduce_by_key.mojo:102, :511). Chosen by "
+                   "reading that guard on 2026-11-05 (lane/slow-verification-lanes), not by a sweep."))
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X)
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X, Xh))
+    # 8192 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # random init, the three restarts and both accumulation arms are the
+    # same; the host oracle's cost is linear in rows, so the CPU column
+    # drops about 2.4x. predict(X) in the probe is held to labels_ on the
+    # same 8192 rows.
+    rows = 8192                                  # FLOORED, see @floor above
+    m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X[:rows])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X[:rows], Xh))
 
 
 @lane("kmeans-array")
@@ -4454,9 +4483,18 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("dbscan-weighted")
+@floor(rows=(2000, "2000 rows keeps one adjacency batch on every device (dbscan/impl/dbscan.mojo:159, the "
+                   "budget gives far more rows than this), and at eps=0.9 in four columns the weighted "
+                   "fit still has core, border and noise points. Chosen 2026-11-05 on "
+                   "lane/slow-verification-lanes from that reading; not measured below."))
 def _(ml, X, yc, yr, Xh=None):
-    w = _hw((6000,), "dbscan:sample_weight", 0.5, 1.5)
-    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4], sample_weight=w)
+    # 2000 rows, not 6000 (2026-11-05, lane/slow-verification-lanes): the
+    # brute adjacency is quadratic in rows, which was 1.1 s a cell on the M4.
+    # The weights are a fresh _hw draw of length rows (the stream is keyed on
+    # the length, so they are not the old 6000's prefix).
+    rows = 2000                                  # FLOORED, see @floor above
+    w = _hw((rows,), "dbscan:sample_weight", 0.5, 1.5)
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:rows, :4], sample_weight=w)
     return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
@@ -4786,11 +4824,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("arima-seasonal-c")
+@floor(observations=(128, "128 observations are 32 periods of the seasonal 4, ample for the seasonal AR start "
+                          "and the rd = 5 Kalman recursion this lane hashes; the identical-mode filter walks "
+                          "every step on one thread per series, so its cost is linear in them. Chosen "
+                          "2026-11-05 on lane/slow-verification-lanes; nothing below 128 measured."))
 def _(ml, X, yc, yr, Xh=None):
     """A seasonal AR block (period 4, so rd = 5 stays inside the
     implemented Kalman kernel; period 12 is refused by name at rd = 13)
     and an explicit intercept."""
-    series = np.ascontiguousarray(X[:512, :4].T)
+    # 128 observations, not 512 (2026-11-05, lane/slow-verification-lanes).
+    # The steady-state chunked scan (arima/impl/fast_kalman_scan.mojo) is
+    # FAST only; identical runs the serial per-series loop at any length.
+    observations = 128                           # FLOORED, see @floor above
+    series = np.ascontiguousarray(X[:observations, :4].T)
     m = ml.ARIMA(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c").fit(series)
     return _fit(dict(ar=_h(m.ar_), sar=_h(m.sar_), mu=_h(m.mu_), sigma2=_h(m.sigma2_), forecast=_h(m.forecast(24))),
                 m, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
@@ -4848,13 +4894,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("arima-exog-seasonal")
+@floor(observations=(128, "128 observations keep 32 periods of the seasonal 4 and 127 differenced steps for "
+                          "the least-squares beta start, the regressors' differencing and the rd = 6 Kalman "
+                          "walk, whose identical-mode cost is linear in steps (19.5 s on the MI300X at 512). "
+                          "Set 2026-11-05 on lane/slow-verification-lanes; nothing below 128 measured."))
 def _(ml, X, yc, yr, Xh=None):
     """Differenced, seasonal, with two regressors (lane/arima-exog,
     2026-09-15): ARIMA(1, 1, 0)(1, 0, 0)_4, so the regressors are differenced
     beside y, their future values are differenced against their past
     (prepare_future_data) and the forecast is undifferenced after the
     observation intercept; rd = 6, r = 5, the implemented Kalman arms."""
-    series, exog, fut24 = _arima_exog_inputs(X)
+    # 128 observations, not the arima-exog lane's 512 (2026-11-05,
+    # lane/slow-verification-lanes): the same layout as _arima_exog_inputs,
+    # built here so arima-exog keeps its inputs. The forecast regressors are
+    # the 24 rows after the training ones, so no train cell reads Xh.
+    observations = 128                           # FLOORED, see @floor above
+    series = np.ascontiguousarray(X[:observations, :4].T)
+    exog = _arima_exog_block(X[:observations], observations)
+    fut24 = _arima_exog_block(X[observations:], 24)
     m = ml.ARIMA(order=(1, 1, 0), seasonal_order=(1, 0, 0, 4)).fit(series, exog)
     return _fit(dict(beta=_h(m.beta_), ar=_h(m.ar_), sar=_h(m.sar_), sigma2=_h(m.sigma2_),
                      forecast=_h(m.forecast(24, exog=fut24))),
@@ -6316,22 +6373,27 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("bootstrap")
 def _(ml, X, yc, yr, Xh=None):
-    """resample.bootstrap over the first 4096 values of yr, 2048
+    """resample.bootstrap over the first 1024 values of yr, 1024
     replicates: the Philox index map, the per-replicate folds (mean,
     std), the segmented sort (quantile), the paired two-column statistics
     (pearson, diff_means), the percentile and basic intervals and the
     standard error. Every distribution and every scalar is hashed; the
     r_first slice equality is asserted, as the surface promises it.
 
-    The two SORTED statistics (quantile, trimmed_mean) take 1024
-    replicates, 1024 * 4096 = RESAMPLE_MAX_SORT_CELLS (1 << 22,
-    resample/checks/statistics.mojo), the largest run the sort path admits;
-    at 2048 the lane read REFUSED by name on the M4 on every fixture
-    (2026-09-14 night), and the limit is a comptime constant, so it
-    refused on every vendor and the lane had no cell anywhere."""
+    The two SORTED statistics (quantile, trimmed_mean) are bounded by
+    RESAMPLE_MAX_SORT_CELLS (1 << 22, resample/checks/statistics.mojo);
+    at 2048 replicates of 4096 values the lane read REFUSED by name on
+    every vendor (2026-09-14 night). 1024 * 1024 = 1 << 20 is inside it."""
+    # 1024 values and 1024 replicates, not 4096 and 2048 (2026-11-05,
+    # lane/slow-verification-lanes). Branch reasons: each replicate's fold is
+    # one RESAMPLE_TPB = 256 block (resample/estimator.mojo:173), so 1024
+    # draws still give every thread four; the segmented sort's SORT_BLOCK is
+    # 512 (core/segmented_sort.mojo:98), so a 1024-draw replicate segment and
+    # the 1024-replicate sorted_distribution each still span two sort blocks;
+    # the r_first slice below is unchanged. The cost is n_resamples * n.
     rs = ml.resample
-    x = np.ascontiguousarray(yr[:4096])
-    two = np.ascontiguousarray(np.stack([yr[:4096], X[:4096, 3]], 1).astype(np.float32))
+    x = np.ascontiguousarray(yr[:1024])
+    two = np.ascontiguousarray(np.stack([yr[:1024], X[:1024, 3]], 1).astype(np.float32))
     parts = {}
     for name, kw in (("mean", dict(data=x, statistic="mean")),
                      ("std", dict(data=x, statistic="std", method="basic")),
@@ -6339,7 +6401,7 @@ def _(ml, X, yc, yr, Xh=None):
                      ("trimmed", dict(data=x, statistic="trimmed_mean", q_or_prop=0.1, alternative="greater")),
                      ("pearson", dict(data=two, statistic="pearson")),
                      ("diff", dict(data=two, statistic="diff_means", method="basic"))):
-        n_resamples = 1024 if kw["statistic"] in ("quantile", "trimmed_mean") else 2048
+        n_resamples = 1024
         b = rs.bootstrap(n_resamples=n_resamples, random_state=3, **kw)
         parts[name] = _h(b.distribution, b.sorted_distribution,
                          np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0], b.confidence_interval[1]], dtype=np.float64),
@@ -6691,15 +6753,23 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("kmeans-sqrt")
+@floor(rows=(8192, "the sqrt-expanded fit keeps its weight-per-cluster sum on the privatized GPU arm "
+                   "only while n_samples >= PRIVATE_MIN_WORK = 8192 (cluster/checks/reduce_by_key.mojo:511); "
+                   "below it the plain arm runs. Read from that guard 2026-11-05, "
+                   "lane/slow-verification-lanes; no smaller size measured."))
 def _(ml, X, yc, yr, Xh=None):
     """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken on
     the assignment's reduced distance (`metric_is_sqrt`, `identical_sqrt`,
     DEVIATION 2715) and so in the inertia, the row norms squared as under
     L2Expanded (DEVIATION 2716); a different inertia_ from the squared arm."""
-    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
+    # 8192 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # sqrt-expanded assignment and inertia are row-local, and 8192 keeps the
+    # privatized weight accumulator the 20000-row fit took.
+    rows = 8192                                  # FLOORED, see @floor above
+    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X[:rows])
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
                      inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
-                m, _km_probe(X, Xh))
+                m, _km_probe(X[:rows], Xh))
 
 
 @lane("kmeans-classic-pp")
@@ -7703,8 +7773,12 @@ def _batch_iforest(ml, e, Xh):
 
 _batch_decl(_batch_iforest, "iforest", "iforest-tuned")
 
-_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
-            "kmeans-sqrt", "kmeans-classic-pp")
+_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-array", "kmeans-weighted",
+            "kmeans-classic-pp")
+# The same two calls on 2048 held-out rows (2026-11-05, lane/slow-verification-lanes):
+# the assignment is row-local, so the whole/alone/split protocol is unchanged and
+# the host column stops scoring 20000 rows three times per call.
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 2048)), "kmeans-random", "kmeans-sqrt")
 # The transductive clustering lanes (read 2026-09-15 against the Python
 # estimator, the GPU binding, the CPU host binding and cuML v26.08.00).
 #   DBSCAN and AgglomerativeClustering are NOT transductive since
@@ -7985,16 +8059,18 @@ def _range_rows(label, n, fn, min_batch=1, refusal=None):
 BOOTSTRAP_ONE_REFUSAL = "the standard error needs at least 2 resamples"
 
 
-def _batch_resample_inputs(Xh):
+def _batch_resample_inputs(Xh, values=4096):
     """The bootstrap and permutation-test lanes' inputs, derived from the
-    held-out rows by the same rules (labels_for's targets): yr's first 4096
-    values, yr paired with column 3, and the two label groups' first 512
-    rows (the lane's fallback when a group is short). Column 3 alone is
+    held-out rows by the same rules (labels_for's targets): yr's first
+    `values` values, yr paired with column 3, and the two label groups' first
+    512 rows (the lane's fallback when a group is short). Column 3 alone is
     constant over the first 1024 denormal rows, where pearson refuses by
-    name; the lane's pairing is not."""
+    name; the lane's pairing is not. `values` is the lane's own sample size:
+    the bootstrap lane passes 1024 (2026-11-05, lane/slow-verification-lanes),
+    the permutation-test lane keeps the default."""
     ych, yrh = labels_for(Xh, HELDOUT_SEED)
-    x = np.ascontiguousarray(yrh[:4096]).astype(np.float32)
-    two = np.ascontiguousarray(np.stack([yrh[:4096], Xh[:4096, 3]], 1).astype(np.float32))
+    x = np.ascontiguousarray(yrh[:values]).astype(np.float32)
+    two = np.ascontiguousarray(np.stack([yrh[:values], Xh[:values, 3]], 1).astype(np.float32))
     a = np.ascontiguousarray(yrh[:4096][ych[:4096] == 0][:512])
     b = np.ascontiguousarray(yrh[:4096][ych[:4096] == 1][:512])
     if a.size < 8 or b.size < 8:
@@ -8010,7 +8086,7 @@ BATCH_BOOTSTRAP_ARMS = (("mean", dict(statistic="mean")), ("std", dict(statistic
                         ("pearson", dict(statistic="pearson")), ("diff_means", dict(statistic="diff_means")))
 
 
-def _batch_resample(bootstrap, permutation_test, prefix=""):
+def _batch_resample(bootstrap, permutation_test, prefix="", values=4096):
     """resample's own batch-invariance handle (python/mojolearn/resample.py
     module docstring: "replicates [r_first, r_first + n_resamples) of one run
     are bit-identical to the corresponding slice of a whole run"): replicate
@@ -8019,7 +8095,7 @@ def _batch_resample(bootstrap, permutation_test, prefix=""):
     The point estimate, interval, standard error and p-value are reductions
     over the run and are not asked."""
     def spec(ml, e, Xh):
-        x, two, a, b = _batch_resample_inputs(Xh)
+        x, two, a, b = _batch_resample_inputs(Xh, values)
         calls = []
         for name, kw in BATCH_BOOTSTRAP_ARMS:
             data = two if kw["statistic"] in ("pearson", "diff_means") else x
@@ -8037,7 +8113,9 @@ def _batch_resample(bootstrap, permutation_test, prefix=""):
 
 
 def _batch_bootstrap_lane(ml, e, Xh):
-    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[:-1]
+    # 1024 values, the lane body's own sample size (2026-11-05,
+    # lane/slow-verification-lanes): the 126 range calls per cell scaled with it.
+    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test, values=1024)(ml, e, Xh)[:-1]
 
 
 def _batch_permutation_lane(ml, e, Xh):
