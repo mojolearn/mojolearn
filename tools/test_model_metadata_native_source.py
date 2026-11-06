@@ -37,7 +37,7 @@ class ModelMetadataSource(unittest.TestCase):
                       "model_checkpoint_names_snapshot", "_model_error_class"):
             self.assertIn("def " + guard + "(", source)
         owner = source.split("def model_record_fields(", 1)[1].split("def _model_context(", 1)[0]
-        self.assertLess(owner.index('"__getattribute__"'), owner.index("_fields(value)"))
+        self.assertLess(owner.index('"__getattribute__"'), owner.index("_fields(mods, value)"))
 
     def test_checkpoint_slots_and_native_exports_are_admitted(self):
         source = (ROOT / "bindings/causal_checkpoint.mojo").read_text()
