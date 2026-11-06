@@ -37,7 +37,7 @@ MATH_SYMBOLS |= {"__sincosf_stret", "__sincos_stret", "__sincospif_stret", "__si
 #: bindings' native file of a FAST set (`_mojolearn_native.so`, holding every
 #: FAST member, packaging/linux/merged_layout.py) matches the same pattern;
 #: its index `_mojolearn_merged.json` is not a binary and is never audited here.
-FAST_SET = re.compile(r"^mojolearn/(cuda|hip|cuda_native|hip_native|cuda_ptx)/[^/]+/_mojolearn[^/]*\.so$"
+FAST_SET = re.compile(r"^mojolearn/(cuda|hip|cuda_native|hip_native|cuda_portable|cuda_ptx)/[^/]+/_mojolearn[^/]*\.so$"
                       # macOS: FAST GPU bindings sit at the package root; host/
                       # and identical/ are directories below it.
                       r"|^mojolearn/_mojolearn[^/]*\.so$")
@@ -399,7 +399,10 @@ def audit_tree(root, python_only=False):
             (".libs/libMojolearnMath.so", ".dylibs/libMojolearnMath.dylib")):
         errors.append("owned Python math helper is missing its native library")
     baseline_reports = []
-    baseline_root = root / "mojolearn/cuda_ptx"
+    baseline_root = root / "mojolearn/cuda_portable"  # the PTX set (gpu_plugins.PTX_DIRECTORY, 2026-11-05)
+    if (root / "mojolearn/cuda_ptx").exists():
+        errors.append("the PTX set ships at mojolearn/cuda_portable; mojolearn/cuda_ptx is the retired "
+                      "mojolearn-nvidia-ptx path")
     if baseline_root.exists():
         for directory in sorted(baseline_root.iterdir()):
             if not directory.is_dir() or directory.name != "sm_80":
@@ -461,7 +464,7 @@ def audit_tree(root, python_only=False):
             "python_math_policy": "owned helpers and guarded CPython fsum", "platform_math_free": True,
             "scope": "wheel native math imports and Python operation policy; excludes Python and OS dependencies", "binaries": binaries,
             "identical_ptx_rounding_pinned": True, "identical_ptx": ptx_rows,
-            # The native sets carry machine code; the PTX slot (cuda_ptx/sm_80) carries
+            # The native sets carry machine code; the PTX slot (cuda_portable/sm_80) carries
             # rounding-pinned PTX and is reported separately (Andrew 2026-10-10:
             # PTX is a normal target; no flag).
             "identical_cuda_machine_code": True, "identical_cuda_fatbins": fatbin_rows,

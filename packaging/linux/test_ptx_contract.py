@@ -142,7 +142,7 @@ def test_wheel_audit_refuses_unpinned_identical_ptx(tmp_path):
 def test_relocated_native_cuda_keeps_rounding_and_machine_code_gates(tmp_path):
     import cubin_contract as cc
     native = "mojolearn/cuda_native/sm_89/identical/_mojolearn.so"
-    portable = "mojolearn/cuda_ptx/sm_80/identical/_mojolearn.so"
+    portable = "mojolearn/cuda_portable/sm_80/identical/_mojolearn.so"
     for rel in (native, portable):
         p = tmp_path / rel
         p.parent.mkdir(parents=True)

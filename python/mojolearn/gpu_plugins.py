@@ -10,7 +10,7 @@ requires all three, so `pip install mojolearn` installs everything and
 2026-10-20). macOS keeps the one complete `mojolearn` wheel. Each vendor
 wheel contains its registered architecture sets; architecture selection
 happens in the loader. mojolearn-nvidia carries both the native sets
-(cuda_native/sm_89) and the PTX set (cuda_ptx/sm_80) in one wheel, and its
+(cuda_native/sm_89) and the PTX set (cuda_portable/sm_80) in one wheel, and its
 vendor marker binds the PTX manifest. PTX is a normal target; no flag.
 Native directory depth stays unchanged to preserve binding RUNPATHs.
 """
@@ -18,12 +18,21 @@ Native directory depth stays unchanged to preserve binding RUNPATHs.
 #: The NVIDIA PTX slot: one rounding-pinned PTX build for compute capability
 #: 8.0, compiled by the driver on any NVIDIA GPU of capability 8.0 or newer
 #: that has no native set in the wheel. Its directory sits at the native
-#: depth (mojolearn/cuda_ptx/sm_80/...), so every RUNPATH resolves the same.
+#: depth (mojolearn/cuda_portable/sm_80/...), so every RUNPATH resolves the same.
 PTX_ARCH = "sm_80"
-PTX_DIRECTORY = "cuda_ptx"
+#: NEW PATH (2026-11-05). mojolearn-nvidia-ptx 0.8.53 to 0.8.65 (and the retired
+#: experimental mojolearn-nvidia-ptx80) installed the PTX set at
+#: mojolearn/cuda_ptx/sm_80; the combined NVIDIA wheel installs it at a directory
+#: no published distribution ever owned, so an upgrade never overwrites the old
+#: package's files and `pip uninstall mojolearn-nvidia-ptx` removes only its own.
+PTX_DIRECTORY = "cuda_portable"
+#: Directories older releases used for the PTX set. The loader never reads them; a
+#: leftover one is ignored. Packaging accepts them only as an input spelling when it
+#: repacks a retained old install, and always writes PTX_DIRECTORY.
+LEGACY_PTX_DIRECTORIES = ("cuda_ptx",)
 #: Until 0.8.66 (2026-11-05) the PTX set shipped as its own distribution,
 #: exactly pinned by mojolearn-nvidia. It no longer exists as a released
-#: package: mojolearn-nvidia owns cuda_ptx/sm_80 itself. The name is kept so
+#: package: mojolearn-nvidia owns cuda_portable/sm_80 itself. The name is kept so
 #: packaging tools can refuse it and recognise an old install.
 LEGACY_PTX_DISTRIBUTION = "mojolearn-nvidia-ptx"
 
@@ -42,7 +51,7 @@ PLUGINS = {
         # 2026-11-05 (Andrew): ONE NVIDIA WHEEL. The 2026-10-19 split (native + PTX
         # was 134.1 MiB in 0.8.39, over the 100 MiB default) is undone: PyPI granted
         # mojolearn-nvidia 250 MiB per file (packaging/pypi_limits.json) and native
-        # + PTX pack to about 63 MiB, so this wheel owns cuda_ptx/sm_80 again.
+        # + PTX pack to about 63 MiB, so this wheel carries the PTX set, at cuda_portable/sm_80.
         ptx=dict(arch=PTX_ARCH, directory=PTX_DIRECTORY), ptx_shipped=True,
         directory="cuda_native", code_format="native", release_enabled=True),
     "hip": dict(distribution="mojolearn-amd", wheel_name="mojolearn_amd",
@@ -120,10 +129,10 @@ def member_payload(arcname):
     for key, row in PAYLOADS.items():  # glue: map an archive member path to its registered package owner
         if parts[1] in (row["vendor"], row["directory"]) and parts[2] in row["arches"]:
             return key
-        if (row.get("ptx") and parts[1] in (row["vendor"], row["ptx"]["directory"])
+        if (row.get("ptx") and parts[1] in (row["vendor"], row["ptx"]["directory"], *LEGACY_PTX_DIRECTORIES)
                 and parts[2] == row["ptx"]["arch"]):
             return key
-    if parts[1] in (*PLUGINS, "cuda_native", "hip_native", "cuda_ptx"):
+    if parts[1] in (*PLUGINS, "cuda_native", "hip_native", PTX_DIRECTORY, *LEGACY_PTX_DIRECTORIES):
         raise ValueError(f"unregistered GPU payload member: {arcname}")
     return None
 
@@ -207,7 +216,8 @@ def member_vendor(arcname):
             return parts[1]
         for vendor in PLUGINS:  # glue: classify a package directory by vendor metadata
             row = PLUGINS[vendor]
-            if parts[1] == native_directory(vendor) or (row.get("ptx") and parts[1] == row["ptx"]["directory"]):
+            if parts[1] == native_directory(vendor) or (row.get("ptx") and parts[1] in (
+                    row["ptx"]["directory"], *LEGACY_PTX_DIRECTORIES)):
                 return vendor
     return None
 
@@ -433,7 +443,7 @@ def validate_bundled_ptx(descriptor, manifest_bytes, files, indexes=None):
     """Validate the PTX slot's transported bytes against the vendor marker's
     descriptor; return the parsed manifest.
 
-    files is the complete relative GPU .so SHA256 map under cuda_ptx/sm_80;
+    files is the complete relative GPU .so SHA256 map under cuda_portable/sm_80;
     indexes, when given, the same for its merged indexes (_mojolearn_merged.json).
     """
     import hashlib

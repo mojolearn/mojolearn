@@ -50,8 +50,8 @@ class PluginUpgrade(unittest.TestCase):
                 data = {n: b for n, b in members(fixtures.SplitWheels.split[row['wheel_name']]).items()
                         if '.dist-info/' not in n}
                 expected.update(data)
-                # the PTX slot (cuda_ptx/sm_80) too: the legacy owner kept every CUDA set under cuda/
-                legacy.update({n.replace('/cuda_native/', '/cuda/').replace('/cuda_ptx/', '/cuda/'): b
+                # the PTX slot (cuda_portable/sm_80) too: the legacy owner kept every CUDA set under cuda/
+                legacy.update({n.replace('/cuda_native/', '/cuda/').replace('/cuda_portable/', '/cuda/'): b
                                for n, b in data.items()})
             install(write_fixture('mojolearn_nvidia', '0.0.1', legacy))
             for row in pw.gpu_plugins.PAYLOADS.values():

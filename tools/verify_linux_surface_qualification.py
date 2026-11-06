@@ -107,7 +107,7 @@ RELEASE_PROFILES = frozenset({RELEASE_PROFILE, 'release-0.6.1'})
 #
 # - REQUIRED: gpu_plugins.required_sets(vendor) -- every native slot's first
 #   spelling (cuda/sm_89, hip/gfx942) plus the shipped PTX slot (cuda/sm_80,
-#   packed into the mojolearn-nvidia wheel at mojolearn/cuda_ptx/sm_80 (2026-11-05)
+#   packed into the mojolearn-nvidia wheel at mojolearn/cuda_portable/sm_80 (2026-11-05; cuda_ptx in mojolearn-nvidia-ptx before)
 #   and keyed cuda/sm_80 at the build layout). The PTX set is a set like any
 #   other: built by its own leg, proved by its own build proof, qualified under
 #   its own runtime key (Andrew 2026-10-10: PTX is a normal target; no flag).

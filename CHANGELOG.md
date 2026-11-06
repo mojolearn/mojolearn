@@ -4,7 +4,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
-- **One NVIDIA package.** `mojolearn-nvidia` carries both the native kernels for sm_89 and the PTX build for every NVIDIA GPU of compute capability 8.0 or newer; the separate `mojolearn-nvidia-ptx` package is no longer published. An environment that has `mojolearn-nvidia-ptx` from an earlier release can remove it and reinstall the NVIDIA package once: `pip uninstall -y mojolearn-nvidia-ptx && pip install --force-reinstall --no-deps "mojolearn-nvidia==<version>"`.
+- **One NVIDIA package.** `mojolearn-nvidia` carries both the native kernels for sm_89 and the PTX build for every NVIDIA GPU of compute capability 8.0 or newer; the separate `mojolearn-nvidia-ptx` package is no longer published. After upgrading, an environment that has `mojolearn-nvidia-ptx` from an earlier release can uninstall it safely (`pip uninstall mojolearn-nvidia-ptx`); it is no longer used and owns none of the new package's files.
 
 ## 0.8.66 (published 2026-11-05)
 

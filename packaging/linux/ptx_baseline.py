@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Audit the PTX set (cuda_ptx/sm_80) of mojolearn-nvidia and write its manifest.
+"""Audit the PTX set (cuda_portable/sm_80) of mojolearn-nvidia and write its manifest.
 
 Andrew 2026-10-10: PTX is a normal target; no flag. This report is the PTX
 set's build-format witness (target, no embedded cubin, IDENTICAL arithmetic

@@ -26,9 +26,9 @@ import compare_ordered_python
 import verify_linux_surface_qualification as surface
 
 require = surface.require
-# cuda_ptx/sm_80 is the PTX slot of mojolearn-nvidia, a set like any other
+# cuda_portable/sm_80 is the PTX slot of mojolearn-nvidia, a set like any other (cuda_ptx in releases to 0.8.65)
 # (Andrew 2026-10-10: PTX is a normal target; no flag).
-EXTENSION = re.compile(r'mojolearn/(cuda|hip)(?:_native|_ptx)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
+EXTENSION = re.compile(r'mojolearn/(cuda|hip)(?:_native|_portable|_ptx)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                        r'(?:(identical)/)?(_mojolearn[^/]*)\.so')
 
 
@@ -37,7 +37,7 @@ EXTENSION = re.compile(r'mojolearn/(cuda|hip)(?:_native|_ptx)?/(sm_[0-9]+a?|gfx[
 # _mojolearn_merged.json naming each file's members (surface.set_layout). The
 # index is shipped and hashed like a binary; it is collected beside
 # `extensions` as `merged_indexes` ({path: {'sha256', 'files'}}), never in it.
-INDEX = re.compile(r'mojolearn/(cuda|hip)(?:_native|_ptx)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
+INDEX = re.compile(r'mojolearn/(cuda|hip)(?:_native|_portable|_ptx)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                    r'(?:(identical)/)?' + re.escape(surface.MERGED_INDEX))
 HOST_INDEX = 'mojolearn/host/' + surface.MERGED_INDEX
 HOST_BINARY = re.compile(r'mojolearn/host/_mojolearn_[^/]*_host\.so')

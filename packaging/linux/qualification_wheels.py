@@ -257,7 +257,7 @@ def assemble(source, commit, site, out, overlay=(), stage_manifest=None):
         normalized[installed] = path
         normalized_provenance[installed] = provenance[member]
     entries, provenance = normalized, normalized_provenance
-    manifest_member = "mojolearn/cuda_ptx/sm_80/" + plugins.BASELINE_MANIFEST
+    manifest_member = plugins.BUNDLED_PTX_ROOT + "/" + plugins.BASELINE_MANIFEST  # canonical (installed_member) path
     bundle, ptx = None, None
     if manifest_member in entries:
         path = entries[manifest_member]

@@ -99,7 +99,7 @@ class PluginLoader(unittest.TestCase):
 
     def ptx_set(self, source="a" * 40):
         """The PTX slot (Andrew 2026-10-10: PTX is a normal target; no flag):
-        cuda_ptx/sm_80 with a fast and an identical binding, its v2 manifest
+        cuda_portable/sm_80 with a fast and an identical binding, its v2 manifest
         and the core's source witness. Returns (root, identical binary)."""
         import hashlib
         gp = self.B.gpu_plugins
@@ -370,7 +370,7 @@ class ArchitecturePayloadLoader(PluginLoader):
 
     # ---- THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag) ----
     def ptx_root(self):
-        return self.pkg / "cuda_ptx" / "sm_80"
+        return self.pkg / "cuda_portable" / "sm_80"
 
     def test_native_set_first_then_ptx_for_every_other_nvidia_gpu(self):
         self.split_core()

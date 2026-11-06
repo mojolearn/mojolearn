@@ -1,10 +1,10 @@
 """THE PTX SLOT OF mojolearn-nvidia (Andrew 2026-10-10: PTX is a normal target; no flag).
 
 The cuda/sm_80 set is the PTX set. It packs into the NVIDIA vendor wheel at
-cuda_ptx/sm_80 beside the native sets, the vendor marker binds its manifest by
+cuda_portable/sm_80 beside the native sets, the vendor marker binds its manifest by
 SHA256, and a release-split pack proves it with its own build proof like any
 set. Since 2026-11-05 there is no separate mojolearn-nvidia-ptx wheel: the one
-NVIDIA wheel owns cuda_native/sm_89 and cuda_ptx/sm_80. Synthetic inert bytes only.
+NVIDIA wheel owns cuda_native/sm_89 and cuda_portable/sm_80. Synthetic inert bytes only.
 """
 import hashlib
 import json
@@ -41,11 +41,11 @@ def rewrite(path, files):
 
 
 @pytest.mark.parametrize('merged', [False, True])
-def test_ptx_set_lands_at_cuda_ptx_with_its_bytes_and_a_native_marker(tmp_path, merged):
+def test_ptx_set_lands_at_cuda_portable_with_its_bytes_and_a_native_marker(tmp_path, merged):
     dirs,ptx=inputs(tmp_path, merged=merged)
     wheel=pack(tmp_path,dirs)
     files=members(wheel);prefix=pw.gpu_plugins.BUNDLED_PTX_ROOT+'/'
-    assert prefix=='mojolearn/cuda_ptx/sm_80/'
+    assert prefix=='mojolearn/cuda_portable/sm_80/'
     manifest=(ptx/pw.gpu_plugins.BASELINE_MANIFEST).read_bytes()
     for row in json.loads(manifest)['files']:
         assert files[prefix+row['file']]==(ptx/row['file']).read_bytes()
@@ -61,7 +61,7 @@ def test_ptx_set_lands_at_cuda_ptx_with_its_bytes_and_a_native_marker(tmp_path, 
     assert marker['bundled_ptx']==dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
     assert marker['role']=='vendor'
     assert marker['code_format']=='native'
-    assert marker['ptx']==dict(arch='sm_80', directory='cuda_ptx')
+    assert marker['ptx']==dict(arch='sm_80', directory='cuda_portable')
     wheels=list((tmp_path/'out').glob('*.whl'))
     assert not wheel_api_audit.split_audit(wheels)['problems']
     assert sorted(p.name.split('-')[0] for p in wheels)==['mojolearn_nvidia']
@@ -74,13 +74,19 @@ def test_the_nvidia_wheel_owns_the_ptx_slot_without_bundle_flags():
     assert 'nvidia-ptx' not in gp.PAYLOADS
     assert gp.LEGACY_PTX_DISTRIBUTION=='mojolearn-nvidia-ptx'
     assert [r['profile'] for r in gp.distribution_rows(include_experimental=True)]==['nvidia','amd']
-    assert gp.owns_member('nvidia','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
+    assert gp.owns_member('nvidia','mojolearn/cuda_portable/sm_80/_mojolearn_x.so')
     assert gp.owns_member('nvidia','mojolearn/cuda/sm_80/identical/_mojolearn_x.so')
     assert gp.owns_member('nvidia','mojolearn/cuda_native/sm_89/_mojolearn_x.so')
     assert gp.payload_requirements('cuda','0.0.1')==[]
+    # THE NEW PATH (2026-11-05): no published mojolearn-nvidia-ptx ever owned it; the old
+    # cuda_ptx spelling is only an input (a retained old install) and maps to the new one
+    assert gp.PTX_DIRECTORY=='cuda_portable' and gp.LEGACY_PTX_DIRECTORIES==('cuda_ptx',)
+    assert not any(gp.BUNDLED_PTX_ROOT.startswith('mojolearn/'+d+'/') for d in gp.LEGACY_PTX_DIRECTORIES)
+    assert gp.installed_member('mojolearn/cuda_ptx/sm_80/identical/_mojolearn_x.so')=='mojolearn/cuda_portable/sm_80/identical/_mojolearn_x.so'
+    assert gp.member_vendor('mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')=='cuda'
     assert gp.package_requirements('nvidia','0.0.1')==['mojolearn-core==0.0.1']
-    assert gp.installed_member('mojolearn/cuda/sm_80/_mojolearn_x.so')=='mojolearn/cuda_ptx/sm_80/_mojolearn_x.so'
-    assert not gp.owns_member('amd','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
+    assert gp.installed_member('mojolearn/cuda/sm_80/_mojolearn_x.so')=='mojolearn/cuda_portable/sm_80/_mojolearn_x.so'
+    assert not gp.owns_member('amd','mojolearn/cuda_portable/sm_80/_mojolearn_x.so')
     assert gp.required_sets('cuda')=={('cuda','sm_89'),('cuda','sm_80')}
     with pytest.raises(SystemExit):
         pw.main(['--set','x','--bundle-ptx'],_gates=False)
@@ -139,6 +145,13 @@ def test_audit_detects_ptx_slot_tampering(tmp_path,mutation):
     else:doc['bundled_ptx']['manifest_sha256']='0'*64;files[name]=json.dumps(doc).encode()
     rewrite(wheel,files)
     assert wheel_api_audit.split_audit([wheel])['problems']
+
+
+def test_audit_refuses_the_old_ptx_path_in_the_nvidia_wheel(tmp_path):
+    dirs,ptx=inputs(tmp_path);wheel=pack(tmp_path,dirs);files=members(wheel)
+    files['mojolearn/cuda_ptx/sm_80/identical/_mojolearn_x.so']=b'old path'
+    rewrite(wheel,files)
+    assert any('outside its architecture payload' in p for p in wheel_api_audit.split_audit([wheel])['problems'])
 
 
 def test_audit_requires_the_ptx_slot_in_the_nvidia_wheel(tmp_path):

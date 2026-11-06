@@ -64,7 +64,7 @@ def test_no_separate_ptx_distribution_is_packed_or_required(tmp_path):
     files = members(native)
     metadata = next(data for name, data in files.items() if name.endswith('.dist-info/METADATA')).decode()
     assert 'mojolearn-nvidia-ptx' not in metadata
-    assert any(name.startswith('mojolearn/cuda_ptx/sm_80/') for name in files)
+    assert any(name.startswith('mojolearn/cuda_portable/sm_80/') for name in files)
     assert any(name.startswith('mojolearn/cuda_native/sm_89/') for name in files)
 
 

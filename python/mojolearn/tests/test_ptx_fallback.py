@@ -10,7 +10,7 @@ pointed at the file from outside the package (a symlink in another directory),
 because collecting it as `mojolearn.tests.*` imports the real package.
 
 Every case fabricates an installed split core and a `mojolearn-nvidia` plugin
-carrying the native sm_89 set and the PTX slot (cuda_ptx/sm_80), then asks the
+carrying the native sm_89 set and the PTX slot (cuda_portable/sm_80), then asks the
 real `_backend` about a synthetic device. Nothing loads an extension and
 nothing touches a device. The rules under test (docs/NVIDIA_PTX_IDENTITY.md;
 Andrew 2026-10-10: PTX is a normal target; no flag):
@@ -155,7 +155,7 @@ class Install(unittest.TestCase):
 
 class LegacyPTXDistribution(Install):
     """mojolearn-nvidia-ptx (0.8.39 to 0.8.65) is no longer released: since
-    2026-11-05 mojolearn-nvidia carries cuda_ptx/sm_80 itself. A leftover old
+    2026-11-05 mojolearn-nvidia carries cuda_portable/sm_80 itself. A leftover old
     PTX .dist-info is never read by the loader."""
 
     def leftover(self, version="0.8.65"):
@@ -171,6 +171,41 @@ class LegacyPTXDistribution(Install):
         self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
         self.assertEqual(self.B.gpu_plugin()["distribution"], "mojolearn-nvidia")
         self.assertEqual(self.B.baseline_selection_receipt()["selected"], "ptx")
+
+    def old_path_files(self):
+        """What mojolearn-nvidia-ptx 0.8.65 installed: its PTX set at the OLD path."""
+        gp = self.B.gpu_plugins
+        old = self.pkg / gp.LEGACY_PTX_DIRECTORIES[0] / gp.PTX_ARCH
+        for tier in ("", "identical"):
+            (old / tier).mkdir(parents=True, exist_ok=True)
+            (old / tier / "_mojolearn_gbdt.so").write_bytes(b"old 0.8.65 ptx")
+        (old / gp.BASELINE_MANIFEST).write_text("{}")
+        return old
+
+    def test_the_new_ptx_path_is_not_the_old_one(self):
+        gp = self.B.gpu_plugins
+        self.assertNotIn(gp.PTX_DIRECTORY, gp.LEGACY_PTX_DIRECTORIES)
+        self.assertEqual(self.root, self.pkg / "cuda_portable" / "sm_80")
+
+    def test_a_leftover_old_path_ptx_set_is_ignored_and_its_uninstall_breaks_nothing(self):
+        self.leftover()
+        old = self.old_path_files()
+        self.device = "sm_90"
+        self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
+        self.assertEqual(self.B.baseline_selection_receipt()["selected"], "ptx")
+        # `pip uninstall mojolearn-nvidia-ptx` removes only its own old-path files
+        shutil.rmtree(old.parent)
+        shutil.rmtree(self.site / "mojolearn_nvidia_ptx-0.8.65.dist-info")
+        self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
+        self.assertEqual(self.B.baseline_selection_receipt()["selected"], "ptx")
+        self.assertTrue(any(self.root.rglob("*.so")))
+
+    def test_a_leftover_old_path_ptx_set_does_not_change_native_selection(self):
+        self.leftover()
+        self.old_path_files()
+        self.device = "sm_89"
+        self.assertTrue(self.layout("identical")[1].endswith("cuda_native/sm_89"))
+        self.assertIsNone(self.B.baseline_selection_receipt())
 
     def test_a_leftover_ptx_distribution_alone_is_not_an_nvidia_install(self):
         gp = self.B.gpu_plugins

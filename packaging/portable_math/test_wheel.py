@@ -276,7 +276,7 @@ def test_fast_tier_gpu_sets_are_the_only_math_exemption():
     ok = ["mojolearn/cuda/sm_89/_mojolearn_gp.so", "mojolearn/hip/gfx942/_mojolearn.so",
           "mojolearn/_mojolearn_gp.so",
           # the merged-bindings layout: one native file per set directory
-          "mojolearn/cuda/sm_89/_mojolearn_native.so", "mojolearn/cuda_ptx/sm_80/_mojolearn_native.so",
+          "mojolearn/cuda/sm_89/_mojolearn_native.so", "mojolearn/cuda_portable/sm_80/_mojolearn_native.so",
           "mojolearn/_mojolearn_native.so"]
     enforced = ["mojolearn/cuda/sm_89/identical/_mojolearn_gp.so",
                 "mojolearn/host/_mojolearn_gp_host.so", "mojolearn/identical/_mojolearn_gp.so",
@@ -338,7 +338,7 @@ def test_empty_payload_cannot_use_aggregate_exception(tmp_path):
 
 def test_baseline_manifest_is_rechecked_against_final_bytes(payload):
     import json
-    directory = payload / 'mojolearn/cuda_ptx/sm_80'
+    directory = payload / 'mojolearn/cuda_portable/sm_80'
     directory.mkdir(parents=True)
     binary = directory / 'probe.so'
     binary.write_bytes(b'fixture\0.version 8.1\n.target sm_80\n.address_size 64\n'

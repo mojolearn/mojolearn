@@ -125,7 +125,7 @@ PARTS = ("train", "infer", "model", "batch", "stepfull")
 OPTIONAL_PARTS = ("batchgrad", "batchscale", "ragged", "rlpair")
 CLASSES = ("apple", "nvidia", "amd", "cpu", "ptx")
 #: THE PTX COLUMN (Andrew 2026-10-10: PTX is a normal target; no flag): the
-#: NVIDIA PTX set (mojolearn-nvidia's cuda_ptx/sm_80) recorded on an NVIDIA box,
+#: NVIDIA PTX set (mojolearn-nvidia's cuda_portable/sm_80) recorded on an NVIDIA box,
 #: labelled `nvidia-ptx-<gpu>-sm80`. It is judged against the reference and
 #: never decides one: the reference is Apple == NVIDIA == AMD, and a PTX value that
 #: differs is listed (`ptx_divergent`) as a bug to fix, never a conflict that

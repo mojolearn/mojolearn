@@ -206,7 +206,9 @@ class QualificationWheels(unittest.TestCase):
             with zipfile.ZipFile(item["path"]) as wheel:
                 # repacked into the one NVIDIA wheel (2026-11-05)
                 if item["profile"] == "nvidia":
-                    self.assertEqual(wheel.read("mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json"), manifest_bytes)
+                    # the retained old path (cuda_ptx) is repacked at the new one (2026-11-05)
+                    self.assertEqual(wheel.read("mojolearn/cuda_portable/sm_80/PTX_BASELINE.json"), manifest_bytes)
+                    self.assertFalse([n for n in wheel.namelist() if n.startswith("mojolearn/cuda_ptx/")])
                 elif item["profile"] is None:
                     self.assertEqual(wheel.read("mojolearn/identity_columns/COMMIT"), (self.commit + "\n").encode())
 

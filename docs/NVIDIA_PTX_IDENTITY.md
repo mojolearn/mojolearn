@@ -6,7 +6,7 @@ Andrew 2026-10-10: PTX is a normal target; no flag.
 
 The release packages native `sm_89` and PTX `sm_80` in one wheel,
 `mojolearn-nvidia` (Andrew 2026-11-05), at the existing loader paths
-(`cuda_native/sm_89`, `cuda_ptx/sm_80`). Its marker binds the PTX manifest's
+(`cuda_native/sm_89`, `cuda_portable/sm_80`). Its marker binds the PTX manifest's
 SHA256.
 
 Releases through 0.8.52 shipped native `sm_89` only. The native and PTX
@@ -16,15 +16,13 @@ releases 0.8.53 to 0.8.65 shipped the PTX set in its own exactly pinned
 2026-11-04 (`packaging/pypi_limits.json`) and the two sets pack to about
 63 MiB, so the split is undone.
 
-Upgrading from a release with `mojolearn-nvidia-ptx`: pip installs the new
-`mojolearn-nvidia`, which writes the `cuda_ptx/sm_80` files over the old
-ones, and leaves `mojolearn-nvidia-ptx` installed because nothing removes
-an orphaned distribution. The loader never reads it; a stale PTX file the
-new manifest does not list fails the manifest check at import (fail
-closed), never loads. A later `pip uninstall mojolearn-nvidia-ptx` deletes
-the files its old RECORD lists, which are now `mojolearn-nvidia`'s, and the
-import then refuses with "missing its PTX set"; the repair is
-`pip install --force-reinstall --no-deps "mojolearn-nvidia==<version>"`.
+Upgrading from a release with `mojolearn-nvidia-ptx`: the old package
+installed the PTX set at `mojolearn/cuda_ptx/sm_80`; the combined wheel
+installs it at `mojolearn/cuda_portable/sm_80`, a path no published
+distribution ever owned (`gpu_plugins.PTX_DIRECTORY`, with the old one in
+`LEGACY_PTX_DIRECTORIES`). pip leaves the orphaned `mojolearn-nvidia-ptx`
+installed; the loader never reads its directory or its .dist-info, and
+`pip uninstall mojolearn-nvidia-ptx` removes only its own old files.
 
 ## Available build slots
 
@@ -34,7 +32,7 @@ The NVIDIA install supports two kinds of set, registered in
 | Slot | Directory | Code | Runs on |
 | --- | --- | --- | --- |
 | native `sm_89` | `cuda_native/sm_89` | cubins (IDENTICAL compiled with a pinned ptxas, contraction off) | Ada (L40S, L40, RTX 4090, RTX 6000 Ada) |
-| PTX `sm_80` | `cuda_ptx/sm_80` | rounding-pinned PTX, compiled by the driver on the user's machine | every NVIDIA GPU of compute capability 8.0 or newer |
+| PTX `sm_80` | `cuda_portable/sm_80` | rounding-pinned PTX, compiled by the driver on the user's machine | every NVIDIA GPU of compute capability 8.0 or newer |
 
 Other native architectures stay registered (`sm_90`/`sm_90a`, Blackwell
 `sm_100`/`sm_100a`, `sm_103`/`sm_103a`, `sm_120`/`sm_120a`, `sm_121`/`sm_121a`):

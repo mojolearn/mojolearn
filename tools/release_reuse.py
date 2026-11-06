@@ -2000,7 +2000,7 @@ def legacy_archive_path(name):
     """Canonical identity path across the file-ownership migration; bytes stay unchanged."""
     parts = name.split("/")
     if len(parts) > 2 and parts[0] == "mojolearn":
-        parts[1] = {"cuda_native": "cuda", "hip_native": "hip", "cuda_ptx": "cuda"}.get(parts[1], parts[1])
+        parts[1] = {"cuda_native": "cuda", "hip_native": "hip", "cuda_ptx": "cuda", "cuda_portable": "cuda"}.get(parts[1], parts[1])
     return "/".join(parts)
 
 

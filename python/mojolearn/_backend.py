@@ -109,7 +109,7 @@ order:
 THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag)
 -----------------------------------------------------------------
 The native sets above carry no PTX. The loader also supports one PTX
-set, `cuda_ptx/sm_80` (gpu_plugins.PTX_ARCH), as a regular slot, which the
+set, `cuda_portable/sm_80` (gpu_plugins.PTX_ARCH), as a regular slot, which the
 driver compiles on the machine. A published wheel omits this set while
 `gpu_plugins.PLUGINS['cuda']['ptx_shipped']` is False (PyPI's file-size limit);
 the following fallback requires it to be installed. The loader takes a native
@@ -724,9 +724,10 @@ def _check_plugins(pkg, present):
 
 
 # The standalone PTX distribution (mojolearn-nvidia-ptx, 0.8.39 to 0.8.65) is no
-# longer released: since 2026-11-05 mojolearn-nvidia carries cuda_ptx/sm_80 and
-# its marker binds the PTX manifest, which _ptx_base checks. A leftover old
-# mojolearn-nvidia-ptx .dist-info is not read here.
+# longer released: since 2026-11-05 mojolearn-nvidia carries the PTX set at
+# cuda_portable/sm_80 and its marker binds the PTX manifest, which _ptx_base
+# checks. The old package's cuda_ptx/sm_80 directory and .dist-info, left behind
+# by an upgrade, are never read here; uninstalling it removes only those.
 
 
 _BASELINE_SELECTION = None
@@ -752,7 +753,7 @@ def ptx_payload_files():
 
 
 def _ptx_directory(pkg):
-    """The PTX set's directory: cuda_ptx/sm_80 beside the split core (the
+    """The PTX set's directory: cuda_portable/sm_80 beside the split core (the
     mojolearn-nvidia install), cuda/sm_80 in the combined and source layouts."""
     vdir = gpu_plugins.PTX_DIRECTORY if _split_core() else "cuda"
     return os.path.join(pkg, vdir, gpu_plugins.PTX_ARCH)

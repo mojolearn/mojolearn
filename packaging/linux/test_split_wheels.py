@@ -22,7 +22,7 @@ index `_mojolearn_merged.json`, the bindings/merged_groups.json plan);
 THE IDENTITY PROOF is `test_the_three_wheels_are_the_combined_wheel`: every
 member of the combined wheel outside its .dist-info is in exactly one split
 wheel, at the same archive path, with the same bytes, and the split wheels
-carry nothing else but the PTX slot (cuda_ptx/sm_80, in mojolearn-nvidia).
+carry nothing else but the PTX slot (cuda_portable/sm_80, in mojolearn-nvidia).
 The split set (2026-10-20) is mojolearn_core (no vendor pin), the vendor
 wheels (each pinning mojolearn-core), and the file-free Linux mojolearn
 (pinning the core and both vendors). `_gates=False` skips portable_math/wheel.py and the API
@@ -256,7 +256,7 @@ class SplitWheels(unittest.TestCase):
         union.update(ptx)
         # and the sets really are in there, every tier of every architecture
         # (its binaries, and its index when merged), the PTX slot at
-        # cuda_ptx/sm_80 with its manifest, and host/ once in the core
+        # cuda_portable/sm_80 with its manifest, and host/ once in the core
         for vendor, arch in SETS:
             for tier in pw.TIERS:
                 shipped = dir_files(vendor, arch, tier, merged=self.MERGED)
@@ -273,7 +273,7 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual(sorted(n for n in union if n.startswith("mojolearn/host/")),
                          sorted(f"mojolearn/host/{f}" for f in dir_files("cuda", "sm_89", "host", merged=self.MERGED)))
         self.assertIn(pw.gpu_plugins.BUNDLED_PTX_ROOT + "/" + pw.gpu_plugins.BASELINE_MANIFEST, ptx)
-        self.assertTrue(pw.gpu_plugins.BUNDLED_PTX_ROOT.startswith("mojolearn/cuda_ptx/sm_80"))
+        self.assertTrue(pw.gpu_plugins.BUNDLED_PTX_ROOT.startswith("mojolearn/cuda_portable/sm_80"))
 
     def test_qualification_requires_payloads_as_well_as_aggregates(self):
         import check_linux_release_qualification as qualification
@@ -521,7 +521,7 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual(marker, gp.plugin_marker("cuda", self.version, ["sm_89"], bundled_ptx=bundle))
         # THE MARKER BINDS THE PTX MANIFEST, and names the PTX slot; the native arches stay native
         self.assertEqual(marker["bundled_ptx"], bundle)
-        self.assertEqual(marker["ptx"], dict(arch="sm_80", directory="cuda_ptx"))
+        self.assertEqual(marker["ptx"], dict(arch="sm_80", directory="cuda_portable"))
         self.assertEqual(marker["arches"], ["sm_89"])
         # the digest is required only while the registry ships the slot (gpu_plugins ptx_shipped; off since
         # 2026-10-12 while the wheel is over PyPI's 100 MiB limit): without it the marker names the slot unbundled
@@ -532,7 +532,7 @@ class SplitWheels(unittest.TestCase):
         with patch.dict(gp.PLUGINS["cuda"], {"ptx_shipped": False}):
             bare = gp.plugin_marker("cuda", self.version, ["sm_89"])
             self.assertNotIn("bundled_ptx", bare)
-            self.assertEqual(bare["ptx"], dict(arch="sm_80", directory="cuda_ptx"))
+            self.assertEqual(bare["ptx"], dict(arch="sm_80", directory="cuda_portable"))
         with self.assertRaisesRegex(ValueError, "only the NVIDIA"):
             gp.plugin_marker("hip", self.version, ["gfx942"], bundled_ptx=bundle)
         for whl in self.split.values():
@@ -697,12 +697,12 @@ class SplitWheels(unittest.TestCase):
         self.assertIn("WHEEL OVER ITS PyPI FILE LIMIT", text)
         # one NVIDIA wheel (2026-11-05): both sets are named, against the 250 MiB limit
         self.assertIn("cuda_native/sm_89:", text)
-        self.assertIn("cuda_ptx/sm_80:", text)
+        self.assertIn("cuda_portable/sm_80:", text)
         report = json.loads(next(self.last_out.glob("SIZES-*.json")).read_text())
         row = next(iter(report["wheels"].values()))
         self.assertTrue(row["over_limit"])
         self.assertEqual(row["pypi_limit_bytes"], 250 * 1024**2)
-        self.assertIn("cuda_ptx/sm_80", row["payloads"])
+        self.assertIn("cuda_portable/sm_80", row["payloads"])
         self.assertIn("cuda_native/sm_89", row["payloads"])
 
     def test_native_generic_does_not_start_accepting_optional_byte_lm(self):

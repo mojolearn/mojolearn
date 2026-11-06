@@ -132,7 +132,7 @@ def _native_files() -> list[dict[str, Any]]:
 #: Architecture directory names under a vendor (the architecture axis,
 #: 2026-08-30): sm_80, sm_90a, gfx90a, gfx942, ...
 _ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
-_GPU_DIRECTORIES = ("cuda", "hip", "cuda_native", "cuda_ptx", "hip_native")
+_GPU_DIRECTORIES = ("cuda", "hip", "cuda_native", "cuda_portable", "cuda_ptx", "hip_native")
 
 
 def _installed_gpu_sets(native_files: list[dict[str, Any]]) -> list[str]:

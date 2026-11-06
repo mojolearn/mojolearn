@@ -917,7 +917,7 @@ workflow `release-provenance.yml`. Each job uploads only its project's files.
 #### The NVIDIA PTX slot
 
 Andrew 2026-10-10: PTX is a normal target; no flag. `mojolearn-nvidia`
-carries the native sm_89 set AND the PTX set `cuda_ptx/sm_80` as a regular
+carries the native sm_89 set AND the PTX set `cuda_portable/sm_80` as a regular
 slot (`gpu_plugins.PTX_ARCH`). The release builds it as the leg `cuda-sm_80`
 on every build backend, through the same route as any arch
 (`tools/release061_remote_build.sh` gives cuda/sm_80 the `ptx` code format, so

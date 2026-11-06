@@ -15,7 +15,8 @@ the file-free meta `mojolearn`, all pinned to the same version.
 Default pip installation includes every released target.
 
 `--wheels nvidia` emits the one NVIDIA wheel: `cuda_native/sm_89` and the PTX
-slot (`cuda/sm_80`, installed at `cuda_ptx/sm_80`, its own build proof). Its
+slot (`cuda/sm_80`, installed at `cuda_portable/sm_80`, a path no file of the old
+mojolearn-nvidia-ptx ever owned; its own build proof). Its
 marker binds the PTX manifest SHA256. There is no separate PTX wheel any more
 (mojolearn-nvidia-ptx shipped 0.8.39 to 0.8.65).
 Every wheel is checked against its project's PyPI file limit (packaging/pypi_limits.json) here, at pack time;
@@ -1885,7 +1886,7 @@ def main(argv=None, _gates=True):
                 "pypi_limit_bytes": limit, "over_limit": size > limit,
                 "payloads": wheel_payload_sizes(whl)}
             # One line per wheel with its per-set compressed sizes: the NVIDIA wheel
-            # carries cuda_native/sm_89 and cuda_ptx/sm_80 together (2026-11-05).
+            # carries cuda_native/sm_89 and cuda_portable/sm_80 together (2026-11-05).
             print(f"pack_wheel: size {whl.name}: {size / 2**20:.1f} MiB of {limit / 2**20:.0f} MiB; "
                   + ", ".join(f"{k} {n / 2**20:.1f} MiB" for k, n in sorted(wheels[whl.name]["payloads"].items())))
         sizes = {
@@ -1933,7 +1934,7 @@ def oversize_report(built):
 
 def wheel_payload_sizes(whl):
     """{payload: compressed bytes} of one wheel: each architecture set
-    (mojolearn/<dir>/<arch>, e.g. cuda_native/sm_89, cuda_ptx/sm_80), the
+    (mojolearn/<dir>/<arch>, e.g. cuda_native/sm_89, cuda_portable/sm_80), the
     shared runtime and everything else, from the zip's own member sizes."""
     out = {}
     with zipfile.ZipFile(whl) as z:

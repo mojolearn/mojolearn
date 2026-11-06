@@ -211,7 +211,7 @@ def load_check(vendor, version):
         problems.append(f"loaded vendor package has unexpected native ownership: {plugin}")
     directory = {"cuda": "cuda_native", "hip": "hip_native"}[vendor]
     if vendor == "cuda" and facts["ptx_selection"]:
-        directory = "cuda_ptx"
+        directory = "cuda_portable"  # gpu_plugins.PTX_DIRECTORY since 2026-11-05 (cuda_ptx before)
     want_dir = os.path.join(facts["package"], directory) + os.sep
     if not (facts["tier_dir"] + os.sep).startswith(want_dir):
         problems.append(f"the loaded tier directory {facts['tier_dir']} is not under {want_dir}")

@@ -64,6 +64,7 @@ class ProjectClassification(unittest.TestCase):
             projects.classify([self.wheel(split_marker=False)])
         for path in ('mojolearn/cuda/sm_89/x.so', 'mojolearn/cuda_native/sm_89/x.so',
                      'mojolearn/hip_native/gfx942/x.so', 'mojolearn/cuda_ptx/sm_80/x.so',
+                     'mojolearn/cuda_portable/sm_80/x.so',
                      'mojolearn/_mojolearn_rf.so'):
             with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'GPU payload member'):
                 projects.classify([self.wheel(gpu_member=path)])

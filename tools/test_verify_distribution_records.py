@@ -37,7 +37,7 @@ class Record:
                                   'changed-core', 'unknown-architecture', 'external-native'])
 def test_split_wheel_ownership_and_negative_controls(verifier, monkeypatch, tmp_path, fault):
     package = tmp_path / 'mojolearn'
-    relative = 'mojolearn/cuda_ptx/sm_80/identical/native.so'
+    relative = 'mojolearn/cuda_portable/sm_80/identical/native.so'
     core = SimpleNamespace(version='0.8.60', files=[Record('mojolearn/_verify_distributed.py', 'a' * 64)])
     payload = SimpleNamespace(version='0.8.60', files=[Record(relative, 'b' * 64)],
                               locate_file=lambda name: tmp_path / name)
@@ -47,7 +47,7 @@ def test_split_wheel_ownership_and_negative_controls(verifier, monkeypatch, tmp_
 
     def distribution(name):
         calls.append(name)
-        assert name == 'mojolearn-nvidia'  # the NVIDIA wheel owns cuda_ptx/sm_80 (2026-11-05)
+        assert name == 'mojolearn-nvidia'  # the NVIDIA wheel owns cuda_portable/sm_80 (2026-11-05)
         if fault == 'missing-owner':
             raise metadata.PackageNotFoundError(name)
         return payload
