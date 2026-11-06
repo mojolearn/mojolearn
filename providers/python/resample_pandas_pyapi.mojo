@@ -1804,6 +1804,16 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
             if dest < 0 or dest >= cols or seen[dest]:
                 raise Error("ValueError: pandas block columns overlap or exceed output shape")
             seen[dest] = True
+            if target.kind != "O" and source.code == target.code:
+                # p3-cnn-sequence-tsa: same storage code: the dtype dispatch
+                # runs once per column, then a plain strided item copy
+                var item = source.item
+                var step = cols * target.item
+                var out = target.address + dest * target.item
+                for row in range(rows):  # driver-loop: native dtype-preserving storage copy, not model computation
+                    memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=out + row * step),
+                           src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.at(row, col)), count=item)
+                continue
             for row in range(rows):  # driver-loop: native dtype-preserving storage copy, not model computation
                 _rp_copy(source, source.at(row, col), target.address + (row * cols + dest) * target.item, target)
     _ = owned^
