@@ -17,6 +17,8 @@ from bindings.arena_cache_binding import arena_cache_supports
 from bindings.arena_cache_release import arena_cache_release_operation
 from bindings.arena_resident_native import arena_resident_operation
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.native_loaded_module import native_namespace_string_keys
+from bindings.p3_array_arena_records import P3_ROWS_LAYOUT, p3_layout_admitted, p3_layout_admit
 
 
 def _rows_metadata_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -24,29 +26,32 @@ def _rows_metadata_fields(value: PythonObject, context: PythonObject) raises -> 
     var cls = py_type(value)
     if py_type(cls) is not b["type"]:
         raise Error("TypeError: DeviceRows requires a native metadata class")
-    var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
     var expected = context["maxabs_rows_class"]
     var descriptor = context["maxabs_rows_dict"]
-    if len(ancestry) < 2 or ancestry[len(ancestry)-2] is not expected or ancestry[len(ancestry)-1] is not b["object"]:
-        raise Error("TypeError: DeviceRows requires its ordinary class or a subclass without mixed-in protocols")
-    for i in range(len(ancestry)-1):  # driver-loop: admit ordinary subclass layouts without invoking their descriptors
-        var mapping = py_call(b["type"].__dict__["__dict__"].__get__,ancestry[i])
-        var keys = py_call(b["list"],mapping)
-        for j in range(len(keys)):  # driver-loop: class keys precede lookup that could invoke application equality
-            if py_type(keys[j]) is not b["str"]:
-                raise Error("TypeError: DeviceRows class keys must be native strings")
-        if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
-            raise Error("TypeError: DeviceRows cannot invoke attribute or lifecycle hooks")
-        var dictionary = py_get(mapping,"__dict__")
-        if dictionary is not None and dictionary is not descriptor:
-            raise Error("TypeError: DeviceRows requires its native dictionary descriptor")
+    # p3-array-arena: the class rows are admitted once per class state (type
+    # watcher; a modification of the class or any ancestor re-runs it).
+    if not p3_layout_admitted(P3_ROWS_LAYOUT, cls, descriptor):
+        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+        if len(ancestry) < 2 or ancestry[len(ancestry)-2] is not expected or ancestry[len(ancestry)-1] is not b["object"]:
+            raise Error("TypeError: DeviceRows requires its ordinary class or a subclass without mixed-in protocols")
+        for i in range(len(ancestry)-1):  # driver-loop: admit ordinary subclass layouts without invoking their descriptors
+            var mapping = py_call(b["type"].__dict__["__dict__"].__get__,ancestry[i])
+            var keys = py_call(b["list"],mapping)
+            for j in range(len(keys)):  # driver-loop: class keys precede lookup that could invoke application equality
+                if py_type(keys[j]) is not b["str"]:
+                    raise Error("TypeError: DeviceRows class keys must be native strings")
+            if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
+                raise Error("TypeError: DeviceRows cannot invoke attribute or lifecycle hooks")
+            var dictionary = py_get(mapping,"__dict__")
+            if dictionary is not None and dictionary is not descriptor:
+                raise Error("TypeError: DeviceRows requires its native dictionary descriptor")
+        p3_layout_admit(P3_ROWS_LAYOUT, cls, descriptor)
     var fields = py_call(descriptor.__get__,value,expected)
     if py_type(fields) is not b["dict"]:
         raise Error("TypeError: DeviceRows requires a native metadata dictionary")
-    var keys = py_call(b["list"],fields)
-    for i in range(len(keys)):  # driver-loop: reject metadata key protocols before field lookup or replacement
-        if py_type(keys[i]) is not b["str"]:
-            raise Error("TypeError: DeviceRows metadata keys must be native strings")
+    # Instance keys: one native dictionary walk, no key list.
+    if not native_namespace_string_keys(fields._obj_ptr, b["str"]):
+        raise Error("TypeError: DeviceRows metadata keys must be native strings")
     return fields
 
 
