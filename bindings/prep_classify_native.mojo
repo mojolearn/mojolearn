@@ -27,6 +27,7 @@ from bindings.classical_validate import classical_view
 from bindings.prep_lda_admission import (
     lda_native_fields, lda_native_labels, lda_native_context, lda_native_initialize,
     lda_native_get_params, lda_native_set_params, lda_require_fitted,
+    lda_native_fields_plain, prep_plain_classes,
 )
 from bindings.classifier_public_lifecycle import classifier_label_list, classifier_after_fit
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result, lifecycle_fitting
@@ -1444,16 +1445,31 @@ def _class_counts(mut pr: ClsProg, co: Int, n: Int, K: Int) -> Int:
 # ---------------------------------------------------------------- the door
 
 
-def _dispatch(model: PythonObject, operation: String, var args: PythonObject, var context: PythonObject) raises -> PythonObject:
+def _kind_of(model: PythonObject, context: PythonObject) raises -> String:
+    # `cls_kind`: an exact public class is the MRO's first row, answered by
+    # one lookup without the MRO read; a subclass walks the MRO (perf2-prep).
+    var own = py_get(context["cls_kinds"], py_type(model))
+    if own is not None:
+        return String(own)
+    return cls_kind(model, context)
+
+
+def _dispatch(model: PythonObject, operation: String, var args: PythonObject, var context: PythonObject,
+              known: String = "") raises -> PythonObject:
+    # `known`: the kind the caller already resolved for this model (the
+    # public naive Bayes / QDA door), so the MRO is not read twice.
     if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
         raise Error("TypeError: native classifiers cannot invoke Python metaclass hooks")
-    var kind = cls_kind(model, context)
+    var kind = known if known != "" else _kind_of(model, context)
     var fields: PythonObject
     if kind == "lda":
         context = lda_native_context(context)
         if operation == "initialize":
             return lda_native_initialize(model, args, context)
-        fields = lda_native_fields(model, context, operation == "is_fitted" or operation == "get_params" or operation == "set_params")
+        # One admission pass per fitted state (a per-model record), and the
+        # plain classes_ list it read is reused below instead of a second copy.
+        var admitted = lda_native_fields_plain(model, context, operation == "is_fitted" or operation == "get_params" or operation == "set_params")
+        fields = admitted[0]
         if operation == "is_fitted":
             return classical_is_fitted(model)
         if operation == "get_params":
@@ -1461,12 +1477,15 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
         if operation == "set_params":
             return lda_native_set_params(model, fields, args[0], context)
         if operation == "fit" or operation == "fit_transform" or operation == "score":
-            args = Python.tuple(args[0], classifier_label_list(args[1], context))
+            args = Python.tuple(args[0], prep_plain_classes(args[1], context))
             lda_native_labels(args[1], context, operation != "score")
         if operation != "fit" and operation != "fit_transform":
             lda_require_fitted(model, operation, context)
+            var plain = admitted[1]
             fields = py_call(native_loaded_module("builtins").dict, fields)
-            py_setitem(fields, "classes_", classifier_label_list(fields["classes_"], context))
+            if plain is None:
+                plain = prep_plain_classes(fields["classes_"], context)
+            py_setitem(fields, "classes_", plain)
     elif kind == "gnb" and py_get(context, "cv_fixed_owner") is not None:
         context = fixed_owner_context(context)
         fields = fixed_owner_fields(model, context)
@@ -1528,7 +1547,7 @@ def _public_kind(model: PythonObject, context: PythonObject) raises -> String:
     var b = native_loaded_module("builtins")
     if py_type(py_type(model)) is not b.type or py_get(context, "cv_fixed_owner") is not None:
         return ""
-    var kind = cls_kind(model, context)
+    var kind = _kind_of(model, context)
     if kind == "gnb" or kind == "mnb" or kind == "bnb" or kind == "cnb" or kind == "cat" or kind == "qda":
         return kind
     return ""
@@ -1547,7 +1566,7 @@ def _classifier_public(model: PythonObject, kind: String, operation: String, arg
     var depth = lifecycle_begin(model, operation, source, True, sparse_ok, True, context)
     var fields = py_fields(model)
     var public_labels = py_get(fields, "classes_")
-    var plain = classifier_label_list(public_labels, context)
+    var plain = prep_plain_classes(public_labels, context)
     var swapped = plain is not public_labels
     var result = PythonObject(None)
     try:
@@ -1555,7 +1574,7 @@ def _classifier_public(model: PythonObject, kind: String, operation: String, arg
             lda_native_labels(args[1], lda_native_context(context), True, classical_estimator_name(model))
         if swapped:
             py_setitem(fields, "classes_", plain)
-        result = _dispatch(model, operation, args, context)
+        result = _dispatch(model, operation, args, context, kind)
     finally:
         lifecycle_end(model, operation, depth)
         if swapped:
