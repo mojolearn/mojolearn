@@ -3933,6 +3933,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                    MOJOLEARN_REQUIREMENTS_LEDGER=str(self.readiness().path))
         if getattr(self.args, "owner_waiver", None):
             env["MOJOLEARN_OWNER_WAIVER"] = str(Path(self.args.owner_waiver).resolve())
+        if self.single() and (self.admitted() or {}).get("repacked"):
+            # the publish admission accepts the data-only repack of a qualified wheel by its receipt
+            env["MOJOLEARN_REPACK_RECEIPTS"] = ":".join(sorted(self.admitted()["repacked"].values()))
         notes = self.smoke_notes(platform)
         if notes:
             env["MOJOLEARN_ALPHA_SMOKE_NOTES"] = json.dumps(notes, sort_keys=True)

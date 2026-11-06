@@ -178,6 +178,9 @@ PYTHON=$GATE_TREE/.pixi/envs/default/bin/python3
 
 PHASE=build
 mkdir -p "$GATE_WORK/out"
+if [ "${GATE_BUILD_AUTOGRAD:-1}" = 0 ]; then
+    say "no compiled autograd check is owed (units plan): nothing is built"
+else
 say "building the autograd executables: ${BUILD_ARGV[*]}"
 brc=0
 timeout "${GATE_BUILD_MINUTES}m" "$PIXI" run -e default "$PYTHON" "${BUILD_ARGV[@]}" > "$J/autograd-build.log" 2>&1 || brc=$?
@@ -189,6 +192,7 @@ if [ "$brc" != 0 ] && [ "${GATE_REUSE:-0}" = 1 ] && [ "$brc" != 124 ]; then
 fi
 [ "$brc" = 0 ] || { say "the autograd build exited $brc"; tail -n 20 "$J"/autograd-build*.log; exit "$brc"; }
 say "autograd executables built: $GATE_WORK/out/autograd-bin"
+fi
 
 PHASE=overlay
 if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
@@ -215,10 +219,21 @@ if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
 fi
 
 PHASE=gate
-say "gate: python3 ${GATE_ARGV[*]}"
 grc=0
-python3 "${GATE_ARGV[@]}" > "$J/gate.log" 2>&1 || grc=$?
-tail -n 5 "$J/gate.log"
+if [ "${GATE_UNITS:-0}" = 1 ]; then
+    # THE DEVICE CHECKS AS UNITS (tools/release_check_units.py): exactly the units the Mac's plan owes, in the
+    # identity phase's venv (the same installed wheel bytes); no gate stage list, nothing twice
+    whl=(); for w in "${GATE_WHEELS[@]}"; do whl+=(--wheel "$w"); done
+    say "check units: python3 tools/release_check_units.py run --plan $IN/units-plan.json"
+    python3 tools/release_check_units.py run --plan "$IN/units-plan.json" --python "$GATE_WORK/identity-venv/bin/python" \
+        "${whl[@]}" --bin-dir "$GATE_WORK/out/autograd-bin" --version "$GATE_VERSION" \
+        --source-commit "$GATE_SOURCE_COMMIT" --out "$GATE_WORK/out/units" > "$J/units.log" 2>&1 || grc=$?
+    grep -E '^check-units:' "$J/units.log" | head -n 5 || true
+else
+    say "gate: python3 ${GATE_ARGV[*]}"
+    python3 "${GATE_ARGV[@]}" > "$J/gate.log" 2>&1 || grc=$?
+    tail -n 5 "$J/gate.log"
+fi
 
 PHASE=runtime-qualify
 # runtime-<vendor> evidence for the ledger (tools/release_runtime_installed.py run: fresh venv, the exact

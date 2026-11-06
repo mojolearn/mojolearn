@@ -99,7 +99,7 @@ def repack(wheel, table_path, out_dir):
     if after[TABLE_MEMBER] != sha256(table):
         out.unlink()
         raise RepackError("the repacked table is not the admitted table")
-    return dict(schema=SCHEMA, input=dict(file=wheel.name, sha256=sha256(wheel.read_bytes())),
+    return dict(schema=SCHEMA, input=dict(file=wheel.name, path=str(wheel.resolve()), sha256=sha256(wheel.read_bytes())),
                 output=dict(file=out.name, path=str(out), sha256=sha256(out.read_bytes())),
                 table=dict(member=TABLE_MEMBER, old_sha256=sha256(old_table), new_sha256=sha256(table),
                            source=str(Path(table_path).resolve())),

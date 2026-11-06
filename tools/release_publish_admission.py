@@ -78,6 +78,41 @@ def source_revision(root, source):
     return actual
 
 
+#: tools/release.py --identity-on-wheels: the data-only repack receipts (tools/wheel_table_repack.py) of the wheels
+#: whose admitted reference table was repacked after qualification, colon separated
+REPACK_ENV = "MOJOLEARN_REPACK_RECEIPTS"
+
+
+def repacked_from(path, found, qualified_hashes, receipts=None):
+    """(receipt sha256, input sha256) when PATH (sha256 FOUND) is a data-only repack of a qualified wheel: a receipt
+    names FOUND as its output and a qualified hash as its input, the input file is still those bytes, and every
+    member but the reference table and RECORD (the native members included) is byte-identical in the two wheels.
+    None when no receipt names it. A receipt that names it but does not hold is refused, never ignored."""
+    import wheel_table_repack as W
+    paths = receipts if receipts is not None else [p for p in os.environ.get(REPACK_ENV, "").split(":") if p]
+    for receipt_path in paths:
+        doc = json.loads(Path(receipt_path).read_text())
+        if doc.get("schema") != W.SCHEMA or (doc.get("output") or {}).get("sha256") != found:
+            continue
+        if Path(doc["output"]["file"]).name != Path(path).name:
+            raise ValueError("repack receipt names another file: " + Path(receipt_path).name)
+        source = Path((doc.get("input") or {}).get("path") or "/nonexistent")
+        if doc["input"].get("sha256") not in qualified_hashes:
+            raise ValueError("repack receipt input is not a qualified artifact: " + Path(path).name)
+        if not source.is_file() or sha256(source) != doc["input"]["sha256"]:
+            raise ValueError("repack receipt input bytes are gone or changed: " + str(source))
+        before, after = W.members(source), W.members(path)
+        record = [n for n in before if n.endswith(".dist-info/RECORD")]
+        moved = sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n)
+                       and n != W.TABLE_MEMBER and n not in record)
+        if moved or set(before) != set(after):
+            raise ValueError("repacked wheel changed more than the reference table: " + ", ".join(moved[:5]))
+        if any(after.get(n) != d for n, d in (doc.get("native_members") or {}).items()):
+            raise ValueError("repacked wheel native members differ from the receipt")
+        return sha256(receipt_path), doc["input"]["sha256"]
+    return None
+
+
 def wheel_identity(path, version, source, configuration):
     """Bind published bytes to qualified artifacts; audit file-free metadata separately."""
     path = Path(path)
@@ -120,13 +155,22 @@ def wheel_identity(path, version, source, configuration):
     qualified = [mapping for key, mapping in configuration.items()
                  if key.startswith("artifacts:") and isinstance(mapping, dict)
                  and (mapping.get(name) == found or mapping.get(path.name) == found)]
+    repack = None
     if not is_meta and not qualified:
+        hashes = {v for key, mapping in configuration.items() if key.startswith("artifacts:") and isinstance(mapping, dict)
+                  for v in mapping.values()}
+        repack = repacked_from(path, found, hashes)
+    if not is_meta and not qualified and not repack:
         raise ValueError("published wheel hash is absent from the qualified artifact inputs: " + path.name)
     if is_meta and not all(isinstance(configuration.get("artifacts:" + vendor), dict)
                            for vendor in ("nvidia", "amd")):
         raise ValueError("metadata wheel requires the qualified NVIDIA and AMD artifact sets")
-    return dict(file=path.name, distribution=name, version=version, sha256=found, source_revision=source,
-                scope="file-free pinned dependencies" if is_meta else "qualified artifact bytes")
+    out = dict(file=path.name, distribution=name, version=version, sha256=found, source_revision=source,
+               scope="file-free pinned dependencies" if is_meta else "qualified artifact bytes")
+    if repack:
+        out.update(scope="qualified artifact bytes with the admitted reference table repacked",
+                   repack_receipt_sha256=repack[0], qualified_sha256=repack[1])
+    return out
 
 
 def verify_ledger(ledger_path, root, source, *, log_dir=None):
