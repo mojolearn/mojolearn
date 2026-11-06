@@ -38,7 +38,11 @@ from bindings.trees_public_inputs import (
 )
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32
 from bindings.metrics_native_support import metric_is_integral
-from bindings.trees_public_forest import forest_predict, forest_effective_mode, forest_kind
+from bindings.trees_public_forest import (
+    forest_predict, forest_predict_codes, forest_public_predict, forest_effective_mode, forest_kind,
+)
+from bindings.trees_public_inputs import trees_decode_labels
+from bindings.classifier_public_lifecycle import classifier_label_list
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -511,12 +515,28 @@ def trees_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight
     """`_expansion_metrics.accuracy_fraction(y_true, prediction,
     sample_weight, mode)`: the (weighted) matched fraction from the device
     COUNT tail."""
-    var b = trees_builtins()
     var caller = String("accuracy_score")
     _refuse_multilabel(y_true, "y_true", caller, context)
     _refuse_multilabel(prediction, "y_pred", caller, context)
     var true = _classification_encoded(y_true, "y_true", context)
     var pred = _classification_encoded(prediction, "y_pred", context)
+    return _accuracy_encoded(true, pred, sample_weight, mode, context)
+
+
+def trees_accuracy_labels(y_true: PythonObject, pred: ScoreLabels, sample_weight: PythonObject, mode: PythonObject,
+                          context: PythonObject) raises -> Float64:
+    """`trees_accuracy` with the prediction already encoded (a classifier's
+    own class codes): y_true is checked and encoded as before."""
+    var caller = String("accuracy_score")
+    _refuse_multilabel(y_true, "y_true", caller, context)
+    var true = _classification_encoded(y_true, "y_true", context)
+    return _accuracy_encoded(true, pred, sample_weight, mode, context)
+
+
+def _accuracy_encoded(true: ScoreLabels, pred: ScoreLabels, sample_weight: PythonObject, mode: PythonObject,
+                      context: PythonObject) raises -> Float64:
+    var b = trees_builtins()
+    var caller = String("accuracy_score")
     if true.n != pred.n:
         raise Error("mojolearn " + caller + ": y_true and y_pred lengths differ")
     if true.kind != pred.kind:
@@ -605,26 +625,87 @@ def _owned_f32(w: TreesMatrix, context: PythonObject) raises -> PythonObject:
 def forest_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`ForestProtocol.score(X, y, sample_weight)`: the forest's predict and
     the accuracy (classifiers) or float32 R^2 (regressors) in one call."""
-    var X = args[0]
-    var y = args[1]
-    var sample_weight = args[2]
+    var shape = trees_shape_of(args[1], context)
+    if len(shape) != 1:
+        raise Error("score requires one-dimensional targets")
+    if forest_kind(model, context).endswith("_classifier"):
+        return _score_codes(model, forest_predict_codes(model, Python.tuple(args[0]), context), args[1], args[2],
+                            shape[0], context)
+    return _score_values(model, forest_predict(model, Python.tuple(args[0]), context), args[1], args[2], shape[0],
+                         context)
+
+
+def forest_score_public(model: PythonObject, kind: String, x: TreesMatrix, y: PythonObject,
+                        sample_weight: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`forest_score` over the X the public door already admitted and
+    checked (no second view or width check)."""
     var shape = trees_shape_of(y, context)
     if len(shape) != 1:
         raise Error("score requires one-dimensional targets")
-    var prediction = forest_predict(model, Python.tuple(X), context)
+    if kind.endswith("_classifier"):
+        return _score_codes(model, forest_public_predict(model, kind, x, False, True, context), y, sample_weight,
+                            shape[0], context)
+    return _score_values(model, forest_public_predict(model, kind, x, False, False, context), y, sample_weight,
+                         shape[0], context)
+
+
+def _score_values(model: PythonObject, prediction: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                  n: Int, context: PythonObject) raises -> PythonObject:
     var rows = Int(py=prediction.shape[0]) if py_type(prediction) is context["array_class"] else len(prediction)
-    if rows != shape[0]:
+    if rows != n:
         raise Error("score target and prediction lengths differ")
-    var fields = py_fields(model)
-    var mode = PythonObject(forest_effective_mode(fields, context))
-    if forest_kind(model, context).endswith("_classifier"):
-        return PythonObject(trees_accuracy(y, prediction, sample_weight, mode, context))
+    var mode = PythonObject(forest_effective_mode(py_fields(model), context))
     var y32 = trees_f32(y, 1, "C", "y", context)
     var p32 = trees_f32(prediction, 1, "C", "prediction", context)
     var result = trees_r2(_as_array(y32, context), _as_array(p32, context), sample_weight, mode, context)
     _ = y32^
     _ = p32^
     return PythonObject(result)
+
+
+def _score_codes(model: PythonObject, pair: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                 n: Int, context: PythonObject) raises -> PythonObject:
+    """A classifier's accuracy from its `(classes_, codes)` prediction.
+    String classes are scored in codes (lane perf-trees-owed, 2026-11-06):
+    before, each row was decoded to its class string, then each string
+    re-read, type-checked and looked up again. The distinct predicted codes
+    come from one native encode of the code buffer, their class strings
+    form the prediction's label set, and `_codes` maps them through one
+    gather, so the label set, the codes and the device program are the
+    ones the decoded strings produced. Any other classes decode as before."""
+    var classes = pair[0]
+    var codes = pair[1]
+    var rows = Int(py=codes.size)
+    if rows != n:
+        raise Error("score target and prediction lengths differ")
+    var mode = PythonObject(forest_effective_mode(py_fields(model), context))
+    var encoded = _string_class_codes(classes, codes, rows, context)
+    if encoded:
+        return PythonObject(trees_accuracy_labels(y, encoded.value(), sample_weight, mode, context))
+    return PythonObject(trees_accuracy(y, trees_decode_labels(classes, codes, context), sample_weight, mode, context))
+
+
+def _string_class_codes(classes: PythonObject, codes: PythonObject, rows: Int,
+                        context: PythonObject) raises -> Optional[ScoreLabels]:
+    """The prediction as encoded string labels: the predicted classes (each
+    an exact str) and one int32 code per row into them; None when a class is
+    not an exact str or a code is out of range (the decode then reports it)."""
+    var labels = classifier_label_list(classes, context)
+    var k = len(labels)
+    if k == 0 or rows < 1:
+        return None
+    var str_t = trees_builtins().str
+    for c in range(k):  # driver-loop: over the k fitted classes
+        if py_type(labels[c]) is not str_t:
+            return None
+    var present = _native_labels(_view_of_array(codes), False, context)
+    var values = Python.list()
+    for j in range(len(present.classes)):  # driver-loop: over the distinct predicted codes
+        var c = Int(py=present.classes[j])
+        if c < 0 or c >= k:
+            return None
+        _ = py_call(values.append, labels[c])
+    return ScoreLabels(True, values, present.codes, PythonObject(None), rows, "string")
 
 
 def _as_array(m: TreesMatrix, context: PythonObject) raises -> PythonObject:
