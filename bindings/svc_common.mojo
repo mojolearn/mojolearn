@@ -27,6 +27,7 @@ from bindings.classical_labels import _pandas_values, labels_type_name
 from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
 from bindings.classical_labels import labels_encode_labels, labels_accuracy
 from bindings.label_admission_native import classifier_label_list
+from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
     family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr, family_f32_snapshot,
@@ -246,44 +247,43 @@ def svc_label_kind(classes: PythonObject, context: PythonObject) raises -> Int:
     return 0 if kind == "int" else 1 if kind == "float" else 2
 
 
-def svc_decode(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_labels.decode_labels(classes, codes)` for an int64 code Array this
-    owner made: an int64 Array for int classes, a float64 Array for real
-    classes (the base binding's `gather_i64` / `gather_f64`), the list of
-    label objects otherwise."""
+def _svc_class_table(classes: PythonObject, kind: Int, context: PythonObject) raises -> PythonObject:
+    """The int64 (kind 0) / float64 (kind 1) gather table of the label list
+    `classes`, or None when a class does not pack (or kind 2)."""
     var b = svc_builtins()
-    classes = classifier_label_list(classes, context)
-    var kind = svc_label_kind(classes, context)
+    var k = len(classes)
+    if kind >= 2 or k == 0:
+        return PythonObject(None)
+    var table = family_array(Python.tuple(PythonObject(k)), "<i8" if kind == 0 else "<f8", context)
+    for i in range(k):  # driver-loop: over the fitted classes
+        try:
+            if kind == 0:
+                var value = py_call(b.int, classes[i])
+                if Bool(py=value < PythonObject(-9223372036854775807 - 1)) or Bool(py=value > PythonObject(9223372036854775807)):
+                    return PythonObject(None)
+                FAMILY_I64P(unsafe_from_address=Int(py=classical_address(table)))[i] = Int64(Int(py=value))
+                _ = table  # keep the Python object alive through the native call above
+            else:
+                FAMILY_F64P(unsafe_from_address=Int(py=classical_address(table)))[i] = Float64(py=py_call(b.float, classes[i]))
+                _ = table  # keep the Python object alive through the native call above
+        except:
+            return PythonObject(None)
+    return table
+
+
+def _svc_decode_with(classes: PythonObject, kind: Int, table: PythonObject, codes: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    var b = svc_builtins()
     var n = Int(py=codes.size)
     var k = len(classes)
-    if kind < 2 and k > 0:
-        var table = family_array(Python.tuple(PythonObject(k)), "<i8" if kind == 0 else "<f8", context)
-        var packed = True
-        for i in range(k):  # driver-loop: over the fitted classes
-            if not packed:
-                continue
-            try:
-                if kind == 0:
-                    var value = py_call(b.int, classes[i])
-                    if Bool(py=value < PythonObject(-9223372036854775807 - 1)) or Bool(py=value > PythonObject(9223372036854775807)):
-                        packed = False
-                    else:
-                        FAMILY_I64P(unsafe_from_address=Int(py=classical_address(table)))[i] = Int64(Int(py=value))
-                        _ = table  # keep the Python object alive through the native call above
-                else:
-                    FAMILY_F64P(unsafe_from_address=Int(py=classical_address(table)))[i] = Float64(py=py_call(b.float, classes[i]))
-                    _ = table  # keep the Python object alive through the native call above
-            except:
-                packed = False
-        if packed:
-            var out = family_array(Python.tuple(PythonObject(n)), "<i8" if kind == 0 else "<f8", context)
-            if n > 0:
-                _ = family_call(svc_base("gather_i64" if kind == 0 else "gather_f64", context), classical_address(table),
-                                PythonObject(k), classical_address(codes), PythonObject(n), classical_address(out))
-                _ = table  # keep the Python object alive through the native call above
-                _ = out  # keep the Python object alive through the native call above
-            _ = table^
-            return out
+    if table is not None:
+        var out = family_array(Python.tuple(PythonObject(n)), "<i8" if kind == 0 else "<f8", context)
+        if n > 0:
+            _ = family_call(svc_base("gather_i64" if kind == 0 else "gather_f64", context), classical_address(table),
+                            PythonObject(k), classical_address(codes), PythonObject(n), classical_address(out))
+            _ = table  # keep the Python object alive through the native call above
+            _ = out  # keep the Python object alive through the native call above
+        return out
     # the label output step: the class objects, one per code (C-level map
     # over the int64 store)
     var values = family_call(b.list, family_call(b.map, py_attr(classes, "__getitem__"), codes._store))
@@ -295,6 +295,34 @@ def svc_decode(var classes: PythonObject, codes: PythonObject, context: PythonOb
         return classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i8" if kind == 0 else "<f8", "C", context)
     except:
         return values
+
+
+def svc_decode(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_labels.decode_labels(classes, codes)` for an int64 code Array this
+    owner made: an int64 Array for int classes, a float64 Array for real
+    classes (the base binding's `gather_i64` / `gather_f64`), the list of
+    label objects otherwise."""
+    classes = classifier_label_list(classes, context)
+    var kind = svc_label_kind(classes, context)
+    return _svc_decode_with(classes, kind, _svc_class_table(classes, kind, context), codes, context)
+
+
+comptime _SVC_CLASS_TABLE_SLOT = "svc_class_table_v1"
+
+
+def svc_decode(owner: PythonObject, var classes: PythonObject, codes: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """`svc_decode(classes, codes)` for the fitted `owner`: the label kind and
+    the gather table are built once per class list (the same label objects),
+    kept in a weak-keyed native record (bindings/gp_svm_records.mojo)
+    instead of being rebuilt with a per-class conversion on every predict."""
+    classes = classifier_label_list(classes, context)
+    var built = gpsvm_class_table(owner, _SVC_CLASS_TABLE_SLOT, classes)
+    if built is None:
+        var kind = svc_label_kind(classes, context)
+        built = Python.tuple(PythonObject(kind), _svc_class_table(classes, kind, context))
+        gpsvm_class_table_put(owner, _SVC_CLASS_TABLE_SLOT, classes, built)
+    return _svc_decode_with(classes, Int(py=built[0]), built[1], codes, context)
 
 
 def svc_threshold_codes(scores: PythonObject, threshold: Float64, strict: Bool, below: Int, above: Int,

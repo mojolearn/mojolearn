@@ -18,6 +18,7 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_isinstance, family_call, family_entry, family_array, family_min,
 )
 from core.family_weights_impl import family_fill_f32
+from bindings.gp_svm_records import ocsvm_coef_reused, ocsvm_coef_remember
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_has, svc_float, svc_int, svc_truthy, svc_base, svc_prefix, svc_scalar_array,
     svc_read_f32, svc_read_i32, svc_f32,
@@ -287,8 +288,15 @@ def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObje
     var q = svc_f32(source, 2, "X", True, context)[0]
     var dual = svc_field(fields, "dual_coef_")
     var n_sv = Int(py=dual.shape[1])
-    # the (n_sv, 1) column of the C-order float32 coefficients
-    var coef = svc_f32(dual, 2, "dual_coef_", False, context)[0]
+    # the (n_sv, 1) column of the C-order float32 coefficients. The fitted
+    # coefficient Array is already one: its snapshot is skipped while it is
+    # the same object it was last call (bindings/gp_svm_records.mojo).
+    var coef: PythonObject
+    if ocsvm_coef_reused(model, dual):
+        coef = dual
+    else:
+        coef = svc_f32(dual, 2, "dual_coef_", False, context)[0]
+        ocsvm_coef_remember(model, dual, coef)
     var kernel = svc_field(fields, "kernel")
     var precomputed = String(kernel) == "precomputed"
     var nq = Int(py=q.shape[0])

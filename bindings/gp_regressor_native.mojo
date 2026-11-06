@@ -19,6 +19,7 @@ from bindings.metrics_native_support import metric_warn, metric_is_integral, met
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
+from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
@@ -394,7 +395,9 @@ def _gpr_fitted(fields: PythonObject, message: String) raises:
 
 def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`as_f32_c(X, ndim=2, name="X")` with the fitted feature count."""
-    var q = family_as_f32(source, 2, "X", context)
+    # The public door already admitted this X as C-order float32 and
+    # registered it (bindings/gp_svm_records.mojo): no second snapshot.
+    var q = source if gp_x_known(source, context) else family_as_f32(source, 2, "X", context)
     var d = Int(py=q.shape[1])
     var fitted = Int(py=fields["n_features_in_"])
     if d != fitted:
@@ -429,7 +432,7 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var n_star = Int(py=q.shape[0])
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
-    var arrays = gp_kernel_arrays(gp_model_kernel(fields), context)
+    var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     var mean = family_array(Python.tuple(n_star), "<f4", context)
     var var_out = family_array(Python.tuple(n_star), "<f4", context)
     var std = family_array(Python.tuple(n_star), "<f4", context)
@@ -483,7 +486,7 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
     var n_star = Int(py=q.shape[0])
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
-    var arrays = gp_kernel_arrays(gp_model_kernel(fields), context)
+    var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     var ext = _gpr_ext(model, args[0], context)
     var entry = neural_descriptor_entry(ext, "gpr_predict_cov", False)
     if entry is None:
@@ -543,7 +546,7 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     var n_star = Int(py=q.shape[0])
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
-    var arrays = gp_kernel_arrays(gp_model_kernel(fields), context)
+    var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     # Never a zero-length buffer: a refused n still addresses real memory
     # (the binding refuses n_samples < 1 by name).
     var out = family_array(Python.tuple(n_star, n) if n_star * n >= 1 else Python.tuple(1), "<f4", context)

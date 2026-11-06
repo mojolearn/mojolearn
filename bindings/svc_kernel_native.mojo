@@ -34,6 +34,7 @@ from bindings.classical_arrays import classical_address, classical_is_array, cla
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_attributes import _type_mro
 from bindings.mode_metadata_native import _class_fields
+from bindings.gp_svm_records import gpsvm_no_fit_callbacks
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_arrays import classical_typed
 from bindings.classical_labels import labels_cast, labels_real_type
@@ -1062,7 +1063,8 @@ def _run(fields: PythonObject, binding: PythonObject, source: PythonObject, pred
     _ = out  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
-    _svc_publish_dispatch(fields, native, context)
+    # The dispatch diagnostic is published once, by svc_kernel_operation,
+    # after the operation (it published it twice per predict).
     return out
 
 
@@ -1093,7 +1095,7 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
         _ = dec  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
-    _svc_publish_dispatch(fields, native, context)
+    # The dispatch diagnostic is published once, by svc_kernel_operation.
     return dec
 
 
@@ -1163,7 +1165,7 @@ def _svc_decision(fields: PythonObject, binding: PythonObject, source: PythonObj
                      Python.tuple(PythonObject(n_rows), PythonObject(k)), "<f8", PythonObject(None), 0.0, context, native)
 
 
-def _svc_predict(fields: PythonObject, binding: PythonObject, source: PythonObject,
+def _svc_predict(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
                  context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVC.predict`: the binary epilogue's codes, or the one-vs-one vote
     (the 'ovr' argmax with break_ties)."""
@@ -1174,7 +1176,7 @@ def _svc_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
         var codes = _epilogue(fields, binding, _EPI_BINARY, raw, 1, n_rows, _binary_codes(context),
                               Python.tuple(PythonObject(n_rows)), "<i8", PythonObject(None),
                               svc_float(svc_field(fields, "_label1")), context, native)
-        return svc_decode(svc_field(fields, "classes_"), codes, context)
+        return svc_decode(model, svc_field(fields, "classes_"), codes, context)
     var dec = _pair_decisions(fields, binding, source, context, native)
     var n_pairs = Int(py=dec.shape[0])
     var n_rows = Int(py=dec.shape[1])
@@ -1184,8 +1186,9 @@ def _svc_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
     if svc_truthy(svc_field(fields, "_hp_break_ties")):
         var scores = _epilogue(fields, binding, _EPI_OVR, dec, n_pairs, n_rows, pc,
                                Python.tuple(PythonObject(n_rows), PythonObject(k)), "<f8", PythonObject(None), 0.0, context, native)
-        return svc_decode(classes, svc_argmax_rows(scores, context), context)
-    return svc_decode(classes, _epilogue(fields, binding, _EPI_VOTES, dec, n_pairs, n_rows, pc,
+        return svc_decode(model, classes, svc_argmax_rows(scores, context), context)
+    # The class table is built once per class list of this model.
+    return svc_decode(model, classes, _epilogue(fields, binding, _EPI_VOTES, dec, n_pairs, n_rows, pc,
                                          Python.tuple(PythonObject(n_rows)), "<i8", PythonObject(None), 0.0, context, native),
                       context)
 
@@ -1465,12 +1468,8 @@ def _svm_lifecycle_admit(model: PythonObject, fields: PythonObject, context: Pyt
     var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
     if py_type(fitted) is not b.bool and py_type(fitted) is not b.int:
         raise Error("TypeError: SVM fitted state requires a native boolean or integer")
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from native fit
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: SVM fitting cannot invoke Python completion callbacks")
-    if py_contains(fields, "_mojolearn_after_fit"):
-        raise Error("TypeError: SVM fitting cannot invoke Python completion callbacks")
+    # The ancestry scan runs once per class state (bindings/gp_svm_records.mojo).
+    gpsvm_no_fit_callbacks(model, fields, "TypeError: SVM fitting cannot invoke Python completion callbacks")
 
 
 def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -1553,13 +1552,13 @@ def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonOb
     if operation == "family_svc_svc_decision":
         return _svc_decision(fields, args[0], args[1], context, native)
     if operation == "family_svc_svc_predict":
-        return _svc_predict(fields, args[0], args[1], context, native)
+        return _svc_predict(model, fields, args[0], args[1], context, native)
     if operation == "family_svc_svc_proba":
         return _svc_proba(fields, args[0], args[1], _EPI_PROBA, context, native)
     if operation == "family_svc_svc_log_proba":
         return _svc_proba(fields, args[0], args[1], _EPI_LOG_PROBA, context, native)
     if operation == "family_svc_svc_score":
-        var pred = _svc_predict(fields, args[0], args[1], context, native)
+        var pred = _svc_predict(model, fields, args[0], args[1], context, native)
         return PythonObject(svc_accuracy(args[2], pred, _pred_count(pred), context))
     if operation == "family_svc_svr_fit":
         _svr_fit(model, args, context, native)

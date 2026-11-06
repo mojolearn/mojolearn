@@ -25,6 +25,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import _flatten_labels
 from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
@@ -274,34 +275,37 @@ def _gp_label_kind(classes: PythonObject, context: PythonObject) raises -> Strin
     return "object"
 
 
-def gp_decode_labels(var classes: PythonObject, codes: PythonObject, base: PythonObject,
-                     context: PythonObject) raises -> PythonObject:
-    """`_labels.decode_labels(classes, codes)` for int64 codes (an Array of
-    shape (n,)): an int64 / float64 Array through the base binding's gather
-    for int / float classes, else the list of label objects."""
+def _gp_class_table(classes: PythonObject, context: PythonObject) raises -> PythonObject:
+    """(kind, packed `array` table or None) of an admitted label list: the
+    int64 / float64 gather table for int / float classes, None for object
+    classes or a class outside int64."""
     var b = native_loaded_module("builtins")
-    classes = classifier_label_list(classes, context)
-    classical_admit_value(classes, context)
     var kind = _gp_label_kind(classes, context)
     var k = len(classes)
-    var n = Int(py=codes.size)
+    var table = PythonObject(None)
     if (kind == "int" or kind == "float") and k > 0:
         var wide = Python.list()
         for i in range(k):  # driver-loop: over the distinct classes
             _ = py_call(wide.append, family_call(b.int if kind == "int" else b.float, classes[i]))
-        var table = PythonObject(None)
         try:
             table = py_call(context["array_type"], PythonObject(String("q") if kind == "int" else String("d")), wide)
         except:
             table = PythonObject(None)  # a class outside int64: the label objects come back
-        if table is not None:
-            var out = family_array(Python.tuple(n), String("<i8") if kind == "int" else String("<f8"), context)
-            _ = family_call(neural_descriptor_entry(base, String("gather_i64") if kind == "int" else String("gather_f64")),
-                            py_call(table.buffer_info)[0], PythonObject(k), classical_address(codes),
-                            PythonObject(n), classical_address(out))
-            _ = out  # keep the Python object alive through the native call above
-            _ = table^
-            return out
+    return Python.tuple(PythonObject(kind), table)
+
+
+def _gp_decode_with(classes: PythonObject, kind: String, table: PythonObject, codes: PythonObject,
+                    base: PythonObject, context: PythonObject) raises -> PythonObject:
+    var k = len(classes)
+    var n = Int(py=codes.size)
+    if (kind == "int" or kind == "float") and k > 0 and table is not None:
+        var out = family_array(Python.tuple(n), String("<i8") if kind == "int" else String("<f8"), context)
+        _ = family_call(neural_descriptor_entry(base, String("gather_i64") if kind == "int" else String("gather_f64")),
+                        py_call(table.buffer_info)[0], PythonObject(k), classical_address(codes),
+                        PythonObject(n), classical_address(out))
+        _ = out  # keep the Python object alive through the native call above
+        _ = table
+        return out
     var rows = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(codes)))
     var result = Python.list()
     for i in range(n):  # driver-loop: native code-to-label gather retains output objects
@@ -311,3 +315,32 @@ def gp_decode_labels(var classes: PythonObject, codes: PythonObject, base: Pytho
         _ = py_call(result.append, classes[index])
         _ = codes
     return result
+
+
+def gp_decode_labels(var classes: PythonObject, codes: PythonObject, base: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`_labels.decode_labels(classes, codes)` for int64 codes (an Array of
+    shape (n,)): an int64 / float64 Array through the base binding's gather
+    for int / float classes, else the list of label objects."""
+    classes = classifier_label_list(classes, context)
+    classical_admit_value(classes, context)
+    var built = _gp_class_table(classes, context)
+    return _gp_decode_with(classes, String(built[0]), built[1], codes, base, context)
+
+
+comptime _GP_CLASS_TABLE_SLOT = "gp_class_table_v1"
+
+
+def gp_decode_labels(owner: PythonObject, var classes: PythonObject, codes: PythonObject, base: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`gp_decode_labels(classes, codes, base)` for the fitted `owner`: the
+    label admission, kind and gather table are built once per class list
+    (the same label objects) and kept in a weak-keyed native record
+    (bindings/gp_svm_records.mojo), not on every predict."""
+    classes = classifier_label_list(classes, context)
+    var built = gpsvm_class_table(owner, _GP_CLASS_TABLE_SLOT, classes)
+    if built is None:
+        classical_admit_value(classes, context)
+        built = _gp_class_table(classes, context)
+        gpsvm_class_table_put(owner, _GP_CLASS_TABLE_SLOT, classes, built)
+    return _gp_decode_with(classes, String(built[0]), built[1], codes, base, context)
