@@ -19,33 +19,52 @@ from core.scaler_fit_impl import scaler_cast
 from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, host_sparse_coo, host_sparse_dia, host_sparse_uint64_bound
 
 
-def _sparse_class(module_name: String, name: String) raises -> PythonObject:
+def host_sparse_format(value: PythonObject) raises -> String:
+    # Perf: called for every array argument of most public calls, nearly
+    # always with a dense input. It used to resolve 14 candidate classes
+    # through _sparse_class, each re-admitting the builtins and sys
+    # connections (two namespace stamps) and reading the module dictionary
+    # through a Python call: ~50 stamps per argument. The connections are
+    # admitted once here, each loaded scipy.sparse._<fmt> module's dictionary
+    # is read natively, and a candidate's metaclass is checked only when it
+    # IS the value's class. Same matches as the former _sparse_class: an exact loaded
+    # module, a class whose metaclass is type or the exact loaded ABCMeta.
+    ref cpy = Python().cpython()
+    var cls = py_type(value)
     var b = native_loaded_module("builtins")
     var sys = native_loaded_module("sys")
-    var module = py_get(sys.modules, module_name)
-    if module is None or py_type(module) is not py_type(sys):
-        return PythonObject(None)
-    var cls = py_get(py_fields(module), name)
-    if py_type(cls) is b.type:
-        return cls
-    # SciPy's ordinary sparse classes use ABCMeta, unlike pandas' classes.
-    # Match its exact loaded identity; never call its __instancecheck__,
-    # __subclasscheck__, attribute hooks or class construction methods.
-    var abc_module = py_get(sys.modules, "abc")
-    if abc_module is not None and py_type(abc_module) is py_type(sys):
-        var abc_meta = py_get(py_fields(abc_module), "ABCMeta")
-        if py_type(abc_meta) is b.type and py_type(cls) is abc_meta:
-            return cls
-    return PythonObject(None)
-
-
-def host_sparse_format(value: PythonObject) raises -> String:
-    var cls = py_type(value)
-    var formats = Python.tuple("csr", "csc", "coo", "bsr", "dia", "dok", "lil")
+    var module_type = py_type(sys)
+    var modules = sys.modules
+    var abc_read = False
+    var abc_meta = PythonObject(None)
+    var formats: List[String] = ["csr", "csc", "coo", "bsr", "dia", "dok", "lil"]
     for i in range(len(formats)):  # driver-loop: seven supported native sparse storage schemas
-        var name = String(formats[i])
-        if cls is _sparse_class("scipy.sparse._" + name, name + "_matrix") or cls is _sparse_class("scipy.sparse._" + name, name + "_array"):
-            return name
+        var name = formats[i]
+        var module = py_get(modules, PythonObject("scipy.sparse._" + name))
+        if module is None or py_type(module) is not module_type:
+            continue
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        var fields = PythonObject(from_borrowed=raw)
+        var suffixes: List[String] = ["_matrix", "_array"]
+        for k in range(2):  # small-loop(matrix and array class of one format)
+            var candidate = py_get(fields, PythonObject(name + suffixes[k]))
+            if candidate is not cls:
+                continue
+            var meta = py_type(candidate)
+            if meta is b.type:
+                return name
+            if not abc_read:
+                abc_read = True
+                var abc_module = py_get(modules, PythonObject("abc"))
+                if abc_module is not None and py_type(abc_module) is module_type:
+                    var found = py_get(py_fields(abc_module), PythonObject("ABCMeta"))
+                    if py_type(found) is b.type:
+                        abc_meta = found
+            if abc_meta is not None and meta is abc_meta:
+                return name
+        _ = module
     return ""
 
 
