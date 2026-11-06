@@ -59,10 +59,10 @@ def _probe(entries: PythonObject) raises -> PythonObject:
 
 def samba_caps(entries: PythonObject) raises -> PythonObject:
     """The capability record of `entries`; probed once per compiled binding module."""
-    var canonical = entries.canonical
+    var canonical = py_call(native_loaded_module("builtins").getattr, entries, "canonical", PythonObject(None))
     if canonical is None:
-        # No binding connected: nothing to key on; the probe is cheap and the
-        # owner refuses at use anyway.
+        # No binding connected (or a namespace without one): nothing to key
+        # on; probe directly, as before.
         return _probe(entries)
     var mods = NativeModules()
     var record = prepared_get(mods, _SAMBA_CAPS_SLOT, canonical)

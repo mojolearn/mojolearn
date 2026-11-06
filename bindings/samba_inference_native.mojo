@@ -18,6 +18,7 @@ from bindings.samba_training_native import samba_ids
 from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
 from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
+from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_CHUNKED, SAMBA_CAP_AFN
 from bindings.causal_lm_construct import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.byte_perf_helpers import byte_view_bytes
@@ -195,12 +196,12 @@ def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries:
     var bi = native_loaded_module("builtins")
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)
-    var enabled = True
-    for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over existing resident-model capability entries
-        enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
-    if not enabled or not Bool(py=_native_function(entries, "samba_resident_enabled")()):
+    # Resident ABI and compile-time switches: one per-binding record read
+    # (bindings/p3_samba_caps.mojo), not five probes and two crossings per token.
+    var caps = samba_caps(entries)
+    if not (Bool(py=caps[SAMBA_CAP_RESIDENT_ABI]) and Bool(py=caps[SAMBA_CAP_RESIDENT_ON])):
         return PythonObject(None)
-    if Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")) and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")()):
+    if Bool(py=caps[SAMBA_CAP_CHUNKED]):
         return PythonObject(None)
     var session = py_get(fields, "_resident_handle")
     if session is None:
@@ -319,9 +320,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             hidden = result
         output = generation_array([b, l, v])
         var head = arrays["embed.weight"] if Bool(py=config["tie_embeddings"]) else arrays["lm_head.weight"]
-        var afn = state is None
-        for name in [String("samba_afn_norm_head_forward"), String("samba_afn_tail_train"), String("samba_afn_embedding_backward_tied")]:  # driver-loop: over the optional fused-tail ABI
-            afn = afn and Bool(py=py_call(bi.hasattr, entries, name))
+        var afn = state is None and Bool(py=samba_caps(entries)[SAMBA_CAP_AFN])
         if afn:
             var params = py_ints([b * l, v, d])
             _ = py_call(params.append, config["norm_eps"])
