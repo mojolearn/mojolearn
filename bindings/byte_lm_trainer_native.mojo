@@ -43,6 +43,7 @@ from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoin
 from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import neural_cast_i32_2d
+from bindings.byte_perf_helpers import byte_int_list_from_i64
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -1231,9 +1232,8 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
                 var source = _F32P(unsafe_from_address=output_address)
                 for row in range(batch):  # cpu-route: same strict first-max owner on each last real row
                     argmax_rows_f32(source + (row * length + admitted[3][row] - 1) * shape.vocab(), 1, shape.vocab(), MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(indices.unsafe_ptr()) + row * 8))
-            result = Python.list()
-            for row in range(batch):  # driver-loop: publish the completed native token outputs
-                _ = py_call(result.append, Int(indices[row]))
+            result = byte_int_list_from_i64(Int(indices.unsafe_ptr()), batch)
+            _ = indices^
         elif args[1] is not None:
             result = tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context)
             neural_copy_row_prefixes(Int(py=classical_address(result)), output_address, admitted[3], batch, length, shape.vocab())
