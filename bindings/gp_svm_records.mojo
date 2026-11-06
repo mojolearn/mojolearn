@@ -102,6 +102,54 @@ def gpsvm_context_key(key: PythonObject, context: PythonObject, names: List[Stri
         _ = py_call(key.append, py_get(context, PythonObject(names[i])))
 
 
+def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: PythonObject, value: PythonObject,
+                    context: PythonObject, depth: Int) raises -> Bool:
+    """Append the identities `classical_admit_value(value)` reads: the value,
+    exact list/tuple/set/frozenset/dict containers item by item (with their
+    lengths), and every other value's class. An exact ndarray, Array or
+    connected NumPy scalar is admitted by its class alone; any other value
+    (RandomState, torch, container subclasses, ...) is also appended to
+    `residual`, to be admitted again on every call. False when the nesting
+    is too deep to record."""
+    if depth > 64:
+        return False
+    _ = py_call(key.append, value)
+    if value is None:
+        return True
+    var b = mods.module("builtins")
+    var cls = py_type(value)
+    if cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes:
+        return True
+    if cls is b.dict:
+        # items() of an exact dict never hashes or compares keys.
+        var pairs = py_call(b.list, py_call(value.items))
+        _ = py_call(key.append, PythonObject(len(pairs)))
+        for k in range(len(pairs)):  # driver-loop: stored mapping entries (identity only)
+            if not gpsvm_key_value(mods, key, residual, pairs[k][0], context, depth + 1):
+                return False
+            if not gpsvm_key_value(mods, key, residual, pairs[k][1], context, depth + 1):
+                return False
+        return True
+    if cls is b.list or cls is b.tuple or cls is b.set or cls is b.frozenset:
+        # Iterating an exact container runs no item protocol.
+        var items = py_call(b.list, value)
+        _ = py_call(key.append, PythonObject(len(items)))
+        for k in range(len(items)):  # driver-loop: stored container items (identity only)
+            if not gpsvm_key_value(mods, key, residual, items[k], context, depth + 1):
+                return False
+        return True
+    _ = py_call(key.append, cls)
+    if cls is context["array_class"] or cls is py_get(context, "ndarray"):
+        return True
+    var scalars = py_get(context, "scalar_types")
+    if scalars is not None and py_type(scalars) is b.tuple:
+        for i in range(len(scalars)):  # driver-loop: over the connected NumPy scalar types, by identity
+            if cls is scalars[i]:
+                return True
+    _ = py_call(residual.append, value)
+    return True
+
+
 # ------------------------------------------------------------ class tables
 
 

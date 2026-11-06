@@ -26,6 +26,76 @@ from bindings.family_common import family_f32_snapshot, family_array
 from core.family_cast_impl import family_all_finite_f32, family_cast_rows_f64
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
+from bindings.native_class_admission import class_record, class_admit
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_same
+from bindings.gp_svm_records import gpsvm_key_value
+
+
+comptime _KM_ADMIT_SLOT = "kernel_public_admitted_v1"
+comptime _KM_CLASS_SLOT = "kernel_public_class_v1"
+
+
+def _km_key(mut mods: NativeModules, model: PythonObject, fields: PythonObject, parameters: PythonObject,
+            learned: PythonObject, plan: PythonObject, attributes: PythonObject, context: PythonObject,
+            key: PythonObject, residual: PythonObject) raises -> Bool:
+    """The identities the parameter and learned-field admissions read: the
+    connected plan and schema, then each name's stored value (exact
+    containers item by item); a learned name's absence counts too."""
+    _ = py_call(key.append, context)
+    _ = py_call(key.append, attributes)
+    _ = py_call(key.append, plan)
+    _ = py_call(key.append, parameters)
+    _ = py_call(key.append, py_type(model))
+    for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names (identity record)
+        var name = parameters[i]
+        _ = py_call(key.append, name)
+        if not py_contains(fields, name):
+            return False
+        if not gpsvm_key_value(mods, key, residual, fields[name], context, 0):
+            return False
+    for i in range(len(learned)):  # driver-loop: fitted storage names (identity record)
+        var name = learned[i]
+        var present = py_contains(fields, name)
+        _ = py_call(key.append, PythonObject(present))
+        if present and not gpsvm_key_value(mods, key, residual, fields[name], context, 0):
+            return False
+    return True
+
+
+def _km_admitted(mut mods: NativeModules, model: PythonObject, fields: PythonObject, parameters: PythonObject,
+                 learned: PythonObject, plan: PythonObject, attributes: PythonObject,
+                 context: PythonObject) raises -> Bool:
+    """True when every parameter and learned field is the object a full
+    admission accepted (read from plain instance storage, the class unchanged
+    since: CPython type watchers), after the values admitted by more than
+    their identity passed again. False: run the full admission."""
+    if class_record(mods, _KM_CLASS_SLOT, py_type(model)) is None:
+        return False
+    var held = trees_side_get(_KM_ADMIT_SLOT, model)
+    if held is None:
+        return False
+    var key = Python.list()
+    var residual = Python.list()
+    if not _km_key(mods, model, fields, parameters, learned, plan, attributes, context, key, residual):
+        return False
+    if not trees_key_same(held, key):
+        return False
+    for i in range(len(residual)):  # driver-loop: values admitted by more than their identity
+        classical_admit_value(residual[i], context)
+    return True
+
+
+def _km_remember(mut mods: NativeModules, model: PythonObject, fields: PythonObject, parameters: PythonObject,
+                 learned: PythonObject, plan: PythonObject, attributes: PythonObject,
+                 context: PythonObject) raises:
+    var key = Python.list()
+    var residual = Python.list()
+    if not _km_key(mods, model, fields, parameters, learned, plan, attributes, context, key, residual):
+        return
+    # The class passed the full admission just now; any later change of the
+    # class or an ancestor invalidates this payload.
+    class_admit(mods, _KM_CLASS_SLOT, py_type(model), PythonObject(True))
+    _ = trees_side_put(_KM_ADMIT_SLOT, model, key)
 
 
 def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
@@ -45,16 +115,27 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
             parameters = py_get(context["family_km_public_parameters"], ancestry[i])
     if parameters is None:
         raise Error("TypeError: kernel execution requires a connected estimator class")
-    for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names
-        var value = _lookup(model, parameters[i], fields, plan, attributes)
-        classical_admit_value(value, context)
     var learned = Python.tuple("n_features_in_", "n_targets_", "_kernel_params", "_params", "_squeeze",
                                "X_fit_", "dual_coef_", "info_", "components_", "component_indices_",
                                "normalization_", "eigenvalues_", "eigenvectors_", "sweeps_",
                                "random_weights_", "random_offset_", "sigma_", "scale_", "feature_names_in_")
-    for i in range(len(learned)):  # driver-loop: only fitted storage consumed by kernel owners
-        if py_contains(fields, learned[i]):
-            classical_admit_value(_lookup(model, learned[i], fields, plan, attributes), context)
+    # Every non-fit call used to look up and admit ~26 parameters and learned
+    # fields; a per-model identity record skips them while nothing they read
+    # changed (bindings/gp_svm_records.mojo). Fit always admits in full.
+    if fitting or not _km_admitted(modules, model, fields, parameters, learned, plan.plan, attributes, context):
+        var direct = not fitting
+        for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names
+            var value = _lookup(model, parameters[i], fields, plan, attributes)
+            classical_admit_value(value, context)
+            direct = direct and py_contains(fields, parameters[i]) and value is fields[parameters[i]]
+        for i in range(len(learned)):  # driver-loop: only fitted storage consumed by kernel owners
+            if py_contains(fields, learned[i]):
+                var value = _lookup(model, learned[i], fields, plan, attributes)
+                classical_admit_value(value, context)
+                direct = direct and value is fields[learned[i]]
+        if direct:
+            # Every value came from plain instance storage: record it.
+            _km_remember(modules, model, fields, parameters, learned, plan.plan, attributes, context)
     var flag = py_get(fields, "_mojolearn_fitted", PythonObject(False))
     if py_type(flag) is not py_type(PythonObject(True)) and py_type(flag) is not py_type(PythonObject(0)):
         raise Error("TypeError: kernel fitted flags must be native booleans or integers")
