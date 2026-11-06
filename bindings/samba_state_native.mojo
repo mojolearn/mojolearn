@@ -84,11 +84,14 @@ def samba_schedule_snapshot(schedule: PythonObject, context: PythonObject) raise
     if schedule is None:
         return PythonObject(None)
     var bi = native_loaded_module("builtins")
-    var kinds = py_call(bi.list, context["schedule_classes"])
+    # The three built-in kinds are fixed (python/mojolearn/_native_samba_bridge.py
+    # schedule_classes); compare the exact type against each, no list(dict).
+    var classes = context["schedule_classes"]
+    var schedule_type = py_type(schedule)
     var kind = String()
-    for i in range(len(kinds)):  # driver-loop: over supported built-in schedule classes
-        if py_type(schedule) is context["schedule_classes"][kinds[i]]:
-            kind = String(kinds[i])
+    for name in [String("constant"), String("linear"), String("cosine")]:  # driver-loop: over the three built-in schedule kinds
+        if schedule_type is classes[name]:
+            kind = name
     if kind == "":
         raise Error("NotImplementedError: Samba requires ConstantLR, WarmupLinearLR or WarmupCosineLR; Python schedule callbacks cannot execute in the native runtime")
     var fields = samba_fields(schedule)

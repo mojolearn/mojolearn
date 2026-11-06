@@ -83,16 +83,12 @@ def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObj
     if fields["max_norm"] is not None and not (max_norm > 0.0):
         raise Error("Samba: max_norm must be positive or None")
     py_setitem(opt, "t", step + 1)
-    var plan = py_ints([len(opt["params"]), 2, step + 1, 0])
-    _ = py_call(plan.append, opt["lr"])
-    _ = py_call(plan.append, opt["betas"][0])
-    _ = py_call(plan.append, opt["betas"][1])
-    _ = py_call(plan.append, opt["eps"])
-    _ = py_call(plan.append, opt["weight_decay"])
-    _ = py_call(plan.append, 0.0)
-    _ = py_call(plan.append, 0.0)
-    _ = py_call(plan.append, max_norm)
-    _ = py_call(plan.append, 1 if Bool(py=py_get(opt, "maximize", PythonObject(False))) else 0)
+    # One list build (the 13-word plan the step entry reads), not 9 appends.
+    var betas = opt["betas"]
+    var plan = Python.list(PythonObject(len(opt["params"])), PythonObject(2), PythonObject(step + 1), PythonObject(0),
+                           opt["lr"], betas[0], betas[1], opt["eps"], opt["weight_decay"],
+                           PythonObject(0.0), PythonObject(0.0), PythonObject(max_norm),
+                           PythonObject(1 if Bool(py=py_get(opt, "maximize", PythonObject(False))) else 0))
     return plan
 
 
