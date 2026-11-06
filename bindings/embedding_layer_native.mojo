@@ -27,7 +27,7 @@ from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import new_array, same_shape, base_format, py_ints, door_ready
 from bindings.optimizer_device_native import shape_count, device_shape
-from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store
+from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
 from bindings.sequence_device_native import seq_device_make, sequence_device_operation
 from bindings.sequence_optimizer_native import seq_device_get
 from bindings.optimizer_admission import opt_value, opt_scalar, opt_guards, opt_exact, opt_numpy
@@ -183,6 +183,12 @@ def _drop_table(fields: PythonObject, context: PythonObject):
 # ---------------------------------------------------------------- ids
 
 def _ids(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # An exact list/tuple of exact ints (the usual token ids): one native
+    # pass to int32 (training_embedding_native.embedding_int_list); every
+    # other input keeps the capture below and its refusals.
+    var fast = embedding_int_list(value)
+    if fast is not None:
+        return fast
     # Capture a native buffer once, retain its export through packing, and
     # feed the existing integer conversion ABI an owned compact snapshot.
     var pin = EmbeddingInput(value, context, True)

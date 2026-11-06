@@ -6,7 +6,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.optimizer_admission import opt_value, opt_numpy
 from bindings.optimizer_public_words import stash_python_error
-from bindings.optimizer_public_door import TensorView, tensor_view, new_array, contiguous_addr
+from bindings.optimizer_public_door import TensorView, tensor_view, new_array, contiguous_addr, py_ints
+from std.memory import memcpy
 from bindings.optimizer_device_native import shape_count
 from bindings.training_rms_native import rms_host_view
 from bindings.training_scalar_native import training_scalar_number
@@ -114,6 +115,69 @@ def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
     py_call(leaves.append, value)
 
 
+def _int32_leaf(item: PythonObject, int_type: PythonObject, mut codes: List[Int32]) raises -> Bool:
+    # One exact int leaf that fits int32, appended; False sends the whole
+    # input to the general walk (which raises the same refusals as before).
+    if py_type(item) is not int_type:
+        return False
+    var v = 0
+    try:
+        v = Int(py=item)
+    except:
+        return False
+    if v < -2147483648 or v > 2147483647:
+        return False
+    codes.append(Int32(v))
+    return True
+
+
+def embedding_int_list(value: PythonObject) raises -> PythonObject:
+    """The common index input, an exact list/tuple of exact ints (or a
+    rectangular list/tuple of such rows) that fit int32, read in one native
+    pass into a new int32 Array: (array, address, count, shape) or None for
+    every other input (lane p3-neural-blocks). The general path walked each
+    leaf through Python (admission, a bound append), scanned the leaves
+    twice more, built an `array('q')` through a Python call and cast it with
+    a second binding call. Same int32 values: an exact int in int32 range
+    is exactly what that cast produced; anything else (bool, float, a NumPy
+    scalar, out of range, ragged, deeper nesting, empty) takes the general
+    path and its refusals."""
+    var b = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is not b.list and cls is not b.tuple:
+        return PythonObject(None)
+    var rows = len(value)
+    if rows == 0:
+        return PythonObject(None)
+    var first = value[0]
+    var nested = py_type(first) is b.list or py_type(first) is b.tuple
+    var width = len(first) if nested else 1
+    if width == 0:
+        return PythonObject(None)
+    var codes = List[Int32](capacity=rows * width)
+    var shape = List[Int]()
+    shape.append(rows)
+    if nested:
+        shape.append(width)
+        for i in range(rows):  # driver-loop: rows of the caller's index list
+            var row = value[i]
+            var row_cls = py_type(row)
+            if (row_cls is not b.list and row_cls is not b.tuple) or len(row) != width:
+                return PythonObject(None)
+            for j in range(width):  # driver-loop: one native read per index of the row
+                if not _int32_leaf(row[j], b.int, codes):
+                    return PythonObject(None)
+    else:
+        for i in range(rows):  # driver-loop: one native read per index
+            if not _int32_leaf(value[i], b.int, codes):
+                return PythonObject(None)
+    var count = len(codes)
+    var out = new_array([count], "<i4")
+    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)),
+           src=codes.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), count=count)
+    return Python.tuple(out, out._addr, count, py_ints(shape))
+
+
 def embedding_numpy_dtype(value: PythonObject, context: PythonObject) raises:
     var dtype = value.dtype
     var admitted = sequence_dtype_instance(dtype, sequence_dtype_classes(context))
@@ -170,6 +234,9 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
 
 
 def embedding_indices(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fast = embedding_int_list(value)
+    if fast is not None:
+        return Python.tuple(fast[0], fast[1], fast[2])
     var value_owner = value
     var numpy = py_get(context["modules"], "numpy")
     if numpy is not None and py_type(numpy) is context["module_type"]:
