@@ -149,9 +149,14 @@ def gmm_fit_binding(
     gp.max_iter = Int(py=params[6])
     gp.init_params = init_params_from_name(String(py=params[7]))
     gp.random_state = UInt64(Int(py=params[8]))
-    var x = read_f32(Int(xp), max(0, n * d))
+    # The owned copy of X the fit takes is made with the GIL released (it
+    # was taken under the GIL; p3 rank 776). The fit's List signature
+    # (mixture/estimator.mojo) keeps the copy itself.
+    var x_address = Int(xp)
+    var x = List[Float32]()
     var n_iter = 0
     with GILReleased(Python()):
+        x = read_f32(x_address, max(0, n * d))
         n_iter = _gmm_fit_run(x, n, d, gp, wp, mp, cp, pp, lp, sp)
     return PythonObject(n_iter)
 
