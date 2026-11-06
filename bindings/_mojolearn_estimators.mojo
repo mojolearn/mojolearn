@@ -99,7 +99,11 @@ from decomposition.estimator import (
     tsvd_fit_host,
     tsvd_transform_host,
 )
+from std.gpu import block_dim, block_idx, thread_idx
+from core.gemm import gemv_n
+from checks.soft_f64 import sf64_from_f32
 from glm.estimator import (
+    _add_scalar_kernel,
     ols_fit_host,
     ols_fit_resident_host,
     ols_predict_host,
@@ -878,16 +882,62 @@ def ols_predict_wide_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var intercept = Float32(Float64(py=params[2]))
-    var narrow = List[Float32](length=max(nr, 1), fill=0)
-    var np = _f32_ptr(Int(narrow.unsafe_ptr()))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        ols_predict_host(ctx, xp, cp, np, nr, nf, intercept)
-        ctx.synchronize()
-        for i in range(nr):  # native output marshaling: exact widening of the downloaded prediction
-            wide[i] = Float64(np[i])
-    _ = narrow^
+        _ols_predict_wide_device(ctx, xp, cp, wide, nr, nf, intercept)
     return PythonObject(0)
+
+
+def _ols_widen_kernel(
+    src: MutPointer[Float32, MutAnyOrigin], dst: MutPointer[UInt64, MutAnyOrigin], n_in: Int32
+):
+    """dst[i] = the exact binary64 widening of src[i], as bit patterns
+    (`checks/soft_f64.mojo` `sf64_from_f32`; the Apple GPU has no float64),
+    one thread per element."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, sf64_from_f32(src.unsafe_load(i)))
+
+
+def _ols_predict_wide_device(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float64, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    intercept: Float32,
+) raises:
+    """`ols_predict_host` (glm/estimator.mojo) with the float64 output
+    formed on the device: the same upload, `gemv_n` and intercept epilogue
+    (the same float32 words), then the exact widening kernel and one
+    download of the binary64 words straight into `out_ptr`."""
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var coef = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var out = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
+    ctx.synchronize()
+    gemv_n(ctx, out, x, coef, n_rows, n_features)
+    # The same host compare of a caller-supplied constant as ols_predict_host
+    # (DEVIATION 527): `x + 0.0` is skipped exactly as there.
+    if intercept != Float32(0.0):
+        ctx.enqueue_function[_add_scalar_kernel](
+            out.unsafe_ptr(), Int32(n_rows), intercept,
+            grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+    var wide = ctx.enqueue_create_buffer[DType.uint64](max(n_rows, 1))
+    if n_rows > 0:
+        ctx.enqueue_function[_ols_widen_kernel](
+            out.unsafe_ptr(), wide.unsafe_ptr(), Int32(n_rows),
+            grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=out_ptr.bitcast[UInt64](), src_buf=wide)
+    ctx.synchronize()
+    _ = x^
+    _ = coef^
+    _ = out^
+    _ = wide^
 
 
 def ridge_fit_binding(
