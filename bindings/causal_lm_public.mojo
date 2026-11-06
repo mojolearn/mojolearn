@@ -2933,14 +2933,6 @@ def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject
     return causal_lm_generate_text_binding(mods, model, tokenizer, text, maximum, options)
 
 
-def _array_bytes(value: PythonObject) raises -> PythonObject:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if py_type(value) is g[].array_cls:
-        var captured = generation_array_snapshot(value)
-        return py_call(captured._mv.tobytes, "C")
-    return py_call(generation_buffer_view(value).tobytes, "C")
-
-
 def _hash_array(mut hash: Sha256, value: PythonObject) raises:
     # The same bytes in the same order as `_array_bytes` (tobytes("C")),
     # hashed straight from the pinned buffer: no bytes object and no
