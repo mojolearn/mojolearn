@@ -141,6 +141,25 @@ def _row(mut kit: DecompKit, source: PythonObject, name: String, context: Python
     return kit.input_snapshot(input, 1, input.shape[0])
 
 
+def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+    # A fitted operand: admitted per call as before; on a query its device
+    # copy is kept across calls (DecompKit.resident_input), else as _matrix.
+    var input = decomp_input_snapshot(source, name, context)
+    var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, input.shape[0], input.shape[1])
+    if held >= 0:
+        return held
+    return kit.input_snapshot(input, input.shape[0], input.shape[1])
+
+
+def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+    # A fitted 1-D float32 vector as a 1 x n matrix, resident as _fitted_matrix.
+    var input = decomp_input_snapshot(source, name, context, 1)
+    var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, 1, input.shape[0])
+    if held >= 0:
+        return held
+    return kit.input_snapshot(input, 1, input.shape[0])
+
+
 def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject,
             captured: Optional[ArrayMetadata] = None) raises -> Tuple[Int, Bool]:
     # Admit the exact supported input before reading any metadata. A vector
@@ -313,9 +332,9 @@ def _check_fitted(model: PythonObject, fields: PythonObject) raises:
 def _project(mut kit: DecompKit, a: Int, mean_name: String, std_name: String, rotations_name: String,
              fields: PythonObject, context: PythonObject) raises -> Int:
     # ((A - mean) / std) @ rotations.
-    var mean = _row(kit, fields[mean_name], mean_name, context)
-    var std = _row(kit, fields[std_name], std_name, context)
-    var rotations = _matrix(kit, fields[rotations_name], rotations_name, context)
+    var mean = _fitted_row(kit, fields[mean_name], mean_name, context)
+    var std = _fitted_row(kit, fields[std_name], std_name, context)
+    var rotations = _fitted_matrix(kit, fields[rotations_name], rotations_name, context)
     var centered = kit.ew(XD_SUB, a, mean)
     var scaled = kit.ew(XD_DIV, centered, std)
     return kit.mm(scaled, rotations)
@@ -332,9 +351,9 @@ def _transform(mut kit: DecompKit, x: Int, ym: Int, fields: PythonObject, contex
 def _rebuild(mut kit: DecompKit, z: Int, loadings_name: String, std_name: String, mean_name: String,
              fields: PythonObject, context: PythonObject) raises -> Int:
     # (Z @ loadings^T) * std + mean.
-    var loadings = _matrix(kit, fields[loadings_name], loadings_name, context)
-    var std = _row(kit, fields[std_name], std_name, context)
-    var mean = _row(kit, fields[mean_name], mean_name, context)
+    var loadings = _fitted_matrix(kit, fields[loadings_name], loadings_name, context)
+    var std = _fitted_row(kit, fields[std_name], std_name, context)
+    var mean = _fitted_row(kit, fields[mean_name], mean_name, context)
     var product = kit.mm(z, loadings, tb=True)
     var scaled = kit.ew(XD_MUL, product, std)
     return kit.ew(XD_ADD, scaled, mean)
@@ -414,6 +433,8 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         return r2
     _check_fitted(model, fields)
     var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    # A query: the fitted operands stay on the device across calls.
+    kit.owner = model
     try:
         if operation == "transform":
             # args: (X, y, Y)
@@ -432,11 +453,11 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             return Python.tuple(kit.publish(xr), kit.publish(yr))
         if operation == "predict":
             var x = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, args[0], "X", context)
-            var mean = _row(kit, fields["_x_mean"], "_x_mean", context)
+            var mean = _fitted_row(kit, fields["_x_mean"], "_x_mean", context)
             var centered = kit.ew(XD_SUB, x, mean)
-            var coef = _matrix(kit, fields["coef_"], "coef_", context)
+            var coef = _fitted_matrix(kit, fields["coef_"], "coef_", context)
             var product = kit.mm(centered, coef, tb=True)
-            var y_mean = _row(kit, fields["_y_mean"], "_y_mean", context)
+            var y_mean = _fitted_row(kit, fields["_y_mean"], "_y_mean", context)
             var prediction = kit.ew(XD_ADD, product, y_mean)
             if Bool(py=fields["_predict_1d"]):
                 return kit.out_shape(prediction, Python.tuple(kit.nrows(prediction)))

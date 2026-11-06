@@ -53,6 +53,10 @@ def _fitted(mut kit: DecompKit, fields: PythonObject, name: String, rows: Int, c
     # A fitted float32 Array (location_ (p,) as 1 x p, _precision p x p).
     var array = classical_host_f32(fields[name], 1 if rows == 1 else 2, name, context)
     var size = Int(py=array.size)
+    # On a query its device copy is kept across calls (DecompKit.resident_input).
+    var held = kit.resident_input(fields[name], name, array, Int(py=classical_address(array)), array, rows, size // rows)
+    if held >= 0:
+        return held
     return kit.input(array, rows, size // rows)
 
 
@@ -394,6 +398,8 @@ def mcd_operation(model: PythonObject, operation: String, args: PythonObject, co
             kit.close()
     _check_fitted(model, fields)
     var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    # A query: the fitted location and precision stay on the device across calls.
+    kit.owner = model
     try:
         var x = _matrix(kit, args[0], "X", context)
         if operation == "mahalanobis":
