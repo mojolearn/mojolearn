@@ -2,7 +2,9 @@
 # Direct native estimator ABI calls. Python only connects these fixed plans
 # at package import; CV never calls a constructor, method or clone callback.
 from bindings.native_array_storage import native_array_empty
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import NativeModules, native_loaded_module
+from bindings.native_class_admission import class_record, class_admit
+from bindings.msel_plan_records import MSEL_PLAN_CLASS_SLOT, msel_fields_admitted, msel_fields_admit
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
@@ -28,6 +30,29 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
         if py_contains(context["family_msel_pending_estimators"], cls):
             raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
         raise Error("TypeError: Python estimator callbacks are not accepted; use a connected native estimator")
+    # perf2-msel: the class rows (ancestry and every connected hook identity)
+    # are checked once per class state (native_class_admission type watchers;
+    # bindings/msel_plan_records.mojo), the instance keys once per dictionary
+    # state (dictionary watchers). Without watchers (Python < 3.12) both run on
+    # every call as before.
+    var mods = NativeModules()
+    var class_held = class_record(mods, MSEL_PLAN_CLASS_SLOT, cls)
+    if class_held is None or Int(py=class_held) != Int(plan._obj_ptr):
+        _msel_check_class_rows(cls, plan, b)
+        # The payload is the plan's address (plans live in the import-time
+        # registry for the process), never the plan itself: it holds the MRO,
+        # and a record must not strongly retain its class.
+        class_admit(mods, MSEL_PLAN_CLASS_SLOT, cls, PythonObject(Int(plan._obj_ptr)))
+    var fields = py_call(plan["fields_get"], model, cls)
+    if msel_fields_admitted(fields, plan):
+        return plan
+    _msel_check_fields(fields, plan, b)
+    if py_type(fields) is b.dict:
+        msel_fields_admit(fields, plan)
+    return plan
+
+
+def _msel_check_class_rows(cls: PythonObject, plan: PythonObject, b: PythonObject) raises:
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     if len(mro) != len(plan["mro"]):
         raise Error("TypeError: native estimator class ancestry changed")
@@ -50,7 +75,9 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
             base_fields = py_call(class_dict, base)
         if py_get(base_fields, hook[1]) is not hook[2]:
             raise Error("TypeError: native estimator methods or storage hooks changed")
-    var fields = py_call(plan["fields_get"], model, cls)
+
+
+def _msel_check_fields(fields: PythonObject, plan: PythonObject, b: PythonObject) raises:
     var names = py_call(b.list, fields.keys())
     for k in range(len(names)):  # driver-loop: instance keys before dictionary lookup
         if py_type(names[k]) is not b.str:
@@ -66,7 +93,6 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
             continue
         if py_contains(fields, protected[k]):
             raise Error("TypeError: native estimator instance overrides a connected method or protocol")
-    return plan
 
 
 def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
