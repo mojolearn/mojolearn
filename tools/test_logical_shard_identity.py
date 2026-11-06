@@ -15,8 +15,11 @@ def part(name, sha):
     return dict(name=name, shape=[2], dtype="<f4", sha256=sha * 64)
 
 
-def doc(name, arms):
-    return dict(lane=name, error=None, arms={str(c): dict(parts=p, error=None) for c, p in arms.items()})
+def doc(name, arms, ranks=None):
+    """A worker document; each arm spread over `ranks[c]` ranks (default: all of its c devices)."""
+    ranks = ranks or {}
+    return dict(lane=name, error=None, arms={str(c): dict(parts=p, error=None, ranks=ranks.get(c, c))
+                                             for c, p in arms.items()})
 
 
 def test_the_list_is_short_fixed_and_well_formed():
@@ -48,6 +51,42 @@ def test_equal_arms_match_and_a_changed_arm_differs():
     assert verdict == "DIFFER" and "n%d" % LS.COUNTS[-1] in reason
     line = LS.shardcheck_line("x", verdict, reason, digests)
     assert line.startswith("SHARDCHECK x single=") and " n2=" in line and " DIFFER " in line
+
+
+def test_an_arm_that_did_not_spread_its_work_fails():
+    same = {c: [part("a", "1")] for c in LS.COUNTS}
+    multi = LS.COUNTS[1]
+    verdict, reason, _ = LS.lane_verdict("x", doc("x", same, {multi: 1}))
+    assert verdict == "FAIL" and "n%d spread its work over 1 rank" % multi in reason
+    unknown = doc("x", same)
+    unknown["arms"][str(multi)].pop("ranks")
+    verdict, reason, _ = LS.lane_verdict("x", unknown)
+    assert verdict == "FAIL" and "no rank record" in reason
+    # Two of three logical devices receiving work is a real split: MATCH.
+    assert LS.lane_verdict("x", doc("x", same, {c: min(c, 2) for c in LS.COUNTS}))[0] == "MATCH"
+    # A bit difference outranks the spread verdict.
+    changed = dict(same)
+    changed[LS.COUNTS[-1]] = [part("a", "2")]
+    assert LS.lane_verdict("x", doc("x", changed, {multi: 1}))[0] == "DIFFER"
+
+
+def test_ranks_are_read_from_every_loaded_binding_and_cleared():
+    class Binding:
+        def __init__(self, ranks):
+            self.ranks = ranks
+
+        def device_plan_log(self):
+            got, self.ranks = self.ranks, 0
+            return [], got
+
+    class Old:
+        def device_plan_log(self):
+            return []
+
+    a, b = Binding(3), Binding(1)
+    assert LS.ranks_take({"a": a, "b": b, "again": a, "old": Old(), "plain": object()}) == 3
+    assert LS.ranks_take({"a": a, "b": b}) == 0
+    assert LS.ranks_take({"old": Old()}) is None
 
 
 def test_everything_missing_fails_closed():
