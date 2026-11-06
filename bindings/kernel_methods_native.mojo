@@ -23,6 +23,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_caller_frame import native_frame_globals
 from bindings.native_loaded_module import native_loaded_module
+from bindings.trees_side_records import trees_side_get, trees_side_put
 from bindings.classical_validate import classical_view
 from bindings.classical_warnings import classical_warning
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_bool
@@ -52,6 +53,7 @@ from bindings.family_common import (
     family_owned_snapshot, family_f32_snapshot, family_snapshot_min, family_sample_weight_snapshot, family_field, family_f32,
 )
 
+comptime _KM_MODE_SLOT = "p3_km_binding_mode_checked_v1"
 comptime _KERNEL_PRECOMPUTED = 4
 comptime _KERNEL_CHI2 = 7
 comptime _KERNEL_ADDITIVE_CHI2 = 8
@@ -184,11 +186,21 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
         want = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(want) is not py_type(PythonObject("")):
         raise Error("TypeError: numeric_mode must be a native string or None")
-    want = want.strip().lower()
-    var selected = String(want)
+    # The spelling is normalized natively (lane p3-svm-gp-kernel, row 472):
+    # no Python strip()/lower() call; only "identical" and "fast" pass.
+    var selected = String(String(want).strip()).lower()
     if selected != "identical" and selected != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    want = PythonObject(selected)
     var native = kernel_method_provider(fields, binding, selected == "identical")
+    # The binary's compile-time mode never changes for one binding object:
+    # once it agreed with a requested mode, the check is skipped for that
+    # binding and mode (a side record weak-keyed by the binding).
+    var checked = trees_side_get(_KM_MODE_SLOT, binding)
+    if (checked is not None and py_type(checked) is b.tuple and len(checked) == 2 and py_contains(checked[0], want)
+            and ((native is None and checked[1] is None) or (native is not None and checked[1] is native))):
+        var flags_hit = kernel_method_metadata(native, 14) if native is not None else 0
+        return (binding, native, flags_hit)
     var getter = PythonObject(None)
     if native is None:
         getter = neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False)
@@ -204,6 +216,7 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
                         + "but " + String(owner_name) + " reports compile-time mode code "
                         + String(got) + "; the binary and the directory it sits in disagree, rebuild "
                         + "it with bash bindings/build_kernel_methods.sh")
+        _ = trees_side_put(_KM_MODE_SLOT, binding, Python.tuple(Python.tuple(want), native))
     var flags = kernel_method_metadata(native, 14) if native is not None else 0
     return (binding, native, flags)
 
