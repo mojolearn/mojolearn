@@ -39,8 +39,13 @@ def _name(model: PythonObject) raises -> String:
 def _str_instance(value: PythonObject) raises -> Bool:
     # `isinstance(value, str)` through CPython's own native entry (the same
     # protocol, without a Python-level builtins.isinstance call).
+    # An exact str (every setting a caller writes) answers by type identity,
+    # with no symbol lookup or call (p3 rank 412).
+    var text_type = native_loaded_module("builtins").str
+    if py_type(value) is text_type:
+        return True
     ref cpy = Python().cpython()
-    var found = cpy.lib.get_function[Int32]("PyObject_IsInstance")(value._obj_ptr, native_loaded_module("builtins").str._obj_ptr)
+    var found = cpy.lib.get_function[Int32]("PyObject_IsInstance")(value._obj_ptr, text_type._obj_ptr)
     if found < 0:
         raise cpy.unsafe_get_error()
     return found == 1
