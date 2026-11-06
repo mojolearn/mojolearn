@@ -13,13 +13,16 @@ from providers.python.classical_family_admission_pyapi import classical_family_a
 
 
 def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
-             freeze_buffers: Bool = True) raises -> PythonObject:
+             freeze_buffers: Bool = True, admitted: Bool = False) raises -> PythonObject:
+    # `admitted`: an enclosing list/tuple's classical_admit_value already
+    # admitted this element (it walks list/tuple contents recursively), so
+    # the element is not admitted a second time, once per nesting level.
     if depth > 64:
         raise Error("TypeError: manifold settings exceed the supported nesting depth")
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var scalar = manifold_scalar_type(value, context)
-    if not scalar:
+    if not scalar and not admitted:
         classical_admit_value(value, context)
     elif freeze_buffers:
         # Immutable native scalar storage is captured before any numerical
@@ -29,7 +32,7 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
     if cls is b.list or cls is b.tuple:
         var result = Python.list()
         for i in range(len(value)):  # driver-loop: copy configuration contents before execution can release the GIL
-            _ = py_call(result.append, _setting(value[i], context, depth + 1, freeze_buffers))
+            _ = py_call(result.append, _setting(value[i], context, depth + 1, freeze_buffers, True))
         return py_call(b.tuple, result) if cls is b.tuple else result
     elif cls is b.dict:
         var result = Python.dict()
