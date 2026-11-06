@@ -28,11 +28,11 @@ def resolve(wheels, destination, project='mojolearn'):
 
 
 #: 2026-10-20: what each Linux install resolves to. mojolearn (file-free)
-#: pulls the core and both vendors; a vendor pulls the core (NVIDIA also its
-#: PTX package); the core pulls no vendor.
+#: pulls the core and both vendors; a vendor pulls the core; the core pulls no
+#: vendor. 2026-11-05: the NVIDIA wheel carries its PTX set, no PTX package.
 RESOLVES = {
-    'mojolearn': {'mojolearn', 'mojolearn_core', 'mojolearn_nvidia', 'mojolearn_amd', 'mojolearn_nvidia_ptx'},
-    'mojolearn-nvidia': {'mojolearn_core', 'mojolearn_nvidia', 'mojolearn_nvidia_ptx'},
+    'mojolearn': {'mojolearn', 'mojolearn_core', 'mojolearn_nvidia', 'mojolearn_amd'},
+    'mojolearn-nvidia': {'mojolearn_core', 'mojolearn_nvidia'},
     'mojolearn-amd': {'mojolearn_core', 'mojolearn_amd'},
     'mojolearn-core': {'mojolearn_core'},
 }
@@ -57,15 +57,18 @@ def test_pip_refuses_a_vendor_without_the_core(tmp_path):
     assert 'mojolearn-core' in result.stderr
 
 
-def test_pip_refuses_a_release_missing_the_ptx_dependency(tmp_path):
+def test_no_separate_ptx_distribution_is_packed_or_required(tmp_path):
     wheels = packed(tmp_path)
-    next(wheels.glob('mojolearn_nvidia_ptx-*.whl')).unlink()
-    result = resolve(wheels, tmp_path / 'resolved')
-    assert result.returncode != 0
-    assert 'mojolearn-nvidia-ptx' in result.stderr
+    assert not list(wheels.glob('mojolearn_nvidia_ptx-*.whl'))
+    native = next(wheels.glob('mojolearn_nvidia-*.whl'))
+    files = members(native)
+    metadata = next(data for name, data in files.items() if name.endswith('.dist-info/METADATA')).decode()
+    assert 'mojolearn-nvidia-ptx' not in metadata
+    assert any(name.startswith('mojolearn/cuda_ptx/sm_80/') for name in files)
+    assert any(name.startswith('mojolearn/cuda_native/sm_89/') for name in files)
 
 
-def test_audit_binds_the_native_vendor_to_the_separate_ptx_bytes(tmp_path):
+def test_audit_binds_the_nvidia_marker_to_its_own_ptx_bytes(tmp_path):
     wheels = packed(tmp_path)
     native = next(wheels.glob('mojolearn_nvidia-*.whl'))
     files = members(native)
@@ -77,23 +80,12 @@ def test_audit_binds_the_native_vendor_to_the_separate_ptx_bytes(tmp_path):
         for name, data in files.items():
             z.writestr(name, data)
     problems = wheel_api_audit.split_audit(wheels.glob('*.whl'))['problems']
-    assert any('PTX dependency manifest differs' in p for p in problems)
+    assert any('invalid PTX slot' in p for p in problems)
 
 
-def test_ptx_only_release_pack_requires_only_its_own_build_proof(tmp_path, monkeypatch):
+def test_a_ptx_only_wheel_kind_no_longer_exists(tmp_path):
     sets = make_sets(tmp_path, sets=(('cuda', 'sm_80'),), include_byte_lm=True)
-
-    class InventoryReached(Exception):
-        pass
-
-    def inventory(sets, proofs, version, **kwargs):
-        assert {(s.vendor, s.arch) for s in sets} == {('cuda', 'sm_80')}
-        assert kwargs['required'] == {('cuda', 'sm_80')}
-        assert len(proofs) == 1
-        raise InventoryReached()
-
-    monkeypatch.setattr(pw, 'release_inventory', inventory)
     args = [a for directory in sets for a in ('--set', directory)]
-    with pytest.raises(InventoryReached):
+    with pytest.raises(SystemExit, match='name each'):
         pw.main(args + ['--profile', 'release-split', '--wheels', 'nvidia-ptx',
                        '--build-proof', 'cuda-sm_80.json', '--out', str(tmp_path / 'out')], _gates=False)
