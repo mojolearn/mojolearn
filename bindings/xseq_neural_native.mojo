@@ -19,9 +19,9 @@ from bindings.neural_labels_native import neural_encode_labels, neural_decode_la
 from std.math import sqrt
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
-from providers.python.sequence_pyapi import py_ints, py_f64s
 from providers.python.autograd_pyapi import cast_in_of
 from sequence.ops_impl import net_of
 from sequence.neural_model_dispatch import RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD
@@ -39,18 +39,18 @@ from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 
 def _attr(owner: PythonObject, name: String) raises -> PythonObject:
     """`getattr(owner, name)` of a class constant (`_CELL`, `_TASK`, ...)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(b.getattr, owner, PythonObject(name))
 
 
 def _method(owner: PythonObject, name: String) raises -> PythonObject:
     """A builtin container's or ndarray's own C method, bound to `owner`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(b.getattr, owner, PythonObject(name))
 
 
 def _repr(value: PythonObject) raises -> String:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return String(py=py_call(b.repr, value))
 
 
@@ -59,7 +59,7 @@ def _eq(value: PythonObject, text: String) raises -> Bool:
 
 
 def _shape_text(value: PythonObject) raises -> String:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return String(py=py_call(b.str, value.shape))
 
 
@@ -110,10 +110,23 @@ def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObjec
 
 # ---------------------------------------------------------------- optimizer arguments
 
-def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+struct _RnnOptimizer(Movable):
+    """The binding's optimizer kind, flag word and six float slots, as the
+    native words the RNN_FIT descriptor reads (no Python list round trip)."""
+    var kind: Int
+    var flags: Int
+    var floats: List[Float64]
+
+    def __init__(out self, kind: Int, flags: Int, var floats: List[Float64]):
+        self.kind = kind
+        self.flags = flags
+        self.floats = floats^
+
+
+def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObject) raises -> _RnnOptimizer:
     """`(kind, flags, [f1, f2, eps, weight_decay, f7, initial_accumulator])`
     of the binding's optimizer slots, PyTorch's defaults under `options`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var kinds = context["xseq_rnn_optimizers"]
     var known = False
     try:
@@ -157,10 +170,10 @@ def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObj
         fp = Python.list(0.0, o["alpha"], o["eps"], o["weight_decay"], o["momentum"], 0.0)
     else:
         fp = Python.list(o["lr_decay"], 0.0, o["eps"], o["weight_decay"], 0.0, o["initial_accumulator_value"])
-    var floats = Python.list()
+    var floats = List[Float64](capacity=6)
     for i in range(len(fp)):  # driver-loop: over the six fixed optimizer float slots
-        _ = py_call(_method(floats, "append"), PythonObject(xseq_float(fp[i])))
-    return Python.tuple(kind, flags, floats)
+        floats.append(xseq_float(fp[i]))
+    return _RnnOptimizer(Int(py=kind), flags, floats^)
 
 
 def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -> PythonObject:
@@ -181,8 +194,8 @@ def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -
 
 def _buffer_address(value: PythonObject) raises -> PythonObject:
     """The data address of an ndarray or an `array.array`."""
-    var b = Python.import_module("builtins")
-    if Bool(py=py_call(b.isinstance, value, Python.import_module("array").array)):
+    var b = native_loaded_module("builtins")
+    if Bool(py=py_call(b.isinstance, value, native_loaded_module("array").array)):
         return py_call(_method(value, "buffer_info"))[0]
     return xseq_addr(value)
 
@@ -216,16 +229,20 @@ def _rnn_x(source: PythonObject, fields: PythonObject, fitting: Bool, context: P
     if fitting:
         py_setitem(fields, "n_features_in_", Int(py=x.shape[2]))
     elif not Bool(py=x.shape[2] == fields["n_features_in_"]):
-        raise Error("X has " + String(py=py_call(Python.import_module("builtins").str, x.shape[2]))
+        raise Error("X has " + String(py=py_call(native_loaded_module("builtins").str, x.shape[2]))
                     + " features, the model was fitted on "
-                    + String(py=py_call(Python.import_module("builtins").str, fields["n_features_in_"])))
+                    + String(py=py_call(native_loaded_module("builtins").str, fields["n_features_in_"])))
     return x
 
 
-def _rnn_ints(model: PythonObject, fields: PythonObject) raises -> PythonObject:
-    """`_RecurrentBase._ints()`."""
-    return Python.list(_rnn_cell(model, fields), fields["n_features_in_"], xseq_int(fields["hidden_size"]),
-                       xseq_int(fields["num_layers"]), fields["n_outputs_"])
+def _rnn_ints(model: PythonObject, fields: PythonObject) raises -> List[Int]:
+    """`_RecurrentBase._ints()`, as the native words the descriptor reads."""
+    var cell = _rnn_cell(model, fields)
+    var d = Int(py=fields["n_features_in_"])
+    var hidden = xseq_int(fields["hidden_size"])
+    var layers = xseq_int(fields["num_layers"])
+    var ip: List[Int] = [cell, d, hidden, layers, Int(py=fields["n_outputs_"])]
+    return ip^
 
 
 def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, target: PythonObject,
@@ -265,12 +282,14 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var optimizer = _rnn_optimizer(py_get(fields, "optimizer"), py_get(fields, "optimizer_options"), context)
     var rates = _rnn_rates(fields, steps, context)
     var losses = xseq_zeros(Python.tuple(steps), context)
-    var ip = _rnn_ints(model, fields)
-    _ = py_call(_method(ip, "extend"), Python.list(Int(py=_attr(py_type(model), "_TASK")), n, steps_t, epochs, batch,
-                optimizer[0], optimizer[1], 1 if shuffle else 0, Int(seed & 0xFFFFFFFF), Int(seed >> 32)))
+    # `_ints()` from the values read above (cell, D, H, L, O), then the
+    # schedule words, all native (no Python list built and re-read)
+    var ip: List[Int] = [cell, d, hidden, layers, outputs, Int(py=_attr(py_type(model), "_TASK")), n, steps_t, epochs,
+                         batch, optimizer.kind, optimizer.flags, 1 if shuffle else 0, Int(seed & 0xFFFFFFFF),
+                         Int(seed >> 32)]
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)),
                                  Int(py=xseq_addr(losses)), Int(py=_buffer_address(rates))]
-    _ = neural_descriptor_execute(xseq_neural_provider(entries), RNN_FIT, addresses, py_ints(ip), py_f64s(optimizer[2]))
+    _ = neural_descriptor_execute(xseq_neural_provider(entries), RNN_FIT, addresses, ip, optimizer.floats)
     _ = target
     _ = params  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -295,13 +314,16 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var seq = xseq_zeros(Python.tuple(n, steps_t, xseq_int(fields["hidden_size"])) if want_seq else Python.tuple(1), context)
     var params = xseq_f32(xseq_private_input(fields["params_"], context, "params_"), "params_", False, context)
     var ip = _rnn_ints(model, fields)
-    var network = net_of(py_ints(ip))
+    var network = net_of(ip)
     if Int(py=params.size) != network.n_params():
         raise Error("ValueError: recurrent params_ size differs from the fitted network layout")
-    _ = py_call(_method(ip, "extend"), Python.list(Int(py=_attr(py_type(model), "_TASK")), n, steps_t,
-                xseq_int(fields["predict_chunk"]), 1 if want_seq else 0))
+    ip.append(Int(py=_attr(py_type(model), "_TASK")))
+    ip.append(n)
+    ip.append(steps_t)
+    ip.append(xseq_int(fields["predict_chunk"]))
+    ip.append(1 if want_seq else 0)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
-    var written = neural_descriptor_execute(xseq_neural_provider(entries), RNN_PREDICT, addresses, py_ints(ip), List[Float64]())
+    var written = neural_descriptor_execute(xseq_neural_provider(entries), RNN_PREDICT, addresses, ip, List[Float64]())
     if written != n * network.O:
         raise Error("RuntimeError: recurrent prediction returned an invalid result count")
     _ = params  # keep the Python object alive through the native call above
@@ -360,7 +382,7 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
 
 def _mlp_check(fields: PythonObject, context: PythonObject) raises:
     """`_BaseMLP._check()`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var solver = py_get(fields, "solver")
     if _eq(solver, "lbfgs"):
         raise Error("NotImplementedError: solver='lbfgs' is not implemented (adam and sgd are)")
@@ -380,7 +402,7 @@ def _mlp_check(fields: PythonObject, context: PythonObject) raises:
 
 def _mlp_hidden(fields: PythonObject, context: PythonObject) raises -> List[Int]:
     """`_BaseMLP._hidden()`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var h = fields["hidden_layer_sizes"]
     var values = Python.list(h) if xseq_is_int(h, context) else py_call(b.list, h)
     var out = List[Int]()
@@ -418,7 +440,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
              out_act: Int, n_out: Int, context: PythonObject) raises -> PythonObject:
     """`_BaseMLP._fit(X, Y, out_act, n_out)`; `n_out` 0 is None (a float
     target of `target.shape[1]` columns)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _mlp_check(fields, context)
     var x = xseq_as_f32_c(x_source, 2, "X", context)
     var rows = Int(py=x.shape[0])
@@ -467,21 +489,26 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, "n_features_in_", d)
     var max_iter = xseq_int(fields["max_iter"])
     var curve = xseq_zeros(Python.tuple(max_iter), context)
-    var ip = Python.list(rows, d, o, context["xseq_mlp_activations"][fields["activation"]], out_act,
-                         fields["_LOSS_CODE"] if py_contains(fields, "_LOSS_CODE") else _attr(py_type(model), "_LOSS_CODE"),
-                         context["xseq_mlp_solvers"][fields["solver"]], context["xseq_mlp_rates"][fields["learning_rate"]],
-                         1 if xseq_truth(fields["nesterovs_momentum"]) else 0, batch, max_iter,
-                         1 if xseq_truth(fields["shuffle"]) else 0, seed, xseq_int(fields["n_iter_no_change"]), len(hidden))
+    # the descriptor's int and float words, native (no Python list built
+    # and converted back word by word)
+    var activation = Int(py=context["xseq_mlp_activations"][fields["activation"]])
+    var loss_code = Int(py=fields["_LOSS_CODE"] if py_contains(fields, "_LOSS_CODE") else _attr(py_type(model), "_LOSS_CODE"))
+    var solver = Int(py=context["xseq_mlp_solvers"][fields["solver"]])
+    var rate_code = Int(py=context["xseq_mlp_rates"][fields["learning_rate"]])
+    var nesterov = 1 if xseq_truth(fields["nesterovs_momentum"]) else 0
+    var shuffle = 1 if xseq_truth(fields["shuffle"]) else 0
+    var ip: List[Int] = [rows, d, o, activation, out_act, loss_code, solver, rate_code, nesterov, batch, max_iter,
+                         shuffle, seed, xseq_int(fields["n_iter_no_change"]), len(hidden)]
     for i in range(len(hidden)):  # driver-loop: over hidden layer widths
-        _ = py_call(_method(ip, "append"), hidden[i])
+        ip.append(hidden[i])
     if n_out != 0:
-        _ = py_call(_method(ip, "append"), 1 if o > 1 else 2)
-    var fp = Python.list(xseq_float(fields["learning_rate_init"]), xseq_float(fields["beta_1"]),
-                         xseq_float(fields["beta_2"]), xseq_float(fields["epsilon"]), xseq_float(fields["momentum"]),
-                         xseq_float(fields["power_t"]), xseq_float(fields["alpha"]), xseq_float(fields["tol"]))
+        ip.append(1 if o > 1 else 2)
+    var fp: List[Float64] = [xseq_float(fields["learning_rate_init"]), xseq_float(fields["beta_1"]),
+                             xseq_float(fields["beta_2"]), xseq_float(fields["epsilon"]), xseq_float(fields["momentum"]),
+                             xseq_float(fields["power_t"]), xseq_float(fields["alpha"]), xseq_float(fields["tol"])]
     var entries = xseq_entries(fields, context)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)), Int(py=xseq_addr(curve))]
-    var n_iter = neural_descriptor_execute(xseq_neural_provider(entries), MLP_FIT, addresses, py_ints(ip), py_f64s(fp))
+    var n_iter = neural_descriptor_execute(xseq_neural_provider(entries), MLP_FIT, addresses, ip, fp)
     _ = target
     _ = params  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -531,7 +558,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
 
 def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, context: PythonObject) raises -> PythonObject:
     """`_BaseMLP._forward(X, proba2)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var x = xseq_as_f32_c(source, 2, "X", context)
     var x_shape = x.shape
     var rows = Int(py=x_shape[0])
@@ -544,7 +571,7 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     var layers = len(coefs)
     if layers < 1 or len(intercepts) != layers:
         raise Error("ValueError: MLP fitted weights require matching nonempty layer lists")
-    var hidden = Python.list()
+    var hidden = List[Int]()
     var weights_kept = Python.list()
     var biases_kept = Python.list()
     var weight_counts = List[Int]()
@@ -570,7 +597,7 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
         _ = py_call(weights_kept.append, weights)
         _ = py_call(biases_kept.append, bias)
         if l < layers - 1:
-            _ = py_call(_method(hidden, "append"), fo)
+            hidden.append(fo)
     if input_width != Int(py=fields["n_outputs_"]):
         raise Error("ValueError: MLP output weights differ from n_outputs_")
     var width = 2 if proba2 else Int(py=fields["n_outputs_"])
@@ -595,14 +622,15 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
             _ = params  # keep the Python object alive through the native call above
         offset += count
     var out_act = Int(py=context["xseq_mlp_outputs"][fields["out_activation_"]])
-    var ip = Python.list(rows, columns, fields["n_outputs_"], context["xseq_mlp_activations"][fields["activation"]],
-                         out_act, 4096, len(hidden))
-    _ = py_call(_method(ip, "extend"), hidden)
+    var ip: List[Int] = [rows, columns, Int(py=fields["n_outputs_"]),
+                         Int(py=context["xseq_mlp_activations"][fields["activation"]]), out_act, 4096, len(hidden)]
+    for i in range(len(hidden)):  # driver-loop: over hidden layer widths
+        ip.append(hidden[i])
     if proba2:
-        _ = py_call(_method(ip, "append"), 1)
+        ip.append(1)
     var entries = xseq_entries(fields, context)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out))]
-    var written = neural_descriptor_execute(xseq_neural_provider(entries), MLP_PREDICT, addresses, py_ints(ip), List[Float64]())
+    var written = neural_descriptor_execute(xseq_neural_provider(entries), MLP_PREDICT, addresses, ip, List[Float64]())
     _ = params  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
