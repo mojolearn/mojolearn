@@ -292,7 +292,9 @@ def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObje
                 or py_type(previous[4]) is not b.str or py_type(previous[5]) is not b.float):
             raise Error("TypeError: KDE resident key must contain native address, shape and setting words")
         _ = knn_door(cached[2], "kde_fit_release")
-    if cached is not None and _kde_key_same(cached[0], key):
+    # Hazard H4 (lane pass2-cluster-nbr): the handle registries are per
+    # numeric mode, so a handle is reused only by the binding that minted it.
+    if cached is not None and cached[2] is binding and _kde_key_same(cached[0], key):
         return cached[1]
     if cached is not None:
         _kde_validate(fields)

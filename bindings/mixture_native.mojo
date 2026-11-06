@@ -870,13 +870,17 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
 
 
 def _bgmm_score(model: PythonObject, binding: PythonObject, source: PythonObject, flags: Int,
-                context: PythonObject) raises -> PythonObject:
+                context: PythonObject, admitted: Bool = False) raises -> PythonObject:
     """`BayesianGaussianMixture._score`: (f, i, s) of ENTRY_BGMM_SCORE plus
-    the row count, as a tuple (result, n, k)."""
+    the row count, as a tuple (result, n, k). `admitted`: `source` is the X
+    the public cluster door admitted (classical_check_x: 2-D, non-empty,
+    finite, float32 in C order), used as is."""
     var means = _get_or(model, "means_", PythonObject(None))
     if means is None:
         raise Error("RuntimeError: this " + String(py_type(model).__name__) + " is not fitted yet")
-    var x = _x_finite(source, "X", context)
+    # Perf (lane pass2-cluster-nbr): the door already refused a non-finite X;
+    # the second native scan of the same words is skipped for its X only.
+    var x = source if admitted else _x_finite(source, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var fitted = _get(model, "n_features_in_")
@@ -897,9 +901,12 @@ def _bgmm_score(model: PythonObject, binding: PythonObject, source: PythonObject
 
 # ------------------------------------------------------------------- door
 def mixture_operation(model: PythonObject, operation: String, args: PythonObject,
-         context: PythonObject) raises -> PythonObject:
+         context: PythonObject, admitted: Bool = False) raises -> PythonObject:
     """args[0] is the resolved binding; GaussianMixture fit and fit_predict
-    also take the `_mojolearn_x_cluster` binding as args[1]; X is last."""
+    also take the `_mojolearn_x_cluster` binding as args[1]; X is last.
+    `admitted`: the public cluster door (providers/python/
+    cluster_public_lifecycle_pyapi.mojo) admitted args[1] with
+    classical_check_x; the BayesianGaussianMixture queries use it as is."""
     classical_connect_numpy(context)
     if operation.startswith("family_mix_gmm_public_"):
         return _gmm_public_operation(model, operation, args, context)
@@ -932,18 +939,18 @@ def mixture_operation(model: PythonObject, operation: String, args: PythonObject
     if operation == "family_mix_bgmm_predict":
         # the labels come from the device score (`bodies.argmax_row`: the
         # first largest log responsibility, the lowest index on a tie)
-        var got = _bgmm_score(model, args[0], args[1], 0, context)
+        var got = _bgmm_score(model, args[0], args[1], 0, context, admitted)
         return _from_flat(got[0][1][0], Python.tuple(got[1]), "<i4", "i", context)
     if operation == "family_mix_bgmm_predict_proba":
         # the exp of every log responsibility in the binding (bodies.exp_cell)
-        var got = _bgmm_score(model, args[0], args[1], 1, context)
+        var got = _bgmm_score(model, args[0], args[1], 1, context, admitted)
         return _from_flat(got[0][0][2], Python.tuple(got[1], got[2]), "<f4", "f", context)
     if operation == "family_mix_bgmm_score_samples":
-        var got = _bgmm_score(model, args[0], args[1], 0, context)
+        var got = _bgmm_score(model, args[0], args[1], 0, context, admitted)
         return _from_flat(got[0][0][1], Python.tuple(got[1]), "<f4", "f", context)
     if operation == "family_mix_bgmm_score":
         # the float-float fold of log_prob_norm in the binding
-        var got = _bgmm_score(model, args[0], args[1], 2, context)
+        var got = _bgmm_score(model, args[0], args[1], 2, context, admitted)
         return PythonObject(Float64(py=got[0][2][0]) / Float64(Int(py=got[1])))
     raise Error("RuntimeError: unknown family operation " + operation)
 

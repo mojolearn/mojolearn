@@ -291,7 +291,9 @@ def _holder(fields: PythonObject) raises -> PythonObject:
     var key = PyObjectPtr()
     var item = PyObjectPtr()
     for _ in range(len(holder)):  # driver-loop: resident metadata keys before dictionary comparisons
-        if cpy.PyDict_Next(holder._obj_ptr, Pointer(to=pos).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=item).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+        # The call form main compiles (bindings/causal_model_config.mojo:75);
+        # the lookup stays inline as there, over a holder of a few keys.
+        if cpy.lib.get_function[Int32]("PyDict_Next")(holder._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)) == 0:
             break
         if py_type(PythonObject(from_borrowed=key)) is not str_type:
             raise Error("TypeError: neighbor resident keys must be exact strings")
@@ -353,7 +355,11 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
                 or py_type(previous[1][0]) is not b.int or py_type(previous[1][1]) is not b.int):
             raise Error("TypeError: neighbor resident key must contain native address and shape words")
         _ = knn_door(cached[2], "knn_index_release")
-    if cached is not None and _eq(cached[0], key):
+    # Hazard H4 (lane pass2-cluster-nbr): `identical` and `fast` keep
+    # separate handle registries, so a handle is reused only by the binding
+    # that minted it; another binding releases it through its minter below
+    # and prepares its own.
+    if cached is not None and cached[2] is binding and _eq(cached[0], key):
         return cached[1]
     if cached is not None:
         knn_release(model)
@@ -389,7 +395,7 @@ def _refuse_inert_p(cls_name: String, metric: PythonObject, p: PythonObject) rai
             is_default = Float64(py=PythonObject(from_owned=result)) == 2.0
         elif (cpython_table()[].PyErr_ExceptionMatches(type_error._obj_ptr) != 0
                 or cpython_table()[].PyErr_ExceptionMatches(value_error._obj_ptr) != 0):
-            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
         else:
             var failure = stash_python_error()
             raise failure^

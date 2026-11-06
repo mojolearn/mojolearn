@@ -11,7 +11,9 @@
 # move. The fits of these classes are bindings/cluster_fit_a_native.mojo's.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
-from bindings.classical_arrays import classical_address, classical_wrap_array, classical_c_bytes
+from bindings.classical_arrays import (
+    classical_address, classical_wrap_array, classical_c_bytes, classical_is_f32, classical_c_order,
+)
 from core.family_cast_impl import family_fill_i32, family_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -36,16 +38,39 @@ def _xc_fitted(mut mods: NativeModules, model: PythonObject, attr: String) raise
     return value
 
 
+def _xc_f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
+    """`source` is an exact Array or ndarray, 2-D, non-empty, float32 in C
+    order: `as_f32_c(source, ndim=2)` would admit it and return its own
+    storage (the test of bindings/mixture_native.mojo `_f32_ready`)."""
+    var cls = py_type(source)
+    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+        return False
+    if Int(py=source.ndim) != 2 or Int(py=source.size) <= 0:
+        return False
+    return classical_is_f32(source, context) and classical_c_order(source, context)
+
+
 def _xc_input(mut mods: NativeModules, model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_XCluster._input_like_fit`: `_f32(X)` (as_f32_c, nonempty, finite)
     and the fitted feature count."""
     var x = PythonObject(None)
-    try:
-        x = family_f32(source, 2, "X", context)
-    except error:
-        if family_nonfinite(error, "X"):
+    if _xc_f32_ready(source, context):
+        # Perf (lane pass2-cluster-nbr): the public door hands over its
+        # admitted X (an exact float32 C-order Array or ndarray), which
+        # `as_f32_c` would return as is. Only the finite refusal is repeated,
+        # as one native scan of the same words, in the same wording.
+        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))),
+                                     Int(py=source.size)):
             raise Error("mojolearn: X contains NaN or infinity")
-        raise Error(String(error))
+        _ = source  # keep the Python object alive through the native scan above
+        x = source
+    else:
+        try:
+            x = family_f32(source, 2, "X", context)
+        except error:
+            if family_nonfinite(error, "X"):
+                raise Error("mojolearn: X contains NaN or infinity")
+            raise Error(String(error))
     var d = Int(py=x.shape[1])
     var fitted = native_fitted_get(mods, model, "n_features_in_")
     if d != Int(py=fitted):
