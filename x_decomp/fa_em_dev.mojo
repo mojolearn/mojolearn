@@ -24,7 +24,12 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
     var nsqrt = sqrt(Float64(n))
     var old_ll = -inf[DType.float64]()
     var it = 0
-    for i in range(1, a.max_iter + 1):
+    # perf-decomp-slow (2026-11-06): the psi update's keep / drop masks are
+    # constants of (nc, d) (Vfull is d x d on both branches): uploaded once
+    # per fit instead of twice per EM iteration. Same words, same order.
+    var keep = k.upload(fa_mask(nc, d, True))
+    var drop = k.upload(fa_mask(nc, d, False))
+    for i in range(1, a.max_iter + 1):  # driver-loop: over the EM iterations
         it = i
         var sqrt_psi = k.ew1(OP_ADDS, k.ew1(OP_SQRT, psi, 0.0), FA_SMALL)
         var s2: DMat
@@ -47,11 +52,13 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
             Vh = mat_t(rev_cols(vh))
         var Vfull = k.upload(Vh)
         var Vt = k.rows(Vfull, 0, nc)
+        # perf-decomp-slow (2026-11-06): s2's words come home with the two
+        # log vectors below, at ONE sync per iteration (was a second sync
+        # here). s2 is not written in between, so the same words reach the
+        # same `dsum` in the same order.
         var s2h = k.get(s2)
-        k.sync()
         var sk = k.rows(k.vec_t(k.copy(s2)), 0, nc)
         sk = k.vec_t(sk^)
-        var unexp = dsum(s2h, nc, d) if nc < d else 0.0
         comptime if C27_FA_COMPONENTS:
             W = k.ew3(OP_CLASSICAL_FA_LOAD, Vt, k.vec_t(k.copy(sk)), sqrt_psi, 0.0)
         else:
@@ -64,6 +71,7 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
         k.sync()
         _ = lskd^
         _ = lpsd^
+        var unexp = dsum(s2h, nc, d) if nc < d else 0.0
         var slog = dsum(lsk, 0, lsk.n())
         var plog = dsum(lps, 0, lps.n())
         var ll = (a.llconst + slog + unexp + plog) * (-Float64(n) / 2.0)
@@ -71,9 +79,6 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
         if (ll - old_ll) < a.tol:
             break
         old_ll = ll
-        var dfull = Vfull.r
-        var keep = k.upload(fa_mask(nc, dfull, True))
-        var drop = k.upload(fa_mask(nc, dfull, False))
         var wts = k.ew2(OP_ADD, k.ew2(OP_MUL, k.ew1(OP_MINS, s2, 1.0), keep), k.ew2(OP_MUL, s2, drop))
         var share = k.mm(wts, k.ew1(OP_SQ, Vfull, 0.0), False, False)
         psi = k.ew1(OP_MAXS, k.ew2(OP_MUL, k.ew1(OP_SQ, sqrt_psi, 0.0), share), FA_SMALL)
