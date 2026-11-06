@@ -38,7 +38,6 @@ from bindings.xseq_native_common import (
 from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token
-from core.identity_trace import FNV_OFFSET, FNV_PRIME, fnv1a64_bytes
 
 
 def _attr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -216,17 +215,20 @@ def _buffer_address(value: PythonObject) raises -> PythonObject:
 # attribute, a list item swapped, unpickling) misses the identity compare and
 # takes the full path, which also writes the new record.
 #
-# pass2-seq-trees-decomp (2026-11-06, pass 2 H2): the record also keeps a
-# native FNV-1a64 stamp of the fitted host bytes it was built from
-# (`_xseq_params_stamp`, the identity-trace hash `core/identity_trace.mojo`).
-# Every predict re-hashes those bytes (one pass over host memory, no Python
-# per value, no upload); a different stamp drops the record and takes the
-# full path, which repacks and mints a new resident token, so an in-place
-# value edit (`coefs_[0][:] = W`, `params_[:] = p`) is seen on every column
-# and the device copy is uploaded again, as 0.8.55 did. A fitted array that
-# exports no C-contiguous buffer is never recorded (full path every call).
-# Still not noticed: header edits inside the SAME ndarray objects
-# (`params_.shape = ...`, `coefs_[0].strides`), which no public API performs.
+# p3-cnn-sequence-tsa (2026-11-06, replaces the pass 2 H2 per-predict
+# FNV-1a64 hash of every fitted host byte): fits publish `params_`,
+# `coefs_[i]` and `intercepts_[i]` as read-only views that cannot be made
+# writeable again (`xseq_readonly_view`), so an in-place value edit
+# (`coefs_[0][:] = W`, `params_[:] = p`) raises NumPy's read-only error
+# instead of running on the stale packed / resident copy; assigning new
+# arrays misses the identity compare and repacks and re-uploads. A recording
+# predict marks any still-writeable fitted array read-only (an unpickled or
+# user-assigned one) and records only when all are; a hit re-checks one
+# flags word per array, so turning one writeable again drops the record. A
+# fitted field that is not exact ndarrays is never recorded (full path every
+# call). Still not noticed: header edits inside the SAME ndarray objects
+# (`params_.shape = ...`), and an array made writeable, edited and made
+# read-only again between two predicts.
 
 comptime _MLP_PACKED_SLOT = "xseq_mlp_packed_v1"
 comptime _RNN_PARAMS_SLOT = "xseq_rnn_params_v1"
@@ -272,57 +274,59 @@ def _record_put(mut mods: NativeModules, slot: String, model: PythonObject, firs
     prepared_put(mods, slot, model, py_call(native_loaded_module("builtins").tuple, record))
 
 
-comptime _HB = UnsafePointer[UInt8, MutUntrackedOrigin]
+def xseq_readonly_view(value: PythonObject) raises -> PythonObject:
+    """p3-cnn-sequence-tsa (hazard A, the read-only scheme): a read-only
+    view of exact ndarray `value` whose base is a read-only memoryview, so
+    `arr[:] = W` raises NumPy's read-only error and the flag cannot be
+    turned back on. `value` itself is marked read-only too."""
+    _ = py_call(native_loaded_module("builtins").setattr, value.flags, "writeable", PythonObject(False))
+    # a memoryview of a non-writeable ndarray is itself read-only
+    var view = py_call(native_loaded_module("builtins").memoryview, value)
+    return py_call(py_type(value), value.shape, dtype=value.dtype, buffer=view)
 
 
-def _xseq_hash_into(value: PythonObject, mut h: UInt64) raises -> Bool:
-    """Fold the bytes of `value`'s C-contiguous buffer (an ndarray or an
-    `array.array`) into `h`; False, with the export error cleared, when it
-    exports none (a non-contiguous or object array)."""
-    ref cpy = Python().cpython()
-    var view = List[Int](length=10, fill=0)  # one Py_buffer: buf, obj, len, ...
-    var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    # flags 0 (PyBUF_SIMPLE): only a C-contiguous exporter succeeds
-    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0))
-    if status != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
-        _ = view^
+def _xseq_array_frozen(value: PythonObject, freeze: Bool) raises -> Bool:
+    """Whether `value` is an exact ndarray that is read-only (after marking
+    it so when `freeze`); False for anything else."""
+    var ndarray = native_loaded_module("numpy").ndarray
+    if py_type(value) is not ndarray:
         return False
-    var address = view[0]
-    var length = view[2]
-    if length > 0:
-        h = fnv1a64_bytes(h, _HB(unsafe_from_address=address), length)
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
-    _ = view^  # the Py_buffer outlives its release
-    return True
+    var flags = value.flags
+    if freeze and Bool(py=flags.writeable):
+        _ = py_call(native_loaded_module("builtins").setattr, flags, "writeable", PythonObject(False))
+    return not Bool(py=flags.writeable)
 
 
-def _xseq_stamp_add(value: PythonObject, mut h: UInt64) raises -> Bool:
-    """Fold one fitted field: an array, or the arrays of an exact list or
-    tuple (`coefs_`, `intercepts_`) in order."""
+def _xseq_field_frozen(value: PythonObject, freeze: Bool) raises -> Bool:
+    """One fitted field: an array, or the arrays of an exact list or tuple
+    (`coefs_`, `intercepts_`)."""
     var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if kind is b.list or kind is b.tuple:
-        var count = len(value)
-        h = (h ^ UInt64(count)) * FNV_PRIME  # the item count, so a moved boundary changes the stamp
-        for i in range(count):  # driver-loop: over fitted layer arrays
-            if not _xseq_hash_into(value[i], h):
+        for i in range(len(value)):  # driver-loop: over fitted layer arrays
+            if not _xseq_array_frozen(value[i], freeze):
                 return False
         return True
-    return _xseq_hash_into(value, h)
+    return _xseq_array_frozen(value, freeze)
 
 
-def _xseq_params_stamp(first: PythonObject, second: PythonObject) raises -> Int:
-    """The record stamp of the fitted host bytes of `first` (and `second`,
-    unless None): FNV-1a64 as a nonzero Int, or 0 when a field exports no
-    C-contiguous buffer (then nothing is recorded)."""
-    var h = FNV_OFFSET
-    if not _xseq_stamp_add(first, h):
+def _xseq_params_frozen(first: PythonObject, second: PythonObject, freeze: Bool) raises -> Int:
+    """p3-cnn-sequence-tsa: replaces the per-predict FNV-1a64 hash of every
+    fitted host byte (pass 2 H2). The record stamp is 1 when every fitted
+    array of `first` (and `second`, unless None) is read-only (made so here
+    when `freeze`, which a recording predict passes), else 0 (nothing is
+    recorded; the full path and per-call upload run as before). Fits publish
+    read-only views that cannot be made writeable again (`xseq_readonly_view`),
+    so an in-place edit raises instead of running on a stale resident copy; an
+    array made read-only here (an unpickled or user-assigned one) that the
+    caller turns writeable again fails the check on the next predict and the
+    record is rebuilt. Cost: one flags read per array, not one pass over the
+    bytes."""
+    if not _xseq_field_frozen(first, freeze):
         return 0
-    if second is not None and not _xseq_stamp_add(second, h):
+    if second is not None and not _xseq_field_frozen(second, freeze):
         return 0
-    var stamp = Int(h.cast[DType.int64]())
-    return stamp if stamp != 0 else 1
+    return 1
 
 
 def _record_put_token(mut mods: NativeModules, slot: String, model: PythonObject, first: PythonObject,
@@ -419,7 +423,9 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var params = xseq_zeros(Python.tuple(total), context)
     stream.fill_uniform_native(xseq_output_provider(context), Int(py=xseq_addr(params)), total, -bound, bound)
     _ = params  # keep the Python object alive through the native call above
-    py_setitem(fields, "params_", params)
+    # p3-cnn-sequence-tsa: the fitted block is published read-only (the fit
+    # entry below still writes it through its address)
+    py_setitem(fields, "params_", xseq_readonly_view(params))
     # the minibatch schedule's scalars; each epoch's row order is built by rnn_fit
     var batch = max(1, min(xseq_int(fields["batch_size"]), n))
     var epochs = xseq_int(fields["max_epochs"])
@@ -467,9 +473,8 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var source_params = fields["params_"]
     var params: PythonObject
     var record = _record_get(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None))
-    # the fitted bytes now; a record built from other values is stale (H2)
-    var stamp = _xseq_params_stamp(source_params, PythonObject(None))
-    if record is not None and (stamp == 0 or Int(py=record[3]) != stamp):
+    # a record is valid while params_ stays read-only (p3-cnn-sequence-tsa)
+    if record is not None and _xseq_params_frozen(source_params, PythonObject(None), False) == 0:
         prepared_drop(mods, _RNN_PARAMS_SLOT, model)
         record = PythonObject(None)
     var token = 0
@@ -478,6 +483,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
         token = Int(py=record[2])
     else:
         params = xseq_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
+        var stamp = _xseq_params_frozen(source_params, PythonObject(None), True)
         token = _record_put_token(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params), stamp)
     var ip = _rnn_ints(model, fields)
     var network = net_of(ip)
@@ -694,9 +700,12 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     for l in range(len(sizes) - 1):  # driver-loop: over network layers
         var fi = sizes[l]
         var fo = sizes[l + 1]
-        _ = py_call(_method(coefs, "append"), _mlp_layer_copy(params, offset, Python.tuple(fi, fo), fi * fo, context))
+        # p3-cnn-sequence-tsa: published read-only (see `_xseq_params_frozen`)
+        _ = py_call(_method(coefs, "append"),
+                    xseq_readonly_view(_mlp_layer_copy(params, offset, Python.tuple(fi, fo), fi * fo, context)))
         offset += fi * fo
-        _ = py_call(_method(intercepts, "append"), _mlp_layer_copy(params, offset, Python.tuple(fo), fo, context))
+        _ = py_call(_method(intercepts, "append"),
+                    xseq_readonly_view(_mlp_layer_copy(params, offset, Python.tuple(fo), fo, context)))
         offset += fo
     py_setitem(fields, "coefs_", coefs)
     py_setitem(fields, "intercepts_", intercepts)
@@ -805,9 +814,8 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     var packed = _record_get(mods, _MLP_PACKED_SLOT, model, coefs, intercepts)
     if packed is not None and Int(py=packed[3]) != columns:
         packed = PythonObject(None)
-    # the fitted bytes now; a packed copy of other values is stale (H2)
-    var stamp = _xseq_params_stamp(coefs, intercepts)
-    if packed is not None and (stamp == 0 or Int(py=packed[6]) != stamp):
+    # a packed copy is valid while the fitted arrays stay read-only (p3-cnn-sequence-tsa)
+    if packed is not None and _xseq_params_frozen(coefs, intercepts, False) == 0:
         prepared_drop(mods, _MLP_PACKED_SLOT, model)
         packed = PythonObject(None)
     var operands: PythonObject
@@ -817,6 +825,7 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
         token = Int(py=packed[5])
     else:
         operands = _mlp_pack(coefs, intercepts, columns, context)
+        var stamp = _xseq_params_frozen(coefs, intercepts, True)
         token = _record_put_token(mods, _MLP_PACKED_SLOT, model, coefs, intercepts, operands, stamp)
     var params = operands[0]
     var hidden_widths = operands[1]
