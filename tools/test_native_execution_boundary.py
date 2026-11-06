@@ -28,5 +28,5 @@ def test_transformer_admin_and_carried_calls_reuse_original_numerical_owner():
     assert 'owner[].closed = True' in source
     assert 'owner[].busy or (op == 12 and owner[].closed)' in source
     boundary = (ROOT/'bindings/neural_block_public.mojo').read_text()
-    assert 'causal_transformer_admin(fields["_session_binding"], fields["_native_session"], 13)' in boundary
-    assert 'causal_transformer_admin(entries, fields["_native_session"], 12)' in boundary
+    assert 'causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)' in boundary
+    assert 'causal_transformer_admin(mods, entries, fields["_native_session"], 12)' in boundary
