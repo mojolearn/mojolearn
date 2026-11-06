@@ -597,8 +597,13 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
     var rp = f32_ptr(Int(py=addrs[1]))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
-    var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+    # The owned copy the device door takes is made with the GIL released
+    # (it was taken under the GIL; p3 rank 295). The door's List signature
+    # (decomposition/linalg_door_impl.mojo) keeps the copy itself.
+    var a_address = Int(py=addrs[0])
+    var a = List[Float32]()
     with GILReleased(Python()):
+        a = read_f32(a_address, max(0, n_rows * n_cols))
         qr_r_device_into(a, n_rows, n_cols, rp)
     _ = a^
     return PythonObject(n_cols)
@@ -652,8 +657,13 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     var sp = f32_ptr(Int(py=addrs[1]))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
-    var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+    # The owned copy the device door takes is made with the GIL released
+    # (it was taken under the GIL; p3 rank 295). The door's List signature
+    # (decomposition/linalg_door_impl.mojo) keeps the copy itself.
+    var a_address = Int(py=addrs[0])
+    var a = List[Float32]()
     with GILReleased(Python()):
+        a = read_f32(a_address, max(0, n_rows * n_cols))
         svdvals_device_into(a, n_rows, n_cols, sp)
     _ = a^
     return PythonObject(n_cols)
