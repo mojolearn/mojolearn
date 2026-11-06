@@ -3,11 +3,36 @@
 # codec error registry is mutable: even a C decoder can call a Python handler.
 # Validated bytes still use the incumbent native codec; malformed bytes raise
 # the same strict error directly, without consulting that callback registry.
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call
+from bindings.py_balanced import py_call, py_type
 from bindings.py_slice_native import py_slice
 from bindings.optimizer_public_words import stash_python_error
+from bindings.native_loaded_module import native_loaded_module
+
+
+def _archive_bytes(raw: PythonObject) raises -> List[UInt8]:
+    """The bytes of `raw` read once: an exact `bytes` object through its
+    C storage (one pointer read, no Python int per byte); any other byte
+    sequence through its items, as before."""
+    var count = len(raw)
+    var out = List[UInt8](capacity=count)
+    if py_type(raw) is native_loaded_module("builtins").bytes:
+        ref cpy = Python().cpython()
+        var address = cpy.lib.get_function[Int]("PyBytes_AsString")(raw._obj_ptr)
+        if address == 0:
+            var failure = stash_python_error()
+            raise failure^
+        out.resize(count, UInt8(0))
+        if count > 0:
+            memcpy(dest=out.unsafe_ptr(), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address),
+                   count=count)
+        _ = raw  # keep the bytes owner alive through the native reads above
+        return out^
+    for k in range(count):  # driver-loop: over the items of a non-bytes byte sequence (a cold input kind)
+        out.append(UInt8(Int(py=raw[k])))
+    return out^
 
 
 def _archive_unicode_failure(raw: PythonObject, encoding: String, start: Int,
@@ -21,10 +46,11 @@ def _archive_unicode_failure(raw: PythonObject, encoding: String, start: Int,
 
 
 def archive_utf8(raw: PythonObject, context: PythonObject) raises -> PythonObject:
+    var octets = _archive_bytes(raw)
     var i = 0
-    var count = len(raw)
-    while i < count:  # driver-loop: strict UTF-8 archive filename validation
-        var first = Int(py=raw[i])
+    var count = len(octets)
+    while i < count:
+        var first = Int(octets[i])
         if first < 128:
             i += 1
             continue
@@ -34,7 +60,7 @@ def archive_utf8(raw: PythonObject, context: PythonObject) raises -> PythonObjec
         for offset in range(1, width):  # driver-loop: bounded Unicode continuation bytes
             if i + offset >= count:
                 _archive_unicode_failure(raw, "utf-8", i, count, "unexpected end of data", context)
-            var byte = Int(py=raw[i + offset])
+            var byte = Int(octets[i + offset])
             var low = 128
             var high = 191
             if offset == 1:
@@ -53,18 +79,20 @@ def archive_utf8(raw: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 def archive_utf32_decode(raw: PythonObject, context: PythonObject) raises -> PythonObject:
+    var octets = _archive_bytes(raw)
+    var count = len(octets)
     var i = 0
-    while i + 4 <= len(raw):  # driver-loop: strict little-endian NPY Unicode words
+    while i + 4 <= count:
         var word = UInt32(0)
         for k in range(4):  # driver-loop: fixed UTF-32 word bytes
-            word |= UInt32(Int(py=raw[i + k])) << UInt32(8 * k)
+            word |= UInt32(octets[i + k]) << UInt32(8 * k)
         if word >= 0xD800 and word <= 0xDFFF:
             _archive_unicode_failure(raw, "utf-32-le", i, i + 4, "code point in surrogate code point range(0xd800, 0xe000)", context)
         if word > 0x10FFFF:
             _archive_unicode_failure(raw, "utf-32-le", i, i + 4, "code point not in range(0x110000)", context)
         i += 4
-    if i != len(raw):
-        _archive_unicode_failure(raw, "utf-32-le", i, len(raw), "truncated data", context)
+    if i != count:
+        _archive_unicode_failure(raw, "utf-32-le", i, count, "truncated data", context)
     return py_call(context["archive_utf32_decode"], raw)[0]
 
 
@@ -88,25 +116,27 @@ def _archive_hex(byte: Int) -> Int:
 
 
 def archive_literal(raw: PythonObject, context: PythonObject) raises -> PythonObject:
+    var octets = _archive_bytes(raw)
+    var count = len(octets)
     var i = 0
-    while i < len(raw):  # driver-loop: Unicode-escape metadata error validation
-        if Int(py=raw[i]) != 92:
+    while i < count:
+        if Int(octets[i]) != 92:
             i += 1
             continue
         var start = i
         i += 1
-        if i == len(raw):
+        if i == count:
             _archive_unicode_failure(raw, "unicodeescape", start, i, "\\ at end of string", context)
-        var letter = Int(py=raw[i])
+        var letter = Int(octets[i])
         i += 1
         if letter == 120 or letter == 117 or letter == 85:
             var width = 2 if letter == 120 else (4 if letter == 117 else 8)
             var reason = "truncated \\xXX escape" if width == 2 else ("truncated \\uXXXX escape" if width == 4 else "truncated \\UXXXXXXXX escape")
             var word = UInt32(0)
             for k in range(width):  # driver-loop: bounded hexadecimal escape digits
-                if i == len(raw):
+                if i == count:
                     _archive_unicode_failure(raw, "unicodeescape", start, i, reason, context)
-                var digit = _archive_hex(Int(py=raw[i]))
+                var digit = _archive_hex(Int(octets[i]))
                 if digit < 0:
                     _archive_unicode_failure(raw, "unicodeescape", start, i, reason, context)
                 word = (word << 4) | UInt32(digit)
@@ -114,13 +144,13 @@ def archive_literal(raw: PythonObject, context: PythonObject) raises -> PythonOb
             if word > 0x10FFFF:
                 _archive_unicode_failure(raw, "unicodeescape", start, i, "illegal Unicode character", context)
         elif letter == 78:
-            if i == len(raw) or Int(py=raw[i]) != 123:
+            if i == count or Int(octets[i]) != 123:
                 _archive_unicode_failure(raw, "unicodeescape", start, i, "malformed \\N character escape", context)
             i += 1
             var begin = i
-            while i < len(raw) and Int(py=raw[i]) != 125:  # driver-loop: native Unicode name spelling
+            while i < count and Int(octets[i]) != 125:  # driver-loop: native Unicode name spelling
                 i += 1
-            if i == len(raw) or i == begin:
+            if i == count or i == begin:
                 _archive_unicode_failure(raw, "unicodeescape", start, i, "malformed \\N character escape", context)
             var name = py_call(py_slice(raw, begin, i).decode, "latin1")
             i += 1
@@ -144,7 +174,7 @@ def archive_literal(raw: PythonObject, context: PythonObject) raises -> PythonOb
                 _archive_unicode_failure(raw, "unicodeescape", start, i, "unknown Unicode character name", context)
         elif letter >= 48 and letter <= 55:
             for k in range(2):  # driver-loop: at most three octal escape digits
-                if i < len(raw) and Int(py=raw[i]) >= 48 and Int(py=raw[i]) <= 55:
+                if i < count and Int(octets[i]) >= 48 and Int(octets[i]) <= 55:
                     i += 1
                 else:
                     break
