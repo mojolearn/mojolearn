@@ -149,6 +149,7 @@
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_attributes import _type_mro
@@ -172,10 +173,28 @@ def _schema_dictionary(value: PythonObject) raises:
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.dict:
         raise Error("TypeError: saved field storage requires an exact dictionary")
-    var keys = py_call(b.list, value)
-    for i in range(len(keys)):  # driver-loop: exact metadata keys before any dictionary lookup
-        if py_type(keys[i]) is not b.str and py_type(keys[i]) is not b.int:
-            raise Error("TypeError: saved field paths require native string or integer keys")
+    # The key types are read through the dictionary's C iterator: no key
+    # list is built and no key is boxed into a Python call per entry. Every
+    # field access repeats this walk, so it stays pointer reads only.
+    ref cpy = Python().cpython()
+    var next = cpy.lib.get_function[Int32]("PyDict_Next")
+    var str_class = b.str
+    var int_class = b.int
+    var position = 0
+    var key = PyObjectPtr()
+    var item = PyObjectPtr()
+    var admitted = True
+    while next(value._obj_ptr, MutPointer(to=position), MutPointer(to=key), MutPointer(to=item)) != 0:
+        var key_type = cpy.PyObject_Type(key)
+        admitted = key_type == str_class._obj_ptr or key_type == int_class._obj_ptr
+        cpy.Py_DecRef(key_type)
+        if not admitted:
+            break
+    _ = value  # keep the dictionary alive through the borrowed key reads above
+    _ = str_class
+    _ = int_class
+    if not admitted:
+        raise Error("TypeError: saved field paths require native string or integer keys")
 
 
 def _schema_index(value: PythonObject, index: PythonObject) raises -> PythonObject:
