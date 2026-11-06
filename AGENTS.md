@@ -9,6 +9,16 @@
   mojolearn`, `import mojolearn`, `python -m mojolearn verify`), paths, URLs and
   domains (mojolearn.org). Put them in backticks when they appear in prose.
 
+## Bits may change between versions (Andrew, 2026-11-05)
+
+- Breaking bitwise identity across versions is OK. We only need to maintain
+  bitwise identity across GPU vendors (Apple, NVIDIA and AMD) within one
+  version.
+- Never hold a performance fix, a correctness fix, a smaller verification
+  fixture or a better fold order because it changes the bits an older version
+  produced. Change every vendor column and the host column together, then
+  record the new reference in the release's one verification round.
+
 ## Peer communication only for execution (Andrew, 2026-10-29)
 
 - Contact peers or other agent threads only when necessary to execute the
