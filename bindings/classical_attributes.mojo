@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public model attribute lookup. Only connected function/native
 # descriptors may bind; arbitrary Python properties/hooks are never called.
-from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
+from bindings.cpython_table import cpython_table
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp, prepared_class_matches
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -167,6 +168,12 @@ def _classical_check_instance(model: PythonObject, context: PythonObject, cls: P
     var b = native_loaded_module("builtins")
     if py_type(model) is not b.type:
         var fields = py_call(plan["fields_get"], model, cls)
+        if py_type(fields) is b.dict:
+            # Native key walk of the exact instance dict: no key view, list
+            # or per-key Python indexing. Same refusal.
+            if not native_namespace_string_keys(fields._obj_ptr, b.str):
+                raise Error("TypeError: native model dictionary requires exact string keys")
+            return
         var keys = py_call(py_type(Python.list()), fields.keys())
         for k in range(len(keys)):  # driver-loop: over native instance attribute names
             if py_type(keys[k]) is not b.str:
@@ -184,10 +191,9 @@ def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: P
     var getter = binding[1]
     var envelope = Python.tuple(model, cls)
     var attribute_error = plan["attribute_error"]
-    var matches = cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")
     var result = cpy.PyObject_Call(getter._obj_ptr, envelope._obj_ptr, PyObjectPtr())
     if not result:
-        var missing = matches(attribute_error._obj_ptr) != 0
+        var missing = cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0
         var error = cpy.unsafe_get_error()
         if missing:
             raise Error("AttributeError: " + String(error))
