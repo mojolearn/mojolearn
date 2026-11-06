@@ -21,6 +21,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.py_typed_call import py_call_typed
+from bindings.cpython_table import cpython_table
 
 
 # ------------------------------------------------------------------ calls
@@ -315,6 +316,10 @@ def _as_c(a: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _admit(a: PythonObject, context: PythonObject) raises:
+    # p3-array-arena: the exact Array class (every Array the library makes)
+    # needs no ancestry walk; a subclass keeps the MRO check.
+    if py_type(a) is context["array_class"]:
+        return
     var b = native_loaded_module("builtins")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(a))
     for i in range(len(ancestry)):  # driver-loop: the connected Array class in the instance's ancestry
@@ -401,13 +406,28 @@ def _tolist(a: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _row(c: PythonObject, shape: PythonObject, step: Int, i: Int, context: PythonObject) raises -> PythonObject:
     """`Array._row_view`: row `i` of a C-order Array, zero-copy."""
-    var b = native_loaded_module("builtins")
     var view = native_storage_allocate(context["array_class"])
     var offset = i * step
     py_setattr(view, "_store", c._store)
     py_setattr(view, "_base", c)
     py_setattr(view, "_pin", c._pin)
-    var part = _call(_attr(c._mv, "__getitem__"), _call(b.slice, PythonObject(offset), PythonObject(offset + step)))
+    # p3-array-arena: the row slice through the C API (PySlice_New and
+    # PyObject_GetItem; the same memoryview slice), not a builtins
+    # namespace connection plus two Python calls per row.
+    ref cpy = Python().cpython()
+    var start = PythonObject(offset)
+    var stop = PythonObject(offset + step)
+    var raw_slice = cpy.lib.get_function[PyObjectPtr]("PySlice_New")(start._obj_ptr, stop._obj_ptr, PyObjectPtr())
+    if not raw_slice:
+        var failure = stash_python_error()
+        raise failure^
+    var bounds = PythonObject(from_owned=raw_slice)
+    var memory = c._mv
+    var raw_part = cpython_table()[].PyObject_GetItem(memory._obj_ptr, bounds._obj_ptr)
+    if not raw_part:
+        var failure = stash_python_error()
+        raise failure^
+    var part = PythonObject(from_owned=raw_part)
     py_setattr(view, "_mv", part)
     py_setattr(view, "_addr", PythonObject(Int(py=c._addr) + offset * Int(py=c.itemsize)))
     py_setattr(view, "_readonly", c._readonly)
@@ -1097,17 +1117,24 @@ def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, c
 
 
 def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonObject) raises -> PythonObject:
+    # `args` is the whole call tuple (op, array, context, *operation args):
+    # the operation arguments are read at 3.. in place, no copied list.
     if op == "init":
-        return _initialize(a, args[0], args[1], context)
+        return _initialize(a, args[3], args[4], context)
     if op == "from_buffer":
-        return array_from_buffer(a, args[0], context)
+        return array_from_buffer(a, args[3], context)
     if op == "from_list":
         # `a` is the class the classmethod was called on.
         var b = native_loaded_module("builtins")
         if py_type(a) is not b.type or not _truth(_call(b.issubclass, a, context["array_class"])):
             raise Error("TypeError: Array.from_list builds a mojolearn Array class")
-        return _from_list(a, args[0], args[1], context)
+        return _from_list(a, args[3], args[4], context)
     _admit(a, context)
+    # p3-array-arena: the per-row and per-element operations first.
+    if op == "row":
+        return _row(a, args[3], Int(py=args[4]), Int(py=args[5]), context)
+    if op == "getitem":
+        return _getitem(a, args[3], context)
     if op == "len":
         return _length(a)
     if op == "repr":
@@ -1126,16 +1153,12 @@ def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonOb
         return _tolist(a, context)
     if op == "iter":
         return _iterate(a, context)
-    if op == "row":
-        return _row(a, args[0], Int(py=args[1]), Int(py=args[2]), context)
     if op == "reshape":
-        return _reshape(a, args[0], context)
+        return _reshape(a, args[3], context)
     if op == "ravel":
         return _reshape(a, Python.tuple(PythonObject(-1)), context)
-    if op == "getitem":
-        return _getitem(a, args[0], context)
     if op == "astype":
-        return _astype(a, args[0], context)
+        return _astype(a, args[3], context)
     if op == "min":
         return _reduce(a, 0, "min", context)
     if op == "max":
@@ -1145,11 +1168,11 @@ def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonOb
     if op == "argmax":
         return _reduce(_as_c(a, context), 3, "argmax", context)
     if op == "eq":
-        return _equal(a, args[0], context)
+        return _equal(a, args[3], context)
     if op == "ne":
-        return _not_equal(a, args[0], context)
+        return _not_equal(a, args[3], context)
     if op == "array":
-        return _array_protocol(a, args[0], args[1], context)
+        return _array_protocol(a, args[3], args[4], context)
     if op == "buffer":
         return _buffer(a, context)
     if op == "reduce":
@@ -1162,13 +1185,10 @@ def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var args = PythonObject(from_borrowed=args_ptr)
         if len(args) < 3:
             raise Error("TypeError: native Array operations expect an operation, an Array and a context")
-        var b = native_loaded_module("builtins")
-        if py_type(args[0]) is not b.str:
+        var op = args[0]
+        if py_type(op) is not py_type(PythonObject("")):
             raise Error("TypeError: native Array operation names are exact strings")
-        var rest = Python.list()
-        for i in range(3, len(args)):  # small-loop(args: operation arguments): at most three per operation
-            _ = py_call(rest.append, args[i])
-        var result = _dispatch(String(args[0]), args[1], args[2], rest)
+        var result = _dispatch(String(op), args[1], args[2], args)
         return result.steal_data()
     except error:
         return _raise_error(error)
