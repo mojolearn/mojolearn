@@ -83,10 +83,49 @@ def test_ranks_are_read_from_every_loaded_binding_and_cleared():
         def device_plan_log(self):
             return []
 
+    class Broken:
+        __name__ = "broken"
+
+        def device_plan_log(self):
+            raise RuntimeError("binding lost\nits table")
+
     a, b = Binding(3), Binding(1)
     assert LS.ranks_take({"a": a, "b": b, "again": a, "old": Old(), "plain": object()}) == 3
     assert LS.ranks_take({"a": a, "b": b}) == 0
     assert LS.ranks_take({"old": Old()}) is None
+    # a binding whose device_plan_log raises is skipped and named, never an exception that loses the arm
+    errors = []
+    assert LS.ranks_take({"broken": Broken(), "a": Binding(2)}, errors) == 2
+    assert len(errors) == 1 and "broken.device_plan_log: RuntimeError: binding lost its table" == errors[0]
+    assert LS.ranks_take({"broken": Broken()}) is None
+
+
+def test_a_broken_rank_record_names_the_binding_in_the_fail_reason():
+    same = {c: [part("a", "1")] for c in LS.COUNTS}
+    multi = LS.COUNTS[1]
+    broken = doc("x", same)
+    broken["arms"][str(multi)].pop("ranks")
+    broken["arms"][str(multi)]["rank_errors"] = ["_mojolearn_svm.device_plan_log: RuntimeError: boom"]
+    verdict, reason, _ = LS.lane_verdict("x", broken)
+    assert verdict == "FAIL" and "no rank record" in reason and "boom" in reason
+
+
+def test_the_gram_lane_is_a_route_that_reaches_the_gram_plan():
+    # Ridge / LinearRegression take linear_gram_fit (no DevicePlan) in IDENTICAL: never on the list.
+    rows = {r[0]: r for r in LS.LANES}
+    assert "ridge-gram" not in rows and all(r[2] != "ridge" for r in LS.LANES)
+    name, family, recipe, _fixture, n_rows, features, _seed = rows["tsvd-gram"]
+    assert family == "core/gram_multi_gpu.mojo" and recipe == "tsvd" and LS.RECIPES[recipe] is LS._tsvd
+    # the split-K arm needs features <= 128; three live row chunks need rows >= 3 * 128
+    assert features <= 128 and n_rows >= 3 * 128
+
+
+def test_no_lane_names_a_dispatcher_no_identical_call_reaches():
+    # every GLM takes the QN tiled gradient in IDENTICAL (glm/impl/qn/glm_base.mojo), never gradient_columns
+    assert all(r[1] != "glm/impl/qn/multi_gpu.mojo" and r[2] != "logistic" for r in LS.LANES)
+    name, family, recipe, _fixture, n_rows, _features, _seed = {r[0]: r for r in LS.LANES}["gp-regress"]
+    assert family == "gaussian_process/checks/kernels.mojo" and LS.RECIPES[recipe] is LS._gp
+    assert n_rows >= max(LS.COUNTS)  # covariance rows: active = min(count, rows)
 
 
 def test_everything_missing_fails_closed():
@@ -131,3 +170,35 @@ def test_the_box_job_runs_it_unconditionally_and_it_decides_the_verdict():
     assert "tools/logical_shard_identity.py" in job and '[ "$grc" != 0 ] || grc=$src' in job
     # its record comes home with the job's reports
     assert '"shardcheck")' in (ROOT / "tools" / "ops" / "release_gate.py").read_text()
+
+
+def test_the_box_runs_the_macs_copy_of_the_tool_right_after_the_overlay():
+    job = (ROOT / "tools" / "ops" / "release_gate_job.sh").read_text()
+    lines = job.splitlines()
+    overlay, shard, gate = (lines.index("PHASE=" + p) for p in ("overlay", "shardcheck", "gate"))
+    assert overlay < shard < gate
+    # the tool is a gate runner overlay file: the box runs the same LANES the Mac judges with
+    import ast
+    tree = ast.parse((ROOT / "tools" / "ops" / "release_gate.py").read_text())
+    overlay = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                   and any(getattr(t, "id", None) == "GATE_OVERLAY" for t in node.targets))
+    assert "tools/logical_shard_identity.py" in overlay
+
+
+def test_the_shard_venv_always_gets_numpy():
+    job = (ROOT / "tools" / "ops" / "release_gate_job.sh").read_text()
+    block = job[job.index("\nPHASE=shardcheck"):job.index("\nPHASE=gate")]
+    install = block.index("-m pip install -q --no-cache-dir 'numpy>=1.26.4'")
+    # after the venv is chosen (identity venv or the fallback venv), before the tool runs
+    assert block.index('shpy="$GATE_WORK/shard-venv/bin/python"') < install < block.index("logical_shard_identity.py --python")
+
+
+def test_the_worker_runs_the_shipped_defaults(monkeypatch):
+    for k, v in (("MOJOLEARN_GBDT_SHARD_ONE_DEVICE", "1"), ("MOJOLEARN_VENDOR", "cpu"),
+                 ("MOJOLEARN_NUMERIC_MODE", "fast"), ("MOJOLEARN_KMEANS_DEVICE_COUNT", "1"),
+                 ("PYTHONPATH", "/src"), ("CUDA_VISIBLE_DEVICES", "0")):
+        monkeypatch.setenv(k, v)
+    env = LS.worker_env(0)
+    assert {k for k in env if k.startswith("MOJOLEARN_")} == {LS.LOGICAL_ENV, "MOJOLEARN_NUMERIC_MODE"}
+    assert env[LS.LOGICAL_ENV] == "1" and env["MOJOLEARN_NUMERIC_MODE"] == "identical"
+    assert "PYTHONPATH" not in env and env["CUDA_VISIBLE_DEVICES"] == "0"

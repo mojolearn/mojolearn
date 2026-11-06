@@ -99,7 +99,11 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
 #: applied over the source tree AFTER the autograd build (the build and its reuse proof read the clean tree)
 #: and BEFORE the gate runs, so a runner fix never needs a refreeze. tools/release.py gate_ok accepts the
 #: report only when the box's route-overlay.txt shows the overlaid bytes (release.overlay_verified).
-GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/release_gate_profiles.py")
+#: tools/logical_shard_identity.py (the one-GPU multi-device gate) is one of them: the Mac judges its record with
+#: its own LANES / COUNTS / SCHEMA (tools/release_identity_wheels.py `single_gate_ok`), so the box must run the same
+#: copy; release_gate_job.sh runs its phase right after the overlay.
+GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/release_gate_profiles.py",
+                "tools/logical_shard_identity.py")
 TERMINAL_NV = ("done", "failed", "cancelled", "timeout", "interrupted")
 
 
