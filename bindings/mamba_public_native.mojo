@@ -17,6 +17,8 @@ return only the output. Internal tuple-returning operations remain available
 for other compiled owners. Dictionary insertion retains each report before
 the temporary tuple is released.
 """
+from std.ffi import _Global
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from std.python import Python, PythonObject
 from std.os import getenv
 from std.python._cpython import PyObjectPtr
@@ -174,7 +176,8 @@ def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObje
     # field storage was admitted. Test the actual native type ancestry.
     ref cpy = Python().cpython()
     var cls = py_type(block)
-    if cpy.lib.get_function[Int32]("PyType_IsSubtype")(
+    # The process-wide CPython table, not a by-name symbol lookup per call.
+    if cpython_table()[].PyType_IsSubtype(
         cls._obj_ptr, context["block_classes"]["cpu"]["mamba3"]._obj_ptr) != 0:
         var entries = _model_bindings(mods, PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
         var block_provider = PythonObject(None)
@@ -1080,11 +1083,43 @@ def mamba_session_repr(session: PythonObject) raises -> PythonObject:
 # ---------------------------------------------------------------- the C boundary
 
 
+struct _MambaGenerationSeen(Defaultable, Movable):
+    # The import-connected class tuple last admitted by
+    # generation_initialize_binding from this door.
+    var classes: PythonObject
+
+    def __init__(out self):
+        self.classes = PythonObject(None)
+
+
+comptime _MAMBA_GENERATION_SEEN = _Global[
+    StorageType=_MambaGenerationSeen, name="MojoMambaGenerationSeenV1",
+    init_fn=_MambaGenerationSeen.__init__,
+]
+
+
+def _mamba_generation_ready(classes: PythonObject) raises:
+    """`generation_initialize_binding(classes)` once per class tuple (lane
+    p3-neural-blocks): it re-proved the whole layer-class registry (a list of
+    its keys, a dict copy, a type check per class) on every decode token. The
+    tuple is immutable; its layer-class dict is watched (Python >= 3.12), so
+    any insert, replacement or deletion there runs the full check again.
+    Where dictionary watchers are unavailable it runs on every call, as
+    before."""
+    var g = _MAMBA_GENERATION_SEEN.get_or_create_ptr()
+    if g[].classes is classes and dict_keys_admitted(classes[2]):
+        return
+    _ = generation_initialize_binding(classes)
+    # The registry keys were just admitted as exact strings.
+    dict_keys_admit(classes[2])
+    g[].classes = classes
+
+
 def mamba_native_call(mut mods: NativeModules, operation: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = mods.module("builtins")
     if py_type(values) is not bi.tuple:
         raise Error("TypeError: native Mamba operations require their ordinary argument tuple")
-    _ = generation_initialize_binding(context["generation_classes"])
+    _mamba_generation_ready(context["generation_classes"])
     if operation == "state_init":
         if len(values) != 3 or py_type(values[1]) is not bi.str:
             raise Error("TypeError: native Mamba state requires its kind and arguments")

@@ -76,7 +76,8 @@ from training.host.native_primitive_dispatch import NATIVE_HOST_TRAINING_PRIMITI
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
+from bindings.native_class_admission import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from core.mojolearn_training_host_impl import (
     embedding_forward_host_into, embedding_backward_host_into, rms_norm_forward_host_into, rms_norm_backward_host_into, linear_forward_host_into, linear_backward_host_into, accumulate_host_into, chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into,
@@ -151,6 +152,12 @@ from training.host.mlp_oracle import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address and size the wrappers pass) is read
+    # directly: the type identity against the static builtin, no operator
+    # module lookup or Python call (lane p3-neural-blocks; a step paid 40+ of
+    # these). Other integer types keep the operator.index path below.
+    if _py_type(value) is static_builtin_type("builtins", "int"):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("training host: integers expected, not booleans")

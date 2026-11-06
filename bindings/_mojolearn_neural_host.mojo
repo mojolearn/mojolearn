@@ -71,7 +71,8 @@ from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
+from bindings.native_class_admission import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API
@@ -143,6 +144,12 @@ from transformer.block_options import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address and size the wrappers pass) is read
+    # directly: the type identity against the static builtin, no operator
+    # module lookup or Python call (lane p3-neural-blocks; a decode token
+    # paid 22-50 of these). Other integer types keep operator.index below.
+    if _py_type(value) is static_builtin_type("builtins", "int"):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("neural host: integers expected, not booleans")

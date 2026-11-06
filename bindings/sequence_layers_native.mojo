@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole public LayerNorm operations and the sequence-layer dispatcher. Input
 # shape/storage/ownership are pinned once and reused for admission and execution.
+from bindings.native_class_admission import class_record, class_admit
+from bindings.native_loaded_module import NativeModules
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
@@ -105,6 +107,26 @@ def _ln_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
     var cls = py_type(owner)
     if cls is not layout[0] or py_type(cls) is not b.type:
         raise Error("TypeError: LayerNorm requires its connected native storage class")
+    # The ancestry, hook and descriptor checks read only the class rows and
+    # the import-connected layout: kept per class (native_class_admission,
+    # re-run when the class or an ancestor changes; every call on Python <
+    # 3.12). Lane p3-neural-blocks.
+    var mods = NativeModules()
+    if class_record(mods, _LN_CLASS_SLOT, cls) is None:
+        _ln_class_admit(cls, layout, b)
+        class_admit(mods, _LN_CLASS_SLOT, cls, PythonObject(True))
+    var fields = _fields(owner)
+    var keys = py_call(b.list, fields)
+    for i in range(len(keys)):  # small-loop(instance metadata keys)
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: LayerNorm fields require exact string names")
+    return fields
+
+
+comptime _LN_CLASS_SLOT = "seqln_class_admitted_v1"
+
+
+def _ln_class_admit(cls: PythonObject, layout: PythonObject, b: PythonObject) raises:
     if py_call(b.type.__dict__["__mro__"].__get__, cls) is not layout[1]:
         raise Error("TypeError: LayerNorm class ancestry changed")
     var hooks = layout[3]
@@ -118,12 +140,6 @@ def _ln_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
         for name in ["normalized_shape", "_D", "eps", "numeric_mode", "weight", "bias", "weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over native layer state schema
             if py_contains(namespace, name):
                 raise Error("TypeError: LayerNorm state cannot be replaced by class descriptors")
-    var fields = _fields(owner)
-    var keys = py_call(b.list, fields)
-    for i in range(len(keys)):  # small-loop(instance metadata keys)
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: LayerNorm fields require exact string names")
-    return fields
 
 
 def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:

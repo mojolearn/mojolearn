@@ -18,16 +18,18 @@ assigning `weight` and finalizing release the resident device table.
 The same compiled entries with the same argument words as the Python bodies
 it replaces, so no bit moves.
 """
+from bindings.native_class_admission import class_record, class_admit
+from bindings.native_loaded_module import NativeModules
 from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import new_array, same_shape, base_format, py_ints, door_ready
 from bindings.optimizer_device_native import shape_count, device_shape
-from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store
+from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
 from bindings.sequence_device_native import seq_device_make, sequence_device_operation
 from bindings.sequence_optimizer_native import seq_device_get
 from bindings.optimizer_admission import opt_value, opt_scalar, opt_guards, opt_exact, opt_numpy
@@ -183,6 +185,12 @@ def _drop_table(fields: PythonObject, context: PythonObject):
 # ---------------------------------------------------------------- ids
 
 def _ids(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # An exact list/tuple of exact ints (the usual token ids): one native
+    # pass to int32 (training_embedding_native.embedding_int_list); every
+    # other input keeps the capture below and its refusals.
+    var fast = embedding_int_list(value)
+    if fast is not None:
+        return fast
     # Capture a native buffer once, retain its export through packing, and
     # feed the existing integer conversion ABI an owned compact snapshot.
     var pin = EmbeddingInput(value, context, True)
@@ -295,6 +303,21 @@ def _class_flag(cls: PythonObject, name: String, context: PythonObject) raises -
 
 
 def _owner(cls: PythonObject, context: PythonObject) raises:
+    # The answer depends only on the class rows and the import-connected
+    # descriptors: kept per class (native_class_admission; re-run when the
+    # class or an ancestor changes; every call on Python < 3.12). Lane
+    # p3-neural-blocks: every forward/backward walked the MRO twice here.
+    var mods = NativeModules()
+    if class_record(mods, _EMB_OWNER_SLOT, cls) is not None:
+        return
+    _owner_full(cls, context)
+    class_admit(mods, _EMB_OWNER_SLOT, cls, PythonObject(True))
+
+
+comptime _EMB_OWNER_SLOT = "embedding_layer_owner_class_v1"
+
+
+def _owner_full(cls: PythonObject, context: PythonObject) raises:
     var ancestry = py_call(_b().type.__dict__["__mro__"].__get__, cls)
     var finalizer = _class_fields(context["embedding_class"])["__del__"]
     # The saved-model CPU class (HostEmbedding, python/mojolearn/_classical_host.py)
@@ -527,6 +550,21 @@ def _require_shape(value: PythonObject, expected: List[Int], name: String, conte
         raise Error("ValueError: mojolearn Embedding: " + name + " has an unexpected shape")
 
 
+def _freeze(table: PythonObject) raises:
+    """Make the layer's own stored table read-only storage (lane
+    p3-neural-blocks): the binding keeps a resident device copy keyed by the
+    layer's token, so an in-place write (`np.asarray(layer.weight)[i] = v`)
+    would otherwise be served stale rows. The table is always the layer's
+    own copy (`_float_owned`, `_load`), never the caller's array; assigning
+    `layer.weight = new` stays allowed and takes a new token. Both the
+    Array's flag (`__array_interface__`) and its memoryview (the 3.12+
+    buffer export NumPy reads first) refuse writes."""
+    py_setattr(table, "_readonly", PythonObject(True))
+    var view = table._mv
+    if not Bool(py=view.readonly):
+        py_setattr(table, "_mv", py_call(view.toreadonly))
+
+
 def _integer(value: PythonObject, name: String) raises -> Int:
     if py_type(value) is not _b().int:
         raise Error("TypeError: mojolearn Embedding: " + name + " must be an int")
@@ -581,6 +619,7 @@ def _initialize(model: PythonObject, values: PythonObject, context: PythonObject
     py_setitem(fields, "norm_type", values[4])
     py_setitem(fields, "scale_grad_by_freq", values[5])
     py_setitem(fields, "sparse", values[6])
+    _freeze(table)
     py_setitem(fields, "weight", table)
     py_setitem(fields, "plan", values[8])
     py_setitem(fields, "numeric_mode", mode)
@@ -689,8 +728,21 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
         _ = dy
         _ = grad
         return seq_device_make(entries["module"], [v, d], handle, PythonObject(None), context)
-    var gradient = _float_owned(dy, "dy", context)
-    _require_shape(gradient, expected, "dy", context)
+    # A contiguous native-order float32 dy is read in place for the call
+    # (its pin retains the storage); only other layouts and dtypes pay the
+    # pack-and-cast copy (lane p3-neural-blocks). The kernel only reads dy.
+    var dy_pin = EmbeddingInput(dy, context)
+    var dy_layout = dy_pin.layout.copy()
+    var gradient = PythonObject(None)
+    var dy_address = 0
+    if base_format(dy_pin.format) == "f" and dy_layout.itemsize == 4 and dy_layout.contiguous():
+        if not same_shape(dy_layout.shape, expected):
+            raise Error("ValueError: mojolearn Embedding: dy has an unexpected shape")
+        dy_address = dy_layout.address
+    else:
+        gradient = _float_owned(dy, "dy", context)
+        _require_shape(gradient, expected, "dy", context)
+        dy_address = Int(py=gradient._addr)
     var previous = grad
     if _is_device(previous, context):
         previous = sequence_device_operation("seqdev_host", previous, Python.tuple(), PythonObject(None), context)
@@ -700,9 +752,11 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
         plan = 0
     if not py_contains(entries, "embedding_backward"):
         raise Error("RuntimeError: this Embedding install has no training entry")
-    _ = py_call_typed(entries["embedding_backward"], Python.list(gradient._addr, admitted[1], out._addr), Python.list(v, d, t, pad, accumulate, plan))
+    _ = py_call_typed(entries["embedding_backward"], Python.list(dy_address, admitted[1], out._addr), Python.list(v, d, t, pad, accumulate, plan))
     _ = admitted^
     _ = gradient^
+    _ = dy_pin^
+    _ = dy
     return out
 
 
@@ -782,6 +836,7 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
     py_setitem(fields, "scale_grad_by_freq", False)
     py_setitem(fields, "sparse", False)
     py_setitem(fields, "plan", plan)
+    _freeze(table)
     py_setitem(fields, "weight", table)
     py_setitem(fields, "numeric_mode", mode)
     _ = meta^
@@ -856,6 +911,7 @@ def embedding_layer_lifetime_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
             _drop_table(fields, context)
             if py_get(fields, "_table_tok") is not None:
                 raise Error("RuntimeError: cannot release the previous Embedding table owner")
+            _freeze(table)
             py_setitem(fields, "weight", table)
         else:
             # Refuse descriptor callbacks before native setattr; native slots

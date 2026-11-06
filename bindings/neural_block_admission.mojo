@@ -3,12 +3,14 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_array_snapshot import native_array_slots as neural_array_slots, native_array_snapshot as neural_array_snapshot
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.generation_buffers import generation_array, py_ints
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32
 from core.hostptr import f32_ptr
+from std.memory import memcpy
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
 
@@ -111,7 +113,19 @@ def neural_record_fields(mut mods: NativeModules, value: PythonObject, names: Py
     # access, including on an otherwise ordinary subclass. No getattr is used.
     var fields = _fields(mods, value)
     var b = mods.module("builtins")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
+    # The descriptor refusal reads only the class rows and the names: kept
+    # per (class, names) (native_class_admission; re-run when the class or an
+    # ancestor changes; every call on Python < 3.12). Lane p3-neural-blocks:
+    # block, state and session calls ran this MRO walk on every step.
+    var slot = String()
+    var cls = py_type(value)
+    if class_watch_ready():
+        slot = String("neural_record_fields_v1")
+        for j in range(len(names)):  # small-loop(known operation field names): the record slot's exact name list
+            slot += "|" + String(py=names[j])
+        if class_record(mods, slot, cls) is not None:
+            return fields
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: refuse field descriptors before later shared attribute access
         var namespace = _class_fields(mods, ancestry[i])
         for j in range(len(names)):  # small-loop(known operation field names)
@@ -121,6 +135,8 @@ def neural_record_fields(mut mods: NativeModules, value: PythonObject, names: Py
                 for k in range(len(member_mro)):  # small-loop(descriptor protocol ancestry)
                     if py_contains(_class_fields(mods, member_mro[k]), "__get__"):
                         raise Error("TypeError: neural fields require native instance storage, not Python descriptors")
+    if slot.byte_length() > 0:
+        class_admit(mods, slot, cls, PythonObject(True))
     return fields
 
 
@@ -155,21 +171,26 @@ def neural_block_fields(mut mods: NativeModules, block: PythonObject, context: P
         "norm", "mlp", "qkv_bias", "o_bias", "norm_bias", "mlp_bias", "qk_norm", "rope_scaling",
         "norm_eps", "rope_theta", "rope_dim", "attn_softcap")
     var fields = neural_record_fields(mods, block, names)
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(block))
-    var admitted = False
-    # The eight connected block classes are read once, not once per ancestor.
-    var block_classes = context["block_classes"]
-    var connected = List[PythonObject]()
-    for route in ["cpu", "gpu"]:  # driver-loop: native admission metadata and retained owner registry
-        var by_kind = block_classes[route]
-        for kind in ["transformer", "mamba1", "mamba2", "mamba3"]:  # driver-loop: native admission metadata and retained owner registry
-            connected.append(by_kind[kind])
-    for i in range(len(ancestry)):  # driver-loop: passive subclasses of connected public block classes
-        var ancestor = ancestry[i]
-        for j in range(len(connected)):  # small-loop(eight connected block classes)
-            admitted = admitted or ancestor is connected[j]
-    if not admitted:
-        raise Error("TypeError: neural operation requires a connected native block")
+    # A subclass of a connected block class: the answer depends only on the
+    # class ancestry and the import-connected classes, kept per class.
+    var block_cls = py_type(block)
+    if class_record(mods, _NEURAL_CONNECTED_SLOT, block_cls) is None:
+        var ancestry = py_call(b.type.__dict__["__mro__"].__get__, block_cls)
+        var admitted = False
+        # The eight connected block classes are read once, not once per ancestor.
+        var block_classes = context["block_classes"]
+        var connected = List[PythonObject]()
+        for route in ["cpu", "gpu"]:  # driver-loop: native admission metadata and retained owner registry
+            var by_kind = block_classes[route]
+            for kind in ["transformer", "mamba1", "mamba2", "mamba3"]:  # driver-loop: native admission metadata and retained owner registry
+                connected.append(by_kind[kind])
+        for i in range(len(ancestry)):  # driver-loop: passive subclasses of connected public block classes
+            var ancestor = ancestry[i]
+            for j in range(len(connected)):  # small-loop(eight connected block classes)
+                admitted = admitted or ancestor is connected[j]
+        if not admitted:
+            raise Error("TypeError: neural operation requires a connected native block")
+        class_admit(mods, _NEURAL_CONNECTED_SLOT, block_cls, PythonObject(True))
     if not initialized:
         return fields
     for i in range(len(names)):  # small-loop(admit mutable scalar words before conversion or comparisons)
@@ -182,6 +203,9 @@ def neural_block_fields(mut mods: NativeModules, block: PythonObject, context: P
     if py_type(fields["d_model"]) is not b.int or Int(py=fields["d_model"]) < 1:
         raise Error("TypeError: neural d_model must be a positive native integer")
     return fields
+
+
+comptime _NEURAL_CONNECTED_SLOT = "neural_block_connected_class_v1"
 
 
 def neural_block_fields(block: PythonObject, context: PythonObject, initialized: Bool = True) raises -> PythonObject:
@@ -310,8 +334,33 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
                     py_setitem(saved, name, storage)
             py_setitem(result, keys[i], captured)
         else:
-            py_setitem(result, keys[i], neural_block_f32(mods, value, String(keys[i]), context))
+            py_setitem(result, keys[i], neural_block_f32_owned(mods, value, String(keys[i]), context))
     return result
+
+
+def neural_block_f32_owned(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`neural_block_f32` for a weight the model RETAINS (constructor
+    weights): always the model's own C-order float32 copy. A C-order float32
+    Array used to be kept as a view of the caller's storage, so an in-place
+    write into the caller's array after construction reached the per-layer
+    and CPU routes but not a kept resident device session (lane
+    p3-neural-blocks; resident sessions are invalidated only through
+    `parameters()`). Every other input already came back as a new array."""
+    if py_type(value) is context["array_class"]:
+        var captured = neural_array_snapshot(mods, value, context)
+        if String(captured.dtype) != "<f4":
+            raise Error(_neural_dtype_refusal(name, String(captured.dtype)))
+        if String(captured.order) == "C":
+            var dims = List[Int]()
+            for i in range(len(captured.shape)):  # driver-loop: over the weight's shape words
+                dims.append(Int(py=captured.shape[i]))
+            var result = generation_array(dims)
+            var count = Int(py=captured.size)
+            if count > 0:
+                memcpy(dest=f32_ptr(Int(py=result._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
+            _ = captured^
+            return result
+    return neural_block_f32(mods, value, name, context)
 
 
 def _neural_dtype_refusal(name: String, code: String) -> String:

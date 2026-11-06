@@ -3,7 +3,8 @@
 # weight ownership, native execution and finished result publication. Numerical
 # forward/backward kernels and their resident weight ABI remain unchanged.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields
@@ -25,9 +26,19 @@ def _b() raises -> PythonObject:
 
 
 
+# The class admission below depends only on the class rows and the
+# import-connected layout: kept per class (native_class_admission, re-run when
+# the class or an ancestor changes; every call on Python < 3.12). Lane
+# p3-neural-blocks: it was an MRO walk with 18 name tests per row per call.
+comptime _MOE_CLASS_SLOT = "seqmoe_class_admitted_v1"
+
+
 def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    var layout = context["seqmoe_layout"]
     var cls = py_type(owner)
+    var mods = NativeModules()
+    if class_record(mods, _MOE_CLASS_SLOT, cls) is not None:
+        return _fields(mods, owner)
+    var layout = context["seqmoe_layout"]
     var b = _b()
     if py_type(cls) is not b.type:
         raise Error("TypeError: MoEBlock refuses Python metaclass protocols")
@@ -52,7 +63,8 @@ def _owner(owner: PythonObject, context: PythonObject) raises -> PythonObject:
         for name in ["D", "F", "E", "k", "norm_topk_prob", "numeric_mode", "router", "gate_up_proj", "down_proj", "_wver", "_wdev", "_routing", "router_grad_", "gate_up_proj_grad_", "down_proj_grad_"]:  # driver-loop: over native state schema
             if py_contains(namespace, name):
                 raise Error("TypeError: MoEBlock state cannot be replaced by class descriptors")
-    return _fields(owner)
+    class_admit(mods, _MOE_CLASS_SLOT, cls, PythonObject(True))
+    return _fields(mods, owner)
 
 
 def _integer(value: PythonObject, context: PythonObject) raises -> Int:
@@ -105,12 +117,39 @@ def _readonly(value: PythonObject) raises:
     py_setattr(value.flags, "writeable", PythonObject(False))
 
 
+def _sealed(value: PythonObject) raises -> PythonObject:
+    """The stored weight: a read-only view over a read-only buffer of the
+    owning ndarray, so `w.flags.writeable = True` raises instead of letting
+    an in-place write diverge from the resident device copy (lane
+    p3-neural-blocks; the resident key is the weight version, which only an
+    assignment bumps). `value` must already be read-only (`_readonly`); its
+    memoryview is then read-only and NumPy refuses to turn WRITEABLE back on
+    for an array whose base buffer is read-only. Same bytes, no copy."""
+    var numpy = native_loaded_module("numpy")
+    var view = py_call(_b().memoryview, value)
+    var flat = py_call(numpy.frombuffer, view, value.dtype)
+    return py_call(flat.reshape, value.shape)
+
+
+def _owner_word(fields: PythonObject) -> Int:
+    # The identity of this block's own instance dict: `copy.copy(block)`
+    # copies `_wdev` into a new dict, and that copy must neither use nor free
+    # the original block's device handle.
+    return Int(fields._obj_ptr)
+
+
 def _cached(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var cur = py_get(fields, "_wdev")
     if cur is None:
         return cur
-    if py_type(cur) is not _b().tuple or len(cur) != 3 or py_type(cur[1]) is not _b().int or py_type(cur[2]) is not _b().int:
+    if (py_type(cur) is not _b().tuple or len(cur) != 4 or py_type(cur[1]) is not _b().int
+            or py_type(cur[2]) is not _b().int or py_type(cur[3]) is not _b().int):
         raise Error("TypeError: MoEBlock resident weights require native owner/version/handle metadata")
+    if Int(py=cur[3]) != _owner_word(fields):
+        # Another block's handle, copied in by copy.copy: forget it here
+        # without freeing it (its own block releases it).
+        py_setitem(fields, "_wdev", PythonObject(None))
+        return PythonObject(None)
     _ = seq_binding(PythonObject(None), context, cur[0])
     return cur
 
@@ -132,7 +171,7 @@ def _weights(fields: PythonObject, entries: PythonObject, words: List[Int],
     _release(fields, context)
     var handle = py_call_typed(entries["moe_weights_put"], Python.list(r.address, gu.address, dn.address),
                                Python.list(words[2], words[0], words[1]))
-    py_setitem(fields, "_wdev", Python.tuple(entries["module"], version, handle))
+    py_setitem(fields, "_wdev", Python.tuple(entries["module"], version, handle, _owner_word(fields)))
     return handle
 
 
@@ -196,7 +235,7 @@ def _initialize(fields: PythonObject, values: PythonObject, mode: PythonObject, 
         _ = normal_init_f32(Int(py=classical_address(a)), n, 0.0, 0.02, word, offset)
         offset += UInt64(n)
         _readonly(a)
-        py_setitem(fresh, names_w[i], a)
+        py_setitem(fresh, names_w[i], _sealed(a))
     var version = _version(fields)
     _release(fields, context)
     py_setitem(fresh, "_wver", PythonObject(version + 3))
@@ -219,7 +258,7 @@ def _load(owner: PythonObject, fields: PythonObject, state: PythonObject, contex
         if not same_shape(buffer.shape, _shapes(words, i)):
             raise Error("ValueError: MoEBlock: " + String(names[i]) + " has the wrong shape")
         _readonly(buffer.array)
-        _ = py_call(pending.append, buffer.array)
+        _ = py_call(pending.append, _sealed(buffer.array))
     var version = _version(fields)
     for i in range(3):  # driver-loop: over publish only after complete admission
         py_setitem(fields, names[i], pending[i])
@@ -351,7 +390,7 @@ def sequence_moe_operation(operation: String, owner: PythonObject, values: Pytho
             var buffer = MoEBuffer(values[1], context, True, False)
             var version = _version(fields)
             _readonly(buffer.array)
-            py_setitem(fields, name, buffer.array)
+            py_setitem(fields, name, _sealed(buffer.array))
             py_setitem(fields, "_wver", PythonObject(version + 1))
         else:
             # Ordinary instance fields retain Python assignment semantics. A

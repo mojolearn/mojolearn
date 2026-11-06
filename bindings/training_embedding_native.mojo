@@ -6,7 +6,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.optimizer_admission import opt_value, opt_numpy
 from bindings.optimizer_public_words import stash_python_error
-from bindings.optimizer_public_door import TensorView, tensor_view, new_array, contiguous_addr
+from bindings.optimizer_public_door import TensorView, tensor_view, new_array, contiguous_addr, py_ints
+from std.memory import memcpy
 from bindings.optimizer_device_native import shape_count
 from bindings.training_rms_native import rms_host_view
 from bindings.training_scalar_native import training_scalar_number
@@ -50,28 +51,48 @@ def embedding_array_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
     var packed = embedding_pack(view.addr, view.shape, view.strides, view.itemsize, False, 0, count)
     var pointer = packed.unsafe_ptr()
     var dtype = String(value.dtype)
+    # The dtype is decided once per Array, not by a string chain per element.
+    var code = 0
+    if dtype == "<f4":
+        code = 1
+    elif dtype == "<f8":
+        code = 2
+    elif dtype == "<f2":
+        code = 3
+    elif dtype == "<i8":
+        code = 4
+    elif dtype == "<i4":
+        code = 5
+    elif dtype == "<u4":
+        code = 6
+    elif dtype == "<u2":
+        code = 7
+    elif dtype == "<i1":
+        code = 8
+    elif dtype == "<u1":
+        code = 9
+    if code == 0 and count > 0:
+        raise Error("TypeError: nested index Array has an unsupported dtype")
     for i in range(count):  # driver-loop: serialize nested native Array leaves into the admitted index envelope
         var scalar = PythonObject(None)
-        if dtype == "<f4":
+        if code == 1:
             scalar = PythonObject(Float64(pointer.bitcast[Float32]()[i]))
-        elif dtype == "<f8":
+        elif code == 2:
             scalar = PythonObject(pointer.bitcast[Float64]()[i])
-        elif dtype == "<f2":
+        elif code == 3:
             scalar = PythonObject(Float64(f16_bits_to_f32(pointer.bitcast[UInt16]()[i])))
-        elif dtype == "<i8":
+        elif code == 4:
             scalar = PythonObject(Int(pointer.bitcast[Int64]()[i]))
-        elif dtype == "<i4":
+        elif code == 5:
             scalar = PythonObject(Int(pointer.bitcast[Int32]()[i]))
-        elif dtype == "<u4":
+        elif code == 6:
             scalar = PythonObject(Int(pointer.bitcast[UInt32]()[i]))
-        elif dtype == "<u2":
+        elif code == 7:
             scalar = PythonObject(Int(pointer.bitcast[UInt16]()[i]))
-        elif dtype == "<i1":
+        elif code == 8:
             scalar = PythonObject(Int(pointer.bitcast[Int8]()[i]))
-        elif dtype == "<u1":
-            scalar = PythonObject(Int(pointer[i]))
         else:
-            raise Error("TypeError: nested index Array has an unsupported dtype")
+            scalar = PythonObject(Int(pointer[i]))
         py_call(leaves.append, scalar)
     _ = packed^
     _ = value_owner^
@@ -112,6 +133,69 @@ def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
         raise Error("ValueError: embedding indices must be rectangular")
     opt_value(value, context)
     py_call(leaves.append, value)
+
+
+def _int32_leaf(item: PythonObject, int_type: PythonObject, mut codes: List[Int32]) raises -> Bool:
+    # One exact int leaf that fits int32, appended; False sends the whole
+    # input to the general walk (which raises the same refusals as before).
+    if py_type(item) is not int_type:
+        return False
+    var v = 0
+    try:
+        v = Int(py=item)
+    except:
+        return False
+    if v < -2147483648 or v > 2147483647:
+        return False
+    codes.append(Int32(v))
+    return True
+
+
+def embedding_int_list(value: PythonObject) raises -> PythonObject:
+    """The common index input, an exact list/tuple of exact ints (or a
+    rectangular list/tuple of such rows) that fit int32, read in one native
+    pass into a new int32 Array: (array, address, count, shape) or None for
+    every other input (lane p3-neural-blocks). The general path walked each
+    leaf through Python (admission, a bound append), scanned the leaves
+    twice more, built an `array('q')` through a Python call and cast it with
+    a second binding call. Same int32 values: an exact int in int32 range
+    is exactly what that cast produced; anything else (bool, float, a NumPy
+    scalar, out of range, ragged, deeper nesting, empty) takes the general
+    path and its refusals."""
+    var b = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is not b.list and cls is not b.tuple:
+        return PythonObject(None)
+    var rows = len(value)
+    if rows == 0:
+        return PythonObject(None)
+    var first = value[0]
+    var nested = py_type(first) is b.list or py_type(first) is b.tuple
+    var width = len(first) if nested else 1
+    if width == 0:
+        return PythonObject(None)
+    var codes = List[Int32](capacity=rows * width)
+    var shape = List[Int]()
+    shape.append(rows)
+    if nested:
+        shape.append(width)
+        for i in range(rows):  # driver-loop: rows of the caller's index list
+            var row = value[i]
+            var row_cls = py_type(row)
+            if (row_cls is not b.list and row_cls is not b.tuple) or len(row) != width:
+                return PythonObject(None)
+            for j in range(width):  # driver-loop: one native read per index of the row
+                if not _int32_leaf(row[j], b.int, codes):
+                    return PythonObject(None)
+    else:
+        for i in range(rows):  # driver-loop: one native read per index
+            if not _int32_leaf(value[i], b.int, codes):
+                return PythonObject(None)
+    var count = len(codes)
+    var out = new_array([count], "<i4")
+    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)),
+           src=codes.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), count=count)
+    return Python.tuple(out, out._addr, count, py_ints(shape))
 
 
 def embedding_numpy_dtype(value: PythonObject, context: PythonObject) raises:
@@ -170,9 +254,17 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
 
 
 def embedding_indices(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fast = embedding_int_list(value)
+    if fast is not None:
+        return Python.tuple(fast[0], fast[1], fast[2])
     var value_owner = value
     var numpy = py_get(context["modules"], "numpy")
-    if numpy is not None and py_type(numpy) is context["module_type"]:
+    # The complex-scalar refusal reads NumPy scalar classes only: an exact
+    # ndarray or Array is neither, so it skips the class loop (lane
+    # p3-neural-blocks; it was two boxed reads per scalar class per call).
+    var value_cls = py_type(value)
+    var container = value_cls is context["array_class"] or (numpy is not None and value_cls is native_numpy_type("ndarray", context))
+    if not container and numpy is not None and py_type(numpy) is context["module_type"]:
         var classes = sequence_dtype_classes(context)
         for i in range(len(classes)):  # driver-loop: preserve native complex-scalar refusal before general admission
             if py_type(value) is classes[i][1] and String(value.dtype.kind) == "c":
@@ -202,22 +294,28 @@ def embedding_indices(value: PythonObject, context: PythonObject) raises -> Pyth
             # conversion; admit every resulting leaf before calling a slot.
             var leaves = Python.list()
             ref cpy = Python().cpython()
+            # The stored object pointers are read straight from the buffer
+            # in logical C order (lane p3-neural-blocks): no index tuple, no
+            # by-name PyObject_GetItem per element. An exact object ndarray's
+            # item access returned the same stored object (one new
+            # reference); the leaves are admitted below as before.
+            var steps = view.strides.copy()
+            if not view.has_strides or len(steps) != len(view.shape):
+                steps = List[Int](length=len(view.shape), fill=0)
+                var step = view.itemsize
+                for j in range(len(view.shape) - 1, -1, -1):  # driver-loop: C-order strides of the object buffer
+                    steps[j] = step
+                    step *= view.shape[j]
             for i in range(count):  # driver-loop: native index-container item unboxing in logical C order
                 var remaining = i
-                var words = List[Int](length=len(view.shape), fill=0)
-                for j in range(len(view.shape) - 1, -1, -1):  # driver-loop: coordinates of one scalar item
-                    words[j] = remaining % view.shape[j]
+                var offset = 0
+                for j in range(len(view.shape) - 1, -1, -1):  # driver-loop: byte offset of one stored item
+                    offset += (remaining % view.shape[j]) * steps[j]
                     remaining //= view.shape[j]
-                var indexes = Python.list()
-                for j in range(len(words)):  # driver-loop: assemble the native scalar index tuple
-                    py_call(indexes.append, words[j])
-                var index = py_call(context["container_types"][1], indexes)
-                var item = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(value._obj_ptr, index._obj_ptr)
-                _ = index^
-                if not item:
-                    var failure = stash_python_error()
-                    raise failure^
-                var scalar = PythonObject(from_owned=item)
+                var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=view.addr + offset)[0]
+                if not raw:
+                    raise Error("TypeError: embedding indices contain an uninitialized object slot")
+                var scalar = PythonObject(from_owned=cpy.Py_NewRef(raw))
                 py_call(leaves.append, scalar)
             var packed = embedding_leaf_store(leaves, True, context)
             storage = packed[0]
