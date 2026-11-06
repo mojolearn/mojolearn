@@ -4,7 +4,6 @@
 # default_mode, getattr hooks, or a Python truth/string conversion protocol.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_error_class import error_without_class
@@ -80,7 +79,7 @@ def _instance_fields(b: PythonObject, model: PythonObject) raises -> PythonObjec
     ref cpy = Python().cpython()
     # This documented accessor reads the actual native instance dictionary;
     # GenericGetAttr("__dict__") could invoke a user-defined property.
-    var raw = cpython_table()[].PyObject_GenericGetDict(model._obj_ptr, PyObjectPtr())
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr, PyObjectPtr())
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=raw)
@@ -218,8 +217,8 @@ def _configuration_value(mut mods: NativeModules, model: PythonObject, fields: P
                 var args = Python.tuple(model, cls)
                 var value = cpy.PyObject_Call(getter._obj_ptr, args._obj_ptr, PyObjectPtr())
                 if not value:
-                    if cpython_table()[].PyErr_ExceptionMatches(b.AttributeError._obj_ptr) != 0:
-                        cpy.PyErr_Clear()
+                    if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(b.AttributeError._obj_ptr) != 0:
+                        cpy.lib.get_function[NoneType]("PyErr_Clear")()
                         return PythonObject(None)
                     var failure = stash_python_error()
                     raise failure^
