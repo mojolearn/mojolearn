@@ -17,7 +17,6 @@ from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains
-from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
@@ -32,7 +31,7 @@ from bindings.family_common import (
 from bindings.mani_kit import (
     MKit, mk_from_input, mk_from_snapshot, mk_copy, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_desc_range, mk_out,
     mk_out2, mk_store, mk_store_ptr, mk_at, mk_of, mk_fill, mk_zeros, mk_reshape, mk_dev_view, mk_new,
-    mk_on_dev, mk_take_rows_list, mk_ints, mk_addr, mk_store_addr, mk_store_len,
+    mk_on_dev, mk_take_rows_list, mk_ints, mk_addr, mk_store_addr, mk_store_len, mk_store_zeros, mk_store_part,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_SQRT, OP_SQ, OP_SCALE, OP_FMA, OP_ADDS, OP_GTS, OP_MIN, OP_LE,
     SEL_MAXABS, SEL_MAX, SEL_MIN,
 )
@@ -209,7 +208,8 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
         return (False, PythonObject(None), PythonObject(None))
     var q = k.ew1(OP_ADDS, k.rand(n, 1, PythonObject(0x1A2C05), 91, 0), -0.5)
     q = k.ew1(OP_SCALE, q, 1.0 / sqrt(_mani_kdot(k, q, q)))
-    var ab = py_call(ctx["array_type"], PythonObject("f"), py_call(ctx["native_bytes_type"], PythonObject(2 * cap * 4)))
+    # the batch's alphas and betas: a native words holder, made once per solve
+    var ab = mk_store_zeros(2 * cap, ctx)
     var resident = k.res()
     var qd: PythonObject
     var abd = PythonObject(None)
@@ -293,9 +293,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
     if mk_on_dev(qd):
         qm = mk_dev_view(matrix_device(qd), j, n, ctx)
     else:
-        var store = mk_store(qd, ctx)
-        qm = mk_new(py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice, PythonObject(0),
-                                                       PythonObject(j * n))), j, n, ctx)
+        qm = mk_new(mk_store_part(mk_store(qd, ctx), 0, j * n), j, n, ctx)
     var v = k.mm(qm, yt, True, False)
     _ = ab^
     _ = abd^

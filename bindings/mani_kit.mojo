@@ -15,17 +15,18 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
-from bindings.py_attr import py_attr
 from bindings.manifold_storage_native import (
     ManifoldMatrix, ManifoldDevice, matrix_rows, matrix_cols, matrix_store, matrix_device,
     matrix_set_store, matrix_set_device, device_binding, device_identifier,
+    device_alloc, device_release, device_upload, device_download, device_move,
+    words_new, words_count, words_address,
 )
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.classical_arrays import classical_address, classical_wrap_array
-from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_as_f32, family_f32_snapshot
+from bindings.classical_arrays import classical_address
+from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array, family_f32_snapshot
 from core.family_cast_impl import family_all_finite_f32
-from bindings.native_loaded_module import native_loaded_module, _loaded_fields
-from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_entry as family_entry, spectral_umap_optional_entry
+from bindings.native_loaded_module import native_loaded_module
+from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_optional_entry
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -90,26 +91,48 @@ def mk_append(items: PythonObject, value: PythonObject) raises:
 
 
 def mk_store_zeros(n: Int, ctx: PythonObject) raises -> PythonObject:
-    """`array.array('f', [0.0]) * n`: n zero float32 words."""
-    return py_call(ctx["array_type"], PythonObject("f"), py_call(ctx["native_bytes_type"], PythonObject(n * 4)))
+    """n zero float32 words: a native words holder (was `array.array('f',
+    bytes(4 n))`, two Python allocations and a copy)."""
+    return words_new(n)
 
 
 def mk_store_len(store: PythonObject) raises -> Int:
-    return Int(py=py_call(native_loaded_module("builtins").len, store))
+    return words_count(store)
 
 
 def mk_store_addr(store: PythonObject) raises -> PythonObject:
-    """`store.buffer_info()[0]`."""
-    return py_call(store.buffer_info)[0]
+    """The holder's first word, as the entries take it."""
+    return PythonObject(words_address(store))
 
 
 def mk_store_ptr(store: PythonObject) raises -> FAMILY_F32P:
-    return FAMILY_F32P(unsafe_from_address=Int(py=mk_store_addr(store)))
+    return FAMILY_F32P(unsafe_from_address=words_address(store))
 
 
 def mk_store_copy(store: PythonObject, ctx: PythonObject) raises -> PythonObject:
-    """`array.array('f', store)`: an exact copy."""
-    return py_call(ctx["array_type"], PythonObject("f"), store)
+    """An exact copy of a holder's words."""
+    return mk_store_part(store, 0, words_count(store))
+
+
+def mk_store_part(store: PythonObject, a: Int, b: Int) raises -> PythonObject:
+    """`store[a:b]` (a copy), the bounds clamped to the holder as a slice
+    clamps them (callers pass a >= 0)."""
+    var n = words_count(store)
+    var lo = min(max(a, 0), n)
+    var hi = min(max(b, lo), n)
+    var out = words_new(hi - lo)
+    if hi > lo:
+        memcpy(dest=mk_store_ptr(out), src=mk_store_ptr(store) + lo, count=hi - lo)
+    _ = store  # keep the holder alive through the copy above
+    return out
+
+
+def mk_required(entry: PythonObject, name: String) raises -> PythonObject:
+    """An entry resolved optionally at buffer creation, refused at use exactly
+    as `spectral_umap_entry` refused a missing one."""
+    if entry is None:
+        raise Error("ImportError: mojolearn: compiled entry is unavailable: " + name)
+    return entry
 
 
 def mk_r(m: PythonObject) raises -> Int:
@@ -141,18 +164,14 @@ def mk_dev_view(d: PythonObject, r: Int, c: Int, ctx: PythonObject) raises -> Py
     return PythonObject(alloc=ManifoldMatrix(PythonObject(None), d, r, c))
 
 
-def mk_devbuf(raw: PythonObject, n: Int, ctx: PythonObject) raises -> PythonObject:
-    """`_DevBuf(raw, n)`: a pooled device buffer of the binding, freed (back to
-    the pool) when its last holder dies."""
-    var release = family_entry(raw, "x_decomp_dev_free", ctx)
-    return mk_devbuf_with(raw, release, family_entry(raw, "x_decomp_dev_alloc", ctx), n)
-
-
-def mk_devbuf_with(raw: PythonObject, release: PythonObject, alloc: PythonObject, n: Int) raises -> PythonObject:
-    """`mk_devbuf` with the binding's free and alloc entries already resolved
-    (MKit keeps them per kit)."""
+def mk_devbuf_like(d: PythonObject, n: Int) raises -> PythonObject:
+    """`_DevBuf(raw, n)` on the binding of the device buffer `d`, with the
+    entries `d` already carries (no namespace lookup): a pooled device
+    buffer, freed (back to the pool) when its last holder dies."""
+    var alloc = device_alloc(d)
     var identifier = family_call(alloc, PythonObject(max(n, 1)))
-    return PythonObject(alloc=ManifoldDevice(raw, release, identifier, n))
+    return PythonObject(alloc=ManifoldDevice(device_binding(d), device_release(d), identifier, n, alloc,
+                                             device_upload(d), device_download(d), device_move(d)))
 
 
 def mk_zeros(r: Int, c: Int, ctx: PythonObject) raises -> PythonObject:
@@ -165,10 +184,9 @@ def mk_of(values: List[Float64], r: Int, c: Int, ctx: PythonObject) raises -> Py
     var store = mk_store_zeros(len(values), ctx)
     if len(values) > 0:
         var p = mk_store_ptr(store)
-        _ = store  # keep the Python object alive through the native call above
         for i in range(len(values)):  # small-loop(values: a constant operand the caller spells out): bounded by the call site
             p[i] = Float32(values[i])
-            _ = store  # keep the Python object alive through the native call above
+        _ = store  # keep the holder alive through the writes above
     return mk_new(store, r, c, ctx)
 
 
@@ -195,7 +213,10 @@ def mk_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
         var n = mk_n(m)
         var a = mk_store_zeros(n, ctx)
         if n > 0:
-            _ = family_call(family_entry(device_binding(d), "x_decomp_dev_download", ctx), device_identifier(d), mk_store_addr(a), PythonObject(n))
+            # the download entry the buffer carries (was a module-namespace
+            # scan per download)
+            _ = family_call(mk_required(device_download(d), "x_decomp_dev_download"), device_identifier(d),
+                            mk_store_addr(a), PythonObject(n))
             _ = a  # keep the Python object alive through the native call above
         matrix_set_store(m, a)
     matrix_set_device(m, PythonObject(None))
@@ -203,13 +224,12 @@ def mk_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
 
 
 def mk_addr(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
-    """`m.addr`: its host store's address (`_M._one`'s for an empty one)."""
+    """`m.addr`: its host store's address (an empty holder's spare zero word,
+    as `_M._one`'s was, for an empty one)."""
     var store = mk_store(m, ctx)
-    if mk_store_len(store):
-        var _keep_ret_store = mk_store_addr(store)
-        _ = store  # keep the Python object alive through the native call above
-        return _keep_ret_store^
-    return mk_store_addr(mk_store(mk_one(ctx), ctx))
+    var _keep_ret_store = mk_store_addr(store)
+    _ = store  # keep the Python object alive through the native call above
+    return _keep_ret_store^
 
 
 def mk_ptr(m: PythonObject, ctx: PythonObject) raises -> FAMILY_F32P:
@@ -231,9 +251,21 @@ def mk_copy(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
 
 
 def mk_out(m: PythonObject, shape: PythonObject, ctx: PythonObject) raises -> PythonObject:
-    """`m.out(shape)`: a public float32 Array (C order) holding a copy."""
-    var store = mk_store_copy(mk_store(m, ctx), ctx)
-    return classical_wrap_array(store, shape, "<f4", "C", ctx)
+    """`m.out(shape)`: a public float32 Array (C order) holding a copy (one
+    copy straight from the words; was a store copy wrapped in an Array)."""
+    var store = mk_store(m, ctx)
+    var n = words_count(store)
+    var size = 1
+    for k in range(len(shape)):  # driver-loop: over array rank metadata
+        size *= Int(py=shape[k])
+    if size != n:
+        raise Error("RuntimeError: an array store does not match its shape")
+    var out = family_array(shape, "<f4", ctx)
+    if n > 0:
+        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), src=mk_store_ptr(store), count=n)
+    _ = store  # keep the holder alive through the copy above
+    _ = out  # keep the Python object alive through the copy above
+    return out
 
 
 def mk_out2(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
@@ -255,32 +287,31 @@ def mk_res_moves(m: PythonObject, count: Int) raises -> Bool:
 
 def mk_dev_gather(m: PythonObject, op: Int, idx: List[Int], ctx: PythonObject) raises -> PythonObject:
     """`_dev_gather(M, op, idx)`: rows (TAKE_ROWS) or columns (TAKE_COLS) of
-    a device matrix, on its own binding."""
+    a device matrix, on its own binding (the entries its buffer carries)."""
     var d = matrix_device(m)
-    var raw = device_binding(d)
     var w = len(idx)
     var ia = mk_store_zeros(w, ctx)
     var p = mk_store_ptr(ia)
-    _ = ia  # keep the Python object alive through the native call above
     for t in range(w):  # small-loop(idx: the gathered row or column numbers): bounded by the caller's index list
         p[t] = Float32(Float64(idx[t]))
-        _ = ia  # keep the Python object alive through the native call above
-    var di = mk_devbuf(raw, w, ctx)
-    _ = family_call(family_entry(raw, "x_decomp_dev_upload", ctx), device_identifier(di), mk_store_addr(ia), PythonObject(w))
+    _ = ia  # keep the Python object alive through the writes above
+    var di = mk_devbuf_like(d, w)
+    _ = family_call(mk_required(device_upload(d), "x_decomp_dev_upload"), device_identifier(di), mk_store_addr(ia), PythonObject(w))
     _ = ia  # keep the Python object alive through the native call above
+    var move = mk_required(device_move(d), "x_decomp_dev_move")
     var r = mk_r(m)
     var c = mk_c(m)
     var n = r * c
     var out: PythonObject
     if op == MV_TAKE_ROWS:
         var count = w * c
-        out = mk_dev_view(mk_devbuf(raw, count, ctx), w, c, ctx)
-        _ = family_call(family_entry(raw, "x_decomp_dev_move", ctx), device_identifier(d), device_identifier(di), device_identifier(matrix_device(out)),
+        out = mk_dev_view(mk_devbuf_like(d, count), w, c, ctx)
+        _ = family_call(move, device_identifier(d), device_identifier(di), device_identifier(matrix_device(out)),
                         mk_ints([op, count, c, 0, 0, 1, 0, n, count, w]))
     else:
         var count = r * w
-        out = mk_dev_view(mk_devbuf(raw, count, ctx), r, w, ctx)
-        _ = family_call(family_entry(raw, "x_decomp_dev_move", ctx), device_identifier(d), device_identifier(di), device_identifier(matrix_device(out)),
+        out = mk_dev_view(mk_devbuf_like(d, count), r, w, ctx)
+        _ = family_call(move, device_identifier(d), device_identifier(di), device_identifier(matrix_device(out)),
                         mk_ints([op, count, w, c, 0, 0, 0, n, count, w]))
     _ = ia^
     _ = di^
@@ -296,8 +327,7 @@ def mk_rows(m: PythonObject, a: Int, b: Int, ctx: PythonObject) raises -> Python
             idx.append(i)
         return mk_dev_gather(m, MV_TAKE_ROWS, idx, ctx)
     var store = mk_store(m, ctx)
-    var part = py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice,
-                                                  PythonObject(a * c), PythonObject(b * c)))
+    var part = mk_store_part(store, a * c, b * c)
     return mk_new(part, b - a, c, ctx)
 
 
@@ -347,27 +377,49 @@ def mk_desc_range(start: Int, count: Int) -> List[Int]:
 
 
 def mk_vstack_host(ms: List[PythonObject], ctx: PythonObject) raises -> PythonObject:
-    """`_vstack(*ms)`: the stores concatenated on the host."""
-    var s = py_call(ctx["array_type"], PythonObject("f"))
+    """`_vstack(*ms)`: the stores concatenated on the host (one native copy
+    each into one holder; was array.extend per matrix)."""
+    var total = 0
     var rows = 0
     for i in range(len(ms)):  # small-loop(ms: the stacked matrices): bounded by the caller
-        _ = py_call(s.extend, mk_store(ms[i], ctx))
+        total += mk_store_len(mk_store(ms[i], ctx))
         rows += mk_r(ms[i])
+    var s = mk_store_zeros(total, ctx)
+    var dst = mk_store_ptr(s)
+    var off = 0
+    for i in range(len(ms)):  # small-loop(ms: one native copy per stacked matrix): bounded by the caller
+        var part = mk_store(ms[i], ctx)
+        var cnt = mk_store_len(part)
+        if cnt > 0:
+            memcpy(dest=dst + off, src=mk_store_ptr(part), count=cnt)
+        _ = part  # keep the holder alive through the copy above
+        off += cnt
+    _ = s  # keep the holder alive through the copies above
     return mk_new(s, rows, mk_c(ms[0]), ctx)
 
 
 struct MKit(Movable):
-    """`_Kit(mode, binding)`: the binding's cells, called on `_M` matrices."""
+    """`_Kit(mode, binding)`: the binding's cells, called on `_M` matrices.
+
+    lane perf-manifold-kit: every entry, optional entry, residency answer,
+    the host 1 x 1 zero and the device broadcast zero are resolved once per
+    kit (one fit or transform) and kept native; device buffers carry their
+    binding's alloc / upload / download / move entries. An operation then
+    makes no namespace scan, dict or id() call, only the entry call itself.
+    """
     var mode: String
     var b: PythonObject
     var raw: PythonObject
     var ctx: PythonObject
     var res_known: Bool
     var res_ok: Bool
-    var opt: PythonObject
+    var opt: Dict[String, Bool]
     var lle_mm: PythonObject
     var lle_lu: PythonObject
     var handles: Dict[String, PythonObject]  # entries resolved by this kit, once each
+    var optional: Dict[String, PythonObject]  # optional entries (None when absent), once each
+    var one_host: PythonObject  # `_M._one`, read from the context once per kit
+    var one_dev: PythonObject  # `_dev_one(kit)`'s buffer, looked up once per kit
 
     def __init__(out self, mode: String, binding: PythonObject, ctx: PythonObject) raises:
         self.mode = mode
@@ -380,10 +432,13 @@ struct MKit(Movable):
         self.raw = binding
         self.res_known = False
         self.res_ok = False
-        self.opt = Python.dict()
+        self.opt = Dict[String, Bool]()
         self.lle_mm = PythonObject(None)
         self.lle_lu = PythonObject(None)
         self.handles = Dict[String, PythonObject]()
+        self.optional = Dict[String, PythonObject]()
+        self.one_host = PythonObject(None)
+        self.one_dev = PythonObject(None)
 
     def fn(mut self, name: String) raises -> PythonObject:
         """`self.b.<name>`: resolved (module dict read and compiled-entry
@@ -396,16 +451,30 @@ struct MKit(Movable):
         self.handles[name] = entry
         return entry
 
-    def _devbuf(mut self, n: Int) raises -> PythonObject:
-        """`mk_devbuf(self.raw, n)` with the kit's cached free/alloc entries
-        (self.raw is self.b, so the entries are the same objects)."""
-        var release = self.fn("x_decomp_dev_free")
-        return mk_devbuf_with(self.raw, release, self.fn("x_decomp_dev_alloc"), n)
+    def fn_opt(mut self, name: String) raises -> PythonObject:
+        """An optional compiled entry (None when the module has none),
+        resolved once per kit."""
+        if name in self.optional:
+            return self.optional[name]
+        var entry = spectral_umap_optional_entry(self.raw, name, self.ctx)
+        self.optional[name] = entry
+        return entry
 
-    def has(self, name: String) -> Bool:
+    def _devbuf(mut self, n: Int) raises -> PythonObject:
+        """`_DevBuf(self.raw, n)` with the kit's cached entries, which the
+        buffer keeps for every later download, move or buffer made from it."""
+        var release = self.fn("x_decomp_dev_free")
+        var alloc = self.fn("x_decomp_dev_alloc")
+        var identifier = family_call(alloc, PythonObject(max(n, 1)))
+        return PythonObject(alloc=ManifoldDevice(self.raw, release, identifier, n, alloc,
+                                                 self.fn_opt("x_decomp_dev_upload"),
+                                                 self.fn_opt("x_decomp_dev_download"),
+                                                 self.fn_opt("x_decomp_dev_move")))
+
+    def has(mut self, name: String) -> Bool:
         """Whether the admitted module exports a compiled optional entry."""
         try:
-            return spectral_umap_optional_entry(self.raw, name, self.ctx) is not None
+            return self.fn_opt(name) is not None
         except:
             return False
 
@@ -418,28 +487,26 @@ struct MKit(Movable):
 
     def opt_dev(mut self, name: String) raises -> Bool:
         """`_opt_dev(name)`: an optional resident entry, asked once."""
-        var key = PythonObject(name)
-        var got = py_get(self.opt, key, PythonObject(None))
-        if got is None:
-            var r = False
-            if self.res():
-                r = self.has(name)
-            py_setitem(self.opt, key, PythonObject(r))
-            return r
-        return Bool(py=got)
+        if name in self.opt:
+            return self.opt[name]
+        var r = False
+        if self.res():
+            r = self.has(name)
+        self.opt[name] = r
+        return r
 
-    def vendor(self) -> String:
+    def vendor(mut self) -> String:
         """`_kit_vendor`: the binding's compiled vendor, "" when it cannot say."""
         try:
-            var f = spectral_umap_entry(self.raw, "x_decomp_vendor", self.ctx)
+            var f = mk_required(self.fn_opt("x_decomp_vendor"), "x_decomp_vendor")
             return String(py=py_call(native_loaded_module("builtins").str, py_call(f)))
         except:
             return String("")
 
-    def w4_flags(self) -> Int:
+    def w4_flags(mut self) -> Int:
         """`w4_flags()`: 0 on a binding without the entry."""
         try:
-            var f = spectral_umap_entry(self.raw, "x_decomp_w4_flags", self.ctx)
+            var f = mk_required(self.fn_opt("x_decomp_w4_flags"), "x_decomp_w4_flags")
             return Int(py=py_call(native_loaded_module("builtins").int, py_call(f)))
         except:
             return 0
@@ -456,6 +523,12 @@ struct MKit(Movable):
             self.lle_lu = lu
         except:
             return
+
+    def one(mut self) raises -> PythonObject:
+        """`_M._one`, the shared host 1 x 1 zero, read once per kit."""
+        if self.one_host is None:
+            self.one_host = mk_one(self.ctx)
+        return self.one_host
 
     # ---- placement
     def use(mut self, a: PythonObject, b: PythonObject, c: PythonObject) raises -> Bool:
@@ -508,7 +581,9 @@ struct MKit(Movable):
 
     def dev_one(mut self) raises -> PythonObject:
         """`_dev_one(kit)`: the unused broadcast operand on the device, one
-        per binding (the Python kit's own cache)."""
+        per binding (the Python kit's own cache), looked up once per kit."""
+        if not (self.one_dev is None):
+            return device_identifier(self.one_dev)
         var cache = py_get(self.ctx, "family_mani_native_dev_one")
         if cache is None:
             cache = Python.dict()
@@ -522,6 +597,7 @@ struct MKit(Movable):
             _ = z  # keep the Python object alive through the native call above
             _ = z^
             py_setitem(cache, key, d)
+        self.one_dev = d
         return device_identifier(d)
 
     # ---- elementwise
@@ -548,7 +624,7 @@ struct MKit(Movable):
         """`ew(op, A, B, C, s)`."""
         var bmode = self._mode_of(b, a)
         var cmode = self._mode_of(c, a)
-        var one = mk_one(self.ctx)
+        var one = self.one()
         var bm = one if b is None else b
         var cm = one if c is None else c
         var n = mk_n(a)
@@ -742,8 +818,8 @@ struct MKit(Movable):
     def lu(mut self, a: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
         """(lu, piv int32 array, info)."""
         var n = mk_r(a)
-        var piv = py_call(self.ctx["array_type"], PythonObject("i"),
-                          py_call(self.ctx["native_bytes_type"], PythonObject(n * 4)))
+        # n int32 pivots: a native words holder of n 4-byte words
+        var piv = mk_store_zeros(n, self.ctx)
         var info = mk_zeros(1, 1, self.ctx)
         if not (self.lle_lu is None):
             var lu = mk_copy(a, self.ctx)
@@ -904,7 +980,7 @@ struct MKit(Movable):
             _ = family_call(self.fn("x_decomp_dev_move"), ia, one, ia, params)
             return
         var pa = mk_addr(a, self.ctx)
-        _ = family_call(self.fn("x_decomp_move"), pa, mk_addr(mk_one(self.ctx), self.ctx), pa, params)
+        _ = family_call(self.fn("x_decomp_move"), pa, mk_addr(self.one(), self.ctx), pa, params)
 
     def reduce(mut self, a: PythonObject, op: Int) raises -> PythonObject:
         """max |A| (0), max A (1) or min A (2) as a 1 x 1 matrix."""
@@ -964,7 +1040,7 @@ struct MKit(Movable):
             _ = family_call(self.fn("x_decomp_dev_move"), iv, one, id, params)
             return
         var pv = mk_addr(v, self.ctx)
-        var po = mk_addr(mk_one(self.ctx), self.ctx)
+        var po = mk_addr(self.one(), self.ctx)
         var pd = mk_addr(d, self.ctx)
         _ = family_call(self.fn("x_decomp_move"), pv, po, pd, params)
 
@@ -1069,8 +1145,7 @@ struct MKit(Movable):
                                            mk_addr(buf, self.ctx))))
             _ = buf  # keep the Python object alive through the native call above
         var store = mk_store(buf, self.ctx)
-        var part = py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice,
-                                                      PythonObject(0), PythonObject(c)))
+        var part = mk_store_part(store, 0, c)
         return mk_new(part, c, 1, self.ctx)
 
     def pad_zero_row(mut self, x: PythonObject) raises -> PythonObject:
@@ -1090,8 +1165,12 @@ struct MKit(Movable):
             _ = family_call(self.fn("x_decomp_dev_move"), oid, one, oid,
                             mk_ints([MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1]))
             return out
-        var store = mk_store_copy(mk_store(x, self.ctx), self.ctx)
-        _ = py_call(store.extend, mk_store_zeros(c, self.ctx))
+        # X's words, then one zero row (the holder starts zeroed)
+        var src = mk_store(x, self.ctx)
+        var store = mk_store_zeros((r + 1) * c, self.ctx)
+        if r * c > 0:
+            memcpy(dest=mk_store_ptr(store), src=mk_store_ptr(src), count=r * c)
+        _ = src  # keep the holder alive through the copy above
         return mk_new(store, r + 1, c, self.ctx)
 
     def dsum_sq(mut self, m: PythonObject) raises -> Float64:
@@ -1302,8 +1381,8 @@ def mk_t(m: PythonObject, mut hk: MKit, ctx: PythonObject) raises -> PythonObjec
     if not (d is None) and (r == 1 or c == 1):
         return mk_dev_view(d, c, r, ctx)
     if not (d is None) and n < I32_MAX:
-        var out = mk_dev_view(mk_devbuf(device_binding(d), n, ctx), c, r, ctx)
-        _ = family_call(family_entry(device_binding(d), "x_decomp_dev_move", ctx), device_identifier(d), device_identifier(d), device_identifier(matrix_device(out)),
+        var out = mk_dev_view(mk_devbuf_like(d, n), c, r, ctx)
+        _ = family_call(mk_required(device_move(d), "x_decomp_dev_move"), device_identifier(d), device_identifier(d), device_identifier(matrix_device(out)),
                         mk_ints([MV_TRANSPOSE, n, r, c, 0, 0, 0, n, n, 1]))
         return out
     if r == 1 or c == 1:
