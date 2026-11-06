@@ -6,7 +6,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.optimizer_admission import opt_value, opt_numpy
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, new_array, contiguous_addr, refuse_kwargs
 from bindings.optimizer_device_native import device_entries, device_shape, device_allocate, shape_count
-from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_native_call
+from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_native_call, embedding_int_list
 from bindings.training_scalar_native import training_scalar_number, training_scalar_float
 from bindings.training_loss_options import loss_truth, loss_reduction
 from bindings.native_numpy_metadata import native_numpy_type
@@ -25,6 +25,14 @@ def loss_buffer_dtype(value: PythonObject, context: PythonObject) raises:
 
 
 def loss_targets(value: PythonObject, device: Bool, context: PythonObject) raises -> PythonObject:
+    # A flat exact list/tuple of exact ints in int32 range (the usual
+    # targets): one native pass to the int32 index Array (lane
+    # p3-neural-blocks), instead of the leaf walk, a second leaf scan, an
+    # array('q') built through Python and the index cast. Everything else,
+    # nested lists included, keeps the path below and its refusals.
+    var fast = embedding_int_list(value)
+    if fast is not None and len(fast[3]) == 1:
+        return fast
     var input = value
     loss_buffer_dtype(value, context)
     var view = TensorView()
