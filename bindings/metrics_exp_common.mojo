@@ -47,6 +47,8 @@ from core.family_cast_impl import family_all_finite_f32
 from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
 from core.label_cast import host_unique_inverse_cast
 from core.metrics_exp_impl import mexp_gather_i32
+from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
+from bindings.p3_labels_metrics_native import p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK
 
 comptime MX_NONE = -1
 comptime MX_PARAMS = 14
@@ -60,7 +62,13 @@ def mx_b() raises -> PythonObject:
 
 
 def mx_len(value: PythonObject) raises -> Int:
-    return Int(py=py_call(mx_b().len, value))
+    # p3-labels-metrics: exact list / tuple / dict / set / str through the C
+    # length slot; anything else keeps the builtins call.
+    var b = mx_b()
+    var cls = py_type(value)
+    if cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.str:
+        return len(value)
+    return Int(py=py_call(b.len, value))
 
 
 def mx_attr(value: PythonObject, name: String) raises -> PythonObject:
@@ -378,10 +386,10 @@ def mx_list_labels(values: PythonObject, name: String, allow_empty: Bool,
         # `int(v)` of an exact Python int is v: the flattened list (fresh) is the converted one
         return (labels, String("integer"))
     if integers:
-        var converted = Python.list()
-        for i in range(mx_len(labels)):  # driver-loop: native integer label boxing after exact type admission
-            py_call(converted.append, metric_integer(labels[i], context))
-        return (converted, String("integer"))
+        # p3-labels-metrics: one presized list filled by C conversions (exact
+        # ints kept, bools 0 / 1, NumPy integer scalars their exact int), not
+        # `metric_integer` and a Python append per label.
+        return (p3_integral_list(labels, py_get(context, "bool_types")), String("integer"))
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 
@@ -415,13 +423,17 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
         # a flat list of exact Python ints as an int64 buffer (OverflowError
         # for an int outside int64 keeps the list route)
         var n = mx_len(values)
-        if n == 0 or not mx_eq(mx_set(py_call(b.map, b.type, values)), mx_set(Python.list(b.int))):
+        # p3-labels-metrics: the exact-int test reads each item's class by
+        # pointer through the container's C storage (it was a type set, then
+        # min and max over the Python ints); the int64 range is the array's
+        # own conversion check (OverflowError: the list route, as before).
+        if n == 0 or labels_list_scalar_kind(values) != LABELS_LIST_INT:
             return PythonObject(None)
-        var lo = py_call(b.min, values)
-        var hi = py_call(b.max, values)
-        if Bool(py=lo < PythonObject(Int.MIN)) or Bool(py=hi > PythonObject(Int.MAX)):
+        var store = PythonObject(None)
+        try:
+            store = py_call(context["array_type"], PythonObject("q"), values)
+        except:
             return PythonObject(None)
-        var store = py_call(context["array_type"], PythonObject("q"), values)
         source = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i8", "C", context)
     elif not classical_is_array(values, context):
         var nd_class = py_get(context, "ndarray")
@@ -480,6 +492,19 @@ def mx_encode(values: PythonObject, name: String, context: PythonObject) raises 
         var native = _mx_buffer_labels(labels, name, context)
         if native is not None:
             return MxLab("integer", native[0], native[1], Int(py=native[1].size))
+    if listed[1] == "string":
+        # p3-labels-metrics: exact str labels hashed by UTF-8 bytes to the k
+        # distinct values, only those sorted (code-point order, as
+        # `sorted(set(...))`), int32 codes written natively.
+        var fast_text = p3_text_codes(labels, False)
+        if fast_text.status == P3_TEXT_OK:
+            var m = len(fast_text.codes)
+            var fast_codes = family_array(Python.tuple(PythonObject(m)), "<i4", context)
+            var target = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(fast_codes)))
+            for i in range(m):  # driver-loop: native copy of the n codes
+                target[i] = fast_text.codes[i]
+            _ = fast_codes  # keep the Python object alive through the native writes above
+            return MxLab(listed[1], p3_text_classes(labels, fast_text.first), fast_codes, m)
     var classes = mx_sorted(mx_set(labels))
     var index = mx_index(classes)
     var n = mx_len(labels)
