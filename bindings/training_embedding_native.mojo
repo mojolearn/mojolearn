@@ -51,28 +51,48 @@ def embedding_array_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
     var packed = embedding_pack(view.addr, view.shape, view.strides, view.itemsize, False, 0, count)
     var pointer = packed.unsafe_ptr()
     var dtype = String(value.dtype)
+    # The dtype is decided once per Array, not by a string chain per element.
+    var code = 0
+    if dtype == "<f4":
+        code = 1
+    elif dtype == "<f8":
+        code = 2
+    elif dtype == "<f2":
+        code = 3
+    elif dtype == "<i8":
+        code = 4
+    elif dtype == "<i4":
+        code = 5
+    elif dtype == "<u4":
+        code = 6
+    elif dtype == "<u2":
+        code = 7
+    elif dtype == "<i1":
+        code = 8
+    elif dtype == "<u1":
+        code = 9
+    if code == 0 and count > 0:
+        raise Error("TypeError: nested index Array has an unsupported dtype")
     for i in range(count):  # driver-loop: serialize nested native Array leaves into the admitted index envelope
         var scalar = PythonObject(None)
-        if dtype == "<f4":
+        if code == 1:
             scalar = PythonObject(Float64(pointer.bitcast[Float32]()[i]))
-        elif dtype == "<f8":
+        elif code == 2:
             scalar = PythonObject(pointer.bitcast[Float64]()[i])
-        elif dtype == "<f2":
+        elif code == 3:
             scalar = PythonObject(Float64(f16_bits_to_f32(pointer.bitcast[UInt16]()[i])))
-        elif dtype == "<i8":
+        elif code == 4:
             scalar = PythonObject(Int(pointer.bitcast[Int64]()[i]))
-        elif dtype == "<i4":
+        elif code == 5:
             scalar = PythonObject(Int(pointer.bitcast[Int32]()[i]))
-        elif dtype == "<u4":
+        elif code == 6:
             scalar = PythonObject(Int(pointer.bitcast[UInt32]()[i]))
-        elif dtype == "<u2":
+        elif code == 7:
             scalar = PythonObject(Int(pointer.bitcast[UInt16]()[i]))
-        elif dtype == "<i1":
+        elif code == 8:
             scalar = PythonObject(Int(pointer.bitcast[Int8]()[i]))
-        elif dtype == "<u1":
-            scalar = PythonObject(Int(pointer[i]))
         else:
-            raise Error("TypeError: nested index Array has an unsupported dtype")
+            scalar = PythonObject(Int(pointer[i]))
         py_call(leaves.append, scalar)
     _ = packed^
     _ = value_owner^
