@@ -45,7 +45,7 @@ def test_failure_release_and_closed_or_stale_discard_preserve_existing_lifecycle
         assert f"generation != owner[].{epoch} or not owner[].tape" in source
     for operation in (38, 39, 40):
         assert f"36, 37, {operation}," in PROVIDER
-    assert 'py_call(_transformer_native_entry(previous, "transformer_session_close"), session)' in PUBLIC
+    assert 'py_call(_transformer_native_entry(mods, previous, "transformer_session_close"), session)' in PUBLIC
     assert "idempotent" in PUBLIC
 
 
