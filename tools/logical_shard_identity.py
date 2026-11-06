@@ -46,8 +46,10 @@ WHAT THIS DOES NOT COVER (say it plainly):
   * Apple: the door refuses any device list but (0,) on Metal (bindings/parallel_plan_door.mojo `plan_devices`),
     multi-device is not a Metal feature, and this option does not change that; the CPU column: a CPU-only install
     has no cooperative multi-device plan (the same door refuses it), so there is nothing to check there;
-  * the families not on the list (QR panels, hierarchy and neighbors kNN rows, GP covariance rows, the optimizer /
-    training and autograd distributed programs, which open DeviceContext(device_id=rank) without a plan).
+  * the families not on the list (QR panels, hierarchy and neighbors kNN rows, the optimizer / training and
+    autograd distributed programs, which open DeviceContext(device_id=rank) without a plan), and two dispatchers
+    no public IDENTICAL call reaches: the GLM gradient columns (glm/impl/qn/multi_gpu.mojo; every GLM takes the QN
+    tiled order) and the Gram of an unweighted Ridge / LinearRegression (`linear_gram_fit`, no plan).
 tools/two_device_checks.sh remains THE real two-GPU check (2x L40S; run it after any multi_gpu.mojo or device plan
 change).
 
@@ -82,8 +84,15 @@ LANE_TIMEOUT = 1200
 # FIXTURE SIZES come from each dispatcher's split rule (read 2026-11-06, lane perf3-cluster-gp-gate), not from any
 # benchmark shape: every logical device of the largest arm (max(COUNTS) = 3) must receive a shard, with margin.
 #   svm-rbf      rows of the kernel matrix, active = min(count, m) (svm/multi_gpu.mojo:121): m >= 3 rows
-#   logistic     feature columns of X^T dZ, active = min(count, D) (glm/impl/qn/multi_gpu.mojo:70); binary y only
-#                (a C > 1 target takes the tiled multiclass rule, qn_tiled_rule.mojo:53): D >= 3
+#   gp-regress   covariance rows, active = min(count, m) (gaussian_process/checks/kernels.mojo `_gp_rows`): fit's
+#                K(X, X) (gaussian_process/gpr_resident.mojo `gp_kernel_matrix(..., "gp.kernel")`, distribute defaults
+#                to True) and predict's K(X, X*) ("gp.kcross") both shard, gated on the plan's GP bit
+#                (kernels.mojo `device_plan_setting("MOJOLEARN_GP_DEVICE_COUNT")`): rows >= 3. The defaults are
+#                optimizer=None and a fixed ConstantKernel * RBF kernel (python/mojolearn/_gp_impl.py), so no
+#                hyperparameter search runs; the n x n Cholesky stays on the root, so 512 rows keeps it small.
+#                (Not LogisticRegression: in IDENTICAL every GLM gradient takes the QN tiled order, binary
+#                `qn_tiled_applies` and C > 1 `qn_tiled_multi_applies` in glm/impl/qn/glm_base.mojo, which never calls
+#                glm/impl/qn/multi_gpu.mojo `gradient_columns`, so a GLM lane never spreads.)
 #   lasso-cd     row leaves of 128 (bench/gemm_shapes.mojo contract_leaf_size), k <= 128 stays single
 #                (solver/multi_gpu.mojo:63): rows >= 2*128 + 1; only the column mean / norm passes before the
 #                Gram sweeps reach it
@@ -111,7 +120,7 @@ LANE_TIMEOUT = 1200
 #                n_estimators >= 3 (the recipe fits 16)
 LANES = (
     ("svm-rbf", "svm/multi_gpu.mojo", "svm", "classify", 600, 16, 11),
-    ("logistic", "glm/impl/qn/multi_gpu.mojo", "logistic", "classify", 2000, 16, 12),
+    ("gp-regress", "gaussian_process/checks/kernels.mojo", "gp", "regress", 512, 8, 12),
     ("lasso-cd", "solver/multi_gpu.mojo", "lasso", "regress", 2000, 32, 13),
     ("tsvd-gram", "core/gram_multi_gpu.mojo", "tsvd", "regress", 4000, 32, 14),
     ("kmeans", "cluster/multi_gpu.mojo", "kmeans", "blobs", 4000, 8, 15),
@@ -319,10 +328,12 @@ def _svm(ml, X, y, devices):
             ("decision", pc.predict_svm(est, X, devices=devices, method="decision_function"))]
 
 
-def _logistic(ml, X, y, devices):
+def _gp(ml, X, y, devices):
     from mojolearn import parallel_classical as pc
-    est = pc.fit_logistic(ml.LogisticRegression(), X, y, devices=devices)
-    return [("coef_", est.coef_), ("intercept_", est.intercept_)]
+    est = pc.fit_gaussian_process(ml.GaussianProcessRegressor(), X, y, devices=devices)
+    return [("alpha_", est.alpha_), ("L_", est.L_), ("info_", [est.info_]),
+            ("log_marginal_likelihood_value_", [est.log_marginal_likelihood_value_]),
+            ("predict", pc.predict_gaussian_process(est, X, devices=devices))]
 
 
 def _lasso(ml, X, y, devices):
@@ -392,7 +403,7 @@ def _forest(ml, X, y, devices):
         return [("predict_proba", pool.predict_proba(X))]
 
 
-RECIPES = dict(svm=_svm, logistic=_logistic, lasso=_lasso, tsvd=_tsvd, kmeans=_kmeans, dbscan=_dbscan,
+RECIPES = dict(svm=_svm, gp=_gp, lasso=_lasso, tsvd=_tsvd, kmeans=_kmeans, dbscan=_dbscan,
                gmm=_gmm, bootstrap=_bootstrap, cholesky=_cholesky, iforest=_iforest, gbdt=_gbdt, forest=_forest)
 
 

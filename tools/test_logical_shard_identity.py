@@ -120,6 +120,14 @@ def test_the_gram_lane_is_a_route_that_reaches_the_gram_plan():
     assert features <= 128 and n_rows >= 3 * 128
 
 
+def test_no_lane_names_a_dispatcher_no_identical_call_reaches():
+    # every GLM takes the QN tiled gradient in IDENTICAL (glm/impl/qn/glm_base.mojo), never gradient_columns
+    assert all(r[1] != "glm/impl/qn/multi_gpu.mojo" and r[2] != "logistic" for r in LS.LANES)
+    name, family, recipe, _fixture, n_rows, _features, _seed = {r[0]: r for r in LS.LANES}["gp-regress"]
+    assert family == "gaussian_process/checks/kernels.mojo" and LS.RECIPES[recipe] is LS._gp
+    assert n_rows >= max(LS.COUNTS)  # covariance rows: active = min(count, rows)
+
+
 def test_everything_missing_fails_closed():
     assert LS.lane_verdict("x", None)[0] == "FAIL"
     assert LS.lane_verdict("x", dict(lane="x", error="ImportError: no wheel"))[:2] == ("FAIL", "ImportError: no wheel")
