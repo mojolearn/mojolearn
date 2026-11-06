@@ -27,6 +27,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run_plan
+from bindings.cpython_table import cpython_table
 from bindings.metrics_plan_admission import MetricPlanOpcodes
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.family_common import (
@@ -254,7 +255,18 @@ def _reg_run(prog: _Prog, mode: PythonObject, context: PythonObject) raises -> P
 
 
 def _arena_base(arena: PythonObject) raises -> Int:
-    return Int(py=py_call(arena.buffer_info)[0])
+    # p3-labels-metrics: the store's address through one C buffer export
+    # (the process-wide table), not a Python `buffer_info()` call, attribute
+    # lookup and tuple per word read. The caller holds `arena` across reads.
+    ref cpy = Python().cpython()
+    var storage = List[Int](length=10, fill=0)
+    var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    if cpython_table()[].PyObject_GetBuffer(arena._obj_ptr, pointer, Int32(0)) != 0:
+        raise cpy.unsafe_get_error()
+    var address = storage[0]
+    cpython_table()[].PyBuffer_Release(pointer)
+    _ = storage^
+    return address
 
 
 def _arena_double(arena: PythonObject, off: Int) raises -> Float64:
