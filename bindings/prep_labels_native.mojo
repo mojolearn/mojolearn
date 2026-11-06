@@ -369,18 +369,35 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
     walks over the labels that read it back."""
     var env = _Env()
     var integral = context["labels_integral_type"] if count_ints else PythonObject(None)
+    # Exact int and float labels (the common case) are read by type pointer
+    # and PyFloat_AsDouble (the same double float(v) returns, the same
+    # OverflowError for an int too large); an exact int is integral, an
+    # exact float is not. Other classes keep the ABC checks (p3-prep).
+    var int_type = env.b.int
+    var float_type = env.b.float
     all_ints = count_ints
     var n = len(values)
     words.reserve(n)
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
         var v = values[i]
-        if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
-            return False
-        var x = Float64(py=py_call(env.b.float, v))
+        var cls = py_type(v)
+        var x: Float64
+        var is_int: Bool
+        if cls is int_type:
+            x = Float64(py=v)
+            is_int = True
+        elif cls is float_type:
+            x = Float64(py=v)
+            is_int = False
+        else:
+            if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
+                return False
+            x = Float64(py=py_call(env.b.float, v))
+            is_int = all_ints and Bool(py=py_call(env.b.isinstance, v, integral))
         if x != x or Float64(Float32(x)) != x:
             return False
         words.append(x)
-        if all_ints and not Bool(py=py_call(env.b.isinstance, v, integral)):
+        if all_ints and not is_int:
             all_ints = False
     return True
 
