@@ -32,6 +32,7 @@ from std.memory import memcpy
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_buffer_owner import native_storage_allocate
 
@@ -434,19 +435,20 @@ def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
 def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
     """`PyObject_GetBuffer(obj, view, PyBUF_FULL_RO)`; False (indicator
     cleared) when `obj` does not export a buffer."""
-    ref cpy = Python().cpython()
+    # Symbols from the process-wide table (bindings/cpython_table.mojo),
+    # resolved once, not a dlsym per tensor; the clear runs only on refusal.
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var rc = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
+    var rc = cpython_table()[].PyObject_GetBuffer(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
     if rc != 0:
+        ref cpy = Python().cpython()
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return False
     return True
 
 
 def _release_buffer(mut view: List[Int]) raises:
-    ref cpy = Python().cpython()
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(p)
+    cpython_table()[].PyBuffer_Release(p)
 
 
 def _array_view(obj: PythonObject, context: PythonObject, mut v: TensorView) raises:
