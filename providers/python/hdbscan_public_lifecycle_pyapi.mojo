@@ -83,9 +83,10 @@ def _admit(model: PythonObject, context: PythonObject, fitting: Bool, key: Pytho
     cluster_refuse_fit_callbacks(py_type(model), "TypeError: HDBSCAN cannot invoke Python fit callbacks")
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: HDBSCAN cannot invoke Python fit callbacks")
-    var names = _schema(context)
     var recorded = not fitting and cluster_record_get(_ADMIT_SLOT, model, key) is not None
     if not recorded:
+        # (A recorded query's key was built from the schema this call.)
+        var names = _schema(context)
         for i in range(len(names)):  # driver-loop: scalar settings before legacy numerical-owner casts
             var name = String(names[i])
             var value = family_raw_get_or(model, name, PythonObject(None)) if name == "numeric_mode" else family_raw_get(model, name)

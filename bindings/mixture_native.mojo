@@ -104,9 +104,28 @@ def _from_flat(flat: PythonObject, shape: PythonObject, typestr: String, code: S
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
+def _f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
+    """`source` is an exact Array or ndarray, non-empty, float32 in C order:
+    `as_f32_c` would admit it and return its own storage. Perf (lane
+    perf2-cluster): the BayesianGaussianMixture door and the fitted-state
+    reads pass such arrays (the public door's admitted X, the fitted blocks)
+    on every query; they skip a second view admission."""
+    var cls = py_type(source)
+    if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
+        return False
+    return Int(py=source.size) > 0 and classical_is_f32(source, context) and classical_c_order(source, context)
+
+
 def _x_finite(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_expansion_cluster._f32(source, name)`: as_f32_c (2-D, non-empty)
     and every value finite, in that refusal's wording."""
+    if _f32_ready(source, context) and Int(py=source.ndim) == 2:
+        # One native scan of the admitted float32 words: the same refusal
+        # the cast's scan makes, for the same values.
+        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))), Int(py=source.size)):
+            raise Error("mojolearn: " + name + " contains NaN or infinity")
+        _ = source  # keep the Python object alive through the native scan above
+        return source
     var x = PythonObject(None)
     try:
         x = family_f32(source, 2, name, context)
@@ -128,6 +147,10 @@ def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut
     """`_any_f32`; `kept` stays True only when the result is the storage of
     `source` itself (an exact Array or ndarray already float32 in C order, no
     cast copy), so a later in-place edit of `source` is seen through it."""
+    if _f32_ready(source, context):
+        # The input itself, as the view admission below returns it (its own
+        # storage: `kept` stays as it is).
+        return source
     var view = family_view(source, -1, name, context)
     var result = _any_f32_view(view, name, context)
     if kept:
