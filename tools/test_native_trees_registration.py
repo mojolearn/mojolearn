@@ -1,15 +1,26 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import metadata selects each tree owner's actual public lifecycle."""
+import functools
 import importlib.util
 from pathlib import Path
+import sys
+import types
 
 import pytest
 
 
+PACKAGE = "_tree_registration_pkg"
+
+
 @pytest.fixture
 def bridge(monkeypatch):
+    # Load the bridge inside an empty fixture package: its relative imports
+    # resolve only to modules a test installs, never to the product package.
+    package = types.ModuleType(PACKAGE)
+    package.__path__ = []
+    monkeypatch.setitem(sys.modules, PACKAGE, package)
     path = Path(__file__).resolve().parents[1] / "python/mojolearn/_native_trees_bridge.py"
-    spec = importlib.util.spec_from_file_location("_tree_registration_probe", path)
+    spec = importlib.util.spec_from_file_location(PACKAGE + "._native_trees_bridge", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     context = dict(trees_classes={}, trees_defaults={}, trees_constructors={})
@@ -17,9 +28,16 @@ def bridge(monkeypatch):
     return module, context
 
 
-@pytest.mark.parametrize("kind", ["gbdt", "gbdt_adapter", "iforest"])
+@pytest.mark.parametrize("kind", ["gbdt", "gbdt_adapter"])
 def test_other_tree_schemas_keep_their_registration_without_forest_hooks(bridge, monkeypatch, kind):
     module, context = bridge
+    layouts = []
+    if kind == "gbdt":
+        # A GBDT class also records its classical state layout (77ed135648).
+        classical = types.ModuleType(PACKAGE + "._native_classical_bridge")
+        classical._layout = lambda cls, descriptor: layouts.append((cls, descriptor)) or ("layout", cls)
+        monkeypatch.setitem(sys.modules, classical.__name__, classical)
+        context["trees_state_layouts"] = {}
     marker = object()
 
     class Estimator:
@@ -45,6 +63,50 @@ def test_other_tree_schemas_keep_their_registration_without_forest_hooks(bridge,
     assert Estimator.fit is original_fit
     assert Estimator.__getattribute__ is original_getattribute
     assert "_mojolearn_native_public" not in vars(Estimator)
+    if kind == "gbdt":
+        assert layouts == [(Estimator, None)]
+        assert context["trees_state_layouts"][Estimator] == {
+            "classical_public_layouts": {Estimator: ("layout", Estimator)},
+            "classical_public_installed": True}
+    else:
+        assert layouts == []
+
+
+def test_iforest_schema_unwraps_its_public_doors_without_forest_hooks(bridge, monkeypatch):
+    # IsolationForest's public lifecycle is native (115b5eb8bb): registration
+    # strips the former Python decorators from its five doors and its loader,
+    # marks the class native, and never touches the public-forest owner.
+    module, context = bridge
+
+    def decorate(function):
+        @functools.wraps(function)
+        def wrapper(*args, **kwargs):
+            raise AssertionError("registration must not execute a decorator")
+        return wrapper
+
+    def door(self, x, y=None):
+        raise AssertionError("registration must not execute a public method")
+
+    def load(cls, path):
+        raise AssertionError("registration must not load")
+
+    names = ("fit", "fit_predict", "score_samples", "decision_function", "predict")
+    Estimator = type("Estimator", (), {name: decorate(door) for name in names})
+    Estimator.load = classmethod(decorate(load))
+    original_getattribute = Estimator.__getattribute__
+
+    def wrong_owner(*args):
+        raise AssertionError("non-forest schema was connected to the forest lifecycle")
+
+    monkeypatch.setattr(module, "_connect_public_forest", wrong_owner)
+    module.register(Estimator, "iforest")
+    assert context["trees_classes"][Estimator] == "iforest"
+    assert context["trees_constructors"] == {}
+    for name in names:
+        assert vars(Estimator)[name] is door
+    assert vars(Estimator)["load"].__func__ is load
+    assert Estimator.__getattribute__ is original_getattribute
+    assert vars(Estimator)["_mojolearn_native_public"] is True
 
 
 @pytest.mark.parametrize("kind", ["rf_classifier", "rf_regressor", "et_classifier",
