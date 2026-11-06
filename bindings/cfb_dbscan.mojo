@@ -114,11 +114,19 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     if cap < 0:
         raise Error("mojolearn DBSCAN max_iterations must be None (the fixed "
                     + "point) or a positive cap")
-    var x = family_as_f32(source, 2, "X", context)
+    # args[3] (present and True) marks `source` as the X the public door
+    # already admitted with classical_check_x (providers/python/
+    # density_public_lifecycle_pyapi.mojo): 2-D, non-empty, C-order float32
+    # and refused there when not finite. That X is used as is: no second
+    # snapshot and no second finite pass over it (perf3-cluster-gp-gate;
+    # perf2-cluster row 24: one extra full pass + one admission per fit).
+    # Any other caller keeps the full admission below.
+    var admitted = len(args) > 3 and Bool(py=args[3])
+    var x = source if admitted else family_as_f32(source, 2, "X", context)
     py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+    if not admitted and not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         # Before this check a NaN row reached the kernel and came back
         # labelled noise (-1), silently; scikit-learn refuses it.
         raise Error("mojolearn DBSCAN: X contains a NaN or an infinity; a "
@@ -235,7 +243,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
 
 def cfb_dbscan_operation(model: PythonObject, operation: String, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """args: (binding, X[, sample_weight])."""
+    """args: (binding, X[, sample_weight[, admitted]])."""
     if operation == "family_cfb_dbscan_fit":
         _dbscan_fit(model, args, context)
         return model

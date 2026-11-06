@@ -264,7 +264,10 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
             if py_type(width) is b.int:
                 classical_check_width(columns, Int(py=width), name)
             estimator_feature_check(model, fields, source, context)
-    var prepared = Python.tuple(binding, x, args[2]) if fitting else Python.tuple(binding, x)
+    # The fourth element tells bindings/cfb_dbscan.mojo that `x` is this
+    # door's admitted X (classical_check_x above), so the fit does not
+    # snapshot and finite-scan it a second time.
+    var prepared = Python.tuple(binding, x, args[2], PythonObject(True)) if fitting else Python.tuple(binding, x)
     if fitting:
         classical_admit_value(args[2], context)
     var depth = estimator_fit_begin(fields) if fitting else 0
