@@ -777,14 +777,14 @@ def provenance_history(root, revision, limit=200):
 
     for commit in git("log", "--format=%H", "-n", str(limit), revision, "--", path).split():
         take(git("show", "%s:%s" % (commit, path)))
-    legacy_at = revision
-    if not git("ls-tree", "--name-only", revision, LEGACY_DIR + "/").strip():
-        last = git("log", "-n", "1", "--format=%H", revision, "--", LEGACY_DIR + "/").strip()
-        legacy_at = last + "^" if last else ""
-    if legacy_at:
-        for p in git("ls-tree", "-r", "--name-only", legacy_at, LEGACY_DIR + "/").splitlines():
+    # the dated records at REVISION (the ones a document still points at stay in the tree) and, for those removed,
+    # at the parent of each commit that deleted files there
+    points = [revision] + [c + "^" for c in git("log", "--diff-filter=D", "--format=%H", revision, "--",
+                                                 LEGACY_DIR + "/").split()]
+    for at in points:
+        for p in git("ls-tree", "-r", "--name-only", at, LEGACY_DIR + "/").splitlines():
             if p.endswith("/release-provenance.json"):
-                take(git("show", "%s:%s" % (legacy_at, p)))
+                take(git("show", "%s:%s" % (at, p)))
     return out
 
 
