@@ -20,6 +20,14 @@ from bindings.host_svc_native import _svc_input
 def _kde_option_value(value: PythonObject, context: PythonObject, numeric: Bool = False) raises -> PythonObject:
     var cls = py_type(value)
     var native_str = py_type(PythonObject(""))
+    # p3-neighbors-cluster: the common exact cases answer before the NumPy
+    # dtype constructions below (PyUnicode_FromObject of an exact str is the
+    # str itself; an exact float or int takes the numeric branch unchanged).
+    if cls is native_str:
+        return value
+    if numeric and (cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(0))):
+        host_inference_scalar(value, context)
+        return value
     var native_bytes = context["host_kde_bytes_type"]
     var numpy_str = PythonObject(None)
     var numpy_bytes = PythonObject(None)
