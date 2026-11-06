@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # NumPy's public NpyString storage API; formatting remains Mojo code.
-from std.ffi import c_char, c_int, c_uint, c_size_t, external_call
+from std.ffi import _Global, c_char, c_int, c_uint, c_size_t, external_call
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.sys import size_of
@@ -13,6 +13,25 @@ from core.sequence_array_format import sequence_float_text
 from core.sequence_array_cast import sequence_signaling, SEQ_CAST_INVALID
 
 comptime StringStoragePointer = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+struct SequenceStringTableRecord(Defaultable, Movable):
+    # p3-array-arena: the (capsule, table) pair whose dladdr owner checks and
+    # API version check passed. Both are process constants of one loaded
+    # NumPy extension; the capsule is retained once so its address cannot
+    # recycle. A different capsule or table re-runs every check.
+    var capsule: Int
+    var table: Int
+
+    def __init__(out self):
+        self.capsule = 0
+        self.table = 0
+
+
+comptime SEQUENCE_STRING_TABLE = _Global[
+    StorageType=SequenceStringTableRecord, name="MojolearnP3SequenceStringTableV1",
+    init_fn=SequenceStringTableRecord.__init__,
+]
 comptime StringStorageVersion = def() thin abi("C") -> c_uint
 comptime StringStorageAcquire = def(StringStoragePointer) thin abi("C") -> Optional[StringStoragePointer]
 comptime StringStorageRelease = def(StringStoragePointer) thin abi("C") -> NoneType
@@ -129,21 +148,27 @@ struct SequenceStringStorage(Movable):
         if not pointer:
             raise cpy.unsafe_get_error()
         var address = Int(pointer.value())
-        var owner = sequence_storage_image(Int(numpy_dtype._obj_ptr))
-        if sequence_storage_image(address) != owner:
-            raise Error("TypeError: NumPy storage table has a foreign native owner")
-        var words = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=address)
-        # Public stable C API indices from numpy/__multiarray_api.h:
-        # GetNDArrayCFeatureVersion=211; pack=314; acquire=316; release=318.
-        # The NpyString slots require NPY_2_0_API_VERSION (0x12).
-        if sequence_storage_image(words[211]) != owner:
-            raise Error("TypeError: NumPy storage version entry has a foreign owner")
-        var version = MutPointer[StringStorageVersion, MutUntrackedOrigin](unsafe_from_address=address + 211 * size_of[Int]())[0]
-        if version() < c_uint(0x12):
-            raise Error("TypeError: managed string output requires NumPy 2's native storage API")
-        for index in [314, 316, 318]:  # driver-loop: validate the three public native storage entry owners
-            if sequence_storage_image(words[index]) != owner:
-                raise Error("TypeError: NumPy storage entry has a foreign native owner")
+        var record = SEQUENCE_STRING_TABLE.get_or_create_ptr()
+        if record[].capsule != Int(capsule._obj_ptr) or record[].table != address:
+            var owner = sequence_storage_image(Int(numpy_dtype._obj_ptr))
+            if sequence_storage_image(address) != owner:
+                raise Error("TypeError: NumPy storage table has a foreign native owner")
+            var words = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=address)
+            # Public stable C API indices from numpy/__multiarray_api.h:
+            # GetNDArrayCFeatureVersion=211; pack=314; acquire=316; release=318.
+            # The NpyString slots require NPY_2_0_API_VERSION (0x12).
+            if sequence_storage_image(words[211]) != owner:
+                raise Error("TypeError: NumPy storage version entry has a foreign owner")
+            var version = MutPointer[StringStorageVersion, MutUntrackedOrigin](unsafe_from_address=address + 211 * size_of[Int]())[0]
+            if version() < c_uint(0x12):
+                raise Error("TypeError: managed string output requires NumPy 2's native storage API")
+            for index in [314, 316, 318]:  # driver-loop: validate the three public native storage entry owners
+                if sequence_storage_image(words[index]) != owner:
+                    raise Error("TypeError: NumPy storage entry has a foreign native owner")
+            # Validated once per (capsule, table) for the process.
+            cpy.Py_IncRef(capsule._obj_ptr)
+            record[].capsule = Int(capsule._obj_ptr)
+            record[].table = address
         var acquire = MutPointer[StringStorageAcquire, MutUntrackedOrigin](unsafe_from_address=address + 316 * size_of[Int]())[0]
         var release = MutPointer[StringStorageRelease, MutUntrackedOrigin](unsafe_from_address=address + 318 * size_of[Int]())[0]
         var pack = MutPointer[StringStoragePack, MutUntrackedOrigin](unsafe_from_address=address + 314 * size_of[Int]())[0]
