@@ -84,9 +84,15 @@ def _ivf_host_search_arrays(
     var cand = List[Int32]()
     with GILReleased(Python()):
         var r = host_ivf_search(index, queries, m, k, n_probes, partial_storage, keep)
+        # compile-fix-2: each result list moves out and its field is refilled
+        # empty, so `r` stays whole and is destroyed as one value (moving
+        # fields out of the middle of it does not compile); still no copy.
         dist = r.distances^
+        r.distances = List[Float32]()
         idx = r.indices^
+        r.indices = List[UInt32]()
         cand = r.n_candidates^
+        r.n_candidates = List[Int32]()
     ivf_write_search_result(addrs, dist, idx, cand, m, k)
     return PythonObject(0)
 
@@ -305,9 +311,15 @@ def ivf_flat_index_search_binding(
     var cand = List[Int32]()
     with GILReleased(Python()):
         var r = host_ivf_search(e[].index, queries, m, k, n_probes, partial, keep)
+        # compile-fix-2: each result list moves out and its field is refilled
+        # empty, so `r` stays whole and is destroyed as one value (moving
+        # fields out of the middle of it does not compile); still no copy.
         dist = r.distances^
+        r.distances = List[Float32]()
         idx = r.indices^
+        r.indices = List[UInt32]()
         cand = r.n_candidates^
+        r.n_candidates = List[Int32]()
     ivf_write_resident_result(addrs, dist, idx, cand, m, k)
     _ = e^
     return PythonObject(0)
