@@ -596,6 +596,16 @@ def mx_pair(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObj
     mx_refuse_multilabel(y_pred, "y_pred", caller, context)
     var true = mx_encode(y_true, "y_true", context)
     var pred = mx_encode(y_pred, "y_pred", context)
+    return mx_pair_encoded(true^, pred^, sample_weight, caller, context)
+
+
+def mx_pair_encoded(var true: MxLab, var pred: MxLab, sample_weight: PythonObject, caller: String,
+                    context: PythonObject) raises -> MxPair:
+    """`mx_pair` of two label vectors the caller already encoded with
+    `mx_encode` (p3-labels-metrics: classification_report encoded them for
+    its label set and used to encode both again). A successful `mx_encode`
+    is one-dimensional, so the multilabel refusal cannot apply; the checks
+    below run in mx_pair's order."""
     if true.n != pred.n:
         raise Error("mojolearn " + caller + ": y_true and y_pred lengths differ")
     if true.kind != pred.kind:

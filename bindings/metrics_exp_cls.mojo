@@ -21,7 +21,7 @@ from bindings.classical_arrays import classical_address
 from bindings.metrics_exp_common import (
     MX_NONE, MxProg, MxArena, MxLab, MxPair, mx_run, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str,
     mx_is_real, mx_float, mx_nan, mx_inf, mx_isnan, mx_isinf, mx_raise_obj, mx_zero_division, mx_warn, mx_undefined,
-    mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode, mx_selected, mx_codes, mx_pair,
+    mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode, mx_selected, mx_codes, mx_pair, mx_pair_encoded,
     mx_list_labels, mx_union_sorted, mx_zero_division_value, mx_attr,
 )
 
@@ -580,7 +580,8 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # times over one encoded pair: one program, the four epilogues
     var caller = String("precision_recall_fscore_support")
     _ = mx_zero_division_value(zero_division, context)
-    var pair = mx_pair(args[0], args[1], args[4], caller, context)
+    # p3-labels-metrics: the pair reuses t0 / p0 (they were encoded twice).
+    var pair = mx_pair_encoded(t0.copy(), p0.copy(), args[4], caller, context)
     var sel = _set_wise_labels(pair, PythonObject(None), chosen, PythonObject(1), caller, context)
     var order = mx_label_order(sel, pair.present)
     var k = mx_len(sel)
