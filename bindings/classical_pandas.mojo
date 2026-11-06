@@ -13,6 +13,9 @@ from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
+from bindings.p3_labels_metrics_native import p3_table, p3_type_word
 
 
 def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
@@ -40,7 +43,37 @@ def _pd_class(module_name: String, name: String) raises -> PythonObject:
     return cls if _pd_native_metaclass(cls) else PythonObject(None)
 
 
+def _pd_class_word(modules: PyObjectPtr, module_name: String, name: String) raises -> Int:
+    """The word of `sys.modules[module_name].<name>` read by C dict lookups
+    (no attribute hook), or 0 when absent."""
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    var module_key = PythonObject(module_name)
+    var module = t[].PyDict_GetItem(modules, module_key._obj_ptr)
+    if not module:
+        return 0
+    var fields = cpy.PyModule_GetDict(module)
+    if not fields:
+        p3_table()[].err_clear()  # not a module: no pandas class here
+        return 0
+    var name_key = PythonObject(name)
+    var cls = t[].PyDict_GetItem(fields, name_key._obj_ptr)
+    if not cls:
+        return 0
+    return Int(cls)
+
+
 def native_pandas_exact(value: PythonObject) raises -> Bool:
+    # p3-labels-metrics: every input that is not a pandas object (lists,
+    # arrays: nearly every call) is answered by two C dict lookups per name
+    # and one class-pointer compare; only a class that IS the loaded
+    # DataFrame / Series takes the full admitted check below (metaclass and
+    # module identity), so the answer is unchanged.
+    var modules = cpython_table()[].PyImport_GetModuleDict()
+    if modules:
+        var word = p3_type_word(value._obj_ptr)
+        if word != _pd_class_word(modules, "pandas.core.frame", "DataFrame") and word != _pd_class_word(modules, "pandas.core.series", "Series"):
+            return False
     var cls = py_type(value)
     return cls is _pd_class("pandas.core.frame", "DataFrame") or cls is _pd_class("pandas.core.series", "Series")
 
@@ -217,6 +250,24 @@ def _pd_object_bits(value: PythonObject, context: PythonObject) raises -> UInt32
     return f64_to_f32_bits(bitcast[DType.uint64](number))
 
 
+def _pd_cell_bits(raw: PyObjectPtr, int_word: Int, float_word: Int, bool_word: Int,
+                  context: PythonObject) raises -> UInt32:
+    """`_pd_object_bits` of one borrowed object-block cell: exact int, float
+    and bool through PyFloat_AsDouble (the value `Float64(py=v)` read),
+    anything else through `_pd_object_bits` (same refusal)."""
+    ref cpy = Python().cpython()
+    if not raw:
+        raise Error("TypeError: pandas object storage must contain native numeric scalars without Python conversion hooks")
+    var word = p3_type_word(raw)
+    if word == int_word or word == float_word or word == bool_word:
+        var number = p3_table()[].float_as(raw)
+        if number == -1.0:
+            if p3_table()[].err_occurred():
+                raise cpy.unsafe_get_error()
+        return f64_to_f32_bits(bitcast[DType.uint64](number))
+    return _pd_object_bits(PythonObject(from_borrowed=raw), context)
+
+
 def _pd_values(values: PythonObject, series: Bool, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(values) is context["ndarray"]:
@@ -293,10 +344,16 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
     var objects = False
     var booleans = False
     var numbers = False
+    # The four admitted block classes, read once per conversion (they were
+    # read per block; p3-labels-metrics).
+    var numpy_block = _pd_class("pandas.core.internals.blocks", "NumpyBlock")
+    var numeric_block = _pd_class("pandas.core.internals.blocks", "NumericBlock")
+    var object_block = _pd_class("pandas.core.internals.blocks", "ObjectBlock")
+    var extension_block = _pd_class("pandas.core.internals.blocks", "ExtensionBlock")
     for k in range(len(blocks)):  # driver-loop: over native pandas storage blocks
         var block = blocks[k]
         var cls = py_type(block)
-        if cls is not _pd_class("pandas.core.internals.blocks", "NumpyBlock") and cls is not _pd_class("pandas.core.internals.blocks", "NumericBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ObjectBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ExtensionBlock"):
+        if cls is not numpy_block and cls is not numeric_block and cls is not object_block and cls is not extension_block:
             raise Error("TypeError: pandas requires ordinary native blocks without subclass hooks")
         var pair = _pd_values(_pd_get("pandas._libs.internals", "Block", "values", block), series, context)
         var data = pair[0]
@@ -331,6 +388,9 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
         raise Error(refuse_double)
     var result = sequential_array(Python.tuple(rows) if series else Python.tuple(rows, cols), context["float32"], context)
     var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
+    var int_word = Int(b.int._obj_ptr)
+    var float_word = Int(b.float._obj_ptr)
+    var bool_word = Int(b.bool._obj_ptr)
     var seen = List[Bool](length=cols, fill=False)
     for k in range(len(owned)):  # driver-loop: over admitted native block owners
         var data = owned[k]
@@ -347,11 +407,15 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
                 raise Error("pandas block column positions overlap or exceed the matrix")
             seen[dest] = True
             if object_dtype:
-                # cpu-route: pandas object-dtype cells are Python objects; each one is read through
-                # its native buffer metadata, which only the Python door can reach.
+                # cpu-route: pandas object-dtype cells are Python objects. p3-labels-metrics: each
+                # cell's PyObject pointer is read from the object block's storage (no boxed index
+                # or index tuple per cell); exact int, float and bool convert by PyFloat_AsDouble
+                # (their C slot, as `float(v)` ran it); NumPy scalars keep their buffer read.
+                var cells = Int(py=sequential_address(data))
+                var cell_col = col * col_stride if rank == 2 else 0
                 for row in range(rows):  # cpu-route: Python objects marshaled one element at a time before the runtime
-                    var item = data[row] if rank == 1 else data[Python.tuple(col, row)]
-                    var bits = _pd_object_bits(item, context)
+                    var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=cells + row * row_stride + cell_col)[0]
+                    var bits = _pd_cell_bits(raw, int_word, float_word, bool_word, context)
                     if not allow_nonfinite and (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
                         raise Error("Input contains NaN or infinity")
                     output[row * cols + dest] = bitcast[DType.float32](bits)

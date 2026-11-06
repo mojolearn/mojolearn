@@ -44,6 +44,12 @@ from bindings.label_input_sources import (
     labels_list_scalar_kind, labels_series_values, labels_text_storage,
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
 from bindings.str_labels_native import StrTable, _read, _sorted
+from bindings.cpython_table import cpython_table
+from bindings.perf3_label_doors_text import labels_all_exact_str
+from bindings.label_input_sources import LABELS_LIST_INT
+from bindings.p3_labels_metrics_native import (
+    p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
+    p3_integral_list, p3_item, p3_type_word, p3_table, P3_TEXT_OK, P3_TEXT_NOT_STR)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -148,9 +154,10 @@ def labels_helper(context: PythonObject, name: String) raises -> PythonObject:
 def labels_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     """`entry(*args)` for a compiled entry point and a Python list of its
     arguments, keeping the class of a refusal the entry raises."""
-    ref cpy = Python().cpython()
     var envelope = py_call(labels_builtins().tuple, args)
-    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallObject")(entry._obj_ptr, envelope._obj_ptr)
+    # p3-labels-metrics: PyObject_CallObject from the process-wide table (it
+    # was resolved by name, dlsym, on every call).
+    var result = p3_table()[].call_object(entry._obj_ptr, envelope._obj_ptr)
     if not result:
         raise typed_python_error()
     return PythonObject(from_owned=result)
@@ -300,10 +307,10 @@ def _any_contiguous_address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var storage = List[Int](length=10, fill=0)
     var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x9C)) != 0:
+    if cpython_table()[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0x9C)) != 0:
         raise cpy.unsafe_get_error()
     var address = storage[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    cpython_table()[].PyBuffer_Release(pointer)
     _ = storage^
     return address
 
@@ -545,8 +552,10 @@ def labels_check_sample_weight(source: PythonObject, n: Int, context: PythonObje
     var cls = py_type(source)
     var scalar = False
     var value = Float64(0)
-    if cls is b.int or cls is b.float or (labels_real_type(cls, context) and not labels_bool_type(cls, context)
-                                          and not labels_integral_type(cls, context)):
+    # One classification (it was three: real, bool, integral): a real
+    # scalar that is neither bool nor integral is kind 4.
+    _labels_connect(context)
+    if cls is b.int or cls is b.float or labels_primitive_kind(cls, context) == 4:
         scalar = True
         value = Float64(py=py_call(b.float, source))
     elif cls is not context["array_class"] and cls is not b.list and cls is not b.tuple:
@@ -718,25 +727,51 @@ def _flatten_labels(var y: PythonObject, context: PythonObject) raises -> Python
         raise Error("mojolearn: y must be a sequence of labels")
     var out = Python.list()
     var kinds = LabelTypeKinds()
-    # Exact container types and the output's native append owner are stable
-    # throughout this recursive walk; capture them once, not per node/leaf.
-    _flatten_into(item, out.append, b.list, b.tuple, context, kinds)
+    # Exact container class words are stable throughout this recursive walk;
+    # capture them once, not per node/leaf.
+    _flatten_into(item, out, Int(b.list._obj_ptr), Int(b.tuple._obj_ptr), context, kinds)
     _ = kinds^
     return out
 
 
-def _flatten_into(item: PythonObject, append: PythonObject, list_type: PythonObject,
-                  tuple_type: PythonObject, context: PythonObject, mut kinds: LabelTypeKinds,
-                  depth: Int = 0) raises:
+def _flatten_into(item: PythonObject, out: PythonObject, list_word: Int, tuple_word: Int,
+                  context: PythonObject, mut kinds: LabelTypeKinds, depth: Int = 0) raises:
+    # p3-labels-metrics: items are read borrowed from the exact container's C
+    # storage and their classes compared by pointer; a container holding no
+    # nested container is admitted label by label (same order, same
+    # refusals) and copied with ONE list.extend; leaves of a mixed container
+    # go in by PyList_Append. No boxed index, no Python append call per label.
     if depth > 64:
         raise Error("TypeError: label nesting exceeds the supported native depth")
-    var cls = py_type(item)
-    if cls is list_type or cls is tuple_type:
-        for k in range(len(item)):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
-            _flatten_into(item[k], append, list_type, tuple_type, context, kinds, depth + 1)
+    var cls = p3_type_word(item._obj_ptr)
+    if cls == list_word or cls == tuple_word:
+        var is_tuple = cls == tuple_word
+        var n = len(item)
+        var nested = False
+        for k in range(n):  # driver-loop: exact native container slots by pointer, stops at the first nested one
+            var child = p3_type_word(p3_item(item, k, is_tuple))
+            if child == list_word or child == tuple_word:
+                nested = True
+                break
+        if not nested:
+            for k in range(n):  # driver-loop: exact native container slots, one memoized class admission per label
+                _ = kinds.admit_raw(p3_item(item, k, is_tuple), context)
+            _ = py_call(out.extend, item)
+            return
+        ref cpy = Python().cpython()
+        for k in range(n):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
+            var raw = p3_item(item, k, is_tuple)
+            var child = p3_type_word(raw)
+            if child == list_word or child == tuple_word:
+                _flatten_into(PythonObject(from_borrowed=raw), out, list_word, tuple_word, context, kinds, depth + 1)
+            else:
+                _ = kinds.admit_raw(raw, context)
+                if Int(p3_table()[].list_append(out._obj_ptr, raw)) != 0:
+                    raise cpy.unsafe_get_error()
+        _ = item
         return
     _ = kinds.admit(item, context)
-    _ = py_call(append, item)
+    _ = py_call(out.append, item)
 
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
@@ -762,17 +797,24 @@ def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> C
     var seen_number = False
     _labels_connect(context)
     var kinds = LabelTypeKinds()
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        var item = labels[i]
-        var t = py_type(item)
+    var is_tuple = py_type(labels) is b.tuple
+    var int_word = Int(b.int._obj_ptr)
+    var bool_word = Int(b.bool._obj_ptr)
+    for i in range(n):  # driver-loop: borrowed label reads by class pointer (p3-labels-metrics), the explicit label input step
+        var raw = p3_item(labels, i, is_tuple)
         # Inspect identities before hashing a class: an application metaclass
         # can define Python __hash__, even when the label itself is untouched.
-        var primitive = kinds.kind(t, context)
+        var primitive = kinds.kind_raw(raw, context)
         var kind = 1 if primitive == 1 else 2 if primitive > 1 else 0
         if kind == 0:
-            raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols, got " + labels_type_name(t))
-        if kind == 2 and Bool(py=item != item):
-            raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+            raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols, got " + labels_type_name(py_type(PythonObject(from_borrowed=raw))))
+        if kind == 2:
+            # An exact int or bool is never NaN (`v != v` is False for it).
+            var word = p3_type_word(raw)
+            if word != int_word and word != bool_word:
+                var item = PythonObject(from_borrowed=raw)
+                if Bool(py=item != item):
+                    raise Error("mojolearn: y contains a NaN label; NaN is not a class")
         seen_str = seen_str or kind == 1
         seen_number = seen_number or kind == 2
     _ = kinds^  # end admission reuse before sorting or numerical helpers
@@ -783,11 +825,10 @@ def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> C
     for i in range(len(classes)):  # driver-loop: over class index table (classes-sized: distinct classes)
         py_setitem(index, classes[i], PythonObject(i))
     var codes = labels_vector(n, "<i4", context)
-    var p = _I32P(unsafe_from_address=labels_address(codes))
-    _ = codes  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        p[i] = Int32(Int(py=index[labels[i]]))
-        _ = codes  # keep the Python object alive through the native call above
+    # One borrowed read and one C dict probe per label (the label's own C
+    # hash and equality, as `index[label]` ran them); every label is a key.
+    p3_dict_codes(index, labels, labels_address(codes), -1)
+    _ = codes  # keep the Python object alive through the native writes above
     return ClassicalLabels(classes, codes, n)
 
 
@@ -1007,6 +1048,20 @@ def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optio
     var n = len(flat)
     if n == 0:
         return None
+    # p3-labels-metrics: hash to the k distinct labels by their UTF-8 bytes,
+    # sort only the k classes (bindings/p3_labels_metrics_native.mojo): the
+    # same classes (first label of each), order and codes. A str with no
+    # UTF-8 form takes the code-point path below.
+    var fast = p3_text_codes(flat, True)
+    if fast.status == P3_TEXT_NOT_STR:
+        return None
+    if fast.status == P3_TEXT_OK:
+        var fast_codes = labels_vector(n, "<i4", context)
+        var target = _I32P(unsafe_from_address=labels_address(fast_codes))
+        for i in range(n):  # driver-loop: native copy of the n codes
+            target[i] = fast.codes[i]
+        _ = fast_codes  # keep the Python object alive through the native writes above
+        return ClassicalLabels(p3_text_classes(flat, fast.first), fast_codes, n)
     var table = StrTable()
     if not _read(flat, table):
         return None
@@ -1033,14 +1088,11 @@ def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[Clas
     var n = len(y)
     if n == 0:
         return None
-    var all_int = True
-    var all_float = True
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        var t = py_type(y[i])
-        all_int = all_int and t is b.int
-        all_float = all_float and t is b.float
-        if not all_int and not all_float:
-            break  # the answer is already None; str/object lists stop at their first label
+    # One borrowed class-pointer read per label through the container's C
+    # storage, stopping at the first other label (p3-labels-metrics).
+    var scalar_kind = labels_list_scalar_kind(y)
+    var all_int = scalar_kind == LABELS_LIST_INT
+    var all_float = scalar_kind == LABELS_LIST_FLOAT
     if not all_int and not all_float:
         return None
     var store = PythonObject(None)
@@ -1091,8 +1143,9 @@ def labels_label_kind(var classes: PythonObject, context: PythonObject) raises -
     var all_int = True
     var all_real = True
     var kinds = LabelTypeKinds()
+    var is_tuple = py_type(classes) is b.tuple
     for i in range(len(classes)):  # driver-loop: exact primitive kinds preserve bool/string object-label output
-        var kind = kinds.admit(classes[i], context)
+        var kind = kinds.admit_raw(p3_item(classes, i, is_tuple), context)
         all_int = all_int and kind == 3
         all_real = all_real and (kind == 3 or kind == 4)
     _ = kinds^
@@ -1109,8 +1162,18 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
     classical_admit_value(codes, context)
     var n = Int(py=codes.size)
     var k = len(classes)
+    var code_dtype = String(codes.dtype)
+    if kind != "int" and kind != "float" and (code_dtype == "<i4" or code_dtype == "<i8"):
+        # p3-labels-metrics: str / bool / object classes decode as ONE
+        # presized list filled in C from the code words (no widening copy,
+        # no Python append per row). An out-of-range code takes the loop
+        # below, which raises Python's IndexError as before.
+        var listed = p3_decode_list(classes, labels_address(codes), 4 if code_dtype == "<i4" else 8, n)
+        _ = codes  # keep the Python object alive through the native reads above
+        if listed is not None:
+            return listed
     var wide_codes = codes
-    if String(codes.dtype) == "<i4":
+    if code_dtype == "<i4":
         wide_codes = labels_vector(n, "<i8", context)
         labels_cast(labels_address(codes), "<i4", labels_address(wide_codes), "<i8", n, context)
         _ = wide_codes  # keep the Python object alive through the native call above
@@ -1542,9 +1605,10 @@ def _native_classification(var values: PythonObject, context: PythonObject) rais
         var n = len(values)
         if n == 0:
             return None
-        for i in range(n):  # cpu-route: the label types of a user Python list, the explicit label input step
-            if py_type(values[i]) is not b.int:
-                return None
+        # Every label exactly an int, read by class pointer through the
+        # container's C storage (p3-labels-metrics).
+        if labels_list_scalar_kind(values) != LABELS_LIST_INT:
+            return None
         var store = PythonObject(None)
         try:
             store = native_array_from_values(String("q"), values)
@@ -1594,20 +1658,28 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
     var all_str = True
     var all_int = True
     var kinds = LabelTypeKinds()
-    for i in range(n):  # cpu-route: the label types of user labels, the explicit label input step
-        var kind = kinds.admit(labels[i], context)
+    for i in range(n):  # driver-loop: borrowed label reads, one memoized class admission per label
+        var kind = kinds.admit_raw(p3_item(labels, i, False), context)
         all_str = all_str and kind == 1
         all_int = all_int and (kind == 2 or kind == 3)
     _ = kinds^  # no cached classification spans the following conversions
     var out = Python.list()
     if all_str:
-        for i in range(n):  # cpu-route: str labels, the explicit label input step
+        # `str(v)` of an exact str is v itself: the flat list (a fresh list)
+        # is the converted one (p3-labels-metrics).
+        if labels_all_exact_str(labels):
+            return ScoreLabels(False, PythonObject(None), PythonObject(None), labels, n, "string")
+        for i in range(n):  # cpu-route: NumPy str_ labels to exact str, the explicit label input step
             _ = py_call(out.append, py_call(b.str, labels[i]))
         return ScoreLabels(False, PythonObject(None), PythonObject(None), out, n, "string")
     if all_int:
-        for i in range(n):  # cpu-route: Python int labels, the explicit label input step
-            _ = py_call(out.append, py_call(b.int, labels[i]))
-        return ScoreLabels(False, PythonObject(None), PythonObject(None), out, n, "integer")
+        # Exact ints kept, bools 0 / 1, NumPy integer scalars their exact int
+        # (C calls into one presized list; p3-labels-metrics).
+        var bool_types = Python.tuple()
+        if py_get(context, "ndarray") is not None:
+            bool_types = Python.tuple(context["numeric_dtypes"][Python.tuple("b", 1)].type)
+        return ScoreLabels(False, PythonObject(None), PythonObject(None), p3_integral_list(labels, bool_types),
+                           n, "integer")
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 
@@ -1646,11 +1718,9 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
         _ = table  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
         return out
-    var p = _I32P(unsafe_from_address=labels_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step
-        p[i] = Int32(Int(py=py_get(index, labels.values[i], PythonObject(-1))))
-        _ = out  # keep the Python object alive through the native call above
+    # One borrowed read and one C dict probe per row (p3-labels-metrics).
+    p3_dict_codes(index, labels.values, labels_address(out), -1)
+    _ = out  # keep the Python object alive through the native writes above
     return out
 
 

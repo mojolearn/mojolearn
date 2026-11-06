@@ -93,8 +93,20 @@ def pandas_arrow_ndarray(values: PythonObject, context: PythonObject) raises -> 
     var count = Int(py=chunked.num_chunks)
     var rows = len(chunked)
     var typestr = String()
+    # p3-labels-metrics: each chunk object is kept from this admission pass
+    # (the copy pass called chunked.chunk(c) again), and a chunk of the same
+    # exact class as the previous one has its code (the class lookups ran
+    # per chunk).
+    var chunks = Python.list()
+    var last_class = PythonObject(None)
     for c in range(count):  # driver-loop: over Arrow chunks, admitting one dtype before any copy
-        var code = _arrow_typestr(py_call(chunked.chunk, c))
+        var chunk_c = py_call(chunked.chunk, c)
+        _ = py_call(chunks.append, chunk_c)
+        var cls_c = py_type(chunk_c)
+        var code = typestr
+        if c == 0 or cls_c is not last_class:
+            code = _arrow_typestr(chunk_c)
+        last_class = cls_c
         if c > 0 and code != typestr:
             raise Error("TypeError: Arrow chunks of one column disagree on their type")
         typestr = code
@@ -108,8 +120,9 @@ def pandas_arrow_ndarray(values: PythonObject, context: PythonObject) raises -> 
     var floating = typestr.startswith("<f")
     var boolean = typestr == "|b1"
     var position = 0
+    var buffer_class = _pd_class("pyarrow.lib", "Buffer")
     for c in range(count):  # driver-loop: over Arrow chunks, one native copy each
-        var chunk = py_call(chunked.chunk, c)
+        var chunk = chunks[c]
         var length = len(chunk)
         var offset = Int(py=chunk.offset)
         var nulls = Int(py=chunk.null_count)
@@ -118,7 +131,6 @@ def pandas_arrow_ndarray(values: PythonObject, context: PythonObject) raises -> 
         var buffers = py_call(chunk.buffers)
         if py_type(buffers) is not b.list or len(buffers) != 2:
             raise Error("TypeError: numeric Arrow storage requires one validity and one data buffer")
-        var buffer_class = _pd_class("pyarrow.lib", "Buffer")
         if length > 0 and (buffer_class is None or py_type(buffers[1]) is not buffer_class):
             raise Error("TypeError: numeric Arrow storage requires an exact pyarrow Buffer")
         if length > 0:

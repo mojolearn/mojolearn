@@ -14,6 +14,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
+from bindings.p3_labels_metrics_native import (
+    p3_text_codes, p3_text_classes, p3_text_lookup, p3_decode_list, P3_TEXT_OK, P3_TEXT_NOT_STR)
 
 # Py_TPFLAGS_UNICODE_SUBCLASS
 comptime UNICODE_FLAG = 1 << 28
@@ -56,13 +58,12 @@ def _read(labels: PythonObject, mut table: StrTable) raises -> Bool:
     # Every label's code points; False when one is not a str. The C API
     # entries are resolved once per call, not once per label.
     ref cpy = Python().cpython()
-    var get_flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")
     var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
     var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
     var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
     for i in range(len(labels)):  # driver-loop: the explicit label input step, one read per label
         var value = labels[i]
-        if (get_flags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
+        if (cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
             return False
         var count = get_length(value._obj_ptr)
         if count < 0:
@@ -128,10 +129,10 @@ def _address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var view = List[Int](length=10, fill=0)
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0)) != 0:
+    if cpython_table()[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0)) != 0:
         raise cpy.unsafe_get_error()
     var address = view[0]
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    cpython_table()[].PyBuffer_Release(pointer)
     # Keep the Py_buffer storage alive past the release.
     _ = view^
     return address
@@ -142,6 +143,21 @@ def str_encode(labels: PythonObject) raises -> PythonObject:
     var n = len(labels)
     if n == 0:
         return PythonObject(None)
+    # p3-labels-metrics: hash the labels to their k distinct values over the
+    # UTF-8 bytes CPython caches in each str, sort only the k classes and
+    # write each row's code from its hash slot (bindings/p3_labels_metrics_native.mojo).
+    # The same classes (the first label of each class), the same code-point
+    # order and codes; a str with no UTF-8 form takes the code-point path below.
+    var fast = p3_text_codes(labels, True)
+    if fast.status == P3_TEXT_NOT_STR:
+        return PythonObject(None)
+    if fast.status == P3_TEXT_OK:
+        var fast_codes = _store("i", n)
+        var target = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(fast_codes))
+        for i in range(n):  # driver-loop: native copy of the n codes
+            target[i] = fast.codes[i]
+        _ = fast_codes  # keep the Python object alive through the native writes above
+        return Python.tuple(p3_text_classes(labels, fast.first), fast_codes)
     var table = StrTable()
     if not _read(labels, table):
         return PythonObject(None)
@@ -167,8 +183,21 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     classes: a duplicated class keeps its LAST index, as the comprehension
     does; a value that is not a str matches no str class."""
     var k = len(classes)
+    if k == 0:
+        return PythonObject(None)
+    # p3-labels-metrics: classes hashed by their UTF-8 bytes once, each value
+    # one borrowed read and one hash probe (no per-value code-point copy or
+    # binary search). The former path below answers when a class is not a
+    # str (None) or has no UTF-8 form.
+    var n_fast = len(values)
+    var fast_codes = _store("f" if as_float else "i", n_fast)
+    var fast_missing = Python.list()
+    var fast_count = p3_text_lookup(classes, values, _address(fast_codes), as_float, fast_missing)
+    _ = fast_codes  # keep the Python object alive through the native writes above
+    if fast_count >= 0:
+        return Python.tuple(fast_codes, fast_missing, fast_count)
     var table = StrTable()
-    if k == 0 or not _read(classes, table):
+    if not _read(classes, table):
         return PythonObject(None)
     var order = _sorted(table, k)
     # The distinct sorted classes and the index each answers with.
@@ -190,7 +219,6 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     # One reused one-label table and the C API entries resolved once: each
     # value used to build a Python list, a fresh table and four symbol
     # lookups.
-    var get_flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")
     var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
     var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
     var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
@@ -198,7 +226,7 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     for i in range(n):  # driver-loop: the explicit label input step, one lookup per label
         var value = values[i]
         var found = -1
-        if (get_flags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) != 0:
+        if (cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) != 0:
             var length = get_length(value._obj_ptr)
             if length < 0:
                 raise cpy.unsafe_get_error()
@@ -265,6 +293,18 @@ def str_labels_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             if py_type(call[1]) is not b.list:
                 raise Error("TypeError: str label encoding requires a native list")
             result = str_encode(call[1])
+        elif operation == "decode":
+            # ("decode", classes, codes address, n, code width 4 or 8) ->
+            # [classes[c] for c in codes] as one presized list, or None
+            # when a code is out of range (the caller's Python indexing
+            # then raises its IndexError).
+            var cls = py_type(call[1])
+            if cls is not b.list and cls is not b.tuple:
+                raise Error("TypeError: str label decoding requires a native list or tuple")
+            var width = Int(py=call[4])
+            if width != 4 and width != 8:
+                raise Error("TypeError: str label decoding requires int32 or int64 codes")
+            result = p3_decode_list(call[1], Int(py=call[2]), width, Int(py=call[3]))
         elif operation == "lookup":
             if py_type(call[1]) is not b.list or py_type(call[2]) is not b.list:
                 raise Error("TypeError: str label lookup requires native lists")

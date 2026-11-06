@@ -60,18 +60,23 @@ struct McPair(Movable):
 
 
 def mc_pair(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject, caller: String,
-            context: PythonObject, true_admitted: Bool = False) raises -> McPair:
+            context: PythonObject, true_admitted: Bool = False, pred_admitted: Bool = False) raises -> McPair:
     """`_expansion_metrics._pair(y_true, y_pred, sample_weight, caller)`.
 
     Each label input is admitted (`classical_admit_value`) once here, in the
     order the shape probes admitted them, and the multilabel refusal, the
     fast encoder and the label input step reuse that admission instead of
     walking a label list again. `true_admitted`: the caller already admitted
-    y_true in this native call (GaussianProcessClassifier.score)."""
+    y_true in this native call (GaussianProcessClassifier.score).
+    `pred_admitted` likewise for y_pred (p3-labels-metrics: the metrics door,
+    bindings/metrics_cls_native.mojo, admits every argument before
+    `metric_arguments` snapshots it; a snapshot holds the same admitted
+    leaves, so the door's calls skip this second walk of a label list)."""
     if not true_admitted:
         classical_admit_value(y_true, context)
     mc_refuse_multilabel(y_true, "y_true", caller, context, True)
-    classical_admit_value(y_pred, context)
+    if not pred_admitted:
+        classical_admit_value(y_pred, context)
     mc_refuse_multilabel(y_pred, "y_pred", caller, context, True)
     var true = mc_labels(y_true, "y_true", context, True)
     var pred = mc_labels(y_pred, "y_pred", context, True)
@@ -230,7 +235,7 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("normalize must be a bool")
     if not mc_bool(normalize):
         # `accuracy_count`: the COUNT tail over the match sums
-        var pair = mc_pair(args[1], args[2], args[4], "accuracy_score", context)
+        var pair = mc_pair(args[1], args[2], args[4], "accuracy_score", context, True, True)
         var prog = McProg(context)
         var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
         var out = mc_count_tail(prog, s, mc_len(pair.present))
@@ -267,7 +272,7 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
 def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`confusion_matrix_weighted`; args = (binding, y_true, y_pred, labels,
     sample_weight, normalize, numeric_mode)."""
-    var pair = mc_pair(args[1], args[2], args[4], "confusion_matrix", context)
+    var pair = mc_pair(args[1], args[2], args[4], "confusion_matrix", context, True, True)
     var chosen = mc_selected(args[3], pair.true.kind, pair.present, context)
     if mc_len(family_call(mc_set(chosen).intersection, pair.true.classes)) == 0:
         raise Error("At least one label specified must be in y_true")
@@ -400,7 +405,7 @@ def _prf_weighted(args: PythonObject, metric: Int, context: PythonObject) raises
     zero_division, numeric_mode)."""
     var zero_division = args[8]
     var zv = _zero_division_value(zero_division, context)
-    var pair = mc_pair(args[2], args[3], args[7], "precision_recall_fscore_support", context)
+    var pair = mc_pair(args[2], args[3], args[7], "precision_recall_fscore_support", context, True, True)
     var average = args[6]
     var chosen = _set_wise_labels(pair.present, pair.true.kind, average, args[4], args[5],
                                   "precision_recall_fscore_support", context)
@@ -706,12 +711,12 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def mcls_accuracy_fraction(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject,
                            numeric_mode: PythonObject, context: PythonObject,
-                           true_admitted: Bool = False) raises -> PythonObject:
+                           true_admitted: Bool = False, pred_admitted: Bool = False) raises -> PythonObject:
     """`_expansion_metrics.accuracy_fraction` (the estimators' `score`): the
     COUNT tail of `_accuracy_sums` over the match sums, the (weighted)
     match count over the row count or the weight total; a zero weight total
     raises as the division did. The same program as accuracy_count's."""
-    var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context, true_admitted)
+    var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context, true_admitted, pred_admitted)
     var prog = McProg(context)
     var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
     var out = mc_count_tail(prog, s, mc_len(pair.present))
@@ -726,7 +731,7 @@ def mcls_classify_operation(operation: String, args: PythonObject, context: Pyth
         return _accuracy(args, context)
     if operation == "family_mcls_accuracy_fraction":
         # args = (y_true, y_pred, sample_weight, numeric_mode)
-        return mcls_accuracy_fraction(args[0], args[1], args[2], args[3], context)
+        return mcls_accuracy_fraction(args[0], args[1], args[2], args[3], context, True, True)
     if operation == "family_mcls_confusion":
         return _confusion(args, context)
     if operation == "family_mcls_prf":
