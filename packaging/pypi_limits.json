@@ -30,7 +30,6 @@
       "granted": "2026-11-04",
       "issues": ["pypi/support#12539", "pypi/support#12675"]
     },
-    "mojolearn-core": {},
-    "mojolearn-nvidia-ptx": {}
+    "mojolearn-core": {}
   }
 }

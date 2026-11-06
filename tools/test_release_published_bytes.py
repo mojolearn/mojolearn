@@ -85,7 +85,8 @@ def check(tmp_path, vendor, candidates, index, gate, out="out", verdict="PASS: 1
 
 
 def nvidia_set(directory, **kw):
-    return [make_wheel(directory, d, **kw) for d in ("mojolearn-core", "mojolearn-nvidia", "mojolearn-nvidia-ptx")]
+    # the NVIDIA wheel carries its PTX set (2026-11-05): two distributions
+    return [make_wheel(directory, d, **kw) for d in ("mojolearn-core", "mojolearn-nvidia")]
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +107,7 @@ def test_published_bytes_equal_to_the_gated_candidates_pass_without_any_install(
     out = tmp_path / "out"
     assert not (out / "venv").exists()                     # nothing was installed
     log = (out / "resolve.log").read_text()
-    assert log.count("pip download") == 3 and "--platform manylinux_2_35_x86_64" in log and "--no-deps" in log
+    assert log.count("pip download") == 2 and "--platform manylinux_2_35_x86_64" in log and "--no-deps" in log
     # the gate's receipt is kept by content, and judge re-derives the same report from the retained files
     copied = json.loads((out / "request.json").read_text())["gate"]["evidence"]
     assert copied[0]["path"] == f"gate-evidence/{sha(gate)[:16]}-gate-smoke.json" and copied[0]["sha256"] == sha(gate)
@@ -118,23 +119,23 @@ def test_published_bytes_equal_to_the_gated_candidates_pass_without_any_install(
 def test_published_bytes_that_differ_fail_with_both_hashes_and_nothing_reruns(tmp_path):
     cands = nvidia_set(tmp_path / "cand")
     other = make_wheel(tmp_path / "pub", "mojolearn-nvidia", payload=b"x = 2\n")
-    index = fake_index(tmp_path / "index", [cands[0], other, cands[2]])
+    index = fake_index(tmp_path / "index", [cands[0], other])
     rc, report = check(tmp_path, "nvidia", cands, index, [gate_receipt(tmp_path / "gate", cands)])
     assert rc == 1 and report["status"] == "failed"
     assert report["mismatch"] == [dict(file=other.name, published_sha256=sha(other), candidate=cands[1].name,
                                        candidate_sha256=sha(cands[1]))]
     cov = {r["id"]: r["status"] for r in report["coverage"]}
     assert cov["published-artifact-hashes"] == "failed" and cov["index-resolution"] == "passed"
-    assert (tmp_path / "out" / "resolve.log").read_text().count("pip download") == 3   # one resolution each
+    assert (tmp_path / "out" / "resolve.log").read_text().count("pip download") == 2   # one resolution each
 
 
 def test_a_package_missing_from_the_index_or_a_wrong_index_digest_fails_resolution(tmp_path):
     cands = nvidia_set(tmp_path / "cand")
-    index = fake_index(tmp_path / "index", cands[:2], advertise={cands[0].name: "0" * 64})
+    index = fake_index(tmp_path / "index", cands[:1], advertise={cands[0].name: "0" * 64})
     rc, report = check(tmp_path, "nvidia", cands, index, [gate_receipt(tmp_path / "gate", cands)])
     assert rc == 1
     failed = [c["name"] for c in report["checks"]["index-resolution"] if not c["passed"]]
-    assert "resolved:mojolearn-nvidia-ptx" in failed
+    assert "resolved:mojolearn-nvidia" in failed
     # a file whose bytes are not what the index advertises: pip refuses it, or the digest check does
     assert "resolved:mojolearn-core" in failed or "index-digest:" + cands[0].name in failed
 
@@ -171,9 +172,9 @@ def test_a_broken_record_fails_integrity_even_with_equal_bytes(tmp_path):
 def test_gate_evidence_must_name_the_published_bytes_and_stay_unchanged(tmp_path):
     cands = nvidia_set(tmp_path / "cand")
     index = fake_index(tmp_path / "index", cands)
-    stale = gate_receipt(tmp_path / "gate", cands[:2])       # the gate never saw the PTX wheel's bytes
+    stale = gate_receipt(tmp_path / "gate", cands[:1])       # the gate never saw the NVIDIA wheel's bytes
     rc, report = check(tmp_path, "nvidia", cands, index, [stale])
-    assert rc == 1 and any(c["name"] == "gated-bytes:" + cands[2].name and not c["passed"]
+    assert rc == 1 and any(c["name"] == "gated-bytes:" + cands[1].name and not c["passed"]
                            for c in report["checks"]["gate-evidence"])
     rc, report = check(tmp_path, "nvidia", cands, index, [], out="none")
     assert rc == 1 and {r["id"]: r["status"] for r in report["coverage"]}["gate-evidence"] == "failed"

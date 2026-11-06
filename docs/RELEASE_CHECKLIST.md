@@ -152,7 +152,7 @@ candidate wheel directory) are placeholders.
 # The tests are copied from a checkout of SHA; a git worktree of SHA is enough.
 git worktree add --detach ~/src-$SHA $SHA
 python3 tools/release_runtime_installed.py run --vendor nvidia --source-root ~/src-$SHA --source-commit $SHA \
-  --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_nvidia-$V-*.whl --wheel $W/mojolearn_nvidia_ptx-$V-*.whl \
+  --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_nvidia-$V-*.whl \
   --python python3.12 --out ~/mojolearn-evidence/release/$V/runtime-nvidia
 #   amd:   --vendor amd   --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_amd-$V-*.whl
 #   cpu:   --vendor cpu   --wheel $W/mojolearn_core-$V-*.whl            (Linux CPU box, cpu_target linux-64)
@@ -163,7 +163,7 @@ python3 tools/release_runtime_installed.py run --vendor nvidia --source-root ~/s
 # the eleven installed correctness jobs and the three adapter phases.
 python3 tools/release_published_install.py run --vendor nvidia --version $V \
   --candidate-wheel $W/mojolearn_core-$V-*.whl --candidate-wheel $W/mojolearn_nvidia-$V-*.whl \
-  --candidate-wheel $W/mojolearn_nvidia_ptx-$V-*.whl --python python3.12 --out ~/mojolearn-evidence/release/$V/published-nvidia
+  --python python3.12 --out ~/mojolearn-evidence/release/$V/published-nvidia
 #   apple runs under tools/mac_slot.py ... metal -- with --candidate-wheel $W/mojolearn-$V-*-macosx_*.whl
 
 # On the Mac, for each pulled directory DIR and its adapter:
@@ -292,13 +292,11 @@ FIVE PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 - **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
   linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
-  plugins plus PTX, 3b), publish-core-linux (last, after both plugins).
-- **nvidia-ptx**: publish-nvidia-ptx, before the NVIDIA vendor package that
-  requires it. The default preverified route uses its build and artifact checks.
+  plugins, the NVIDIA one carrying the PTX set, 3b), publish-core-linux (first on Linux).
 - **nvidia**: gpu-column-nvidia (the expanded smoke, on the
   nv box we hold, the RunPod L40S sm_89), gpu-column-nvidia-hopper (only with
   `--hopper-box <ssh>`, a Hopper box we hold; otherwise SKIPPED), publish-nvidia
-  (after publish-nvidia-ptx).
+  (after publish-core-linux; one wheel with native sm_89 and PTX sm_80 since 2026-11-05).
 - **amd**: gpu-column-amd (on the amd box we hold, the DigitalOcean MI325X
   gfx942; the expanded smoke too), publish-amd.
 

@@ -23,7 +23,7 @@ VERSION = "0.8.57"
 
 
 def wheel_files(tmp_path, vendor):
-    names = ["mojolearn_core", "mojolearn_" + vendor] + (["mojolearn_nvidia_ptx"] if vendor == "nvidia" else [])
+    names = ["mojolearn_core", "mojolearn_" + vendor]  # the NVIDIA wheel carries its PTX set (2026-11-05)
     out = []
     for name in names:
         path = tmp_path / f"{name}-{VERSION}-py3-none-manylinux_2_35_x86_64.whl"

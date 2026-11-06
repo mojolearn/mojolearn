@@ -99,7 +99,8 @@ class ProjectClassification(unittest.TestCase):
         self.assertTrue(result['core'])
         self.assertTrue(result['mojolearn'])
         self.assertEqual(result['plugins'], ['amd', 'nvidia'])
-        self.assertEqual(result['payloads'], ['nvidia-ptx'])
+        # the NVIDIA wheel carries its PTX set (2026-11-05): no payload project
+        self.assertEqual(result['payloads'], [])
         parsed = {key: json.loads(value) for key, value in
                   (line.split('=', 1) for line in projects.github_outputs(result).splitlines())}
         self.assertEqual(list(parsed), ['core', 'mojolearn', 'plugins', 'payloads'])
@@ -119,7 +120,7 @@ class ProjectClassification(unittest.TestCase):
                 projects.classify(subset, require_complete=True)
 
     def test_partial_payload_and_aggregate_dispatches(self):
-        for profile, role in (('amd', 'plugins'), ('nvidia', 'plugins'), ('nvidia-ptx', 'payloads')):
+        for profile, role in (('amd', 'plugins'), ('nvidia', 'plugins')):
             wheel = self.wheel(profile)
             result = projects.classify([wheel])
             self.assertFalse(result['core'])
@@ -139,12 +140,13 @@ class ProjectClassification(unittest.TestCase):
         self.assertEqual(result['payloads'], [])
 
     def test_retired_unknown_empty_duplicate_and_mixed_versions_fail(self):
-        # The old experimental PTX80 name remains retired; the normal PTX
-        # dependency uses mojolearn-nvidia-ptx.
-        retired = self.root / 'mojolearn_nvidia_ptx80-1.2.3-py3-none-manylinux_2_35_x86_64.whl'
-        retired.write_bytes(b'')
-        with self.assertRaisesRegex(ValueError, 'unknown GPU release project'):
-            projects.classify([retired])
+        # The old experimental PTX80 name and, since 2026-11-05, the PTX dependency
+        # mojolearn-nvidia-ptx are retired: the NVIDIA wheel carries its PTX set.
+        for stem in ('mojolearn_nvidia_ptx80', 'mojolearn_nvidia_ptx'):
+            retired = self.root / f'{stem}-1.2.3-py3-none-manylinux_2_35_x86_64.whl'
+            retired.write_bytes(b'')
+            with self.subTest(stem=stem), self.assertRaisesRegex(ValueError, 'unknown GPU release project'):
+                projects.classify([retired])
         with self.assertRaisesRegex(ValueError, 'unknown GPU release profile'):
             projects.wheel_prefix('nvidia-ptx80')
         with self.assertRaisesRegex(ValueError, 'unknown'):

@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 
-_DISTRIBUTIONS = ("mojolearn", "mojolearn-core", "mojolearn-nvidia", "mojolearn-amd", "mojolearn-nvidia-ptx")
+_DISTRIBUTIONS = ("mojolearn", "mojolearn-core", "mojolearn-nvidia", "mojolearn-amd")
 
 
 def _sha256(path):

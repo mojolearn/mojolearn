@@ -5,8 +5,8 @@
         --python <venv>/bin/python --dir <cache>/pypi-wheels --manifest <out>/wheel-manifest.json
     python3 tools/pypi_wheel_install.py verify --manifest <out>/wheel-manifest.json --python <venv>/bin/python
 
-install: `pip download mojolearn-core==V mojolearn-<vendor>==V --no-deps` (NVIDIA adds
-mojolearn-nvidia-ptx; Apple is `mojolearn==V`) from https://pypi.org/simple into
+install: `pip download mojolearn-core==V mojolearn-<vendor>==V --no-deps` (the NVIDIA
+wheel carries its PTX set; Apple is `mojolearn==V`) from https://pypi.org/simple into
 an empty directory, hash every file (SHA-256), check each hash against PyPI's JSON API digest
 (https://pypi.org/pypi/<name>/<V>/json), then `pip install` those exact files (a dependency pass, then a
 `--force-reinstall --no-deps` pass so an older install of the same version cannot stand in for them).
@@ -40,7 +40,7 @@ SCHEMA = "mojolearn-pypi-wheel-manifest/1"
 #: Apple has no plugin package: the macOS `mojolearn` wheel carries the Metal bindings (Andrew 2026-10-14:
 #: the M4 smoke runs against `pip install mojolearn==<version>`). On Linux (2026-10-20) a vendor box
 #: installs mojolearn-core and its own vendor only, what `pip install mojolearn-<vendor>` installs.
-PLUGIN = {"nvidia": ("mojolearn-nvidia", "mojolearn-nvidia-ptx"), "amd": ("mojolearn-amd",), "apple": ()}
+PLUGIN = {"nvidia": ("mojolearn-nvidia",), "amd": ("mojolearn-amd",), "apple": ()}  # PTX ships in mojolearn-nvidia (2026-11-05)
 #: the Linux core distribution (python/mojolearn/gpu_plugins.py CORE_DISTRIBUTION)
 CORE = "mojolearn-core"
 

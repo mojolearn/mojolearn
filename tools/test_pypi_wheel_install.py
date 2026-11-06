@@ -49,7 +49,8 @@ def _loaded(manifest, **over):
 
 def test_distributions_per_vendor():
     # a Linux box installs mojolearn-core and its own vendor's packages; Apple installs mojolearn
-    assert P.distributions("nvidia") == ["mojolearn-core", "mojolearn-nvidia", "mojolearn-nvidia-ptx"]
+    # the NVIDIA wheel carries its PTX set (2026-11-05): no mojolearn-nvidia-ptx
+    assert P.distributions("nvidia") == ["mojolearn-core", "mojolearn-nvidia"]
     assert P.distributions("amd") == ["mojolearn-core", "mojolearn-amd"]
     assert P.distributions("apple") == ["mojolearn"]
     # a release from before mojolearn-core: the Linux core was mojolearn itself
@@ -64,9 +65,8 @@ def test_manifest_records_specs_index_files_and_pypi_digest_match(tmp_path):
     names, digests = _files(tmp_path)
     m = P.build_manifest(V, "nvidia", str(tmp_path), fetch=_fetch(digests))
     assert m["index_url"] == "https://pypi.org/simple"
-    assert m["requested"] == ["mojolearn-core==" + V, "mojolearn-nvidia==" + V, "mojolearn-nvidia-ptx==" + V]
-    assert [f["file"] for f in m["files"]] == [names["mojolearn-core"], names["mojolearn-nvidia"],
-                                               names["mojolearn-nvidia-ptx"]]
+    assert m["requested"] == ["mojolearn-core==" + V, "mojolearn-nvidia==" + V]
+    assert [f["file"] for f in m["files"]] == [names["mojolearn-core"], names["mojolearn-nvidia"]]
     assert m["files"][0]["file"].startswith("mojolearn_core-%s-" % V)
     assert all(f["pypi_digest_match"] and f["sha256"] == f["pypi_sha256"] for f in m["files"])
     assert m["all_digests_match"]
@@ -113,7 +113,6 @@ def test_loaded_from_the_verified_files_passes(tmp_path):
     ({IMPORT: {"module_file": "/repo/python/mojolearn/__init__.py"}}, "site-packages"),
     ({"mojolearn-core": {"version": "0.8.43"}}, "0.8.43"),
     ({"mojolearn-nvidia": {"version": "0.8.45"}}, "0.8.45"),
-    ({"mojolearn-nvidia-ptx": {"version": "0.8.46"}}, "0.8.46"),
     ({"mojolearn-core": {"direct_url": None}}, "not installed from the verified file"),
     ({"mojolearn-core": {"direct_url": {"url": "file:///x/other.whl"}}}, "not installed from the verified file"),
     ({"mojolearn-core": {"error": "PackageNotFoundError: mojolearn-core"}}, "mojolearn-core is not installed"),
