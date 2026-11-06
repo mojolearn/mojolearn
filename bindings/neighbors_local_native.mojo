@@ -119,16 +119,30 @@ def _b() raises -> PythonObject:
 
 def _truth(value: PythonObject) raises -> Bool:
     """`bool(value)`, as an `if` or `and`/`or` took it."""
+    # Perf (perf2-neighbors): an exact bool or None has no truth protocol to
+    # run; read it by identity instead of a Python `bool()` call.
+    if value is None:
+        return False
+    if py_type(value) is _b().bool:
+        return value is PythonObject(True)
     return Bool(py=family_call(_b().bool, value))
 
 
 def _eq(a: PythonObject, b: PythonObject) raises -> Bool:
     """`bool(a == b)`."""
+    # Perf (perf2-neighbors): two exact strs compare natively (str equality
+    # runs no user protocol); anything else keeps `operator.eq`.
+    var bi = _b()
+    if py_type(a) is bi.str and py_type(b) is bi.str:
+        return String(py=a) == String(py=b)
     return _truth(family_call(native_loaded_module("operator").eq, a, b))
 
 
 def _ne(a: PythonObject, b: PythonObject) raises -> Bool:
     """`bool(a != b)`."""
+    var bi = _b()
+    if py_type(a) is bi.str and py_type(b) is bi.str:
+        return String(py=a) != String(py=b)
     return _truth(family_call(native_loaded_module("operator").ne, a, b))
 
 
