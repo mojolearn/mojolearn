@@ -11,6 +11,24 @@ from bindings.native_owner_lifetime import native_release_admit
 from providers.python.resample_rows_pyapi import _row_dtype_admit
 
 
+def _metric_flat_leaves(value: PythonObject, context: PythonObject) raises -> Bool:
+    """True when no element of the list/tuple `value` is a container the
+    snapshot copies (a mojolearn Array, array.array, ndarray, list, tuple or
+    bytearray): the exact types are read once with `set(map(type, value))`
+    and each distinct type is tested, not each element."""
+    var b = native_loaded_module("builtins")
+    var types = py_call(b.list, py_call(b.set, py_call(b.map, b.type, value)))
+    var ndarray = py_get(context, "ndarray")
+    var array_class = context["array_class"]
+    var native_array = context["array_type"]
+    for i in range(len(types)):  # driver-loop: over the distinct exact element types (a handful)
+        var cls = types[i]
+        if (cls is array_class or cls is native_array or cls is ndarray or cls is b.list
+                or cls is b.tuple or cls is b.bytearray):
+            return False
+    return True
+
+
 def metric_input_snapshot(value: PythonObject, memo: PythonObject,
                           context: PythonObject, depth: Int = 0) raises -> PythonObject:
     if depth > 64:
@@ -56,6 +74,11 @@ def metric_input_snapshot(value: PythonObject, memo: PythonObject,
             # private snapshot must never become the final callback owner.
             native_release_admit(result, context)
         _ = view^
+    elif _metric_flat_leaves(value, context):
+        # Every element is a leaf, which the walk below returns unchanged and
+        # never memoizes: one C-level copy of the container is the same
+        # snapshot, without a recursive call per element.
+        result = py_call(b.tuple, value) if cls is b.tuple else py_call(b.list, value)
     else:
         var items = Python.list()
         for i in range(len(value)):  # driver-loop: stable nested native metric containers, preserving scalar leaf dtypes
