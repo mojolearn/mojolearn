@@ -4,6 +4,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_address import native_buffer_address
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
 
@@ -63,8 +64,26 @@ struct NativeJSON(Movable):
             self.at += 1
         return result
 
+    def _decoded(self, start: Int, end: Int) raises -> PythonObject:
+        # One native UTF-8 decode of buf[start, end): no slice object, bytes
+        # copy or bound decode call. A malformed run raises the same
+        # UnicodeDecodeError the bytes.decode("utf-8") of that run raised.
+        ref cpy = Python().cpython()
+        var data = self.buf.unsafe_ptr() + start
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyUnicode_DecodeUTF8")(data, end - start, Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
+        if not raw:
+            raise cpy.unsafe_get_error()
+        return PythonObject(from_owned=raw)
+
     def string(mut self) raises -> PythonObject:
         self.take(34)
+        # Common case: a string with no escape is one plain run then the
+        # closing quote; decode it straight from the document buffer.
+        var plain_end = json_plain_end(self.buf, self.at)
+        if json_peek(self.buf, plain_end) == 34:
+            var text = self._decoded(self.at, plain_end)
+            self.at = plain_end + 1
+            return text
         var parts = self.bi.list()
         var bytes = self.bi.bytearray()
         while True:  # driver-loop: over a JSON string's escape segments
@@ -136,8 +155,26 @@ struct NativeJSON(Movable):
             if self.peek() < 48 or self.peek() > 57:
                 raise Error("JSON: missing exponent at " + String(self.at))
             self.at = json_digits_end(self.buf, self.at)
-        var text = self.raw[py_call(self.bi.slice, start, self.at)]
-        return py_call(self.bi.float, text) if floating else py_call(self.bi.int, text)
+        # The admitted ASCII number text, NUL-terminated, parsed by the same
+        # CPython conversions float(bytes) and int(bytes) use (no slice
+        # object or bytes copy per number).
+        var count = self.at - start
+        var digits = List[UInt8](unsafe_uninit_length=count + 1)
+        memcpy(dest=digits.unsafe_ptr(), src=self.buf.unsafe_ptr() + start, count=count)
+        digits[count] = 0
+        ref cpy = Python().cpython()
+        var raw = PyObjectPtr()
+        if floating:
+            var number = cpy.lib.get_function[Float64]("PyOS_string_to_double")(digits.unsafe_ptr(), Int(0), Int(0))
+            if number == -1.0 and cpy.PyErr_Occurred():
+                raise cpy.unsafe_get_error()
+            raw = cpy.lib.get_function[PyObjectPtr]("PyFloat_FromDouble")(number)
+        else:
+            raw = cpy.lib.get_function[PyObjectPtr]("PyLong_FromString")(digits.unsafe_ptr(), Int(0), Int32(10))
+        _ = digits^
+        if not raw:
+            raise cpy.unsafe_get_error()
+        return PythonObject(from_owned=raw)
 
     def value(mut self, depth: Int = 0) raises -> PythonObject:
         if depth >= 1000:

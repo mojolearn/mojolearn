@@ -11,7 +11,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_cast, labels_reshape, labels_view, labels_check_rank, classical_decode_labels
 from bindings.family_common import family_call, family_entry, family_array, family_as_f32_dense, family_f32_snapshot
-from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype
+from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype, shard_item, shard_array
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from bindings.neighbors_knn_native import (
     _nn_fit, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
@@ -185,16 +185,35 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
         ids = sorted_ids
         dist = sorted_dist
     var wide = _wide(ids, Python.tuple(nnz), context)
-    var ip = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(ptr)))
-    var rows = Python.list()
-    var drows = Python.list()
-    for i in range(nq):  # driver-loop: native ragged output assembly
-        var lo = Int(ip[i])
-        var hi = Int(ip[i + 1])
-        _ = py_call(rows.append, shard_rows(wide, lo, hi, context))
-        _ = py_call(drows.append, shard_rows(dist, lo, hi, context))
+    var rows = _ragged_rows(wide, ptr, nq, context)
+    var drows = _ragged_rows(dist, ptr, nq, context) if distances else Python.list()
     _ = ptr
     return Python.tuple(drows, rows) if distances else rows
+
+
+def _ragged_rows(source: PythonObject, ptr: PythonObject, nq: Int, context: PythonObject) raises -> PythonObject:
+    # One output Array per query row (the ragged radius contract). The
+    # source dtype, item size, address and the row offsets are read once,
+    # not once per row as shard_rows does; each row is one native copy.
+    # The distance rows are built only when they are returned.
+    var dtype = shard_dtype(source)
+    var item = shard_item(dtype)
+    var size = item[1]
+    var base = Int(py=classical_address(source))
+    var ip = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(ptr)))
+    var rows = Python.list()
+    for i in range(nq):  # driver-loop: native ragged output assembly, one output Array per query row
+        var lo = Int(ip[i])
+        var hi = Int(ip[i + 1])
+        var out = shard_array(dtype, Python.tuple(hi - lo), hi - lo, context)
+        if hi > lo:
+            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base) + lo * size,
+                   count=(hi - lo) * size)
+        _ = py_call(rows.append, out)
+    _ = source  # keep the Python object alive through the native copies above
+    _ = ptr
+    return rows
 
 
 def _vote(model: PythonObject, distances: PythonObject, indices: PythonObject, method: String,

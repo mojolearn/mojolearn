@@ -27,7 +27,7 @@ matches. A record must not strongly retain the class it belongs to.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_loaded_module import NativeModules
+from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call
 
@@ -130,3 +130,130 @@ def class_admit(mut mods: NativeModules, slot: String, cls: PythonObject, payloa
     if not _class_arm(cls):
         return
     prepared_put(mods, slot, cls, Python.tuple(PythonObject(_class_epoch(cls)), payload))
+
+
+# ---------------------------------------------------------------- dictionaries
+# The same idea for exact dictionaries whose key admission (every key an
+# exact str, so a keyed lookup cannot run a foreign __eq__) used to be
+# repeated per call: module namespaces read by native metadata. Python >=
+# 3.12 dictionary watchers (`PyDict_AddWatcher` / `PyDict_Watch`) report
+# every insertion, replacement, deletion, clear, clone and deallocation of a
+# watched dictionary; each event bumps the dictionary's epoch, so a recycled
+# address or any edit forces the full scan again. Python 3.10 and 3.11 keep
+# the full scan on every call.
+
+
+struct DictWatch(Defaultable, Movable):
+    var watcher: Int
+    var epochs: Dict[Int, Int]
+    var admitted: Dict[Int, Int]
+
+    def __init__(out self):
+        self.watcher = -2
+        self.epochs = Dict[Int, Int]()
+        self.admitted = Dict[Int, Int]()
+
+
+comptime DICT_WATCH = _Global[
+    StorageType=DictWatch, name="MojolearnDictWatchV1",
+    init_fn=DictWatch.__init__,
+]
+
+
+def _dict_modified_c(event: Int32, fields: PyObjectPtr, key: PyObjectPtr, value: PyObjectPtr) abi("C") -> Int32:
+    # Dictionary watcher callback (GIL held): native map update only.
+    try:
+        var g = DICT_WATCH.get_or_create_ptr()
+        var address = Int(fields)
+        if address in g[].epochs:
+            g[].epochs[address] = g[].epochs[address] + 1
+        else:
+            g[].epochs[address] = 1
+    except:
+        pass
+    return 0
+
+
+def _dict_watcher() raises -> Int:
+    var g = DICT_WATCH.get_or_create_ptr()
+    if g[].watcher != -2:
+        return g[].watcher
+    if _class_watcher() < 0:
+        # Same version gate as the type watchers (Python >= 3.12).
+        g[].watcher = -1
+        return -1
+    ref cpy = Python().cpython()
+    var identifier = cpy.lib.get_function[Int32]("PyDict_AddWatcher")(_dict_modified_c)
+    if identifier < 0:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        g[].watcher = -1
+        return -1
+    g[].watcher = Int(identifier)
+    return g[].watcher
+
+
+def _dict_epoch(address: Int) raises -> Int:
+    var g = DICT_WATCH.get_or_create_ptr()
+    if address in g[].epochs:
+        return g[].epochs[address]
+    return 0
+
+
+def dict_keys_admitted(fields: PythonObject) raises -> Bool:
+    """True when `fields` passed a full key admission and has not changed
+    since (watched). Always False where dictionary watchers are unavailable."""
+    var g = DICT_WATCH.get_or_create_ptr()
+    if g[].watcher < 0:
+        return False
+    var address = Int(fields._obj_ptr)
+    if address not in g[].admitted:
+        return False
+    return g[].admitted[address] == _dict_epoch(address)
+
+
+def dict_keys_admit(fields: PythonObject) raises:
+    """Record that `fields` (an exact dict) just passed a full key admission."""
+    var watcher = _dict_watcher()
+    if watcher < 0:
+        return
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields._obj_ptr) < 0:
+        raise cpy.unsafe_get_error()
+    var address = Int(fields._obj_ptr)
+    var g = DICT_WATCH.get_or_create_ptr()
+    g[].admitted[address] = _dict_epoch(address)
+
+
+# ---------------------------------------------------------------- static types
+# CPython's static builtin types (builtin_function_or_method, AttributeError,
+# ...) are process constants: their identity can never change. Resolve each
+# once from the admitted module connection instead of re-admitting that
+# module on every call that only compares a type identity.
+
+
+struct StaticTypes(Defaultable, Movable):
+    var types: Dict[String, PythonObject]
+
+    def __init__(out self):
+        self.types = Dict[String, PythonObject]()
+
+
+comptime STATIC_TYPES = _Global[
+    StorageType=StaticTypes, name="MojolearnStaticTypesV1",
+    init_fn=StaticTypes.__init__,
+]
+
+
+def static_builtin_type(module: String, name: String) raises -> PythonObject:
+    """`module.name` for a static (non-heap) builtin type, resolved once."""
+    var g = STATIC_TYPES.get_or_create_ptr()
+    var key = module + "." + name
+    if key in g[].types:
+        return g[].types[key]
+    var value = py_call(native_loaded_module("builtins").getattr, native_loaded_module(module), PythonObject(name))
+    ref cpy = Python().cpython()
+    # Py_TPFLAGS_HEAPTYPE (1 << 9): only immortal static types are cached.
+    if cpy.lib.get_function[UInt64]("PyType_GetFlags")(value._obj_ptr) & UInt64(1 << 9) != 0:
+        return value
+    g[].types[key] = value
+    return value
