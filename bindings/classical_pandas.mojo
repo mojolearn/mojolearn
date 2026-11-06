@@ -143,6 +143,11 @@ def classical_admit_fields(fields: PythonObject, names: PythonObject, context: P
     holds, with one module handle and one set of admission type vectors for
     the whole pass (they were rebuilt for every field on every call)."""
     var mods = NativeModules()
+    classical_admit_fields(mods, fields, names, context)
+
+
+def classical_admit_fields(mut mods: NativeModules, fields: PythonObject, names: PythonObject, context: PythonObject) raises:
+    """The same pass with the caller's module handle."""
     var seq = _cached_value_types(mods, context)
     for k in range(len(names)):  # driver-loop: over connected estimator metadata fields
         if py_contains(fields, names[k]):
