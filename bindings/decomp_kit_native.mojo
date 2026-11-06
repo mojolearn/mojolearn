@@ -348,11 +348,17 @@ struct DecompKit(Movable):
     # The fitted model of a query (predict/transform/...), or None: its fitted
     # operands stay on the device across calls (`resident_input`).
     var owner: PythonObject
+    # A binding's compiled-route words (`flags`), read once per kit: they are
+    # compile-time constants (p3 rank 414: 3 to 6 binding calls per call).
+    var flag_names: List[String]
+    var flag_words: List[Int]
 
     def __init__(out self, entries: PythonObject, context: PythonObject) raises:
         self.entries = entries
         self.context = context
         self.owner = PythonObject(None)
+        self.flag_names = List[String]()
+        self.flag_words = List[Int]()
         self.hot = List[PythonObject]()
         for _ in range(_DK_HOT_COUNT):  # driver-loop: over the fixed entry-handle slots
             self.hot.append(PythonObject(None))
@@ -384,13 +390,17 @@ struct DecompKit(Movable):
     def has(self, name: String) raises -> Bool:
         return py_get(self.entries, PythonObject(name)) is not None
 
-    def flags(self, name: String) raises -> Int:
+    def flags(mut self, name: String) raises -> Int:
         # A binding's compiled-route word (`x_decomp_s_flags`, ...): 0 when
         # the binding has no such entry, as `_Kit.s_flags` and its siblings.
+        for i in range(len(self.flag_names)):  # small-loop(the few route-word names one kit reads)
+            if self.flag_names[i] == name:
+                return self.flag_words[i]
         var entry = py_get(self.entries, PythonObject(name))
-        if entry is None:
-            return 0
-        return Int(py=py_call(entry))
+        var word = 0 if entry is None else Int(py=py_call(entry))
+        self.flag_names.append(name)
+        self.flag_words.append(word)
+        return word
 
     def opt_dev(self, name: String) raises -> Bool:
         # `_Kit._opt_dev`: an optional resident entry this binding exports.
