@@ -39,13 +39,14 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 - Tooling: lane-selection cache, bincache one-key-one-content rule, dependency worktree cleanup, shared GPU type list
   for prebuild rentals, `tools/identity_lane_timings.py`, pip in the test environment.
 - Test debt: the tools suite on a CPU pod went from 134 failing tests to 27.
+- Run everything by default under `--identity-on-wheels` (`--reuse-unchanged` is the opt-in), and 41 lanes with smaller
+  fixtures (their digests change, so the next record run re-records every lane). Green on a CPU pod (leg16: no new
+  failures against main, 35 fixture floors hold).
 
 ## Branches written tonight, NOT merged (each needs the step named)
 
 | Branch | What | Needs |
 |---|---|---|
-| `lane/single-step-run-everything` @ 65a0d2f473 | every lane/check/unit runs by default; `--reuse-unchanged` opt-in | CPU pod test (leg16, in flight), then merge |
-| `lane/slow-verification-lanes` @ 7d1051e482 | 41 lanes with smaller fixtures; digests change; every lane re-records | same pod test; `tools/fixture_floors.py`; then merge |
 | `lane/trees-boost-train-regression` @ 7580d25b71 | boosting classifier labels read natively (20x fit regression from 2c61cfe498) | compile classical runtime binding; time 5 tree lanes on NV+AMD |
 | `lane/parallel-pool-spawn-cost` @ 9eaff35ad3 | parallel spawn/close of pool workers, worker exits at once, pool timing record | build 2 bindings; `tools/pool_spawn_cost_probe.py` A/B on NV+AMD |
 | `lane/per-element-python-loops` | audit + fixes of per-item Python loops in fit/predict paths | in flight; compile + timing |
