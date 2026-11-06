@@ -77,7 +77,7 @@ def main():
 
     # The stateless reference arm, run once; every resident run compares
     # against these captures.
-    control = Trainer(parameters, shape=shape, data_schedule=schedule)
+    control = Trainer(parameters, shape=shape, data_schedule=schedule, step_result='full')
     control_results, control_states = [], []
     control_eval = None
     for k, batch in enumerate(batches):

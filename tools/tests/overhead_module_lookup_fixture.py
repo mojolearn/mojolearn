@@ -194,7 +194,7 @@ def byte_lm_case():
     from mojolearn import SmallByteLanguageModelTrainer
 
     def trainer():
-        return SmallByteLanguageModelTrainer(np.zeros(34944, dtype=np.float32), data_schedule={
+        return SmallByteLanguageModelTrainer(np.zeros(34944, dtype=np.float32), step_result='full', data_schedule={
             'corpus_sha256': '1' * 64, 'token_schedule_sha256': '2' * 64,
             'batch_offsets': [0, 32], 'planned_steps': 4})
     ids = (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)

@@ -31,8 +31,10 @@ per step; a step moves the ids in and the loss and the flags out. The
 stateless path (`resident=False`) hands the state in and takes the new
 state out on every call. Since cpu2-l11-neural (2026-10-04) `resident`
 defaults to True on a GPU install (the stateless path is an explicit
-opt-out and the route of a binding without session entries); a defaulted
-session keeps `step_result='full'`.
+opt-out and the route of a binding without session entries). Since
+2026-11-06 (Andrew) `step_result` defaults to 'lean' unless `resident=False`
+is given, on every vendor and the CPU column: the per-step result is the loss,
+counters and flags; 'full' adds the gradients, same bytes as before.
 
 ONE NATIVE CALL PER METHOD (lane neural-byte-lm-trainer, 2026-10-21).
 `train_step`, `evaluate`, `logits`, `next_bytes`, `export_state` (also
@@ -615,10 +617,11 @@ def _require_written(written, expected):
 # step_result selects what `train_step` returns. 'full' returns the
 # complete dict (loss, gradients, state); on a resident session it is the
 # lean step plus `export_gradients()`, so the bytes are the stateless
-# path's. 'lean' (resident only) returns `loss, step, completed_steps,
-# next_batch_index, flags` and leaves the gradient on the device until
-# `export_gradients()`. The default (None) is 'lean' for a resident
-# trainer and 'full' for a stateless one: DEVIATION 2514 gate G5 on the
+# path's. 'lean' returns `loss, step, completed_steps, next_batch_index,
+# flags` and leaves the gradient on the device (or, on the stateless route
+# an AUTO trainer resolved to, with the trainer) until `export_gradients()`.
+# The default (None) is 'lean' unless resident=False is given (Andrew,
+# 2026-11-06; formerly 'lean' only for resident=True): DEVIATION 2514 gate G5 on the
 # H100 (2026-09-11) measured a lean target-shape step at 0.565 s against
 # 8.6 s full and 45 s before the device-owned step, with every lean step
 # bit-equal to the full path's and to the pre-change trainer's.
@@ -689,10 +692,12 @@ class SmallByteLanguageModelTrainer:
         Keep the training state on the device between steps. None chooses the
         resident session whenever the loaded GPU binaries support it.
     step_result : {"full", "lean"} or None, default None
-        What :meth:`train_step` returns. ``"full"`` includes the gradients;
-        ``"lean"`` (requires ``resident=True``) returns the loss, step counters
-        and flags and leaves the gradient on the device. None means ``"lean"``
-        when ``resident=True`` is given and ``"full"`` otherwise.
+        What :meth:`train_step` returns. ``"lean"`` returns the loss, the step
+        counters and the flags; the last step's gradient is available from
+        :meth:`export_gradients`. ``"full"`` also returns the pre-update
+        gradients (``flat_gradients`` and ``gradients``) from every step.
+        None means ``"lean"``, or ``"full"`` when ``resident=False`` is given.
+        ``"lean"`` cannot be combined with ``resident=False``.
 
     Attributes
     ----------
@@ -786,10 +791,12 @@ class SmallByteLanguageModelTrainer:
         return _LM_TRAINER(self, "export_state", (), _LM_TRAINER_CONTEXT)
 
     def export_gradients(self, named=True):
-        """The pre-update gradient of the last completed step of a resident session.
+        """The pre-update gradient of the last completed training step.
 
-        Valid until the next :meth:`train_step` starts. The stateless path
-        returns its gradients from :meth:`train_step` instead.
+        Available after a :meth:`train_step` with ``step_result="lean"`` (the
+        default) and valid until the next :meth:`train_step` starts. With
+        ``step_result="full"`` on a stateless trainer (``resident=False``),
+        :meth:`train_step` returns the gradients itself.
 
         Parameters
         ----------
@@ -1186,9 +1193,11 @@ class SmallByteLanguageModelTrainer:
         Returns
         -------
         dict
-            ``loss``, ``step``, ``completed_steps`` and ``next_batch_index``. With
+            ``loss``, ``step``, ``completed_steps`` and ``next_batch_index``. By
+            default (``step_result="lean"``) also ``flags``; call
+            :meth:`export_gradients` for this step's gradient. With
             ``step_result="full"`` also ``flat_gradients`` and ``gradients`` (by
-            tensor name), the pre-update gradient; with ``"lean"`` also ``flags``.
+            tensor name), the pre-update gradient.
         """
         # the lock, the ids, the binding and the session lifecycle and the
         # step in one native call (bindings/byte_lm_trainer_native.mojo)

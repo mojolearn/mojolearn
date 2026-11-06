@@ -15,7 +15,7 @@ def shape():
 
 def model(cfg=None):
     cfg = cfg or shape()
-    return Trainer(np.zeros(cfg.n_total, np.float32), shape=cfg,
+    return Trainer(np.zeros(cfg.n_total, np.float32), shape=cfg, step_result='full',
                    data_schedule={'dataset': 'host-sentinel'})
 
 
