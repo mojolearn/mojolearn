@@ -24,6 +24,29 @@ def _target_finite(view: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: MaxAbsScaler targets require Float16, Float32 or Float64 storage")
     var native = classical_is_array(view,context) or Bool(py=view.dtype.isnative)
     var storage = view._mv if classical_is_array(view,context) else py_call(native_loaded_module("builtins").memoryview,view)
+    var size = Int(py=view.size)
+    if native:
+        # A native-order C-contiguous export of exactly `size` words is
+        # already the packed buffer tobytes would build: scan it in place,
+        # without the bytes copy and the second array.array copy below.
+        # Any other layout (strided, byte-swapped, short export) keeps the
+        # packing path. The buffer is released at once; `storage` and `view`
+        # own the words through the scan (the xprep_address idiom).
+        ref cpy = Python().cpython()
+        var buffer = List[Int](length=10,fill=0)
+        var bp = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+        # PyBUF_C_CONTIGUOUS (0x38): only a C-contiguous export succeeds
+        if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(storage._obj_ptr,bp,Int32(0x38)) == 0:
+            var direct = buffer[0]
+            var length = buffer[2]
+            cpy.lib.get_function[NoneType]("PyBuffer_Release")(bp)
+            if length == size*item:
+                if Int(py=py_call(context["maxabs_finite_f64" if item == 8 else "maxabs_finite_f32"],direct,size)) != 1:
+                    raise Error("Input y contains NaN or infinity (MaxAbsScaler).")
+                _ = storage  # keep the exported words alive through the scan above
+                return
+        else:
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
     var packed = py_call(storage.tobytes,"C")
     # Keep the existing device finite scan and Float64 values. Packing and
     # byte-order normalization use the native array buffer implementation.
