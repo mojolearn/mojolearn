@@ -13,11 +13,14 @@
 # value changes; every route `_Kit` chose by residency reads `on_device`,
 # which follows the Python `_M` exactly; an operation that writes a matrix
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
+from std.ffi import _Global, external_call, c_size_t
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from std.python._cpython import PyObjectPtr
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
 from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.py_balanced import py_call, py_get, py_type, py_contains
+from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_host_f32, classical_kind
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
@@ -88,13 +91,17 @@ def decomp_seed_word(seed: PythonObject) raises -> Int:
 
 
 def decomp_is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
-    """The model's class MRO, read through type's own descriptor, holds cls."""
-    var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    for k in range(len(mro)):  # driver-loop: over the model class's MRO
-        if mro[k] is cls:
-            return True
-    return False
+    """The model's class MRO holds cls."""
+    # CPython's own subtype test walks the same tp_mro by identity in one
+    # native call (no builtins module check, MRO tuple fetch or per-entry
+    # Python indexing per call). An MRO holds classes only, so anything
+    # that is not a class is never found, as before.
+    var meta = py_type(py_type(PythonObject(0)))  # the builtin `type`
+    ref cpy = Python().cpython()
+    var subtype = cpy.lib.get_function[Int32]("PyType_IsSubtype")
+    if subtype(py_type(cls)._obj_ptr, meta._obj_ptr) == 0:
+        return False
+    return subtype(py_type(model)._obj_ptr, cls._obj_ptr) != 0
 
 
 def decomp_class_attr(model: PythonObject, name: String) raises -> PythonObject:
@@ -124,7 +131,11 @@ def decomp_entries(mode_value: PythonObject, context: PythonObject) raises -> Py
     var mode = decomp_mode(mode_value, context)
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    var name = String(py=py_call(py_call(mode.strip).lower))
+    # An exact canonical spelling needs no strip()/lower() calls (both would
+    # return it unchanged); any other spelling is normalized as before.
+    var name = String(py=mode)
+    if name != "identical" and name != "fast":
+        name = String(py=py_call(py_call(mode.strip).lower))
     if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     var entries = context["decomp_bindings"][name]
@@ -186,6 +197,89 @@ def decomp_shape(source: PythonObject, name: String, context: PythonObject) rais
     return (rows, cols)
 
 
+# Device-resident fitted operands of a query model (lane perf2-pca-decomp):
+# one prepared-registry record per model (a dict: operand name -> (stored
+# source, alloc entry, free entry, rows, cols, handle, owning capsule)). The
+# record lives outside the model's __dict__ and is dropped with the model.
+comptime _DK_RESIDENT_SLOT = "decomp_resident_operands_v1"
+
+
+struct _ResidentNames(Defaultable, Movable):
+    var capsule_name: String
+
+    def __init__(out self):
+        # PyCapsule keeps this name pointer, not a copy: the DSO-global owner
+        # is never reassigned and outlives every capsule.
+        self.capsule_name = String("mojolearn.decomp_kit.resident.v1")
+
+
+comptime _RESIDENT_NAMES = _Global[
+    StorageType=_ResidentNames, name="MojolearnDecompResidentNamesV1",
+    init_fn=_ResidentNames.__init__,
+]
+
+comptime _ResidentWords = MutPointer[Int, MutUntrackedOrigin]
+comptime _ResidentBytes = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
+    # Native destructor: returns the device buffer through the binding's
+    # compiled `x_decomp_dev_free` (no Python function runs). A pending
+    # exception of the code that dropped the record is kept; a failing free
+    # (interpreter shutdown: the pool dies with the process) is quiet, as
+    # the Python `_DevBuf.__del__` was.
+    try:
+        ref cpy = Python().cpython()
+        var names = _RESIDENT_NAMES.get_or_create_ptr()
+        var raw = cpy.lib.get_function[Optional[_ResidentBytes]]("PyCapsule_GetPointer")(
+            capsule, names[].capsule_name.as_c_string_slice().unsafe_ptr())
+        if not raw:
+            cpy.PyErr_Clear()
+            return None
+        var words = _ResidentWords(unsafe_from_address=Int(raw.value()))
+        var free = words[0]
+        var handle = words[1]
+        words[0] = 0
+        if free != 0:
+            var pending = cpy.PyErr_FetchTriple()
+            var argument = cpy.lib.get_function[PyObjectPtr]("PyLong_FromSsize_t")(handle)
+            if argument:
+                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(free, argument)
+                if result:
+                    cpy.lib.get_function[NoneType]("Py_DecRef")(result)
+                cpy.lib.get_function[NoneType]("Py_DecRef")(argument)
+            cpy.PyErr_Clear()
+            cpy.lib.get_function[NoneType]("Py_DecRef")(free)
+            cpy.PyErr_Restore(pending[0], pending[1], pending[2])
+        external_call["free", NoneType](raw.value())
+    except:
+        pass
+    return None
+
+
+def _resident_capsule(free: PythonObject, handle: Int) raises -> PythonObject:
+    # Two words: a strong reference to the minting binding's free entry and
+    # the device buffer id. On failure the buffer is returned at once.
+    ref cpy = Python().cpython()
+    var raw = external_call["malloc", Optional[_ResidentBytes]](c_size_t(16))
+    if not raw:
+        _ = py_call(free, handle)
+        raise Error("decomposition resident operand allocation failed")
+    var words = _ResidentWords(unsafe_from_address=Int(raw.value()))
+    words[0] = Int(cpy.Py_NewRef(free._obj_ptr))
+    words[1] = handle
+    var names = _RESIDENT_NAMES.get_or_create_ptr()
+    var result = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
+        raw.value(), names[].capsule_name.as_c_string_slice().unsafe_ptr(), _resident_destroy)
+    if not result:
+        cpy.lib.get_function[NoneType]("Py_DecRef")(words[0])
+        external_call["free", NoneType](raw.value())
+        var failure = cpy.unsafe_get_error()
+        _ = py_call(free, handle)
+        raise failure^
+    return PythonObject(from_owned=result)
+
+
 struct DecompMatrix(Copyable, Movable):
     var host: PythonObject   # a float32 Array of rows * cols words (at least one), or None
     var host_address: Int    # -1 until captured, otherwise operation-local native address
@@ -236,10 +330,14 @@ struct DecompKit(Movable):
     var one_device: Int
     var one_host: Int
     var hot: List[PythonObject]  # cached entry handles, None until first use
+    # The fitted model of a query (predict/transform/...), or None: its fitted
+    # operands stay on the device across calls (`resident_input`).
+    var owner: PythonObject
 
     def __init__(out self, entries: PythonObject, context: PythonObject) raises:
         self.entries = entries
         self.context = context
+        self.owner = PythonObject(None)
         self.hot = List[PythonObject]()
         for _ in range(_DK_HOT_COUNT):  # driver-loop: over the fixed entry-handle slots
             self.hot.append(PythonObject(None))
@@ -315,6 +413,54 @@ struct DecompKit(Movable):
         self.input_owners.append(snapshot.owner)
         var index = self.add(snapshot.keep, rows, cols)
         self.matrices[index].host_address = snapshot.source.addr
+        return index
+
+    def resident_input(mut self, source: PythonObject, name: String, host: PythonObject, address: Int,
+                       keep: PythonObject, rows: Int, cols: Int) raises -> Int:
+        """A fitted operand of the query model (`self.owner`) whose device
+        copy is kept across calls, as the Python `_M` the fitted model held
+        stayed on the device after its first upload: uploaded at the first
+        query after a fit and reused while the model's stored `source` is the
+        same object (the record holds it, so the address cannot be recycled),
+        with the same shape, on the binding that minted it. -1 when this kit
+        keeps nothing resident (a host binding, no query model, an empty
+        operand): the caller adds the operand as before. The values are the
+        ones uploaded, so no route or bit changes; the matrix starts as a host
+        matrix (`on_device` False) exactly as `input_snapshot` adds it."""
+        var n = rows * cols
+        if self.owner is None or not self.resident or n < 1:
+            return -1
+        var mods = NativeModules()
+        var record = prepared_get(mods, _DK_RESIDENT_SLOT, self.owner)
+        if record is None:
+            record = Python.dict()
+            prepared_put(mods, _DK_RESIDENT_SLOT, self.owner, record)
+        var alloc = self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc")
+        var upload = self._entry(_DK_DEV_UPLOAD, "x_decomp_dev_upload")
+        var free = self._entry(_DK_DEV_FREE, "x_decomp_dev_free")
+        var key = PythonObject(name)
+        var held = py_get(record, key)
+        var handle = -1
+        if (held is not None and held[0] is source and held[1] is alloc and held[2] is free
+                and Int(py=held[3]) == rows and Int(py=held[4]) == cols):
+            handle = Int(py=held[5])
+        else:
+            handle = Int(py=py_call(alloc, n))
+            # The capsule owns the device buffer from here on: replacing or
+            # dropping the record (refit, a new array, the model's death)
+            # returns it to the minting binding's pool.
+            var capsule = _resident_capsule(free, handle)
+            _ = py_call(upload, handle, PythonObject(address), n)
+            _ = keep  # keep the host owner alive through the upload above
+            held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle), capsule)
+            py_setitem(record, key, held)
+        # The kit holds the entry (and its capsule) until it is dropped, so
+        # the buffer outlives this operation even when the model cannot be
+        # weakly referenced (no record kept) or a nested call replaces it.
+        self.input_owners.append(held)
+        self.input_owners.append(keep)
+        var index = self.add(host, rows, cols, handle, address)
+        self.matrices[index].on_device = False
         return index
 
     def const(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:

@@ -14,6 +14,11 @@ from core.family_cast_impl import family_cast_rows, family_all_finite_f32
 from core.pca_exact_impl import pca_check_state
 
 
+def _shown(captured: ArrayMetadata) raises -> String:
+    # The shape spelling is built only on a refusal, never on success.
+    return String(py_call(native_loaded_module("builtins").repr, captured.python_shape()))
+
+
 def pca_input_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
     var format = host_sparse_format(source)
     var sparse = format.byte_length() > 0
@@ -28,7 +33,6 @@ def pca_input_snapshot(source: PythonObject, context: PythonObject) raises -> Ar
     var nd = len(captured.shape)
     var code = captured.dtype_number
     var numeric = (0 <= code and code <= 13) or code == 23
-    var shown = String(py_call(native_loaded_module("builtins").repr, captured.python_shape()))
     if sparse:
         # The former sparse branch returned classical_host_f32 directly,
         # retaining its simpler rank/empty/finite messages.
@@ -42,13 +46,13 @@ def pca_input_snapshot(source: PythonObject, context: PythonObject) raises -> Ar
         if numeric:
             if nd < 2:
                 raise Error("Expected 2D array, got " + (String("scalar") if nd == 0 else String("1D"))
-                            + " array instead (shape=" + shown + "). " + String(RESHAPE_HINT))
+                            + " array instead (shape=" + _shown(captured) + "). " + String(RESHAPE_HINT))
             if nd == 2 and captured.shape[0] == 0:
-                raise Error("Found array with 0 sample(s) (shape=" + shown + ") while a minimum of 1 is required by PCA.")
+                raise Error("Found array with 0 sample(s) (shape=" + _shown(captured) + ") while a minimum of 1 is required by PCA.")
             if nd == 2 and captured.shape[1] == 0:
-                raise Error("Found array with 0 feature(s) (shape=" + shown + ") while a minimum of 1 is required by PCA.")
+                raise Error("Found array with 0 feature(s) (shape=" + _shown(captured) + ") while a minimum of 1 is required by PCA.")
         if nd != 2:
-            raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + shown)
+            raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _shown(captured))
         if not numeric:
             # Only the failing path asks the admitted native exporter for
             # its PEP3118 spelling; it never executes or converts its values.

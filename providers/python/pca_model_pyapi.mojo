@@ -7,9 +7,10 @@ from bindings.sequential_admission import sequential_admit_value, _one_of
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_scalar_decode import native_scalar_buffer_dtype
 from bindings.classical_exceptions import classical_not_fitted_class
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same
 
 
 def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
@@ -45,7 +46,10 @@ def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
 
 
 def pca_query_fields(model: PythonObject, context: PythonObject, operation: String = "transform") raises -> PythonObject:
-    var state = classical_family_admit(model)
+    return _pca_query_fields_from(classical_family_admit(model), context, operation)
+
+
+def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation: String) raises -> PythonObject:
     var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
     var scalar_owners = Python.list()
     # Preserve the PCA owner's existing admission of all declared settings
@@ -144,3 +148,112 @@ def pca_query_entries(fields: PythonObject, context: PythonObject) raises -> Pyt
     if Int(py=py_call(entries["estimators_numeric_mode"])) != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: PCA native mode differs from selected execution")
     return entries
+
+
+# Per-model query record (lane perf2-pca-decomp). A transform used to re-admit
+# all 22 connected settings and fitted fields (scalar parser, NumPy dtype
+# builds, generic admission), decode six scalars, copy and re-check both
+# binding tables and call the two compiled getters on every call. Those steps
+# read only the identities and exact types recorded below, so while the record
+# matches they would accept again and produce the same decoded values and
+# entries. Class admission (classical_family_admit), the X snapshot and the
+# fitted-array shape/dtype/finite snapshots still run on every call.
+# The record notices: set_params or any assignment or deletion of one of the
+# 22 fields (refit replaces them), a changed process default mode while
+# numeric_mode is None, replaced connected tables or a replaced selected entry.
+# It does not notice in-place edits of the private connected context objects
+# other than the selected mode's entry table, which nothing public reaches.
+comptime _PCA_QUERY_SLOT = "pca_query_v1"
+
+
+def _pca_query_decoded(name: String) -> Bool:
+    # The six fields whose value (not only type) the query decodes.
+    return (name == "_mojolearn_fitted" or name == "_mojolearn_fitting" or name == "n_samples_"
+            or name == "n_features_in_" or name == "n_components_" or name == "whiten")
+
+
+def _pca_query_plain(value: PythonObject, ndarray: PythonObject, decoded: Bool) raises -> Bool:
+    # Admission and decoding of an exact builtin scalar depend on its identity
+    # only (immutable). An exact ndarray is admitted by type alone; its shape,
+    # dtype and values are read again by the per-call state snapshots. An
+    # ndarray among the decoded scalars can change value in place: never
+    # recorded. Anything else (NumPy scalars, user types) takes the full path.
+    var cls = py_type(value)
+    if (value is None or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0))
+            or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(""))):
+        return True
+    return not decoded and cls is ndarray
+
+
+def _pca_query_key(state: PythonObject, context: PythonObject) raises -> PythonObject:
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is None or py_type(state) is not py_type(Python.dict()):
+        return PythonObject(None)
+    var parameters = context["pca_parameters"]
+    var stored = context["pca_state"]
+    var key = Python.list(context, ndarray, parameters, stored, py_get(context, "vendor"),
+                          context["pca_bindings"], context["pca_query_connections"])
+    for group in range(2):  # small-loop(connected settings, then fitted state)
+        var names = parameters if group == 0 else stored
+        for index in range(len(names)):  # driver-loop: connected PCA field inventory, identity only
+            var name = names[index]
+            if not py_contains(state, name):
+                _ = py_call(key.append, False)
+                continue
+            var value = state[name]
+            if not _pca_query_plain(value, ndarray, _pca_query_decoded(String(name))):
+                return PythonObject(None)
+            _ = py_call(key.append, True)
+            _ = py_call(key.append, value)
+    if py_get(state, "numeric_mode") is None:
+        # The query then selects the process default mode, read per call.
+        var backend = context["backend_fields"]
+        _ = py_call(key.append, backend)
+        _ = py_call(key.append, backend["_DEFAULT_MODE"])
+    return key
+
+
+def _pca_entries_key(context: PythonObject, mode: PythonObject) raises -> PythonObject:
+    # The selected mode's binding table and every entry in it, by identity.
+    var selected = py_get(context["pca_bindings"], mode)
+    var key = Python.list(selected)
+    if py_type(selected) is py_type(Python.dict()):
+        var items = py_call(py_type(Python.list()), py_call(py_type(selected).__dict__["items"], selected))
+        for index in range(len(items)):  # driver-loop: connected compiled entries of one mode, identity only
+            _ = py_call(key.append, items[index][0])
+            _ = py_call(key.append, items[index][1])
+    return key
+
+
+def pca_query_admitted(model: PythonObject, context: PythonObject, operation: String) raises -> PythonObject:
+    """(fields, entries) of a PCA transform or inverse_transform: the full
+    admission on first use and after any recorded change, else the record."""
+    var state = classical_family_admit(model)
+    var key = _pca_query_key(state, context)
+    var mods = NativeModules()
+    if key is not None:
+        var held = prepared_get(mods, _PCA_QUERY_SLOT, model)
+        if held is not None and prepared_key_same(held[0], key) and prepared_key_same(held[3], _pca_entries_key(context, held[2])):
+            var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
+            _ = py_call(py_type(Python.dict()).__dict__["update"], fields, held[1])
+            return Python.tuple(fields, held[4])
+    var fields = _pca_query_fields_from(state, context, operation)
+    if py_get(context, "ndarray") is None:
+        raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
+                    + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
+    var entries = pca_query_entries(fields, context)
+    if key is not None:
+        # Only a model fitted by its lifecycle flags is recorded: the
+        # attribute-name fallback reads fields outside the key.
+        var flagged = Bool(py=py_get(fields, "_mojolearn_fitted", False)) or Bool(py=py_get(fields, "_mojolearn_fitting", False))
+        if flagged:
+            var overlay = Python.dict()
+            var decoded = Python.tuple("_mojolearn_fitted", "_mojolearn_fitting", "n_samples_", "n_features_in_",
+                                       "n_components_", "whiten", "numeric_mode", "_pca_query_scalar_owners")
+            for index in range(len(decoded)):  # small-loop(eight decoded query field names)
+                if py_contains(fields, decoded[index]):
+                    py_setitem(overlay, decoded[index], fields[decoded[index]])
+            var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
+            prepared_put(mods, _PCA_QUERY_SLOT, model,
+                         Python.tuple(key, overlay, mode, _pca_entries_key(context, mode), entries))
+    return Python.tuple(fields, entries)

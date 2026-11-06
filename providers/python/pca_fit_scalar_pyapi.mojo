@@ -128,6 +128,14 @@ def pca_fit_scalar_admit(value: PythonObject, context: PythonObject) raises:
         sequential_admit_value(value, context)
         return
     var cls = py_type(value)
+    # Exact builtin values and exact ndarrays never match a NumPy scalar class
+    # (the dtype classes below are NumPy scalar types, never builtin int/str
+    # or ndarray), so they reach the same generic admission directly instead
+    # of walking the class table and building the q/Q dtypes per value.
+    if (value is None or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0))
+            or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject("")) or cls is context["ndarray"]):
+        sequential_admit_value(value, context)
+        return
     var scalar = context["pca_fit_scalar_context"]
     var classes = sequence_dtype_classes(scalar)
     for index in range(len(classes)):  # driver-loop: all exact native scalar classes supported by the dedicated parser
