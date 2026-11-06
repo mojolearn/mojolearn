@@ -89,8 +89,13 @@ def _kind(model: PythonObject, context: PythonObject) raises -> String:
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var kinds = context["prep_stateless_kinds"]
+    # An exact admitted class is the MRO's first row: one lookup, no MRO read
+    # (pass2-prep-metrics; the same as `_kind_of` in prep_classify_native).
+    var own = py_get(kinds, cls)
+    if own is not None:
+        return String(own)
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var kind = py_get(kinds, mro[k])
         if kind is not None:
