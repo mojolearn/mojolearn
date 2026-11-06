@@ -267,6 +267,9 @@ def _size(shape):
 # residency bit set) until `unpin_weights()`. The host arrays stay the
 # layer's weights: after changing them (in place, or `set_weights`) call
 # `pin_weights()` again. The same entry on the same words: no bit moves.
+# p3-cnn-sequence-tsa (2026-11-06): a pinned layer's `weight_` / `bias_` are
+# read-only arrays (bindings/xcnn_conv_native.mojo `_pin_values`), so an
+# in-place edit raises instead of running on the stale device copy.
 # `x_cnn_idn_flags` bit 5 (`-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`); with it off,
 # on FAST or on the CPU twin `pin_weights()` does nothing.
 _F_PIN = 32
@@ -451,8 +454,11 @@ class Conv2d(_Layer):
 
     def pin_weights(self):
         """Keep `weight_` and `bias_` on the device for `DeviceTensor`
-        forwards and backwards (lane fam2-neural); call again after changing
-        them. Returns self."""
+        forwards and backwards. While they are kept there, `weight_` and
+        `bias_` are read-only arrays: assign new arrays (or call
+        `set_weights`) to change them, and the new values are uploaded on the
+        next call. `unpin_weights()` makes them writeable again. Returns
+        self."""
         return _XCNN(self, "conv_pin", (), _XCNN_CONTEXT)
 
     def unpin_weights(self):

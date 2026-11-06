@@ -20,7 +20,7 @@ from bindings.xcnn_common import (
     XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed,
     xcnn_idn, xcnn_resident, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new,
     xcnn_reshape_t, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr, xcnn_dev, xcnn_dev_get,
-    xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32,
+    xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32, xcnn_readonly, xcnn_writable_copy,
 )
 from bindings.xcnn_bn_native import xcnn_bn_forward_dev, xcnn_bn_forward, xcnn_bn_layers, xcnn_bn_backward, xcnn_bn_backward_dev, _bn_admit
 from bindings.xseq_native_common import xseq_f32
@@ -558,8 +558,18 @@ def _pin_values(layer: PythonObject, fields: PythonObject, entries: PythonObject
         var h = xcnn_dev_upload(layer, entries, "pin_" + String(py=names[i]), a, context)
         py_setitem(handles, names[i], Python.tuple(h, xcnn_size(xcnn_shape(a))))
     _set(fields, "_pins", Python.tuple(entries["module"], handles))
+    # p3-cnn-sequence-tsa (hazard A): the host words just uploaded become the
+    # layer's `weight_` / `bias_` as read-only arrays (`xcnn_readonly`), so an
+    # in-place edit (`weight_ -= lr * g`, `weight_[:] = W`) raises NumPy's
+    # read-only error instead of running on the stale device copy. Assigning
+    # a new array (or `set_weights`) is the way to change weights; it is
+    # noticed by identity below and uploaded again. No per-call host hash.
+    var ro_w = xcnn_readonly(values[0], py_get(fields, "weight_"), context)
+    var ro_b = xcnn_readonly(values[1], py_get(fields, "bias_"), context)
+    _set(fields, "weight_", ro_w)
+    _set(fields, "bias_", ro_b)
     # the arrays pinned, so a reassigned `weight_` / `bias_` is uploaded again
-    _set(fields, "_pin_src", Python.tuple(py_get(fields, "weight_"), py_get(fields, "bias_")))
+    _set(fields, "_pin_src", Python.tuple(ro_w, ro_b))
 
 
 def _pin_weights(layer: PythonObject, fields: PythonObject, entries: PythonObject, context: PythonObject) raises:
@@ -1285,7 +1295,14 @@ def xcnn_conv_layers(layer: PythonObject, operation: String, args: PythonObject,
         _pin_weights(layer, fields, xcnn_entries(fields, context), context)
         return layer
     if operation == "conv_unpin":
+        if py_get(fields, "_pins") is not None:
+            # p3-cnn-sequence-tsa: no resident copy any more, so the host
+            # weights are handed back writeable (fresh copies of the words).
+            var values = _weight_pair(fields, context)
+            _set(fields, "weight_", xcnn_writable_copy(values[0], context))
+            _set(fields, "bias_", xcnn_writable_copy(values[1], context))
         _set(fields, "_pins", PythonObject(None))
+        _set(fields, "_pin_src", PythonObject(None))
         return layer
     if operation == "conv_grad_weight" or operation == "conv_grad_bias":
         return _conv_gradient(fields, operation == "conv_grad_weight", context)

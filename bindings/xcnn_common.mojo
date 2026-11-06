@@ -445,6 +445,38 @@ def xcnn_reshape(value: PythonObject, shape: List[Int]) raises -> PythonObject:
     return py_call(cls, xcnn_tuple(shape), dtype=value.dtype, buffer=value)
 
 
+def xcnn_readonly(value: PythonObject, original: PythonObject, context: PythonObject) raises -> PythonObject:
+    """p3-cnn-sequence-tsa (hazard A, the read-only scheme): a read-only
+    float32 ndarray over the words of `value` (a contiguous float32 ndarray,
+    the snapshot just uploaded to a resident copy). Its base is a read-only
+    memoryview, so `arr[:] = W` or `arr -= lr * g` raises NumPy's read-only
+    error and `arr.flags.writeable = True` is refused: the device copy can
+    never silently diverge from the host words. `original` (the array the
+    layer held, which other references may share) is marked read-only too.
+    Replacing the attribute stays allowed; callers key on its identity."""
+    if py_type(original) is context["ndarray"]:
+        py_setattr(original.flags, "writeable", PythonObject(False))
+    if py_type(value) is not context["ndarray"]:
+        raise Error("TypeError: CNN resident weights require an exact native ndarray")
+    py_setattr(value.flags, "writeable", PythonObject(False))
+    # memoryview of a non-writeable ndarray is itself read-only
+    var view = native_buffer_view(value)
+    return py_call(context["ndarray"], xcnn_tuple(xcnn_shape(value)), dtype=context["float32"], buffer=view)
+
+
+def xcnn_writable_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A fresh writeable float32 copy of a contiguous float32 ndarray (the
+    host weights handed back when a layer's resident copy is dropped)."""
+    var shape = xcnn_shape(value)
+    var out = xcnn_host_f32(shape, context)
+    var count = xcnn_size(shape)
+    if count:
+        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
+               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(value))), count=count)
+    _ = value
+    return out
+
+
 def xcnn_addr(value: PythonObject) raises -> PythonObject:
     admit_native_buffer_exporter(value)
     return PythonObject(native_buffer_address(value))
