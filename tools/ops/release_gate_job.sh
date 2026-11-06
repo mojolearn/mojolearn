@@ -83,6 +83,7 @@ OVERLAID=""
 finish() {
     local code=$?
     trap - EXIT
+    if [ -n "${SAMPLER:-}" ]; then kill "$SAMPLER" 2>/dev/null || true; fi
     # the overlaid runner files go back to the source commit's bytes: the next job finds a clean tree
     if [ -n "$OVERLAID" ]; then
         ( cd "$GATE_TREE" && for f in $OVERLAID; do git checkout -q -- "$f" 2>/dev/null || rm -f "$f"; done ) \
@@ -107,6 +108,37 @@ for ((i = 0; i < ${#GATE_ARGV[@]}; i++)); do
     fi
 done
 { uname -a; nproc; free -g 2>/dev/null || true; df -h /root; } > "$J/box.txt" 2>&1 || true
+# BOX FACTS (release evidence, 2026-11-06; tools/release_evidence_set.py box-facts): the GPU and CPU model, the
+# core count and memory in job/box-facts.txt, and every 30 s the cores more than half busy over the interval, of
+# the total, in job/busy-cores.tsv (epoch, busy, total), so the committed evidence states busy cores of total.
+{
+    echo "nproc=$(nproc)"
+    echo "cpu_model=$(grep -m 1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//')"
+    echo "mem_total_kb=$(awk '/^MemTotal/ {print $2}' /proc/meminfo 2>/dev/null)"
+    echo "kernel=$(uname -r)"
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null | sed 's/^/gpu=/'
+    fi
+    if command -v rocm-smi >/dev/null 2>&1; then
+        rocm-smi --showproductname 2>/dev/null | grep -E 'Card (Series|series|SKU)' | sed 's/^/gpu=/'
+    fi
+} > "$J/box-facts.txt" 2>/dev/null || true
+busy_cores_sampler() {
+    local prev cur
+    prev="$(grep -E '^cpu[0-9]+ ' /proc/stat)" || return 0
+    while sleep 30; do
+        cur="$(grep -E '^cpu[0-9]+ ' /proc/stat)" || return 0
+        paste -d' ' <(echo "$prev") <(echo "$cur") | awk -v t="$(date -u +%s)" '
+            { n = NF / 2; t0 = 0; t1 = 0
+              for (i = 2; i <= n; i++) { t0 += $i; t1 += $(n + i) }
+              d = t1 - t0; idle = ($(n + 5) + $(n + 6)) - ($5 + $6)
+              if (d > 0 && (d - idle) * 2 >= d) busy++; total++ }
+            END { printf "%s\t%d\t%d\n", t, busy, total }'
+        prev="$cur"
+    done
+}
+busy_cores_sampler >> "$J/busy-cores.tsv" 2>/dev/null &
+SAMPLER=$!
 
 PHASE=tree
 if [ -n "$GATE_FETCH_URL" ]; then
