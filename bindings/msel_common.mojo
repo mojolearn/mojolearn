@@ -22,6 +22,7 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission import _one_of
 from bindings.classical_labels import _label_list, labels_encode_labels
+from bindings.label_input_sources import labels_list_scalar_kind, labels_text_storage, LABELS_LIST_OTHER
 from bindings.native_typed_context import native_typed_context
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_warn
@@ -276,6 +277,19 @@ def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObje
     # the stratified splitters), whose C-order storage is its logical order,
     # a column vector included.
     var direct = msel_numeric_vector(value, True, context)
+    # perf3-nbr-msel-trees: an exact flat list or tuple of exact ints, exact
+    # floats or exact bools, and an exact '<U' ndarray, go to the shared
+    # encoder as given: its one-pass readers (classical_labels
+    # `_flat_list_labels`, `_text_buffer_labels`) give the classes and codes
+    # the flatten + per-label admission + encode gave (the flatten of such a
+    # list is the same items in the same order, and every item passes
+    # `_msel_admit_labels`), without those two per-label walks.
+    if not direct:
+        if labels_list_scalar_kind(value) != LABELS_LIST_OTHER:
+            direct = True
+        elif labels_text_storage(value, context):
+            msel_admit(value, context)
+            direct = True
     var flat = value
     if not direct:
         flat = msel_flatten(value, context)
