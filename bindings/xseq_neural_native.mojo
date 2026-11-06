@@ -37,6 +37,7 @@ from bindings.xseq_native_common import (
 )
 from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
+from sequence.perf3_seq_resident_words import seq_resident_token
 
 
 def _attr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -262,6 +263,23 @@ def _record_put(mut mods: NativeModules, slot: String, model: PythonObject, firs
     prepared_put(mods, slot, model, py_call(native_loaded_module("builtins").tuple, record))
 
 
+def _record_put_token(mut mods: NativeModules, slot: String, model: PythonObject, first: PythonObject,
+                      second: PythonObject, operands: PythonObject) raises -> Int:
+    """`_record_put` of `(*operands, token)` with a new resident-block token
+    (perf3-seq-neural, sequence/perf3_seq_resident_words.mojo); the token,
+    or 0 when no record was kept (a self-referential field): an unrecorded
+    block is never named, so it is uploaded per call as before."""
+    var token = seq_resident_token()
+    var record = Python.list()
+    for i in range(len(operands)):  # small-loop(record operands)
+        _ = py_call(record.append, operands[i])
+    _ = py_call(record.append, PythonObject(token))
+    _record_put(mods, slot, model, first, second, record)
+    if prepared_get(mods, slot, model) is None:
+        return 0
+    return token
+
+
 # ---------------------------------------------------------------- recurrent models
 
 def _rnn_cell(model: PythonObject, fields: PythonObject) raises -> Int:
@@ -382,11 +400,13 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var source_params = fields["params_"]
     var params: PythonObject
     var record = _record_get(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None))
+    var token = 0
     if record is not None:
         params = record[1]
+        token = Int(py=record[2])
     else:
         params = xseq_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
-        _record_put(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params))
+        token = _record_put_token(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params))
     var ip = _rnn_ints(model, fields)
     var network = net_of(ip)
     if Int(py=params.size) != network.n_params():
@@ -397,6 +417,11 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     ip.append(xseq_int(fields["predict_chunk"]))
     ip.append(1 if want_seq else 0)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
+    if token:
+        # the recorded block's name: its device copy stays resident
+        addresses.append(Int(model._obj_ptr))
+        addresses.append(token)
+        addresses.append(network.n_params())
     var written = neural_descriptor_execute(xseq_neural_provider(entries), RNN_PREDICT, addresses, ip, List[Float64]())
     if written != n * network.O:
         raise Error("RuntimeError: recurrent prediction returned an invalid result count")
@@ -709,11 +734,13 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     if packed is not None and Int(py=packed[3]) != columns:
         packed = PythonObject(None)
     var operands: PythonObject
+    var token = 0
     if packed is not None:
         operands = Python.tuple(packed[1], packed[2], packed[3], packed[4])
+        token = Int(py=packed[5])
     else:
         operands = _mlp_pack(coefs, intercepts, columns, context)
-        _record_put(mods, _MLP_PACKED_SLOT, model, coefs, intercepts, operands)
+        token = _record_put_token(mods, _MLP_PACKED_SLOT, model, coefs, intercepts, operands)
     var params = operands[0]
     var hidden_widths = operands[1]
     var input_width = Int(py=operands[3])
@@ -733,6 +760,11 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
         ip.append(1)
     var entries = xseq_entries(fields, context)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out))]
+    if token:
+        # the recorded block's name: its device copy stays resident
+        addresses.append(Int(model._obj_ptr))
+        addresses.append(token)
+        addresses.append(Int(py=params.size))
     var written = neural_descriptor_execute(xseq_neural_provider(entries), MLP_PREDICT, addresses, ip, List[Float64]())
     _ = params  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
