@@ -1357,6 +1357,37 @@ def _positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: Pyth
     return _proba_positive(xt, e, Xa, context)
 
 
+def _ovr_fused(xt: PythonObject, fused: PythonObject, members: PythonObject, Xa: PythonObject, n: Int, k: Int,
+               decision: Bool, finish: Int, context: PythonObject) raises -> PythonObject:
+    """The k > 2 OneVsRest epilogue through `x_trees_ovr_assemble`: the
+    members' positive columns (`_positive` when `decision`, else
+    `_proba_positive`) widened into the scores and finished (normalized, or
+    the row argmax) as one device program with one readback (lane
+    perf-sweep-trees, 2026-11-05; before it a gather and a scatter, each with
+    its readbacks, per member). Same kernels and widening: no bit moves."""
+    var keep = Python.list()
+    var columns = Python.list()
+    for j in range(len(members)):  # driver-loop: over members
+        var e = members[j]
+        if decision and prep_estimator_has(e, "decision_function", context):
+            var score = _f32_array(prep_estimator_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
+            var blk = _out2d(score, n, context)
+            _ = py_call(keep.append, blk.keep)
+            _ = py_call(columns.append, Python.tuple(_P(blk.addr), _P(blk.cols), _P(0)))
+            _ = blk^
+        else:
+            var p = _out2d(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
+            var at = _index_of_one(e, context)
+            _ = py_call(keep.append, p.keep)
+            _ = py_call(columns.append, Python.tuple(_P(p.addr), _P(p.cols), _P(at)))
+            _ = p^
+    var out = trees_vector(n, "<i4", context) if finish == 2 else trees_vector(n * k, "<f8", context)
+    _ = py_call_typed(fused, _A(out), columns, Python.list(_P(n), _P(k), _P(finish)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = keep  # keep the members' blocks alive through the native call above
+    return out
+
+
 def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
@@ -1366,6 +1397,9 @@ def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     var members = _attr(model, "estimators_", Python.list())
     if k == 2:
         return trees_decode_labels(classes, _i32_vec(prep_estimator_call(members[0], "predict", Python.tuple(Xa), context), "codes", context), context)
+    var fused = py_get(xt, PythonObject("x_trees_ovr_assemble"))
+    if fused is not None and len(members) == k:
+        return trees_decode_labels(classes, _ovr_fused(xt, fused, members, Xa, n, k, True, 2, context), context)
     var acc = _class_zero(xt, n * k, context)
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
@@ -1391,6 +1425,9 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
         _ = out  # keep the Python object alive through the native call above
         _ = p  # keep the Python object alive through the native call above
         return trees_reshape(out, Python.tuple(n, 2), context)
+    var fused = py_get(xt, PythonObject("x_trees_ovr_assemble"))
+    if fused is not None and len(members) == k:
+        return trees_reshape(_ovr_fused(xt, fused, members, Xa, n, k, False, 1, context), Python.tuple(n, k), context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_proba_positive(xt, members[j], Xa, context), n, context)
         _ = _place(xt, acc, n, k, blk, rows, j)

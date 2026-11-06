@@ -27,11 +27,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.soft_f64 import SF64_ONE, sf64_add, sf64_div, sf64_from_f32, sf64_from_int, sf64_mul, sf64_to_f32
 from xtrees.ops_device import OPS_TPB, _blocks, _ctx
 from xtrees.ops_device_elem import (
-    accumulate_cols_kernel, accumulate_kernel, complement_pairs_kernel, normalize_rows_kernel, scale_kernel,
+    accumulate_cols_kernel, accumulate_kernel, argmax_rows_kernel, complement_pairs_kernel, normalize_rows_kernel,
+    scale_kernel,
 )
 from xtrees.ops_device_boost import isotonic_predict_kernel, platt_apply_kernel
 from xtrees.ops import (
-    accumulate, accumulate_cols, complement_pairs, isotonic_predict_strided, normalize_rows,
+    accumulate, accumulate_cols, argmax_rows, complement_pairs, isotonic_predict_strided, normalize_rows,
     platt_apply_strided, scale_f64,
 )
 
@@ -262,3 +263,109 @@ def calibrated_proba_host(pairs: List[CalPair], n: Int, k: Int, acc: MutPointer[
         accumulate(acc, qp, n * k, 1.0)
     if n * k > 0:
         scale_f64(acc, n * k, Float64(len(pairs)))
+
+
+# ------------------------------------------------------------ OneVsRest --
+# `OneVsRestClassifier.predict` / `predict_proba` (k > 2) assembled in one
+# program: each member's positive column (its decision_function, or the
+# code-1 column of its predict_proba, or zeros when it never saw code 1)
+# widened into column j of the (n x k) float64 scores, then the row
+# normalization (predict_proba) or the first-max argmax (predict). Before
+# this each member paid a column gather (arange, codes, gather), a scatter
+# (owner check readback, scatter readback), and the zero fill, the arange and
+# the finish were programs of their own. The widening is `scatter_kernel`'s
+# (`sf64_from_f32`), the finish the same kernels: no bit moves.
+
+comptime OVR_SCORES = 0
+comptime OVR_NORMALIZE = 1
+comptime OVR_ARGMAX = 2
+
+
+@fieldwise_init
+struct OvrColumn(Copyable, Movable):
+    #: The member's float32 n x bc block; `at` its positive column, or -1
+    #: for a zero column.
+    var blk: Int
+    var bc: Int
+    var at: Int
+
+
+def ovr_place_kernel(dst: MutPointer[UInt64, MutAnyOrigin], k: Int64, j: Int64, src: MutPointer[Float32, MutAnyOrigin],
+                     n: Int64, c: Int64, at: Int64):
+    """dst[i, j] = float64(src[i, at]) (a widening copy), +0.0 for at < 0."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < Int(n):
+        var v = Float32(0.0)
+        if Int(at) >= 0:
+            v = src.unsafe_load(i * Int(c) + Int(at))
+        dst.unsafe_store(i * Int(k) + Int(j), sf64_from_f32(v))
+        i += stride
+
+
+def ovr_assemble_device(columns: List[OvrColumn], n: Int, k: Int, finish: Int,
+                        scores: MutPointer[Float64, MutUntrackedOrigin], codes: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    """The (n x k) scores into `scores` (OVR_SCORES, OVR_NORMALIZE: then
+    normalized), or their row argmax into `codes` (OVR_ARGMAX)."""
+    if n <= 0 or k <= 0:
+        return
+    if len(columns) != k:
+        raise Error("x_trees_ovr_assemble: one column per class")
+    var ctx = _ctx()
+    var keep = List[DeviceBuffer[DType.float32]]()
+    var d = ctx.enqueue_create_buffer[DType.uint64](n * k)
+    d.enqueue_fill(UInt64(0))
+    try:
+        for j in range(k):  # driver-loop: over the members (one column each)
+            ref col = columns[j]
+            var d_src = ctx.enqueue_create_buffer[DType.float32](max(1, n * col.bc))
+            if col.at >= 0:
+                ctx.enqueue_copy(dst_buf=d_src, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=col.blk))
+            ctx.enqueue_function[ovr_place_kernel](
+                d.unsafe_ptr(), Int64(k), Int64(j), d_src.unsafe_ptr(), Int64(n), Int64(col.bc), Int64(col.at),
+                grid_dim=_blocks(n), block_dim=OPS_TPB,
+            )
+            keep.append(d_src^)
+        if finish == OVR_ARGMAX:
+            var d_res = ctx.enqueue_create_buffer[DType.int32](n)
+            ctx.enqueue_function[argmax_rows_kernel](
+                d.unsafe_ptr(), Int64(n), Int64(k), d_res.unsafe_ptr(), grid_dim=_blocks(n), block_dim=OPS_TPB,
+            )
+            ctx.enqueue_copy(dst_ptr=codes, src_buf=d_res)
+            ctx.synchronize()
+            _ = d_res^
+        else:
+            if finish == OVR_NORMALIZE:
+                ctx.enqueue_function[normalize_rows_kernel](
+                    d.unsafe_ptr(), Int64(n), Int64(k), sf64_div(SF64_ONE, sf64_from_int(k)),
+                    grid_dim=_blocks(n), block_dim=OPS_TPB,
+                )
+            ctx.enqueue_copy(dst_ptr=scores.bitcast[UInt64](), src_buf=d)
+            ctx.synchronize()
+    except e:
+        ctx.synchronize()
+        raise e
+    _ = keep^
+    _ = d^
+
+
+def ovr_assemble_host(columns: List[OvrColumn], n: Int, k: Int, finish: Int,
+                      scores: MutPointer[Float64, MutUntrackedOrigin], codes: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    """`ovr_assemble_device` on the host ops (the CPU binding)."""
+    if n <= 0 or k <= 0:
+        return
+    if len(columns) != k:
+        raise Error("x_trees_ovr_assemble: one column per class")
+    var own = List[Float64](length=n * k, fill=0.0)
+    var sp = own.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    if finish != OVR_ARGMAX:
+        sp = scores
+    for j in range(k):  # driver-loop: over the members (one column each)
+        ref col = columns[j]
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=col.blk)
+        for i in range(n):  # host-column: the CPU binding's widening copy
+            sp[unsafe_offset=i * k + j] = Float64(src[unsafe_offset=i * col.bc + col.at]) if col.at >= 0 else 0.0
+    if finish == OVR_NORMALIZE:
+        normalize_rows(sp, n, k)
+    elif finish == OVR_ARGMAX:
+        argmax_rows(sp, n, k, codes)
