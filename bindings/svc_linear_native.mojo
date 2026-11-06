@@ -23,6 +23,7 @@ from bindings.family_common import (
 from bindings.svm_mixture_native import _qn_scores
 from core.family_weights_impl import family_fill_f32
 from bindings.classical_labels import labels_real_type, labels_bool_type, labels_text_type, labels_type_name
+from bindings.trees_side_records import trees_side_get, trees_side_put
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_base, svc_mode, svc_binding, svc_zero_division, svc_f32, svc_shape_of, svc_labels_1d,
@@ -476,11 +477,20 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
     _ = encoded^
 
 
+comptime _SVC_LINEAR_FLAGS_SLOT = "p3_svc_linear_flags_v1"
+
+
 def _py2mojo_flags(binding: PythonObject) raises -> Int:
+    # The binary's compile-time flags never change for one binding object:
+    # read once and kept in a record weak-keyed by the binding (lane
+    # p3-svm-gp-kernel, row 473), not a getattr and a binding call per predict.
+    var held = trees_side_get(_SVC_LINEAR_FLAGS_SLOT, binding)
+    if held is not None:
+        return svc_int(held)
     var fn_obj = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
-    if fn_obj is None:
-        return 0
-    return svc_int(family_call(fn_obj))
+    var flags = 0 if fn_obj is None else svc_int(family_call(fn_obj))
+    _ = trees_side_put(_SVC_LINEAR_FLAGS_SLOT, binding, PythonObject(flags))
+    return flags
 
 
 def _linear_svc_codes(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
@@ -512,7 +522,9 @@ def _linear_svc_codes(model: PythonObject, fields: PythonObject, binding: Python
 
 def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                         context: PythonObject) raises -> PythonObject:
-    """`LinearSVC.predict(X)`."""
+    """`LinearSVC.predict(X)`. The label kind and gather table come from the
+    owner-keyed record (`svc_decode(model, ...)`, lane p3-svm-gp-kernel, row
+    473), not rebuilt with a per-class conversion on every predict."""
     var b = svc_builtins()
     var fields = py_fields(model)
     var fitted = svc_has(fields, "classes_")
@@ -521,18 +533,18 @@ def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: Pyth
         var k = len(classes)
         if k == 2 and (_py2mojo_flags(binding) & _PY2MOJO_ROWS) != 0:
             # the `z > 0` codes in the binding: the same decision and threshold
-            return svc_decode(classes, _linear_svc_codes(model, fields, binding, source, "qn_predict_binary", 2, context), context)
+            return svc_decode(model, classes, _linear_svc_codes(model, fields, binding, source, "qn_predict_binary", 2, context), context)
         if k > 2 and py_call(b.getattr, binding, PythonObject("qn_predict_multiclass"), PythonObject(None)) is not None:
             # the row argmax on the device beside the scores
-            return svc_decode(classes, _linear_svc_codes(model, fields, binding, source, "qn_predict_multiclass", k, context), context)
+            return svc_decode(model, classes, _linear_svc_codes(model, fields, binding, source, "qn_predict_multiclass", k, context), context)
     if not svc_has(fields, "_w"):
         raise Error("mojolearn LinearSVC: call fit first")
     var classes = svc_field(fields, "classes_")
     var k = len(classes)
     var scores = _qn_scores(model, binding, source, 1 if k == 2 else k, context)
     if k == 2:
-        return svc_decode(classes, svc_threshold_codes(scores, 0.0, True, 0, 1, context), context)
-    return svc_decode(classes, svc_argmax_rows(scores, context), context)
+        return svc_decode(model, classes, svc_threshold_codes(scores, 0.0, True, 0, 1, context), context)
+    return svc_decode(model, classes, svc_argmax_rows(scores, context), context)
 
 
 def _pred_count(pred: PythonObject) raises -> Int:
