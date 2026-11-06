@@ -17,6 +17,8 @@ from core.cast_in import cast_in_kind, cast_f32_bits, cast_w64_bits
 from core.classical_pandas_impl import _pd_double
 from core.scaler_fit_impl import scaler_cast
 from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, host_sparse_coo, host_sparse_dia, host_sparse_uint64_bound
+from bindings.cpython_table import cpython_table
+from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 def host_sparse_format(value: PythonObject) raises -> String:
@@ -289,6 +291,153 @@ def _sparse_coordinate(value: PythonObject, limit: Int, context: PythonObject) r
     return index
 
 
+struct _SparseKinds(Movable):
+    """p3-array-arena: the scalar classes a DOK/LIL element may have, read
+    ONCE per conversion as native addresses (was: per element, a builtins
+    connection, a walk of the connected type tuples and up to four alias
+    lookups), plus a per-class memo of NumPy scalar storage (kind, width,
+    byte order), which is fixed by the scalar's class."""
+    var int_class: Int
+    var bool_class: Int
+    var float_class: Int
+    var scalars: List[Int]
+    var integers: List[Int]
+    var alias0: Int
+    var alias1: Int
+    var memo: List[Int]  # quads: class, source kind, source width, native
+
+    def __init__(out self, context: PythonObject) raises:
+        var b = native_loaded_module("builtins")
+        self.int_class = Int(b.int._obj_ptr)
+        self.bool_class = Int(b.bool._obj_ptr)
+        self.float_class = Int(b.float._obj_ptr)
+        self.scalars = _type_addresses(context["scalar_types"])
+        self.integers = _type_addresses(context["integer_types"])
+        # The aliases are retained in the context; their scalar classes live
+        # as long as the dtypes do.
+        var aliases = _sparse_aliases(context)
+        self.alias0 = Int(aliases[0].type._obj_ptr)
+        self.alias1 = Int(aliases[1].type._obj_ptr)
+        self.memo = List[Int]()
+
+
+def _type_addresses(types: PythonObject) raises -> List[Int]:
+    # The connected type tuple is retained by the context.
+    var out = List[Int]()
+    for k in range(len(types)):  # driver-loop: over connected native ABI type identities, once per conversion
+        out.append(Int(types[k]._obj_ptr))
+    return out^
+
+
+def _address_in(address: Int, members: List[Int]) -> Bool:
+    for i in range(len(members)):  # driver-loop: over the few connected type identities
+        if members[i] == address:
+            return True
+    return False
+
+
+def _sparse_scalar_word_k(value: PythonObject, kind: Int, width: Int, mut kinds: _SparseKinds) raises -> UInt64:
+    # Same admission, words and conversions as `_sparse_scalar_word`, with
+    # exact ints read through PyLong_AsLongLong and NumPy scalar bytes read
+    # from one native buffer export (no tobytes, no per-byte Python index).
+    var cls = Int(py_type(value)._obj_ptr)
+    var source_kind = 0
+    var source_width = 8
+    var word = UInt64(0)
+    if cls == kinds.int_class or cls == kinds.bool_class:
+        var t = perf2_cpython_table()
+        var number = t[].PyLong_AsLongLong(value._obj_ptr)
+        if number == -1 and cpython_table()[].PyErr_Occurred():
+            # Outside int64: the old exact path (uint64 high-bit values, or
+            # the overflow refusal).
+            ref cpy = Python().cpython()
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            if Bool(py=value < 0):
+                source_kind = 1
+                word = bitcast[DType.uint64](Int64(py=value))
+            else:
+                if Int(py=py_call(value.bit_length)) > 64:
+                    raise Error("OverflowError: int too big to convert")
+                var bytes = py_call(value.to_bytes, 8, "little")
+                for i in range(8):  # driver-loop: bytes of one admitted native integer storage item
+                    word |= UInt64(py=bytes[i]) << UInt64(8 * i)
+        elif number < 0:
+            source_kind = 1
+            word = bitcast[DType.uint64](number)
+        else:
+            word = UInt64(number)
+    elif cls == kinds.float_class:
+        source_kind = 2
+        word = bitcast[DType.uint64](Float64(py=value))
+    elif _address_in(cls, kinds.scalars) or cls == kinds.alias0 or cls == kinds.alias1:
+        var native = True
+        var found = False
+        for m in range(len(kinds.memo) // 4):  # driver-loop: over the few NumPy scalar classes seen in this conversion
+            if kinds.memo[4 * m] == cls:
+                source_kind = kinds.memo[4 * m + 1]
+                source_width = kinds.memo[4 * m + 2]
+                native = kinds.memo[4 * m + 3] != 0
+                found = True
+                break
+        if not found:
+            var dtype = value.dtype
+            source_width = Int(py=dtype.itemsize)
+            source_kind = cast_in_kind(Int(py=dtype.num), source_width, "sparse scalar")
+            native = Bool(py=dtype.isnative)
+            kinds.memo.append(cls)
+            kinds.memo.append(source_kind)
+            kinds.memo.append(source_width)
+            kinds.memo.append(1 if native else 0)
+        var view = native_buffer_view(value)
+        var buffer = List[Int](length=10, fill=0)
+        var pointer = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+        if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, pointer, Int32(0)) != 0:
+            ref cpy = Python().cpython()
+            raise cpy.unsafe_get_error()
+        var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=buffer[0])
+        var length = buffer[2]
+        if length < source_width:
+            cpython_table()[].PyBuffer_Release(pointer)
+            _ = len(buffer)
+            raise Error("IndexError: index out of range")
+        for i in range(source_width):  # driver-loop: bytes of one native scalar storage item
+            word |= UInt64(data[i if native else source_width - i - 1]) << UInt64(8 * i)
+        cpython_table()[].PyBuffer_Release(pointer)
+        # Keep the Py_buffer storage alive past the release.
+        _ = len(buffer)
+        _ = view^
+    else:
+        raise Error("TypeError: sparse values require native numeric scalars without Python conversion hooks")
+    if kind == source_kind and width == source_width:
+        return word
+    if kind == 2:
+        return UInt64(cast_f32_bits(word, source_kind, source_width)) if width == 4 else bitcast[DType.uint64](_pd_double(word, source_kind, source_width))
+    if kind == 3:
+        return UInt64(_pd_double(word, source_kind, source_width) != 0)
+    if source_kind == 2:
+        var number = _pd_double(word, source_kind, source_width)
+        if not isfinite(number):
+            raise Error("sparse integer storage cannot contain a nonfinite scalar")
+        if kind == 1:
+            if number < -9223372036854775808.0 or number >= 9223372036854775808.0:
+                raise Error("sparse integer value exceeds int64")
+            return bitcast[DType.uint64](Int64(number))
+        if number < 0 or number >= 18446744073709551616.0:
+            raise Error("sparse integer value exceeds uint64")
+        return UInt64(number)
+    return cast_w64_bits(word, source_kind, source_width)
+
+
+def _sparse_coordinate_k(value: PythonObject, limit: Int, mut kinds: _SparseKinds) raises -> Int:
+    var cls = Int(py_type(value)._obj_ptr)
+    if cls != kinds.int_class and not _address_in(cls, kinds.integers) and cls != kinds.alias0 and cls != kinds.alias1:
+        raise Error("TypeError: sparse coordinates must be native integers")
+    var index = Int(bitcast[DType.int64](_sparse_scalar_word_k(value, 1, 8, kinds)))
+    if index < 0 or index >= limit:
+        raise Error("sparse coordinate exceeds its declared shape")
+    return index
+
+
 def host_sparse_dense(source: PythonObject, format: String, context: PythonObject) raises -> PythonObject:
     if format.byte_length() == 0 or host_sparse_format(source) != format:
         raise Error("TypeError: sparse storage requires an exact supported SciPy container")
@@ -380,13 +529,20 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
             raise Error("TypeError: sparse DOK storage requires a native dictionary")
         var pairs = py_call(b.list, dictionary.items())
         _ = py_call(owners.append, Python.tuple(dictionary, pairs))
+        # p3-array-arena: classes read once per conversion; the snapshot's
+        # pairs and coordinates read borrowed through the C API.
+        var kinds = _SparseKinds(context)
+        var t = perf2_cpython_table()
+        var tuple_class = Int(b.tuple._obj_ptr)
         for i in range(len(pairs)):  # driver-loop: native dictionary's sparse coordinate records
-            var key = pairs[i][0]
-            if py_type(key) is not b.tuple or len(key) != 2:
+            var pair = t[].PyList_GetItem(pairs._obj_ptr, i)
+            var key = PythonObject(from_borrowed=t[].PyTuple_GetItem(pair, 0))
+            var item = PythonObject(from_borrowed=t[].PyTuple_GetItem(pair, 1))
+            if Int(py_type(key)._obj_ptr) != tuple_class or len(key) != 2:
                 raise Error("TypeError: sparse DOK coordinates must be native pairs")
-            var row = _sparse_coordinate(key[0], rows, context)
-            var col = _sparse_coordinate(key[1], columns, context)
-            var word = _sparse_scalar_word(pairs[i][1], kind, width, context)
+            var row = _sparse_coordinate_k(PythonObject(from_borrowed=t[].PyTuple_GetItem(key._obj_ptr, 0)), rows, kinds)
+            var col = _sparse_coordinate_k(PythonObject(from_borrowed=t[].PyTuple_GetItem(key._obj_ptr, 1)), columns, kinds)
+            var word = _sparse_scalar_word_k(item, kind, width, kinds)
             host_sparse_place(destination + (row * columns + col) * width, word, width, kind, True)
         _ = pairs^
         _ = dictionary^
@@ -396,6 +552,8 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         _ = py_call(owners.append, Python.tuple(indices.owner, values.owner))
         if indices.count != rows or values.count != rows:
             raise Error("sparse LIL storage requires one native object row per sample")
+        var kinds = _SparseKinds(context)
+        var t = perf2_cpython_table()
         for row in range(rows):  # driver-loop: captured sparse object-row storage
             var row_indices = _sparse_object_at(indices, row)
             var row_values = _sparse_object_at(values, row)
@@ -408,8 +566,8 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
                 raise Error("TypeError: sparse LIL rows require matching native lists")
             _ = py_call(owners.append, Python.tuple(row_indices, row_values, saved_indices, saved_values))
             for entry in range(entries):  # driver-loop: captured native sparse row coordinate records
-                var col = _sparse_coordinate(saved_indices[entry], columns, context)
-                var word = _sparse_scalar_word(saved_values[entry], kind, width, context)
+                var col = _sparse_coordinate_k(PythonObject(from_borrowed=t[].PyList_GetItem(saved_indices._obj_ptr, entry)), columns, kinds)
+                var word = _sparse_scalar_word_k(PythonObject(from_borrowed=t[].PyList_GetItem(saved_values._obj_ptr, entry)), kind, width, kinds)
                 # LIL assigns each item; repeated columns keep the last word.
                 host_sparse_place(destination + (row * columns + col) * width, word, width, kind, False)
         _ = indices^
