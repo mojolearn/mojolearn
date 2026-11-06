@@ -177,7 +177,7 @@ def release_runner(tmp_path):
     r.dry, r.version, r.rel, r.commit = True, "0.8.56", tmp_path / "rel", "c" * 40
     r.base = tmp_path / "base"
     r.args = SimpleNamespace(smoke_branch="main", gate_autograd_root=None)
-    r.gate_ok = lambda vendor: (False, "no gate report")
+    r.gate_ok = lambda vendor, measure=True: (False, "no gate report")
     r.gate_out = lambda vendor: tmp_path / "out"
     r.source_checkout = lambda create=True: tmp_path / "source"
     r.candidate_gate_wheels = lambda vendor: [tmp_path / "core.whl", tmp_path / (vendor + ".whl")]
