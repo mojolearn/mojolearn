@@ -1137,6 +1137,56 @@ LANE_REVISIONS = {
     # read OWED to the next record. The random-init lanes did not move.
     "gmm": "classic-kmeanspp-init-1",
     "gmm-sample": "classic-kmeanspp-init-1",
+    # THE 2026-11-05 SHRINK (lane/slow-verification-lanes, Andrew: "fixtures
+    # should be small"): correctness checks, not measurements. Each lane keeps
+    # its branches, arms, parts and fixture kinds; rows, observations,
+    # iterations, tree counts and eigh widths came down. Every committed
+    # column hashed the old input, so these cells read OWED to the next record.
+    "x-prep-da-solvers": "rows-4500-1",
+    "x-prep-nb-weights": "rows-4500-1",
+    "x-prep-rfe": "rows-4500-1",
+    "x-prep-score-edges": "rows-4500-1",
+    "x-prep-priors": "rows-4500-1",
+    "x-cluster-hdbscan-epsilon": "rows-1000-1",
+    "sequence-ets": "obs-48-1",
+    "x-metrics-permutation-test-score": "perms-4-20261105-1",
+    "x-decomp-eigh-wide-linalg": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-fastica": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-rotation": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-mincovdet": "light-fixture-20261105-1",
+    "x-decomp-umap-options": "light-fixture-20261105-1",
+    "x-decomp-manifold": "light-fixture-20261105-1",
+    "trees-calibrated": "light-fixture-20261105-1",
+    "trees-stacking-clf": "light-fixture-20261105-1",
+    "trees-voting-clf": "light-fixture-20261105-1",
+    "gbdt-symmetric": "light-fixture-20261105-1",
+    "gbdt-symmetric-eval": "light-fixture-20261105-1",
+    "gbdt-class-weights": "light-fixture-20261105-1",
+    "gbdt-multiclass-offgrid": "light-fixture-20261105-1",
+    "gbdt-ordered": "light-fixture-20261105-1",
+    "gbdt-ordered-bayesian-noise": "light-fixture-20261105-1",
+    "gbdt-binary-columns": "light-fixture-20261105-1",
+    "gbdt-catboost-defaults": "light-fixture-20261105-1",
+    "gbdt-stochastic-arms": "light-fixture-20261105-1",
+    "gbdt-multiclass": "light-fixture-20261105-1",
+    "gbdt-onevsall": "light-fixture-20261105-1",
+    "gbdt-multiclass-defaults": "light-fixture-20261105-1",
+    "gbdt-pointwise-l2-bayesian-eval": "light-fixture-20261105-1",
+    "gbdt-adapter-clf": "light-fixture-20261105-1",
+    "gbdt-yeti-rank": "light-fixture-20261105-1",
+    "kmeans-random": "rows-8192-1",
+    "kmeans-sqrt": "rows-8192-1",
+    "dbscan-weighted": "rows-2000-1",
+    "arima-seasonal-c": "obs-128-1",
+    "arima-exog-seasonal": "obs-128-1",
+    "saved-model-host-infer": "rows-4096-1",
+    "rf-reg-gamma-ig": "rows-2048-1",
+    "bootstrap": "light-fixture-20261105-1",
+    # The neural sequence lanes' 2026-11-05 change is to the batchscale and
+    # rlpair PROTOCOLS (SEQ_SCALE_WHOLE, SCALE_LONG_L, SCALE_PREFIXES,
+    # RLPAIR_DECODE, RLPAIR_LEAVE_AFTER), not to their train input; those parts
+    # carry their own protocol stamp (`_part_protocol`), so no revision here.
 }
 
 
@@ -1279,6 +1329,93 @@ NON_SIZE_REVISIONS = {
         "arithmetic, not input: GaussianMixture's init_params='kmeans' start became the classic "
         "greedy k-means++ instead of k-means|| (2026-09-26, lane/gmm-degenerate-data, DEVIATION 3133 "
         "in mixture/estimator.mojo). The lane still fits the same 6000 x 4 rows"),
+    # 2026-11-05 (lane/slow-verification-lanes): several dimensions moved at once, so no one size key.
+    "x-metrics-permutation-test-score": (
+        "x-metrics-permutation-test-score draws 4 permutations per call instead of 12 (2026-11-05, "
+        "lane/slow-verification-lanes): every permutation is three Ridge fits; the plain and grouped "
+        "counter-generator draws, the score and the p-value parts are unchanged."),
+    "x-decomp-eigh-wide-linalg": (
+        "2026-11-05 lane/slow-verification-lanes: the second eigh width moves from 128 to 65, which is the "
+        "exact-multiple panel arm and the odd-n Jacobi pad arm; 72 is kept."),
+    "x-decomp-eigh-wide-fastica": (
+        "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 and FastICA max_iter "
+        "from 8 to 4; every iteration still runs the decorrelation eigh."),
+    "x-decomp-eigh-wide-rotation": (
+        "2026-11-05 lane/slow-verification-lanes: quartimax n_components moves from 128 to 65, rows from 4d "
+        "to 2d and EM max_iter from 5 to 3; varimax stays at 72."),
+    "x-decomp-eigh-wide-factor-analysis": (
+        "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 with rows still "
+        "width - 1, and EM max_iter from 10 to 4."),
+    "x-decomp-eigh-wide-mincovdet": (
+        "2026-11-05 lane/slow-verification-lanes: the MinCovDet widths move from 72/128 to 72/65; rows stay "
+        "at 3d and every hashed part is kept."),
+    "x-decomp-umap-options": (
+        "2026-11-05 lane/slow-verification-lanes: the rows move from 384 to 192 and the epochs from 8 to 4 "
+        "(the array-init pre-fit from 4 to 2); every option arm is kept."),
+    "x-decomp-manifold": (
+        "2026-11-05 lane/slow-verification-lanes: the MDS max_iter values are halved (40/30/25 to 20/15/12) "
+        "and the shift-invert LLE moves from 300 to 240 rows, still above 200."),
+    "trees-calibrated": (
+        "2026-11-05 lane/slow-verification-lanes: both calibrators fit on the first 7001 rows (was 20000) "
+        "with depth-3 trees (was 4), batch protocol on 2001 held-out rows; methods, cv=3 and ensemble arms "
+        "unchanged"),
+    "trees-stacking-clf": (
+        "2026-11-05 lane/slow-verification-lanes: fit on the first 7001 rows (was 20000), members depth 3 "
+        "(was 4) and forest of 2 trees (was 3), batch protocol on 2001 held-out rows; folds, passthrough "
+        "and final tree unchanged"),
+    "trees-voting-clf": (
+        "2026-11-05 lane/slow-verification-lanes: fit on the first 5001 rows (was 20000), member depths "
+        "4/4/3 (was 5/5/4), forest 2 trees (was 4), bagging 2 members (was 3), batch protocol on 2001 "
+        "held-out rows; weights and soft voting unchanged"),
+    "gbdt-symmetric": (
+        "2026-11-05, lane/slow-verification-lanes: training rows 20000 -> 4000 and both fits' trees 20 -> 8; "
+        "borders254 arm, Logloss, depth 6 and both parts kept"),
+    "gbdt-symmetric-eval": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 4000, m's trees 20 -> 8 "
+        "to stay gbdt-symmetric's fit; the overfitting od/sh shape and both asserts unchanged"),
+    "gbdt-class-weights": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8 per policy; "
+        "SymmetricTree, Depthwise, Lossguide and the off-grid class weight kept"),
+    "gbdt-multiclass-offgrid": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; MultiClass with "
+        "the off-grid class weights and l2 1 kept"),
+    "gbdt-ordered": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 6000 (floored at 5000, "
+        "the min_fold_size arm) and trees 20 -> 8 for both Ordered fits"),
+    "gbdt-ordered-bayesian-noise": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000, the min_fold_size "
+        "arm) and trees 20 -> 8; Bayesian bootstrap, noise and NewtonCosine twin kept"),
+    "gbdt-binary-columns": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000) and trees 20 -> 8 "
+        "for all six fits; batch part on the first 2048 held-out rows"),
+    "gbdt-catboost-defaults": (
+        "2026-11-05, lane/slow-verification-lanes: the two capped default fits go 20000 rows x 20 trees -> "
+        "4000 x 8; the below-cap 2000-row 50-tree fit is unchanged"),
+    "gbdt-stochastic-arms": (
+        "2026-11-05, lane/slow-verification-lanes: rows stay 4000; trees 20 -> 6 per bootstrap/noise arm "
+        "and 8 -> 4 per pointwise loss; every arm and loss kept"),
+    "gbdt-multiclass": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; MultiClass with "
+        "class weights [1, 2, 0.5] on three classes kept"),
+    "gbdt-onevsall": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; "
+        "MultiClassOneVsAll on the three-class centered target kept"),
+    "gbdt-multiclass-defaults": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8 for both "
+        "multiclass losses at their Bayesian/noise defaults"),
+    "gbdt-pointwise-l2-bayesian-eval": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 4000 and trees 20 -> 8; "
+        "pointwise searcher, L2, Bayesian bootstrap, weights, od and best model kept"),
+    "gbdt-adapter-clf": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; batch "
+        "predict/predict_proba on the first 2048 held-out rows, decision_function 512 unchanged"),
+    "gbdt-yeti-rank": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and the main fit's trees 20 -> 8; "
+        "the seeded 8-tree depth-4 fit and the RANK_QUERY_SIZES grouping kept"),
+    "bootstrap": (
+        "bootstrap moved from 4096 values x 2048 replicates (1024 for the sorted arms) to 1024 values x "
+        "1024 replicates for every arm, in the lane body and its batch part, on 2026-11-05 "
+        "(lane/slow-verification-lanes)."),
 }
 
 
@@ -9511,8 +9648,10 @@ def _part_protocol(part, alone):
                     uneven_split=GRAD_UNEVEN_SPLIT_NA, carry_splits=[list(BATCH_SPLIT) + ["n"], f"every {alone}"],
                     seq=[GRAD_SEQ_BATCH, GRAD_SEQ_LEN])
     if part == "batchscale":
-        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, long_l=SCALE_LONG_L,
-                    prefixes=list(SCALE_PREFIXES))
+        # seq_whole: the sequence lanes' whole-call rows (SEQ_SCALE_WHOLE), stamped so a
+        # column taken at another whole-call size reads "protocol differs", not DIVERGENT.
+        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, seq_whole=SEQ_SCALE_WHOLE,
+                    long_l=SCALE_LONG_L, prefixes=list(SCALE_PREFIXES))
     if part == "stepfull":
         return dict(rows=STEPFULL_ROWS, length=STEPFULL_LENGTH,
                     full="forward(x) from a zero state, one pass",
