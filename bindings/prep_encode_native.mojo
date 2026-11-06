@@ -292,9 +292,12 @@ def _fitted_flat(owner: PythonObject, name: String, value: PythonObject, context
     admission and conversion of `value`, kept in the prepared-owner registry
     keyed weakly by the model (one slot per field name, never in the model's
     `__dict__`) and reused while the field holds the same object (perf2-prep).
-    Not noticed: a value written in place into a fitted array whose
-    admission produced a converted copy (the fitted arrays are written by
-    the encoder alone)."""
+    The record is kept only when the admission returned `value` itself (an
+    exact float32 C-order Array): the program then reads the live words on
+    every call, so an in-place write is always seen. A converted copy (a
+    float64 or strided array assigned by the user) is never kept: it is
+    converted per call, so an in-place write into the source is seen too
+    (hazard class A, p3-prep)."""
     var mods = NativeModules()
     var slot = String("prep_encode_fitted_v1:") + name
     var record = prepared_get(mods, slot, owner)
@@ -302,7 +305,7 @@ def _fitted_flat(owner: PythonObject, name: String, value: PythonObject, context
         return record
     var flat = _input(value, 1, False, context)
     record = Python.tuple(value, flat, Int(py=flat.size))
-    prepared_put(mods, slot, owner, record)
+    prepared_put(mods, slot, owner, record if flat is value else PythonObject(None))
     return record
 
 
