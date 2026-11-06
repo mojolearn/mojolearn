@@ -15,7 +15,6 @@ from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import TensorView, tensor_view, contiguous_addr, base_format, new_array, py_ints, shape_text
 from bindings.optimizer_device_native import shape_count
 from bindings.training_embedding_native import embedding_indices
-from bindings.native_error_class import error_without_class
 
 
 def _entry(entries: PythonObject, name: String, missing: String) raises -> PythonObject:
@@ -233,16 +232,21 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
         _ = py_call(shapes_append, py_ints(view.shape))
         _ = py_call(addresses_append, PythonObject(address))
         views.append(view^)
+    # One native call into the training binding: the output is sized here
+    # from the views already read above (the `mlp_sessions_rows` rule: at
+    # least one session, every session a (rows, width) matrix), not by a
+    # second call that re-reads the shape tuples. `mlp_sessions_rows` stays
+    # exported for its other caller (bindings/small_mlp_native.mojo).
+    var sessions_entry = _entry(entries, "mlp_sessions", "mojolearn: this training binding lacks ")
+    if len(views) == 0:
+        raise Error("ValueError: MLP sessions require at least one (rows, width) input")
     var total_rows = 0
-    try:
-        total_rows = Int(py=py_call_typed(_entry(entries, "mlp_sessions_rows", "mojolearn: this training binding lacks "),
-                                          shapes, PythonObject(width)))
-    except error:
-        if String(error).startswith("ImportError:"):
-            raise error^
-        raise Error("ValueError: " + String(error_without_class(error, "ValueError")))
+    for i in range(len(views)):  # driver-loop: over the caller's session arrays (shape words, not data)
+        if len(views[i].shape) != 2 or views[i].shape[1] != width or views[i].shape[0] < 0:
+            raise Error("ValueError: MLP sessions require at least one (rows, width) input")
+        total_rows += views[i].shape[0]
     var output = new_array([total_rows, out_width], "<f4")
-    var wrote = py_call_typed(_entry(entries, "mlp_sessions", "mojolearn: this training binding lacks "),
+    var wrote = py_call_typed(sessions_entry,
                               Python.list(output._addr, w1, b1, w2, b2), addresses, shapes,
                               Python.list(width, hidden, out_width))
     _ = output  # keep the Python object alive through the native call above
