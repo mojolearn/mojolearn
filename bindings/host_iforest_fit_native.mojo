@@ -20,6 +20,7 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.host_iforest_depth_native import host_iforest_depth_admit, host_iforest_depth_truth, host_iforest_depth_step, host_iforest_depth_positive
 from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.host_iforest_native import host_iforest_alias_types
 from bindings.optimizer_public_words import stash_python_error
 from bindings.sequential_admission import _one_of
 from core.host_inference_impl import host_inference_finite
@@ -28,10 +29,13 @@ from core.host_inference_impl import host_inference_finite
 def _if_fit_alias(value: PythonObject, context: PythonObject, integer_only: Bool = False) raises -> Bool:
     if py_get(context, "ndarray") is None:
         return False
-    var constructor = native_numpy_dtype(context)
-    var codes = Python.tuple("q", "Q", "g")
+    # The alias types come from the once-built record (p3-trees: 3 np.dtype()
+    # calls per option probe, ~15 probes per fit); its slots 1..3 are the
+    # types of 'q', 'Q' and 'g'.
+    var types = host_iforest_alias_types(context)
+    var kind = py_type(value)
     for i in range(2 if integer_only else 3):  # driver-loop: exact native numeric scalar aliases
-        if py_type(value) is py_call(constructor, codes[i]).type:
+        if kind is types[1 + i]:
             return True
     return False
 
