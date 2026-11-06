@@ -147,3 +147,74 @@ ship through step 5 above, not through the old path. PyPI latest is 0.8.65.
 
 - Go for the compile and the box timing pass (step 3-4), and go for the release run (step 5).
 - Whether the remaining slow Apple lanes may keep sizes above the 5 s target where the checked branch needs them.
+
+## BEFORE THE RELEASE: every improvement lands first (Andrew, 2026-11-06)
+
+Andrew: "i want to do all of our improvements ALL OF OUR IMPROVEMENTS before the release." Nothing on this list
+is deferred to a later version. "After the compile" below means after the first compile and BEFORE the freeze,
+the verification round and the publish. The release (0.8.66) does not start until every item is done or Andrew
+has struck it.
+
+Order: (1) third-pass fix lanes merge -> (2) ONE compile of `integ/perf-20261105`, fix what breaks -> (3) the
+post-compile items below (code, then recompile only what they touch) -> (4) the profile pass and the fixes it
+points to -> (5) tool tests on CPU runners, measurement smoke and multi-GPU gate dry run on the rented boxes ->
+(6) fast-forward main, freeze, the ONE verification round on the built wheels, TestPyPI rehearsal, publish.
+
+State 2026-11-06 evening: `integ/perf-20261105` = main + 24 night lanes + 10 `perf2-*` + 5 `perf3-*` + 6
+`pass2-*` + multi-GPU logical-shard gate + harness per-row lane + third-pass lanes as they finish (14 `p3-*`).
+Three Fable ideas passes done: `~/mojolearn-evidence/ideas-every-slow-lane-pass1.md`, `-pass2.md`,
+`ideas-pass3-from-scratch.md`. UNCOMPILED. Nothing rented.
+
+### A. Structural cleanups held until the first compile (do right after it)
+- Fold the three CPython function tables into one: `bindings/cpython_table.mojo`,
+  `bindings/perf2_shared_cpython_table.mojo`, `bindings/p3_lm_tokenizer_cpython.mojo` (and any further copy a
+  `p3-*` lane adds). One table, one global name, all users moved; delete the copies.
+- Fold the per-model record helpers into one (`trees_side_records`, `cluster_side_records`, `gp_svm_records`,
+  `msel_plan_records`, prepared-registry slots), fixing the `msel_plan_records` one-entry-per-model leak.
+- `AdmittedCall`: one admitted record per class and mode and per fitted model, threaded through every public
+  call (design: `~/mojolearn-evidence/ideas-cpu-per-call-cost.md`); the per-family records become its users.
+- Native kernel call table between bindings and the manifold driver inside `_mojolearn_x_decomp`
+  (`bindings/mani_kit.mojo`: 78 per-op Python-level calls per manifold fit).
+- 26 calls left in an unproven form (`cpy.PyModule_GetDict`, `cpy.PyObject_GetIter` / `PyIter_Next`): settle the
+  form at the compile, align all.
+- Lock on the sequence resident store (`sequence/perf3_seq_resident.mojo`).
+
+### B. Rows the fix lanes left OWED (each lane's table has the `file:line` and the design)
+`~/mojolearn-evidence/p3-*.md`, `perf2-*.md`, `perf3-*.md`, `pass2-*.md`: every row marked OWED or OWED-SHARED.
+Known so far: native byte LM session record and multi-step entry; one request per contiguous worker span in
+parallel causal; engine output written into the caller's address; device greedy pick for ragged lengths; kept
+sessions owning a stream's KV; legacy GradientBoosting predict reading X twice; forest predict-codes operation
+for meta-estimator members; RFE / IterativeImputer one crossing per feature; per-fold DeviceRows built natively;
+BayesianGaussianMixture blocks without the per-query copy; decode-session per-step re-admission;
+`estimator_arguments` per cluster query; pandas class cache in `classical_pandas.mojo`; IsolationForest refit on
+every `fast` score (`_mojolearn_svm.mojo:643`); `MultiOutputClassifier.score` with string labels; `x-decomp-lda`
+and `x-decomp-ipca` (Apple / CPU). After the 14 `p3-*` lanes finish, collect their OWED rows here and run one
+more round of Opus lanes on them.
+
+### C. Product gaps found on the way
+- `LogisticRegression` (and every GLM) with several devices runs on one device in `identical` mode (the tiled
+  gradient never reaches `glm/impl/qn/multi_gpu.mojo`): shard the tiled gradient.
+- Unit tests of the multi-device split logic (no binding exposes it yet).
+- Python 3.10 / 3.11 (wheels declare `>=3.10`): the "check once" fixes need 3.12 watchers; decide a watcher-free
+  fast path (per-class version stamp) so those versions are not left on the slow path.
+
+### D. Only a compiled build can answer (ONE profile pass, integ wheel vs `pip install mojolearn==0.8.55`)
+The 16 profiles in `ideas-every-slow-lane-pass2.md` ("Post-compile profile list") plus the forest predict
+profile in `~/mojolearn-evidence/forest-regressor-other-stage.md`. Fix what they show, before the freeze.
+
+### E. Release-process changes (tools; in flight 2026-11-06)
+- Multi-GPU logical-shard gate (12 fixed lanes, 1 / 2 / 3 logical devices on one GPU) in every NVIDIA and AMD
+  gate job; one dry run on a box before the freeze.
+- Measurement smoke as a gate phase (every measurement recipe once at smoke size, our GPU arm, pass = runs and
+  returns the board's fields).
+- TestPyPI rehearsal before the first real publish; after publish only the sha256 comparison remains.
+- Harness: per-row Python removed, harness work in its own `-harness` stage (`timing_env.harness_timing=2`):
+  timings are not comparable with records before this change; the 0.8.55 comparison is the profile pass in D.
+- Tool tests on CPU runners for everything changed in tools/ since 2026-11-05; the 27 failing tools tests.
+- Release-tool log wording: stop printing "owed" in the run-everything path.
+
+### Decisions taken 2026-11-06 (Fable judging; Andrew can reverse)
+- Fitted arrays that have a resident device copy become read-only at the buffer level (in-place writes raise
+  NumPy's read-only error; replacing the attribute re-uploads). No per-call content hashes.
+- Byte LM `train_step` default returns loss and scalars only; gradients on explicit request (Andrew).
+- Lazy `models` import reverted. PCA whitening scans its fitted buffers natively on each whitened call.
