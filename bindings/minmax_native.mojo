@@ -430,8 +430,8 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _ = output  # keep the Python object alive through the native call above
         _ = keep^
     _ = arena^
-    _ = mean^
-    _ = scale^
+    # compile-fix-1: `mean` / `scale` now live only in the uncached branch
+    # above (copied into the arena there); nothing to release here.
     return _write_back(source, values, output, copy, context, snapshot)
 
 
