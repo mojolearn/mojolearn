@@ -41,7 +41,7 @@ def test_decode_session_properties_lifecycle_and_outputs_are_native():
 
 def test_record_fields_are_admitted_before_attribute_access():
     body = NATIVE.split("def _mamba_record_fields(")[1].split("def _mamba_scalar(")[0]
-    assert body.index("py_type(value) is not expected") < body.index("return _fields(value)")
+    assert body.index("py_type(value) is not expected") < body.index("return _fields(mods, value)")
     assert "__getattribute__" in body and "__setattr__" in body and "__getattr__" in body
     assert "replaced field descriptor" in body
     assert "block.__dict__" not in NATIVE and "state.__dict__" not in NATIVE
@@ -52,7 +52,7 @@ def test_checkpoint_admission_precedes_publication():
     body = NATIVE.split("def mamba3_setstate(")[1].split("def _shape_of(")[0]
     assert body.index("py_type(state) is not bi.dict") < body.index("state.keys()")
     assert body.index("py_type(keys[i]) is not bi.str") < body.index("candidate_fields.update")
-    assert body.index("neural_block_fields(candidate, context)") < body.index("fields.update, candidate_fields")
+    assert body.index("neural_block_fields(mods, candidate, context)") < body.index("fields.update, candidate_fields")
 
 
 def test_mutable_state_buffers_have_retained_operation_snapshots():
@@ -82,7 +82,7 @@ def test_session_release_survives_rejected_state_dictionary():
     body = NATIVE.split("def _session_release(")[1].split("def mamba_session_close(")[0]
     assert "try:" in body and body.count("finally:") == 2
     assert body.index("_fields(state)") < body.index("finally:")
-    assert body.index("h[].weights.clear()") > body.rindex("finally:")
+    assert body.index("h[].plan.weights.clear()") > body.rindex("finally:")
 
 
 def test_saved_binding_lookup_uses_connected_identity_without_attribute_hooks():
@@ -93,25 +93,25 @@ def test_saved_binding_lookup_uses_connected_identity_without_attribute_hooks():
     for operation, following in (("release_owned", "session_info"), ("session_info", "export_owned"),
                                  ("export_owned", "getstate")):
         body = NATIVE.split(f'def mamba3_{operation}(')[1].split(f'def mamba3_{following}(')[0]
-        assert '_mamba_saved_entries(binding, context)' in body
-        assert '_native_function(binding,' not in body
+        assert '_mamba_saved_entries(mods, binding, context)' in body
+        assert '_native_function(binding,' not in body and '_native_function(mods, binding,' not in body
 
 
 def test_native_entry_selection_refuses_hooks_before_lookup():
     assert 'Python.import_module(' not in NATIVE
     assert '.hasattr' not in NATIVE
     canonical = NATIVE.split('def _m3_canonical(')[1].split('def _mamba_saved_entries(')[0]
-    assert canonical.index('_native_entry_fields(entries)') < canonical.index('fields["canonical"]')
+    assert canonical.index('_native_entry_fields(mods, entries)') < canonical.index('fields["canonical"]')
     assert 'entries.canonical' not in canonical
     for name in ('mamba3_forward_fresh', 'mamba3_owned_weights_enabled', 'mamba1_profile'):
         assert f'_native_has_entry(' in NATIVE and f'"{name}")' in NATIVE
-    assert '_native_has_entry(binding, kind_name + "_session_create")' in NATIVE
-    assert '_native_has_entry(binding, kind_name + "_decode_step")' in NATIVE
+    assert '_native_has_entry(mods, binding, kind_name + "_session_create")' in NATIVE
+    assert '_native_has_entry(mods, binding, kind_name + "_decode_step")' in NATIVE
 
 
 def test_owned_weight_revalidation_admits_plan_and_finished_record():
     body = NATIVE.split('def _m3_checked_weights(')[1].split('def mamba3_install_owned(')[0]
-    assert body.index('_mamba_record_fields(plan,') < body.index('py_setitem(plan_fields, "kind"')
+    assert body.index('_mamba_record_fields(mods, plan,') < body.index('py_setitem(plan_fields, "kind"')
     assert 'py_setattr(plan,' not in body
-    assert 'return neural_block_fields(checked, context)["_w"]' in body
+    assert 'return neural_block_fields(mods, checked, context)["_w"]' in body
     assert 'checked.__dict__' not in body
