@@ -7,7 +7,8 @@
 # Python wrapper but is NOT completion of the x_ann provider migration.
 from std.memory import MutPointer
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.mode_metadata_native import _fields
 from bindings.classical_attributes import classical_connect_numpy
@@ -91,6 +92,73 @@ def _stored(fields: PythonObject, name: String, expected: List[Int], floating: B
     if py_type(address) is not py_type(PythonObject(0)):
         raise Error("TypeError: fitted array address must be an exact native int")
     return _StoredArray(value, array_owner_once(value, context), shape^, Int(py=address))
+
+
+comptime _ANN_STORED_SLOT = "neighbors_ann_stored_v1"
+
+
+def _want(mut names: List[String], mut shapes: List[List[Int]], mut floating: List[Bool],
+          name: String, var shape: List[Int], is_float: Bool):
+    names.append(name)
+    shapes.append(shape^)
+    floating.append(is_float)
+
+
+def ann_stored_drop(model: PythonObject) raises:
+    """Drop the stored-array admission stamp of `model` (and the arrays it
+    retains). For the fit owners: a refit replaces the fitted arrays."""
+    var mods = NativeModules()
+    prepared_drop(mods, _ANN_STORED_SLOT, model)
+
+
+def _stored_all(model: PythonObject, fields: PythonObject, names: List[String], shapes: List[List[Int]],
+                floating: List[Bool], context: PythonObject) raises -> List[_StoredArray]:
+    """`_stored` of every named fitted array, once while they are unchanged.
+
+    Perf (perf2-neighbors): the admitted arrays' identity stamp lives in the
+    native prepared registry, outside `__dict__`, weakly keyed by the model
+    (as the IVF, radius, KDE and local-neighbor stamps). Each record entry
+    is (array, owner, address, shape); while every slot holds the same
+    object and the fitted dimensions give the same shapes, a search reuses
+    the captured owners and addresses instead of re-admitting each array and
+    re-reading its shape, dtype, itemsize, strides and address slots."""
+    var mods = NativeModules()
+    var b = native_loaded_module("builtins")
+    var record = prepared_get(mods, _ANN_STORED_SLOT, model)
+    var count = len(names)
+    var hit = record is not None and py_type(record) is b.tuple and len(record) == 4 * count
+    if hit:
+        for i in range(count):  # small-loop(fixed saved-array schema)
+            if record[4 * i] is not py_get(fields, names[i]):
+                hit = False
+                break
+            var shape = record[4 * i + 3]
+            if len(shape) != len(shapes[i]):
+                hit = False
+                break
+            for axis in range(len(shapes[i])):  # small-loop(saved array rank)
+                if Int(py=shape[axis]) != shapes[i][axis]:
+                    hit = False
+                    break
+            if not hit:
+                break
+    var arrays = List[_StoredArray]()
+    if hit:
+        for i in range(count):  # small-loop(fixed saved-array schema)
+            arrays.append(_StoredArray(record[4 * i], record[4 * i + 1], shapes[i].copy(), Int(py=record[4 * i + 2])))
+        return arrays^
+    var stamp = Python.list()
+    for i in range(count):  # small-loop(fixed saved-array schema)
+        arrays.append(_stored(fields, names[i], shapes[i].copy(), floating[i], context))
+        var words = Python.list()
+        for axis in arrays[i].shape:  # small-loop(saved array rank)
+            _ = py_call(words.append, axis)
+        _ = py_call(stamp.append, arrays[i].value)
+        _ = py_call(stamp.append, arrays[i].owner)
+        _ = py_call(stamp.append, arrays[i].address)
+        _ = py_call(stamp.append, py_call(b.tuple, words))
+    prepared_put(mods, _ANN_STORED_SLOT, model, py_call(b.tuple, stamp))
+    return arrays^
 
 
 def _mask(source: PythonObject, n: Int, owner: String, context: PythonObject) raises -> PythonObject:
@@ -299,7 +367,9 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
     # A resident index already owns its all-ones filter. Allocate/copy a
     # host mask only for an explicit filter or the per-call numerical route.
     var mask = PythonObject(None) if args[2] is None else _mask(args[2], n, owner, context)
-    var arrays = List[_StoredArray]()
+    var names = List[String]()
+    var shapes = List[List[Int]]()
+    var floating = List[Bool]()
     var prepare_params = Python.list()
     var search_params = Python.list()
     var full_params = Python.list()
@@ -320,8 +390,8 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
         seeds = min(seeds if seeds != 0 else length + width * graph_degree, n)
         var seed = _cagra_seed(fields)
         selected = length if filtered else k
-        arrays.append(_stored(fields, "dataset_", [n, dim], True, context))
-        arrays.append(_stored(fields, "graph_", [n, graph_degree], False, context))
+        _want(names, shapes, floating, "dataset_", [n, dim], True)
+        _want(names, shapes, floating, "graph_", [n, graph_degree], False)
         prepare_params = Python.list(n, dim, graph_degree)
         search_params = Python.list(m, selected, length, width, iterations, seeds, seed)
         full_params = Python.list(n, dim, graph_degree, m, selected, length, width, iterations, seeds, seed)
@@ -330,24 +400,24 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
         var probes = _int(fields, "n_probes", owner)
         if n_lists < 1 or n_lists > n or probes < 1 or probes > n_lists:
             raise Error("ValueError: ANN n_lists must be in [1, n_rows] and n_probes in [1, n_lists]")
-        arrays.append(_stored(fields, "centers_", [n_lists, dim], True, context))
-        arrays.append(_stored(fields, "list_offsets_", [n_lists + 1], False, context))
-        arrays.append(_stored(fields, "list_indices_", [n], False, context))
+        _want(names, shapes, floating, "centers_", [n_lists, dim], True)
+        _want(names, shapes, floating, "list_offsets_", [n_lists + 1], False)
+        _want(names, shapes, floating, "list_indices_", [n], False)
         if kind == 0:
             pq_dim = _int(fields, "pq_dim_", owner)
             var bits = _int(fields, "pq_bits_", owner)
             var length = _int(fields, "pq_len_", owner)
             if pq_dim < 1 or pq_dim > dim or bits < 1 or bits > 8 or length != (dim + pq_dim - 1) // pq_dim:
                 raise Error("ValueError: invalid fitted IVFPQIndex dimensions")
-            arrays.append(_stored(fields, "codebooks_", [pq_dim, 1 << bits, length], True, context))
+            _want(names, shapes, floating, "codebooks_", [pq_dim, 1 << bits, length], True)
             if not device_codes:
-                arrays.append(_stored(fields, "codes_", [n, pq_dim], False, context))
+                _want(names, shapes, floating, "codes_", [n, pq_dim], False)
             prepare_params = Python.list(n, dim, n_lists, pq_dim, bits)
             full_params = Python.list(n, dim, n_lists, pq_dim, bits, m, k, probes)
         elif kind == 1:
-            arrays.append(_stored(fields, "sq_vmin_", [dim], True, context))
-            arrays.append(_stored(fields, "sq_delta_", [dim], True, context))
-            arrays.append(_stored(fields, "codes_", [n, dim], False, context))
+            _want(names, shapes, floating, "sq_vmin_", [dim], True)
+            _want(names, shapes, floating, "sq_delta_", [dim], True)
+            _want(names, shapes, floating, "codes_", [n, dim], False)
             prepare_params = Python.list(n, dim, n_lists)
             full_params = Python.list(n, dim, n_lists, m, k, probes)
         else:
@@ -355,12 +425,13 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
             var rotated = 1
             while rotated < dim:  # small-loop(RaBitQ's existing power-of-two padded feature count)
                 rotated *= 2
-            arrays.append(_stored(fields, "codes_", [n, (rotated + 31) // 32], False, context))
-            arrays.append(_stored(fields, "norms_", [n], True, context))
-            arrays.append(_stored(fields, "ip_factors_", [n], True, context))
+            _want(names, shapes, floating, "codes_", [n, (rotated + 31) // 32], False)
+            _want(names, shapes, floating, "norms_", [n], True)
+            _want(names, shapes, floating, "ip_factors_", [n], True)
             prepare_params = Python.list(n, dim, n_lists, seed)
             full_params = Python.list(n, dim, n_lists, seed, m, k, probes)
         search_params = Python.list(m, k, probes)
+    var arrays = _stored_all(model, fields, names, shapes, floating, context)
     var distances = family_array(Python.tuple(m, selected), "<f4", context)
     var indices = family_array(Python.tuple(m, selected), "<i4", context)
     var candidates = family_array(Python.tuple(m), "<i4", context)
