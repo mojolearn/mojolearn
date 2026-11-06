@@ -77,7 +77,15 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, sizes:
 
 def first_rows_binding(codes: PythonObject, n: PythonObject, k: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     """x_metrics/epilogue.mojo first_rows_i32 (lane metrics-apple3)."""
-    first_rows_i32(Int(py=codes), Int(py=n), Int(py=k), Int(py=out_addr))
+    # p3-labels-metrics: the O(n) host pass over the row codes runs with the
+    # GIL released (it reads and writes only the caller's raw buffers, held
+    # by the caller across this call).
+    var codes_addr = Int(py=codes)
+    var rows = Int(py=n)
+    var classes = Int(py=k)
+    var out = Int(py=out_addr)
+    with GILReleased(Python()):
+        first_rows_i32(codes_addr, rows, classes, out)
     return PythonObject(0)
 
 
