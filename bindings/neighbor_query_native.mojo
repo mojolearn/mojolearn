@@ -100,6 +100,21 @@ def _resident_owner(cached: PythonObject, context: PythonObject) raises -> Pytho
 comptime _RADIUS_STATE_SLOT = "neighbor_radius_state_v1"
 
 
+def _ivf_state_names() raises -> PythonObject:
+    """The fitted array owners then the scalar configuration slots of the
+    IVF/k-NN admission stamp, in `_admit_state`'s order."""
+    var names = Python.tuple("_index", "centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
+    var scalars = Python.tuple("n_samples_fit_", "n_features_in_", "n_rows_", "n_lists_", "metric_code_", "metric", "p", "algorithm", "query_tile", "_metric_value", "_metric_arg")
+    return names + scalars
+
+
+def _ivf_state_stamp(fields: PythonObject) raises -> PythonObject:
+    """The IVF prepared-registry stamp of `fields` as it stands (the slot
+    objects, then the stored `_resident`), as `_admit_state` writes it when
+    the resident tuple is unchanged."""
+    return knn_state_values(fields, _ivf_state_names()) + Python.tuple(py_get(fields, "_resident"))
+
+
 def _admit_state(model: PythonObject, kind: PythonObject, context: PythonObject) raises -> Bool:
     """Admit the fitted state, once while it is unchanged: True when every
     fitted array, scalar and resident tuple is the object admitted before
@@ -463,9 +478,14 @@ def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject,
 
 def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
+    # Perf (perf2-neighbors): a stamp hit (the same fitted objects a search,
+    # a clone or `_admit_state` admitted) skips the per-array admission of
+    # the four stored arrays and `list_data_`; their shape/dtype/C-order
+    # checks below still run. Read before the drop.
+    var stamp_mods = NativeModules()
+    var admitted = knn_state_unchanged(prepared_get(stamp_mods, IVF_QUERY_STATE_SLOT, model), _ivf_state_stamp(fields))
     # Extend replaces the fitted arrays: drop the admission stamp (and the
     # old arrays it holds); the next search admits the extended index once.
-    var stamp_mods = NativeModules()
     prepared_drop(stamp_mods, IVF_QUERY_STATE_SLOT, model)
     var b = native_loaded_module("builtins")
     if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
@@ -487,10 +507,10 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
                     + " features, the index has " + String(dim))
     if Int(py=_ivf_metric(fields, context)) != metric:
         raise Error("ValueError: mojolearn IVFIndex: metric does not name the metric this index was built under")
-    var centers = _ivf_stored_snapshot(fields, "centers_", [n_lists, dim], CAST_KIND_FLOAT, context)
-    var norms = _ivf_stored_snapshot(fields, "center_norms_", [n_lists], CAST_KIND_FLOAT, context)
-    var old_offsets = _ivf_stored_snapshot(fields, "list_offsets_", [n_lists + 1], CAST_KIND_SIGNED, context)
-    var old_indices = _ivf_stored_snapshot(fields, "list_indices_", [n], CAST_KIND_SIGNED, context)
+    var centers = _ivf_stored_snapshot(fields, "centers_", [n_lists, dim], CAST_KIND_FLOAT, context, admitted)
+    var norms = _ivf_stored_snapshot(fields, "center_norms_", [n_lists], CAST_KIND_FLOAT, context, admitted)
+    var old_offsets = _ivf_stored_snapshot(fields, "list_offsets_", [n_lists + 1], CAST_KIND_SIGNED, context, admitted)
+    var old_indices = _ivf_stored_snapshot(fields, "list_indices_", [n], CAST_KIND_SIGNED, context, admitted)
     var cached = _resident_owner(py_get(fields, "_resident"), context)
     py_setitem(fields, "_resident", cached)
     if py_contains(fields, "_device_list_data"):
@@ -501,7 +521,9 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
                         classical_address(exported), PythonObject(n * dim))
         py_setitem(fields, "list_data_", exported)
         _ = py_call(fields.pop, "_device_list_data")
-    var old_data = _ivf_stored_snapshot(fields, "list_data_", [n, dim], CAST_KIND_FLOAT, context)
+    # The device export above is a fresh native Array; any other list_data_
+    # is the stamped object when `admitted`.
+    var old_data = _ivf_stored_snapshot(fields, "list_data_", [n, dim], CAST_KIND_FLOAT, context, admitted)
     var binding = _query_route(model, kind, "ivf", context)
     var entry = family_entry(binding, "ivf_flat_extend", context)
     var total = n + m
@@ -584,6 +606,10 @@ def _ivf_clone(model: PythonObject, kind: PythonObject, context: PythonObject) r
     _ = snapshots
     for i in range(len(counts)):  # small-loop(four fitted integer parameters)
         py_setitem(target, counts[i], fields[counts[i]])
+    # The clone holds fresh native Arrays and the source's admitted scalar
+    # objects: stamp it, so its first extend or search admits nothing again.
+    var mods = NativeModules()
+    prepared_put(mods, IVF_QUERY_STATE_SLOT, clone, _ivf_state_stamp(target))
     return clone
 
 
