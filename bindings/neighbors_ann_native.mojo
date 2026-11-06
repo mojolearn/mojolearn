@@ -7,7 +7,8 @@
 # descriptor-only ANN provider remains explicit migration work. No arithmetic
 # or vendor identity lane is introduced by these boundary repairs.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_drop
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
 from bindings.classical_arrays import classical_address, classical_kind, classical_is_array
@@ -32,6 +33,11 @@ from providers.python.neighbors_public_lifecycle_pyapi import (
 
 
 # ---------------------------------------------------------------- shared steps
+
+# The IVF query admission stamp's slot in the native prepared registry
+# (bindings/native_prepared_owner.mojo): weakly keyed by the model, outside
+# `__dict__`, never pickled. Written by the first query, dropped by fit/extend.
+comptime IVF_QUERY_STATE_SLOT = "neighbor_ivf_query_state_v1"
 
 
 def _ann_int(owner: String, name: String, value: PythonObject) raises -> PythonObject:
@@ -226,8 +232,10 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var fields = _fields(model)
     _ = py_call(fields.pop, PythonObject("_device_list_data"), PythonObject(None))
     # A refit replaces every fitted array: drop the query admission stamp
-    # (bindings/neighbor_query_native.mojo `_admit_state`) and what it holds.
-    _ = py_call(fields.pop, PythonObject("_query_admitted"), PythonObject(None))
+    # (bindings/neighbor_query_native.mojo `_admit_state`, kept in the native
+    # prepared registry outside `__dict__`) and what it holds.
+    var stamp_mods = NativeModules()
+    prepared_drop(stamp_mods, IVF_QUERY_STATE_SLOT, model)
     _ann_release(fields, "ivf_flat_index_release")
     var x = x_snapshot.keep
     var n = x_snapshot.shape[0]
