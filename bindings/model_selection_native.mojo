@@ -32,14 +32,22 @@ from bindings.msel_split import (
 
 
 def _msel_attr(model: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var fields = msel_search_fields(model, context)
+    return _msel_field(msel_search_fields(model, context), name)
+
+
+def _msel_field(fields: PythonObject, name: String) raises -> PythonObject:
+    # One field of an already admitted search fields dict (perf2-msel: an
+    # operation that reads several fields admits the dict once, not per field).
     if not py_contains(fields, PythonObject(name)):
         raise Error("AttributeError: native search field is unavailable: " + name)
     return fields[PythonObject(name)]
 
 
 def _msel_best(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = msel_search_fields(model, context)
+    return _msel_best_of(model, msel_search_fields(model, context))
+
+
+def _msel_best_of(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     if not py_contains(fields, "best_estimator_"):
         raise Error("AttributeError: This " + String(py_type(model).__name__)
                     + " instance was initialized with refit=False or is not fitted.")
@@ -116,18 +124,23 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_search_score":
         # The scorer is resolved first, as `score` resolved it before
         # reaching the best estimator.
+        # The fields dict is admitted once here and every field read from it
+        # (perf2-msel). The reads that ran in between (msel_admit,
+        # msel_flag_truth, msel_get_scorer) run no Python code that could
+        # replace a search field, so the values read are the same.
+        var fields = msel_search_fields(model, context)
         var scorer: PythonObject
-        var multimetric = _msel_attr(model, "multimetric_", context)
+        var multimetric = _msel_field(fields, "multimetric_")
         msel_admit(multimetric, context)
         if not msel_flag_truth(multimetric, context):
-            scorer = msel_get_scorer(_msel_attr(model, "scoring", context), context)
+            scorer = msel_get_scorer(_msel_field(fields, "scoring"), context)
         else:
-            var scorers = _msel_attr(model, "scorer_", context)
-            var refit = _msel_attr(model, "refit", context)
+            var scorers = _msel_field(fields, "scorer_")
+            var refit = _msel_field(fields, "refit")
             if py_type(scorers) is not b.dict or py_type(refit) is not b.str:
                 raise Error("TypeError: fitted native search scorer state requires a dict and exact string key")
             scorer = scorers[refit]
-        var best = _msel_best(model, context)
+        var best = _msel_best_of(model, fields)
         return msel_score(best, args[0], args[1], scorer, context)
     if operation == "family_msel_splitter_init":
         return msel_splitter_initialize(model, args, context)

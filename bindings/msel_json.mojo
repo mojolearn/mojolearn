@@ -8,10 +8,11 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.msel_inputs import msel_admit
 
 
-def _text(value: PythonObject, context: PythonObject, depth: Int) raises -> String:
+def _text(value: PythonObject, context: PythonObject, b: PythonObject, depth: Int) raises -> String:
+    # perf2-msel: `b` is the builtins module, resolved once per msel_canonical
+    # call and passed down (it was a native_loaded_module stamp check per value).
     if depth >= 1000:
         raise Error("RecursionError: maximum recursion depth exceeded while encoding a JSON object")
-    var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if value is None:
         return "null"
@@ -20,7 +21,12 @@ def _text(value: PythonObject, context: PythonObject, depth: Int) raises -> Stri
     if kind is b.bool:
         return "true" if Bool(py=value) else "false"
     if kind is b.int:
-        return String(value)
+        # Exact int leaf: an int64-sized value is written by Mojo's decimal
+        # writer (same digits as Python's str); a wider int keeps str().
+        try:
+            return String(Int(py=value))
+        except:
+            return String(value)
     if kind is b.float or kind is py_get(context, "float64"):
         # json.dumps accepts np.float64 as a native float subclass, but not
         # other NumPy scalar classes. Keep that exact historical boundary.
@@ -34,7 +40,7 @@ def _text(value: PythonObject, context: PythonObject, depth: Int) raises -> Stri
         for k in range(len(value)):  # driver-loop: descriptor sequence traversal, no Python iterator protocol
             if k:
                 result += ","
-            result += _text(value[k], context, depth + 1)
+            result += _text(value[k], context, b, depth + 1)
         return result + "]"
     if kind is b.dict:
         var keys = py_call(b.list, value.keys())
@@ -47,7 +53,7 @@ def _text(value: PythonObject, context: PythonObject, depth: Int) raises -> Stri
             if k:
                 result += ","
             result += String(py_call(context["family_msel_json_string"], keys[k]))
-            result += ":" + _text(value[keys[k]], context, depth + 1)
+            result += ":" + _text(value[keys[k]], context, b, depth + 1)
         return result + "}"
     raise Error("TypeError: split descriptor value is not JSON serializable")
 
@@ -57,4 +63,4 @@ def msel_canonical(value: PythonObject, context: PythonObject) raises -> PythonO
     var b = native_loaded_module("builtins")
     if py_type(context["family_msel_json_string"]) is not py_type(b.len):
         raise Error("TypeError: split descriptor string encoding requires the connected C entry")
-    return py_call(PythonObject(_text(value, context, 0)).encode, "ascii")
+    return py_call(PythonObject(_text(value, context, b, 0)).encode, "ascii")

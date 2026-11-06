@@ -15,7 +15,8 @@
 # refusals are still raised at the first `next`.
 from std.memory import memcpy
 from std.os import getenv
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import NativeModules, native_loaded_module
+from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.classical_arrays import classical_wrap_array
@@ -51,6 +52,9 @@ def msel_is(model: PythonObject, name: String, context: PythonObject) raises -> 
     return py_type(model) is msel_cls(name, context)
 
 
+comptime _SPLITTER_CLASS_SLOT = "msel_splitter_plan_class_v1"
+
+
 def _splitter_plan(cls: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = msel_b()
     if py_type(cls) is not py_type(py_type(PythonObject(0))):
@@ -58,6 +62,15 @@ def _splitter_plan(cls: PythonObject, context: PythonObject) raises -> PythonObj
     var plan = py_get(context["family_msel_splitter_layouts"], cls)
     if plan is None:
         raise Error("TypeError: model selection requires a connected native splitter; Python callbacks cannot execute")
+    # perf2-msel: the class rows below depend only on the class; they are
+    # checked once per class state (native_class_admission type watchers:
+    # any class or ancestor modification invalidates the record). One split()
+    # reads 6-8 fields and each read reached this walk. Python < 3.12 keeps
+    # the walk on every call.
+    var mods = NativeModules()
+    var held = class_record(mods, _SPLITTER_CLASS_SLOT, cls)
+    if held is not None and Int(py=held) == Int(plan._obj_ptr):
+        return plan
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     if len(mro) != len(plan[0]):
         raise Error("TypeError: native splitter ancestry changed")
@@ -73,6 +86,9 @@ def _splitter_plan(cls: PythonObject, context: PythonObject) raises -> PythonObj
         for j in range(len(stored)):  # driver-loop: reject properties replacing stored configuration fields
             if py_get(mapping, stored[j]) is not plan[4][i][stored[j]]:
                 raise Error("TypeError: native splitter configuration descriptors changed")
+    # The payload is the plan's address (layouts live in the import-time
+    # context for the process), never the plan: it holds the class's MRO.
+    class_admit(mods, _SPLITTER_CLASS_SLOT, cls, PythonObject(Int(plan._obj_ptr)))
     return plan
 
 
@@ -81,10 +97,16 @@ def _splitter_fields(model: PythonObject, context: PythonObject) raises -> Pytho
     var cls = py_type(model)
     var plan = _splitter_plan(cls, context)
     var fields = py_call(plan[1], model, cls)
+    # perf2-msel: the exact-str key admission is kept per dictionary state
+    # (native_class_admission dictionary watchers; any edit forces the scan).
+    if dict_keys_admitted(fields):
+        return fields
     var keys = py_call(b.list, fields)
     for i in range(len(keys)):  # driver-loop: dictionary keys cannot invoke custom equality
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: native splitter fields require ordinary string keys")
+    if py_type(fields) is b.dict:
+        dict_keys_admit(fields)
     return fields
 
 

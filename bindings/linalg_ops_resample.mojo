@@ -11,7 +11,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_type, py_setitem
 from bindings.py_attr import py_attr
-from bindings.classical_pandas import classical_admit_value
+from bindings.classical_pandas import _classical_admit, _ClassicalAdmitTypes
+from bindings.sequential_admission import _SequentialValueTypes
 from bindings.classical_validate import classical_view
 from bindings.classical_arrays import classical_is_array
 from bindings.metrics_native_inputs import metric_shape, metric_flatten_admitted
@@ -19,7 +20,7 @@ from bindings.native_scalar_decode import NativeScalarBuffer
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
 from bindings.mode_metadata_native import _fields
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import NativeModules, native_loaded_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.resample_public_pyapi import resample_arguments, resample_result_initialize, resample_result_layout
 from providers.python.resample_rows_operation_pyapi import resample_rows_operation
@@ -103,7 +104,10 @@ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
               context: PythonObject) raises -> LinBuf:
     # Capture ordinary input-buffer metadata once. Lists, pandas and Torch
     # use their existing native materialization before capturing the new owner.
-    classical_admit_value(source, context)
+    # perf2-msel: no second classical_admit_value here. Every caller passes a
+    # public argument of rs_operation (or an element of one), which
+    # rs_operation admitted with the same check at the start of this call, and
+    # no Python code runs in between.
     var value = source
     if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
         value = classical_view(value, context, name)
@@ -478,8 +482,15 @@ def rs_operation(operation: String, var args: PythonObject, context: PythonObjec
     if operation == "family_rs_resample":
         return resample_rows_operation(args, context)
     args = resample_arguments(operation, args, context)
+    # perf2-msel: one module handle and one set of admission type vectors for
+    # every argument of this call (classical_admit_value rebuilt them per
+    # argument). The same values are admitted by the same checks, in order.
+    var mods = NativeModules()
+    _ = mods.module("builtins")
+    var seq = _SequentialValueTypes(mods, context)
+    var kinds = _ClassicalAdmitTypes()
     for i in range(1, len(args)):  # driver-loop: admit native public inputs before any legacy scalar/container operations
-        classical_admit_value(args[i], context)
+        _classical_admit(mods, seq, kinds, args[i], context, 0)
         var data = ((operation == "family_rs_bootstrap" and i == 1)
                     or (operation == "family_rs_permutation_test" and (i == 1 or i == 2))
                     or (operation == "family_rs_monte_carlo_integrate" and (i == 2 or i == 3)))

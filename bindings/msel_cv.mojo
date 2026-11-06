@@ -22,6 +22,7 @@ from bindings.metrics_native_support import metric_float
 from bindings.msel_json import msel_canonical
 from bindings.sha256_door import sha256_update, sha256_hexdigest
 from core.sha256 import Sha256
+from core.msel_fold_digest import msel_fold_digest_hex
 from bindings.msel_estimator_native import (
     msel_native_clone, msel_native_clone_planned, msel_clone_parameter, msel_estimator_call, msel_estimator_plan,
     msel_planned_call,
@@ -264,6 +265,8 @@ struct MselFoldRows(Movable):
     var extra: PythonObject
     var dev: Bool
     var scope: PythonObject
+    var rows_class: PythonObject
+    var rows_take: PythonObject
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -276,6 +279,8 @@ struct MselFoldRows(Movable):
         self.dev = (device_rows and msel_is_array(x, context) and String(py=x.dtype) == "<f4" and Int(py=x.ndim) == 2
                     and Int(py=x.size) > 0 and msel_has_c(x))
         self.scope = PythonObject(None)
+        self.rows_class = PythonObject(None)
+        self.rows_take = PythonObject(None)
         if self.dev:
             # DeviceRows exposes a bound take owner to its materializer. Keep
             # that separately mutable public boundary on its existing checks.
@@ -288,16 +293,20 @@ struct MselFoldRows(Movable):
             py_setattr(scope, "_scope", PythonObject(None))
             _ = _arena_rows_call(scope, "scope_enter", Python.tuple(), context)
             self.scope = scope
+            # perf2-msel: the DeviceRows class and the resident store's bound
+            # `take` are read once per fold set, not once per fold side. The
+            # store is this owner's own object; the class is the import-time
+            # `_arena_io` connection read once at the start of the run.
+            self.rows_class = family_call(msel_b().getattr, context["family_msel_arena_io"], PythonObject("DeviceRows"))
+            self.rows_take = family_call(msel_b().getattr, self.res, PythonObject("take"))
 
     def xrows(mut self, idx_in: PythonObject, context: PythonObject) raises -> PythonObject:
         if not self.dev:
             var x = self.x
             return self.rows(x, idx_in, context)
         var idx = msel_index_i64(idx_in, context)
-        var dr = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
-                                                     PythonObject("DeviceRows")))
-        var take = family_call(msel_b().getattr, self.res, PythonObject("take"))
-        _ = _arena_rows_call(dr, "init", Python.tuple(self.x, idx, take), context)
+        var dr = native_storage_allocate(self.rows_class)
+        _ = _arena_rows_call(dr, "init", Python.tuple(self.x, idx, self.rows_take), context)
         return dr
 
     def resident_take(mut self, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -345,6 +354,7 @@ struct MselFoldRows(Movable):
 
     def close(mut self, context: PythonObject) raises:
         self.extra = PythonObject(None)
+        self.rows_take = PythonObject(None)
         var scope = self.scope
         self.scope = PythonObject(None)
         try:
@@ -934,6 +944,24 @@ def _ascii(text: String) raises -> PythonObject:
     return py_call(PythonObject(text).encode, PythonObject("ascii"))
 
 
+def _folds_digest(trains: List[PythonObject], tests: List[PythonObject]) raises -> PythonObject:
+    """`_digest(("folds", canonical(folds)))` written natively from the int64
+    index buffers (core/msel_fold_digest.mojo): the same bytes, so the same
+    digest, without building or walking Python int lists."""
+    var train_addresses = List[Int]()
+    var train_counts = List[Int]()
+    var test_addresses = List[Int]()
+    var test_counts = List[Int]()
+    for f in range(len(trains)):  # driver-loop: over folds
+        train_addresses.append(msel_addr(trains[f]))
+        train_counts.append(Int(py=trains[f].size))
+        test_addresses.append(msel_addr(tests[f]))
+        test_counts.append(Int(py=tests[f].size))
+    var hex = msel_fold_digest_hex(train_addresses, train_counts, test_addresses, test_counts)
+    # The caller's `trains` / `tests` lists own the index buffers for this call.
+    return PythonObject(hex)
+
+
 def _order_digest(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_order_digest`: the values in arrival order with dtype and shape."""
     var b = msel_b()
@@ -963,7 +991,10 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     if msel_n_samples(y, context) != n:
         raise Error("y must be a 1-D buffer array matching X rows")
     var it = family_call(b.iter, msel_fold_source(cv, estimator, x, y, groups, context))
-    var folds = Python.list()
+    # perf2-msel: the folds stay int64 index Arrays; their digest is written
+    # from the buffers (it walked Python int lists through the JSON writer).
+    var trains = List[PythonObject]()
+    var tests = List[PythonObject]()
     var sizes = Python.list()
     while True:  # driver-loop: over folds
         var item = msel_try(b.next, Python.tuple(it), b.StopIteration, context)
@@ -975,11 +1006,15 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
         if len(pair) != 2:
             raise Error(String("too many values to unpack (expected 2)") if len(pair) > 2
                         else String("not enough values to unpack (expected 2, got ") + String(len(pair)) + ")")
-        var train = py_call(b.list, msel_indices(pair[0], n, "train", context)._mv)
-        var test = py_call(b.list, msel_indices(pair[1], n, "test", context)._mv)
-        _ = py_call(folds.append, Python.tuple(train, test))
-        _ = py_call(sizes.append, py_call(b.list, Python.tuple(len(train), len(test))))
-    if len(folds) == 0:
+        var train = msel_indices(pair[0], n, "train", context)
+        var test = msel_indices(pair[1], n, "test", context)
+        var sized = Python.list()
+        _ = py_call(sized.append, PythonObject(Int(py=train.size)))
+        _ = py_call(sized.append, PythonObject(Int(py=test.size)))
+        _ = py_call(sizes.append, sized)
+        trains.append(train^)
+        tests.append(test^)
+    if len(trains) == 0:
         raise Error("cv must produce at least one fold")
     var descriptor = Python.dict()
     py_setitem(descriptor, "schema", context["family_msel_schema"])
@@ -988,8 +1023,8 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     py_setitem(descriptor, "X_sha256", _order_digest(x, "X", context))
     py_setitem(descriptor, "y_sha256", _order_digest(y, "y", context))
     py_setitem(descriptor, "groups_sha256", PythonObject(None) if groups is None else _order_digest(groups, "groups", context))
-    py_setitem(descriptor, "fold_assignment_sha256", _digest(Python.tuple(_ascii("folds"), _canonical(folds, context))))
-    py_setitem(descriptor, "n_folds", PythonObject(len(folds)))
+    py_setitem(descriptor, "fold_assignment_sha256", _folds_digest(trains, tests))
+    py_setitem(descriptor, "n_folds", PythonObject(len(trains)))
     py_setitem(descriptor, "fold_sizes", sizes)
     py_setitem(descriptor, "sha256", sha256_hexdigest(_canonical(descriptor, context)))
     return descriptor
