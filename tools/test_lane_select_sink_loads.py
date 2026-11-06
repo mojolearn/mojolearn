@@ -83,7 +83,9 @@ def test_a_function_the_lane_does_not_run_loads_nothing_for_it():
 def test_an_import_time_call_of_the_loader_restores_the_load():
     # THE ARM THAT RESTORES THE REACH: the same lane (asking for `other`)
     # takes the binding once the module's own top level calls `connect`.
-    with _Seeded(BRIDGE + "\n_ENTRY = connect()\n"):
+    # dedent first: an unindented line appended to the indented text leaves
+    # nothing common to strip, and the seeded file would not parse
+    with _Seeded(textwrap.dedent(BRIDGE) + "\n_ENTRY = connect()\n"):
         loads, names = ls.sink_region_loads(SINK, {"other"})
     assert HOST in loads and "manifold_native_call" in names, (loads, names)
 
