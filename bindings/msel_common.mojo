@@ -21,6 +21,7 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission import _one_of
 from bindings.classical_labels import _label_list, labels_encode_labels
+from bindings.native_typed_context import native_typed_context
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_warn
 from bindings.native_torch_admission import native_torch_exact
@@ -278,12 +279,10 @@ def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObje
     if not direct:
         flat = msel_flatten(value, context)
         _msel_admit_labels(flat, context)
-    var labels_context = py_call(msel_b().dict, context)
-    var real = Python.list()
-    _ = py_call(real.extend, Python.tuple(msel_b().int, msel_b().float, msel_b().bool))
-    _ = py_call(real.extend, context["scalar_types"])
-    py_setitem(labels_context, "labels_real_type", py_call(msel_b().tuple, real))
-    py_setitem(labels_context, "labels_integral_type", context["integer_types"])
+    # The labels context (context plus the concrete real/integral type
+    # tuples) is built once per connected context and cached there, not
+    # copied and rebuilt on every encode (bindings/native_typed_context.mojo).
+    var labels_context = native_typed_context(context, True, False)
     var encoded = labels_encode_labels(flat, labels_context)
     return Python.tuple(encoded.classes, encoded.codes)
 
