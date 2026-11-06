@@ -26,8 +26,10 @@ def native_namespace_string_keys(fields: PyObjectPtr, string_type: PythonObject)
     var key = PyObjectPtr()
     var value = PyObjectPtr()
     var count = cpython_table()[].PyDict_Size(fields)
+    # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
+    var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
     for i in range(count):  # small-loop(count: namespace fields): native metadata key admission only
-        if cpy.PyDict_Next(fields, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+        if dict_next(fields, MutPointer(to=position), MutPointer(to=key), MutPointer(to=value)) == 0:
             return False
         var cls = cpy.PyObject_Type(key)
         var same = cls == string_type._obj_ptr
@@ -182,8 +184,10 @@ struct _AdmittedModule(Copyable, Movable):
         var position = Int(0)
         var key = PyObjectPtr()
         var value = PyObjectPtr()
+        # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
+        var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
         for i in range(size):  # small-loop(size: namespace fields): capture metadata identities once
-            if cpy.PyDict_Next(fields._obj_ptr, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+            if dict_next(fields._obj_ptr, MutPointer(to=position), MutPointer(to=key), MutPointer(to=value)) == 0:
                 raise Error("native module namespace changed during admission")
             self.namespace_keys.append(PythonObject(from_owned=cpy.Py_NewRef(key)))
             var expected = PyObjectPtr()
@@ -251,8 +255,10 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     var position = Int(0)
     var key = PyObjectPtr()
     var value = PyObjectPtr()
+    # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
+    var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
     for i in range(entry.size):  # small-loop(entry.size: namespace fields): compare native metadata pointers only
-        if cpy.PyDict_Next(fields, Pointer(to=position).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=key).unsafe_origin_cast[MutAnyOrigin](), Pointer(to=value).unsafe_origin_cast[MutAnyOrigin]()) == 0:
+        if dict_next(fields, MutPointer(to=position), MutPointer(to=key), MutPointer(to=value)) == 0:
             return False
         if key != entry.namespace_keys[i]._obj_ptr:
             return False
