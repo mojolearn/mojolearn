@@ -83,6 +83,37 @@ struct PreparedParameterGrid(Movable):
             total += count
         return total
 
+    def item(self, index_in: Int) raises -> PythonObject:
+        """`list(ParameterGrid)[index]` without expanding the grid: the
+        candidate at a (negative-normalized) index by mixed-radix digits,
+        rightmost parameter fastest, as `expand` emits them (lane
+        perf-sweep-msel-nbr-svc: `ParameterGrid[i]` expanded every candidate
+        to return one)."""
+        var total = self.count()
+        var index = index_in + total if index_in < 0 else index_in
+        if index < 0 or index >= total:
+            raise Error("IndexError: list index out of range")
+        for i in range(len(self.rows)):  # driver-loop: outer grids, in emission order
+            ref row = self.rows[i]
+            var size = 1
+            for j in range(len(row.widths)):  # driver-loop: dimensions of one grid
+                size *= row.widths[j]
+            if index >= size:
+                index -= size
+                continue
+            var rank = len(row.keys)
+            var positions = List[Int](length=rank, fill=0)
+            var axis = rank - 1
+            while axis >= 0:  # driver-loop: mixed-radix digits of one candidate
+                positions[axis] = index % row.widths[axis]
+                index //= row.widths[axis]
+                axis -= 1
+            var candidate = Python.dict()
+            for j in range(rank):  # driver-loop: sorted parameter insertion order
+                py_setitem(candidate, row.keys[j], row.choices[j][positions[j]])
+            return candidate
+        raise Error("IndexError: list index out of range")
+
     def expand(self) raises -> PythonObject:
         var output = Python.list()
         ref cpy = Python().cpython()
