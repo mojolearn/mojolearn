@@ -537,7 +537,7 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         # `score(X, y)`: predict, the row-count refusal, then
         # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
         var pred = _gpc_predict(model, Python.tuple(args[0], args[1], args[2]), context)
-        var shape = mc_shape_of(args[3], context)
+        var shape = mc_shape_of(args[3], context)  # admits y once; the accuracy pair reuses it
         var n_truth = 0
         if Int(py=py_call(native_loaded_module("builtins").len, shape)) > 0:
             n_truth = Int(py=py_call(native_loaded_module("builtins").int, shape[0]))
@@ -545,5 +545,5 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         if n_truth != n_pred:
             raise Error("mojolearn GaussianProcessClassifier: y has " + String(n_truth) + " entries for "
                         + String(n_pred) + " rows")
-        return mcls_accuracy_fraction(args[3], pred, PythonObject(None), PythonObject(None), context)
+        return mcls_accuracy_fraction(args[3], pred, PythonObject(None), PythonObject(None), context, True)
     raise Error("RuntimeError: unknown gaussian process classifier operation " + operation)
