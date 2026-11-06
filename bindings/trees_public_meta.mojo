@@ -1257,7 +1257,7 @@ def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, contex
     var flat = Python.list()
     for i in range(len(zipped)):  # driver-loop: completed output labels
         _ = py_call(flat.extend, zipped[i])
-    var store: PythonObject
+    var store = PythonObject(None)
     try:
         store = native_array_from_values("q" if ints else "d", flat)
     except:
