@@ -2,19 +2,29 @@
 # Zero-copy ndarray view of an admitted Array's retained native exporter.
 # Imported by both input and public-output owners; no model-specific routing.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.sequential_admission import sequential_admit_value, _one_of, _ctypes_array_owner
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 
 
+comptime _VIEW_CLASS_SLOT = "array_view_class_keys_v1"
+
+
 def _namespace(cls: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
+    # The exact-string key scan of the Array class namespace runs once per
+    # class state (native_class_admission), not once per fitted-output view.
+    var mods = NativeModules()
+    if class_record(mods, _VIEW_CLASS_SLOT, cls) is not None:
+        return fields
     var names = py_call(b.list, fields.keys())
     for i in range(len(names)):  # driver-loop: over refuse foreign equality hooks before slot lookups
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: native Array storage requires exact string class keys")
+    class_admit(mods, _VIEW_CLASS_SLOT, cls, PythonObject(True))
     return fields
 
 
