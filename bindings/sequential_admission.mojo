@@ -116,7 +116,7 @@ def _cached_value_types(mut mods: NativeModules, context: PythonObject) raises -
                 "native_default_factories", "buffer_owner_types"]:  # small-loop(six fixed context entry names)
         current.append(py_get(context, PythonObject(key)))
     var saved = _SEQUENTIAL_VALUE_TYPES.get_or_create_ptr()
-    for i in range(len(saved[].contexts)):  # small-loop(_VALUE_TYPE_CONTEXTS: connected admission contexts)
+    for i in range(len(saved[].contexts)):  # driver-loop: over cached connected admission contexts (at most _VALUE_TYPE_CONTEXTS)
         if saved[].contexts[i] is not context:
             continue
         var same = True
@@ -134,7 +134,7 @@ def _cached_value_types(mut mods: NativeModules, context: PythonObject) raises -
         cacheable = cacheable and (current[k] is None or py_type(current[k]) is tuple_type)
     if cacheable:
         var slot = -1
-        for i in range(len(saved[].contexts)):  # small-loop(_VALUE_TYPE_CONTEXTS: connected admission contexts)
+        for i in range(len(saved[].contexts)):  # driver-loop: over cached connected admission contexts (at most _VALUE_TYPE_CONTEXTS)
             if saved[].contexts[i] is context:
                 slot = i
         if slot < 0 and len(saved[].contexts) < _VALUE_TYPE_CONTEXTS:
