@@ -37,14 +37,14 @@ layout, Andrew 2026-10-26: compiling never uses paid rentals):
             per-binding: 32 vCPU cpu5g..cpu3m.
   gpu-legs  the RunPod NVIDIA and DigitalOcean/Hot Aisle AMD GPU boxes.
 
-SEVERABLE PIPELINES (2026-09-25). After the common steps a release is six
+SEVERABLE PIPELINES (2026-09-25). After the common steps a release is five
 build pipelines that run at once in one invocation. Before any publication,
 both vendor candidate gates must pass for the actual packed wheel hashes:
   macos       macos-build -> macos-smoke -> publish-macos
   core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
               -> publish-core-linux (mojolearn-core; FIRST on Linux)
-  nvidia-ptx  gpu-column-nvidia -> publish-nvidia-ptx (after publish-core-linux)
-  nvidia      gpu-column-nvidia -> publish-nvidia (after publish-nvidia-ptx)
+  nvidia      gpu-column-nvidia -> publish-nvidia (after publish-core-linux; the one
+              NVIDIA wheel carries native sm_89 and PTX sm_80, Andrew 2026-11-05)
   amd         gpu-column-amd -> publish-amd (after publish-core-linux)
   meta-linux  publish-meta-linux (the file-free Linux `mojolearn`; LAST, after
               publish-core-linux, publish-nvidia AND publish-amd)
@@ -201,14 +201,15 @@ Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
 
 THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py). Linux ships as
-five PyPI projects (Andrew 2026-10-20): mojolearn-core (the Python package,
-host bindings and runtime; no vendor requirement), mojolearn-nvidia,
-mojolearn-nvidia-ptx and mojolearn-amd (each requires mojolearn-core at its
-version; NVIDIA also requires the matching PTX version), and mojolearn, a
+four PyPI projects (Andrew 2026-10-20; mojolearn-nvidia-ptx folded back into
+mojolearn-nvidia 2026-11-05): mojolearn-core (the Python package, host bindings
+and runtime; no vendor requirement), mojolearn-nvidia (native sm_89 and PTX
+sm_80 in one wheel) and mojolearn-amd (each requires mojolearn-core at its
+version), and mojolearn, a
 file-free Linux wheel requiring the core and both vendors. `pip install
 mojolearn` installs everything; `pip install mojolearn-nvidia` or
 `mojolearn-amd` installs the core and that vendor. THE CORE PUBLISHES FIRST,
-then PTX, then the VENDORS, and the Linux mojolearn LAST (it resolves only
+then the VENDORS, and the Linux mojolearn LAST (it resolves only
 once all of them are on the index). Each column gates its own plugin (its
 wheel smoke against the admitted reference table); a failed candidate gate
 holds every publication. Each package is its
@@ -1056,8 +1057,7 @@ STEP_TABLE = [
     # requires the core and both vendors, so each is resolvable only once
     # what it requires is on the index
     ("publish-core-linux", "core-linux", ["linux-pack"], "dispatch"),
-    ("publish-nvidia-ptx", "nvidia-ptx", ["gpu-column-nvidia", "publish-core-linux"], "dispatch"),
-    ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "publish-nvidia-ptx"], "dispatch"),
+    ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "publish-core-linux"], "dispatch"),
     ("publish-amd", "amd", ["gpu-column-amd", "publish-core-linux"], "dispatch"),
     ("publish-meta-linux", "meta-linux", ["publish-core-linux", "publish-nvidia", "publish-amd"], "dispatch"),
     ("publish-macos", "macos", ["macos-smoke", "gate-apple"], "dispatch"),
@@ -1065,7 +1065,7 @@ STEP_TABLE = [
     ("record", "finish", ["finish-line"], None),
 ]
 #: Steps that wait for others to SETTLE (done, failed or blocked), not succeed.
-AFTER = {"finish-line": ["publish-core-linux", "publish-nvidia", "publish-nvidia-ptx", "publish-amd",
+AFTER = {"finish-line": ["publish-core-linux", "publish-nvidia", "publish-amd",
                          "publish-meta-linux", "publish-macos"],
          # with --gpu-smoke the core publishes on a column receipt: wait for both columns to settle
          "publish-core-linux": ["gpu-column-nvidia", "gpu-column-amd"]}
@@ -1078,7 +1078,6 @@ PIPELINES = {
     "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
                        checks=["cross-compile"], publish="publish-core-linux", platform="linux"),
     "nvidia": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia", platform="nvidia"),
-    "nvidia-ptx": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia-ptx", platform="nvidia-ptx"),
     "amd": dict(builds=[], checks=["gpu-column-amd"], publish="publish-amd", platform="amd"),
     "meta-linux": dict(builds=[], checks=[], publish="publish-meta-linux", platform="linux-meta"),
 }
@@ -1093,7 +1092,7 @@ PLUGIN_PACKAGES = tuple(k for k in SPLIT_PACKAGES if k not in ("linux", "linux-m
 #: what `pip install <project>` must resolve on Linux: package -> the split packages it installs
 LINUX_RESOLVES = {"linux": ("linux",),
                   "linux-meta": tuple(SPLIT_PACKAGES),
-                  **{k: ("linux", k) + (("nvidia-ptx",) if k == "nvidia" else ()) for k in PLUGIN_PACKAGES
+                  **{k: ("linux", k) for k in PLUGIN_PACKAGES
                      if GPU_PACKAGES["PAYLOADS"][k]["role"] == "vendor"}}
 # Vendor wheels retain separate native execution columns for every hardware slot.
 NATIVE_COLUMNS = {"nvidia": ("nvidia", "nvidia-hopper"), "amd": ("amd",)}
@@ -3291,7 +3290,7 @@ class Release:
 
     def split_final(self, package):
         """A final split wheel: package 'linux' (mojolearn-core), a plugin
-        ('nvidia', 'nvidia-ptx', 'amd') or 'linux-meta' (the Linux mojolearn)."""
+        ('nvidia', 'amd') or 'linux-meta' (the Linux mojolearn)."""
         prefix = SPLIT_PACKAGES[package][1]
         # A corrected unpublished artifact gets a new immutable path. Original
         # candidate receipts must still resolve the exact bytes they admitted;
@@ -3876,11 +3875,6 @@ class Release:
         smoke = self.rel / "smoke-linux" / "results.json"
         return self.publish("nvidia", self.split_final("nvidia"), smoke), dict(smoke=str(smoke))
 
-    def step_publish_nvidia_ptx(self):
-        smoke = self.rel / "smoke-linux" / "results.json" if self.gpu_smoke() else None
-        return self.publish("nvidia-ptx", self.split_final("nvidia-ptx"), smoke), dict(
-            smoke=str(smoke) if smoke else None)
-
     def step_publish_amd(self):
         if not self.gpu_smoke():
             return self.publish("amd", self.split_final("amd"), None), dict(smoke=None)
@@ -4155,7 +4149,7 @@ class Release:
 
     # ------------------------------------------------------------ the release gate
     def candidate_gate_wheels(self, vendor):
-        packages = ['linux', vendor] + (['nvidia-ptx'] if vendor == 'nvidia' else [])
+        packages = ['linux', vendor]
         wheels = []
         for package in packages:
             path = self.split_final(package)
@@ -4723,7 +4717,7 @@ class Release:
         """The qualified candidate wheels the published files must equal."""
         if vendor == "apple":
             return [self.macos_wheel()]
-        return [self.split_final("linux")] + ([self.split_final("nvidia"), self.split_final("nvidia-ptx")]
+        return [self.split_final("linux")] + ([self.split_final("nvidia")]
                                               if vendor == "nvidia" else [self.split_final("amd")])
 
     def published_index_url(self):
@@ -5015,7 +5009,7 @@ class Release:
         # proof, PTX_BASELINE.json and stage manifest of the leg whose PTX bytes
         # shipped, so the next release can take the published PTX set from this
         # record alone (release_reuse.ptx_proof_source) when no PTX binding builds.
-        if "nvidia-ptx" in published:
+        if "nvidia" in published:  # the PTX set ships in mojolearn-nvidia (2026-11-05)
             leg = self.shipped_ptx_leg()
             if leg:
                 try:
