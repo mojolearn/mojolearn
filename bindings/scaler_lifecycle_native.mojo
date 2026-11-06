@@ -627,11 +627,13 @@ def scaler_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var name = args[2]
         classical_connect_numpy(context)
         var value = classical_getattribute(model,name,context)
-        if not _outside(context,0):
-            var fields = py_fields(model)
-            var original = py_get(fields,name)
-            if classical_is_array(original,context):
-                value = original
+        # The caller frame is walked only when the stored value is an Array
+        # that the public conversion changed (p3-prep): method lookups and
+        # plain fields return without the frame walk.
+        var fields = py_fields(model)
+        var original = py_get(fields,name)
+        if original is not value and classical_is_array(original,context) and not _outside(context,0):
+            value = original
         return value.steal_data()
     except error:
         if String(error).startswith("AttributeError:"):
