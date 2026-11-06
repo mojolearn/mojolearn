@@ -17,3 +17,12 @@ from . import parallel_neighbors, parallel_neighbors_reference, parallel_ivf  # 
 from ._native_parallel_shard import _native_parallel_shard
 
 _native_parallel_shard('worker', sys.argv)
+
+# glue: process lifecycle only. The native loop returns only after the pool's
+# close request, when every reply has been delivered and the owner discards
+# this worker's state. End the process here instead of finalizing the
+# interpreter and every loaded native runtime, which the owner's reap would
+# otherwise wait for (bindings/native_process_pool.mojo, _process_reap_group).
+sys.stdout.flush()
+sys.stderr.flush()
+os._exit(0)
