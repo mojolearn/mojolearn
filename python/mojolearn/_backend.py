@@ -1531,19 +1531,38 @@ def load_door_host(basename):
     return module
 
 
+#: perf-host-grain (2026-11-06): `host_families_built` keyed on the host
+#: directory and the stamps of it and of the merged index. A miss on a `_HostBinding` used to
+#: list the directory and stat every merged member on every probe.
+_HOST_FAMILIES_CACHE = [None, None, ()]
+
+
 def host_families_built():
     """The basenames of every `_mojolearn_*_host.so` under mojolearn/host/,
     sorted. What `tools/identity_break.py` records as `host.families`, so a
     REFUSED cell on the CPU column is attributable to an unbuilt family
     rather than a bug."""
     d = host_dir()
+    try:
+        stamp = os.stat(d).st_mtime_ns
+    except OSError:
+        return []
+    try:
+        stamp = (stamp, os.stat(os.path.join(d, _merged.INDEX_NAME)).st_mtime_ns)
+    except OSError:
+        stamp = (stamp, None)
+    cache = _HOST_FAMILIES_CACHE
+    if cache[0] == d and cache[1] == stamp:
+        return list(cache[2])
     if not os.path.isdir(d):
         return []
     own = {f[:-3] for f in os.listdir(d)
            if f.startswith("_mojolearn_") and f.endswith("_host.so")}
     # and every member of a merged host file (`_merged.py`)
     own.update(n for n in _merged.merged_members(d) if n.endswith("_host"))
-    return sorted(own)
+    built = sorted(own)
+    cache[0], cache[1], cache[2] = d, stamp, tuple(built)
+    return built
 
 
 #: `_MODULES` name -> the basename of the host binding under mojolearn/host/
@@ -1883,6 +1902,10 @@ class _HostBinding(type(sys)):
         self.__name = name
         self.__basename = basename
         self.__reason = reason
+        # perf-host-grain: the refusal text per missing entry, built once.
+        # Whether the entry exists is still asked of the module every time
+        # (one dictionary read); only the sentence is reused.
+        self.__misses = {}
 
     def __getattr__(self, item):
         if item.startswith("__"):
@@ -1894,9 +1917,11 @@ class _HostBinding(type(sys)):
         module = load_host_module(self.__basename)
         fn = getattr(module, item, None)
         if fn is None:
-            raise NoCpuEntry(
-                _no_cpu_implementation(self.__name, item, self.__reason, self.__basename)
-            )
+            message = self.__misses.get(item)
+            if message is None:
+                message = _no_cpu_implementation(self.__name, item, self.__reason, self.__basename)
+                self.__misses[item] = message
+            raise NoCpuEntry(message)
         # glue: connect the resolved entry once; later reads (including the
         # native ones inside an operation) find it in the module dictionary
         # and run no Python attribute hook.

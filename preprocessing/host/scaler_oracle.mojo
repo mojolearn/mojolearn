@@ -84,6 +84,7 @@ from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_div, identical_mul, portable_sqrtf
 from core.host_predict_threads import (
+    host_predict_task_count_work,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,
@@ -180,7 +181,8 @@ def host_standard_transform(
 ) -> List[Float32]:
     """`standard_transform_kernel` (module docstring), `n * d` floats."""
     var out = List[Float32](length=n * d, fill=Float32(0.0))
-    var tasks = host_predict_task_count(n)
+    # perf-host-grain: rows are independent; the grain floor on n * d
+    var tasks = host_predict_task_count_work(n, 4 * n * max(d, 1))
     var chunk = host_predict_chunk(n, tasks)
     var xp = host_list_ptr(x)
     var mp = host_list_ptr(mean)
@@ -278,7 +280,8 @@ def host_minmax_transform(
 ) -> List[Float32]:
     """`minmax_transform_kernel` (module docstring), `n * d` floats."""
     var out = List[Float32](length=n * d, fill=Float32(0.0))
-    var tasks = host_predict_task_count(n)
+    # perf-host-grain: rows are independent; the grain floor on n * d
+    var tasks = host_predict_task_count_work(n, 4 * n * max(d, 1))
     var chunk = host_predict_chunk(n, tasks)
     var xp = host_list_ptr(x)
     var sp = host_list_ptr(scale)

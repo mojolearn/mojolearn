@@ -52,6 +52,7 @@ from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 
 from core.host_predict_threads import (
+    host_grain_cap,
     HostF32Ptr,
     host_list_ptr,
     host_predict_chunk,
@@ -689,6 +690,10 @@ def oracle_score_samples_into(
         t = 1
     if t > n_query:
         t = n_query
+    # perf-host-grain: query rows are independent (a row reads the whole
+    # training set and writes its own score), so a call below the grain
+    # floor on query x train x feature work is one task on this thread
+    t = host_grain_cap(t, n_query * n_train * max(d, 1))
     var chunk = host_predict_chunk(n_query, t)
     var qnp = host_list_ptr(q_norms)
     var failed = List[Int](length=t, fill=0)

@@ -538,28 +538,50 @@ def host():
     s = [HDR, GEN, '"""The neighbors lane\'s CPU drivers: host loops over the SAME items (see x_neighbors/gen.py)."""\n',
          "from std.sys.compile import is_defined\n",
          "from std.os import getenv\n",
+         "from std.ffi import _Global\n",
          "from core.host_parallel import host_parallelize\n",
-         "from core.host_predict_threads import host_predict_chunk, host_predict_task_count\n", imports("host"), """
+         "from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work\n", imports("host"), """
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
 #: first float output moves by 1e-3 in its first element
 comptime X_NEIGHBORS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
+struct _XnHostSerial(Defaultable, Movable):
+    var on: Bool
+
+    def __init__(out self):
+        self.on = String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
+
+
+comptime _XN_HOST_SERIAL = _Global[StorageType=_XnHostSerial,
+    name="MojolearnXnHostSerialV1", init_fn=_XnHostSerial.__init__]
+
+
 #: MOJOLEARN_XN_HOST_SERIAL=1: every op's items one after another on one
-#: thread (the loop before lane/neural-pass72)
+#: thread (the loop before lane/neural-pass72). Read once per process (lane
+#: perf-host-grain); set it before the first op.
 def _xn_host_serial() -> Bool:
-    return String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
+    try:
+        return _XN_HOST_SERIAL.get_or_create_ptr()[].on
+    except:
+        return String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
 
 
 #: lane/neural-pass72 (2026-10-01): f(t) for t in [0, count), the items cut
 #: over host tasks by count only. An item is one device thread's work and
 #: writes only its own cells, so the task count and the cut move no bit; the
 #: ops with a shared scratch list and the HOST_SERIAL folds keep the
-#: one-thread loop.
-def _items[F: def(Int) -> None](ref f: F, count: Int):
+#: one-thread loop. Lane perf-host-grain (2026-11-06): `work` is the op's
+#: scalar element operations (gen.py `host_work`: elements touched, or the
+#: pairwise product for a distance / matmul / reduction item), and a call
+#: below the grain floor (`core/host_predict_threads.mojo::
+#: HOST_MIN_TASK_WORK`) runs its items on the calling thread instead of
+#: waking pool workers; 0 means unknown (no floor). Items are
+#: row-independent, so this moves no bit.
+def _items[F: def(Int) -> None](ref f: F, count: Int, work: Int = 0):
     if count <= 0:
         return
-    var tasks = host_predict_task_count(count)
+    var tasks = host_predict_task_count_work(count, work)
     if tasks <= 1 or _xn_host_serial():
         for t in range(count):
             f(t)
@@ -596,6 +618,27 @@ def _i(addr: Int) -> IP:
                 body += f"    _ = s_{b[0]}^\n"
         s.append(f"\n\ndef op_{name}({', '.join(dp)}) raises:\n{body}")
     return "".join(s)
+
+
+#: lane perf-host-grain (2026-11-06): the whole call's scalar work for the
+#: ops whose item loops over an inner length the buffers do not show (a
+#: pairwise distance, a dot product, a per-item reduction over a third
+#: axis). Every other op is costed at its elements touched (`host_work`).
+HOST_ITEM_WORK = {
+    "sqdist": "n * m * d", "nan_sqdist": "n * m * d", "l1dist": "n * m * d", "kernel": "n * m * d",
+    "matmul": "n * m * k", "knn_sq": "n * m * d", "nc_decision": "n * n_classes * d",
+    "nc_shrink": "n_classes * d * n", "skew_transform": "n * nc * d", "svgp_var": "n * m * m",
+    "ls_laplacian": "n * n * n", "knn_impute": "n * d * m * d", "knn_impute_cells": "nc * m * d",
+}
+
+
+def host_work(name, bufs):
+    """The `work` argument of `_items` for op `name`: HOST_ITEM_WORK's
+    expression, else the sum of the op's input and output buffer sizes."""
+    if name in HOST_ITEM_WORK:
+        return f"({HOST_ITEM_WORK[name]})"
+    sizes = [f"({b[2]})" for b in bufs if b[1] in ("fin", "iin", "finout", "fout", "iout")]
+    return "(" + " + ".join(sizes) + ")" if sizes else "0"
 
 
 def host_loop(item, count, bufs, scal, name=None, par=False):
@@ -636,7 +679,7 @@ def host_loop(item, count, bufs, scal, name=None, par=False):
             caps = ", ".join([f"imm p_{b}" for b in binds] + [f"imm {p[0]}" for p in scal])
             pcall = ", ".join(["t"] + [f"p_{b}" for b in binds] + [p[0] for p in scal])
             body += f"    def _item(t: Int) {{{caps}}}:\n        {item}({pcall})\n"
-            body += f"    _items(_item, {count})\n"
+            body += f"    _items(_item, {count}, {host_work(name, bufs)})\n"
             return body
         body += f"    for t in range({count}):\n        {item}({call})\n"
         return body

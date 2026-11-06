@@ -96,7 +96,16 @@ def host_fp_env_set(v: UInt64):
 def host_parallelize[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     """`sync_parallelize(func, n)`, every task in the caller's floating-point
     environment (DEVIATION 5900). The work split, the task count and the
-    join are `sync_parallelize`'s, unchanged."""
+    join are `sync_parallelize`'s, unchanged.
+
+    One task (or none) runs on the calling thread without touching the pool
+    (lane perf-host-grain): the caller's environment is the one every task
+    is pinned to, so the bits are the pool's."""
+    if n <= 0:
+        return
+    if n == 1:
+        func(0)
+        return
     var env = host_fp_env()
 
     def task(i: Int) {imm func, imm env}:
