@@ -6,8 +6,11 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or
-from bindings.classical_attributes import classical_connect_numpy, _type_mro
-from bindings.mode_metadata_native import _class_fields
+from bindings.classical_attributes import classical_connect_numpy
+from bindings.cluster_side_records import (
+    cluster_is_subclass, cluster_refuse_fit_callbacks, cluster_record_key, cluster_record_get,
+    cluster_record_put, cluster_record_drop,
+)
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name
 from bindings.classical_exceptions import classical_require_fitted
@@ -135,34 +138,57 @@ def _state(model: PythonObject, args: PythonObject, dbscan: Bool, restore: Bool,
     return PythonObject(None)
 
 
-def _admit(model: PythonObject, names: PythonObject, dbscan: Bool, fitting: Bool, context: PythonObject) raises -> PythonObject:
+# Per-model record (bindings/cluster_side_records.mojo, lane perf2-cluster):
+# the public admission of a query passed for this key.
+comptime _ADMIT_SLOT = "cluster_density_admitted_v1"
+
+
+def _record_key(model: PythonObject, names: PythonObject, dbscan: Bool) raises -> PythonObject:
+    """The identity key of a query: every setting, fitted field and the
+    residency holder the admission reads."""
+    var holder = String("_resident_holder") if dbscan else String("_resident")
+    var optional = Python.tuple("input_copied_", "n_features_in_", "n_samples_fit_", "n_iter_", "_mojolearn_fitted",
+                                "_mojolearn_fitting", "labels_", "components_", "core_sample_indices_", "_core_labels",
+                                "_x", "_w", "feature_names_in_", PythonObject(holder))
+    return cluster_record_key(model, py_fields(model), names, optional)
+
+
+def _admit(model: PythonObject, names: PythonObject, dbscan: Bool, fitting: Bool, context: PythonObject,
+           key: PythonObject = PythonObject(None)) raises -> Bool:
+    """The public admission. Perf (lane perf2-cluster): a query whose `key`
+    matches this model's admission record skips the per-value admissions of
+    every setting, fitted field and the residency holder; the flag checks and
+    the callback refusal (its ancestry walk once per class state) run on
+    every call. Returns whether the record matched."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    for i in range(len(names)):  # driver-loop: consumed constructor metadata
-        var name = String(names[i])
-        var value = family_raw_get_or(model, name, PythonObject(None)) if name == "numeric_mode" else family_raw_get(model, name)
-        if name == "metric_params":
-            if value is not None:
-                if py_type(value) is not b.dict:
-                    raise Error("TypeError: KernelDensity metric_params requires an exact dictionary")
-                var pairs = py_call(b.list, value.items())
-                for k in range(len(pairs)):  # driver-loop: KDE reads values only; native keys remain safe in diagnostic repr
-                    host_inference_scalar(pairs[k][0], context)
-                    host_inference_scalar(pairs[k][1], context)
-        else:
-            host_inference_scalar(value, context, True)
-    var scalars = Python.tuple("input_copied_", "n_features_in_", "n_samples_fit_", "n_iter_", "_mojolearn_fitted", "_mojolearn_fitting")
-    var arrays = Python.tuple("labels_", "components_", "core_sample_indices_", "_core_labels", "_x", "_w")
-    for i in range(len(scalars)):  # driver-loop: learned numeric metadata consumed by the owner
-        if py_contains(fields, scalars[i]):
-            host_inference_scalar(fields[scalars[i]], context)
-            if fitting:
-                native_release_admit(fields[scalars[i]], context)
-    for i in range(len(arrays)):  # driver-loop: retained fitted buffer owners
-        if py_contains(fields, arrays[i]):
-            classical_admit_value(fields[arrays[i]], context)
-            if fitting:
-                native_release_admit(fields[arrays[i]], context)
+    var recorded = not fitting and cluster_record_get(_ADMIT_SLOT, model, key) is not None
+    if not recorded:
+        for i in range(len(names)):  # driver-loop: consumed constructor metadata
+            var name = String(names[i])
+            var value = family_raw_get_or(model, name, PythonObject(None)) if name == "numeric_mode" else family_raw_get(model, name)
+            if name == "metric_params":
+                if value is not None:
+                    if py_type(value) is not b.dict:
+                        raise Error("TypeError: KernelDensity metric_params requires an exact dictionary")
+                    var pairs = py_call(b.list, value.items())
+                    for k in range(len(pairs)):  # driver-loop: KDE reads values only; native keys remain safe in diagnostic repr
+                        host_inference_scalar(pairs[k][0], context)
+                        host_inference_scalar(pairs[k][1], context)
+            else:
+                host_inference_scalar(value, context, True)
+        var scalars = Python.tuple("input_copied_", "n_features_in_", "n_samples_fit_", "n_iter_", "_mojolearn_fitted", "_mojolearn_fitting")
+        var arrays = Python.tuple("labels_", "components_", "core_sample_indices_", "_core_labels", "_x", "_w")
+        for i in range(len(scalars)):  # driver-loop: learned numeric metadata consumed by the owner
+            if py_contains(fields, scalars[i]):
+                host_inference_scalar(fields[scalars[i]], context)
+                if fitting:
+                    native_release_admit(fields[scalars[i]], context)
+        for i in range(len(arrays)):  # driver-loop: retained fitted buffer owners
+            if py_contains(fields, arrays[i]):
+                classical_admit_value(fields[arrays[i]], context)
+                if fitting:
+                    native_release_admit(fields[arrays[i]], context)
     if fitting and py_contains(fields, "feature_names_in_"):
         native_release_admit(fields["feature_names_in_"], context)
     var flag = py_get(fields, "_mojolearn_fitted", PythonObject(False))
@@ -170,14 +196,12 @@ def _admit(model: PythonObject, names: PythonObject, dbscan: Bool, fitting: Bool
         raise Error("TypeError: native fitted flags require exact booleans or integers")
     if py_type(py_get(fields, "_mojolearn_fitting", PythonObject(0))) is not b.int:
         raise Error("TypeError: native fitting depth requires an exact integer")
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: no fit-completion callback may enter Python
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: density execution cannot invoke Python fit callbacks")
+    cluster_refuse_fit_callbacks(py_type(model), "TypeError: density execution cannot invoke Python fit callbacks")
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: density execution cannot invoke Python fit callbacks")
-    _resident(py_get(fields, "_resident_holder" if dbscan else "_resident"), dbscan, context)
-    return fields
+    if not recorded:
+        _resident(py_get(fields, "_resident_holder" if dbscan else "_resident"), dbscan, context)
+    return recorded
 
 
 def density_public_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -187,11 +211,9 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
         raise Error("TypeError: density public arguments require an exact tuple")
     var dbscan = operation.startswith("family_density_dbscan_")
     var owner = context["density_dbscan_class"] if dbscan else context["density_kde_class"]
-    var ancestry = _type_mro(py_type(model))
-    var known = False
-    for i in range(len(ancestry)):  # driver-loop: connected owner identity, preserving passive subclasses
-        known = known or ancestry[i] is owner
-    if not known:
+    # Passive subclasses are accepted: CPython's MRO test
+    # (bindings/cluster_side_records.mojo), not a Python-level walk.
+    if not cluster_is_subclass(py_type(model), owner):
         raise Error("TypeError: density execution requires its connected estimator class")
     var prefix = String("family_density_dbscan_") if dbscan else String("family_density_kde_")
     var method = String(operation[byte=prefix.byte_length():])
@@ -208,14 +230,23 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
         _kde_release(fields)
         return PythonObject(None)
     var fitting = method == "fit" or method == "fit_predict"
-    var fields = _admit(model, names, dbscan, fitting, context)
+    var query = not fitting and (method == "predict" or method == "score_samples" or method == "score")
+    var key = _record_key(model, names, dbscan) if query else PythonObject(None)
+    var recorded = _admit(model, names, dbscan, fitting, context, key)
+    var fields = py_fields(model)
+    if fitting:
+        # A fit replaces the fitted state: release the old record now.
+        cluster_record_drop(_ADMIT_SLOT, model)
     var binding = estimator_binding(model, "_mojolearn_estimators", context)
     _keep_binding(binding, context)
     if not dbscan:
         # KDE already owns fitted tracking, y admission and public outputs in
         # the shared neighbor lifecycle. Preserve that compiled owner once.
         var prepared = Python.tuple(binding, args[0], args[2], args[1]) if fitting else Python.tuple(binding, args[0])
-        return neighbors_kde_operation(model, "family_xn_kde_" + method, prepared, context)
+        var kde_result = neighbors_kde_operation(model, "family_xn_kde_" + method, prepared, context)
+        if query and not recorded:
+            cluster_record_put(_ADMIT_SLOT, model, key, PythonObject(True))
+        return kde_result
     var outside = estimator_outside()
     var depth_value = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
     if not fitting:
@@ -248,6 +279,8 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
             estimator_fit_end(model, depth)
     if fitting:
         estimator_fit_complete(model, source, False, context)
+    if query and not recorded:
+        cluster_record_put(_ADMIT_SLOT, model, key, PythonObject(True))
     if outside and py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None:
         return native_array_ndarray_view(result, context)
     return result
