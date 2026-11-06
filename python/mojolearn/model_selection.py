@@ -2245,12 +2245,11 @@ _native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_sc
 # search (bindings/msel_*.mojo), connected once: the model_selection
 # classes the owner builds and dispatches on, the base binding helper
 # resolver (`_native`: binding acquisition), the x_metrics binding resolver,
-# the input step it hands the caller's objects to (`_materialize`,
-# `flatten_labels`, `encode_labels`), dtype code tables, the resident row
+# dtype code tables, the resident row
 # store's compiled door and the family door itself (for the lazy per-split
 # iterators).
 from ._array import _NATIVE_CODE as _ARRAY_CODE, _REDUCE_INTEGRAL  # noqa: E402
-from ._labels import encode_labels as _encode_labels, _NATIVE_ENCODE  # noqa: E402
+from ._labels import _NATIVE_ENCODE  # noqa: E402
 _native_family_bridge.tables(
     family_msel_classes=dict(
         KFold=KFold, StratifiedKFold=StratifiedKFold, GroupKFold=GroupKFold,
@@ -2262,8 +2261,7 @@ _native_family_bridge.tables(
         ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
         RandomizedSearchCV=RandomizedSearchCV, Array=Array),
     family_msel_native=_native, family_msel_xm=_x_metrics_binding, family_msel_miss=object(),
-    family_msel_integral=numbers.Integral, family_msel_materialize=_materialize,
-    family_msel_flatten=flatten_labels, family_msel_encode=_encode_labels, family_msel_codes=dict(_MSEL_CODE),
+    family_msel_integral=numbers.Integral, family_msel_codes=dict(_MSEL_CODE),
     family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
     family_msel_native_encode=frozenset(_NATIVE_ENCODE),
     family_msel_resident_class=_Resident, family_msel_resident_call=_RESIDENT_CALL,
