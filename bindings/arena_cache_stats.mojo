@@ -165,6 +165,41 @@ def _hash_key(value: PythonObject, context: PythonObject, mut known: HashKeyType
         raise Error("TypeError: cache keys require native immutable values without Python equality or hash hooks")
 
 
+def _admit_entry_keys(entries: PythonObject, context: PythonObject) raises:
+    """Refuse application hashing/equality among the keys of one exact dict.
+
+    Walks the dictionary in place with PyDict_Next (no key list, no hashing
+    or equality hooks). The keys DeviceCache itself publishes are exact
+    (int, int) tuples: those are admitted by three native type identity
+    checks. Any other key takes the full `_hash_key` admission, so the
+    accepted and refused key sets are unchanged."""
+    ref cpy = Python().cpython()
+    var tuple_type = context["arena_native_types"]["tuple"]
+    var int_type = context["arena_native_types"]["int"]
+    var tuple_size = cpy.lib.get_function[Int]("PyTuple_Size")
+    var tuple_item = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")
+    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+    var position = Int(0)
+    var key = PyObjectPtr()
+    var value = PyObjectPtr()
+    var others = List[PythonObject]()
+    while next_item(entries._obj_ptr, MutPointer(to=position), MutPointer(to=key), MutPointer(to=value)) != 0:  # driver-loop: over current exact cache dictionary keys
+        var stored = PythonObject(from_borrowed=key)
+        if py_type(stored) is tuple_type and tuple_size(key) == 2:
+            var first = PythonObject(from_borrowed=tuple_item(key, 0))
+            var second = PythonObject(from_borrowed=tuple_item(key, 1))
+            if py_type(first) is int_type and py_type(second) is int_type:
+                continue
+        others.append(stored^)
+    if len(others) == 0:
+        return
+    # Full admission runs after the walk, so nothing it reads can disturb
+    # the in-place dictionary iteration.
+    var key_types = HashKeyTypes(context)
+    for i in range(len(others)):  # driver-loop: keys not of the published (int, int) shape
+        _hash_key(others[i], context, key_types)
+
+
 def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     var b = context["arena_native_types"]

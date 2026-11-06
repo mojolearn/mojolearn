@@ -52,7 +52,7 @@ def _ordinary_torch(cls: PythonObject, context: PythonObject) raises -> Bool:
     return native_torch_exact(cls)
 
 
-struct _SequentialValueTypes(Movable):
+struct _SequentialValueTypes(Copyable, Movable):
     # Capture fixed import-time admission metadata once per public scan. Nested
     # lists used to allocate two empty Python containers and reread the same
     # context dictionaries for every element. Native identity vectors avoid
@@ -78,6 +78,72 @@ struct _SequentialValueTypes(Movable):
         self.mapping_types = _value_types(py_get(context, "mapping_types"))
         self.factory_types = _value_types(py_get(context, "native_default_factories"))
         self.buffer_types = _value_types(py_get(context, "buffer_owner_types"))
+
+
+struct _SequentialValueTypesCache(Defaultable, Movable):
+    # Per-value public entries (sequential_admit_value) used to rebuild the
+    # five type vectors from the context tuples on every value. The vectors
+    # are kept here per admission context (a few connected module contexts,
+    # retained, so an identity cannot be reused) together with the exact
+    # context entries they came from. A hit re-reads those six entries and
+    # compares identities; entries are cached only when each one is an exact
+    # tuple (immutable) or None, so an identity match means equal contents.
+    var contexts: List[PythonObject]
+    var sources: List[List[PythonObject]]
+    var types: List[_SequentialValueTypes]
+
+    def __init__(out self):
+        self.contexts = List[PythonObject]()
+        self.sources = List[List[PythonObject]]()
+        self.types = List[_SequentialValueTypes]()
+
+
+comptime _SEQUENTIAL_VALUE_TYPES = _Global[
+    StorageType=_SequentialValueTypesCache, name="MojolearnSequentialValueTypesV1",
+    init_fn=_SequentialValueTypesCache.__init__,
+]
+
+comptime _VALUE_TYPE_CONTEXTS = 8
+
+
+def _cached_value_types(mut mods: NativeModules, context: PythonObject) raises -> _SequentialValueTypes:
+    # The connection check the uncached path runs first (same refusal when a
+    # builtins export was replaced), then the six context entries the type
+    # vectors are read from, in _SequentialValueTypes order.
+    _ = mods.module("builtins")
+    var current = List[PythonObject]()
+    for key in ["defaultdict_class", "native_value_types", "scalar_types", "mapping_types", "native_default_factories", "buffer_owner_types"]:  # small-loop(six fixed context entry names)
+        current.append(py_get(context, PythonObject(key)))
+    var saved = _SEQUENTIAL_VALUE_TYPES.get_or_create_ptr()
+    for i in range(len(saved[].contexts)):  # driver-loop: over cached connected admission contexts (at most _VALUE_TYPE_CONTEXTS)
+        if saved[].contexts[i] is not context:
+            continue
+        var same = True
+        for k in range(len(current)):  # small-loop(six fixed context entries)
+            same = same and saved[].sources[i][k] is current[k]
+        if same:
+            # A copy: a later admission may replace this slot while the
+            # caller's walk is still running.
+            return saved[].types[i].copy()
+        break
+    var types = _SequentialValueTypes(mods, context)
+    var tuple_type = types.tuple_type
+    var cacheable = True
+    for k in range(1, len(current)):  # small-loop(five fixed type-tuple entries)
+        cacheable = cacheable and (current[k] is None or py_type(current[k]) is tuple_type)
+    if cacheable:
+        var slot = -1
+        for i in range(len(saved[].contexts)):  # driver-loop: over cached connected admission contexts (at most _VALUE_TYPE_CONTEXTS)
+            if saved[].contexts[i] is context:
+                slot = i
+        if slot < 0 and len(saved[].contexts) < _VALUE_TYPE_CONTEXTS:
+            saved[].contexts.append(context)
+            saved[].sources.append(current^)
+            saved[].types.append(types.copy())
+        elif slot >= 0:
+            saved[].sources[slot] = current^
+            saved[].types[slot] = types.copy()
+    return types^
 
 
 def _value_types(values: PythonObject) raises -> List[PythonObject]:
@@ -142,7 +208,8 @@ def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, contex
 
 
 def sequential_admit_value(mut mods: NativeModules, value: PythonObject, context: PythonObject, depth: Int = 0) raises:
-    var types = _SequentialValueTypes(mods, context)
+    # Type vectors come from the per-context cache, not rebuilt per value.
+    var types = _cached_value_types(mods, context)
     _sequential_admit_value(mods, value, context, types, depth)
 
 
@@ -161,7 +228,7 @@ struct SequentialValueAdmitter(Movable):
 
     def __init__(out self, context: PythonObject) raises:
         self.mods = NativeModules()
-        self.types = _SequentialValueTypes(self.mods, context)
+        self.types = _cached_value_types(self.mods, context)
 
     def admit(mut self, value: PythonObject, context: PythonObject) raises:
         _sequential_admit_value(self.mods, value, context, self.types, 0)
@@ -251,7 +318,7 @@ comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v3"
 
 
 def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
-    var types = _SequentialValueTypes(mods, context)
+    var types = _cached_value_types(mods, context)
     if operation == "load_checkpoint":
         if model is not context["sequential_class"]:
             raise Error("TypeError: Sequential checkpoint loading requires the native Sequential class")
