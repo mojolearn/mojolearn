@@ -424,7 +424,9 @@ def decode_labels(classes, codes):
     fast = _decode_labels_native(classes, codes, kind)
     if fast is not None:
         return fast
-    values = list(map(classes.__getitem__, map(int, codes)))  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
+    values = _decode_list_native(classes, codes)
+    if values is None:
+        values = list(map(classes.__getitem__, map(int, codes)))  # cpu-route: codes the native decode does not take (not an int32/int64 Array, or out of range: Python's IndexError), the explicit label output step
     try:
         if kind == "int":
             return Array.from_list(list(map(int, values)), "<i8")  # cpu-route: int classes past the native decode range, the explicit label output step
@@ -436,6 +438,21 @@ def decode_labels(classes, codes):
         # raised instead of returning the label objects; fixed 2026-09-10)
         pass
     return values
+
+
+def _decode_list_native(classes, codes):
+    """`[classes[c] for c in codes]` as ONE native call (bindings/str_labels_native.mojo
+    "decode"): a presized list filled in C from an int32 or int64 vector code
+    `Array`. None for any other codes, or a code out of range."""
+    if type(classes) not in (list, tuple) or not isinstance(codes, Array):
+        return None
+    if codes.ndim != 1 or codes.dtype not in ("<i4", "<i8"):
+        return None
+    if not _STR_LABELS:
+        from .tokenizer import _binding
+        _STR_LABELS.append(_binding()._module.str_labels_native_call)
+    return _STR_LABELS[0]("decode", classes, codes._addr, int(codes.size),
+                          4 if codes.dtype == "<i4" else 8)
 
 
 def _decode_labels_native(classes, codes, kind):
