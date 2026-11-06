@@ -1185,6 +1185,14 @@ STEP_TABLE = [(name, pipeline, [("identity-at-freeze" if n == "freeze-commit" el
                if name in ("rehearsal", "cross-compile") else needs, resource)
               for name, pipeline, needs, resource in STEP_TABLE]
 
+# --identity-on-wheels (default off): identity-cpu (the cpu column and the CPU checks on GitHub) and identity-admit
+# (every column admitted, the table repacked). Without the option both return "skipped" at once and order nothing:
+# the ordering they need under the option is added per run (Release.__init__), so the default graph is unchanged.
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish-line")),
+                  ("identity-cpu", "finish", ["linux-pack"], None))
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish-line")),
+                  ("identity-admit", "finish", ["linux-pack"], None))
+
 #: NO IDENTITY LANE AFTER THE FIRST PUBLISH (Andrew 2026-11-05). The steps that execute identity lanes on a device:
 #: the macOS wheel self-test / smoke (`verify --self-test` or qualify_verifier_wheel on Metal), the GPU wheel columns
 #: (verify against the admitted table on the NVIDIA/AMD box) and the NVIDIA/AMD candidate gates (installed correctness
@@ -1249,6 +1257,13 @@ class StepFailed(Exception):
 
 class StepHeld(StepFailed):
     """Stopped on purpose (publication without --publish), not broken."""
+
+
+# THE ONE RELEASE RUN ON THE BUILT WHEELS (--identity-on-wheels, default off; tools/release_identity_wheels.py):
+# its steps and hooks live in that module as a mixin of Release; it raises this module's StepFailed.
+import release_identity_wheels  # noqa: E402
+release_identity_wheels.StepFailed = StepFailed
+release_identity_wheels.write_json = lambda path, doc: write_json(path, doc)
 
 
 # ---------------------------------------------------------------- the run
@@ -1347,14 +1362,15 @@ class BoxKeeper:
         self.end_hold()
 
 
-class Release:
+class Release(release_identity_wheels.IdentityOnWheels):
     STEPS = [s for s, _, _, _ in STEP_TABLE]
     #: Every other step checks its own OUTPUT each time and returns at once when
     #: it is already there (a wheel of this commit, a PASSED receipt for that
     #: wheel); these are skipped on their record
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
-    SKIP_IF_RECORDED = {"identity-at-freeze", "rehearsal", "cross-compile", "finish-line", "record", *PUBLISH_STEPS}
+    SKIP_IF_RECORDED = {"identity-at-freeze", "rehearsal", "cross-compile", "finish-line", "record",
+                        "identity-cpu", "identity-admit", *PUBLISH_STEPS}
 
     def __init__(self, args, runner=None):
         self.args = args
@@ -1377,6 +1393,16 @@ class Release:
                              "longer builds; --redo linux-pack to repack it as the split packages")
         (self.STEPS, self.PIPELINE_OF, self.NEEDS, self.RESOURCE, self.AFTER, self.PIPELINES) = (
             [t[0] for t in STEP_TABLE], PIPELINE_OF, NEEDS, RESOURCE, AFTER, PIPELINES)
+        if self.single():
+            # --identity-on-wheels: the one run settles before any publish. identity-admit waits for every column
+            # (the box jobs, the Apple column in gate-apple, the GitHub CPU run); every publish waits for it, and
+            # gate-apple and identity-cpu run identity lanes, so they join the no-lane-after-publish guard.
+            self.AFTER = {k: list(v) for k, v in AFTER.items()}
+            self.AFTER["identity-admit"] = ["gate-nvidia", "gate-amd", "gate-apple", "identity-cpu"]
+            for publish in PUBLISH_STEPS:
+                self.AFTER[publish] = list(dict.fromkeys(self.AFTER.get(publish, []) + [
+                    "gate-apple", "identity-cpu", "identity-admit"]))
+            self.reference_env()
         if self.hopper_required():
             # a held Hopper box (or the rented route): its column gates publish-nvidia as before
             self.NEEDS = dict(NEEDS, **{"publish-nvidia": NEEDS["publish-nvidia"] + ["gpu-column-nvidia-hopper"]})
@@ -2382,6 +2408,11 @@ class Release:
         import identity_at_freeze
         for line in identity_at_freeze.lines(doc):
             self.say("  " + line)
+        if (rc == 4 or not doc.get("adopted")) and self.single():
+            # --identity-on-wheels records identity from the built wheels of THIS freeze: owed lanes are
+            # the one run's work, reported here, never a hold
+            return ("identity owed at the freeze on %s: recorded once from the built wheels (--identity-on-wheels)"
+                    % ", ".join(doc.get("held") or [])), dict(identity_at_freeze=str(out))
         if rc == 4 or not doc.get("adopted"):
             raise StepHeld("identity is owed at the freeze %s on %s: record ONCE at this source "
                            "(tools/reference_refresh.sh %s), merge ref/%s, then --refreeze; report %s" % (
@@ -3180,6 +3211,10 @@ class Release:
         return bool(w) and wheel_self_test.passed(self.macos_self_test(), w)
 
     def step_macos_smoke(self):
+        if self.single():
+            # --identity-on-wheels: the self-test's lanes are part of the Apple column, recorded once from this
+            # wheel in gate-apple; nothing runs here
+            return "SKIPPED (--identity-on-wheels): the Apple column is recorded from this wheel in gate-apple"
         w = self.macos_wheel()
         if not self.gpu_smoke():
             # docs/RELEASE_CHECKLIST.md's preverified macOS gate: a fresh venv, `verify --self-test`
@@ -3853,6 +3888,8 @@ class Release:
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
+        # --identity-on-wheels: the core and macOS wheels ship repacked with the admitted table (data only)
+        wheel = self.shipped_wheel(platform, wheel) if not self.dry else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
@@ -4051,10 +4088,12 @@ class Release:
         return why
 
     def step_gate_apple(self):
-        """The Apple adapter smoke (when adapters ship) and runtime-apple, the installed-runtime qualifier."""
+        """The Apple adapter smoke (when adapters ship) and runtime-apple, the installed-runtime qualifier; with
+        --identity-on-wheels first the Apple identity column from the installed macOS wheel (one pass)."""
+        identity = self.apple_identity_gate()
         adapters = self.apple_adapter_gate()
         runtime = self.apple_runtime_gate()
-        return "; ".join(str(part) for part in (adapters, runtime) if part) or None
+        return "; ".join(str(part) for part in (identity, adapters, runtime) if part) or None
 
     def apple_adapter_gate(self):
         AG = adapter_gate_module()
@@ -4095,6 +4134,11 @@ class Release:
         # same `verify --self-test`); its PASSED receipt for these bytes is
         # required even when publish-macos is run alone. The Apple-vs-previous
         # release cross-diff is deleted: identity is decided by the table admit.
+        if self.single():
+            # the Apple column recorded from this wheel (or every lane reused) replaces the self-test receipt
+            if not self.dry and not (self.apple_identity_ok()[0] or self.lanes_owed("apple") == []):
+                raise StepFailed("no Apple column for this macOS wheel (%s); run gate-apple" % self.apple_identity_ok()[1])
+            return self.publish("macos", self.macos_wheel(), None)
         if not self.gpu_smoke():
             if not self.dry and not self.macos_self_test_passed():
                 raise StepFailed(f"no PASSED macOS wheel self-test for this wheel ({self.macos_self_test()}); "
@@ -4302,6 +4346,9 @@ class Release:
             return False, "; ".join(errors)
         from release_gate_profiles import profile, LIGHT
         if profile(doc) == LIGHT:
+            once = self.gate_identity_errors(vendor, output, doc.get("correctness"))
+            if once:
+                return False, "; ".join(once)
             runtime, cases = self.gate_runtime_error(vendor, output)
             if runtime:
                 return False, runtime
@@ -4367,6 +4414,7 @@ class Release:
             cmd += ["--runtime-prior", str(runtime_prior)]  # unit receipts the qualifier may reuse
         if not adapter_gate_module().enabled():
             cmd.append("--no-adapters")  # no adapters ship: the gate records its adapter stage as disabled
+        cmd += self.gate_identity_args(vendor)   # --identity-on-wheels: the one box job records the columns too
         self.refuse_device_lanes_after_publish("gate-" + vendor)
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
@@ -4542,6 +4590,9 @@ class Release:
             vendor = step[len("gate-"):]
             if self.waiver_covers("candidate-" + vendor):
                 return None
+            if self.single():
+                # one box job: REUSED n / RUN m per vendor; no rental when nothing is owed
+                return self.single_box_owed(vendor)
             ok, why = self.gate_ok(vendor)
             return None if ok else why
         owed = getattr(self, "box_step_owed_" + step.replace("-", "_"), None)
@@ -4795,9 +4846,9 @@ class Release:
     def published_wheels(self, vendor):
         """The qualified candidate wheels the published files must equal."""
         if vendor == "apple":
-            return [self.macos_wheel()]
-        return [self.split_final("linux")] + ([self.split_final("nvidia"), self.split_final("nvidia-ptx")]
-                                              if vendor == "nvidia" else [self.split_final("amd")])
+            return [self.shipped_wheel("macos", self.macos_wheel())]
+        return [self.shipped_wheel("linux", self.split_final("linux"))] + (
+            [self.split_final("nvidia"), self.split_final("nvidia-ptx")] if vendor == "nvidia" else [self.split_final("amd")])
 
     def published_index_url(self):
         """PyPI. MOJOLEARN_PUBLISHED_INDEX_URL names a mirror or a test index; a report made against any
@@ -5325,6 +5376,7 @@ class Release:
         "gpu-column-amd": ("numerical", "amd"),
         "published-apple": ("package", None), "published-nvidia": ("package", None),
         "published-amd": ("package", None), "identity-at-freeze": ("metadata", None),
+        "identity-cpu": ("numerical", None), "identity-admit": ("package", None),
     }
     #: identity column -> the box its record runs on (Apple records on this Mac: never rented)
     PLAN_COLUMN_DEVICE = {"nvidia": "nvidia", "amd": "amd", "cpu": "nvidia", "ptx": "nvidia", "apple": None}
@@ -5549,6 +5601,9 @@ class Release:
             steps = [s for s in steps if s in wanted]
         # --published-smoke is refused (removed 2026-11-05: no identity lane after the first publish)
         smoke = self.record_published_smoke_requests()
+        if self.single() and self.gpu_smoke():
+            raise SystemExit("release: --identity-on-wheels replaces the --gpu-smoke wheel columns (one run, nothing "
+                             "twice); drop --gpu-smoke")
         steps = [s for s in steps if s not in PUBLISHED_SMOKE_STEPS or PUBLISHED_SMOKE_STEPS[s][0] in smoke]
         self.selected = list(steps)
         for redo in (self.args.redo.split(",") if self.args.redo else []):
@@ -5790,6 +5845,13 @@ def main(argv=None):
     ap.add_argument("--build-backend", default=None, choices=sorted(BUILD_BACKENDS))
     # WHY NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked before merge on NVIDIA,
     # AMD, Apple and CPU; the release only builds, checks artifact integrity and publishes.
+    ap.add_argument("--identity-on-wheels", action="store_true",
+                    help="THE ONE RUN (default off until the orchestrator has run it once): identity recorded from "
+                         "the built wheels on each device class (NVIDIA/AMD box jobs, Apple in gate-apple, CPU on "
+                         "GitHub), admitted, the table repacked into the wheels, then publish; no gate repeats a lane")
+    ap.add_argument("--nvidia-columns", default="",
+                    help="with --identity-on-wheels: the NVIDIA columns of the box job, comma list of nvidia, ptx "
+                         "(default nvidia,ptx); each on its own GPU when the pod has several")
     ap.add_argument("--gpu-smoke", action="store_true",
                     help="the old GPU route: the NVIDIA/AMD wheel smokes (lq or rented), the expanded macOS smoke, "
                          "light-smoke receipts and any --build-backend; default: no GPU (GitHub builds, the "

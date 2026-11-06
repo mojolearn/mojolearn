@@ -12,6 +12,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 from collections import Counter
@@ -525,6 +526,26 @@ class RequirementsLedger:
                        reasons=list(verdict["reasons"]))
 
     @staticmethod
+    def _reference_revision(root, revision):
+        """The revision whose committed table judges the identity rows of the freeze REVISION: the freeze itself,
+        or, under tools/release.py --identity-on-wheels, the admission commit of its one run on the built wheels
+        (MOJOLEARN_IDENTITY_REFERENCE_AT=<freeze>:<admission>). The admission is honoured only when it is
+        source-equal to the freeze (they differ in record outputs only, tools/identity_at_freeze.py); otherwise
+        the rows are judged at the freeze, as without the option."""
+        for pair in (os.environ.get("MOJOLEARN_IDENTITY_REFERENCE_AT") or "").split(","):
+            freeze, _, admitted = pair.partition(":")
+            if freeze == revision and re.fullmatch(r"[0-9a-f]{40}", admitted or ""):
+                import identity_at_freeze
+                try:
+                    if identity_at_freeze.source_equal(root, revision, admitted):
+                        return admitted
+                except identity_at_freeze.GitError:
+                    pass
+                raise ValueError("the identity admission %s is not source-equal to the freeze %s"
+                                 % (admitted[:12], revision[:12]))
+        return revision
+
+    @staticmethod
     def _reference_batch(doc, root, log_dir):
         """A lazy {row id: (verdict, error)} lookup: the frozen reference is read once, on first use."""
         from release_identity_reference import unit_of
@@ -549,7 +570,8 @@ class RequirementsLedger:
                     from release_identity_reference import NoReference, verdicts
                     group = units.get(revision, {})
                     try:
-                        found[revision] = (verdicts(root, revision, group, log_dir=log_dir,
+                        judged = RequirementsLedger._reference_revision(root, revision)
+                        found[revision] = (verdicts(root, judged, group, log_dir=log_dir,
                                                     failures={k: sorted(failures.get(k, ())) for k in group}), None, None)
                     except NoReference as error:
                         found[revision] = (None, "", str(error))
