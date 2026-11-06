@@ -95,6 +95,7 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     else:
         classical_admit_value(source, context)
         var prepared = native_torch_numpy(source) if _ordinary_torch(py_type(source), context) else source
+        var tree_source = prepared
         if not native_pandas_exact(prepared):
             var raw = classical_input(prepared, context, "X")
             if classical_kind(raw, context) == "c":
@@ -105,8 +106,12 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
                     Int(py=raw.strides[0]), Int(py=raw.strides[1]), classical_is_array(raw, context) or Bool(py=raw.dtype.isnative))
             # SVR's existing query path casts directly; nonfinite inputs
             # reach the unchanged SVM kernel rather than a dense finite scan.
-            _ = raw^
-        x = host_tree_input(prepared, context)
+            # The admitted array goes on to the cast (lane p3-svm-gp-kernel,
+            # rows 631/633): host_tree_input no longer re-admits and
+            # re-converts the source.
+            tree_source = raw
+        x = host_tree_input(tree_source, context)
+        _ = tree_source^
         _ = prepared^
     var rows = Int(py=x.shape[0])
     var features = Int(py=fields["n_features_in_"])
