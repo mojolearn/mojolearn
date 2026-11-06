@@ -5,6 +5,7 @@
 # the Python shells densified it before converting. Metadata reads and the
 # shared typed CastIn conversion only.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call
 from bindings.classical_arrays import classical_host_f32, classical_kind, classical_is_f32
 from bindings.classical_validate import classical_view, _cast_x, RESHAPE_HINT
@@ -25,7 +26,7 @@ def decomp_input(source: PythonObject, est: String, context: PythonObject) raise
         raise Error("Complex data not supported: " + est + " got a complex X.")
     if kind == "b" or kind == "i" or kind == "u" or kind == "f":
         var nd = Int(py=view.ndim)
-        var shape = String(py_call(Python.import_module("builtins").repr, view.shape))
+        var shape = String(py_call(native_loaded_module("builtins").repr, view.shape))
         if nd < 2:
             raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + shape + "). " + RESHAPE_HINT)
         if nd == 2 and Int(py=view.shape[0]) == 0:

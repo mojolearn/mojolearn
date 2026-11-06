@@ -4,6 +4,7 @@
 # instance fields with Python's AttributeError, the fitted numeric mode's
 # connected x_decomp entries, mojolearn Array outputs and scalar reads.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem
 from bindings.classical_arrays import classical_typed
 
@@ -18,28 +19,28 @@ def decomp_attr(model: PythonObject, fields: PythonObject, name: String) raises 
 
 
 def decomp_int(value: PythonObject) raises -> Int:
-    return Int(py=py_call(Python.import_module("builtins").int, value))
+    return Int(py=py_call(native_loaded_module("builtins").int, value))
 
 
 def decomp_float(value: PythonObject) raises -> Float64:
-    return Float64(py=py_call(Python.import_module("builtins").float, value))
+    return Float64(py=py_call(native_loaded_module("builtins").float, value))
 
 
 def decomp_lt(a: PythonObject, b: PythonObject) raises -> Bool:
     """`a < b` with Python's comparison."""
-    return Bool(py=py_call(Python.import_module("operator").lt, a, b))
+    return Bool(py=py_call(native_loaded_module("operator").lt, a, b))
 
 
 def decomp_le(a: PythonObject, b: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("operator").le, a, b))
+    return Bool(py=py_call(native_loaded_module("operator").le, a, b))
 
 
 def decomp_eq(a: PythonObject, b: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("operator").eq, a, b))
+    return Bool(py=py_call(native_loaded_module("operator").eq, a, b))
 
 
 def decomp_repr(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").repr, value))
+    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def decomp_set_mode(fields: PythonObject, context: PythonObject) raises:
@@ -55,7 +56,7 @@ def decomp_entries(model: PythonObject, fields: PythonObject, names: PythonObjec
                    context: PythonObject) raises -> PythonObject:
     """The connected _mojolearn_x_decomp entries of the fitted mode
     (`_Kit(self.numeric_mode_)`); every name in `names` must be exported."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = decomp_attr(model, fields, "numeric_mode_")
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
@@ -93,7 +94,7 @@ def decomp_min_samples(n: Int, d: Int, who: String, minimum: Int = 2) raises:
 
 def decomp_seed(random_state: PythonObject) raises -> Int:
     """`_seed_of`: None is 0; a bool or a non-int refused."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if random_state is None:
         return 0
     if py_type(random_state) is b.bool or not Bool(py=py_call(b.isinstance, random_state, b.int)):

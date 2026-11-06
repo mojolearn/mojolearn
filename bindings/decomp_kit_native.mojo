@@ -14,6 +14,7 @@
 # which follows the Python `_M` exactly; an operation that writes a matrix
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains
@@ -56,22 +57,22 @@ comptime XD_RESHAPE_HINT = ". Reshape your data either using array.reshape(-1, 1
 
 
 def _repr(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").repr, value))
+    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def decomp_int(value: PythonObject) raises -> Int:
     """`int(value)`."""
-    return Int(py=py_call(Python.import_module("builtins").int, value))
+    return Int(py=py_call(native_loaded_module("builtins").int, value))
 
 
 def decomp_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
-    return Float64(py=py_call(Python.import_module("builtins").float, value))
+    return Float64(py=py_call(native_loaded_module("builtins").float, value))
 
 
 def decomp_seed(random_state: PythonObject) raises -> PythonObject:
     """`_expansion_decomp._seed_of`: None is 0; anything but an int refused."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if random_state is None:
         return PythonObject(0)
     if Bool(py=py_call(b.isinstance, random_state, b.bool)) or not Bool(py=py_call(b.isinstance, random_state, b.int)):
@@ -81,14 +82,14 @@ def decomp_seed(random_state: PythonObject) raises -> PythonObject:
 
 def decomp_seed_word(seed: PythonObject) raises -> Int:
     """`int(seed) & 0xFFFFFFFF`, with Python's integer semantics."""
-    var masked = py_call(Python.import_module("operator").and_, py_call(Python.import_module("builtins").int, seed),
+    var masked = py_call(native_loaded_module("operator").and_, py_call(native_loaded_module("builtins").int, seed),
                          PythonObject(4294967295))
     return Int(py=masked)
 
 
 def decomp_is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
     """The model's class MRO, read through type's own descriptor, holds cls."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         if mro[k] is cls:
@@ -99,7 +100,7 @@ def decomp_is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
 def decomp_class_attr(model: PythonObject, name: String) raises -> PythonObject:
     """A class attribute (a fixed estimator constant such as `_deflation`),
     read from the class dictionaries along the MRO, None when absent."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
@@ -119,7 +120,7 @@ def decomp_mode(value: PythonObject, context: PythonObject) raises -> PythonObje
 def decomp_entries(mode_value: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected x_decomp entries of a numeric mode, refused as
     `_backend.binding` refuses the mode (or as it refused at connection)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = decomp_mode(mode_value, context)
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")

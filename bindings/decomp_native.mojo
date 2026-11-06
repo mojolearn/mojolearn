@@ -4,6 +4,7 @@
 # decomp_c, which admits the model by its connected class and dispatches the
 # operation to the class's native file (bindings/ica_native.mojo, ...).
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -25,7 +26,7 @@ from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transfor
 
 def _family(model: PythonObject, context: PythonObject) raises -> String:
     """The connected class the model's MRO holds ('' for none)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         return ""
@@ -156,7 +157,7 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
         if len(call) != 4:
             raise Error("TypeError: decomp_native_call requires model, operation, arguments and connected context")
         var model = call[0]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
             raise Error("TypeError: native decomposition operation and argument tuple are required")
         var operation = String(call[1])
