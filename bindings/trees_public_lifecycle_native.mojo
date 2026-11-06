@@ -81,7 +81,9 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     var name = classical_estimator_name(model)
     if not fitting:
         classical_require_fitted(model, False, "score" if operation.endswith("score") else "predict", context)
-    var x = classical_check_x(args[0], name, context)
+    # `args` (X among them) was admitted just above: the X check reuses that
+    # admission instead of walking X again (perf3-nbr-msel-trees).
+    var x = classical_check_x(args[0], name, context, True)
     var kind = forest_kind(model, context)
     var classifier = kind.endswith("_classifier")
     var result = PythonObject(None)
@@ -112,7 +114,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             if len(target_shape) == 0 or target_shape[0] != rows:
                 raise Error("Found input variables with inconsistent numbers of samples")
         else:
-            y = classical_check_y(y, rows, name, context)
+            y = classical_check_y(y, rows, name, context, True)
         var depth_object = py_get(fields, "_mojolearn_fitting", PythonObject(0))
         if py_type(depth_object) is not b.int:
             raise Error("TypeError: native forest fit depth must be an exact integer")
