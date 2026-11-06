@@ -71,14 +71,15 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     _ = yp  # keep the Python object alive through the native call above
     var b = mc_b()
     var total = nt + npred
-    var classes = family_call(native_loaded_module("array").array, PythonObject("q"),
-                              py_call(b.bytes, PythonObject(8 * total)))
+    # p3-labels-metrics: the class table (only k is used) is a native
+    # scratch list, not a bytes object copied into an array.array.
+    var classes = List[Int64](length=max(total, 1), fill=0)
     var codes = family_array(Python.tuple(total), "<i4", context)
-    var k = mc_encode_signed(base, 4, total, Int(py=py_call(classes.buffer_info)[0]),
+    var k = mc_encode_signed(base, 4, total, Int(classes.unsafe_ptr()),
                              Int(py=classical_address(codes)))
     # prepare_targets writes the class table even though this caller only
     # returns its size. Its integer address does not retain the scratch owner.
-    _ = classes
+    _ = classes^
     _ = both  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     if k < 0:
@@ -183,14 +184,14 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
         raise Error("mojolearn " + caller + ": labels has " + String(n_lab) + " entries and X has "
                     + String(rows) + " rows")
     # `_labels.encode_labels(lab)`: prepare_targets over the int32 labels.
-    var store = family_call(native_loaded_module("array").array, PythonObject("q"),
-                            py_call(b.bytes, PythonObject(8 * n_lab)))
+    # p3-labels-metrics: the class table is a native scratch list.
+    var store = List[Int64](length=max(n_lab, 1), fill=0)
     var mapped = family_array(Python.tuple(n_lab), "<i4", context)
-    var k = mc_encode_signed(Int(py=classical_address(lab)), 4, n_lab, Int(py=py_call(store.buffer_info)[0]),
+    var k = mc_encode_signed(Int(py=classical_address(lab)), 4, n_lab, Int(store.unsafe_ptr()),
                              Int(py=classical_address(mapped)))
     # The class table is written through its integer address by prepare_targets.
     # Retain its owner until that write has completed, even though only k is returned.
-    _ = store
+    _ = store^
     _ = lab  # keep the Python object alive through the native call above
     _ = mapped  # keep the Python object alive through the native call above
     if k < 0:
