@@ -29,6 +29,10 @@ struct ClassicalKit(Movable):
     var matrices: List[ClassicalMatrix]
     var allocations: List[Int]
     var resident: Bool
+    # One shared 1 x 1 zero operand for every `ew` with an unused operand
+    # (read only by the kernels): allocated, and on a resident binding
+    # uploaded, once per solve instead of once per elementwise op.
+    var zero: Int
 
     def __init__(out self, entries: PythonObject, context: PythonObject) raises:
         self.entries = entries
@@ -36,6 +40,12 @@ struct ClassicalKit(Movable):
         self.matrices = List[ClassicalMatrix]()
         self.allocations = List[Int]()
         self.resident = py_get(entries, "x_decomp_dev_ew") is not None
+        self.zero = -1
+
+    def shared_zero(mut self) raises -> Int:
+        if self.zero < 0:
+            self.zero = self.zeros(1, 1)
+        return self.zero
 
     def close(mut self) raises:
         # Cleanup owns every successful allocation before the first upload.
@@ -119,9 +129,12 @@ struct ClassicalKit(Movable):
         raise Error("classical TSQR: invalid internal broadcast")
 
     def ew(mut self, op: Int, a: Int, b: Int = -1, c: Int = -1, scalar: Float64 = 0.0) raises -> Int:
-        var zero = self.zeros(1, 1)
-        var ib = zero if b < 0 else b
-        var ic = zero if c < 0 else c
+        var ib = b
+        var ic = c
+        if b < 0 or c < 0:
+            var zero = self.shared_zero()
+            ib = zero if b < 0 else b
+            ic = zero if c < 0 else c
         var bm = 3 if b < 0 else self.broadcast(a, ib)
         var cm = 3 if c < 0 else self.broadcast(a, ic)
         var rows = self.matrices[a].rows
@@ -409,8 +422,10 @@ def classical_tsqr_solve(ra: PythonObject, rows: Int, cols: Int,
         var vt = decomposition[2]
         # Same binary64 scalar multiply then one Float32 narrowing as _f32.
         var cut = Float64(Float32(kit.word(s) * (Float64(cols) * 0.00000011920928955078125)))
-        var kept = kit.ew(23, s, scalar=cut)
-        var rank = Int(kit.total(kept))
+        # The kept-rank count (`ew 23` + `total`, a device sum and a scalar
+        # download) and the residual-norm sum that followed it were read by
+        # nothing: LinearRegression publishes only the coefficients `x`. Both
+        # are gone; `x` is formed by the same ops on the same words.
         var zero = kit.zeros(1, 1)
         var selected = kit.ew(35, s, s, zero, cut)
         var inverse = kit.ew(16, selected)
@@ -420,18 +435,6 @@ def classical_tsqr_solve(ra: PythonObject, rows: Int, cols: Int,
         var x = kit.mm(vt, weighted, ta=True)
         var st = kit.transpose(scale)
         x = kit.ew(2, x, st)
-        # Preserve the old residual/rank execution, although LinearRegression
-        # only publishes coefficients from this internal least-squares result.
-        if rank == cols and rows > cols:
-            var tail = classical_array(cols + 1, 0, context)
-            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(ra)))
-            var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(tail)))
-            memcpy(dest=dst, src=src + cols * (cols + 1), count=cols + 1)
-            var tail_id = kit.add(tail, 1, cols + 1)
-            var last = kit.columns(tail_id, cols, cols + 1)
-            var residual_squared = kit.ew(8, last)
-            _ = kit.sum(residual_squared, True)
-            _ = tail^
         var result = kit.host(x)
         # The final matrix is cols x 1, already a flat native ndarray buffer.
         return result

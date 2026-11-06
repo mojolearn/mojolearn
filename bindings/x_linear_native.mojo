@@ -30,7 +30,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_attributes import _type_mro
 from bindings.mode_metadata_native import _class_fields
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_lists import py_list_int, py_list_f64
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_error_boundary import classical_python_error
@@ -181,7 +182,11 @@ def _xl_mode(fields: PythonObject, context: PythonObject) raises -> String:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not _b().str:
         raise Error("numeric_mode must be fast, identical or None")
-    var clean = String(py=py_call(py_call(mode.strip).lower))
+    # ASCII strip/lower natively; any other spelling takes Python's
+    # Unicode-aware strip/lower (same accepted words, same refusal).
+    var clean = String(String(String(py=mode).strip()).lower())
+    if clean != "identical" and clean != "fast":
+        clean = String(py=py_call(py_call(mode.strip).lower))
     if clean != "identical" and clean != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     return clean
@@ -192,9 +197,20 @@ def _xl_entries(fields: PythonObject, context: PythonObject) raises -> PythonObj
     with the binding's compiled-mode check, or the refusal recorded at
     import ("<Class>: <message>")."""
     var mode = _xl_mode(fields, context)
-    var entries = context["xl_bindings"][PythonObject(mode)]
+    var key = PythonObject(mode)
+    var entries = context["xl_bindings"][key]
     if py_type(entries) is _b().str:
         raise Error(String(py=entries))
+    # The compiled mode of a connected entry table is fixed when its binding
+    # loads: checked once per (mode, entry table identity) and the verdict
+    # kept in the long-lived connection context (as classical_entries and
+    # logistic `_entries` do). A reconnection installs a new table, so the
+    # check runs again.
+    var verdicts = py_get(context, "xl_entries_admitted")
+    if verdicts is not None:
+        var seen = py_get(verdicts, key)
+        if seen is not None and seen is entries:
+            return entries
     var reads = py_get(entries, "x_linear_numeric_mode")
     if reads is not None:
         var code = Int(py=py_call(reads))
@@ -202,6 +218,10 @@ def _xl_entries(fields: PythonObject, context: PythonObject) raises -> PythonObj
             raise Error("RuntimeError: mojolearn: _mojolearn_x_linear was compiled for "
                         + ("identical" if code == 1 else "fast") + ", but this call requested " + mode
                         + "; rebuild the " + mode + " binding")
+    if verdicts is None:
+        verdicts = Python.dict()
+        py_setitem(context, "xl_entries_admitted", verdicts)
+    py_setitem(verdicts, key, entries)
     return entries
 
 
@@ -1370,14 +1390,28 @@ def xl_isotonic(model: PythonObject, operation: String, args: PythonObject, cont
 
 def _xl_host_only(model: PythonObject) raises -> Bool:
     """An explicit host inference class (`_HOST_INFERENCE_ONLY` in its class
-    dictionaries): it predicts a saved model on the CPU and never fits."""
+    dictionaries): it predicts a saved model on the CPU and never fits.
+    Depends only on the class rows: resolved once per class state
+    (native_class_admission re-checks after any class modification)."""
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var record = class_record(mods, _XL_HOST_ONLY_SLOT, cls)
+    if record is not None:
+        return Bool(py=record)
     var b = _b()
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var found = False
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var class_fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
         if py_get(class_fields, "_HOST_INFERENCE_ONLY") is not None:
-            return True
-    return False
+            found = True
+            break
+    class_admit(mods, _XL_HOST_ONLY_SLOT, cls, PythonObject(found))
+    return found
+
+
+comptime _XL_HOST_ONLY_SLOT = "x_linear_host_inference_only_v1"
+comptime _XL_AFTER_FIT_SLOT = "x_linear_no_after_fit_v1"
 
 
 def _xl_cd_entries(context: PythonObject) raises -> PythonObject:
@@ -2498,10 +2532,17 @@ def _xl_lifecycle_admit(model: PythonObject, fields: PythonObject) raises:
     var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
     if py_type(fitted) is not b.bool and py_type(fitted) is not b.int:
         raise Error("TypeError: linear fitted state requires a native boolean or integer")
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from native fit
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: linear fitting cannot invoke Python completion callbacks")
+    # The class rows' verdict (no `_mojolearn_after_fit` anywhere in the MRO)
+    # is kept per class state (native_class_admission: any class or ancestor
+    # modification invalidates it); only a passing class is recorded.
+    var mods = NativeModules()
+    var cls = py_type(model)
+    if class_record(mods, _XL_AFTER_FIT_SLOT, cls) is None:
+        var ancestry = _type_mro(cls)
+        for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from native fit
+            if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+                raise Error("TypeError: linear fitting cannot invoke Python completion callbacks")
+        class_admit(mods, _XL_AFTER_FIT_SLOT, cls, PythonObject(True))
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: linear fitting cannot invoke Python completion callbacks")
 

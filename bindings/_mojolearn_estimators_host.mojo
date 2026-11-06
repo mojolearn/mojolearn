@@ -62,6 +62,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_type as _balanced_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from bindings.py2mojo_cluster_est import dbscan_core_arrays_host_binding
@@ -69,6 +70,7 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
 from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.classical_ridge_impl import classical_widen_f32_f64
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -161,6 +163,12 @@ from core.estimators_host_impl import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Exact Python int (every buffer address and size the owners pass): one
+    # type-pointer compare and a native integer read; no class-name strings,
+    # module lookup or operator.index call. bool is its own class, so it
+    # never takes this path. Anything else keeps the full admission below.
+    if _balanced_type(value) is _balanced_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("estimators host: integers expected, not booleans")
@@ -274,8 +282,6 @@ def kde_score_samples_binding(
     var weights = List[Float32]()
     if has_weights:
         weights = read_f32(_index(weights_addr), max(0, n_train))
-    var train_address = _index(train_addr)
-    var query_address = _index(query_addr)
     var total = Float64(0.0)
     with GILReleased(Python()):
         total = kde_score_samples_host_run(
@@ -914,6 +920,37 @@ def ols_predict_binding(
     return PythonObject(0)
 
 
+def ols_predict_wide_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ols_predict` with a float64 output: the same float32 predictions,
+    each widened exactly to float64 as it is written, with the GIL released.
+    params: n_rows, n_features, intercept. Returns 0."""
+    if len(params) != 3:
+        raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
+    var x_address = _index(x_addr)
+    var coef_address = _index(coef_addr)
+    var wide = f64_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var intercept = Float32(Float64(py=params[2]))
+    var narrow = List[Float32](length=max(nr, 1), fill=0)
+    var np = f32_ptr(Int(narrow.unsafe_ptr()))
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        host_ols_predict_into(
+            f32_ptr(x_address), f32_ptr(coef_address), np, nr, nf, intercept,
+            host_predict_task_count(nr),
+        )
+        classical_widen_f32_f64(Int(np), Int(wide), nr)
+    _ = narrow^
+    return PythonObject(0)
+
+
 def tsvd_transform_binding(
     x_addr: PythonObject,
     components_addr: PythonObject,
@@ -1120,6 +1157,48 @@ def qn_decision_function_binding(
     return PythonObject(0)
 
 
+def qn_proba_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`predict_proba` in one call on the host: `qn_decision_function` then
+    the sigmoid (n_classes < 3: out float64 (n_rows, 2)) or softmax link,
+    the same restatements as the two entries called in turn, the scores in
+    native scratch. params: n_rows, n_features, fit_intercept, n_classes.
+    Returns 0."""
+    if len(params) != 4:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    var x_address = _index(x_addr)
+    var w_address = _index(coef_addr)
+    var op = f64_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var fi = _index(params[2]) != 0
+    var nc = _index(params[3])
+    var nt = nc if nc > 2 else 1
+    var scores = List[Float32](length=max(nr * nt, 1), fill=0)
+    var sp = f32_ptr(Int(scores.unsafe_ptr()))
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        if nt > 2:
+            host_qn_decision_multi_into(
+                f32_ptr(x_address), f32_ptr(w_address), sp, nr, nf, nt, fi,
+                host_predict_task_count(nr),
+            )
+            host_qn_softmax_into(sp, op, nr, nt, host_predict_task_count(nr))
+        else:
+            host_qn_decision_into(
+                f32_ptr(x_address), f32_ptr(w_address), sp, nr, nf, fi,
+                host_predict_task_count(nr),
+            )
+            host_qn_sigmoid_into(sp, op, nr, host_predict_task_count(nr))
+    _ = scores^
+    return PythonObject(0)
+
+
 def qn_predict_binary_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -1243,11 +1322,15 @@ def standard_transform_binding(
         raise Error("StandardScaler: positive dimensions with n*d<=Int32.max required")
     if with_mean < 0 or with_mean > 1 or with_std < 0 or with_std > 1:
         raise Error("StandardScaler: flags must be 0 or 1")
-    var x = _pp_load(_index(x_addr), n * d)
-    var mean = _pp_load(_index(mean_addr), d)
-    var scale = _pp_load(_index(scale_addr), d)
+    var x_address = _index(x_addr)
+    var mean_address = _index(mean_addr)
+    var scale_address = _index(scale_addr)
     var output = _pp_out(_index(out_addr))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x = _pp_load(x_address, n * d)
+        var mean = _pp_load(mean_address, d)
+        var scale = _pp_load(scale_address, d)
         standard_transform_host_run(x, mean, scale, output, n, d, inverse, with_mean, with_std)
     return PythonObject(n * d)
 
@@ -1271,11 +1354,15 @@ def minmax_transform_binding(
         raise Error("MinMaxScaler: positive dimensions with n*d<=Int32.max required")
     if not isfinite(lower) or not isfinite(upper) or lower >= upper:
         raise Error("MinMaxScaler: finite increasing Float32 feature range required")
-    var x = _pp_load(_index(x_addr), n * d)
-    var scale = _pp_load(_index(scale_addr), d)
-    var offset = _pp_load(_index(min_addr), d)
+    var x_address = _index(x_addr)
+    var scale_address = _index(scale_addr)
+    var offset_address = _index(min_addr)
     var output = _pp_out(_index(out_addr))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x = _pp_load(x_address, n * d)
+        var scale = _pp_load(scale_address, d)
+        var offset = _pp_load(offset_address, d)
         minmax_transform_host_run(x, scale, offset, output, n, d, inverse, clip, lower, upper)
     return PythonObject(n * d)
 
@@ -1333,16 +1420,17 @@ def kernel_ridge_predict_binding(
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var q = Int(py=params[9])
-    var x_fit = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var dual = read_f32(Int(py=addrs[1]), max(0, n * t))
-    var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
+    var x_fit_address = Int(py=addrs[0])
+    var dual_address = Int(py=addrs[1])
+    var x_new_address = Int(py=addrs[2])
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x_fit = read_f32(x_fit_address, max(0, n * d))
+        var dual = read_f32(dual_address, max(0, n * t))
+        var x_new = read_f32(x_new_address, max(0, q * d))
         kernel_ridge_predict_host_run(
             op, x_fit, dual, x_new, n, d, t, kernel, degree, gamma, coef0, q
         )
-    _ = x_fit^
-    _ = dual^
-    _ = x_new^
     return PythonObject(0)
 
 
@@ -1373,17 +1461,18 @@ def nystroem_transform_binding(
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var m = Int(py=params[8])
-    var components = read_f32(Int(py=addrs[0]), max(0, q * d))
-    var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
-    var x = read_f32(Int(py=addrs[5]), max(0, m * d))
+    var components_address = Int(py=addrs[0])
+    var normalization_address = Int(py=addrs[2])
+    var x_address = Int(py=addrs[5])
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var components = read_f32(components_address, max(0, q * d))
+        var normalization = read_f32(normalization_address, max(0, q * q))
+        var x = read_f32(x_address, max(0, m * d))
         nystroem_transform_host_run(
             op, components, normalization, x, q, d, kernel, degree, gamma, coef0, m
         )
-    _ = components^
-    _ = normalization^
-    _ = x^
     return PythonObject(0)
 
 
@@ -1409,15 +1498,16 @@ def rbf_sampler_transform_binding(
     var q = Int(py=params[1])
     var scale = Float32(Float64(py=params[5]))
     var m = Int(py=params[6])
-    var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
-    var offset = read_f32(Int(py=addrs[1]), max(0, q))
-    var x = read_f32(Int(py=addrs[2]), max(0, m * d))
+    var weights_address = Int(py=addrs[0])
+    var offset_address = Int(py=addrs[1])
+    var x_address = Int(py=addrs[2])
     var op = f32_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var weights = read_f32(weights_address, max(0, d * q))
+        var offset = read_f32(offset_address, max(0, q))
+        var x = read_f32(x_address, max(0, m * d))
         rbf_sampler_transform_host_run(op, weights, offset, x, d, q, scale, m)
-    _ = weights^
-    _ = offset^
-    _ = x^
     return PythonObject(0)
 
 
@@ -1465,6 +1555,8 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")
+        module.def_function[qn_proba_binding]("qn_proba")
+        module.def_function[ols_predict_wide_binding]("ols_predict_wide")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")
         module.def_function[pca_whiten_transform_binding]("pca_whiten_transform")

@@ -5,6 +5,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy, bitcast
+from std.os import getenv
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_address
 from bindings.py_typed_call import py_call_typed
 from bindings.sequential_description import sequential_fields
@@ -26,26 +27,28 @@ struct ClassicalMetricProgram(Movable):
         self.size += count
         return off
 
-    def stage(mut self, op: Int, total: Int, params: PythonObject) raises:
+    def stage(mut self, op: Int, total: Int, params: List[Int]) raises:
+        # Native stage words: the descriptor fields arrive as a native List,
+        # not a Python list read back one Int(py=) conversion at a time.
         if len(params) > 14:
             raise Error("classical score: too many native stage parameters")
         self.words.append(Int32(op))
         self.words.append(Int32(total))
         for k in range(14):  # driver-loop: over the fixed metric stage descriptor fields
-            self.words.append(Int32(Int(py=params[k])) if k < len(params) else Int32(0))
+            self.words.append(Int32(params[k]) if k < len(params) else Int32(0))
 
     def sum(mut self, key: Int, source: Int, rows: Int) raises -> Int:
         var off = self.alloc(2)
         var order = self.alloc(rows)
         var out = self.alloc(1)
-        self.stage(0, 1, Python.list(key, rows, 1, off, order))
-        self.stage(1, 1, Python.list(off, order, source, 1, -1, out, 1))
+        self.stage(0, 1, [key, rows, 1, off, order])
+        self.stage(1, 1, [off, order, source, 1, -1, out, 1])
         return out
 
     def finish(mut self, sums: Int, rows: Int, divide: Bool, narrow: Bool) raises -> Tuple[Int, Int]:
         var wide = self.alloc(2)
         var nearest = self.alloc(1) if narrow else -1
-        self.stage(60, 1, Python.list(0, 1, sums, -1, rows, wide, nearest, Int(divide)))
+        self.stage(60, 1, [0, 1, sums, -1, rows, wide, nearest, Int(divide)])
         return (wide, nearest)
 
 
@@ -66,15 +69,15 @@ struct ClassicalR2Layout(Movable):
         var p = program.alloc(rows)
         var scalar = program.alloc(1)
         var key = program.alloc(rows)
-        program.stage(2, rows, Python.list(0, 0, key, 1, 2))
+        program.stage(2, rows, [0, 0, key, 1, 2])
         var ys = program.sum(key, y, rows)
         var mean = program.finish(ys, rows, True, True)
         var term = program.alloc(rows)
-        program.stage(3, rows, Python.list(y, p, term, 1, 0, scalar, 0))
+        program.stage(3, rows, [y, p, term, 1, 0, scalar, 0])
         var sums = program.sum(key, term, rows)
         var numerator = program.finish(sums, rows, False, False)[0]
         var centered = program.alloc(rows)
-        program.stage(3, rows, Python.list(y, mean[1], centered, 1, 0, scalar, 1))
+        program.stage(3, rows, [y, mean[1], centered, 1, 0, scalar, 1])
         sums = program.sum(key, centered, rows)
         var denominator = program.finish(sums, rows, False, False)[0]
         self.program = program^
@@ -145,10 +148,26 @@ def _r2_finish(var layout: ClassicalR2Layout, arena: PythonObject, rows: Int, ta
     var bi = native_loaded_module("builtins")
     if py_type(metrics) is bi.str:
         raise Error("ImportError: " + String(metrics))
-    if String(metrics["x_metrics_vendor"]()) != String(py_get(context, "classical_metric_vendor", context["vendor"])):
-        raise Error("RuntimeError: score vendor differs from selected execution")
-    if Int(py=metrics["x_metrics_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
-        raise Error("RuntimeError: score mode differs from process default")
+    # The vendor and mode of a connected metrics binding are fixed when it
+    # loads: check them once per (metrics binding, mode, vendor) identity and
+    # keep the verdict in the long-lived connection context, as
+    # `classical_entries` does for the estimator binding. A reconnection
+    # installs a new binding object (or vendor object), so the check reruns.
+    var metric_vendor = py_get(context, "classical_metric_vendor", context["vendor"])
+    var verdicts = py_get(context, "classical_metrics_admitted")
+    var admitted = False
+    if verdicts is not None:
+        var seen = py_get(verdicts, mode)
+        admitted = seen is not None and seen[0] is metrics and seen[1] is metric_vendor
+    if not admitted:
+        if String(metrics["x_metrics_vendor"]()) != String(metric_vendor):
+            raise Error("RuntimeError: score vendor differs from selected execution")
+        if Int(py=metrics["x_metrics_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
+            raise Error("RuntimeError: score mode differs from process default")
+        if verdicts is None:
+            verdicts = Python.dict()
+            py_setitem(context, "classical_metrics_admitted", verdicts)
+        py_setitem(verdicts, mode, Python.tuple(metrics, metric_vendor))
     var size = layout.program.size
     var numerator = layout.numerator
     var denominator = layout.denominator
@@ -173,11 +192,9 @@ def _r2_finish(var layout: ClassicalR2Layout, arena: PythonObject, rows: Int, ta
     var stages = len(layout.program.words) // 16
     var words_address = Int(layout.program.words.unsafe_ptr())
     var outputs_address = Int(outputs.unsafe_ptr())
-    var setting = py_get(context["environment"], py_call(PythonObject("MOJOLEARN_ARENA_RANGES").encode, "ascii"), py_call(PythonObject("1").encode, "ascii"))
-    if py_type(setting) is not bi.bytes:
-        raise Error("TypeError: arena environment setting must be native bytes")
-    var setting_text = String(setting.decode())
-    var ranges = String(setting_text.strip()) != "0"
+    # The process environment read natively (os.environ edits reach it through
+    # putenv/unsetenv): no Python encode, dict lookup or decode per score.
+    var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"
     if ranges and py_get(metrics, "x_metrics_run_ranges") is not None:
         _ = py_call(metrics["x_metrics_run_ranges"], address, words_address,
             Python.tuple(size, stages, 1, 2), Int(inputs.unsafe_ptr()), outputs_address)

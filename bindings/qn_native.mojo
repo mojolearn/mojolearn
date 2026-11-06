@@ -6,7 +6,7 @@
 # attributes. score predicts and scores in the same call: the prediction stays
 # a native buffer handed straight to the R^2 program.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_pandas import classical_admit_value
@@ -30,8 +30,11 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32, classical_dtype_str, classical_c_order
 from bindings.classical_validate import classical_view, classical_check_weights_input, classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from bindings.classical_score import classical_r2_score
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime _QN_AFTER_FIT_SLOT = "qn_no_after_fit_v1"
+comptime _QN_KNOWN_SLOT = "qn_connected_owner_v1"
 
 
 def _qn_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -43,18 +46,49 @@ def _qn_entries(fields: PythonObject, context: PythonObject) raises -> PythonObj
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "identical" and String(mode) != "fast":
+    # ASCII strip/lower natively; other spellings take Python's Unicode-aware
+    # strip/lower (same accepted words, same refusal).
+    var mode_name = String(String(String(mode).strip()).lower())
+    if mode_name != "identical" and mode_name != "fast":
+        mode_name = String(py_call(py_call(mode.strip).lower))
+    if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    mode = PythonObject(mode_name)
     var entries = context["qn_bindings"][mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
+    # The table admission and the vendor/mode read-backs are fixed once the
+    # table is connected: kept per (mode, table, vendor) identity in the
+    # connection context, and only while the table dictionary is unchanged
+    # (dictionary watchers, Python >= 3.12; older Pythons check every call).
+    var vendor = context["vendor"]
+    var verdicts = py_get(context, "qn_entries_admitted")
+    if verdicts is not None:
+        var seen = py_get(verdicts, mode)
+        if seen is not None and seen[0] is entries and seen[1] is vendor and dict_keys_admitted(entries):
+            return entries
     _entry_table(entries, False)
-    if String(entries["estimators_vendor"]()) != String(context["vendor"]):
+    if String(entries["estimators_vendor"]()) != String(vendor):
         raise Error("RuntimeError: QN native vendor differs from selected execution")
-    if Int(py=entries["estimators_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
+    if Int(py=entries["estimators_numeric_mode"]()) != (1 if mode_name == "identical" else 0):
         raise Error("RuntimeError: QN native mode differs from selected execution")
+    dict_keys_admit(entries)
+    if verdicts is None:
+        verdicts = Python.dict()
+        py_setitem(context, "qn_entries_admitted", verdicts)
+    py_setitem(verdicts, mode, Python.tuple(entries, vendor))
     return entries
+
+
+def _metric_table(metric: PythonObject, context: PythonObject) raises:
+    # `_entry_table(metric, True)` once per connected metrics table while it
+    # is unchanged (same record rule as `_qn_entries`).
+    var seen = py_get(context, "qn_metric_admitted")
+    if seen is not None and seen is metric and dict_keys_admitted(metric):
+        return
+    _entry_table(metric, True)
+    dict_keys_admit(metric)
+    py_setitem(context, "qn_metric_admitted", metric)
 
 
 def _int(value: PythonObject) raises -> Int:
@@ -277,10 +311,16 @@ def _qn_initialize(model: PythonObject, args: PythonObject, context: PythonObjec
 def _qn_admit(model: PythonObject, context: PythonObject, fitting: Bool) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var ancestry = _type_mro(py_type(model))
-    for i in range(len(ancestry)):  # driver-loop: never invoke a Python post-fit hook
-        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
-            raise Error("TypeError: QNRegressor cannot invoke Python fit callbacks")
+    # The class rows' verdict is kept per class state (native_class_admission:
+    # any class or ancestor modification invalidates it); only a pass is kept.
+    var mods = NativeModules()
+    var cls = py_type(model)
+    if class_record(mods, _QN_AFTER_FIT_SLOT, cls) is None:
+        var ancestry = _type_mro(cls)
+        for i in range(len(ancestry)):  # driver-loop: never invoke a Python post-fit hook
+            if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+                raise Error("TypeError: QNRegressor cannot invoke Python fit callbacks")
+        class_admit(mods, _QN_AFTER_FIT_SLOT, cls, PythonObject(True))
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: QNRegressor cannot invoke Python fit callbacks")
     var names = _qn_schema(context)
@@ -311,12 +351,23 @@ def qn_public_operation(model: PythonObject, operation: String, args: PythonObje
     var b = native_loaded_module("builtins")
     if py_type(args) is not b.tuple:
         raise Error("TypeError: QN arguments require a native tuple")
-    var ancestry = _type_mro(py_type(model))
-    var known = False
-    for i in range(len(ancestry)):  # driver-loop: preserve passive subclasses of the connected owner
-        known = known or ancestry[i] is context["qn_public_class"]
-    if not known:
-        raise Error("TypeError: QNRegressor requires its connected native class")
+    # Whether the model's class descends from the connected owner depends on
+    # the class rows only: kept per class state, with the owner it matched
+    # (a reconnection installs a new owner class, so the identity differs).
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var owner = context["qn_public_class"]
+    # The owner class itself needs no walk; a subclass's verdict is recorded
+    # with the owner as payload (a record must not retain its own class).
+    var record = PythonObject(None) if cls is owner else class_record(mods, _QN_KNOWN_SLOT, cls)
+    if not (cls is owner) and (record is None or record is not owner):
+        var ancestry = _type_mro(cls)
+        var known = False
+        for i in range(len(ancestry)):  # driver-loop: preserve passive subclasses of the connected owner
+            known = known or ancestry[i] is owner
+        if not known:
+            raise Error("TypeError: QNRegressor requires its connected native class")
+        class_admit(mods, _QN_KNOWN_SLOT, cls, owner)
     if operation == "initialize":
         return _qn_initialize(model, args, context)
     var fitting = operation == "fit"
@@ -341,7 +392,7 @@ def qn_public_operation(model: PythonObject, operation: String, args: PythonObje
         elif operation == "score":
             var metric = context["classical_metrics"][context["backend_fields"]["_DEFAULT_MODE"]]
             if py_type(metric) is not b.str:
-                _entry_table(metric, True)
+                _metric_table(metric, context)
             result = classical_r2_score(qn_regressor_predict(model, x, context), args[1], context)
         else:
             raise Error("RuntimeError: unknown native QN operation")

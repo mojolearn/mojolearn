@@ -17,9 +17,31 @@ from bindings.host_inference_preparation import host_inference_pandas_finite
 from core.host_inference_impl import host_inference_raw_finite
 from core.host_tree_impl import host_tree_argmax, host_label_codes_in_range, host_label_first_unconverted, host_label_gather_i64, host_label_gather_f64
 from core.host_sparse_impl import host_sparse_uint64_bound
+from bindings.p3_linear_helpers import py_list_select
+
+
+struct _LabelAliases(Movable):
+    # The eight native scalar alias classes (np.dtype(code).type), built at
+    # most once per class-table read instead of once per label.
+    var types: List[PythonObject]
+
+    def __init__(out self):
+        self.types = List[PythonObject]()
+
+    def fill(mut self, context: PythonObject) raises:
+        if len(self.types) == 0:
+            var aliases = Python.tuple("q", "Q", "g", "U", "S", "F", "D", "G")
+            var constructor = native_numpy_dtype(context)
+            for i in range(len(aliases)):  # driver-loop: exact native scalar aliases
+                self.types.append(py_call(constructor, aliases[i]).type)
 
 
 def _logistic_label_kind(value: PythonObject, context: PythonObject) raises -> Int:
+    var aliases = _LabelAliases()
+    return _logistic_label_kind(value, context, aliases)
+
+
+def _logistic_label_kind(value: PythonObject, context: PythonObject, mut alias_types: _LabelAliases) raises -> Int:
     # 1=integer, 2=real, 0=object labels. Only exact native scalar slots can
     # enter a numeric conversion; object labels are returned by reference.
     var b = native_loaded_module("builtins")
@@ -34,10 +56,9 @@ def _logistic_label_kind(value: PythonObject, context: PythonObject) raises -> I
         var kind = String(value.dtype.kind)
         return 1 if kind == "i" or kind == "u" else (2 if kind == "f" else 0)
     if py_get(context, "ndarray") is not None:
-        var aliases = Python.tuple("q", "Q", "g", "U", "S", "F", "D", "G")
-        var constructor = native_numpy_dtype(context)
-        for i in range(len(aliases)):  # driver-loop: exact native scalar aliases
-            if cls is py_call(constructor, aliases[i]).type:
+        alias_types.fill(context)
+        for i in range(len(alias_types.types)):  # driver-loop: exact native scalar aliases
+            if cls is alias_types.types[i]:
                 return 1 if i < 2 else (2 if i == 2 else 0)
     classical_admit_value(value, context)
     return 0
@@ -85,25 +106,25 @@ def host_logistic_classes(source: PythonObject, context: PythonObject) raises ->
             _ = py_call(labels.append, source[i])
     else:
         raise Error("TypeError: class labels require native list or array storage without Python protocols")
+    var alias_types = _LabelAliases()
     for i in range(len(labels)):  # driver-loop: scalar label admission before numeric slots
-        _ = _logistic_label_kind(labels[i], context)
+        _ = _logistic_label_kind(labels[i], context, alias_types)
     return labels
 
 
 def _host_logistic_selected(labels: PythonObject, indices: List[Int]) raises -> PythonObject:
-    """The list of selected label references (object-label result)."""
-    var selected = Python.list()
-    for i in range(len(indices)):  # cpu-route: object-label output, one stored class reference per predicted row
-        _ = py_call(selected.append, labels[indices[i]])
-    return selected
+    """The list of selected label references (object-label result): one
+    PyList_New and direct slot stores of the k stored class references."""
+    return py_list_select(labels, indices)
 
 
 def _host_logistic_decode(labels: PythonObject, indices: List[Int], array_labels: Bool, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var integers = True
     var numbers = True
+    var alias_types = _LabelAliases()
     for i in range(len(labels)):  # driver-loop: distinct label result-type metadata
-        var kind = _logistic_label_kind(labels[i], context)
+        var kind = _logistic_label_kind(labels[i], context, alias_types)
         integers = integers and kind == 1
         numbers = numbers and kind != 0
     var k = len(labels)
@@ -209,6 +230,23 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
         for i in range(rows):  # driver-loop: native completed class-code publication
             indices.append(Int(values[i]))
         _ = codes^
+    elif (operation == "host_infer_predict_proba" or operation == "host_infer_predict_log_proba") and py_get(
+            context["host_inference_entries"], "qn_proba") is not None:
+        # Decision and link in one native call (no Python scores array).
+        var probabilities = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
+        _ = py_call(_kernel_entry("qn_proba", context), classical_address(x), classical_address(weights),
+            classical_address(probabilities), Python.list(rows, features, Int(intercept), targets))
+        if operation == "host_infer_predict_log_proba":
+            var flags = 0
+            if py_get(context["host_inference_entries"], "py2mojo_linear_flags") is not None:
+                flags = Int(py=py_call(_kernel_entry("py2mojo_linear_flags", context)))
+            if (flags & 2) == 0:
+                raise Error("RuntimeError: this estimators binding predates py2mojo_rows; rebuild it")
+            out = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
+            _ = py_call(_kernel_entry("py2mojo_rows", context), 1, classical_address(probabilities), classical_address(out), Python.list(rows * count, 1))
+        else:
+            out = probabilities
+        _ = probabilities^
     else:
         scores = host_archive_typed(Python.tuple(rows) if targets == 1 else Python.tuple(rows, targets), "<f4", context["output_context"])
         _ = py_call(_kernel_entry("qn_decision_function", context), classical_address(x), classical_address(weights),

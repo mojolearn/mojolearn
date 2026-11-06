@@ -25,10 +25,14 @@ def _linear_mode(fields: PythonObject, context: PythonObject) raises -> PythonOb
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "identical" and String(mode) != "fast":
+    # ASCII strip/lower natively; anything else takes Python's Unicode-aware
+    # strip/lower (same accepted spellings, same refusal).
+    var mode_name = String(String(String(mode).strip()).lower())
+    if mode_name != "identical" and mode_name != "fast":
+        mode_name = String(py_call(py_call(mode.strip).lower))
+    if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    return mode
+    return PythonObject(mode_name)
 
 
 def _linear_entries(table: PythonObject, mode: PythonObject) raises -> PythonObject:

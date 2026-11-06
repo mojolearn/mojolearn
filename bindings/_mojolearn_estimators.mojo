@@ -99,6 +99,7 @@ from decomposition.estimator import (
     tsvd_fit_host,
     tsvd_transform_host,
 )
+from core.p3_linear_impl import ols_predict_wide_device
 from glm.estimator import (
     ols_fit_host,
     ols_fit_resident_host,
@@ -858,6 +859,32 @@ def ols_predict_binding(
     return PythonObject(0)
 
 
+def ols_predict_wide_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ols_predict` with a float64 output: the same float32 kernel and
+    words, each prediction widened exactly to float64 as it is written to
+    `out` (the public predict's dtype). One call and one output buffer, the
+    widening done with the GIL released (Apple GPUs have no float64, so the
+    exact widen stays on the host side of the download). params: n_rows,
+    n_features, intercept. Returns 0."""
+    if len(params) != 3:
+        raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    var wide = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var intercept = Float32(Float64(py=params[2]))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ols_predict_wide_device(ctx, xp, cp, wide, nr, nf, intercept)
+    return PythonObject(0)
+
+
 def ridge_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -995,20 +1022,20 @@ def ridge_fit_multi_binding(
     var nt = Int(py=params[2])
     var alpha = Float32(Float64(py=params[3]))
     var center = Int(py=params[4]) != 0
+    # The intercept addresses are read with the GIL held, before the one
+    # GIL-released device section that runs the fit and then the intercepts.
+    var want_icpt = len(params) == 7 and nt > 0 and nf > 0
+    var xm = _f32_ptr(Int(py=params[5])) if want_icpt else wp
+    var ic = _f32_ptr(Int(py=params[6])) if want_icpt else wp
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
         ctx.synchronize()
-    if len(params) == 7:
-        var xm = _f32_ptr(Int(py=params[5]))
-        var ic = _f32_ptr(Int(py=params[6]))
-        if nt > 0 and nf > 0:
-            with GILReleased(Python()):
-                # cpu2-l6-bindings: the intercepts on the device
-                # (`ridge_multi_icpt_kernel`), one thread per target
-                var ctx = process_ctx[_DEVCTX_SLOT]()
-                ridge_multi_icpt_device(ctx, xm, wp, mp, ic, nf, nt)
-                _ = ctx^
+        if want_icpt:
+            # cpu2-l6-bindings: the intercepts on the device
+            # (`ridge_multi_icpt_kernel`), one thread per target
+            ridge_multi_icpt_device(ctx, xm, wp, mp, ic, nf, nt)
+        _ = ctx^
     return PythonObject(0)
 
 
@@ -1167,6 +1194,44 @@ def qn_decision_function_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc)
         ctx.synchronize()
+    return PythonObject(0)
+
+
+def qn_proba_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`predict_proba` in one call: `qn_decision_function` then the sigmoid
+    (n_classes < 3: out float64 (n_rows, 2)) or softmax (out float64
+    (n_rows, n_classes)) link, the same kernels and words as the two entries
+    called in turn, with the scores held in native scratch instead of a
+    Python array between two binding crossings. params: n_rows, n_features,
+    fit_intercept, n_classes. Returns 0."""
+    if len(params) != 4:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var fi = Int(py=params[2]) != 0
+    var nc = Int(py=params[3])
+    var nt = nc if nc > 2 else 1
+    var scores = List[Float32](length=max(nr * nt, 1), fill=0)
+    var sp = _f32_ptr(Int(scores.unsafe_ptr()))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        qn_decision_function_host(ctx, xp, cp, sp, nr, nf, fi, nt)
+        ctx.synchronize()
+        if nr > 0:
+            if nt == 1:
+                qn_sigmoid_device(ctx, sp, op, nr)
+            else:
+                qn_softmax_device(ctx, sp, op, nr, nt)
+        _ = ctx^
+    _ = scores^
     return PythonObject(0)
 
 
@@ -1533,6 +1598,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
+        m.def_function[qn_proba_binding]("qn_proba")
+        m.def_function[ols_predict_wide_binding]("ols_predict_wide")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")
         m.def_function[ridge_resident_default_binding]("ridge_resident_default")

@@ -53,6 +53,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_type as _balanced_type
 from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -89,6 +90,12 @@ def hierarchy_solver_native_api_v1_binding() raises -> PythonObject:
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Exact Python int (every buffer address and size the owners pass): one
+    # type-pointer compare and a native integer read; no class-name strings,
+    # module lookup or operator.index call. bool is its own class, so it
+    # never takes this path. Anything else keeps the full admission below.
+    if _balanced_type(value) is _balanced_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("solver host: integers expected, not booleans")
