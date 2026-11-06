@@ -3,6 +3,7 @@
 # publication, owned by Mojo. All fitting arithmetic stays in selected C ABI
 # entries; this module never calls the Python _M/_Kit driver.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_array, classical_word, classical_address
@@ -96,7 +97,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
     var decomp = PythonObject(None)
     if tsqr:
         decomp = py_get(entries, "decomp")
-        if py_type(decomp) is not Python.import_module("builtins").dict:
+        if py_type(decomp) is not native_loaded_module("builtins").dict:
             raise Error("ImportError: native LinearRegression TSQR entries unavailable: " + String(decomp))
         if String(decomp["x_decomp_vendor"]()) != String(context["vendor"]):
             raise Error("RuntimeError: TSQR vendor differs from selected execution")

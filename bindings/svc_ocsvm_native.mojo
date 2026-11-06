@@ -10,6 +10,7 @@
 # binding's `gather_i32` and `cast_elements`: the bits do not move.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
@@ -118,7 +119,7 @@ def _fast_tier(binding: PythonObject, context: PythonObject) -> Bool:
 
 def _resolve_gamma(binding: PythonObject, gamma: PythonObject, x: PythonObject, context: PythonObject) raises -> Float64:
     """`_expansion_neighbors._resolve_gamma`."""
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     var d = Int(py=x.shape[1])
     if gamma is None or Bool(py=family_call(operator.eq, gamma, PythonObject("auto"))):
         return 1.0 / Float64(d)

@@ -3,6 +3,7 @@
 # constructors. Preserve parameter object identities and defer value checks
 # until fit, exactly as the public constructor contract requires.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields
 from bindings.params_metadata_native import _resolved
@@ -20,7 +21,7 @@ def tree_parameter_storage(model: PythonObject, names: PythonObject) raises:
 
 def tree_store_parameters(fields: PythonObject, values: PythonObject,
                           context: PythonObject, reset: Bool) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var previous = py_call(b.dict, fields)
     var replacement = Python.dict() if reset else py_call(b.dict, previous)
     _ = py_call(replacement.update, values)
@@ -32,7 +33,7 @@ def tree_store_parameters(fields: PythonObject, values: PythonObject,
 
 
 def tree_constructor_values(model: PythonObject, args: PythonObject, constructors: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var owner = args[0]
     var cls = py_type(model)
     if py_type(owner) is not b.type or py_type(cls) is not b.type:

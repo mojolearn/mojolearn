@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Generator metadata and the inclusive exhausted next-stream sentinel."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem
 
 
 def generator_fields(value: PythonObject) raises -> PythonObject:
-    return py_call(Python.import_module("builtins").object.__getattribute__, value, "__dict__")
+    return py_call(native_loaded_module("builtins").object.__getattribute__, value, "__dict__")
 
 
 def generator_validate(seed: PythonObject, counter: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var s = py_call(bi.int, seed)
     var c = py_call(bi.int, counter)
     if Bool(py=s < 0) or Bool(py=s >= py_call(bi.int, "18446744073709551616")):

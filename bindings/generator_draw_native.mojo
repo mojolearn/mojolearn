@@ -2,6 +2,7 @@
 """Native buffer preparation and launch ownership for existing Generator draws."""
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -53,7 +54,7 @@ comptime GENERATOR_DRAW_BOUNDARY = _Global[
 def _builtins() raises -> PythonObject:
     var g = GENERATOR_DRAW_BOUNDARY.get_or_create_ptr()
     if g[].builtins is None:
-        g[].builtins = Python.import_module("builtins")
+        g[].builtins = native_loaded_module("builtins")
     return g[].builtins
 
 

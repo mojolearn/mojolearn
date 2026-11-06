@@ -3,6 +3,7 @@
 # through the existing Host* CPU contract once; no product route selection is
 # delegated to Python and the ordinary GPU owner never enters this path.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import sequential_admit_value
@@ -13,7 +14,7 @@ from bindings.sha256_door import sha256_hexdigest
 
 def classical_host_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
         raise Error("the host model runs identical only; this model was saved with a different numeric_mode")
@@ -33,7 +34,7 @@ def classical_host_hash(model: PythonObject, context: PythonObject) raises -> Py
     var fields = sequential_fields(model)
     if not py_contains(fields, "coef_"):
         raise Error("AttributeError: host linear model has no coef_")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var value = fields["coef_"]
     var payload = py_call(PythonObject("").encode, "ascii")
     if value is not None:

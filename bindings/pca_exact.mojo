@@ -5,6 +5,7 @@
 # so replacing a supported public array preserves its documented semantics.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
@@ -28,7 +29,7 @@ struct PCADimensions(Copyable, Movable):
 
 
 def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     # NumPy's keys are in the context only once NumPy is loaded
     var ndarray = py_get(context, "ndarray")
     if (ndarray is not None and py_type(source) is ndarray) or py_type(source) is context["array_class"]:
@@ -82,7 +83,7 @@ def pca_input(source: PythonObject, context: PythonObject) raises -> PythonObjec
         raise Error("Complex data not supported: PCA got a complex X.")
     if kind == "b" or kind == "i" or kind == "u" or kind == "f":
         var nd = Int(py=view.ndim)
-        var shape = String(py_call(Python.import_module("builtins").repr, view.shape))
+        var shape = String(py_call(native_loaded_module("builtins").repr, view.shape))
         if nd < 2:
             raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + shape + "). " + RESHAPE_HINT)
         if nd == 2 and Int(py=view.shape[0]) == 0:
@@ -120,7 +121,7 @@ def pca_too_small(rows: Int, cols: Int) -> String:
 
 def pca_solver_checks(fields: PythonObject, entries: PythonObject) raises -> String:
     """The solver name and tol refusals, before any input is read."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var value = fields["svd_solver"]
     var solver = String("")
     if py_type(value) is b.str:
@@ -144,7 +145,7 @@ def pca_keep_fit(fields: PythonObject, source: PythonObject, components: PythonO
                  variance: PythonObject, ratio: PythonObject, singular: PythonObject, noise: PythonObject,
                  keep: Int, cols: Int, rows: Int, context: PythonObject) raises:
     # Commit a complete state only after the one fit call returned.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     py_setitem(fields, "input_copied_", pca_copied(source, context))
     py_setitem(fields, "components_", components)
     py_setitem(fields, "mean_", mean)
@@ -167,7 +168,7 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, solver: String, proje
     from the same resident data. The same entry, arguments and order the
     Python shell used, so the bits are unchanged. Returns the model, or the
     projection when `project`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
     var x = pca_input(args[0], context)
     var rows = Int(py=x.shape[0])
