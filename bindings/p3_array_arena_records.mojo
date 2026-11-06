@@ -31,7 +31,8 @@ call back into Python on a hit.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready, _dict_watcher, _dict_epoch
+from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready
+from bindings.native_loaded_module import shared_dict_watcher, shared_dict_epoch
 
 
 # Admission kinds: one per distinct check, so one class can carry several.
@@ -213,13 +214,13 @@ def p3_dict_admitted(kind: Int, fields: PythonObject) raises -> Bool:
     var key = address * 16 + kind
     if key not in g[].epochs:
         return False
-    return g[].epochs[key] == _dict_epoch(address)
+    return g[].epochs[key] == shared_dict_epoch(address)
 
 
 def p3_dict_admit(kind: Int, fields: PythonObject) raises:
     """Record that `fields` just passed the full `kind` key admission (or
     that only this owner's own admitted keys went in since it did)."""
-    var watcher = _dict_watcher()
+    var watcher = shared_dict_watcher()
     if watcher < 0:
         return
     ref cpy = Python().cpython()
@@ -229,4 +230,4 @@ def p3_dict_admit(kind: Int, fields: PythonObject) raises:
         return
     var address = Int(fields._obj_ptr)
     var g = P3_DICT_RECORDS.get_or_create_ptr()
-    g[].epochs[address * 16 + kind] = _dict_epoch(address)
+    g[].epochs[address * 16 + kind] = shared_dict_epoch(address)
