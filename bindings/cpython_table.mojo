@@ -114,6 +114,10 @@ comptime _Py_EnterRecursiveCall = ExternalFunction[
 # void Py_LeaveRecursiveCall(void)
 comptime _Py_LeaveRecursiveCall = ExternalFunction[
     "Py_LeaveRecursiveCall", def() thin abi("C") -> NoneType]
+# int PyBuffer_ToContiguous(void *buf, const Py_buffer *src, Py_ssize_t len, char order)
+# (the Py_buffer as the same word storage as PyObject_GetBuffer)
+comptime _PyBuffer_ToContiguous = ExternalFunction[
+    "PyBuffer_ToContiguous", def(UnsafePointer[UInt8, MutUntrackedOrigin], UnsafePointer[Int, MutUntrackedOrigin], Int, Int8) thin abi("C") -> c_int]
 
 
 struct CPythonTable(Movable):
@@ -146,6 +150,7 @@ struct CPythonTable(Movable):
     var Py_GetRecursionLimit: _Py_GetRecursionLimit.type
     var Py_EnterRecursiveCall: _Py_EnterRecursiveCall.type
     var Py_LeaveRecursiveCall: _Py_LeaveRecursiveCall.type
+    var PyBuffer_ToContiguous: _PyBuffer_ToContiguous.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -179,6 +184,7 @@ struct CPythonTable(Movable):
         self.Py_GetRecursionLimit = _Py_GetRecursionLimit.load(lib)
         self.Py_EnterRecursiveCall = _Py_EnterRecursiveCall.load(lib)
         self.Py_LeaveRecursiveCall = _Py_LeaveRecursiveCall.load(lib)
+        self.PyBuffer_ToContiguous = _PyBuffer_ToContiguous.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
