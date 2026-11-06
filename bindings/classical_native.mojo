@@ -70,10 +70,16 @@ def classical_entries(model: PythonObject, context: PythonObject) raises -> Pyth
     var b = native_loaded_module("builtins")
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    mode = mode.strip().lower()
-    var mode_name = String(mode)
+    # `mode.strip().lower()` in native string operations, once: no Python
+    # method lookups or calls. ASCII whitespace and case are handled here; a
+    # word that is not then exactly "identical" or "fast" takes Python's
+    # Unicode-aware strip/lower (same refusal, same accepted spellings).
+    var mode_name = String(String(String(mode).strip()).lower())
+    if mode_name != "identical" and mode_name != "fast":
+        mode_name = String(mode.strip().lower())
     if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    mode = PythonObject(mode_name)
     var entries = context["classical_bindings"][mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
