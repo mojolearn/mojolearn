@@ -780,7 +780,21 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
                 perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, context))
             else:
                 var folds = msel_cv_folds(estimator, x, yp, cv, groups, False, context)[2]
-                perm_scores.append(_mean_own(estimator, x, yp, folds, sc, device, context))
+                # pass 3 (rank 107): the permutation's folds run on rows0 (X
+                # stored once for the whole call), as the reused folds do;
+                # only the fold index sets change. `_mean_own` built a new
+                # MselFoldRows, so X was copied and stored again and freed
+                # for every permutation. The permutation's index entries are
+                # released after its scores (release ignores an index the
+                # store never held).
+                rows0.folds = folds
+                try:
+                    perm_scores.append(_mean_test(estimator, x, yp, folds, sc, rows0, context))
+                finally:
+                    rows0.folds = folds0
+                    for f in range(len(folds)):  # driver-loop: over this permutation's folds
+                        rows0.resident_release(folds[f][0], context)
+                        rows0.resident_release(folds[f][1], context)
     finally:
         rows0.close(context)
     return Python.tuple(PythonObject(score), msel_f64_list(perm_scores, context),
