@@ -25,6 +25,7 @@ from bindings.native_json import native_json_parse
 from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_sliced8
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from core.sha256 import Sha256
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 
 
 struct CrossVendorBoundary(Defaultable, Movable):
@@ -109,17 +110,24 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
     var n = len(store)
     var total = store.buffer_info()[0]
     for k in range(first, len(parts)):  # driver-loop: over logical shard gradient buffers in immutable order
-        var shard = py_call(c[].arrays, "f")
-        _ = py_call(shard.frombytes, py_call(cross_vendor_f32(parts[k]).cast, "B"))
-        if len(shard) != n:
-            raise Error("ordered_fold: gradients differ in length")
-        # Retain the selected operation's existing GPU/CPU execution route.
-        # Mojo owns the immutable fold; the cached compiled entry owns its
-        # arithmetic, including FTZ and the one float32 rounding per add.
-        _ = py_call(c[].fold_pair, total, shard.buffer_info()[0], n)
-        # Explicitly retain the C array owning the address across every read;
-        # converting to an integer pointer erases the compiler's origin edge.
-        _ = shard^
+        # pass 3 (rank 36): the shard's received float32 view is folded in
+        # place (one read-only buffer export); it was copied into a new
+        # array('f') per shard first. Same values, same fold order.
+        var view = cross_vendor_f32(parts[k])
+        var pin = AdmittedBorrowedBuffer(view)
+        try:
+            var layout = pin.layout.value().copy()
+            if layout.count != n:
+                raise Error("ordered_fold: gradients differ in length")
+            if layout.itemsize != 4 or not layout.contiguous():
+                raise Error("ordered_fold: gradients must be contiguous float32")
+            # Retain the selected operation's existing GPU/CPU execution route.
+            # Mojo owns the immutable fold; the cached compiled entry owns its
+            # arithmetic, including FTZ and the one float32 rounding per add.
+            _ = py_call(c[].fold_pair, total, PythonObject(layout.address), n)
+        finally:
+            pin.release()  # the export pins the received bytes through the fold above
+        _ = view^
     var result = store.tobytes()
     _ = store
     return result
