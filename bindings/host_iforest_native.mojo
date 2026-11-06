@@ -27,12 +27,29 @@ def host_iforest_admit_option(value: PythonObject, context: PythonObject) raises
     # Scoring uses the separately admitted resolved controls; do not reject a
     # successful fit merely because its unused original option is an alias.
     if py_get(context, "ndarray") is not None:
-        var constructor = native_numpy_dtype(context)
-        var aliases = Python.tuple("q", "Q", "g", "U", "S")
-        for i in range(len(aliases)):  # driver-loop: exact original native option aliases
-            if py_type(value) is py_call(constructor, aliases[i]).type:
+        var kind = py_type(value)
+        var types = host_iforest_alias_types(context)
+        for i in range(1, len(types)):  # driver-loop: exact original native option aliases
+            if kind is types[i]:
                 return
     classical_admit_value(value, context)
+
+
+def host_iforest_alias_types(context: PythonObject) raises -> PythonObject:
+    """`(dtype constructor, type of 'q', 'Q', 'g', 'U', 'S')`, built once per
+    connected NumPy dtype constructor and kept in the context (p3-trees: the
+    five np.dtype() calls ran for each option on every scoring call)."""
+    var constructor = native_numpy_dtype(context)
+    var held = py_get(context, "_host_iforest_alias_types")
+    if held is not None and held[0] is constructor:
+        return held
+    var aliases = Python.tuple("q", "Q", "g", "U", "S")
+    var types = Python.list(constructor)
+    for i in range(len(aliases)):  # driver-loop: exact original native option aliases
+        _ = py_call(types.append, py_call(constructor, aliases[i]).type)
+    var record = py_call(native_loaded_module("builtins").tuple, types)
+    py_setitem(context, "_host_iforest_alias_types", record)
+    return record
 
 
 def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
