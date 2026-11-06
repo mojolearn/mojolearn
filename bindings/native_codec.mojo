@@ -133,6 +133,32 @@ def _codec_captured_bytes(pin: AdmittedBorrowedBuffer, maximum: Int) raises -> P
     return PythonObject(from_owned=result)
 
 
+def _codec_append_captured(pin: AdmittedBorrowedBuffer, payload: PythonObject, maximum: Int) raises -> PythonObject:
+    """`_codec_buffer(_codec_captured_bytes(pin, maximum - len(payload)),
+    payload, "array", maximum)` in one copy: the payload bytearray grows by
+    the tensor's size and the admitted layout writes its logical C-order
+    bytes straight into the new tail (it went through a List, then a bytes
+    object, then extend)."""
+    var layout = pin.layout.value().copy()
+    var begin = len(payload)
+    var count = layout.count * layout.itemsize
+    if count > maximum - begin:
+        raise Error("codec: payload exceeds its byte limit")
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyByteArray_Resize")(payload._obj_ptr, begin + count) != 0:
+        raise cpy.unsafe_get_error()
+    if count > 0:
+        var base = cpy.lib.get_function[Int]("PyByteArray_AsString")(payload._obj_ptr)
+        if base == 0:
+            raise cpy.unsafe_get_error()
+        layout.copy_to(base + begin)
+    var item = CODEC_BOUNDARY.get_or_create_ptr()[].bi.dict()
+    py_setitem(item, "kind", PythonObject("array"))
+    py_setitem(item, "begin", PythonObject(begin))
+    py_setitem(item, "size", PythonObject(count))
+    return item
+
+
 def _codec_code(dtype: String) raises -> String:
     if dtype == "<f4":
         return "f"
@@ -279,8 +305,7 @@ def _codec_encode(value: PythonObject, payload: PythonObject, maximum: Int,
                 _ = py_call(shape.append, pin.layout.value().shape[i])
         var order = _codec_text(captured.order) if native else String("C")
         var readonly = captured._readonly if native else PythonObject(pin.layout.value().readonly)
-        var raw = _codec_captured_bytes(pin, maximum - len(payload))
-        result = _codec_buffer(raw, payload, "array", maximum)
+        result = _codec_append_captured(pin, payload, maximum)
         py_setitem(result, "dtype", PythonObject(dtype))
         py_setitem(result, "shape", shape)
         py_setitem(result, "order", PythonObject(order))
