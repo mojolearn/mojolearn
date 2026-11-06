@@ -85,6 +85,19 @@ def _samba_close_tapes(tapes: PythonObject) raises:
 
 
 def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonObject, num_items: PythonObject, stream: PythonObject, token_offset: Int, context: PythonObject) raises -> PythonObject:
+    # Public `model_gradients` / `gradients`: ids and targets are caller
+    # buffers, converted to int32 here.
+    return _samba_gradients(model, inputs, targets, num_items, stream, token_offset, False, context)
+
+
+def samba_gradients_admitted(model: PythonObject, ids: PythonObject, y: PythonObject, num_items: PythonObject, stream: PythonObject, token_offset: Int, context: PythonObject) raises -> PythonObject:
+    # The train step's microbatches: `ids` and `y` are already the admitted
+    # C-order int32 Arrays `samba_ids` returned (vocab range checked), so the
+    # second conversion of every microbatch is skipped.
+    return _samba_gradients(model, ids, y, num_items, stream, token_offset, True, context)
+
+
+def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonObject, num_items: PythonObject, stream: PythonObject, token_offset: Int, admitted: Bool, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
@@ -95,8 +108,8 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
         native = PythonObject(None)
     var d = Int(py=config["d_model"])
     var vocab = Int(py=config["vocab"])
-    var ids = samba_ids(inputs, vocab, False, context)
-    var y = samba_ids(targets, vocab, True, context)
+    var ids = inputs if admitted else samba_ids(inputs, vocab, False, context)
+    var y = targets if admitted else samba_ids(targets, vocab, True, context)
     var shape = ids.shape
     if Bool(py=shape != y.shape):
         raise Error("Samba: targets must match inputs' shape")
