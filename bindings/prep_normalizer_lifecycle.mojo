@@ -150,11 +150,13 @@ def _class_settings(model: PythonObject) raises -> PythonObject:
     return payload
 
 
-def _instance_setting(model: PythonObject, fields: PythonObject, settings: PythonObject, index: Int,
-                      fallback: PythonObject) raises -> PythonObject:
+def _instance_setting(model: PythonObject, fields: PythonObject, settings: PythonObject, names: PythonObject,
+                      index: Int, fallback: PythonObject) raises -> PythonObject:
     # `_setting` on a recorded class value: the instance field wins, then the
     # class value through `_value` (descriptor checks), else `fallback`.
-    var key = _class_settings_names()[index]
+    # `names`: `_class_settings_names()`, built once per transform by the
+    # caller instead of once per setting (pass2-prep-metrics).
+    var key = names[index]
     if not py_contains(fields, key) and settings[index + 1] is settings[0]:
         return fallback
     return _value(model, fields, key, Python.dict(missing=Python.list()), "AttributeError")
@@ -315,12 +317,14 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
     var tags = _tags_of(settings[2], unset)
     var validate = not nested and _truth(py_get(tags, "two_d_array", True)) and not _truth(py_get(tags, "one_d_array", False))
     var scan = not _truth(py_get(tags, "allow_nan", False))
+    var setting_names = _class_settings_names()
     # A Python hook used solely to decide validation is still runtime work.
-    if not nested and scan and _instance_setting(model, fields, settings, 2, PythonObject(None)) is not None:
+    if not nested and scan and _instance_setting(model, fields, settings, setting_names, 2,
+                                                 PythonObject(None)) is not None:
         raise Error("TypeError: native Normalizer validation requires static input tags; Python allow-NaN hooks cannot execute")
     var precomputed = False
     for k in range(3, 7):  # small-loop(metadata: existing width-check exemptions metric/kernel/affinity/dissimilarity)
-        var option = _instance_setting(model, fields, settings, k, PythonObject(None))
+        var option = _instance_setting(model, fields, settings, setting_names, k, PythonObject(None))
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
     var sparse = _truth(py_get(tags, "sparse", False))
     var snapshot = prep_transform_snapshot(source, name, validate, scan, context, sparse, not nested)
