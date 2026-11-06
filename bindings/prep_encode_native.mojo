@@ -3084,10 +3084,15 @@ def prep_encode_scores_call(operation: String, args: PythonObject, context: Pyth
 
 # ---------------------------------------------------------------- the door
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
-    # The admitted class this model is (or subclasses), by its MRO.
+    # The admitted class this model is (or subclasses), by its MRO. The
+    # model's own class is the MRO's first row: an exact public class is
+    # answered by that one lookup, without the MRO read (perf2-prep).
+    var kinds = context["prep_encode_kinds"]
+    var own = py_get(kinds, py_type(model))
+    if own is not None:
+        return String(own)
     var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    var kinds = context["prep_encode_kinds"]
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
         var kind = py_get(kinds, mro[k])
         if kind is not None:
