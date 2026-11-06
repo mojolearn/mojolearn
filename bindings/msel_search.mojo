@@ -502,6 +502,9 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var scoring = args[6]
     var error_score = args[10]
     var raise_errors = py_type(error_score) is b.str and String(error_score) == "raise"
+    # The scorer is resolved once per call, not once per size and fold (lane
+    # perf-sweep-msel-nbr-svc); the same scorer object scores every fold.
+    var sc = msel_get_scorer(scoring, context)
     try:
         for si in range(len(sizes)):  # driver-loop: over train sizes
             var a = sizes[si]
@@ -523,7 +526,6 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                             raise error^
                         fitted = False
                 var t1 = msel_seconds()
-                var sc = msel_get_scorer(scoring, context)
                 tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)) if fitted else msel_error_value(error_score))
                 te_s.append(Float64(py=msel_score(est, _take(res, x, test, context), _take(res, y, test, context), sc, context))
                             if fitted else msel_error_value(error_score))
@@ -684,13 +686,20 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     return Python.tuple(sizes, rows_sorted, inverse)
 
 
-def _group_index(mut rng: MselRng, order: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_NativePermutation._group_index`: each group's rows permuted by its
-    draw over the group-sorted rows, put back in row order."""
+def _group_sizes(order: PythonObject) raises -> List[Int]:
+    """The group sizes of `_group_order`, read once per call."""
     var sizes_py = order[0]
     var sizes = List[Int]()
     for g in range(len(sizes_py)):  # driver-loop: over groups
         sizes.append(Int(py=sizes_py[g]))
+    return sizes^
+
+
+def _group_index(mut rng: MselRng, order: PythonObject, sizes: List[Int], n: Int,
+                 context: PythonObject) raises -> PythonObject:
+    """`_NativePermutation._group_index`: each group's rows permuted by its
+    draw over the group-sorted rows, put back in row order. `sizes` is
+    `_group_sizes(order)`, read once per call, not once per permutation."""
     var gather = msel_entry("gather_i64", context)
     var src = msel_new(n, "<i8", context)
     var s0 = msel_addr(src)
@@ -754,12 +763,13 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
         score = _mean_test(estimator, x, base, folds0, sc, rows0, context)
         var rng = MselRng(random_state, context)
         var order = PythonObject(None) if groups is None else _group_order(groups, n, context)
+        var group_sizes = List[Int]() if groups is None else _group_sizes(order)
         for _ in range(n_permutations):  # driver-loop: over permutations
             var idx = PythonObject(None)
             if order is None:
                 idx = rng.permutation_rows([n], context)[0]
             else:
-                idx = _group_index(rng, order, n, context)
+                idx = _group_index(rng, order, group_sizes, n, context)
             # the permuted y: one device gather out of the resident base y
             var yp = rows0.resident_take(base, idx, context)
             rows0.resident_release(idx, context)
@@ -791,18 +801,26 @@ def _permutation_definition(args: PythonObject, n_permutations: Int, random_stat
     var score = _definition_mean(estimator, xa, yl, groups, cv, sc, context)
     var rng = MselRng(random_state, context)
     var perm_scores = List[Float64]()
+    # The groups, their sorted values and each group's rows depend on the
+    # groups alone: flattened and selected once per call, not once per
+    # permutation (lane perf-sweep-msel-nbr-svc). The draws are unchanged.
+    var group_rows = Python.list()
+    if groups is not None:
+        var g = msel_flatten(groups, context)
+        var values = family_call(b.sorted, family_call(b.set, g))
+        for gi in range(len(values)):  # driver-loop: over groups
+            _ = py_call(group_rows.append,
+                        py_call(b.list, py_call(itertools.compress, py_call(b.range, PythonObject(len(g))),
+                                                py_call(b.map, operator.eq, g, py_call(itertools.repeat, values[gi])))))
     for _ in range(n_permutations):  # driver-loop: over permutations
         var yp = PythonObject(None)
         if groups is None:
             var perm = rng.permutation(len(yl), context)
             yp = py_call(b.list, py_call(b.map, py_call(b.getattr, yl, PythonObject("__getitem__")), perm))
         else:
-            var g = msel_flatten(groups, context)
             yp = py_call(b.list, yl)
-            var values = family_call(b.sorted, family_call(b.set, g))
-            for gi in range(len(values)):  # driver-loop: over groups
-                var rows = py_call(b.list, py_call(itertools.compress, py_call(b.range, PythonObject(len(g))),
-                                                   py_call(b.map, operator.eq, g, py_call(itertools.repeat, values[gi]))))
+            for gi in range(len(group_rows)):  # driver-loop: over groups
+                var rows = group_rows[gi]
                 var perm = rng.permutation(len(rows), context)
                 var src = py_call(b.map, py_call(b.getattr, yl, PythonObject("__getitem__")),
                                   py_call(b.map, py_call(b.getattr, rows, PythonObject("__getitem__")), perm))
