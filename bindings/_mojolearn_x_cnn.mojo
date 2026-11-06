@@ -7,6 +7,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -394,7 +395,7 @@ def softmax_xent_binding[resident: Bool = False](
 
 
 def _is_list(o: PythonObject) raises -> Bool:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     return Bool(py=py_call(bi.isinstance, o, bi.list))
 
 

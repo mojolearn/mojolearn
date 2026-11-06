@@ -35,6 +35,7 @@ from std.ffi import _Global
 from std.memory import bitcast, memcmp
 from std.os import abort, getenv
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.time import perf_counter_ns
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call
@@ -461,7 +462,7 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
 def _byte_config(shape: PythonObject) raises -> ByteConfig:
     if len(shape) != 7 and len(shape) != 9 and len(shape) != 10:
         raise Error("byte LM: expected 7, 9 or 10 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab[,chunked_head_v2]])")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     var values = List[Int]()
     for i in range(len(shape)):  # small-loop(shape: 7 to 10 configuration words)
         var type_name = String(py=shape[i].__class__.__name__)
@@ -512,7 +513,7 @@ def _logits_dims(dims: PythonObject, shape: ByteConfig) raises -> List[Int]:
     address is read."""
     if len(dims) != 2:
         raise Error("byte LM logits: expected dims [batch, length]")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     var out = List[Int]()
     for i in range(2):  # small-loop(dims: batch and length words)
         var type_name = String(py=dims[i].__class__.__name__)
@@ -546,7 +547,7 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
 
 
 def _claimed_step(completed: PythonObject) raises -> Int:
-    var claimed = Int(py=Python.import_module("operator").index(completed))
+    var claimed = Int(py=native_loaded_module("operator").index(completed))
     if claimed < 0 or claimed >= 1000000:
         raise Error("byte LM: completed step outside admitted bound")
     return claimed
