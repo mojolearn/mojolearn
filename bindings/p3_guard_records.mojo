@@ -17,15 +17,35 @@ payload is a plain int and never retains the class.
 """
 from std.python import PythonObject
 from bindings.native_loaded_module import NativeModules
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready
+from bindings.native_model_records import records_live, records_open, records_slot_guard
+
+# Storage (lane ne1-e-records, 2026-11-06): the rows live in the GUARD slot
+# of the class's entry in bindings/native_model_records.mojo (released if the
+# class dies), with the class epoch at admission; validity is unchanged.
 
 
 def guard_row_admitted(mut mods: NativeModules, family: String, index: Int, cls: PythonObject, row: PythonObject) raises -> Bool:
-    var record = class_record(mods, family + String(index), cls)
-    if record is None:
+    if not class_watch_ready():
         return False
-    return Int(py=record) == Int(row._obj_ptr)
+    if not records_live(cls):
+        return False
+    var name = family + String(index)
+    var epoch = _class_epoch(cls)
+    var slot = records_slot_guard(Int(cls._obj_ptr))
+    if name not in slot[].rows:
+        return False
+    return slot[].rows[name] == Int(row._obj_ptr) and slot[].epochs[name] == epoch
 
 
 def guard_row_admit(mut mods: NativeModules, family: String, index: Int, cls: PythonObject, row: PythonObject) raises:
-    class_admit(mods, family + String(index), cls, PythonObject(Int(row._obj_ptr)))
+    if not _class_arm(cls):
+        return
+    var epoch = _class_epoch(cls)
+    var key = records_open(cls)
+    if key == 0:
+        return
+    var name = family + String(index)
+    var slot = records_slot_guard(key)
+    slot[].rows[name] = Int(row._obj_ptr)
+    slot[].epochs[name] = epoch
