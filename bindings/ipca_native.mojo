@@ -164,8 +164,16 @@ def _adopt_state(model: PythonObject, fields: PythonObject, entries: PythonObjec
     for k in range(_IPCA_STATE_COUNT):  # driver-loop: over the five state arrays
         var rows = count if k == 0 else 1
         var cols = d if (k == 0 or k == 2 or k == 3) else count
-        _ = decomp_resident_adopt(model, entries, fields[PythonObject(_state_name(k))], _state_name(k), rows, cols,
-                                  Int(py=got[2 + k]))
+        try:
+            _ = decomp_resident_adopt(model, entries, fields[PythonObject(_state_name(k))], _state_name(k), rows,
+                                      cols, Int(py=got[2 + k]))
+        except error:
+            # adopt returned buffer k itself; the ones not reached go too
+            for j in range(k + 1, _IPCA_STATE_COUNT):  # driver-loop: over the remaining state buffers
+                var handle = Int(py=got[2 + j])
+                if handle >= 0:
+                    _ = py_call(entries["x_decomp_dev_free"], handle)
+            raise error^
 
 
 def _free_kept(entries: PythonObject, got: PythonObject) raises:
