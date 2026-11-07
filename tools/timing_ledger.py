@@ -451,8 +451,11 @@ def main(argv=None):
         print(f"timing_ledger: {ingest_lanes(a.records, column=a.column)} lane(s) -> {ledger_path()}")
         return 0
     if a.cmd == "workflow":
-        run = json.loads(Path(a.json_file).read_text()) if a.json_file else fetch_workflow(a.run_id, a.repo)
-        print(f"timing_ledger: {ingest_workflow(run)} workflow job(s) -> {ledger_path()}")
+        try:
+            run = json.loads(Path(a.json_file).read_text()) if a.json_file else fetch_workflow(a.run_id, a.repo)
+            print(f"timing_ledger: {ingest_workflow(run)} workflow job(s) -> {ledger_path()}")
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            print(f"timing_ledger: run {a.run_id} not recorded ({type(exc).__name__}: {exc})")
         return 0
     if a.cmd == "merge":
         print(f"timing_ledger: {merge(a.paths)} record(s) merged -> {ledger_path()}")
