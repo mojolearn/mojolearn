@@ -25,6 +25,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
+from core.py2mojo_rows import ROWS_LRCV_PROBA, ROWS_MAX_BLOCKS, ROWS_SGD_PROBA, ROWS_TPB, rows_kernel
 from x_linear.dispatch import decision_one, decision_code_row, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
 from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
@@ -5781,6 +5782,53 @@ def decision_codes_device(
     _ = dwb^
     _ = dout^
     _ = dc^
+    _ = ctx^
+
+
+def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_mode: Int, res: FP) raises:
+    """`decision_device`'s block, then `py2mojo_rows` mode `rows_mode`
+    (ROWS_SGD_PROBA or ROWS_LRCV_PROBA, float32 in and out) on the scores
+    while they are on the device; only the n x max(k, 2) float32
+    probabilities come down. The same two kernels on the same words as
+    `x_linear_decision` followed by `py2mojo_rows`."""
+    # ne2-g-linear (N362): SGDClassifier / LogisticRegressionCV predict_proba
+    # was two crossings with the (n, k) scores downloaded and uploaded again.
+    if rows_mode != ROWS_SGD_PROBA and rows_mode != ROWS_LRCV_PROBA:
+        raise Error("x_linear_decision_rows: rows mode must be SGD_PROBA or LRCV_PROBA")
+    var ctx = linear_ctx()
+    var n_res = n * (2 if k == 1 else k)
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
+    var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
+    var dres = ctx.enqueue_create_buffer[DType.float32](max(n_res, 1))
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_d64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_s2 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_d8 = ctx.enqueue_create_buffer[DType.uint8](1)
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    if n > 0:
+        ctx.enqueue_function[decision_kernel](
+            dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(k), Int32(link), dout.unsafe_ptr(),
+            grid_dim=(n * k + 127) // 128, block_dim=128,
+        )
+        var blocks = max(1, min(ROWS_MAX_BLOCKS, (n + ROWS_TPB - 1) // ROWS_TPB))
+        ctx.enqueue_function[rows_kernel](
+            Int32(rows_mode), dout.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(k), Int64(n),
+            dres.unsafe_ptr(), d_d64.unsafe_ptr(), d_s2.unsafe_ptr(), UInt64(0), d_d8.unsafe_ptr(),
+            grid_dim=blocks, block_dim=ROWS_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=res, src_buf=dres.create_sub_buffer[DType.float32](0, n_res))
+    ctx.synchronize()
+    _ = dx^
+    _ = dwb^
+    _ = dout^
+    _ = dres^
+    _ = d_s64^
+    _ = d_d64^
+    _ = d_s2^
+    _ = d_d8^
     _ = ctx^
 
 
