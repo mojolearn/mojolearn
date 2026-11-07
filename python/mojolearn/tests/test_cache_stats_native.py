@@ -162,15 +162,11 @@ print(json.dumps({'calls':calls,'values':values}))
 
 
 def test_cache_statistics_preserve_numpy_free_startup():
+    # NumPy is blocked in the shared child (installed NumPy would otherwise be
+    # importable by package dependencies); the case builds its own cache and
+    # changes no process-wide state, so it shares one child per test process.
     code = r'''
-import sys, importlib.abc
-# Package dependencies may import installed NumPy. Model actual absence rather
-# than assuming a fresh subprocess makes an available optional dependency absent.
-class BlockNumPy(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname == 'numpy' or fullname.startswith('numpy.'):
-            raise ModuleNotFoundError('NumPy intentionally unavailable', name='numpy')
-sys.meta_path.insert(0, BlockNumPy())
+import sys
 from types import SimpleNamespace
 from mojolearn import _arena_io as a
 from mojolearn._buffer import _native
@@ -183,10 +179,8 @@ assert audit_native_call(a.resident.stats).assert_native() is None
 assert 'numpy' not in sys.modules
 print('native statistics remain NumPy-free')
 '''
-    result = subprocess.run([sys.executable, '-c', code], text=True, capture_output=True,
-                            env=dict(os.environ))
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.strip() == 'native statistics remain NumPy-free'
+    from mojolearn.tests._fresh_process import BLOCK_NUMPY_IMPORTED, shared_child
+    assert shared_child(BLOCK_NUMPY_IMPORTED).run(code).strip() == 'native statistics remain NumPy-free'
 
 
 def test_stats_preserves_none_empty_duplicate_prefix_and_nested_scope():

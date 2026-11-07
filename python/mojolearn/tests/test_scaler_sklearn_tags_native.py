@@ -21,9 +21,10 @@ def _run(code):
 
 
 def test_import_mojolearn_imports_neither_sklearn_nor_numpy():
-    out = _run("import sys, json, mojolearn; "
-               "print(json.dumps([m for m in ('sklearn', 'numpy', 'scipy') if m in sys.modules]))")
-    assert json.loads(out) == []
+    # The one plain-import child of this test process (tests/_fresh_process.py).
+    from mojolearn.tests._fresh_process import plain_import_report
+    modules = set(plain_import_report()["modules"])
+    assert [m for m in ('sklearn', 'numpy', 'scipy') if m in modules] == []
 
 
 def test_cold_call_returns_exact_sklearn_records():

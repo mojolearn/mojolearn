@@ -39,10 +39,10 @@ def _child(source):
 
 def test_import_does_not_load_numpy_when_installed():
     pytest.importorskip('numpy')
-    out = _child("import sys, mojolearn\n"
-                 "assert 'numpy' not in sys.modules, sorted(m for m in sys.modules if m.startswith('numpy'))\n"
-                 "print('OK')\n")
-    assert out.strip().endswith('OK')
+    # The one plain-import child of this test process (tests/_fresh_process.py).
+    from mojolearn.tests._fresh_process import plain_import_report
+    modules = plain_import_report()["modules"]
+    assert 'numpy' not in modules, sorted(m for m in modules if m.startswith('numpy'))
 
 
 def test_import_works_with_numpy_blocked_and_sequence_names_stay_lazy():

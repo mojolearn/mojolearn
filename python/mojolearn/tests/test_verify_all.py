@@ -1371,15 +1371,12 @@ def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypat
 
 
 def test_core_import_and_verify_guidance_without_numpy():
-    # Block NumPy in a fresh process even when the test environment has it.
-    # New optional estimators must not prevent the CLI reaching its guidance.
+    # NumPy is blocked in the shared child even when the test environment has
+    # it, and the child imported mojolearn under the block (a failed import
+    # fails this case). New optional estimators must not prevent the CLI
+    # reaching its guidance. The case changes no process-wide state.
     code = '''
 import sys
-class NoNumpy:
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname == "numpy" or fullname.startswith("numpy."):
-            raise ModuleNotFoundError("NumPy blocked for test", name="numpy")
-sys.meta_path.insert(0, NoNumpy())
 import mojolearn
 assert "numpy" not in sys.modules
 assert "AutoARIMA" in dir(mojolearn)
@@ -1398,8 +1395,8 @@ except ModuleNotFoundError as exc:
 else:
     raise AssertionError("NumPy-dependent estimator unexpectedly loaded")
 '''
-    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+    from mojolearn.tests._fresh_process import BLOCK_NUMPY_IMPORTED, shared_child
+    shared_child(BLOCK_NUMPY_IMPORTED).run(code)
 
 
 def test_lazy_sequence_exports_resolve_to_original_implementations():
