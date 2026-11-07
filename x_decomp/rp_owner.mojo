@@ -110,16 +110,24 @@ def rp_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 
 def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
-    x: F32Ptr, m: Int, d: Int, matrix: F32Ptr, rows: Int, tiled: Bool, out_buf: F32Ptr,
+    x: F32Ptr, m: Int, d: Int, matrix: F32Ptr, rows: Int, tiled: Bool, out_buf: F32Ptr, matrix_dev: Int = -1,
 ) raises -> Int:
     """X (m x d) times matrix^T (matrix rows x d) into out (m x rows):
     with `tiled` (transform on a dense X) the tiled projection on a GPU
     binding (`_project`), else `_Kit.mm(M, B, tb=True)`. Returns 1 when the
-    tiled projection flagged a non-finite X, else 0."""
+    tiled projection flagged a non-finite X, else 0. `matrix_dev`: the pool
+    id of a resident device copy of the matrix's words (lane
+    ne1-a-decomp-resident, N350; the caller owns it, so it is not in this
+    kit's ledger), or -1 to upload it here. Every step above is on the
+    device on a GPU binding either way, so the route and the bits are the
+    same; the host words stay attached and equal."""
     var kit = RKit[E, D, RES]()
     try:
         var a = kit.add(Int(x), -1, m, d)
-        var b = kit.add(Int(matrix), -1, rows, d)
+        var resident = -1
+        comptime if RES:
+            resident = matrix_dev
+        var b = kit.add(Int(matrix), resident, rows, d)
         comptime if RES:
             if tiled:
                 var c = kit.device_output(m, rows)

@@ -9,6 +9,7 @@ from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.resident import (
     pool_alloc,
     pool_free,
+    pool_live_count,
     dev_upload_run,
     dev_download_run,
     dev_ew_run,
@@ -50,6 +51,11 @@ def _n(p: PythonObject, i: Int) raises -> Int:
 
 def dev_alloc_py(n: PythonObject) raises -> PythonObject:
     return PythonObject(pool_alloc(Int(py=n)))
+
+
+def dev_live_py() raises -> PythonObject:
+    """The pool ids in use (a test-only readout; lane ne1-a-decomp-resident)."""
+    return PythonObject(pool_live_count())
 
 
 def dev_free_py(id: PythonObject) raises -> PythonObject:

@@ -15,11 +15,17 @@ def connect(tsvd_class):
     required = ("estimators_vendor", "estimators_numeric_mode", "tsvd_fit", "tsvd_explained",
                 "tsvd_transform", "inverse_transform")
     # A build without tsvd_fit_explained takes the tsvd_fit / tsvd_explained pair.
-    optional = ("tsvd_fit_explained",)
+    # The resident-components entries (GPU builds; bindings/tsvd_native.mojo,
+    # lane ne1-a-decomp-resident): a build without them uploads per call.
+    optional = ("tsvd_fit_explained", "tsvd_transform_resident", "tsvd_inverse_transform_resident")
     # The decomp kit's entries: the TSVD_QFIX flag and the two route drivers.
     # A build without a driver refuses that route by name (bindings/tsvd_native.mojo).
     decomp_names = ("x_decomp_qfix_flags", "x_decomp_tsvd_randomized", "x_decomp_tsvd_tsqr")
     connected = {}
+    # The estimators module of each mode: the resident door
+    # (bindings/fitted_resident_door.mojo) opens its lease through the
+    # module's own compiled entry.
+    modules = {}
     decomp = {}
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
@@ -37,6 +43,7 @@ def connect(tsvd_class):
                     raise TypeError(f"TruncatedSVD owner requires compiled {name}")
                 entries[name] = entry
             connected[mode] = entries
+            modules[mode] = binding
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
         try:
@@ -54,7 +61,7 @@ def connect(tsvd_class):
             decomp[mode] = type(error).__name__ + ": " + str(error)
     # Fitted arrays are mojolearn Arrays, as `_buffer.empty` made them.
     context["output_context"] = _numpy_free_context()
-    context.update(tsvd_class=tsvd_class, tsvd_bindings=connected, tsvd_decomp=decomp)
+    context.update(tsvd_class=tsvd_class, tsvd_bindings=connected, tsvd_decomp=decomp, tsvd_modules=modules)
     entry = _binding()._module.tsvd_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("TruncatedSVD owner requires a compiled tsvd_native_call")

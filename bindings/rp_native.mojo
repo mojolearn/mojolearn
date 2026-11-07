@@ -19,6 +19,7 @@ from bindings.decomp_owner_common import (
     decomp_lt, decomp_le, decomp_seed, decomp_set_mode,
 )
 from bindings.jl_native import jl_min_dim
+from bindings.decomp_kit_native import decomp_resident_cached, decomp_resident_operand, decomp_resident_drop
 
 
 def _str(value: PythonObject) raises -> String:
@@ -33,6 +34,8 @@ def _components(fields: PythonObject) raises -> PythonObject:
 def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: PythonObject) raises -> PythonObject:
     """`_RandomProjection.fit`; returns the converted X (kept for fit_transform)."""
     var fields = py_fields(model)
+    # A new fitted matrix replaces the old: its device copies go now (N350).
+    decomp_resident_drop(model)
     decomp_set_mode(fields, context)
     var entries = decomp_entries(model, fields, Python.tuple("x_decomp_rp_fit"), context)
     var sparse_input = host_sparse_format(source).byte_length() > 0
@@ -125,22 +128,47 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     var m = Int(py=x.shape[0])
     var width = Int(py=x.shape[1])
     var matrix: PythonObject
+    var name = String("inverse_components_") if inverse else String("components_")
+    var stored: PythonObject
     if inverse:
         if not py_contains(fields, "inverse_components_"):
             raise Error("inverse_transform needs compute_inverse_components=True")
-        matrix = classical_host_f32(fields["inverse_components_"], 2, "inverse_components_", context)
-        decomp_gemm_check(width, Int(py=matrix.shape[1]))
+        stored = fields["inverse_components_"]
     else:
         var fitted = decomp_int(decomp_attr(model, fields, "n_features_in_"))
         if width != fitted:
             raise Error("X has " + String(width) + " features, but " + String(py_type(model).__name__)
                         + " is expecting " + String(fitted))
-        matrix = classical_host_f32(_components(fields), 2, "components_", context)
+        stored = _components(fields)
+    # A fitted matrix already resident as its own frozen words is not
+    # admitted again (N350); otherwise the per-call admission, as before.
+    var hit = decomp_resident_cached(model, entries, stored, name)
+    if hit is not None:
+        matrix = stored
+    else:
+        matrix = classical_host_f32(stored, 2, name, context)
+    if inverse:
+        decomp_gemm_check(width, Int(py=matrix.shape[1]))
     var rows = Int(py=matrix.shape[0])
     var out = decomp_f32(Python.tuple(m, rows), context)
     var tiled = not inverse and host_sparse_format(source).byte_length() == 0
-    var flagged = Int(py=py_call_typed(entries["x_decomp_rp_project"], Python.list(
-        classical_address(x), m, width, classical_address(matrix), rows, 1 if tiled else 0, classical_address(out))))
+    var params = Python.list(
+        classical_address(x), m, width, classical_address(matrix), rows, 1 if tiled else 0, classical_address(out))
+    # The device copy of the fitted matrix (word 7, GPU bindings only; lane
+    # ne1-a-decomp-resident, N350): uploaded at the first projection of a
+    # fitted state and kept in the model's resident record
+    # (bindings/decomp_kit_native.mojo `decomp_resident_*`: the model, its
+    # generation word and the matrix object; the read-only rule first). Only
+    # when the converted matrix is the stored object itself (a cast copy
+    # would be a new object per call); else the per-call upload, as before.
+    # The device words are the host words: no bit change.
+    var held = hit
+    if held is None and matrix is stored:
+        held = decomp_resident_operand(model, entries, stored, name, rows, Int(py=matrix.shape[1]))
+    if held is not None:
+        _ = py_call(params.append, held[5])
+    var flagged = Int(py=py_call_typed(entries["x_decomp_rp_project"], params))
+    _ = held  # the resident entry (and its device buffer) outlives the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = matrix^
     if flagged != 0:

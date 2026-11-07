@@ -18,7 +18,18 @@ with `x_decomp_dev_eigh`, `IpcaDev.has_eigh`), else the host-address entry.
 The running state between batches and calls is the public arrays (the
 exact words the Python kit's matrices held); each step re-reads them, so a
 partial_fit after a fit, or a transform after either, sees the same values
-the resident matrices held."""
+the resident matrices held.
+
+RESIDENT RUNNING STATE (lane ne1-a-decomp-resident, row N310). On a GPU
+binding a step can also keep its new state on the device (`keep`: the pool
+ids of components, singular values, mean, var and explained variance, the
+caller's to free) and read the previous state from such ids (`prev_dev`,
+the same layout) instead of uploading the host words: the fit's batch loop
+chains them, and the native owner (bindings/ipca_native.mojo) keeps them
+between partial_fit / transform calls. The ids hold the words the host
+arrays were downloaded from, every step reads them where it read the
+upload, and the routes do not depend on where an operand came from, so the
+bits are the same. The host words are still published every step."""
 from std.math import sqrt
 from std.memory import memcpy
 
@@ -154,18 +165,45 @@ def _words(ref words: List[Float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(words.unsafe_ptr()))
 
 
+#: The resident state layout (`prev_dev` / `kept`): components, singular
+#: values, mean, var, explained variance.
+comptime IPCA_STATE_WORDS = 5
+
+
+def _state_id[RES: Bool](prev_dev: List[Int], k: Int) -> Int:
+    # A borrowed pool id of the previous state (GPU binding only), or -1.
+    comptime if RES:
+        if len(prev_dev) == IPCA_STATE_WORDS:
+            return prev_dev[k]
+    return -1
+
+
+def ipca_free_state[D: RDev](mut ids: List[Int]):
+    """Return every pool id of a kept state (quiet: it runs on error paths)."""
+    for i in range(len(ids)):  # driver-loop: over the five kept state buffers
+        if ids[i] >= 0:
+            try:
+                D.free(ids[i])
+            except:
+                pass
+    ids.clear()
+
+
 def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
     x: F32Ptr, n: Int, d: Int, requested: Int, seen: Int, prev_count: Int, prev_d: Int,
     prev_components: F32Ptr, prev_singular: F32Ptr, prev_mean: F32Ptr, prev_var: F32Ptr,
     components_out: F32Ptr, singular_out: F32Ptr, mean_out: F32Ptr, var_out: F32Ptr,
-    variance_out: F32Ptr, ratio_out: F32Ptr,
+    variance_out: F32Ptr, ratio_out: F32Ptr, prev_dev: List[Int], keep: Bool, mut kept: List[Int],
 ) raises -> Tuple[Int, Float64]:
     """One `_partial(Xb)` of the n x d batch at x. `requested` is
     n_components (-1: None); `seen` the samples already fitted, with the
     previous state (prev_count components) read when seen > 0. Writes the
     published arrays (components first, at the kept count) and returns
     (n_components_, noise_variance_). `prev_d` is the state's feature count.
-    The outputs may not alias the state."""
+    The outputs may not alias the state. `prev_dev`: empty, or the pool ids
+    of the previous state's device copies (IPCA_STATE_WORDS, -1 for one not
+    resident; borrowed, never freed here). With `keep` on a GPU binding the
+    new state's pool ids are appended to `kept` (the caller owns them)."""
     var has_prev = seen > 0
     var nc: Int
     if requested < 0:
@@ -192,8 +230,8 @@ def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
             last_mean = kit.zeros(1, d)
             last_var = kit.zeros(1, d)
         else:
-            last_mean = kit.add(Int(prev_mean), -1, 1, d)
-            last_var = kit.add(Int(prev_var), -1, 1, d)
+            last_mean = kit.add(Int(prev_mean), _state_id[RES](prev_dev, 2), 1, d)
+            last_var = kit.add(Int(prev_var), _state_id[RES](prev_dev, 3), 1, d)
         # _incremental_mean_and_var
         var new_sum = kit.sum(xb, True)
         var total = seen + n
@@ -222,8 +260,8 @@ def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
             var xc = kit.ew(_OP_SUB, xb, bmean)
             var shift = kit.ew(_OP_SUB, last_mean, bmean)
             var mc = kit.ew(_OP_SCALE, shift, scalar=sqrt((Float64(seen) / Float64(total)) * Float64(n)))
-            var components = kit.add(Int(prev_components), -1, prev_count, d)
-            var singular = kit.add(Int(prev_singular), -1, 1, prev_count)
+            var components = kit.add(Int(prev_components), _state_id[RES](prev_dev, 0), prev_count, d)
+            var singular = kit.add(Int(prev_singular), _state_id[RES](prev_dev, 1), 1, prev_count)
             var singular_t = kit.transpose(singular)
             var prev = kit.ew(_OP_MUL, components, singular_t)
             z = _stack_rows(kit, prev, xc, mc)
@@ -258,9 +296,16 @@ def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
         kit.copy_out(upd_var, var_out, d)
         kit.copy_out(kept_ev, variance_out, nc)
         kit.copy_out(kept_ratio, ratio_out, nc)
+        comptime if RES:
+            if keep:
+                # The words just published, kept where they were computed.
+                var states = [kept_components, kept_singular, upd_mean, upd_var, kept_ev]
+                for k in range(IPCA_STATE_WORDS):  # driver-loop: over the five state matrices
+                    kept.append(kit.keep(states[k]))
         kit.close()
         return (nc, noise)
     except error:
+        ipca_free_state[D](kept)
         kit.close()
         raise error^
 
@@ -268,14 +313,17 @@ def ipca_partial_step[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
 def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
     x: F32Ptr, n: Int, d: Int, requested: Int, batch_size: Int,
     components_out: F32Ptr, singular_out: F32Ptr, mean_out: F32Ptr, var_out: F32Ptr,
-    variance_out: F32Ptr, ratio_out: F32Ptr,
+    variance_out: F32Ptr, ratio_out: F32Ptr, keep: Bool, mut kept: List[Int],
 ) raises -> Tuple[Int, Float64]:
     """`IncrementalPCA.fit`'s batch loop: batches of batch_size rows (a batch
     whose end leaves fewer than n_components rows is skipped, as the Python
     loop skipped it), then the remainder; each batch one `ipca_partial_step`
     on the state the previous one wrote. The outputs are sized for at most
     min(d, batch) components (the caller allocates d x d, d each); returns
-    (n_components_, noise_variance_)."""
+    (n_components_, noise_variance_). On a GPU binding each batch reads the
+    previous batch's state from its device copies (the words it published
+    to the host lists); with `keep` the final state's pool ids are appended
+    to `kept` (the caller owns them), else they are freed."""
     if batch_size == 0:
         raise Error("integer division or modulo by zero")
     var mb = max(requested, 0)
@@ -293,36 +341,55 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
     var start = 0
     # `range(n // batch_size)`: no full batch for a negative batch size
     var batches = n // batch_size if batch_size > 0 else 0
-    for _ in range(batches):  # driver-loop: over the fit's minibatches
-        var end = start + batch_size
-        if end + mb > n:
-            continue
-        var nxt = 1 - cur
-        var got = ipca_partial_step[E, D, RES, X](
-            x.unsafe_offset(start * d), end - start, d, requested, seen, count, d,
-            _words(comps[cur]), _words(sing[cur]), _words(mean[cur]), _words(var_[cur]),
-            _words(comps[nxt]), _words(sing[nxt]), _words(mean[nxt]), _words(var_[nxt]),
-            _words(ev[nxt]), _words(evr[nxt]),
-        )
-        count = got[0]
-        noise = got[1]
-        seen += end - start
-        cur = nxt
-        start = end
-    if start < n:
-        var nxt = 1 - cur
-        var got = ipca_partial_step[E, D, RES, X](
-            x.unsafe_offset(start * d), n - start, d, requested, seen, count, d,
-            _words(comps[cur]), _words(sing[cur]), _words(mean[cur]), _words(var_[cur]),
-            _words(comps[nxt]), _words(sing[nxt]), _words(mean[nxt]), _words(var_[nxt]),
-            _words(ev[nxt]), _words(evr[nxt]),
-        )
-        count = got[0]
-        noise = got[1]
-        seen = n
-        cur = nxt
-    if seen == 0:
-        raise Error("x_decomp: IncrementalPCA fit saw no batch")
+    # The previous batch's state on the device (GPU binding; empty before the
+    # first batch and on the host binding).
+    var state = List[Int]()
+    try:
+        for _ in range(batches):  # driver-loop: over the fit's minibatches
+            var end = start + batch_size
+            if end + mb > n:
+                continue
+            var nxt = 1 - cur
+            var next_state = List[Int]()
+            var got = ipca_partial_step[E, D, RES, X](
+                x.unsafe_offset(start * d), end - start, d, requested, seen, count, d,
+                _words(comps[cur]), _words(sing[cur]), _words(mean[cur]), _words(var_[cur]),
+                _words(comps[nxt]), _words(sing[nxt]), _words(mean[nxt]), _words(var_[nxt]),
+                _words(ev[nxt]), _words(evr[nxt]), state, RES, next_state,
+            )
+            ipca_free_state[D](state)
+            state = next_state^
+            count = got[0]
+            noise = got[1]
+            seen += end - start
+            cur = nxt
+            start = end
+        if start < n:
+            var nxt = 1 - cur
+            var next_state = List[Int]()
+            var got = ipca_partial_step[E, D, RES, X](
+                x.unsafe_offset(start * d), n - start, d, requested, seen, count, d,
+                _words(comps[cur]), _words(sing[cur]), _words(mean[cur]), _words(var_[cur]),
+                _words(comps[nxt]), _words(sing[nxt]), _words(mean[nxt]), _words(var_[nxt]),
+                _words(ev[nxt]), _words(evr[nxt]), state, RES, next_state,
+            )
+            ipca_free_state[D](state)
+            state = next_state^
+            count = got[0]
+            noise = got[1]
+            seen = n
+            cur = nxt
+        if seen == 0:
+            raise Error("x_decomp: IncrementalPCA fit saw no batch")
+    except error:
+        ipca_free_state[D](state)
+        raise error^
+    if keep and len(state) == IPCA_STATE_WORDS:
+        for k in range(IPCA_STATE_WORDS):  # driver-loop: over the five kept state buffers
+            kept.append(state[k])
+        state.clear()
+    else:
+        ipca_free_state[D](state)
     memcpy(dest=components_out, src=_words(comps[cur]), count=count * d)
     memcpy(dest=singular_out, src=_words(sing[cur]), count=count)
     memcpy(dest=mean_out, src=_words(mean[cur]), count=d)
@@ -341,19 +408,21 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
 
 def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, n: Int, d: Int, nc: Int, mean: F32Ptr, components: F32Ptr, variance: F32Ptr, whiten: Bool,
-    out_buf: F32Ptr,
+    out_buf: F32Ptr, state_dev: List[Int],
 ) raises:
     """`transform`: (X - mean_) components_^T, divided by sqrt(explained
-    variance) per column when whitening; n x nc written to out_buf."""
+    variance) per column when whitening; n x nc written to out_buf.
+    `state_dev`: empty, or the borrowed pool ids of the state's device
+    copies (IPCA_STATE_WORDS layout, -1 for one not resident)."""
     var kit = RKit[E, D, RES]()
     try:
         var m = kit.add(Int(x), -1, n, d)
-        var mu = kit.add(Int(mean), -1, 1, d)
-        var c = kit.add(Int(components), -1, nc, d)
+        var mu = kit.add(Int(mean), _state_id[RES](state_dev, 2), 1, d)
+        var c = kit.add(Int(components), _state_id[RES](state_dev, 0), nc, d)
         var centered = kit.ew(_OP_SUB, m, mu)
         var y = kit.mm(centered, c, tb=True)
         if whiten:
-            var ev = kit.add(Int(variance), -1, 1, nc)
+            var ev = kit.add(Int(variance), _state_id[RES](state_dev, 4), 1, nc)
             var root = kit.ew(_OP_SQRT, ev)
             y = kit.ew(_OP_DIV, y, root)
         kit.copy_out(y, out_buf, n * nc)
@@ -365,20 +434,21 @@ def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
 
 def ipca_inverse_run[E: Exec, D: RDev, RES: Bool](
     y: F32Ptr, n: Int, d: Int, nc: Int, mean: F32Ptr, components: F32Ptr, variance: F32Ptr, whiten: Bool,
-    out_buf: F32Ptr,
+    out_buf: F32Ptr, state_dev: List[Int],
 ) raises:
     """`inverse_transform`: Y C + mean_, C the components scaled by
-    sqrt(explained variance) per row when whitening; n x d written to out_buf."""
+    sqrt(explained variance) per row when whitening; n x d written to
+    out_buf. `state_dev` as in `ipca_transform_run`."""
     var kit = RKit[E, D, RES]()
     try:
         var ym = kit.add(Int(y), -1, n, nc)
-        var c = kit.add(Int(components), -1, nc, d)
+        var c = kit.add(Int(components), _state_id[RES](state_dev, 0), nc, d)
         if whiten:
-            var ev = kit.add(Int(variance), -1, 1, nc)
+            var ev = kit.add(Int(variance), _state_id[RES](state_dev, 4), 1, nc)
             var root = kit.ew(_OP_SQRT, ev)
             var root_t = kit.transpose(root)
             c = kit.ew(_OP_MUL, c, root_t)
-        var mu = kit.add(Int(mean), -1, 1, d)
+        var mu = kit.add(Int(mean), _state_id[RES](state_dev, 2), 1, d)
         var product = kit.mm(ym, c)
         var result = kit.ew(_OP_ADD, product, mu)
         kit.copy_out(result, out_buf, n * d)
