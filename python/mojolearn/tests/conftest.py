@@ -49,14 +49,24 @@ def pytest_collection_modifyitems(config, items):
 # Per-test durations for the whole run (setup + call + teardown, seconds), one
 # JSON file per process, when MOJOLEARN_TEST_DURATIONS_DIR names a directory:
 # tools/test_duration_report.py sums them per file and per test so the heavy
-# tail is cut from measurements. Off by default; costs one dict entry per test.
+# tail is cut from measurements. On by default; costs one dict entry per test.
 # Under pytest-xdist the controller receives every worker's reports, so only
 # the controller (or a run without xdist) records; workers write nothing.
 _DURATIONS = {}
 
 
+def _durations_dir():
+    """Where this run's per-test durations go. ON BY DEFAULT (Andrew, 2026-11-07: timing rides on every run,
+    never a separate run): MOJOLEARN_TEST_DURATIONS_DIR names the directory, "0" turns recording off, unset
+    means ~/mojolearn-evidence/test-durations/latest (overwritten by each run; the runner archives it)."""
+    value = os.environ.get("MOJOLEARN_TEST_DURATIONS_DIR", "").strip()
+    if value == "0":
+        return ""
+    return value or os.path.join(os.path.expanduser("~"), "mojolearn-evidence", "test-durations", "latest")
+
+
 def _records():
-    return bool(os.environ.get("MOJOLEARN_TEST_DURATIONS_DIR")) and not os.environ.get("PYTEST_XDIST_WORKER")
+    return bool(_durations_dir()) and not os.environ.get("PYTEST_XDIST_WORKER")
 
 
 def pytest_runtest_logreport(report):
@@ -71,7 +81,7 @@ def pytest_sessionfinish(session):
     if not _records() or not _DURATIONS:
         return
     import json
-    directory = os.environ["MOJOLEARN_TEST_DURATIONS_DIR"]
+    directory = _durations_dir()
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, f"durations-{os.getpid()}.json")
     with open(path, "w", encoding="utf-8") as handle:
