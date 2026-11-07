@@ -150,7 +150,7 @@ def _admitted_shape(mut mods: NativeModules, trainer: PythonObject, state: Pytho
         _ = py_call(words.append, Int(shape.chunked))
         _ = records_put(RECORDS_PREPARED, trainer, _SHAPE_RECORD,
                         Python.tuple(value, PythonObject(len(keys)), keys, held, words))
-    return shape
+    return shape^
 
 
 def _f32(n: Int, context: PythonObject) raises -> PythonObject:
