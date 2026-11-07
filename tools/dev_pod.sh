@@ -14,7 +14,6 @@
 #   tools/dev_pod.sh run    <lane> [--vendor amd] [--results DIR] [--no-persist] <command>
 #                                              in /root/mojolearn, as root, under tools/box_persist_run.sh:
 #                                              DIR (default box-out/<tag>) persists to R2 from the box
-#                                              (timing: DIR/timing-ledger.jsonl, busy cores of total)
 #   tools/dev_pod.sh extend <lane> [--vendor amd] [minutes]   the heartbeat: on-box lease AND Mac dead-man
 #   tools/dev_pod.sh down   <lane> [--vendor amd]             delete, verify gone, disarm the Mac dead-man
 #   tools/dev_pod.sh list                                     every box, from the state files
@@ -154,7 +153,7 @@ up|sync|run|extend|down)
     [[ "$lane_arg" =~ ^[a-z0-9-]{1,24}$ ]] || die "lane must be [a-z0-9-]{1,24}"
     if [ "$cmd" != up ] && [ "${1:-}" = --vendor ]; then VENDOR="${2:?--vendor nvidia|amd}"; shift 2; fi
     ;;
-*) sed -n 2,19p "$0"; exit 2 ;;
+*) sed -n 2,18p "$0"; exit 2 ;;
 esac
 if [ "$cmd" = up ]; then
     minutes=240; BASE_REF=""

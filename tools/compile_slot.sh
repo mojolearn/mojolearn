@@ -11,7 +11,6 @@ fi
 # compile_slot.sh <command...>: run a compile holding one of N machine-wide slots (mkdir locks),
 # N = MOJOLEARN_COMPILE_SLOTS (default 2; Andrew 2026-10-28: protect the Mac). Every lane subagent
 # wraps its mojo builds in this so at most N compile at once.
-# Each compile is a line in the timing ledger (kind compile; tools/timing_ledger.sh, tools/timing_ledger.py).
 S=$HOME/mojolearn-evidence/compile-slots; mkdir -p $S
 N=${MOJOLEARN_COMPILE_SLOTS:-2}
 case $N in ""|*[!0-9]*|0) echo "compile_slot: MOJOLEARN_COMPILE_SLOTS must be a positive integer" >&2; exit 2 ;; esac
@@ -20,12 +19,7 @@ while :; do
     if mkdir $S/slot$i 2>/dev/null; then
       echo $$ > $S/slot$i/pid
       trap "rm -rf $S/slot$i" EXIT INT TERM
-      # the timing ledger: one line per compile (kind compile; tools/timing_ledger.py report --kind compile)
-      _tl="$(cd "$(dirname "$0")" && pwd)/timing_ledger.sh"; _name="$(printf '%s ' "$@" | cut -c1-200)"
-      if [ -r "$_tl" ] && . "$_tl"; then TL_KEY=$$ tl_start compile "$_name"; fi
-      nice -n 19 "$@"; _rc=$?
-      if type tl_end > /dev/null 2>&1; then TL_KEY=$$ tl_end compile "$_name" "$_rc" "slot=$i"; fi
-      exit $_rc
+      nice -n 19 "$@"; exit $?
     fi
     # reclaim a slot whose holder died
     p=$(cat $S/slot$i/pid 2>/dev/null); [ -n "$p" ] && ! kill -0 $p 2>/dev/null && rm -rf $S/slot$i

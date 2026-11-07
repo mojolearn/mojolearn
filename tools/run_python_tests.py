@@ -19,8 +19,7 @@ MOJOLEARN_TEST_DURATIONS_DIR=<dir> records every test's duration for
 tools/test_duration_report.py. MOJOLEARN_TEST_ORDER=<tsv> (that tool's
 `--tsv` output from an earlier run) hands the parallel pass its files heaviest
 first, so a long file starts at once instead of finishing last; files the tsv
-does not name follow in their usual order. After the run every test is a line
-in the timing ledger (kind test; tools/timing_ledger.py report --kind test).
+does not name follow in their usual order.
 """
 import argparse
 import importlib.util
@@ -117,10 +116,6 @@ def write_duration_report(directory, workers):
     subprocess.call([sys.executable, str(report), str(directory), '--workers', str(workers), '--top', '40',
                      '--tsv', str(directory / 'all.tsv')])
     print(f'durations: {directory} (all.tsv feeds the next run\'s order)', flush=True)
-    # the timing ledger: one line per test (kind test; tools/timing_ledger.py report --kind test --by file)
-    sys.path.insert(0, str(ROOT / 'tools'))
-    import timing_ledger
-    timing_ledger.safe(timing_ledger.ingest_tests, directory)
 
 
 def main(argv=None):

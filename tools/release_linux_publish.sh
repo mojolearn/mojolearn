@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Publish a packed, audited Linux wheel through the Trusted Publisher route:
 # manifest, GitHub release, workflow dispatch, watch. One command.
-# The watched run's jobs go to the timing ledger (kind workflow; tools/timing_ledger.py).
 #
 #   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> --light-smoke <results.json>
 #   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> --full
@@ -208,8 +207,5 @@ RUN=$(gh run list --workflow release-provenance.yml --branch "$TAG" --event work
   --created ">=$DISPATCHED_AT" --limit 1 --json databaseId --jq '.[0].databaseId')
 [[ "$RUN" =~ ^[0-9]+$ ]] || { echo "No new workflow run found for $TAG; inspect the dispatch before retrying" >&2; exit 1; }
 echo "run $RUN"
-_watch_rc=0; gh run watch "$RUN" --exit-status || _watch_rc=$?
-# the timing ledger: each job of the run, GitHub's own clocks (kind workflow); informational, never fails the publish
-python3 "$(dirname "$0")/timing_ledger.py" workflow "$RUN" 2>&1 | tail -1 || true
-[ "$_watch_rc" = 0 ] || { echo "WORKFLOW FAILED run=$RUN"; exit 1; }
+gh run watch "$RUN" --exit-status || { echo "WORKFLOW FAILED run=$RUN"; exit 1; }
 echo "DONE publish=$PUBLISH tag=$TAG wheel_sha256=$WSHA manifest_sha256=$MSHA run=$RUN"

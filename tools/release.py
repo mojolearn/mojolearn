@@ -21,9 +21,6 @@ manifest, no receipt), and the rehearsal skips python-tests and the GPU-box
 leg dry-runs. --gpu-smoke restores the GPU route the step table below
 describes (wheel smokes, light-smoke receipts, any build backend).
 
-TIMING LEDGER: every step that runs writes one line (kind step) to the timing ledger;
-`python3 tools/timing_ledger.py report --kind step` ranks them.
-
 LINUX BUILD BACKENDS (--build-backend; default `github` for either binding
 layout, Andrew 2026-10-26: compiling never uses paid rentals):
   layout       default   also allowed          without --gpu-smoke
@@ -5588,7 +5585,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
         self.say(f"-- {step}")
         shown = self.commands_shown
         started = time.monotonic()   # waste.json: per-step seconds (tools/release_plan.py)
-        wall = time.time()           # the same clock's wall start, for the timing ledger
         try:
             out = getattr(self, "step_" + step.replace("-", "_"))()
             result, data = out if isinstance(out, tuple) else (out, {})
@@ -5600,7 +5596,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 return "done"
             self.say(f"   HELD at {step}: {exc}")
             self.fail(step, exc, held=True)
-            self.ledger_step(step, wall, started, "held", exc)
             return "held"
         except StepFailed as exc:
             if self.dry:
@@ -5608,35 +5603,19 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 return "done"
             self.say(f"   STOPPED at {step}: {exc}")
             self.fail(step, exc)
-            self.ledger_step(step, wall, started, "failed", exc)
             return "failed"
         except (Exception, SystemExit) as exc:
             if self.dry:
                 raise
             self.say(f"   CRASHED at {step}: {exc!r}\n" + traceback.format_exc(limit=6))
             self.fail(step, f"{type(exc).__name__}: {exc}")
-            self.ledger_step(step, wall, started, "crashed", exc)
             return "failed"
         self.say(f"   {result}")
         if not self.dry:
             data = dict(data)
             data.setdefault("seconds", round(time.monotonic() - started, 1))
             self.mark(step, result=result, **data)
-            self.ledger_step(step, wall, started, "done", result)
         return "done"
-
-    def ledger_step(self, step, wall, started, outcome, result):
-        """One timing-ledger line per step that ran (kind step; tools/timing_ledger.py report --kind step):
-        start/end from this step's own clock. Steps already done (recorded or `have`) are not lines."""
-        end = wall + (time.monotonic() - started)
-        sys.path.insert(0, str(ROOT / "tools"))
-        import timing_ledger
-
-        def write():
-            timing_ledger.record("step", step, wall, end, rc=0 if outcome == "done" else 1, commit=self.commit,
-                                 extra=dict(outcome=outcome, release=str(self.rel),
-                                            pipeline=self.PIPELINE_OF.get(step, ""), result=str(result)[:300]))
-        timing_ledger.safe(write)
 
     def schedule(self, selected):
         """THE PIPELINES, AT ONCE. A step starts when every step it needs is

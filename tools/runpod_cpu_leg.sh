@@ -7,7 +7,6 @@
 #   bash tools/runpod_cpu_leg.sh --lane NAME --cmd 'COMMAND' ... --rent  # creates
 #   bash tools/runpod_cpu_leg.sh list          mojolearn-cpu-* pods on the account
 #   bash tools/runpod_cpu_leg.sh reap POD_ID   DELETE one mojolearn-cpu pod, verify
-#   Timing ledger: each leg's phases and the pod command (busy cores of total) land in tools/timing_ledger.py.
 #
 # Options:
 #   --lane NAME          lane tag, [a-z0-9-]; the pod is mojolearn-cpu-NAME-<stamp>.
@@ -398,13 +397,8 @@ ph portable_math_end
 ph run_start
 export MOJOLEARN_COMMIT=@COMMIT@ PYTHONPATH="$R/python" LEG_OUT="$OUT"
 unset MOJOLEARN_BINCACHE_OUT
-# the timing ledger: the command is one line (kind job) in $OUT/timing-ledger.jsonl, with the pod's cores and
-# busy cores sampled every minute while it runs; the Mac merges it on fetch (write_timings)
-export MOJOLEARN_TIMING_LEDGER="$OUT/timing-ledger.jsonl" TL_STATE_DIR=/root/.timing-open
-TL=0; if [ -r "$R/tools/timing_ledger.sh" ] && . "$R/tools/timing_ledger.sh"; then TL=1; tl_start job cpu-leg-command; fi
 bash /root/leg_user_cmd.sh > "$OUT/cmd.log" 2>&1
 echo $? > "$OUT/cmd.exit"
-[ "$TL" = 0 ] || tl_end job cpu-leg-command "$(cat "$OUT/cmd.exit")"
 ph run_end
 
 ph upload_start
@@ -450,9 +444,9 @@ BOX_EOF
 write_timings() {
     [ -n "$T_POST" ] || return 0
     python3 - "$OUT" "$T_POST" "${T_SSH:-}" "${T_ARMED:-}" "${T_STAGED:-}" "${T_DONE:-}" "${T_FETCHED:-}" \
-        "${T_DEL0:-}" "${T_DEL1:-}" "${COST_HR:-}" "${BOX_SKEW:-0}" "$ROOT/tools" "$LANE" "$VCPU" "${COMMIT:-}" <<'PYEOF'
+        "${T_DEL0:-}" "${T_DEL1:-}" "${COST_HR:-}" "${BOX_SKEW:-0}" <<'PYEOF'
 import os, sys
-out, post, ssh, armed, staged, done, fetched, del0, del1, cost, skew, tools, lane, vcpu, commit = sys.argv[1:]
+out, post, ssh, armed, staged, done, fetched, del0, del1, cost, skew = sys.argv[1:]
 f = lambda s: float(s) if s else None
 post, ssh, armed, staged, done, fetched, del0, del1 = map(f, (post, ssh, armed, staged, done, fetched, del0, del1))
 skew = float(skew or 0)
@@ -476,24 +470,6 @@ span("cache upload (misses only)", ph.get("upload_start"), ph.get("upload_end"))
 span("fetch", done, fetched)
 span("teardown (DELETE to verified gone)", del0, del1)
 span("billed (POST to verified gone)", post, del1)
-# the timing ledger (tools/timing_ledger.py): each phase is a line of kind job on the Mac's clock, and the
-# pod's own ledger (the command, with busy cores of total) is merged in; never fails the teardown
-try:
-    sys.path.insert(0, tools)
-    import timing_ledger
-    def ledger_span(name, a, b):
-        if a is not None and b is not None:
-            timing_ledger.record("job", "cpu-leg %s: %s" % (lane, name), a, b, host="runpod-cpu", cores=int(vcpu),
-                                 commit=commit or None, extra=dict(out=out))
-    ledger_span("create to verified gone (billed)", post, del1)
-    ledger_span("command", ph.get("run_start"), ph.get("run_end"))
-    ledger_span("env", ph.get("env_start"), ph.get("env_end"))
-    ledger_span("build", ph.get("build_start"), ph.get("build_end"))
-    remote = os.path.join(out, "remote", "leg_out", "timing-ledger.jsonl")
-    if os.path.exists(remote):
-        timing_ledger.merge([remote])
-except Exception as exc:
-    print("  timing ledger not written (%s: %s)" % (type(exc).__name__, exc))
 with open(os.path.join(out, "timings.tsv"), "w") as fh:
     for k, v in rows:
         fh.write("%s\t%s\n" % (k, v))

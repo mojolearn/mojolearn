@@ -24,9 +24,6 @@ columns name: the NVIDIA box (nvidia, ptx), the AMD box (amd), the Mac (apple) o
             records written (with their admissible= line) and the rc; exit 0 only when every chunk recorded
             admissibly. The records go to admission (tools/admit_identity_columns.sh) with every other column.
 
-Timing ledger: every chunk and the whole run are lines of kind job (the run with busy cores of total, sampled
-while it runs); each record's lanes are lines of kind lane (record_identity_column.sh). See tools/timing_ledger.py.
-
 Nothing here builds, rents or publishes. Tests: tools/test_identity_wheel_record.py (fake recorder, no device).
 """
 import argparse
@@ -38,11 +35,7 @@ import shutil
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import timing_ledger  # noqa: E402
 
 SCHEMA = "mojolearn.identity-wheels.v1"
 ROOT = Path(__file__).resolve().parent.parent
@@ -270,12 +263,9 @@ class Run:
             out.mkdir(parents=True, exist_ok=True)
             env = self.env(py, listed, slot[0], c, dict(LANES=",".join(chunk), LANE_SELECTION=(
                 "auto-reuse-chunk" if self.a.reuse_unchanged else "full-chunk")))
-            t0 = time.time()
             with open(out / "record.log", "w") as log:
                 rc = self.popen(["bash", str(RECORDER), labels[c], str(out)], cwd=str(ROOT), env=env,
                                 stdout=log, stderr=subprocess.STDOUT).wait()
-            timing_ledger.safe(timing_ledger.record, "job", "identity %s w%d" % (labels[c], i), t0, time.time(),
-                               rc=rc, extra=dict(device=slot[0], lanes=len(chunk), out=str(out)))
             text = (out / "record.log").read_text(errors="replace")
             m = re.findall(r"^RECORDED (\S+) rc=(\d+) admissible=(yes|NO) json=(\S+)$", text, re.M)
             results[(c, i)] = dict(worker=i, device=slot[0], lanes=len(chunk), rc=rc,
@@ -290,19 +280,12 @@ class Run:
         def drain(queue):
             for t in queue:
                 work(*t)
-        run_t0 = time.time()
-        with timing_ledger.BusySampler() as sampler:
-            for queue in by_slot.values():
-                th = threading.Thread(target=drain, args=(queue,))
-                th.start()
-                threads.append(th)
-            for th in threads:
-                th.join()
-        busy_summary = sampler.summary()
-        report["busy_cores"] = busy_summary
-        self.say("busy cores: %s of %d" % ("not sampled (run under 30 s)" if busy_summary is None else
-                                            "mean %(mean)s, max %(max)s over %(samples)d sample(s)" % busy_summary,
-                                            nproc))
+        for queue in by_slot.values():
+            th = threading.Thread(target=drain, args=(queue,))
+            th.start()
+            threads.append(th)
+        for th in threads:
+            th.join()
         ok = True
         for (c, i), r in sorted(results.items()):
             row = report["columns"][c]
@@ -318,9 +301,6 @@ class Run:
         if failed:
             self.say("FAILURES (%d chunk(s); every other chunk ran): %s" % (len(failed), "; ".join(failed)))
         (self.out / "identity-wheels.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n")
-        timing_ledger.safe(timing_ledger.record, "job", "identity-wheels " + ",".join(labels[c] for c in columns),
-                           run_t0, time.time(), cores=nproc, busy=busy_summary, rc=0 if ok else 1,
-                           extra=dict(out=str(self.out), workers=busy, gpus=len(devices)))
         self.say("%s: %s" % ("DONE" if ok else "FAILED", self.out / "identity-wheels.json"))
         return 0 if ok else 1
 

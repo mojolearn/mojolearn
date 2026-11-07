@@ -30,10 +30,6 @@
 # Box state: <root>/active/<tag>.env (one per running job; what --flush-all walks), <root>/state/<tag>/ (upload
 # counter, entries, lock). <root> is $BOX_PERSIST_ROOT, else the parent of this script's bin/ directory, else
 # /root/box-persist. Tests: tools/test_box_persist.py.
-# Timing ledger: the job is one line (kind job, name = tag) in <results-dir>/timing-ledger.jsonl (exported as
-# MOJOLEARN_TIMING_LEDGER, so the tools the command runs write there too and it all reaches R2), with the host's
-# cores and busy cores sampled every TL_SAMPLE_SEC (default 60) while it runs; written before final.tgz. Needs
-# timing_ledger.sh beside this script (tools/box_persist.py installs both); without it the job runs untimed.
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 case "$(basename "$(cd "$(dirname "$0")" && pwd)")" in
@@ -53,10 +49,6 @@ fsize() { wc -c < "$1" | tr -d ' '; }
 plog() { echo "$(now_utc) $*" >> "$RES/persist.log" 2> /dev/null; }
 say() { echo "box_persist: $*" >&2 2> /dev/null; }
 die() { echo "box_persist: $*" >&2; exit 2; }
-TL_OPEN=0
-# shellcheck source=tools/timing_ledger.sh
-_tl_helper="$(dirname "$SELF")/timing_ledger.sh"
-if [ -r "$_tl_helper" ]; then . "$_tl_helper"; TL_HAVE=1; else TL_HAVE=0; fi
 
 # the flat json: "key": "value" on its own line (tools/box_persist.py writes every value as a string)
 jget() {
@@ -247,10 +239,6 @@ final_upload() {  # <exit> <why>
     [ "$FINAL_DONE" = 0 ] || return 0
     IN_FINAL=1
     trap '' TERM INT        # ignored dispositions are inherited: curl and tar finish (bounded by their own timeouts)
-    if [ "$TL_OPEN" = 1 ]; then  # the job's ledger line lands before final.tgz is built
-        TL_OPEN=0; tl_end job "$TAG" "$1" "why=$2" "results=$RES"
-        plog "TIMING $(tail -1 "$MOJOLEARN_TIMING_LEDGER" 2> /dev/null | cut -c1-400)"
-    fi
     snapshot final "$1" "$2"; local r=$?
     FINAL_DONE=1
     # a final that did not land stays registered (its pid dead): the box's --flush-all retries it before any delete
@@ -287,8 +275,6 @@ run_job() {
     # so tools/bench_board.py may keep its evidence archives local under it (--evidence-local-only) with no
     # credential on the box
     export MOJOLEARN_RESULTS_DIR="$RES" MOJOLEARN_PERSIST_TAG="$TAG" MOJOLEARN_BOX_PERSIST=1
-    export MOJOLEARN_TIMING_LEDGER="${MOJOLEARN_TIMING_LEDGER:-$RES/timing-ledger.jsonl}"
-    if [ "$TL_HAVE" = 1 ]; then export TL_STATE_DIR="$ST/timing"; tl_start job "$TAG"; TL_OPEN=1; fi
     command -v curl > /dev/null 2>&1 || plog "PERSIST-DISABLED no curl on this box: the command runs, nothing reaches R2"
     plog "START tag=$TAG prefix=$PREFIX pid=$$ every=${EVERY}s slots=$SLOTS expires=$EXPU cmd=$*"
     set -m
@@ -315,6 +301,6 @@ case "${1:-}" in
     --snapshot)
         shift; JSON="${1:?--snapshot <json> <results> [label]}"; RES="${2:?results dir}"; label=${3:-flush}
         load_job; snapshot "$label" "" "$label"; exit $? ;;
-    ''|-h|--help) sed -n 2,37p "$0"; exit 2 ;;
+    ''|-h|--help) sed -n 2,33p "$0"; exit 2 ;;
     *) run_job "$@" ;;
 esac
