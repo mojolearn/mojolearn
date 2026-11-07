@@ -204,6 +204,14 @@ profile in `~/mojolearn-evidence/forest-regressor-other-stage.md`. Fix what they
   timings are not comparable with records before this change; the profile pass in D is the reference.
 - Tool tests on CPU runners for everything changed in tools/ since 2026-11-05; the 27 failing tools tests.
 - Release-tool log wording: stop printing "owed" in the run-everything path.
+- Development build and Python suite on a RunPod CPU pod, every core (lane ne1-k-parallel-tests): the Mac is for
+  Apple only. `tools/cpu_box_dev_build_and_tests.sh` goes to `tools/runpod_cpu_leg.sh --cmd-file`, so it runs
+  against any ref. It runs `development_build.py build --sets identical,host --parallel auto`, then the suite through
+  `tools/run_python_tests.py` (pytest-xdist on every core, `--dist loadfile`, tests marked `serial` afterwards in one
+  process), and writes `tests.log`, `fail.txt`, `errors.txt` and `summary.txt` (busy cores of total) to `$LEG_OUT`.
+  Usage: `bash tools/runpod_cpu_leg.sh --lane devtests-<ref> --worktree <checkout> --cmd-file
+  tools/cpu_box_dev_build_and_tests.sh --envs default,test --vcpu 32 --flavors cpu5m,cpu3m --disk 80 --lease 150 --rent`
+  once on main and once on the branch, then `comm -13 main/fail.txt branch/fail.txt`.
 
 ### Decisions taken 2026-11-06 (Fable judging; Andrew can reverse)
 - Fitted arrays that have a resident device copy become read-only at the buffer level (in-place writes raise
