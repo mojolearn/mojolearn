@@ -840,39 +840,51 @@ def _partition_emit_split_kernel(flag: _I32, scan: _I32, n_: Int32, size: Int32,
             out.unsafe_store(Int(size) + t, Int64(i))
 
 
+def _fold_counts_check_kernel(counts: _I32, sizes: _I64, k_: Int32, status: _I32):
+    """status[0] = 1 when any fold's flagged count differs from its size
+    (every writer stores the same word)."""
+    var f = _tid()
+    if f < Int(k_) and Int64(counts.unsafe_load(f)) != sizes.unsafe_load(f):
+        status.unsafe_store(0, Int32(1))
+
+
 def device_select_folds_i64(
     ctx: DeviceContext, fold_addr: Int, n: Int, k: Int, sizes_addr: Int,
     test_addrs_addr: Int, train_addrs_addr: Int,
-) raises -> Int:
+) raises -> Bool:
     """`select_fold_i64` of every fold 0..k-1 as one split plan (lane
     ne1-b-door, N051): the n fold ids go up ONCE, each fold's flags, scan and
     partition run on the device, each fold's test and train rows are copied
     straight into the caller's host arrays (`test_addrs[f]`, `train_addrs[f]`:
     int64 words holding host addresses; an empty side's address may be 0),
-    and the k counts come back in one download behind ONE synchronize. The
-    previous per-fold form uploaded the same n ids and synchronized twice per
+    and every fold's count is checked on the device behind ONE synchronize.
+    The per-fold form uploaded the same n ids and synchronized twice per
     fold. Same integers, same order as k `select_fold_i64` calls.
 
-    `sizes[f]` (int64, from `fold_ids`) sizes fold f's outputs. Returns -1
-    when every fold's flagged count equals `sizes[f]`, else the first fold
-    that differs (the binding then reruns the host helper, which reports it).
-    `1 <= n <= HPD_MAX_N`, `k >= 1`."""
+    `sizes[f]` (k int64 words, from `fold_ids`) sizes fold f's outputs.
+    Returns True when every fold's flagged count equals `sizes[f]`; False
+    (a size out of range, or a count that differs) has the binding rerun the
+    host helper, which reports the fold. `1 <= n <= HPD_MAX_N`, `k >= 1`."""
     var sizes = _I64(unsafe_from_address=sizes_addr)
     var tests = _I64(unsafe_from_address=test_addrs_addr)
     var trains = _I64(unsafe_from_address=train_addrs_addr)
-    for f in range(k):  # small-loop(k: fold count) control data, not rows: every size is checked before any launch
-        var size = Int(sizes.unsafe_load(f))
-        if size < 0 or size > n:
-            return f
     var d_fold = ctx.enqueue_create_buffer[DType.int32](n)
     var d_flag = ctx.enqueue_create_buffer[DType.int32](n)
     var d_scan = ctx.enqueue_create_buffer[DType.int32](n)
     var d_bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n))
     var d_counts = ctx.enqueue_create_buffer[DType.int32](k)
+    var d_sizes = ctx.enqueue_create_buffer[DType.int64](k)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     var d_out = ctx.enqueue_create_buffer[DType.int64](n)
     ctx.enqueue_copy(dst_buf=d_fold, src_ptr=_I32(unsafe_from_address=fold_addr))
+    ctx.enqueue_copy(dst_buf=d_sizes, src_ptr=sizes)
+    enqueue_fill(ctx, d_status, Int32(0))
+    var sized = True
     for f in range(k):  # driver-loop: over folds of one split plan (stream-ordered; d_out is reused after its copies)
         var size = Int(sizes.unsafe_load(f))
+        if size < 0 or size > n:
+            sized = False
+            break
         ctx.enqueue_function[_fold_flag_kernel](
             d_fold.unsafe_ptr(), Int32(n), Int32(f), d_flag.unsafe_ptr(), d_scan.unsafe_ptr(),
             grid_dim=_blocks(n), block_dim=HPD_TPB,
@@ -896,21 +908,24 @@ def device_select_folds_i64(
             var tail = d_out.create_sub_buffer[DType.int64](size, n - size)
             ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=train_addr), src_buf=tail)
             _ = tail^
-    var h_counts = ctx.enqueue_create_host_buffer[DType.int32](k)
-    ctx.enqueue_copy(dst_ptr=h_counts.unsafe_ptr(), src_buf=d_counts)
-    ctx.synchronize()
-    var bad = -1
-    for f in range(k):  # small-loop(k: fold count) control data: each fold's count against its size
-        if bad < 0 and Int(h_counts.unsafe_ptr()[f]) != Int(sizes.unsafe_load(f)):
-            bad = f
-    _ = h_counts^
+    var ok = False
+    if sized:
+        ctx.enqueue_function[_fold_counts_check_kernel](
+            d_counts.unsafe_ptr(), d_sizes.unsafe_ptr(), Int32(k), d_status.unsafe_ptr(),
+            grid_dim=_blocks(k), block_dim=HPD_TPB,
+        )
+        ok = _read_status(ctx, d_status, 0) == 0
+    else:
+        ctx.synchronize()
     _ = d_fold^
     _ = d_flag^
     _ = d_scan^
     _ = d_bsum^
     _ = d_counts^
+    _ = d_sizes^
+    _ = d_status^
     _ = d_out^
-    return bad
+    return ok
 
 
 def device_select_mask_u8_i64(

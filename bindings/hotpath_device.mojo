@@ -478,10 +478,10 @@ def select_folds_i64_binding(
             and fa != 0 and sa != 0 and ta != 0 and ra != 0
         ):
             var ctx = process_ctx[_HPDEV_SLOT]()
-            var bad = -1
+            var ok = False
             with GILReleased(Python()):
-                bad = device_select_folds_i64(ctx, fa, rows, splits, sa, ta, ra)
-            if bad < 0:
+                ok = device_select_folds_i64(ctx, fa, rows, splits, sa, ta, ra)
+            if ok:
                 return PythonObject(-1)
     return host_select_folds_i64_binding(fold_addr, n, k, sizes_addr, test_addrs_addr, train_addrs_addr)
 
