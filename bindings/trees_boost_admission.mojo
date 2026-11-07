@@ -9,8 +9,34 @@ from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.native_loaded_module import NativeModules
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_fields
+from bindings.native_model_records import (
+    records_stamped_get, records_stamped_put, records_stampable, records_drop, ContentRecord, content_fields,
+    content_object, RECORDS_TREES,
+)
 
 comptime _FITTED_SLOT = "trees_boost_fitted_v1"
+comptime _FITTED_STAMP = "trees_boost_fitted_stamp_v1"
+
+
+def _fitted_stamp(model: PythonObject, fields: PythonObject, reps: PythonObject) raises:
+    """Stamp the fitted admission with the owner's generation and the native
+    content words of what `_fitted_key` reads (lane ne1-e-records, row N050):
+    the owner's field contents, and each member's class, generation word and
+    field contents. Only when `fields` is the owner's own instance
+    dictionary (the one its generation watches; the record holds it)."""
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    content_fields(content, fields, 4)
+    var member = py_get(fields, "forest_")
+    if member is not None:
+        content_object(content, member, 4)
+    for name in ["_estimators", "estimators_", "trees_", "_batched"]:  # small-loop(fixed stored member sequences)
+        var members = py_get(fields, name)
+        if members is not None:
+            for i in range(len(members)):  # driver-loop: each fitted member's content words (once per record)
+                content_object(content, members[i], 4)
+    _ = records_stamped_put(RECORDS_TREES, model, _FITTED_STAMP, content^, Python.tuple(reps, fields))
 
 
 def _fitted_key(mut mods: NativeModules, fields: PythonObject, key: PythonObject, reps: PythonObject) raises -> Bool:
@@ -125,6 +151,7 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
         # A refit replaces the fitted state: forget the record now so the
         # old members are not kept alive until the next call.
         trees_side_drop(_FITTED_SLOT, model)
+        records_drop(RECORDS_TREES, model, _FITTED_STAMP)
         return fields
     # Fitted admission once per fitted state (lane perf-trees-owed,
     # 2026-11-06): every predict admitted every member's arrays and scalars
@@ -134,6 +161,15 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
     # it matches, the full admission below would accept again, and only one
     # member per distinct member class repeats its class admission. Any
     # assignment, member replacement or container edit changes the key.
+    # Generation fast path (lane ne1-e-records, row N050): one word for the
+    # owner plus native content words (member list items, member classes and
+    # member generation words) instead of the Python key list below.
+    var stamped = records_stamped_get(RECORDS_TREES, model, _FITTED_STAMP)
+    if stamped is not None and stamped[1] is fields:
+        var kept = stamped[0]
+        for i in range(len(kept)):  # small-loop(kept: one member per distinct member class)
+            _ = classical_family_admit(kept[i])
+        return fields
     var mods = NativeModules()
     var key = Python.list()
     var reps = Python.list()
@@ -143,6 +179,7 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
         if held is not None and trees_key_same(held, key):
             for i in range(len(reps)):  # small-loop(reps: one member per distinct member class)
                 _ = classical_family_admit(reps[i])
+            _fitted_stamp(model, fields, reps)
             return fields
     for name in ["n_classes_", "n_features_in_", "n_output_features_", "n_trees_"]:  # small-loop(fitted dimensions)
         if py_contains(fields, name):
@@ -168,4 +205,5 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
             _scalar_storage(fields[name], context)
     if recordable:
         _ = trees_side_put(_FITTED_SLOT, model, key)
+        _fitted_stamp(model, fields, reps)
     return fields

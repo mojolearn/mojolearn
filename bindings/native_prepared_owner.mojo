@@ -24,189 +24,41 @@ Rules (shared by every site that uses it):
   `NativeModules.released()` re-check, exactly as before.
 - Nothing here computes on data or changes an arithmetic or fold order.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.native_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_PREPARED
 
 
-struct PreparedEntry(Movable):
-    var slot: String
-    var owner_address: Int
-    var weak: PythonObject
-    var record: PythonObject
-
-    def __init__(out self, var slot: String, owner_address: Int, weak: PythonObject, record: PythonObject):
-        self.slot = slot^
-        self.owner_address = owner_address
-        self.weak = weak
-        self.record = record
-
-
-struct PreparedOwners(Defaultable, Movable):
-    var slots: Dict[String, Dict[Int, Int]]
-    var entries: Dict[Int, PreparedEntry]
-    var next_id: Int
-    var cleanup_module: PythonObject
-    var cleanup_function: PythonObject
-    var weakref_get_ref: Bool
-
-    def __init__(out self):
-        self.slots = Dict[String, Dict[Int, Int]]()
-        self.entries = Dict[Int, PreparedEntry]()
-        self.next_id = 1
-        self.cleanup_module = PythonObject(None)
-        self.cleanup_function = PythonObject(None)
-        self.weakref_get_ref = False
-
-
-comptime PREPARED_OWNERS = _Global[
-    StorageType=PreparedOwners, name="MojolearnPreparedOwnersV2",
-    init_fn=PreparedOwners.__init__,
-]
-
-
-def _prepared_release(identifier: Int) raises:
-    var g = PREPARED_OWNERS.get_or_create_ptr()
-    if identifier not in g[].entries:
-        return
-    # Move the entry OUT before releasing any Python references. Its record
-    # may release buffers or trigger another owner's weakref callback; that
-    # reentrant cleanup must see fully updated maps and no live Dict borrow.
-    var released = g[].entries.pop(identifier)
-    if released.slot in g[].slots:
-        if released.owner_address in g[].slots[released.slot]:
-            if g[].slots[released.slot][released.owner_address] == identifier:
-                ref slot_entries = g[].slots[released.slot]
-                _ = slot_entries.pop(released.owner_address)
-    # released is destroyed only after both maps have been updated. A stale
-    # callback cannot erase a replacement: every record gets a unique ID.
-
-
-def _prepared_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
-    # A native C entry constructed by the supported Mojo module builder.
-    # PyMethod_New binds an opaque integer ID; weakref supplies its own object
-    # as argument two. No Python function implementation is invoked.
-    try:
-        ref cpy = Python().cpython()
-        var table = cpython_table()
-        if table[].PyTuple_Size(args_ptr) != 2:
-            raise Error("prepared owner cleanup requires its native ID and weakref")
-        var raw_id = table[].PyTuple_GetItem(args_ptr, 0)
-        var identifier = table[].PyLong_AsLongLong(raw_id)
-        if cpy.PyErr_Occurred():
-            raise cpy.unsafe_get_error()
-        _prepared_release(Int(identifier))
-        return PythonObject(None).steal_data()
-    except error:
-        return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
-
-
-def _prepared_cleanup_function() raises -> PythonObject:
-    var g = PREPARED_OWNERS.get_or_create_ptr()
-    if g[].cleanup_function is None:
-        # The standard builder owns the method definition and creates the
-        # native C callable. Keep its finalized module alive in this native
-        # global; no sys.modules write, import, Python function, custom ABI
-        # struct layout or borrowed temporary PyMethodDef is involved.
-        var module = PythonModuleBuilder("_mojolearn_prepared_lifetime")
-        module.def_py_c_function(_prepared_finalize_c, "release")
-        var native_module = module.finalize()
-        ref cpy = Python().cpython()
-        var fields = cpython_table()[].PyModule_GetDict(native_module._obj_ptr)
-        var name = String("release")
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemString")(fields, name.as_c_string_slice().unsafe_ptr())
-        if not raw:
-            raise Error("prepared owner native cleanup entry is absent")
-        g[].cleanup_module = native_module
-        g[].cleanup_function = PythonObject(from_owned=cpy.Py_NewRef(raw))
-        var version_ptr = cpy.lib.get_function[Pointer[Int8, MutUntrackedOrigin]]("Py_GetVersion")()
-        var version = String(unsafe_from_utf8_ptr=version_ptr)
-        # GetRef entered the Stable ABI in 3.13. GetObject is available at
-        # the 3.10 floor but removed in 3.15; select once during cold setup.
-        g[].weakref_get_ref = not (version.startswith("3.10.") or version.startswith("3.11.") or version.startswith("3.12."))
-    return g[].cleanup_function
+# The registry itself lives in bindings/native_model_records.mojo (lane
+# ne1-e-records, 2026-11-06): one weak entry per object for every family, the
+# prepared records in its RECORDS_PREPARED payloads. The weakref callback,
+# token and recycled-address check moved there unchanged.
 
 
 def prepared_get(mut mods: NativeModules, slot: String, owner: PythonObject) raises -> PythonObject:
-    # Native slot/address lookup: no Python dict, boxed identity integer,
-    # temporary record list or Python-object method dispatch on a cache hit.
-    var g = PREPARED_OWNERS.get_or_create_ptr()
-    var address = Int(owner._obj_ptr)
-    if slot not in g[].slots or address not in g[].slots[slot]:
-        return PythonObject(None)
-    var identifier = g[].slots[slot][address]
-    ref cpy = Python().cpython()
-    # Weakref admission uses public native APIs, never Python-object call
-    # dispatch. Keep this check even with prompt cleanup: an exceptional
-    # failure invoking a destruction callback must not admit a recycled address.
-    # The weak reference is an exact weakref.ref made by PyWeakref_NewRef
-    # below; calling it with no arguments is CPython's own C referent read
-    # (weakref_call: a new reference to the referent, or None once it died).
-    # It needs no per-call symbol lookup and is the same function on every
-    # interpreter from 3.10 (PyWeakref_GetRef starts at 3.13 and
-    # PyWeakref_GetObject ends at 3.15; both were looked up per call).
-    var weak = g[].entries[identifier].weak._obj_ptr
-    var raw = cpython_table()[].PyObject_CallNoArgs(weak)
-    if not raw:
-        raise cpy.unsafe_get_error()
-    var held = PythonObject(from_owned=raw)
-    if held._obj_ptr != owner._obj_ptr:
-        return PythonObject(None)
-    return g[].entries[identifier].record
+    # Native slot lookup: no Python dict, boxed identity integer, temporary
+    # record list or Python-object method dispatch on a cache hit. The entry's
+    # weak referent is confirmed to be `owner` (a recycled address never
+    # matches a dead entry).
+    return records_get(RECORDS_PREPARED, owner, slot)
 
 
 def prepared_put(mut mods: NativeModules, slot: String, owner: PythonObject, record: PythonObject) raises:
-    var g = PREPARED_OWNERS.get_or_create_ptr()
-    if g[].next_id == 9223372036854775807:
-        raise Error("prepared owner registry exhausted native record IDs")
-    var identifier = g[].next_id
-    g[].next_id += 1
-    ref cpy = Python().cpython()
-    var function = _prepared_cleanup_function()
-    var token = PythonObject(identifier)
-    # Documented public APIs: PyMethod_New binds an object without executing
-    # it; PyWeakref_NewRef invokes the native callback promptly on owner death.
-    # https://docs.python.org/3/c-api/method.html#c.PyMethod_New
-    # https://docs.python.org/3/c-api/weakref.html#c.PyWeakref_NewRef
-    var table = cpython_table()
-    var raw_callback = table[].PyMethod_New(function._obj_ptr, token._obj_ptr)
-    if not raw_callback:
-        raise cpy.unsafe_get_error()
-    var callback = PythonObject(from_owned=raw_callback)
-    var raw_weak = table[].PyWeakref_NewRef(owner._obj_ptr, callback._obj_ptr)
-    if not raw_weak:
-        cpython_table()[].PyErr_Clear()
-        return
-    var weak = PythonObject(from_owned=raw_weak)
-    var address = Int(owner._obj_ptr)
-    var previous = 0
-    if slot not in g[].slots:
-        g[].slots[slot] = Dict[Int, Int]()
-    elif address in g[].slots[slot]:
-        previous = g[].slots[slot][address]
-    g[].entries[identifier] = PreparedEntry(slot.copy(), address, weak, record)
-    g[].slots[slot][address] = identifier
-    # Publish replacement before destroying the old record, matching mapping
-    # replacement behavior even if that destruction reenters this registry.
-    if previous != 0:
-        _prepared_release(previous)
+    # Nothing is stored for an owner that takes no weak reference.
+    _ = records_put(RECORDS_PREPARED, owner, slot, record)
 
 
 def prepared_drop(mut mods: NativeModules, slot: String, owner: PythonObject) raises:
-    var g = PREPARED_OWNERS.get_or_create_ptr()
-    var address = Int(owner._obj_ptr)
-    if slot in g[].slots and address in g[].slots[slot]:
-        _prepared_release(g[].slots[slot][address])
+    records_drop(RECORDS_PREPARED, owner, slot)
 
 
 def prepared_key_add(mut mods: NativeModules, key: PythonObject, value: PythonObject, depth: Int = 0, limit: Int = 4) raises:
     """Append `value` and, for exact list/tuple/dict containers, their items
     (to `limit` levels; deeper containers are compared by identity only)."""
-    _ = py_call(key.append, value)
+    records_key_append(key, value)
     if depth >= limit:
         return
     var bi = mods.module("builtins")
@@ -218,7 +70,7 @@ def prepared_key_add(mut mods: NativeModules, key: PythonObject, value: PythonOb
         # items() of an exact dict never hashes or compares keys.
         var items = py_call(bi.list, py_call(value.items))
         for i in range(len(items)):  # small-loop(items: retained mapping items): identity only, no hooks
-            _ = py_call(key.append, items[i][0])
+            records_key_append(key, items[i][0])
             prepared_key_add(mods, key, items[i][1], depth + 1, limit)
 
 
@@ -237,7 +89,7 @@ def prepared_key_fields(mut mods: NativeModules, key: PythonObject, fields: Pyth
                     break
             if skipped:
                 continue
-        _ = py_call(key.append, name)
+        records_key_append(key, name)
         prepared_key_add(mods, key, items[i][1], 1)
 
 
@@ -259,19 +111,19 @@ def prepared_class_stamp(mut mods: NativeModules, cls: PythonObject, extras: Pyt
     ref cpy = Python().cpython()
     var stamp = py_call(bi.list, extras)
     var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
-    _ = py_call(stamp.append, ancestry)
+    records_key_append(stamp, ancestry)
     var dict_get = bi.type.__dict__["__dict__"].__get__
     for i in range(len(ancestry)):  # small-loop(ancestry: class rows): identity stamp of mutable rows
         var row = ancestry[i]
-        _ = py_call(stamp.append, row)
+        records_key_append(stamp, row)
         # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
         var flags = cpython_table()[].PyType_GetFlags(row._obj_ptr)
         if (flags & UInt64(1 << 8)) != 0:
             continue
         var items = py_call(bi.list, py_call(py_call(dict_get, row).items))
         for k in range(len(items)):  # small-loop(items: one class namespace): identity only, no hooks
-            _ = py_call(stamp.append, items[k][0])
-            _ = py_call(stamp.append, items[k][1])
+            records_key_append(stamp, items[k][0])
+            records_key_append(stamp, items[k][1])
     return stamp
 
 
@@ -320,8 +172,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         if (flags & UInt64(1 << 8)) != 0:
             continue
         var fields = py_call(dict_get, row)
-        var iter_table = cpython_table()
-        var raw_iterator = iter_table[].PyObject_GetIter(fields._obj_ptr)
+        var raw_iterator = cpy.PyObject_GetIter(fields._obj_ptr)
         if not raw_iterator:
             raise cpy.unsafe_get_error()
         var iterator = PythonObject(from_owned=raw_iterator)
@@ -332,7 +183,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         # key can collide with an earlier ordinary key, so interleaving the
         # two checks could invoke its __eq__ before reaching its own position.
         for field_index in range(field_count):  # small-loop(field_count: class fields): admit every namespace key first
-            var raw_key = iter_table[].PyIter_Next(iterator._obj_ptr)
+            var raw_key = cpy.PyIter_Next(iterator._obj_ptr)
             if not raw_key:
                 if cpy.PyErr_Occurred():
                     raise cpy.unsafe_get_error()

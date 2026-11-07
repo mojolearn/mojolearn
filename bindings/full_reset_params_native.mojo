@@ -20,6 +20,7 @@ from bindings.params_setter_native import _set as _linear_set, _constructor_layo
 from bindings.declared_params_native import _assign as _declared_set, _release as _declared_release
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.native_model_records import bump_model_generation
 
 
 def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -178,6 +179,9 @@ def _merge(model: PythonObject, params: PythonObject, values: PythonObject,
 
 
 def _reset(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
     var plan = _plan(model, fields, context)

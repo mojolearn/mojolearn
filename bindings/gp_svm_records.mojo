@@ -12,9 +12,9 @@
 # - Class-state checks (the fit-callback scan, the binary storage class) use
 #   the per-class records of bindings/native_class_admission.mojo (CPython
 #   type watchers; Python 3.10/3.11 run the full scan every call, as before).
-# - Model records live in the prepared-owner registry
-#   (bindings/native_prepared_owner.mojo, through trees_side_records), keyed
-#   by a weak reference to the model, outside its `__dict__`: predict leaves
+# - Model records live in the GP_SVM slot of the one record table
+#   (bindings/native_model_records.mojo, lane ne1-e-records), keyed by a
+#   weak reference to the model, outside its `__dict__`: predict leaves
 #   `__dict__` unchanged, pickles and copies never carry a record, and a copy
 #   or an unpickled model rebuilds its record on first use. A refit drops it.
 # - A record is valid while its key matches: the identities of every object
@@ -31,7 +31,8 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_shallow
+from bindings.trees_side_records import trees_key_shallow
+from bindings.native_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_GP_SVM
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.mode_metadata_native import _class_fields
 from bindings.classical_attributes import _type_mro
@@ -58,6 +59,24 @@ def gpsvm_no_fit_callbacks(model: PythonObject, fields: PythonObject, message: S
         class_admit(mods, _CALLBACK_SLOT, cls, PythonObject(True))
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error(message)
+
+
+# ------------------------------------------------------------ storage
+
+
+def gpsvm_side_get(slot: String, owner: PythonObject) raises -> PythonObject:
+    """The GP / SVM / kernel-method record `slot` holds for `owner`, or None."""
+    return records_get(RECORDS_GP_SVM, owner, slot)
+
+
+def gpsvm_side_put(slot: String, owner: PythonObject, record: PythonObject) raises -> Bool:
+    """Store `record` for `owner`; False when `owner` takes no weak reference."""
+    return records_put(RECORDS_GP_SVM, owner, slot, record)
+
+
+def gpsvm_side_drop(slot: String, owner: PythonObject) raises:
+    """Forget `owner`'s record in `slot` now (a refit)."""
+    records_drop(RECORDS_GP_SVM, owner, slot)
 
 
 # ------------------------------------------------------------ helpers
@@ -88,18 +107,18 @@ def gpsvm_key_fields(mut mods: NativeModules, key: PythonObject, fields: PythonO
                     break
             if skipped:
                 continue
-        _ = py_call(key.append, name)
+        records_key_append(key, name)
         trees_key_shallow(mods, key, items[i][1], 0)
         count += 1
-    _ = py_call(key.append, PythonObject(count))
+    records_key_append(key, PythonObject(count))
 
 
 def gpsvm_context_key(key: PythonObject, context: PythonObject, names: List[String]) raises:
     """The admission context and the connected entries the skipped admission
     read, by identity."""
-    _ = py_call(key.append, context)
+    records_key_append(key, context)
     for i in range(len(names)):  # small-loop(names: fixed connected context entries)
-        _ = py_call(key.append, py_get(context, PythonObject(names[i])))
+        records_key_append(key, py_get(context, PythonObject(names[i])))
 
 
 def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: PythonObject, value: PythonObject,
@@ -113,7 +132,7 @@ def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
     is too deep to record."""
     if depth > 64:
         return False
-    _ = py_call(key.append, value)
+    records_key_append(key, value)
     if value is None:
         return True
     var b = mods.module("builtins")
@@ -123,7 +142,7 @@ def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
     if cls is b.dict:
         # items() of an exact dict never hashes or compares keys.
         var pairs = py_call(b.list, py_call(value.items))
-        _ = py_call(key.append, PythonObject(len(pairs)))
+        records_key_append(key, PythonObject(len(pairs)))
         for k in range(len(pairs)):  # driver-loop: stored mapping entries (identity only)
             if not gpsvm_key_value(mods, key, residual, pairs[k][0], context, depth + 1):
                 return False
@@ -133,12 +152,12 @@ def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
     if cls is b.list or cls is b.tuple or cls is b.set or cls is b.frozenset:
         # Iterating an exact container runs no item protocol.
         var items = py_call(b.list, value)
-        _ = py_call(key.append, PythonObject(len(items)))
+        records_key_append(key, PythonObject(len(items)))
         for k in range(len(items)):  # driver-loop: stored container items (identity only)
             if not gpsvm_key_value(mods, key, residual, items[k], context, depth + 1):
                 return False
         return True
-    _ = py_call(key.append, cls)
+    records_key_append(key, cls)
     if cls is context["array_class"] or cls is py_get(context, "ndarray"):
         return True
     var scalars = py_get(context, "scalar_types")
@@ -146,7 +165,7 @@ def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
         for i in range(len(scalars)):  # driver-loop: over the connected NumPy scalar types, by identity
             if cls is scalars[i]:
                 return True
-    _ = py_call(residual.append, value)
+    records_key_append(residual, value)
     return True
 
 
@@ -182,7 +201,7 @@ def _labels_recordable(mut mods: NativeModules, labels: PythonObject) raises -> 
 def gpsvm_class_table(owner: PythonObject, slot: String, labels: PythonObject) raises -> PythonObject:
     """The class table recorded for `owner` under `slot` when `labels` (the
     native label list of `classes_`) holds the same labels; else None."""
-    var held = trees_side_get(slot, owner)
+    var held = gpsvm_side_get(slot, owner)
     if held is None:
         return PythonObject(None)
     var kept = held[0]
@@ -200,7 +219,7 @@ def gpsvm_class_table_put(owner: PythonObject, slot: String, labels: PythonObjec
     if not _labels_recordable(mods, labels):
         return
     var b = mods.module("builtins")
-    _ = trees_side_put(slot, owner, Python.tuple(py_call(b.list, labels), table))
+    _ = gpsvm_side_put(slot, owner, Python.tuple(py_call(b.list, labels), table))
 
 
 # ------------------------------------------------------------ OneClassSVM
@@ -222,7 +241,7 @@ def ocsvm_coef_reused(owner: PythonObject, dual: PythonObject) raises -> Bool:
     """`dual` is the coefficient object whose float32 snapshot was the object
     itself last call (no conversion), with the same shape, dtype and strides:
     the snapshot can be skipped."""
-    var held = trees_side_get(_OCSVM_COEF_SLOT, owner)
+    var held = gpsvm_side_get(_OCSVM_COEF_SLOT, owner)
     if held is None or not (held[0] is dual) or not (held[1] is py_type(dual)):
         return False
     return Bool(py=held[2] == _ocsvm_coef_layout(dual))
@@ -230,6 +249,6 @@ def ocsvm_coef_reused(owner: PythonObject, dual: PythonObject) raises -> Bool:
 
 def ocsvm_coef_remember(owner: PythonObject, dual: PythonObject, coef: PythonObject) raises:
     if coef is dual:
-        _ = trees_side_put(_OCSVM_COEF_SLOT, owner, Python.tuple(dual, py_type(dual), _ocsvm_coef_layout(dual)))
+        _ = gpsvm_side_put(_OCSVM_COEF_SLOT, owner, Python.tuple(dual, py_type(dual), _ocsvm_coef_layout(dual)))
     else:
-        trees_side_drop(_OCSVM_COEF_SLOT, owner)
+        gpsvm_side_drop(_OCSVM_COEF_SLOT, owner)

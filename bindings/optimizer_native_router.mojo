@@ -28,6 +28,7 @@ from bindings.training_rms_native import training_rms_operation
 from bindings.training_embedding_native import training_embedding_operation
 from bindings.training_cross_entropy_native import training_cross_entropy
 from bindings.training_metadata_native import training_metadata
+from bindings.native_model_records import bump_model_generation
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -208,6 +209,9 @@ def optimizer_params(owner: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(owner)
     var b = native_loaded_module("builtins")
     if py_type(updates) is not b.dict:
         raise Error("TypeError: optimizer parameter updates require native keyword arguments")

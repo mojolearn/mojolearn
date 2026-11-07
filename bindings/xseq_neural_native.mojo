@@ -22,6 +22,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_identity_key import NativeIdentityKey
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
+from bindings.native_model_records import records_open, model_generation
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from providers.python.autograd_pyapi import cast_in_of
@@ -253,8 +254,15 @@ def _record_get(mut mods: NativeModules, slot: String, model: PythonObject, firs
         same = same and key[].complete(offset)
     except:
         same = False
+    # Lane ne1-e-records (lesson 9: identity key plus generation word, no
+    # content stamp): the record's last word is the model's generation when
+    # it was kept (bindings/native_model_records.mojo); any later assignment,
+    # deletion, set_params, __setstate__ or load moves the model's word on.
+    # 0 (no dictionary watcher) leaves the identity key alone deciding.
     if same:
-        return record
+        var kept = Int(py=record[len(record) - 1])
+        if kept == 0 or model_generation(model) == kept:
+            return record
     prepared_drop(mods, slot, model)
     return PythonObject(None)
 
@@ -336,10 +344,11 @@ def _record_put_token(mut mods: NativeModules, slot: String, model: PythonObject
                       second: PythonObject, operands: PythonObject, stamp: Int) raises -> Int:
     """`_record_put` of `(*operands, token, stamp)` with a new resident-block
     token (perf3-seq-neural, sequence/perf3_seq_resident_words.mojo) and the
-    host-bytes stamp of `first` / `second`; the token, or 0 when no record was
-    kept (a self-referential field, or `stamp` 0: fitted bytes that cannot be
-    hashed): an unrecorded block is never named, so it is uploaded per call
-    as before."""
+    read-only stamp of `first` / `second` (`_xseq_params_frozen`), then the
+    model's generation word; the token, or 0 when no record was kept (a
+    self-referential field, or `stamp` 0: a fitted array that is not
+    read-only): an unrecorded block is never named, so it is uploaded per
+    call as before."""
     if stamp == 0:
         return 0
     var token = seq_resident_token()
@@ -348,6 +357,9 @@ def _record_put_token(mut mods: NativeModules, slot: String, model: PythonObject
         _ = py_call(record.append, operands[i])
     _ = py_call(record.append, PythonObject(token))
     _ = py_call(record.append, PythonObject(stamp))
+    # The generation word last (read by `_record_get`); 0 when none is kept.
+    _ = records_open(model)
+    _ = py_call(record.append, PythonObject(model_generation(model)))
     _record_put(mods, slot, model, first, second, record)
     if prepared_get(mods, slot, model) is None:
         return 0

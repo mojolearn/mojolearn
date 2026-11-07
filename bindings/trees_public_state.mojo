@@ -9,6 +9,7 @@ from bindings.native_owner_lifetime import native_release_admit, native_release_
 from bindings.classical_attributes import classical_check_layout
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.trees_lifetime import TreesResident
+from bindings.native_model_records import bump_model_generation
 
 
 def _release_tree_values(values: PythonObject, retained: PythonObject,
@@ -79,6 +80,9 @@ def _release_tree_values(values: PythonObject, retained: PythonObject,
 
 def forest_restore_state(model: PythonObject, state: PythonObject,
                          context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")
     if py_type(state) is not b.dict:
         raise Error("TypeError: forest state must be an ordinary dictionary")

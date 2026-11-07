@@ -12,9 +12,13 @@ from bindings.samba_state_native import samba_fields, samba_entries, samba_view,
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 from bindings.py_balanced import py_call, py_setitem
+from bindings.native_model_records import bump_model_generation
 
 
 def samba_load_weights(model: PythonObject, weights: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(model)
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)

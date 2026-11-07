@@ -14,6 +14,10 @@
 # with its model. A copy or an unpickled model has no record and simply
 # rebuilds it on first use.
 #
+# Storage (lane ne1-e-records, 2026-11-06): the records live in the TREES
+# family slot of bindings/native_model_records.mojo (one weak entry per
+# object for every family); this module keeps the tree family's key walks.
+#
 # A record is valid while its key matches: the identities of every object
 # the cached work read, walked as the work walked them (exact containers item
 # by item, with their lengths; anything else by identity). Values are
@@ -22,8 +26,11 @@
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
-from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
-from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.native_model_records import (
+    records_get, records_put, records_drop, records_key_append, records_key_same_exact,
+    records_stamped_get, records_stamped_put, records_stampable, ContentRecord, content_value, RECORDS_TREES,
+)
+from bindings.py_balanced import py_call, py_type, py_contains, py_fields
 from bindings.classical_pandas import classical_admit_value
 
 comptime _MAX_DEPTH = 64
@@ -31,30 +38,33 @@ comptime _MAX_DEPTH = 64
 
 def trees_side_get(slot: String, owner: PythonObject) raises -> PythonObject:
     """The record `slot` holds for `owner`, or None."""
-    var mods = NativeModules()
-    return prepared_get(mods, slot, owner)
+    return records_get(RECORDS_TREES, owner, slot)
 
 
 def trees_side_put(slot: String, owner: PythonObject, record: PythonObject) raises -> Bool:
     """Store `record` for `owner` (replacing any older one). False when the
     owner takes no weak reference: then nothing is stored and the caller
     redoes its work on every call, as before."""
-    var mods = NativeModules()
-    prepared_put(mods, slot, owner, record)
-    return prepared_get(mods, slot, owner) is not None
+    return records_put(RECORDS_TREES, owner, slot, record)
 
 
 def trees_side_drop(slot: String, owner: PythonObject) raises:
     """Forget `owner`'s record in `slot` (a refit: its arrays are released
     now, not at the next call)."""
-    var mods = NativeModules()
-    prepared_drop(mods, slot, owner)
+    records_drop(RECORDS_TREES, owner, slot)
 
 
 def trees_key_same(held: PythonObject, key: PythonObject) raises -> Bool:
     """Two keys are the same: equal length and every entry the same object
     (exact ints, the recorded counts, compared by value)."""
-    if held is None or len(held) != len(key):
+    if held is None:
+        return False
+    var list_t = py_type(Python.list())
+    if py_type(held) is list_t and py_type(key) is list_t:
+        # Borrowed native reads (lane ne1-e-records, row N255): no boxed
+        # indexing per entry.
+        return records_key_same_exact(held, key)
+    if len(held) != len(key):
         return False
     var int_t = py_type(PythonObject(0))
     for k in range(len(key)):  # small-loop(key: recorded identities): pointer identity compare only
@@ -81,7 +91,7 @@ def trees_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
     and reports it)."""
     if depth > _MAX_DEPTH:
         return False
-    _ = py_call(key.append, value)
+    records_key_append(key, value)
     if value is None:
         return True
     var b = mods.module("builtins")
@@ -91,7 +101,7 @@ def trees_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
     if cls is b.dict:
         # items() of an exact dict never hashes or compares keys.
         var pairs = py_call(b.list, py_call(value.items))
-        _ = py_call(key.append, PythonObject(len(pairs)))
+        records_key_append(key, PythonObject(len(pairs)))
         for k in range(len(pairs)):  # driver-loop: constructor parameter mapping entries
             if not trees_key_value(mods, key, residual, pairs[k][0], depth + 1):
                 return False
@@ -101,13 +111,13 @@ def trees_key_value(mut mods: NativeModules, key: PythonObject, residual: Python
     if cls is b.list or cls is b.tuple or cls is b.set or cls is b.frozenset:
         # Iterating an exact container runs no item protocol.
         var items = py_call(b.list, value)
-        _ = py_call(key.append, PythonObject(len(items)))
+        records_key_append(key, PythonObject(len(items)))
         for k in range(len(items)):  # driver-loop: constructor parameter container items
             if not trees_key_value(mods, key, residual, items[k], depth + 1):
                 return False
         return True
-    _ = py_call(key.append, cls)
-    _ = py_call(residual.append, Python.tuple(value, PythonObject(depth)))
+    records_key_append(key, cls)
+    records_key_append(residual, Python.tuple(value, PythonObject(depth)))
     return True
 
 
@@ -117,33 +127,33 @@ def trees_key_fields(mut mods: NativeModules, key: PythonObject, fields: PythonO
     deeper values by identity)."""
     var b = mods.module("builtins")
     var items = py_call(b.list, py_call(fields.items))
-    _ = py_call(key.append, PythonObject(len(items)))
+    records_key_append(key, PythonObject(len(items)))
     for i in range(len(items)):  # driver-loop: over a fitted model's stored fields (identity only)
-        _ = py_call(key.append, items[i][0])
+        records_key_append(key, items[i][0])
         trees_key_shallow(mods, key, items[i][1], 0)
 
 
 def trees_key_shallow(mut mods: NativeModules, key: PythonObject, value: PythonObject, depth: Int) raises:
     """Append `value` and, for exact list/tuple/dict values, their length and
     items (to depth 4; deeper by identity); a non-scalar's class too."""
-    _ = py_call(key.append, value)
+    records_key_append(key, value)
     if depth >= 4 or value is None:
         return
     var b = mods.module("builtins")
     var cls = py_type(value)
     if cls is b.list or cls is b.tuple:
-        _ = py_call(key.append, PythonObject(len(value)))
+        records_key_append(key, PythonObject(len(value)))
         for i in range(len(value)):  # driver-loop: over a stored container's items (identity only)
             trees_key_shallow(mods, key, value[i], depth + 1)
     elif cls is b.dict:
         var items = py_call(b.list, py_call(value.items))
-        _ = py_call(key.append, PythonObject(len(items)))
+        records_key_append(key, PythonObject(len(items)))
         for i in range(len(items)):  # driver-loop: over a stored mapping's items (identity only)
-            _ = py_call(key.append, items[i][0])
+            records_key_append(key, items[i][0])
             trees_key_shallow(mods, key, items[i][1], depth + 1)
     elif not (cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes):
         # A class can be reassigned on an instance: its admission is by type.
-        _ = py_call(key.append, cls)
+        records_key_append(key, cls)
 
 
 comptime _PARAMS_SLOT = "trees_forest_params_v1"
@@ -163,6 +173,18 @@ def trees_admit_parameters(model: PythonObject, fields: PythonObject, names: Pyt
     subclasses, ...) are admitted again. A `set_params`, an assignment or an
     in-place container edit changes the key and the full admission runs, in
     the original order, with its original refusals."""
+    # Generation fast path (lane ne1-e-records, row N255): while the model's
+    # generation word (bindings/native_model_records.mojo: its watched
+    # instance dictionary, class and explicit bumps) and the native content
+    # words of its container parameters are unchanged, the key below would
+    # match again: no key list is built and only the residual values are
+    # admitted again, as on a key hit.
+    var stamped = records_stamped_get(RECORDS_TREES, model, _PARAMS_STAMP)
+    if stamped is not None and stamped[0] is names and stamped[2] is fields:
+        var kept = stamped[1]
+        for i in range(len(kept)):  # driver-loop: parameters admitted by more than identity
+            classical_admit_value(kept[i][0], context, Int(py=kept[i][1]))
+        return
     var mods = NativeModules()
     var key = Python.list(names)
     var residual = Python.list()
@@ -170,7 +192,7 @@ def trees_admit_parameters(model: PythonObject, fields: PythonObject, names: Pyt
     for i in range(len(names)):  # driver-loop: stored constructor arguments (identity record)
         var name = names[i]
         if py_contains(fields, name):
-            _ = py_call(key.append, name)
+            records_key_append(key, name)
             if not trees_key_value(mods, key, residual, fields[name], 0):
                 recordable = False
                 break
@@ -179,12 +201,34 @@ def trees_admit_parameters(model: PythonObject, fields: PythonObject, names: Pyt
         if held is not None and trees_key_same(held, key):
             for i in range(len(residual)):  # driver-loop: parameters admitted by more than identity
                 classical_admit_value(residual[i][0], context, Int(py=residual[i][1]))
+            _trees_params_stamp(model, fields, names, residual)
             return
     for i in range(len(names)):  # driver-loop: stored constructor arguments before native conversions
         if py_contains(fields, names[i]):
             classical_admit_value(fields[names[i]], context)
     if recordable:
         _ = trees_side_put(_PARAMS_SLOT, model, key)
+        _trees_params_stamp(model, fields, names, residual)
+
+
+comptime _PARAMS_STAMP = "trees_forest_params_stamp_v1"
+
+
+def _trees_params_stamp(model: PythonObject, fields: PythonObject, names: PythonObject,
+                        residual: PythonObject) raises:
+    """Stamp the admitted configuration with the model's generation. Only
+    when `fields` is the model's own instance dictionary (the one its
+    generation watches); the record holds `fields`, so its identity cannot be
+    recycled. Content words cover exact lists and dicts item by item and
+    every other non-scalar's class, as trees_key_value does; a set, a
+    non-str/int dict key or a nested object makes the record unusable."""
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    for i in range(len(names)):  # driver-loop: stored constructor arguments (content words, once per record)
+        if py_contains(fields, names[i]):
+            content_value(content, fields[names[i]], 0, _MAX_DEPTH + 1, True)
+    _ = records_stamped_put(RECORDS_TREES, model, _PARAMS_STAMP, content^, Python.tuple(names, residual, fields))
 
 
 # ------------------------------------------------- finite-scanned fit inputs

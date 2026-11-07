@@ -11,6 +11,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.native_model_records import records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_PREPARED
 from bindings.family_common import (
     FAMILY_F64P, family_repr, family_call, family_entry, family_array, family_as_f32, family_field,
     family_shape_repr,
@@ -42,6 +43,33 @@ def _chol_admit_state(fields: PythonObject, context: PythonObject) raises:
         classical_admit_value(fields["L_"], context)
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: Cholesky cannot invoke Python fit callbacks")
+
+
+comptime _CHOL_STAMP = "linalg_chol_scalars_stamp_v1"
+
+
+def _chol_admit_state_once(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
+    """`_chol_admit_state` with its scalar half admitted once per generation
+    (lane ne1-e-records, row N238): while the model's generation word
+    (bindings/native_model_records.mojo) is unchanged, its stored names and
+    values are the same objects, and exact builtin scalars admit the same
+    way again. `L_` is admitted on every call (an ndarray can be reshaped or
+    retyped in place)."""
+    var stamped = records_stamped_get(RECORDS_PREPARED, model, _CHOL_STAMP)
+    if stamped is not None and stamped[0] is fields:
+        if py_contains(fields, "L_"):
+            classical_admit_value(fields["L_"], context)
+        return
+    _chol_admit_state(fields, context)
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var b = native_loaded_module("builtins")
+    for name in ["jitter", "numeric_mode", "n_", "info_", "nb_", "_logdet", "jitter_"]:  # small-loop(fixed Cholesky metadata fields)
+        if py_contains(fields, name):
+            var cls = py_type(fields[name])
+            if not (fields[name] is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.str):
+                return
+    _ = records_stamped_put(RECORDS_PREPARED, model, _CHOL_STAMP, ContentRecord(), Python.tuple(fields))
 
 
 def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -230,7 +258,7 @@ def linalg_operation(model: PythonObject, operation: String, var args: PythonObj
     if operation == "family_chol_initialize":
         return _chol_initialize(model, args, context)
     var fields = py_fields(model)
-    _chol_admit_state(fields, context)
+    _chol_admit_state_once(model, fields, context)
     if operation == "family_chol_logdet":
         if not py_contains(fields, "info_"):
             raise Error("AttributeError: mojolearn Cholesky: logdet_ is set by fit")
