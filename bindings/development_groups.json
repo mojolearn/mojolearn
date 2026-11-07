@@ -246,6 +246,36 @@
       ],
       "runtime_classical": [
         "_mojolearn_runtime_classical_host"
+      ],
+      "runtime_trees": [
+        "_mojolearn_runtime_trees_host"
+      ],
+      "runtime_family": [
+        "_mojolearn_runtime_family_host"
+      ],
+      "runtime_prep": [
+        "_mojolearn_runtime_prep_host"
+      ],
+      "runtime_decomp": [
+        "_mojolearn_runtime_decomp_host"
+      ],
+      "runtime_linear": [
+        "_mojolearn_runtime_linear_host"
+      ],
+      "runtime_catalog": [
+        "_mojolearn_runtime_catalog_host"
+      ],
+      "runtime_xseq": [
+        "_mojolearn_runtime_xseq_host"
+      ],
+      "runtime_byte_trainer": [
+        "_mojolearn_runtime_byte_trainer_host"
+      ],
+      "runtime_parallel": [
+        "_mojolearn_runtime_parallel_host"
+      ],
+      "runtime_neural": [
+        "_mojolearn_runtime_neural_host"
       ]
     }
   }
