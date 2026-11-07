@@ -1,8 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 """Feature partitions for the QN objective's X-transpose times dZ.
 
-Each output cell retains the original STATS_TPB row partition and pinned sum.
-The loss, bias gradient, regularization and optimizer stay on the root.
+Each output cell keeps the one-device chain: the tile order of
+`glm/impl/qn/qn_tiled_multi.mojo` `qntm_tiled_into` (QNTM_ROWS row tiles,
+then the pinned STATS_TPB fold of the tile partials), the order IDENTICAL's
+one-device gradient takes at every C (`linear_bwd`, `enqueue_tiled`). A cell
+reads only its own column of X, so packing a column range onto a device and
+running the same call there stores the same words: a plan of any size gives
+the bits of one device. The forward, the loss, the bias gradient, the
+regularization and the optimizer stay on the root.
+
+Lane ne2-i-j (2026-11-07, plan row N453): the shards used the STATS_TPB
+256-chain kernels (`xty_kernel`, `xtdz_multi_kernel`), an order no
+IDENTICAL one-device gradient takes any more, and `linear_bwd` skipped this
+dispatcher whenever the C > 1 tile order applied while binary fits never
+reached `linear_bwd` at all (`enqueue_tiled`), so `devices=` ran every GLM on
+one device. Now both objectives call it and the shards run the tile order.
+BITS: one-device fits are unchanged; multi-device GLM fits equal them.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_GLM_PARALLEL_SABOTAGE=1` packs every owner
 above rank 0 from one feature column early. The packed buffer keeps its
@@ -20,9 +34,9 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.column_stats import STATS_TPB, xty_kernel
 from core.multi_gpu import peer_clone, copy_columns_kernel
-from glm.impl.qn.glm_softmax import xtdz_multi_kernel
+from glm.impl.qn.qn_tiled_rule import qntm_ws_floats
+from glm.impl.qn.qn_tiled_multi import qntm_tiled_into
 
 
 @fieldwise_init
@@ -31,6 +45,8 @@ struct GradientColumnShard(Movable):
     var x: DeviceBuffer[DType.float32]
     var dz: DeviceBuffer[DType.float32]
     var output: DeviceBuffer[DType.float32]
+    # the tile partials of this shard's cells (`qntm_ws_floats`)
+    var ws: DeviceBuffer[DType.float32]
     var first: Int
     var width: Int
 
@@ -38,6 +54,7 @@ struct GradientColumnShard(Movable):
         _ = self.x^
         _ = self.dz^
         _ = self.output^
+        _ = self.ws^
         try:
             self.ctx.synchronize()
         except:
@@ -60,10 +77,12 @@ def gradient_columns(
     rows: Int, columns: Int, classes: Int,
 ) raises -> Bool:
     """The GLM gradient dispatcher: False (the caller's single-device route
-    runs) when the plan's setting is "" or "1", else the column shards."""
-    var value = dplan.setting
-    if value == "" or value == "1":
+    runs) when the plan is single (`DevicePlan.single()`: setting "" or "1"),
+    else `output[c + C * j]` = the un-scaled `X^T dZ` cell in the tile order,
+    computed over column shards, one per device, and True. Synchronous."""
+    if dplan.single():
         return False
+    var value = dplan.setting
     var count = Int(value)
     if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("parallel GLM requires IDENTICAL and 1..64 devices")
@@ -72,7 +91,7 @@ def gradient_columns(
         raise Error("parallel GLM needs features")
     ctx.synchronize()
     var shards = List[GradientColumnShard]()
-    for rank in range(active):
+    for rank in range(active):  # driver-loop: over the plan's device shards
         var first = columns * rank // active
         var width = columns * (rank + 1) // active - first
         var cells = rows * width
@@ -91,19 +110,15 @@ def gradient_columns(
         _ = packed^
         var local_dz = peer_clone(ctx, device, dz)
         var out = device.enqueue_create_buffer[DType.float32](width * classes)
+        var ws = device.enqueue_create_buffer[DType.float32](max(1, qntm_ws_floats(rows, width * classes)))
         device.synchronize()
-        shards.append(GradientColumnShard(device^, local_x^, local_dz^, out^, first, width))
-    for rank in range(active):
+        shards.append(GradientColumnShard(device^, local_x^, local_dz^, out^, ws^, first, width))
+    for rank in range(active):  # driver-loop: over the plan's device shards
         ref shard = shards[rank]
-        if classes == 1:
-            shard.ctx.enqueue_function[xty_kernel](shard.output.unsafe_ptr(),
-                shard.x.unsafe_ptr(), shard.dz.unsafe_ptr(), Int32(rows), Int32(shard.width),
-                grid_dim=(shard.width, 1, 1), block_dim=(STATS_TPB, 1, 1))
-        else:
-            shard.ctx.enqueue_function[xtdz_multi_kernel](shard.output.unsafe_ptr(),
-                shard.x.unsafe_ptr(), shard.dz.unsafe_ptr(), Int32(rows), Int32(shard.width), Int32(classes),
-                grid_dim=(classes * shard.width, 1, 1), block_dim=(STATS_TPB, 1, 1))
-    for rank in range(active):
+        # the one-device tile order over this shard's packed columns: cell
+        # `c + C * (j - first)` here is cell `c + C * j` of the full call
+        qntm_tiled_into(shard.ctx, shard.output, shard.x, shard.dz, shard.ws, rows, shard.width, classes)
+    for rank in range(active):  # driver-loop: over the plan's device shards
         ref shard = shards[rank]
         var destination = output.create_sub_buffer[DType.float32](shard.first * classes, shard.width * classes)
         shard.output.enqueue_copy_to(destination)
