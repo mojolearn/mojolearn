@@ -655,8 +655,7 @@ import gc, io, json, sys
 import numpy as np
 from mojolearn._classical_host import HostLinearRegression, HostKernelDensity
 from mojolearn._verify_native_runtime import audit_native_call
-path, case = sys.argv[1:3]
-WARMUP, BATCH = int(sys.argv[3]), int(sys.argv[4])
+path, case = sys.argv[1:]
 payload = open(path, "rb").read()
 loader = HostKernelDensity.load if case == "kde" else HostLinearRegression.load
 
@@ -703,7 +702,7 @@ def operation():
     finally:
         stream.close()
 
-for _ in range(WARMUP):
+for _ in range(1024):
     operation()
 # The count is process-global: CPython can retire unrelated None references
 # while caches warm. Retained fresh-process diagnostics show that loss decays,
@@ -717,7 +716,7 @@ for batch in range(3):
     gc.disable()
     try:
         before = sys.getrefcount(None)
-        for _ in range(BATCH):
+        for _ in range(512):
             operation()
         raw_after = sys.getrefcount(None)
     finally:
@@ -725,31 +724,26 @@ for batch in range(3):
             gc.enable()
     gc.collect()
     after = sys.getrefcount(None)
-    samples.append(dict(calls=BATCH, before=before, raw_after=raw_after,
+    samples.append(dict(calls=512, before=before, raw_after=raw_after,
                         after=after, delta=after-before,
                         raw_delta=raw_after-before, gc_delta=after-raw_after))
 from mojolearn._verify import binding_artifacts
-receipt = dict(case=case, calls=3 * BATCH, warmup=WARMUP, fixed_allowance=16,
+receipt = dict(case=case, calls=1536, warmup=1024, fixed_allowance=16,
                samples=samples, native=True, consumed_state=True,
                bindings=binding_artifacts())
 print(json.dumps(receipt), flush=True)
 assert all(sample["delta"] >= -16 and sample["raw_delta"] >= -16
            for sample in samples), receipt
 '''
-    # The loss this guards against was 139 None references on EVERY load, so a
-    # 128-load batch shows ~17,800 against the fixed allowance of 16; the
-    # warmup covers the cache warm-up retirements the comment above names.
-    # (Was 1024 warmup + 3 x 512 batches: ~2.5 s per case for the same check.)
-    warmup, batch = 256, 128
-    result = subprocess.run([sys.executable, "-c", code, str(path), case, str(warmup), str(batch)],
+    result = subprocess.run([sys.executable, "-c", code, str(path), case],
                             text=True, capture_output=True, timeout=60)
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
     receipt = json.loads(result.stdout)
     # Retain measured deltas and the actual subprocess native artifacts in
     # pytest's captured output, including when the lifetime check succeeds.
     print(json.dumps(receipt, sort_keys=True))
-    assert receipt["calls"] == 3 * batch and receipt["warmup"] == warmup
+    assert receipt["calls"] == 1536 and receipt["warmup"] == 1024
     assert receipt["native"] and receipt["consumed_state"]
     assert receipt["fixed_allowance"] == 16 and len(receipt["samples"]) == 3
-    assert all(sample["calls"] == batch and sample["delta"] >= -16
+    assert all(sample["calls"] == 512 and sample["delta"] >= -16
                and sample["raw_delta"] >= -16 for sample in receipt["samples"])
