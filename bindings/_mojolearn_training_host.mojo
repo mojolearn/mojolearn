@@ -289,7 +289,8 @@ def ce_loss_binding(
     # Row N118 (lane ne3-c-blocks-embedding): the GPU binding's rule, address
     # 0 for the rows under SUM or MEAN skips their store; NONE refuses it.
     var row_address = _index(row_addr)
-    var rp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    # None, not a null `Pointer` (a `Pointer` is never null).
+    var rp = Optional[MutPointer[Float32, MutUntrackedOrigin]](None)
     if row_address != 0 or reduction == 0:
         rp = f32_ptr(row_address)
     var dp = f32_ptr(_index(dlogits_addr))
