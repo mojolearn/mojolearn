@@ -11,6 +11,7 @@ from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.cpython_table import cpython_table
+from bindings.native_resident_capsule import resident_capsule_owned
 
 
 comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"
@@ -134,6 +135,101 @@ def _is_class_labels(cls: PythonObject, b: PythonObject, context: PythonObject) 
     return slots is not None and py_type(slots) is b["tuple"] and len(slots) == 0
 
 
+comptime _PY_TPFLAGS_HAVE_GC = 1 << 14
+
+# Compiled owner types a fitted model can hold (in its `__dict__`, or in a
+# prepared-owner record a reset walk may reach). Each is registered by
+# `add_type` in the compiled bindings, holds only native words or compiled
+# owners, and its deallocation runs only native code (fields read 2026-11-07):
+#   _NeuralDescriptorProvider   module, capsule, compiled factory, native words
+#                               (providers/python/neural_descriptor_pyapi); the
+#                               kernel-methods `_native_kernel_method_provider`,
+#                               the Samba/byte-LM provider fields
+#   _NativeDescriptorResource   its provider, a handle; native close (same file)
+#   _TreesResident              compiled release entry + handle; its __deinit__
+#                               calls that compiled entry (bindings/trees_lifetime);
+#                               a GradientBoosting `_resident` holder
+#   _TreesResidentDeath         a model key; native forget (trees_resident_table)
+#   _TsvdResidentLease, _GpResidentLease, _SvmResidentLease
+#                               a lease word; native fitted_lease_close
+#                               (decomposition/tsvd_, gaussian_process/gp_,
+#                               svm/svm_resident_state; core/fitted_resident_store)
+# The cluster resident table (CresHeld), the sequence resident store, and the
+# ARIMA / Holt-Winters registries are native tables outside every Python
+# object; their per-model capsule (bindings/native_resident_capsule) is
+# admitted by its capsule name below, and the binding modules and compiled
+# entries they record by `_retained_module` / `_retained_entry`.
+
+
+def _native_owner_type(cls: PythonObject, b: PythonObject) raises -> Bool:
+    """`cls` is one of the compiled owner types above: one of the listed names, a
+    direct subclass of object, created by a compiled binding (no `__module__`
+    in its class mapping, which every class statement writes), with no
+    instance dictionary, no weak-reference slot, no garbage-collector
+    support (every Python-defined class has it) and no finalizer. Each
+    binding registers its own copy of the type, so it is recognized by
+    these properties, not by one identity. All reads are C slots of the
+    exact built-in `type`."""
+    if py_type(cls) is not b["type"]:
+        return False
+    var type_fields = b["type"].__dict__
+    var name = py_call(type_fields["__name__"].__get__, cls)
+    if py_type(name) is not b["str"]:
+        return False
+    var wanted = String(py=name)
+    if (wanted != "_NeuralDescriptorProvider" and wanted != "_NativeDescriptorResource"
+            and wanted != "_TreesResident" and wanted != "_TreesResidentDeath"
+            and wanted != "_TsvdResidentLease" and wanted != "_GpResidentLease"
+            and wanted != "_SvmResidentLease"):
+        return False
+    var ancestry = py_call(type_fields["__mro__"].__get__, cls)
+    if len(ancestry) != 2 or ancestry[1] is not b["object"]:
+        return False
+    var mapping = py_call(type_fields["__dict__"].__get__, cls)
+    if (py_get(mapping, "__module__") is not None or py_get(mapping, "__del__") is not None
+            or py_get(mapping, "__getattribute__") is not None):
+        return False
+    if Int(py=py_call(type_fields["__dictoffset__"].__get__, cls)) != 0:
+        return False
+    if Int(py=py_call(type_fields["__weakrefoffset__"].__get__, cls)) != 0:
+        return False
+    return (Int(py=py_call(type_fields["__flags__"].__get__, cls)) & _PY_TPFLAGS_HAVE_GC) == 0
+
+
+def _retained_module(value: PythonObject, cls: PythonObject, b: PythonObject, context: PythonObject) raises -> Bool:
+    """`value` is an exact module that `sys.modules` still holds under its own
+    `__name__` (the compiled binding a resident entry or provider records).
+    Dropping the model's reference cannot finalize it. The name is read
+    from the module's own dictionary (the ModuleType `__dict__` slot), never
+    through a module `__getattr__`."""
+    var module_class = py_get(context, "owner_module_class")
+    var modules = py_get(context, "owner_sys_modules")
+    if module_class is None or modules is None or cls is not module_class:
+        return False
+    var namespace = py_call(context["owner_module_dict"].__get__, value)
+    if py_type(namespace) is not b["dict"]:
+        return False
+    var name = py_get(namespace, "__name__")
+    if name is None or py_type(name) is not b["str"]:
+        return False
+    return py_get(modules, name) is value
+
+
+def _retained_entry(value: PythonObject, cls: PythonObject, b: PythonObject, context: PythonObject) raises -> Bool:
+    """`value` is an exact compiled function bound to a module `sys.modules`
+    still holds (a binding's entry recorded in a resident holder or entry
+    table: a release, prepare or factory entry). Dropping a reference to it
+    runs nothing. The bound module is read with PyCFunction_GetSelf."""
+    var builtin_class = py_get(context, "owner_builtin_function_class")
+    if builtin_class is None or cls is not builtin_class:
+        return False
+    var bound = cpython_table()[].PyCFunction_GetSelf(value._obj_ptr)
+    if not bound:
+        return False
+    var module = PythonObject(from_borrowed=bound)
+    return _retained_module(module, py_type(module), b, context)
+
+
 def native_release_admit(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     # Reinitialization decrements the previous fields' references. Admit the
     # complete owners that could be destroyed before replacing any field.
@@ -239,4 +335,16 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
         for i in range(len(scalars)):  # driver-loop: over exact primitive NumPy scalar identities owning no application objects
             if cls is scalars[i]:
                 return
+    # A fitted model's own compiled owners (its kernel-methods provider, the
+    # resident entry's resource) and the binding module they record: set_params
+    # and every other reset drop them without running Python code.
+    if _native_owner_type(cls, b):
+        return
+    if _retained_module(value, cls, b, context):
+        return
+    if _retained_entry(value, cls, b, context):
+        return
+    var capsule_class = py_get(context, "owner_capsule_class")
+    if capsule_class is not None and cls is capsule_class and resident_capsule_owned(value):
+        return
     raise Error("TypeError: native owner reinitialization cannot release Python-owned metadata; retain the same owner or release it in application code first")

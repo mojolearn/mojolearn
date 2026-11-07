@@ -16,6 +16,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.family_common import family_call
 from bindings.sequential_admission import sequential_admit_value
 from bindings.native_model_records import bump_model_generation
+from bindings.mode_metadata_native import instance_protocol_override
 
 
 def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -85,14 +86,10 @@ def _msel_check_fields(fields: PythonObject, plan: PythonObject, b: PythonObject
             raise Error("TypeError: native estimator state requires exact string keys")
     var protected = plan["protected"]
     for k in range(len(protected)):  # driver-loop: refuse instance method/protocol overrides before dispatch
-        if String(protected[k]) == "_has_constructor_parameters":
-            # Forest constructors deliberately store this native bool on
-            # each instance; the class identity is still protected above.
-            var flag = py_get(fields, protected[k])
-            if flag is not None and py_type(flag) is not b.bool:
-                raise Error("TypeError: native forest constructor-state flag must be an exact bool")
-            continue
-        if py_contains(fields, protected[k]):
+        # Shared predicate (mode_metadata_native): the trees' native
+        # `_has_constructor_parameters` bool is admitted; the class identity
+        # is still protected above.
+        if instance_protocol_override(fields, protected[k], b):
             raise Error("TypeError: native estimator instance overrides a connected method or protocol")
 
 
