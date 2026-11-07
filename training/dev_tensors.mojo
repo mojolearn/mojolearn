@@ -242,7 +242,7 @@ def train_linear_backward_dev(
 def train_ce_loss_dev(
     ctx: DeviceContext,
     loss_ptr: _FP,
-    row_ptr: _FP,
+    row_ptr: Optional[_FP],
     dlogits_h: Int,
     logits_h: Int,
     targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
