@@ -100,6 +100,8 @@ from gaussian_process.gpc_device_var import (
     gpc_scale_rows_kernel,
 )
 from gaussian_process.gpc_items import gpc_fold_blocks, gpc_lml_fin
+from gaussian_process.gp_resident_store import gp_resident_store
+from core.fitted_resident_store import fitted_resident_view
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -236,6 +238,16 @@ def _gpc_upload_checked(
     var n = rows * cols
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=_GP(unsafe_from_address=addr))
+    _gpc_check_finite(ctx, buf, rows, cols, what)
+    return buf^
+
+
+def _gpc_check_finite(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], rows: Int, cols: Int, what: String
+) raises:
+    """`gp_validate_data`'s refusals (DEVIATION 1768) over `rows x cols`
+    uploaded float32: the row and the feature of the first NaN or infinity."""
+    var n = rows * cols
     var bad = device_first_nonfinite(ctx, buf, n)
     if bad >= 0:
         var is_nan = device_classify_nonfinite(ctx, buf, bad)
@@ -248,7 +260,12 @@ def _gpc_upload_checked(
             + String(bad % cols)
             + "; refused by name before any model launch (DEVIATION 1768)"
         )
-    return buf^
+
+
+def _gpc_addr_check(addr: Int, what: String) raises:
+    """`_copy_in`'s null-address refusal, for the resident reads."""
+    if addr == 0:
+        raise Error("gpc: " + what + " has a null address")
 
 
 def _copy_in(ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32], addr: Int, what: String) raises:
@@ -540,6 +557,7 @@ def gpc_predict_all_device(
     l_addrs: List[Int],
     out_kind: Int,
     out_addr: Int,
+    lease: Int = -1,
 ) raises:
     """`predict` (`out_kind` 1: n_star int64 class codes at `out_addr`) or
     `predict_proba` (`out_kind` 2: n_star x max(k, 2) float64, row-major)
@@ -548,7 +566,14 @@ def gpc_predict_all_device(
 
     One binary fit: the codes are `mean > 0` (no variance is computed) and
     the probabilities `[1 - p, p]`. Past one: DEVIATION 2833's combine of
-    the k class-1 probability columns, which never leave the device."""
+    the k class-1 probability columns, which never leave the device.
+
+    `lease` (lane ne1-a-gp-svm): -1 copies every fitted array in per call,
+    as before; otherwise X_train and each binary fit's arrays are read from
+    the GP store's copies for that lease (gaussian_process/gp_resident_store.mojo;
+    0 uploads them for this call only): slot 0 X_train, slot 1 + 2c the
+    fit's y and pi, slot 2 + 2c its W_sr and L (only when the variance is
+    needed). The same bytes reach the same launches: the bits are the same."""
     var k = len(y_addrs)
     if k <= 0:
         raise Error("gpc_predict_all: needs at least one binary fit, got " + String(k))
@@ -567,7 +592,24 @@ def gpc_predict_all_device(
 
     var trace = IdentityTrace()
     var ctx = _family_ctx()
-    var dx = _gpc_upload_checked(ctx, xt_addr, n_train, n_features, String("X_train"))
+    var resident = lease >= 0
+    var store = gp_resident_store()
+    var dx: DeviceBuffer[DType.float32]
+    if resident:
+        if n_train <= 0:
+            raise Error("gpr: X_train must have at least one row, got " + String(n_train))
+        if n_features <= 0:
+            raise Error("gpr: X_train must have at least one feature, got " + String(n_features))
+        if xt_addr == 0:
+            raise Error("gpc: X_train has a null address")
+        var held = fitted_resident_view(store, ctx, lease, 0, [xt_addr], [n_train * n_features])
+        dx = held.bufs[0].copy()
+        if held.fresh:
+            # The refusal `_gpc_upload_checked` makes, once per upload.
+            _gpc_check_finite(ctx, dx, n_train, n_features, String("X_train"))
+        _ = held^
+    else:
+        dx = _gpc_upload_checked(ctx, xt_addr, n_train, n_features, String("X_train"))
     var dxs = _gpc_upload_checked(ctx, xs_addr, n_star, n_features, String("X_star"))
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dkc = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
@@ -593,20 +635,40 @@ def gpc_predict_all_device(
     # the variance side, sized 1 when the binary codes alone are asked for
     var cells = n_train * n_star if want_proba else 1
     var dwv = ctx.enqueue_create_buffer[DType.float32](n_train)
-    var dl2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_train if want_proba else 1)
+    # The resident reads replace these per class (lease >= 0): no n x n
+    # staging buffer is made for them.
+    var dl2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_train if want_proba and not resident else 1)
     var dv2 = ctx.enqueue_create_buffer[DType.float32](cells)
     var dvar = ctx.enqueue_create_buffer[DType.float32](n_star)
     var dcols = ctx.enqueue_create_buffer[DType.uint64](k * n_star)
     for c in range(k):
-        _copy_in(ctx, dyt, y_addrs[c], String("y"))
-        _copy_in(ctx, dpit, pi_addrs[c], String("pi"))
+        if resident:
+            _gpc_addr_check(y_addrs[c], String("y"))
+            _gpc_addr_check(pi_addrs[c], String("pi"))
+            var fit = fitted_resident_view(store, ctx, lease, 1 + 2 * c, [y_addrs[c], pi_addrs[c]],
+                                           [n_train, n_train])
+            dyt = fit.bufs[0].copy()
+            dpit = fit.bufs[1].copy()
+            _ = fit^
+        else:
+            _copy_in(ctx, dyt, y_addrs[c], String("y"))
+            _copy_in(ctx, dpit, pi_addrs[c], String("pi"))
         ctx.enqueue_function[gpc_residual_kernel](
             _fp(dyt), _fp(dpit), _fp(dr), Int32(n_train), grid_dim=_blocks(n_train), block_dim=GPC_STEP_TPB
         )
         identical_gemm_into(ctx, dmean, dkc, dr, dws, n_star, 1, n_train, OP_TN)
         if want_proba:
-            _copy_in(ctx, dwv, wsr_addrs[c], String("W_sr"))
-            _copy_in(ctx, dl2, l_addrs[c], String("L"))
+            if resident:
+                _gpc_addr_check(wsr_addrs[c], String("W_sr"))
+                _gpc_addr_check(l_addrs[c], String("L"))
+                var var_fit = fitted_resident_view(store, ctx, lease, 2 + 2 * c, [wsr_addrs[c], l_addrs[c]],
+                                                   [n_train, n_train * n_train])
+                dwv = var_fit.bufs[0].copy()
+                dl2 = var_fit.bufs[1].copy()
+                _ = var_fit^
+            else:
+                _copy_in(ctx, dwv, wsr_addrs[c], String("W_sr"))
+                _copy_in(ctx, dl2, l_addrs[c], String("L"))
             ctx.enqueue_function[gpc_scale_rows_kernel](
                 dv2.unsafe_ptr(), dkc.unsafe_ptr(), dwv.unsafe_ptr(), Int32(n_train), Int32(n_star),
                 grid_dim=((n_train * n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
