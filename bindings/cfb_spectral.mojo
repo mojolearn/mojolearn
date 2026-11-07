@@ -23,6 +23,8 @@ from bindings.family_common import (
     family_array, family_as_f32, family_as_f32_dense, family_view, family_cast_view_f64, family_field, family_is_str, family_min,
 )
 from bindings.cluster_native import _reference_queries, _xc_array
+from bindings.cluster_resident_table import CRES_SPECTRAL, cres_lookup, cres_store, cres_forget
+from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.spectral_umap_routes import (
     spectral_umap_route, spectral_umap_entry as family_entry,
     spectral_umap_optional_entry as cfb_optional_entry,
@@ -798,12 +800,60 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             _ = embedding  # keep the Python object alive through the native call above
         labels = _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
         _ = embedding  # keep the Python object alive through the native call above
+    # A fit releases the last fit's resident prediction state at once (N326).
+    cres_forget(model, CRES_SPECTRAL)
     py_setitem(fields, "labels_", labels)
     if state is not None:
         py_setitem(fields, "_pd_eigenvalues", state[0])
         py_setitem(fields, "_pd_eigenvectors", state[1])
         py_setitem(fields, "_pd_diag", state[2])
         py_setitem(fields, "_pd_centroids", state[3])
+
+
+def _sc_resident(model: PythonObject, binding: PythonObject, eigenvalues: PythonObject, diag: PythonObject,
+                 n_train: Int, n_features: Int, k: Int, n_clusters: Int, code: Int, words: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    """`(spectral_predict_resident, handle)` of the model's resident
+    prediction state (lane ne1-a-cluster-spectral, N326): taken once at the
+    first predict after a fit and reused while the generation word, the five
+    fitted objects, the binding and the shape words are the same
+    (bindings/cluster_resident_table.mojo). None keeps the per-call
+    `spectral_predict`: a binding without the resident doors (the CPU host
+    binding), or fitted storage that cannot be made read-only."""
+    var vecs = family_raw_get(model, "_pd_eigenvectors")
+    var cents = family_raw_get(model, "_pd_centroids")
+    var train = PythonObject(None)
+    if code == 0:
+        train = family_raw_get(model, "_fit_X")
+    var objects = Python.tuple(eigenvalues, vecs, diag, cents, train)
+    for i in range(4):  # driver-loop: over the four fitted state arrays
+        if not fitted_is_freezable(objects[i], context):
+            return PythonObject(None)
+    if code == 0 and not fitted_is_freezable(train, context):
+        return PythonObject(None)
+    var dims: List[Int] = [n_train, n_features, k, n_clusters, code]
+    var held = cres_lookup(model, CRES_SPECTRAL, binding, objects, dims)
+    if held is not None:
+        return held
+    var query = cfb_optional_entry(binding, "spectral_predict_resident", context)
+    if query is None:
+        return PythonObject(None)
+    var prepare = family_entry(binding, "spectral_predict_prepare", context)
+    var release = family_entry(binding, "spectral_predict_release", context)
+    # Read-only before the copy is taken: an in-place write now raises
+    # NumPy's read-only error instead of diverging from the resident state.
+    for i in range(4):  # driver-loop: over the four fitted state arrays
+        _ = fitted_freeze(objects[i], context)
+    var train_addr = PythonObject(0)
+    if code == 0:
+        _ = fitted_freeze(train, context)
+        train_addr = classical_address(train)
+    var handle = family_call(prepare, Python.list(train_addr, classical_address(eigenvalues), classical_address(vecs),
+                                                  classical_address(diag), classical_address(cents)), words)
+    _ = objects  # keep the Python objects alive through the native call above
+    var nbytes = 4 * (n_train * k + n_train + k + n_clusters * k + (n_train * n_features if code == 0 else 0))
+    cres_store(model, CRES_SPECTRAL, binding, objects, dims^, release, query, Int(py=handle), nbytes)
+    return Python.tuple(query, handle)
 
 
 def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -864,18 +914,29 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     var nq = Int(py=q.shape[0])
     var labels = family_array(Python.tuple(nq), "<i4", context)
     var emb = family_array(Python.tuple(nq, k), "<f4", context)
+    var n_clusters = _int(family_raw_get(model, "_n_clusters"))
+    var n_neighbors = _int(family_raw_get(model, "_n_neighbors"))
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_predict_binding:
     # n_train, n_queries, n_features, n_components, n_clusters, n_neighbors, affinity.
+    var words = Python.list(PythonObject(n_train), PythonObject(nq), PythonObject(n_features), PythonObject(k),
+                            PythonObject(n_clusters), PythonObject(n_neighbors), PythonObject(code))
+    var held = _sc_resident(model, binding, eigenvalues, diag, n_train, n_features, k, n_clusters, code, words,
+                            context)
+    if held is not None:
+        # The resident state (N326): only the queries cross.
+        _ = family_call(held[0], held[1],
+                        Python.list(classical_address(q), classical_address(labels), classical_address(emb)), words)
+        _ = q  # keep the Python objects alive through the native call above
+        _ = emb
+        _ = labels
+        return Python.tuple(labels, emb)
     _ = family_call(family_entry(binding, "spectral_predict", context),
                     Python.list(classical_address(q), train_addr, classical_address(eigenvalues),
                                 classical_address(family_raw_get(model, "_pd_eigenvectors")),
                                 classical_address(diag),
                                 classical_address(family_raw_get(model, "_pd_centroids")),
                                 classical_address(labels), classical_address(emb)),
-                    Python.list(PythonObject(n_train), PythonObject(nq), PythonObject(n_features), PythonObject(k),
-                                PythonObject(_int(family_raw_get(model, "_n_clusters"))),
-                                PythonObject(_int(family_raw_get(model, "_n_neighbors"))),
-                                PythonObject(code)))
+                    words)
     _ = q  # keep the Python object alive through the native call above
     _ = eigenvalues  # keep the Python object alive through the native call above
     _ = diag  # keep the Python object alive through the native call above
