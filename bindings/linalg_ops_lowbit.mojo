@@ -131,7 +131,12 @@ def lin_connected_binding(context: PythonObject) raises -> PythonObject:
     # Resolve the live import-connected module once per operation. Linalg's
     # own provider supplies its compile-mode/profile metadata immediately below.
     var binding = estimator_binding(PythonObject(None), "_mojolearn_linalg", context, False)
-    py_setitem(state, "_binding_cache", binding)
+    # Row N240: the module-state entries are written only when their value
+    # changes (an unchanged binding and provider cost four identity reads,
+    # not five dict writes per call). The binding and the provider factory
+    # are still read live on every call.
+    if py_get(state, "_binding_cache") is not binding:
+        py_setitem(state, "_binding_cache", binding)
     if py_get(state, "_mode_binding") is not binding:
         py_setitem(state, "_mode_binding", binding)
         py_setitem(state, "_mode_cache", PythonObject(None))
@@ -140,8 +145,10 @@ def lin_connected_binding(context: PythonObject) raises -> PythonObject:
     var provider = PythonObject(None)
     if factory is not None:
         provider = neural_descriptor_reuse(py_get(state, "_native_provider"), factory, "mojolearn.linalg.v1", 15)
-    py_setitem(state, "_native_provider", provider)
-    py_setitem(state, "_native_provider_binding", binding)
+    if py_get(state, "_native_provider") is not provider:
+        py_setitem(state, "_native_provider", provider)
+    if py_get(state, "_native_provider_binding") is not binding:
+        py_setitem(state, "_native_provider_binding", binding)
     return binding
 
 
@@ -251,10 +258,13 @@ def lin_ints(*values: Int) raises -> PythonObject:
     return out
 
 
-def lin_operand(x: PythonObject, name: String, context: PythonObject) raises -> LinBuf:
+def lin_operand(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> LinBuf:
     """`_operand(x, name)`: a float32 2-D buffer, refused by name otherwise,
     in C order (a layout copy at most, never a cast)."""
-    var input = LinAdmission(x, context)
+    # `admitted`: the family door already admitted this very argument (row
+    # N237: lin_lowbit_operation and lin_decomp_operation admit every
+    # operand before dispatch), so LinAdmission does not admit it again.
+    var input = LinAdmission(x, context, admitted)
     return _lin_operand_admitted(input^, name, context)
 
 
@@ -283,9 +293,10 @@ def _lin_operand_admitted(var input: LinAdmission, name: String, context: Python
     return lin_admitted_c(input^, "<f4", name, context)
 
 
-def lin_operand_bits(x: PythonObject, name: String, context: PythonObject) raises -> LinBuf:
+def lin_operand_bits(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> LinBuf:
     """`_operand_bits(x, name)`: a 2-D uint16 buffer of bf16 bits in C order."""
-    var input = LinAdmission(x, context)
+    # `admitted`: as lin_operand (row N237).
+    var input = LinAdmission(x, context, admitted)
     return _lin_bits_admitted(input^, name, context)
 
 
@@ -343,8 +354,8 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
                     + "which is (b @ a).T == a.T @ b.T, runs as OP_NN, and leaves the "
                     + "extra step visible in your source where you can price it.")
     var op = OP_NN if not ta and not tb else (OP_NT if tb else OP_TN)
-    var a = lin_operand(args[1], "a", context)
-    var bb = lin_operand(args[2], "b", context)
+    var a = lin_operand(args[1], "a", context, True)
+    var bb = lin_operand(args[2], "b", context, True)
     var m = a.dim(1) if ta else a.dim(0)
     var k = a.dim(0) if ta else a.dim(1)
     var n = bb.dim(0) if tb else bb.dim(1)
@@ -394,7 +405,7 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_typed(args[1], "<f4", -1, "x", context)
+    var a = lin_typed(args[1], "<f4", -1, "x", context, True)
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.to_bf16: x has no elements")
@@ -407,7 +418,7 @@ def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_typed(args[1], "<u2", -1, "bits", context)
+    var a = lin_typed(args[1], "<u2", -1, "bits", context, True)
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.from_bf16: bits has no elements")
@@ -446,15 +457,15 @@ def lin_quantize_int8(binding: PythonObject, a: LinBuf, context: PythonObject) r
 
 
 def _lin_quantize_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_operand(args[1], "x", context)
+    var a = lin_operand(args[1], "x", context, True)
     var result = lin_quantize_int8(args[0], a, context)
     _ = a^
     return result
 
 
 def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var q = lin_typed(args[1], "<i1", 2, "codes", context)
-    var e = lin_typed(args[2], "<i4", 1, "exponents", context)
+    var q = lin_typed(args[1], "<i1", 2, "codes", context, True)
+    var e = lin_typed(args[2], "<i4", 1, "exponents", context, True)
     var rows = q.dim(0)
     var cols = q.dim(1)
     if e.rank() != 1 or e.dim(0) != rows:
@@ -561,7 +572,7 @@ def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> Python
     var input = LinAdmission(args[1], context)
     var a_bits = lin_dtype_name(input.keep, input.view) == "uint16"
     var a = _lin_bits_admitted(input^, "a", context) if a_bits else _lin_operand_admitted(input^, "a", context)
-    var bb = lin_operand_bits(args[2], "b", context)
+    var bb = lin_operand_bits(args[2], "b", context, True)
     var op = 0
     var m = 0
     var n = 0
@@ -599,7 +610,7 @@ def lin_quantize_int15(binding: PythonObject, a: LinBuf, context: PythonObject) 
 
 
 def _lin_quantize_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_operand(args[1], "x", context)
+    var a = lin_operand(args[1], "x", context, True)
     var result = lin_quantize_int15(args[0], a, context)
     _ = a^
     return result

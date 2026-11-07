@@ -34,6 +34,7 @@ from bindings.classical_host_owner import classical_host_entries, classical_host
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_caller_frame import native_caller_globals
 from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.admitted_call import AdmittedCall
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 
 
@@ -60,14 +61,18 @@ def classical_caller_outside(context: PythonObject) raises -> Bool:
     return module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
 
 
-def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
+def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The door's admission record supplies the model fields and builtins it
+    # already admitted (ne1-e-admitted-call); the resolved entry family is
+    # kept on the record as this call's binding.
     if Bool(py=py_get(context, "classical_explicit_cpu", False)):
         return classical_host_entries(model, context)
-    var fields = sequential_fields(model)
-    var mode = py_get(fields, "numeric_mode")
+    if not call.fields_admitted:
+        call.admit_fields(sequential_fields(model))
+    var mode = py_get(call.fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var b = native_loaded_module("builtins")
+    var b = call.builtins()
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     # `mode.strip().lower()` in native string operations, once: no Python
@@ -93,6 +98,7 @@ def classical_entries(model: PythonObject, context: PythonObject) raises -> Pyth
     if verdicts is not None:
         var seen = py_get(verdicts, mode)
         if seen is not None and seen[0] is entries and seen[1] is vendor:
+            call.remember_binding("classical", mode_name, True, entries)
             return entries
     if String(entries["estimators_vendor"]()) != String(vendor):
         raise Error("RuntimeError: classical native vendor differs from selected execution")
@@ -102,21 +108,26 @@ def classical_entries(model: PythonObject, context: PythonObject) raises -> Pyth
         verdicts = Python.dict()
         py_setitem(context, "classical_entries_admitted", verdicts)
     py_setitem(verdicts, mode, Python.tuple(entries, vendor))
+    call.remember_binding("classical", mode_name, True, entries)
     return entries
 
 
 def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
-        var call = PythonObject(from_borrowed=args_ptr)
-        if len(call) != 4:
+        var request = PythonObject(from_borrowed=args_ptr)
+        if len(request) != 4:
             raise Error("TypeError: classical_native_call requires model, operation, arguments and context")
-        var b = native_loaded_module("builtins")
-        if py_type(call[1]) is not b.str or py_type(call[3]) is not b.dict:
+        # The one admission record of this public call: modules, the entry
+        # family, the model fields and the layout verdict are admitted once
+        # here and passed by reference to the helpers below.
+        var call = AdmittedCall()
+        var b = call.builtins()
+        if py_type(request[1]) is not b.str or py_type(request[3]) is not b.dict:
             raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
-        var model = call[0]
-        var operation = String(call[1])
-        var args = call[2]
-        var context = call[3]
+        var model = request[0]
+        var operation = String(request[1])
+        var args = request[2]
+        var context = request[3]
         if operation == "restore_not_fitted":
             var error = classical_error_restore(args, context)
             return error.steal_data()
@@ -192,7 +203,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             if host_context is None:
                 raise Error("RuntimeError: the explicit host linear models are not connected")
             classical_connect_numpy(host_context)
-            classical_admit_value(args, host_context)
+            classical_admit_value(call.modules, args, host_context)
             var hosted = classical_host_model(args[0], host_context)
             return hosted.steal_data()
         var loading = operation == "load"
@@ -214,9 +225,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var names = py_call(b.list, classical_parameter_names(ridge))
             return names.steal_data()
         if not class_operation:
-            classical_check_layout(model, context)
+            _ = classical_check_layout(call, model, context)
         if operation == "getattribute":
-            var attribute = classical_getattribute(model, args[0], context, layout_checked=True)
+            var attribute = classical_getattribute(call, model, args[0], context)
             return attribute.steal_data()
         if loading:
             var loaded = classical_archive_load(model, args[0], ridge, context)
@@ -224,24 +235,23 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "predict_score" or operation == "score_public":
             # scikit-learn's sparse refusal comes before input admission.
             classical_refuse_sparse(args[0], classical_estimator_name(model))
-        # One module handle for this call's input and field admissions.
-        var mods = NativeModules()
+        # The record's module handle serves this call's input and field admissions.
         if (operation == "ridge_fit" or operation == "ols_fit") and len(args) == 3:
             # Same order as the whole-tuple admission (X, y, then the
             # weight); a refused sample_weight names the accepted types
             # (9bdccfa76) instead of the shared admission's generic text.
-            classical_admit_value(mods, args[0], context, 1)
-            classical_admit_value(mods, args[1], context, 1)
+            classical_admit_value(call.modules, args[0], context, 1)
+            classical_admit_value(call.modules, args[1], context, 1)
             try:
-                classical_admit_value(mods, args[2], context, 1)
+                classical_admit_value(call.modules, args[2], context, 1)
             except error:
                 var refusal = classical_weight_refusal(args[2], error)
                 raise refusal
         elif operation != "save":
-            classical_admit_value(mods, args, context)
-        var fields = sequential_fields(model)
+            classical_admit_value(call.modules, args, context)
+        call.admit_fields(sequential_fields(model))
         # One admission pass with one set of type vectors for every field.
-        classical_admit_fields(mods, fields, context["classical_fields"], context)
+        classical_admit_fields(call.modules, call.fields, context["classical_fields"], context)
         var result = PythonObject(None)
         if operation == "initialize":
             result = classical_initialize(model, args, ridge, context)
@@ -249,7 +259,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "validate_params":
             if not ridge:
                 raise Error("TypeError: validate_params requires Ridge")
-            classical_ridge_parameters(sequential_fields(model))
+            classical_ridge_parameters(call.fields)
             return PythonObject(None).steal_data()
         if operation == "get_params":
             result = classical_get_params(model, ridge)
@@ -273,7 +283,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation == "predict_public" or operation == "predict_score" or operation == "score_public":
             classical_require_fitted(model, ridge, "score" if operation == "score_public" else "predict", context)
-        var entries = classical_entries(model, context)
+        var entries = classical_entries(call, model, context)
         if operation == "ridge_fit":
             if not ridge:
                 raise Error("TypeError: ridge_fit requires Ridge")

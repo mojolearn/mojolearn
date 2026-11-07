@@ -7,6 +7,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
+from bindings.admitted_call import AdmittedCall
 from bindings.native_caller_frame import native_frame_globals
 from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _class_fields, _truth, _instance_fields
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
@@ -235,8 +236,10 @@ def _availability_member(mut mods: NativeModules, cls: PythonObject, name: Pytho
     return missing
 
 
-def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
+def _available(mut mods: NativeModules, model: PythonObject, member: PythonObject, schema: PythonObject,
                fields: PythonObject, admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
+    # `mods`: the operation's module view (the door's AdmittedCall.modules),
+    # never a fresh one per availability read (row N265).
     # Admitted rules are presence of transform and LOF's novelty word. Never
     # call the Python available_if descriptor, its check, or its wrapped body.
     var ancestry = _type_mro(py_type(member))
@@ -246,7 +249,6 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
         if ancestry[i] is not schema["mro"][i]:
             raise Error("TypeError: native availability descriptor ancestry changed")
     var hooks = schema["hooks"]
-    var mods = NativeModules()
     var member_class = py_type(member)
     for i in range(len(hooks)):  # driver-loop: changed Python descriptor hooks are never executed
         if _availability_member(mods, member_class, hooks[i][0], context["missing"]) is not hooks[i][1]:
@@ -272,7 +274,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
             var rule = String(condition)
             if rule == "density_predict" or rule == "svm_probability":
                 var requested = _lookup_impl[False](mods, model, PythonObject("probability" if rule == "svm_probability" else "prediction_data"), fields, admission, context)
-                var b = native_loaded_module("builtins")
+                var b = mods.module("builtins")
                 var kind = py_type(requested)
                 var enabled = False
                 if requested is None or kind is b.bool or kind is b.int or kind is b.float or kind is b.str or kind is b.bytes or kind is b.list or kind is b.tuple or kind is b.dict:
@@ -320,19 +322,19 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                 name = schema["function"].__name__
             if py_type(name) is not py_type(PythonObject("")):
                 raise Error("TypeError: native availability method name must be an exact string")
-            var cls_name = py_call(native_loaded_module("builtins").type.__dict__["__name__"].__get__, py_type(model))
+            var cls_name = py_call(mods.module("builtins").type.__dict__["__name__"].__get__, py_type(model))
             raise Error("AttributeError: This '" + String(cls_name) + "' has no attribute '" + String(name) + "'")
         raise error^
     return _bound_function(schema["function"], model)
 
 
-def _property(model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
+def _property(mut mods: NativeModules, model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
-    var mods = NativeModules()
+    # `mods`: the operation's module view, shared with _lookup_impl (row N265).
     if kind == "svm_svc_coef" or kind == "svm_svr_coef":
         var owner = context["svm_owner"]
         var entry = owner[0]
-        if py_type(entry) is not native_loaded_module("types").BuiltinFunctionType:
+        if py_type(entry) is not mods.module("types").BuiltinFunctionType:
             raise Error("TypeError: SVM coefficient property requires its compiled owner")
         if neural_descriptor_entry(entry.__self__, "classical_native_call", False) is not entry:
             raise Error("TypeError: SVM coefficient property owner changed after connection")
@@ -350,7 +352,7 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
             if String(error).startswith("AttributeError:"):
                 raise Error("AttributeError: mojolearn Cholesky: logdet_ is set by fit")
             raise error^
-        var b = native_loaded_module("builtins")
+        var b = mods.module("builtins")
         if py_type(info) is not b.int and py_type(info) is not b.bool and py_type(info) is not b.float:
             raise Error("TypeError: Cholesky info_ must be native numeric status")
         if _truth(info):
@@ -398,7 +400,7 @@ def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObje
         comptime if allow_special:
             var property_plan = py_get(plan["properties"], name)
             if property_plan is not None and member is property_plan[0]:
-                return _property(model, name, String(property_plan[1]), fields, admission, context)
+                return _property(mods, model, name, String(property_plan[1]), fields, admission, context)
         if not known:
             raise Error("TypeError: Python attribute properties/descriptors require a native owner")
         return _classical_descriptor_get(binding, model, cls, plan)
@@ -415,7 +417,7 @@ def _lookup_impl[allow_special: Bool](mut mods: NativeModules, model: PythonObje
         if availability is not None:
             var schema = py_get(availability, name)
             if schema is not None and member is schema["member"]:
-                return _available(model, member, schema, fields, admission, context)
+                return _available(mods, model, member, schema, fields, admission, context)
     if descriptor:
         # Creating a bound method does not execute its body. Preserve ordinary
         # subclass functions and later import-time native setter connections.
@@ -449,17 +451,17 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var name = args[2]
         if py_type(name) is not py_type(PythonObject("")):
             raise Error("TypeError: native model attribute name must be an exact string")
-        # Admission holds the GIL and invokes no application protocol. Share
-        # its builtins connection across plan and instance-storage validation.
-        var mods = NativeModules()
-        var admission = _plan(mods, model, context)
-        var fields = PythonObject(None)
+        # Admission holds the GIL and invokes no application protocol. One
+        # admission record for the read: its module view serves the plan,
+        # the instance storage, the lookup, properties and availability rules.
+        var call = AdmittedCall()
+        var admission = _plan(call.modules, model, context)
         if admission.storage_admitted:
-            fields = _instance_fields(mods.module("builtins"), model)
+            call.admit_fields(_instance_fields(call.builtins(), model))
         else:
-            fields = _fields_from_admitted_rows(mods, model, admission.ancestry, admission.rows)
-            _plan_admit(mods, model, admission, context)
-        var result = _lookup(mods, model, name, fields, admission, context)
+            call.admit_fields(_fields_from_admitted_rows(call.modules, model, admission.ancestry, admission.rows))
+            _plan_admit(call.modules, model, admission, context)
+        var result = _lookup(call.modules, model, name, call.fields, admission, context)
         var text = String(name)
         if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")
                 and py_type(result) is context["array_class"]):

@@ -5,6 +5,7 @@
 # y; inconsistent lengths; the sample_weight shape. Only array metadata is read
 # here; values are read by the typed CastIn conversion.
 from bindings.native_loaded_module import native_loaded_module
+from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_input, classical_kind, classical_address
@@ -83,6 +84,29 @@ def classical_check_x(source: PythonObject, est: String, context: PythonObject,
     cast to C-ordered float32 (the input itself when it already is one)."""
     classical_refuse_sparse(source, est)
     var view = classical_view(source, context, "X", admitted)
+    var x = _check_x_view(view, est, context)
+    _ = view^
+    return x
+
+
+def classical_check_x(mut call: AdmittedCall, source: PythonObject, est: String, context: PythonObject,
+                      position: Int, admitted: Bool = False) raises -> PythonObject:
+    """As above, recording the checked X on the door's admission record at
+    `position`: its rows and columns and the C-ordered float32 result that
+    owns it, so the door reads the shape from the record instead of
+    admitting X again (labels_shape_of; rows N254, N279)."""
+    classical_refuse_sparse(source, est)
+    var view = classical_view(source, context, "X", admitted)
+    var x = _check_x_view(view, est, context)
+    # _cast_x refused every rank but 2; the cast keeps the view's shape.
+    var rows = Int(py=view.shape[0])
+    var columns = Int(py=view.shape[1])
+    _ = view^
+    _ = call.add_input(admitted_input_dense(position, source, x, 0, rows, columns, ADMITTED_ITEM_F32, False))
+    return x
+
+
+def _check_x_view(view: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
     var kind = classical_kind(view, context)
     if kind == "c":
         raise Error("Complex data not supported: " + est + " got a complex X.")
@@ -94,9 +118,7 @@ def classical_check_x(source: PythonObject, est: String, context: PythonObject,
             raise Error("Found array with 0 sample(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
         if nd == 2 and Int(py=view.shape[1]) == 0:
             raise Error("Found array with 0 feature(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
-    var x = _cast_x(view, est, context)
-    _ = view^
-    return x
+    return _cast_x(view, est, context)
 
 
 def classical_check_y(source: PythonObject, rows: Int, est: String, context: PythonObject,

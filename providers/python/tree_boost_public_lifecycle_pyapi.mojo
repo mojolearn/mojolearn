@@ -3,6 +3,7 @@
 # numerical ABI; this owner replaces the Python _mode validation/output stack.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_get, py_type
+from bindings.admitted_call import AdmittedCall
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from bindings.classical_labels import labels_shape_of
@@ -70,12 +71,14 @@ def _boost_classifier_target(source: PythonObject, rows: Int, name: String,
     if not fast:
         return _gp_classifier_target(source, rows, name, context)
     lda_native_labels(source, context, True, name)
-    var target_shape = labels_shape_of(target, context)
-    if len(target_shape) == 0:
-        raise Error("mojolearn: y must be a sequence of labels")
-    if target_shape[0] != rows:
+    # Row N254: `target` is an exact rank-1 ndarray or Array (its ndim and
+    # dtype were read above, and lda_native_labels admitted it), so its
+    # length is read from that same storage, not by a third admission
+    # (labels_shape_of ran classifier_label_list and classical_admit_value).
+    var target_rows = Int(py=target.shape[0])
+    if target_rows != rows:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", "
-                    + String(target_shape[0]) + "]")
+                    + String(target_rows) + "]")
     return target
 
 
@@ -84,15 +87,19 @@ def tree_boost_public_operation(model: PythonObject, operation: String, args: Py
     var method = String(operation[byte=String("trees_public_boost_").byte_length():])
     var fitting = method == "fit" or method == "fit_transform"
     var fields = boost_admit(model, context, fitting)
-    classical_admit_value(args, context)
+    # One admission record for this public call (ne1-e-admitted-call, row
+    # N254): the whole argument tuple is admitted once here, X is checked
+    # without walking it again and its shape is read from the record.
+    var call = AdmittedCall()
+    classical_admit_value(call.modules, args, context)
     var nested = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0))) > 0
     var kind = boost_kind(model, context)
     var classifier = kind.endswith("_classifier")
     var name = classical_estimator_name(model)
     if not fitting:
         classical_require_fitted(model, False, method, context)
-    var x = classical_check_x(args[0], name, context)
-    var shape = labels_shape_of(x, context)
+    var x = classical_check_x(call, args[0], name, context, 0, admitted=True)
+    var shape = call.input_shape(call.find_input(0))
     var rows = shape[0]
     var columns = shape[1]
     if not fitting:
