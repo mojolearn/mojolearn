@@ -11,6 +11,17 @@ Mojo; never bring Python back. Shrink verification fixtures so no lane is slow. 
 round: build the wheels once, run every lane and every check once on every device from those wheels, compare, publish.
 Nothing is verified after a release. Narrow re-verification ("only what changed") is no longer a goal.
 
+## Timing ledger
+
+Every unit of work writes one line to the timing ledger (`~/mojolearn-evidence/timing/ledger.jsonl`; on a box, the
+job's results dir, merged on `tools/box_persist.py fetch --extract`), with its commit, host, cores and, for box
+jobs, busy cores of total (Andrew, 2026-11-07: measure everything in time, every test, so each round starts from
+measured numbers). The units: each pytest test, each development-build group, each `tools/release.py` step, each
+identity lane per column, each identity chunk and run, each box job, each RunPod CPU leg phase, each GitHub workflow
+job, each compile under `tools/compile_slot.sh`. The two commands: `python3 tools/timing_ledger.py report --since
+24h --top 50` (totals, the top items and each kind's share of wall time; `--kind`, `--by file`) and
+`bash tools/timing_ledger.sh start|end <kind> <name>` for a bash wrapper that is not wired yet.
+
 ## Decisions taken on 2026-11-05 (Andrew)
 
 1. Verification is pre-release only. No step after the first publish runs a lane on any device (also in `CLAUDE.md`).
