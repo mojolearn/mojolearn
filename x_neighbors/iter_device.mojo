@@ -67,6 +67,7 @@ from x_neighbors.device_ops import (
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
+    p2m_sign_label_kernel,
 )
 from x_neighbors.items import K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
@@ -1866,6 +1867,59 @@ def op_kernel_matmul(
     _ = d_y^
     _ = d_w^
     _ = d_res^
+    _ = d_k^
+    _ = ctx^
+
+
+def op_ocsvm_labels(
+    q: Int, y: Int, w: Int, lab: Int,
+    n: Int, m: Int, d: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32,
+    scale: Float32, shift: Float32, mode: Int, thr: Float32,
+) raises:
+    """OneClassSVM.predict in one device session (row N382/N369 of the
+    native entry-point plan, lane ne3-g-svc-gp-neighbors): the
+    `op_kernel_matmul` tiles (c = 1) into a device score vector, then
+    `unary_kernel` (U_IDENTITY: scale * s + shift, the decision) and
+    `p2m_sign_label_kernel` (mode, thr) over the same vector, and one int32
+    label download. The launches, their order and their items are the
+    three ops the caller ran one by one (kernel_matmul, unary,
+    p2m_sign_label); only the two host round trips of the n scores are
+    gone, so the labels are the same bits."""
+    var ctx = xn_ctx()
+    var d_q = _buf(ctx, q, n * d, True)
+    var d_y = _buf(ctx, y, m * d, True)
+    var d_w = _buf(ctx, w, m, True)
+    var d_res = _buf(ctx, 0, n, False)
+    var d_dec = _buf(ctx, 0, n, False)
+    var d_lab = _buf_i(ctx, 0, n, False)
+    var tr = _tile_rows(n, m)
+    var d_k = _buf(ctx, 0, tr * m, False)
+    var qp: FP = _p(d_q)
+    var rp: FP = _p(d_res)
+    var r0 = 0
+    while r0 < n:  # driver-loop: over row tiles of the query
+        var rows = min(tr, n - r0)
+        _launch_kernel(ctx, qp + r0 * d, _p(d_y), _p(d_k), rows, m, d, kind, degree, gamma, coef0)
+        _launch_matmul(ctx, _p(d_k), _p(d_w), rp + r0, rows, m, 1)
+        r0 += rows
+    _fused_sabotage(ctx, d_res, n)
+    if n > 0:
+        ctx.enqueue_function[unary_kernel](
+            rp, _p(d_dec), Int64(n), Int64(U_IDENTITY), scale, shift,
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+        ctx.enqueue_function[p2m_sign_label_kernel](
+            _p(d_dec), d_lab.unsafe_ptr(), Int64(n), Int64(mode), thr,
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+        _down_i(ctx, d_lab, lab, n)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_y^
+    _ = d_w^
+    _ = d_res^
+    _ = d_dec^
+    _ = d_lab^
     _ = d_k^
     _ = ctx^
 

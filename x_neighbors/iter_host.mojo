@@ -24,6 +24,7 @@ from x_neighbors.items import (
 )
 
 from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
+from x_neighbors.host_ops import op_unary as _host_unary, op_p2m_sign_label as _host_sign_label
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     K_RBF, U_IDENTITY,
@@ -325,6 +326,27 @@ def op_kernel_matmul(
         r0 += rows
     _hsab(res, n * c)
     _ = kb^
+
+
+def op_ocsvm_labels(
+    q: Int, y: Int, w: Int, lab: Int,
+    n: Int, m: Int, d: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32,
+    scale: Float32, shift: Float32, mode: Int, thr: Float32,
+) raises:
+    """The device op's chain on the host column: `op_kernel_matmul` (c = 1)
+    into a score vector, then the host `op_unary` (U_IDENTITY) and
+    `op_p2m_sign_label` over it: the three host ops the caller ran one by
+    one, in the same order (sabotage hooks included), so the same bits."""
+    var sb = List[Float32](length=max(n, 1), fill=Float32(0))
+    var db = List[Float32](length=max(n, 1), fill=Float32(0))
+    var sp = Int(sb.unsafe_ptr())
+    var dp = Int(db.unsafe_ptr())
+    op_kernel_matmul(q, y, w, sp, n, m, d, 1, kind, degree, gamma, coef0)
+    if n > 0:
+        _host_unary(sp, dp, n, U_IDENTITY, scale, shift)
+        _host_sign_label(dp, lab, n, mode, thr)
+    _ = sb^
+    _ = db^
 
 
 def _scaled_rbf_rows(q: FP, z: FP, kp: FP, ksp: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32):
