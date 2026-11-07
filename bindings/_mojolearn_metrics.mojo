@@ -105,6 +105,13 @@ from spectral.estimator import (
 from spectral.impl.spectral_predict_common import (
     SpectralPredictionState,
     spectral_predict_check_state,
+    spectral_predict_validate,
+)
+from spectral.impl.spectral_predict_resident import (
+    spectral_resident_count,
+    spectral_resident_predict,
+    spectral_resident_prepare,
+    spectral_resident_release,
 )
 
 
@@ -1207,6 +1214,88 @@ def spectral_predict_binding(
     return PythonObject(0)
 
 
+def spectral_predict_prepare_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`spectral_predict_prepare` (lane ne1-a-cluster-spectral, N326): take
+    `SpectralClustering`'s prediction state once
+    (spectral/impl/spectral_predict_resident.mojo) and return its handle.
+
+    `addrs`: training rows (n_train x n_features; 0 for precomputed),
+    eigenvalues (k), eigenvectors (n_train x k), diag (n_train), centroids
+    (n_clusters x k). `params`: n_train, n_queries, n_features, n_components,
+    n_clusters, n_neighbors, affinity, the words `spectral_predict` takes;
+    the call's shape is validated first, as `spectral_predict` does."""
+    if len(addrs) != 5:
+        raise Error("spectral_predict_prepare: addrs must contain 5 addresses, got " + String(len(addrs)))
+    _want(String("spectral_predict_prepare"), params, 7)
+    var n_train = Int(py=params[0])
+    var n_queries = Int(py=params[1])
+    var n_features = Int(py=params[2])
+    var k = Int(py=params[3])
+    var n_clusters = Int(py=params[4])
+    var n_neighbors = Int(py=params[5])
+    var affinity = Int(py=params[6])
+    spectral_predict_validate(n_train, n_queries, n_features, k, n_clusters, n_neighbors, affinity)
+    var train_x = List[Float32]()
+    if affinity == 0:
+        train_x = _load_f32(Int(py=addrs[0]), n_train * n_features)
+    var state = SpectralPredictionState()
+    state.eigenvalues = _load_f32(Int(py=addrs[1]), k)
+    state.eigenvectors = _load_f32(Int(py=addrs[2]), n_train * k)
+    state.diag = _load_f32(Int(py=addrs[3]), n_train)
+    state.centroids = _load_f32(Int(py=addrs[4]), n_clusters * k)
+    var handle = 0
+    with GILReleased(Python()):
+        handle = spectral_resident_prepare(train_x^, n_train, n_features, k, n_clusters, affinity, state)
+    return PythonObject(handle)
+
+
+def spectral_predict_resident_binding(
+    handle: PythonObject, addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`spectral_predict_resident(handle, addrs, params)`: `spectral_predict`
+    on the handle's state. `addrs`: input, out labels, out embedding (as
+    `spectral_predict`'s 0, 6 and 7); `params`: `spectral_predict`'s seven
+    words. Returns 0."""
+    if len(addrs) != 3:
+        raise Error("spectral_predict_resident: addrs must contain 3 addresses, got " + String(len(addrs)))
+    _want(String("spectral_predict_resident"), params, 7)
+    var h = Int(py=handle)
+    var n_train = Int(py=params[0])
+    var n_queries = Int(py=params[1])
+    var n_features = Int(py=params[2])
+    var k = Int(py=params[3])
+    var n_clusters = Int(py=params[4])
+    var n_neighbors = Int(py=params[5])
+    var affinity = Int(py=params[6])
+    var width = n_train if affinity == 1 else n_features
+    var input = _load_f32(Int(py=addrs[0]), n_queries * width)
+    var olp = _i32_ptr(Int(py=addrs[1]))
+    var oep = _f32_ptr(Int(py=addrs[2]))
+    with GILReleased(Python()):
+        var out = spectral_resident_predict(
+            h, input, n_train, n_queries, n_features, k, n_clusters, n_neighbors, affinity,
+        )
+        if len(out.labels) != n_queries or len(out.embedding) != n_queries * k:
+            raise Error("spectral_predict: the kernel returned the wrong number of outputs")
+        memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
+        memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
+        _ = len(out.labels)
+        _ = len(out.embedding)
+    return PythonObject(0)
+
+
+def spectral_predict_release_binding(handle: PythonObject) raises -> PythonObject:
+    """`spectral_predict_release(handle)`: drop the resident state (quiet for
+    a released handle)."""
+    spectral_resident_release(Int(py=handle))
+    return PythonObject(0)
+
+
+def spectral_predict_count_binding() raises -> PythonObject:
+    """The number of live resident spectral handles (tests only)."""
+    return PythonObject(spectral_resident_count())
+
+
 def umap_fit_transform_binding(
     x_addr: PythonObject,
     embedding_addr: PythonObject,
@@ -1446,6 +1535,10 @@ def build__mojolearn_metrics() -> PythonObject:
             "spectral_fit_predict_graph_state"
         )
         m.def_function[spectral_predict_binding]("spectral_predict")
+        m.def_function[spectral_predict_prepare_binding]("spectral_predict_prepare")
+        m.def_function[spectral_predict_resident_binding]("spectral_predict_resident")
+        m.def_function[spectral_predict_release_binding]("spectral_predict_release")
+        m.def_function[spectral_predict_count_binding]("spectral_predict_count")
         m.def_function[spectral_embedding_dataset_binding]("spectral_embedding_dataset")
         m.def_function[spectral_embedding_graph_binding]("spectral_embedding_graph")
         m.def_function[spectral_fit_predict_dense_binding]("spectral_fit_predict_dense")
