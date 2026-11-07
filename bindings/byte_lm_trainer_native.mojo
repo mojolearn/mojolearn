@@ -47,6 +47,7 @@ from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import neural_cast_i32_2d
 from bindings.byte_perf_helpers import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
+from bindings.native_model_records import records_get, records_put, RECORDS_PREPARED
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -100,6 +101,56 @@ def _ids(mut mods: NativeModules, source: PythonObject, shape: _Shape, context: 
     _ = tokens  # keep the Python object alive through the native call above
     _ = value^
     return tokens
+
+
+comptime _SHAPE_RECORD = "byte_lm_admitted_shape_v1"
+
+
+def _admitted_shape(mut mods: NativeModules, trainer: PythonObject, state: PythonObject) raises -> _Shape:
+    """`_shape_of(state)`, admitted once per trainer (plan row N100).
+
+    The record (bindings/native_model_records.mojo, keyed by the trainer's
+    identity, never in its `__dict__`) holds the admitted `model_shape`
+    dict, its size, its keys, the very value objects read and the shape
+    words. A call reuses the words only while `model_shape` is the same dict
+    at the same size and every recorded key still holds the identical
+    object (an int or bool object is its value), so an in-place replacement
+    of a dimension re-admits it. Anything else runs `_shape_of` (with its
+    refusals) and re-records. No generation word: every step writes the
+    trainer's fields, so its generation would change on every call."""
+    var b = _b(mods)
+    if not py_contains(state, "model_shape"):
+        return _shape_of(state)
+    var value = state["model_shape"]
+    if py_type(value) is b.dict:
+        var record = records_get(RECORDS_PREPARED, trainer, _SHAPE_RECORD)
+        if record is not None and record[0] is value and len(value) == Int(py=record[1]):
+            var keys = record[2]
+            var held = record[3]
+            var same = True
+            for i in range(len(keys)):  # small-loop(the admitted dimension fields, at most ten)
+                if py_get(value, keys[i]) is not held[i]:
+                    same = False
+                    break
+            if same:
+                var words = record[4]
+                var d = List[Int]()
+                for i in range(9):  # small-loop(the nine dimensions)
+                    d.append(Int(py=words[i]))
+                return _Shape(d^, Int(py=words[9]) == 1)
+    var shape = _shape_of(state)
+    if py_type(value) is b.dict:
+        var keys = py_call(b.list, value)
+        var held = Python.list()
+        for i in range(len(keys)):  # small-loop(the admitted dimension fields, at most ten)
+            _ = py_call(held.append, value[keys[i]])
+        var words = Python.list()
+        for i in range(9):  # small-loop(the nine dimensions)
+            _ = py_call(words.append, shape.d[i])
+        _ = py_call(words.append, Int(shape.chunked))
+        _ = records_put(RECORDS_PREPARED, trainer, _SHAPE_RECORD,
+                        Python.tuple(value, PythonObject(len(keys)), keys, held, words))
+    return shape
 
 
 def _f32(n: Int, context: PythonObject) raises -> PythonObject:
@@ -1021,7 +1072,7 @@ def byte_lm_checkpoint(mut mods: NativeModules, trainer: PythonObject, operation
     var state = PythonObject(None)
     try:
         byte_state_admit(mods, trainer, fields["_state"], context)
-        var shape = _shape_of(fields["_state"])
+        var shape = _admitted_shape(mods, trainer, fields["_state"])
         if operation == "export_checkpoint" and shape.n_total() * 24 + shape.n_tensors() * 8 > BYTE_JSON_LIMIT:
             raise Error("Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays")
         state = _export_snapshot(mods, fields, shape, context)
@@ -1051,7 +1102,7 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
     var result = PythonObject(None)
     try:
         byte_state_admit(mods, trainer, fields["_state"], context)
-        var shape = _shape_of(fields["_state"])
+        var shape = _admitted_shape(mods, trainer, fields["_state"])
         var tokens = _ids(mods, args[0], shape, context)
         var binding = _binding(mods, fields, shape, context)
         try:
@@ -1246,7 +1297,7 @@ def byte_lm_train_steps(mut mods: NativeModules, trainer: PythonObject, args: Py
     var result = PythonObject(None)
     try:
         byte_state_admit(mods, trainer, fields["_state"], context)
-        var shape = _shape_of(fields["_state"])
+        var shape = _admitted_shape(mods, trainer, fields["_state"])
         var admitted = _ids_steps(mods, args[0], shape, context)
         var stack = admitted[0]
         var n_steps = admitted[1]
@@ -1416,7 +1467,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
     var result = PythonObject(None)
     try:
         byte_state_admit(mods, trainer, fields["_state"], context)
-        var shape = _shape_of(fields["_state"])
+        var shape = _admitted_shape(mods, trainer, fields["_state"])
         var admitted = _logits_input(mods, args[0], args[1], shape, context)
         var tokens = admitted[0]
         var batch = admitted[1]
