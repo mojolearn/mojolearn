@@ -187,7 +187,8 @@ def test_host_language_model_logits_and_next_bytes_lengths():
     _assert_ragged(padded, lambda i, n: m.logits(np.ascontiguousarray(ids[i:i + 1, :n])), lens)
     assert m.next_bytes(ids, lengths=lens) == [m.next_bytes(np.ascontiguousarray(ids[i:i + 1, :n]))[0]
                                                 for i, n in enumerate(lens)]
-    with pytest.raises(ValueError, match="outside"):
+    # the shared ByteLM lengths admission (providers/python/byte_lm_metadata_pyapi.mojo)
+    with pytest.raises(ValueError, match=r"lengths must be in \[1, L\]"):
         m.logits(ids, lengths=(33,) * len(lens))
 
 
