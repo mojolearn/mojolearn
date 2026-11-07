@@ -12,14 +12,14 @@ from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import (
     TreesMatrix, trees_f32, trees_builtins, trees_table, trees_entry, trees_helper, trees_vector,
-    trees_address, trees_cast, trees_all_finite,
+    trees_address, trees_cast, trees_all_finite, trees_decode_labels,
 )
 from bindings.trees_public_score import (
     trees_accuracy, trees_r2, trees_shape_of, trees_sample_weight_f32, ScoreLabels, _classification_encoded,
-    _metrics_mode,
+    _metrics_mode, trees_accuracy_labels, _string_class_codes,
 )
 from bindings.trees_public_gbdt import _adapter_fitted, adapter_codes, adapter_decision_function
-from bindings.trees_public_boost import boost_operation, boost_kind
+from bindings.trees_public_boost import boost_operation, boost_kind, boost_predict_codes
 
 
 def boost_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -29,9 +29,20 @@ def boost_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     var sample_weight = args[2]
     # The mixins pass the estimator's own numeric_mode (None: the default).
     var mode = py_get(py_fields(model), "numeric_mode")
+    var kind = boost_kind(model, context)
+    if kind.endswith("_classifier"):
+        # Scored from the predicted class codes (N043, ne1-a-trees): string
+        # classes are not decoded to n Python labels and re-encoded; the
+        # label set, codes and device program are the ones the decoded labels
+        # produced (`_string_class_codes`, the forest door's route). Other
+        # classes decode as before.
+        var pair = boost_predict_codes(model, kind, X, context)
+        var codes = pair[1]
+        var encoded = _string_class_codes(pair[0], codes, Int(py=codes.size), context)
+        if encoded:
+            return PythonObject(trees_accuracy_labels(y, encoded.value(), sample_weight, mode, context))
+        return PythonObject(trees_accuracy(y, trees_decode_labels(pair[0], codes, context), sample_weight, mode, context))
     var prediction = boost_operation(model, "trees_boost_predict", Python.tuple(X), context)
-    if boost_kind(model, context).endswith("_classifier"):
-        return PythonObject(trees_accuracy(y, prediction, sample_weight, mode, context))
     # `as_f32_c(y, ndim=None)` and `as_f32_c(prediction, ndim=None)`, then
     # `r2_score`'s 1-D path.
     var truth = trees_f32(y, -1, "C", "y", context)

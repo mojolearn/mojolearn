@@ -6,14 +6,17 @@ lane 7): the ensemble glue of `xtrees/ops.mojo`, registered by
 existing `_mojolearn_rf` / `_mojolearn_gbdt` entry points."""
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from std.os import abort
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from providers.python.xtrees_api_pyapi import register, tree_shap_cache_values_args
 from xtrees import shap_device as shap_dev
 from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values, shap_pair_count
-from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
+from xtrees.dart_device import (
+    DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict, dart_forest_prepare, dart_forest_bytes,
+    dart_forest_predict, dart_forest_release,
+)
 
 
 # F13 measurement audit lives in the binding used by public TreeExplainer.
@@ -182,6 +185,50 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
     return PythonObject(p[0])
 
 
+def dart_forest_prepare_binding(forest: PythonObject, sizes: PythonObject, coefs: PythonObject,
+                                inits: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`x_trees_dart_forest_prepare` (N039 / N041, lane ne1-a-trees): the
+    fitted forest of `x_trees_dart_predict` (the same four address lists,
+    sizes, coefficients and class starts; params = [d, k]) uploaded once.
+    Returns [handle, device bytes]; the tree door keeps the handle in its
+    resident table and predicts with `x_trees_dart_forest_predict`. The
+    per-tree words cross once per fitted model, not once per predict."""
+    var p = _dart_ints(params, 2, "x_trees_dart_forest_prepare")
+    if len(forest) != 4:
+        raise Error("x_trees_dart_forest_prepare: forest must hold 4 address lists")
+    var nt = len(sizes)
+    if len(coefs) != nt:
+        raise Error("x_trees_dart_forest_prepare: one coefficient per tree")
+    var sz = List[Int]()
+    var cf = List[Float64]()
+    for j in range(nt):  # small-loop(nt: one size and coefficient per tree): Python parameter glue, once per fitted model
+        sz.append(Int(py=sizes[j]))
+        cf.append(Float64(py=coefs[j]))
+    var iv = List[Float64]()
+    for c in range(len(inits)):  # small-loop(inits: one start per class): Python parameter glue, no compute
+        iv.append(Float64(py=inits[c]))
+    var handle = dart_forest_prepare(_dart_addr_list(forest[0], nt, "x_trees_dart_forest_prepare"),
+                                     _dart_addr_list(forest[1], nt, "x_trees_dart_forest_prepare"),
+                                     _dart_addr_list(forest[2], nt, "x_trees_dart_forest_prepare"),
+                                     _dart_addr_list(forest[3], nt, "x_trees_dart_forest_prepare"), sz, cf, iv, p[0], p[1])
+    return Python.list(PythonObject(handle), PythonObject(dart_forest_bytes(handle)))
+
+
+def dart_forest_predict_binding(handle: PythonObject, x: PythonObject, dst: PythonObject,
+                                params: PythonObject) raises -> PythonObject:
+    """`x_trees_dart_forest_predict`: DART's raw score over a kept forest
+    (x float32 n x d row-major, dst float64 k * n class-major; params =
+    [n, d, k]); the launch `x_trees_dart_predict` makes, X uploaded only."""
+    var p = _dart_ints(params, 3, "x_trees_dart_forest_predict")
+    dart_forest_predict(Int(py=handle), Int(py=x), Int(py=dst), p[0], p[1], p[2])
+    return PythonObject(p[0])
+
+
+def dart_forest_release_binding(handle: PythonObject) raises -> PythonObject:
+    dart_forest_release(Int(py=handle))
+    return PythonObject(0)
+
+
 def tree_shap_prepare_retain_binding(forest: PythonObject, tscale: PythonObject, bg: PythonObject,
                                      cover: PythonObject, ev: PythonObject, meta: PythonObject,
                                      params: PythonObject) raises -> PythonObject:
@@ -228,6 +275,10 @@ def build__mojolearn_x_trees() -> PythonObject:
         m.def_function[vendor_binding]("x_trees_vendor")
         # lane cpu2-l5-trees: DART predict on the device, every GPU build and mode
         m.def_function[dart_predict_binding]("x_trees_dart_predict")
+        # ne1-a-trees: the kept DART forest (one upload per fitted model)
+        m.def_function[dart_forest_prepare_binding]("x_trees_dart_forest_prepare")
+        m.def_function[dart_forest_predict_binding]("x_trees_dart_forest_predict")
+        m.def_function[dart_forest_release_binding]("x_trees_dart_forest_release")
         comptime if DART_DEVICE:
             m.def_function[dart_open_binding]("x_trees_dart_open")
             m.def_function[dart_step_binding]("x_trees_dart_step")

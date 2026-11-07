@@ -1287,7 +1287,7 @@ HOST_IMPORT_ALIASES = {
             'robust_scaler_native_call',
             'standard_scaler_attribute_call',
         ),
-        "types": ("_TreesResident",),
+        "types": ("_TreesResident", "_TreesResidentDeath"),
     },),
 }
 
@@ -2283,6 +2283,7 @@ FAMILIES = (
             "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "et_classifier_fit_shard", "et_regressor_fit_shard",
+            "et_classifier_fit_shard_export", "et_regressor_fit_shard_export",
             # the weighted fits (sample_weight; lanes sk-kernels / sk-final)
             "et_classifier_fit_weighted", "et_classifier_fit_weighted_export",
             "et_classifier_fit_weighted_rowmajor_export",
@@ -2291,6 +2292,7 @@ FAMILIES = (
             "et_classifier_fit_weighted_shard", "et_regressor_fit_weighted_shard",
             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
             "forest_release_gpu",
+            "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2336,7 +2338,9 @@ FAMILIES = (
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
             "rf_regressor_fit_weighted_export",
             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
+            "rf_classifier_fit_shard_export", "rf_regressor_fit_shard_export",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
+            "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
             "rf_data_session_open", "rf_data_session_close",
             "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",

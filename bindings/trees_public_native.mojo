@@ -7,6 +7,7 @@ from bindings.py_balanced import py_get
 from bindings.classical_pandas import classical_admit_value
 from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.trees_resident_table import trees_resident_stats
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh
 from bindings.trees_constructor_native import forest_construct
 from bindings.trees_boost_constructor_native import dart_construct
@@ -43,6 +44,9 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
     # Connect a loaded NumPy's native types (ndarray inputs, pandas
     # storage); outputs stay mojolearn Arrays.
     classical_connect_numpy(context)
+    if operation == "trees_resident_stats":
+        # (snapshots kept, bytes kept, uploads so far): tools/ checks only.
+        return trees_resident_stats()
     if operation == "trees_gbdt_adapter_construct":
         return gbdt_adapter_construct(model, args, context)
     if operation == "trees_gbdt_adapter_public_set_params":

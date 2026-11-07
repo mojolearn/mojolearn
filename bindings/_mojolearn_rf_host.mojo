@@ -105,6 +105,9 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import rf_host_predict, rf_host_trees
+from bindings.forest_host_strict_binding import (
+    forest_strict_prepare_host_binding, forest_strict_predict_host_binding, forest_strict_release_host_binding,
+)
 from bindings.forest_host_groves_binding import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
@@ -648,6 +651,30 @@ def rf_regressor_fit_shard_binding(
     )
 
 
+# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
+# fit returned as the export descriptor the door copies through
+# `forest_export`, not one Python object per node. Same bytes.
+def rf_classifier_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_classifier_fit_shard_export_binding`."""
+    return _rf_fit[True, True, False](
+        x_addr, y_addr, params, criterion, _index(weights_addr), _index(tree_start)
+    )
+
+
+def rf_regressor_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_shard_export_binding`."""
+    return _rf_fit[False, True, False](
+        x_addr, y_addr, params, criterion, 0, _index(tree_start)
+    )
+
+
 # ---------------------------------------------------------------------------
 # THE DATA SESSION, on the host (lane/fix-dart-host, 2026-10-02). The GPU
 # binding's `rf_data_session_open` (bindings/_mojolearn_rf.mojo, trees-apple3)
@@ -1065,6 +1092,8 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_regressor_fit_rowmajor_export_binding]("rf_regressor_fit_rowmajor_export")
         module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
+        module.def_function[rf_classifier_fit_shard_export_binding]("rf_classifier_fit_shard_export")
+        module.def_function[rf_regressor_fit_shard_export_binding]("rf_regressor_fit_shard_export")
         module.def_function[rf_forest_export_binding]("forest_export")
         module.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[rf_forest_export_release_binding]("forest_export_release")
@@ -1078,6 +1107,10 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
         module.def_function[resident_release_binding]("forest_release_gpu")
+        # The strict snapshot of the sequential engine (N044, ne1-a-trees).
+        module.def_function[forest_strict_prepare_host_binding[True]]("forest_strict_prepare")
+        module.def_function[forest_strict_predict_host_binding[True]]("forest_strict_predict")
+        module.def_function[forest_strict_release_host_binding[True]]("forest_strict_release")
         module.def_function[rf_data_session_open_binding]("rf_data_session_open")
         module.def_function[rf_data_session_close_binding]("rf_data_session_close")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.

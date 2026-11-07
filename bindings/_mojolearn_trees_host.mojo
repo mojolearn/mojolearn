@@ -81,6 +81,9 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import et_host_predict, et_host_trees
+from bindings.forest_host_strict_binding import (
+    forest_strict_prepare_host_binding, forest_strict_predict_host_binding, forest_strict_release_host_binding,
+)
 from bindings.forest_host_groves_binding import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
@@ -507,6 +510,25 @@ def et_regressor_fit_shard_binding(
     return _et_fit[False, False, False](x_addr, y_addr, params, _index(tree_start))
 
 
+# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
+# fit returned as the export descriptor the door copies through
+# `forest_export`, not one Python object per node. Same bytes.
+def et_classifier_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_classifier_fit_shard_export_binding`."""
+    return _et_fit[True, True, False](x_addr, y_addr, params, _index(tree_start))
+
+
+def et_regressor_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_regressor_fit_shard_export_binding`."""
+    return _et_fit[False, True, False](x_addr, y_addr, params, _index(tree_start))
+
+
 def et_forest_export_binding(
     handle: PythonObject,
     offsets: PythonObject,
@@ -661,6 +683,8 @@ def build__mojolearn_trees_host() -> PythonObject:
         module.def_function[et_forest_export_release_binding]("forest_export_release")
         module.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
         module.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
+        module.def_function[et_classifier_fit_shard_export_binding]("et_classifier_fit_shard_export")
+        module.def_function[et_regressor_fit_shard_export_binding]("et_regressor_fit_shard_export")
         module.def_function[et_classifier_fit_weighted_shard_binding]("et_classifier_fit_weighted_shard")
         module.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
         module.def_function[et_regressor_fit_weighted_binding]("et_regressor_fit_weighted")
@@ -672,6 +696,10 @@ def build__mojolearn_trees_host() -> PythonObject:
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
         module.def_function[resident_release_binding]("forest_release_gpu")
+        # The strict snapshot of the sequential engine (N044, ne1-a-trees).
+        module.def_function[forest_strict_prepare_host_binding[False]]("forest_strict_prepare")
+        module.def_function[forest_strict_predict_host_binding[False]]("forest_strict_predict")
+        module.def_function[forest_strict_release_host_binding[False]]("forest_strict_release")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_trees_host: ", error))
