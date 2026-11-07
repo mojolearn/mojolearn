@@ -46,7 +46,6 @@ def _connect_pcs_rng():
     # NumPy's documented BitGenerator capsule is used; no RandomState/private
     # layout is read. See providers/python/pcs_rng_pyapi.mojo for pinned sources.
     from types import GetSetDescriptorType, MethodDescriptorType
-    import _thread
     try:
         from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64
     except ImportError:
