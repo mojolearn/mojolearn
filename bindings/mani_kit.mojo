@@ -15,11 +15,12 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
+from bindings.cpython_table import cpython_table
 from bindings.manifold_storage_native import (
     ManifoldMatrix, ManifoldDevice, matrix_rows, matrix_cols, matrix_store, matrix_device,
     matrix_set_store, matrix_set_device, device_binding, device_identifier,
     device_alloc, device_release, device_upload, device_download, device_move,
-    words_new, words_count, words_address, manifold_calls,
+    words_new, words_count, words_address,
 )
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address
@@ -70,7 +71,7 @@ def mk_ints(values: List[Int]) raises -> PythonObject:
     # The three C functions come from the process-wide manifold call table
     # (resolved once; they were three by-name lookups per call, p3 rank 416).
     ref cpy = Python().cpython()
-    var calls = manifold_calls()
+    var calls = cpython_table()
     var count = len(values)
     var raw = calls[].PyList_New(count)
     if not raw:

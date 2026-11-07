@@ -2,8 +2,9 @@
 # THE CPython function table of Mojolearn: C-API functions resolved ONCE per
 # process (lane perf-cpython-table, 2026-11-06; made the only table by lane
 # ne1-e-table, 2026-11-06, absorbing perf2_shared_cpython_table.mojo,
-# p3_lm_tokenizer_cpython.mojo, the 18 entries of p3_labels_metrics_native.mojo
-# and ClusterCPython of cluster_side_records.mojo).
+# p3_lm_tokenizer_cpython.mojo, the 18 entries of p3_labels_metrics_native.mojo,
+# ClusterCPython of cluster_side_records.mojo and ManifoldCalls of
+# manifold_storage_native.mojo).
 #
 # `cpy.lib.get_function[R]("Name")` runs `dlsym` on every call: the dynamic
 # loader walks the loaded images by name (about 50 host bindings or one merged
@@ -242,6 +243,21 @@ comptime _PyType_GetModule = ExternalFunction[
 comptime _PySequence_Repeat = ExternalFunction[
     "PySequence_Repeat", def(PyObjectPtr, Int) thin abi("C") -> PyObjectPtr]
 
+# Absorbed from ManifoldCalls of manifold_storage_native.mojo and the per-call
+# loads of neural_labels_native.mojo (lane ne1-e-table).
+# PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg)  (new, NULL on error)
+comptime _PyObject_CallOneArg = ExternalFunction[
+    "PyObject_CallOneArg", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyNumber_Long(PyObject *o)  (new)
+comptime _PyNumber_Long = ExternalFunction[
+    "PyNumber_Long", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyNumber_Float(PyObject *o)  (new)
+comptime _PyNumber_Float = ExternalFunction[
+    "PyNumber_Float", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyUnicode_FromKindAndData(int kind, const void *buffer, Py_ssize_t size)  (new)
+comptime _PyUnicode_FromKindAndData = ExternalFunction[
+    "PyUnicode_FromKindAndData", def(c_int, Int, Int) thin abi("C") -> PyObjectPtr]
+
 
 struct CPythonTable(Movable):
     var PyImport_GetModuleDict: _PyImport_GetModuleDict.type
@@ -305,6 +321,10 @@ struct CPythonTable(Movable):
     var PyIter_Next: _PyIter_Next.type
     var PyType_GetModule: _PyType_GetModule.type
     var PySequence_Repeat: _PySequence_Repeat.type
+    var PyObject_CallOneArg: _PyObject_CallOneArg.type
+    var PyNumber_Long: _PyNumber_Long.type
+    var PyNumber_Float: _PyNumber_Float.type
+    var PyUnicode_FromKindAndData: _PyUnicode_FromKindAndData.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -370,6 +390,10 @@ struct CPythonTable(Movable):
         self.PyIter_Next = _PyIter_Next.load(lib)
         self.PyType_GetModule = _PyType_GetModule.load(lib)
         self.PySequence_Repeat = _PySequence_Repeat.load(lib)
+        self.PyObject_CallOneArg = _PyObject_CallOneArg.load(lib)
+        self.PyNumber_Long = _PyNumber_Long.load(lib)
+        self.PyNumber_Float = _PyNumber_Float.load(lib)
+        self.PyUnicode_FromKindAndData = _PyUnicode_FromKindAndData.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of

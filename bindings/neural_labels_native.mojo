@@ -23,10 +23,6 @@ from sequence.neural_model_dispatch import MODEL_LABELS
 from core.cast_in import cast_in_kind
 
 
-comptime _PyBytes_FromStringAndSize = ExternalFunction[
-    "PyBytes_FromStringAndSize", def(Int, Int) thin abi("C") -> PyObjectPtr]
-comptime _PyUnicode_FromKindAndData = ExternalFunction[
-    "PyUnicode_FromKindAndData", def(c_int, Int, Int) thin abi("C") -> PyObjectPtr]
 
 
 def _item(layout: BorrowedBufferLayout, i: Int) -> Int:
@@ -83,10 +79,10 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("ValueError: text and object labels must be one-dimensional")
     ref cpy = Python().cpython()
     var admitter = SequentialValueAdmitter(context)
-    # The CPython constructors resolved once, not by name per label.
-    var lib = cpy.lib.borrow()
-    var bytes_from = _PyBytes_FromStringAndSize.load(lib)
-    var unicode_from = _PyUnicode_FromKindAndData.load(lib)
+    # The CPython constructors from the one table (resolved once per process).
+    var table = cpython_table()
+    var bytes_from = table[].PyBytes_FromStringAndSize
+    var unicode_from = table[].PyUnicode_FromKindAndData
     var native = Bool(py=dtype.isnative)
     var words = List[UInt32](length=layout.itemsize // 4, fill=0)
     for i in range(layout.count):  # driver-loop: native label schema decoding, never input hooks
