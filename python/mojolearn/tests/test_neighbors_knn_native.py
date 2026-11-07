@@ -216,7 +216,10 @@ def test_predict_refusals_keep_class_and_wording():
     assert _error(native.predict, Q[:, :2]) == (
         ValueError, "X has 2 features, but KNeighborsClassifier is expecting 3 features as input.")
     native.set_params(n_neighbors=3)
-    assert _error(native.predict, Q)[0] is mojolearn.exceptions.NotFittedError
+    # issubclass, not `is`: once scikit-learn is imported the raised class is
+    # the bridge that also derives from sklearn's NotFittedError
+    # (mojolearn.exceptions, bindings/classical_exceptions.mojo).
+    assert issubclass(_error(native.predict, Q)[0], mojolearn.exceptions.NotFittedError)
 
 
 def test_methods_run_as_one_native_call():
