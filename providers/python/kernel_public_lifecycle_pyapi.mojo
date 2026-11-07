@@ -30,7 +30,9 @@ from core.cast_in import CAST_KIND_FLOAT
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from bindings.native_class_admission import class_record, class_admit
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same
+from bindings.trees_side_records import trees_key_same
+from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, gpsvm_side_drop
+from bindings.native_model_records import records_key_append
 from bindings.gp_svm_records import gpsvm_key_value
 
 
@@ -44,14 +46,14 @@ def _km_key(mut mods: NativeModules, model: PythonObject, fields: PythonObject, 
     """The identities the parameter and learned-field admissions read: the
     connected plan and schema, then each name's stored value (exact
     containers item by item); a learned name's absence counts too."""
-    _ = py_call(key.append, context)
-    _ = py_call(key.append, attributes)
-    _ = py_call(key.append, plan)
-    _ = py_call(key.append, parameters)
-    _ = py_call(key.append, py_type(model))
+    records_key_append(key, context)
+    records_key_append(key, attributes)
+    records_key_append(key, plan)
+    records_key_append(key, parameters)
+    records_key_append(key, py_type(model))
     for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names (identity record)
         var name = parameters[i]
-        _ = py_call(key.append, name)
+        records_key_append(key, name)
         if not py_contains(fields, name):
             return False
         if not gpsvm_key_value(mods, key, residual, fields[name], context, 0):
@@ -59,7 +61,7 @@ def _km_key(mut mods: NativeModules, model: PythonObject, fields: PythonObject, 
     for i in range(len(learned)):  # driver-loop: fitted storage names (identity record)
         var name = learned[i]
         var present = py_contains(fields, name)
-        _ = py_call(key.append, PythonObject(present))
+        records_key_append(key, PythonObject(present))
         if present and not gpsvm_key_value(mods, key, residual, fields[name], context, 0):
             return False
     return True
@@ -74,7 +76,7 @@ def _km_admitted(mut mods: NativeModules, model: PythonObject, fields: PythonObj
     their identity passed again. False: run the full admission."""
     if class_record(mods, _KM_CLASS_SLOT, py_type(model)) is None:
         return False
-    var held = trees_side_get(_KM_ADMIT_SLOT, model)
+    var held = gpsvm_side_get(_KM_ADMIT_SLOT, model)
     if held is None:
         return False
     var key = Python.list()
@@ -98,7 +100,7 @@ def _km_remember(mut mods: NativeModules, model: PythonObject, fields: PythonObj
     # The class passed the full admission just now; any later change of the
     # class or an ancestor invalidates this payload.
     class_admit(mods, _KM_CLASS_SLOT, py_type(model), PythonObject(True))
-    _ = trees_side_put(_KM_ADMIT_SLOT, model, key)
+    _ = gpsvm_side_put(_KM_ADMIT_SLOT, model, key)
 
 
 def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
@@ -127,7 +129,7 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
     # changed (bindings/gp_svm_records.mojo). Fit always admits in full.
     if fitting:
         # A refit replaces the learned fields: release the record now.
-        trees_side_drop(_KM_ADMIT_SLOT, model)
+        gpsvm_side_drop(_KM_ADMIT_SLOT, model)
     if fitting or not _km_admitted(modules, model, fields, parameters, learned, plan.plan, attributes, context):
         var direct = not fitting
         for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names

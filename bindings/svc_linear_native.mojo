@@ -23,7 +23,7 @@ from bindings.family_common import (
 from bindings.svm_mixture_native import _qn_scores
 from core.family_weights_impl import family_fill_f32
 from bindings.classical_labels import labels_real_type, labels_bool_type, labels_text_type, labels_type_name
-from bindings.trees_side_records import trees_side_get, trees_side_put
+from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_base, svc_mode, svc_binding, svc_zero_division, svc_f32, svc_shape_of, svc_labels_1d,
@@ -484,12 +484,12 @@ def _py2mojo_flags(binding: PythonObject) raises -> Int:
     # The binary's compile-time flags never change for one binding object:
     # read once and kept in a record weak-keyed by the binding (lane
     # p3-svm-gp-kernel, row 473), not a getattr and a binding call per predict.
-    var held = trees_side_get(_SVC_LINEAR_FLAGS_SLOT, binding)
+    var held = gpsvm_side_get(_SVC_LINEAR_FLAGS_SLOT, binding)
     if held is not None:
         return svc_int(held)
     var fn_obj = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
     var flags = 0 if fn_obj is None else svc_int(family_call(fn_obj))
-    _ = trees_side_put(_SVC_LINEAR_FLAGS_SLOT, binding, PythonObject(flags))
+    _ = gpsvm_side_put(_SVC_LINEAR_FLAGS_SLOT, binding, PythonObject(flags))
     return flags
 
 

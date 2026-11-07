@@ -8,7 +8,9 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same
+from bindings.trees_side_records import trees_key_same
+from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, gpsvm_side_drop
+from bindings.native_model_records import records_key_append
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.mode_metadata_native import _fields
 from bindings.classical_pandas import classical_admit_value
@@ -64,11 +66,11 @@ def _gp_kernel_key(mut mods: NativeModules, key: PythonObject, nodes: PythonObje
     replaced anywhere in the tree changes its parent's fields, so the
     recorded node list stays complete while the key matches."""
     var none = List[String]()
-    _ = py_call(key.append, PythonObject(len(nodes)))
+    records_key_append(key, PythonObject(len(nodes)))
     for i in range(len(nodes)):  # driver-loop: over the recorded kernel nodes (identity only)
         var node = nodes[i]
-        _ = py_call(key.append, node)
-        _ = py_call(key.append, py_type(node))
+        records_key_append(key, node)
+        records_key_append(key, py_type(node))
         gpsvm_key_fields(mods, key, _fields(mods, node), none)
 
 
@@ -90,7 +92,7 @@ def gp_kernel_arrays_reused(owner: PythonObject, kernel: PythonObject, context: 
     take), packed once per kernel state of `owner` and reused while every node
     of the tree and its fields are the same objects."""
     var mods = NativeModules()
-    var held = trees_side_get(_GP_PACK_SLOT, owner)
+    var held = gpsvm_side_get(_GP_PACK_SLOT, owner)
     if held is not None and held[0] is kernel:
         var key = Python.list()
         gpsvm_context_key(key, context, _gp_pack_context())
@@ -107,7 +109,7 @@ def gp_kernel_arrays_reused(owner: PythonObject, kernel: PythonObject, context: 
         var key = Python.list()
         gpsvm_context_key(key, context, _gp_pack_context())
         _gp_kernel_key(mods, key, nodes)
-        _ = trees_side_put(_GP_PACK_SLOT, owner, Python.tuple(kernel, nodes, key, arrays, classes))
+        _ = gpsvm_side_put(_GP_PACK_SLOT, owner, Python.tuple(kernel, nodes, key, arrays, classes))
     return arrays
 
 
@@ -158,8 +160,8 @@ def _gp_state_key(mut mods: NativeModules, fields: PythonObject, nodes: PythonOb
             var none = List[String]()
             for i in range(len(fits)):  # driver-loop: retained one-vs-rest binary fit owners (identity only)
                 var member = fits[i]
-                _ = py_call(key.append, member)
-                _ = py_call(key.append, py_type(member))
+                records_key_append(key, member)
+                records_key_append(key, py_type(member))
                 if py_type(member) is context["family_gp_binary_laplace"]:
                     gpsvm_key_fields(mods, key, _fields(mods, member), none)
     _gp_kernel_key(mods, key, nodes)
@@ -207,8 +209,8 @@ def _gp_classes_settled(mut mods: NativeModules, classes: PythonObject, context:
 
 def gp_state_forget(model: PythonObject) raises:
     """A fit replaces the fitted state: release the record now."""
-    trees_side_drop(_GP_STATE_SLOT, model)
-    trees_side_drop(_GP_PACK_SLOT, model)
+    gpsvm_side_drop(_GP_STATE_SLOT, model)
+    gpsvm_side_drop(_GP_PACK_SLOT, model)
 
 
 def gp_state_admitted(model: PythonObject, fields: PythonObject, scalar_names: PythonObject,
@@ -218,7 +220,7 @@ def gp_state_admitted(model: PythonObject, fields: PythonObject, scalar_names: P
     accepted, after the residual admissions passed again; the caller then
     skips the full admission. False: run it (and `gp_state_remember`)."""
     var mods = NativeModules()
-    var held = trees_side_get(_GP_STATE_SLOT, model)
+    var held = gpsvm_side_get(_GP_STATE_SLOT, model)
     if held is None:
         return False
     var key = _gp_state_key(mods, fields, held[1], context)
@@ -254,7 +256,7 @@ def gp_state_remember(model: PythonObject, fields: PythonObject, context: Python
             return
     _gp_kernel_classes_admit(mods, classes)
     var key = _gp_state_key(mods, fields, nodes, context)
-    _ = trees_side_put(_GP_STATE_SLOT, model, Python.tuple(key, nodes, classes))
+    _ = gpsvm_side_put(_GP_STATE_SLOT, model, Python.tuple(key, nodes, classes))
 
 
 # ------------------------------------------------------------ admitted X
