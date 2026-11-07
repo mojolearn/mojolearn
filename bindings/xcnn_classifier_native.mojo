@@ -38,6 +38,10 @@ from bindings.sequential_arrays import sequential_array
 from bindings.xcnn_common import xcnn_shape, xcnn_tuple, xcnn_reshape, xcnn_numpy
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.array_helpers_impl import nsum_f64
+from bindings.native_model_records import (
+    RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stampable, records_stamped_get,
+    records_stamped_put,
+)
 from x_cnn.shape_words import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
 
 comptime _PREDICT_ROWS = 2048
@@ -124,8 +128,46 @@ def _minus_one(count: Int, context: PythonObject) raises -> PythonObject:
     return array
 
 
+# N135 (ne3-c-cnn, 2026-11-07): the admission record. A call on a classifier
+# whose generation word (bindings/native_model_records.mojo: the watched
+# instance dictionary) and content words (exact list items of `layers_` /
+# `_blocks`, every held object's class, and each layer's own generation and
+# field contents) are the ones the last full admission saw skips the walk
+# below: 18 settings, 16 options and both learned buffers per layer. Any
+# fit, set_params, setattr or layer field write changes a generation and
+# misses; Python 3.10 / 3.11 (generation 0) always take the full walk. The
+# payload is whether the fitted attributes were all present then. Not
+# noticed, as in the other records: an ndarray header edited in place
+# (`layer.weight_.shape = ...`); the shape reads downstream still check it.
+comptime _ADMIT_STAMP = "xcnn_clf_admission_v1"
+
+
+def _admission_stamp(model: PythonObject, fields: PythonObject, fitted_ok: Bool) raises:
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    content_fields(content, fields, 4)
+    var layers = py_get(fields, "layers_")
+    if layers is not None and py_type(layers) is _b().list:
+        for i in range(len(layers)):  # driver-loop: over the classifier layers (content words, once per record)
+            content_object(content, layers[i], 4)
+    var head = py_get(fields, "head_")
+    if head is not None:
+        content_object(content, head, 4)
+    var blocks = py_get(fields, "_blocks")
+    if blocks is not None and py_type(blocks) is _b().list:
+        for i in range(len(blocks)):  # driver-loop: over the block pairs (content words, once per record)
+            content_object(content, blocks[i][0], 4)
+            if blocks[i][1] is not None:
+                content_object(content, blocks[i][1], 4)
+    _ = records_stamped_put(RECORDS_PREPARED, model, _ADMIT_STAMP, content^, PythonObject(fitted_ok))
+
+
 def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool = False) raises -> PythonObject:
     var fields = _fields(model)
+    var stamped = records_stamped_get(RECORDS_PREPARED, model, _ADMIT_STAMP)
+    if stamped is not None and py_fields(model) is fields and (not fitted or Bool(py=stamped)):
+        return fields
     var mods = NativeModules()   # one module view for every field and child layer below
     for name in ["input_shape", "conv_channels", "kernel_size", "pool_size", "learning_rate",  # driver-loop: over passive classifier settings
                  "momentum", "weight_decay", "batch_size", "max_iter", "shuffle", "random_state", "numeric_mode",
@@ -171,6 +213,8 @@ def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool 
                 raise Error("TypeError: CNN blocks require their native convolution class")
             if blocks[i][1] is not None and py_type(blocks[i][1]) is not context["xcnn_maxpool_class"]:
                 raise Error("TypeError: CNN blocks require their native pooling class")
+    _admission_stamp(model, fields, py_contains(fields, "classes_") and py_contains(fields, "layers_")
+                     and py_contains(fields, "head_"))
     return fields
 
 
@@ -958,7 +1002,12 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
             _free_all(entries, handles)
             raise error^
         owner = _predict_owner(entries, handles, context)
-    py_setitem(fields, "_rw", rw)
+    # N135 (ne3-c-cnn): `_rw` is no longer published on the model during a
+    # predict (no native or Python reader takes it from the fields; every
+    # helper here receives `rw`). Writing it twice per call bumped the
+    # model's generation word on every predict, so no stamped record could
+    # survive to the next call. Its value after a predict was an empty dict
+    # before and is the empty dict the fit left now.
     try:
         var ishape = fields["input_shape"]
         var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
@@ -988,10 +1037,8 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
                 _ = py_call(_e(entries, "x_cnn_res_download"), a["proba"], Int(py=xcnn_addr(proba)) + 4 * s * k, m * k)
                 _ = proba  # keep the Python object alive through the native call above
             s += m
-        py_setitem(fields, "_rw", b.dict())
     except error:
         # no field names a handle after a failure; the owner frees them
-        py_setitem(fields, "_rw", b.dict())
         raise error^
     # keep the state for the next predict when every weight can stay
     # read-only; otherwise `owner` is released here and frees its handles
