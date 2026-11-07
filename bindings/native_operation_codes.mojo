@@ -324,9 +324,15 @@ struct OperationTable(Movable):
     var family_routes: List[Int]
 
     def __init__(out self):
+        # Empty: the global's init_fn does no work (lane ne-fix-hang3: the
+        # names and the route words are filled by `fill` at first use in
+        # `operation_table`, outside the `_Global` initializer).
         self.names = List[String]()
         self.routes = List[Int]()
         self.family_routes = List[Int]()
+
+    def fill(mut self):
+        """The names, routes and family route words (once per process)."""
         _operation_names(self.names)
         for i in range(len(self.names)):  # driver-loop: over the fixed operation names, once per process
             if self.names[i].startswith("trees_"):
@@ -343,11 +349,15 @@ struct OperationTable(Movable):
 # Shared by every Mojo extension in the process; bump the version whenever a
 # name is added, removed or reordered (the codes are indices).
 comptime OPERATION_TABLE = _Global[
-    StorageType=OperationTable, name="MojolearnOperationCodesV1",
+    StorageType=OperationTable, name="MojolearnOperationCodesV2",
     init_fn=OperationTable.__init__,
 ]
 
 
 def operation_table() raises -> UnsafePointer[OperationTable, MutAnyOrigin]:
-    """The process-wide table, filled at first use."""
-    return OPERATION_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    """The process-wide table, filled at first use. Every caller is a
+    CPython entry and holds the GIL, so the fill runs once."""
+    var table = OPERATION_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if len(table[].names) == 0:
+        table[].fill()
+    return table
