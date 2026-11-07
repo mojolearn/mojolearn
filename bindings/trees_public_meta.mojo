@@ -651,9 +651,34 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
     var acc = _class_zero(xt, n * k, context)
     var w = _voting_weights(model)
     var members = _attr(model, "estimators_", Python.list())
-    for i in range(len(members)):  # driver-loop: over members
-        var e = members[i]
-        _acc_cols_w(xt, acc, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, Float64(py=w[i]), context)
+    var fused = py_get(xt, PythonObject("x_trees_accumulate_cols_many"))
+    if fused is not None:
+        # Every member's probabilities into the vote in one call (lane
+        # ne2-b-members, N083): the accumulator stays on the device across
+        # the members instead of one `x_trees_accumulate_cols` crossing (and
+        # one accumulator upload and readback) per member. The same adds in
+        # member order: the same bits.
+        var keep = Python.list()
+        var blocks = Python.list()
+        for i in range(len(members)):  # driver-loop: over members
+            var e = members[i]
+            var xa = trees_f32(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), 2, "C",
+                               "sub-estimator output", context)
+            var cols = _sub_cols(e, context)
+            var cols_view = _view_of_array(cols)
+            _ = py_call(keep.append, xa.keep)
+            _ = py_call(keep.append, cols)
+            _ = py_call(blocks.append, Python.tuple(_P(xa.addr), _P(cols_view.addr), _P(cols_view.shape[0]),
+                                                    _F(Float64(py=w[i]))))
+            _ = cols_view
+            _ = xa^
+        _ = py_call_typed(fused, _A(acc), blocks, Python.list(_P(n), _P(k)))
+        _ = keep  # keep the members' blocks alive through the native call above
+        _ = acc  # keep the Python object alive through the native call above
+    else:
+        for i in range(len(members)):  # driver-loop: over members
+            var e = members[i]
+            _acc_cols_w(xt, acc, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 

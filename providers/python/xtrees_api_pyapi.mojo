@@ -258,6 +258,38 @@ def accumulate_cols_binding(acc: PythonObject, x: PythonObject, cols: PythonObje
     return PythonObject(n)
 
 
+def accumulate_cols_many_binding(acc: PythonObject, members: PythonObject, params: PythonObject) raises -> PythonObject:
+    """acc (float64, n*k) += weight_j * x_j (float32, n*ks_j) into columns
+    cols_j for every member j in order; members = [(x_j, cols_j, ks_j,
+    weight_j), ...]; params = [n, k] (lane ne2-b-members, N083: a soft
+    vote's members in one call instead of one `x_trees_accumulate_cols` per
+    member). The same per-member adds in the same order: the same bits."""
+    _need(params, 2, "x_trees_accumulate_cols_many")
+    var n = _count(_i(params, 0), "x_trees_accumulate_cols_many")
+    var k = _count(_i(params, 1), "x_trees_accumulate_cols_many")
+    var xs = List[Int]()
+    var cols = List[Int]()
+    var widths = List[Int]()
+    var weights = List[Float64]()
+    for j in range(len(members)):  # small-loop(one descriptor per ensemble member)
+        var entry = members[j]
+        if len(entry) != 4:
+            raise Error("x_trees_accumulate_cols_many: each member needs (x, cols, ks, weight)")
+        xs.append(Int(py=entry[0]))
+        cols.append(Int(py=entry[1]))
+        widths.append(_count(Int(py=entry[2]), "x_trees_accumulate_cols_many"))
+        weights.append(Float64(py=entry[3]))
+    if n <= 0:
+        return PythonObject(n)
+    comptime if XTREES_DEVICE_OPS:
+        elem_dev.accumulate_cols_many_device(f64_ptr(Int(py=acc)), xs, cols, widths, weights, n, k)
+    else:
+        if n > 0:
+            for j in range(len(xs)):  # small-loop(one host accumulate per ensemble member)
+                accumulate_cols(f64_ptr(Int(py=acc)), f32_ptr(xs[j]), i32_ptr(cols[j]), n, k, widths[j], weights[j])
+    return PythonObject(n)
+
+
 def accumulate_rows_binding(acc: PythonObject, x: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
     """acc (n x k float64) += x (m x k float64) at rows; params = [n, k, m]."""
     _need(params, 3, "x_trees_accumulate_rows")
@@ -1761,6 +1793,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[accumulate_binding]("x_trees_accumulate")
     m.def_function[accumulate_onehot_binding]("x_trees_accumulate_onehot")
     m.def_function[accumulate_cols_binding]("x_trees_accumulate_cols")
+    m.def_function[accumulate_cols_many_binding]("x_trees_accumulate_cols_many")
     m.def_function[accumulate_rows_binding]("x_trees_accumulate_rows")
     m.def_function[argmax_rows_binding]("x_trees_argmax_rows")
     m.def_function[argmax_rows_f32_binding]("x_trees_argmax_rows_f32")
