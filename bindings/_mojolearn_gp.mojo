@@ -931,8 +931,9 @@ def gp_idn_caps_binding() raises -> PythonObject:
     """Bit 0: `gpc_fit_all` / `gpc_predict_all` are the route
     (`GPC_IDN_OVR`, IDENTICAL builds, on by default). Bit 1: `gpr_fit_ptr` /
     `gpr_predict_ptr` are (`GPR_IDN_PTR`, the same). Bit 2:
-    `gp_resident_lease` / `gpr_predict_resident` exist (every device build,
-    both tiers; the host bindings register neither)."""
+    `gp_resident_lease`, `gpr_predict_resident` and
+    `gpc_predict_all_resident` exist (every device build, both tiers; the
+    host bindings register none of them)."""
     return PythonObject((1 if GPC_IDN_OVR else 0) | (2 if GPR_IDN_PTR else 0) | 4)
 
 
@@ -1134,7 +1135,7 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
     `params`, in this exact order: 0 n_train, 1 n_features, 2 n_star,
     3 n_nodes, 4 n_ls, 5 out_kind, 6 k.
     """
-    if len(params) != 7:
+    if len(params) != 7 and len(params) != 8:
         raise Error(
             "gpc_predict_all: params must contain 7 values (n_train,"
             " n_features, n_star, n_nodes, n_ls, out_kind, k), got "
@@ -1175,12 +1176,32 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
         pi_addrs.append(Int(py=addrs[8 + 4 * c]))
         wsr_addrs.append(Int(py=addrs[9 + 4 * c]))
         l_addrs.append(Int(py=addrs[10 + 4 * c]))
+    var lease = -1
+    if len(params) == 8:
+        # gpc_predict_all_resident (lane ne1-a-gp-svm): the lease word.
+        lease = Int(py=params[7])
+        if lease < 0:
+            raise Error("gpc_predict_all_resident: the lease must be 0 or a lease, got " + String(lease))
     with GILReleased(Python()):
         gpc_predict_all_device(
             xt_addr, n_train, n_features, spec, xs_addr, n_star,
-            y_addrs, pi_addrs, wsr_addrs, l_addrs, out_kind, out_addr,
+            y_addrs, pi_addrs, wsr_addrs, l_addrs, out_kind, out_addr, lease,
         )
     return PythonObject(0)
+
+
+def gpc_predict_all_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`gpc_predict_all` with the same `addrs` in the same order and
+    `params` = its 7 values followed by ONE more word, the lease
+    (`gp_resident_lease`; 0 uploads the model for this call only). The model
+    arrays are read from the lease's device copies. Returns 0."""
+    if len(params) != 8:
+        raise Error(
+            "gpc_predict_all_resident: params must contain 8 values (n_train,"
+            " n_features, n_star, n_nodes, n_ls, out_kind, k, lease), got "
+            + String(len(params))
+        )
+    return gpc_predict_all_binding(addrs, params)
 
 
 # ===========================================================================
@@ -1446,6 +1467,7 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gp_resident_lease_binding]("gp_resident_lease")
         m.def_function[gp_resident_stats_binding]("gp_resident_stats")
         m.def_function[gpr_predict_resident_binding]("gpr_predict_resident")
+        m.def_function[gpc_predict_all_resident_binding]("gpc_predict_all_resident")
         # The Cholesky door (workstream D, 2026-09-14).
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch

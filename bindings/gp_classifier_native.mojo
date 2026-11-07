@@ -25,12 +25,15 @@ from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32
 from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
+from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.mcls_classify import mcls_accuracy_fraction
 from bindings.mcls_common import mc_shape_of
 from bindings.host_inference_scalars import host_inference_scalar
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"
 comptime _K_PROD = 5
+# The prepared-owner slot of a classifier's device-resident fitted state.
+comptime _GPC_RESIDENT_SLOT = "gpc_resident_fitted_v1"
 
 
 def _gpc_ext(model: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -382,7 +385,7 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     return Python.tuple(mean, var_out, proba)
 
 
-def _gpc_predict_all(ext: PythonObject, fields: PythonObject, q: PythonObject, out_kind: Int,
+def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObject, q: PythonObject, out_kind: Int,
                      context: PythonObject, kernel_arrays: PythonObject) raises -> PythonObject:
     """`_predict_all`: every binary fit against one cross kernel in one
     `gpc_predict_all` session; int64 codes (1) or float64 rows (2).
@@ -405,6 +408,11 @@ def _gpc_predict_all(ext: PythonObject, fields: PythonObject, q: PythonObject, o
                             classical_address(out))
     _ = xt  # keep the Python object alive through the native call above
     var kept = Python.list()
+    # The fitted array objects the resident copies would mirror, in slot
+    # order (lane ne1-a-gp-svm): None once one of them is not the field the
+    # binding reads (that state keeps the per-call upload).
+    var mirrors = Python.list(xt) if xt is fields["X_train_"] else PythonObject(None)
+    var names = Python.tuple("y_train_", "pi_", "W_sr_", "L_")
     for i in range(k):  # driver-loop: four model addresses per binary fit
         var own = py_fields(fits[i])
         var parts = Python.list(gp_f32(own, "y_train_", -1, context), gp_f32(own, "pi_", -1, context),
@@ -413,10 +421,25 @@ def _gpc_predict_all(ext: PythonObject, fields: PythonObject, q: PythonObject, o
         for j in range(4):  # small-loop(model buffers: four per binary fit)
             _ = py_call(addrs.append, classical_address(parts[j]))
             _ = xt  # keep the Python object alive through the native call above
-    # n_train, n_features, n_star, n_nodes, n_ls, out_kind, k
-    _ = family_call(gp_entry(ext, "gpc_predict_all"), addrs,
-                    Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
-                                PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(out_kind), PythonObject(k)))
+            if mirrors is not None:
+                if parts[j] is own[names[j]]:
+                    _ = py_call(mirrors.append, parts[j])
+                else:
+                    mirrors = PythonObject(None)
+    # n_train, n_features, n_star, n_nodes, n_ls, out_kind, k (+ lease: gpc_predict_all_resident)
+    var params = Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
+                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(out_kind), PythonObject(k))
+    var name = String("gpc_predict_all")
+    if (gp_caps(ext) & 4) == 4:
+        # Device-resident fitted state: X_train_ and every binary fit's
+        # y_train_, pi_, W_sr_ and L_ cross once per fitted state
+        # (bindings/fitted_resident_door.mojo). Lease 0 uploads per call.
+        var lease = 0
+        if mirrors is not None:
+            lease = fitted_resident_lease(model, _GPC_RESIDENT_SLOT, ext, "gp_resident_lease", mirrors)
+        _ = py_call(params.append, PythonObject(lease))
+        name = String("gpc_predict_all_resident")
+    _ = family_call(gp_entry(ext, name), addrs, params)
     _ = xt  # keep the Python object alive through the native call above
     _ = kept^
     _ = xt^
@@ -463,7 +486,7 @@ def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
     var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
     if (gp_caps(ext) & 1) == 1:
-        return _gpc_predict_all(ext, fields, q, 2, context, arrays)
+        return _gpc_predict_all(model, ext, fields, q, 2, context, arrays)
     if Int(py=fields["n_classes_"]) == 2:
         # `[1 - p, p]` from the binding (`gpc_binary_out`)
         return _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 2, context, arrays)[3]
@@ -481,7 +504,7 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
     var codes: PythonObject
     if (gp_caps(ext) & 1) == 1:
-        codes = _gpc_predict_all(ext, fields, q, 1, context, arrays)
+        codes = _gpc_predict_all(model, ext, fields, q, 1, context, arrays)
     elif Int(py=fields["n_classes_"]) == 2:
         # `mean > 0` codes from the binding (`gpc_binary_out`)
         codes = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays)[3]
