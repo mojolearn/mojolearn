@@ -315,6 +315,23 @@ class ExpandedWheelTests(unittest.TestCase):
             self.assertEqual(len(commands), 1)
             self.assertIn('mojolearn-core', receipt['reason'])
 
+    def test_core_wheel_alone_is_a_cpu_install_and_meta_is_required_only_without_it(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as temp:
+            versions = {'mojolearn': None, 'mojolearn-core': '0.9.0', 'mojolearn-amd': None,
+                        'mojolearn-nvidia': None}
+            rc, commands, receipt = self._installed(Path(temp) / 'cpu', versions)
+            self.assertEqual(len(commands), 2)   # admitted; the fake pip check fails
+            self.assertIn('dependencies failed', receipt['reason'])
+            versions['mojolearn-core'] = None
+            rc, commands, receipt = self._installed(Path(temp) / 'nothing', versions)
+            self.assertEqual(len(commands), 1)
+            self.assertIn("'mojolearn': None", receipt['reason'])
+            versions['mojolearn'] = '0.9.0'
+            rc, commands, receipt = self._installed(Path(temp) / 'single', versions)
+            self.assertEqual(len(commands), 2)
+
     def test_installed_python_refuses_a_wheel_beside_it(self):
         from unittest.mock import patch
         from qualify_verifier_wheel import main
