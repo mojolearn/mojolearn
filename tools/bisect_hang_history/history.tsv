@@ -1,0 +1,63 @@
+index	sha	subject
+0	e49ac7df70	Plan: the CPU-pod development build + parallel suite leg, two-line usage
+1	7641d994b9	Tests: three files that failed only under pytest-xdist, fixed at the cause
+2	bbbe9b7c11	test-python prints the 80 slowest tests of every run (Andrew, 2026-11-06: cut the heavy tail from measurements)
+3	996f1c5a64	Tests: slow marker (MOJOLEARN_TEST_SLOW=0 deselects) and needs_* environment markers that skip at collection with the reason
+4	31e07e2b98	Tests: environment-debt tests skip at collection with the reason (fast tier, identity harness, NumPy-free interpreter, installed package)
+5	06293ffe86	Tests: _fresh_process helper (one spawn API, one plain-import child and one shared NumPy-blocked child per test process); five import-only children use it
+6	09098f10cb	Tests: Ordered eval-set crossing at 20 named iterations (was 500 resolved, 45 s); verdict scope on one lane; real-CLI verify runs marked slow
+7	dd5691e13f	Tests: MOJOLEARN_TEST_DURATIONS_DIR records every test's duration; tools/test_duration_report.py sums files, tests and the loadfile wall
+8	44d7314803	Tests: MOJOLEARN_TEST_ORDER hands the parallel pass its files heaviest first (from a measured durations tsv)
+9	8b010de258	Tests: archive None-refcount regression at 256 warmup + 3 x 128 loads (the guarded loss is 139 per load); native repr recursion search marked slow
+10	d996a14557	Tests: archive None-refcount regression back at 1024 + 3 x 512 loads (measured: the smaller counts saved ~0.5 s per case, the child startup is the cost)
+11	c105e5ca56	Every test run records every test's duration by default, reports the heavy tail, and orders the next run from it (Andrew, 2026-11-07)
+12	e4dced2850	Merge remote-tracking branch 'origin/lane/ne1-e-table' into integ/ne-20261107
+13	924f21b7ec	Merge origin/lane/ne1-e-records into integ/ne-20261107
+14	b8f044f887	Merge remote-tracking branch 'origin/lane/ne1-e-admitted-call' into integ/ne-20261107
+15	5945af31f6	Merge remote-tracking branch 'origin/lane/ne1-a-trees' into integ/ne-20261107
+16	3501146f00	Merge remote-tracking branch 'origin/lane/ne1-a-gp-svm' into integ/ne-20261107
+17	18503258e9	Merge origin/lane/ne1-a-decomp-tsa into integ/ne-20261107
+18	d93e04893e	Merge remote-tracking branch 'origin/lane/ne1-a-cluster-spectral' into integ/ne-20261107
+19	bfe6ed0bd3	Merge remote-tracking branch 'origin/lane/ne1-a-decomp-resident' into integ/ne-20261107
+20	34fa9457c9	Merge origin/lane/ne1-h-labels into integ/ne-20261107
+21	6d3f9860c3	Merge origin/lane/ne1-b-door into integ/ne-20261107
+22	8cc297d29a	Merge remote-tracking branch 'origin/lane/ne1-k-tools-gate' into integ/ne-20261107
+23	b4fc919600	Merge remote-tracking branch 'origin/lane/ne1-k-parallel-dev-build' into integ/ne-20261107
+24	5bfcf370f0	Merge remote-tracking branch 'origin/lane/ne1-k-timing-everywhere' into integ/ne-20261107
+25	c2e95c60b4	Merge remote-tracking branch 'origin/lane/ne2-b-search-workers' into integ/ne-20261107
+26	8831af254d	Merge remote-tracking branch 'origin/lane/ne2-b-members' into integ/ne-20261107
+27	aa0019e99b	Merge remote-tracking branch 'origin/lane/ne2-b-rounds' into integ/ne-20261107
+28	a3b27035ab	Merge origin/lane/ne2-d-session into integ/ne-20261107
+29	66f0e84057	Merge origin/lane/ne2-d-engine-output into integ/ne-20261107
+30	35b4a936cd	Merge remote-tracking branch 'origin/lane/ne2-g-linear' into integ/ne-20261107
+31	fc77fbeddd	Merge remote-tracking branch 'origin/lane/ne2-g-decomp' into integ/ne-20261107
+32	5605da1316	Merge remote-tracking branch 'origin/lane/ne2-i-j' into integ/ne-20261107
+33	38d2c073ea	Merge remote-tracking branch 'origin/lane/ne3-c-byte-lm' into integ/ne-20261107
+34	de79f9ae1a	Merge remote-tracking branch 'origin/lane/ne3-c-samba' into integ/ne-20261107
+35	d8ae3e2c4e	integ: e-records records use the shared dict proof from ne2-i-j (3.10/3.11 keep the records)
+36	c3186b95b5	Merge remote-tracking branch 'origin/lane/ne3-c-cnn' into integ/ne-20261107
+37	1b5f1d808a	Merge remote-tracking branch 'origin/lane/ne3-c-blocks-embedding' into integ/ne-20261107
+38	5a2df03e27	Merge remote-tracking branch 'origin/lane/ne3-c-parallel-trainer' into integ/ne-20261107
+39	f11beb22e2	Merge origin/lane/ne3-g-svc-gp-neighbors into integ/ne-20261107
+40	18bc664c8c	Merge remote-tracking branch 'origin/lane/ne3-f-kernel-table' into integ/ne-20261107
+41	a35f533c20	Merge remote-tracking branch 'origin/lane/ne1-k-fail-b' into integ/ne-20261107
+42	050270afb7	Merge origin/lane/ne1-k-fail-c into integ/ne-20261107
+43	c3293d829b	Merge origin/lane/ne1-k-fail-a into integ/ne-20261107
+44	f50beb5f44	Merge origin/lane/ne1-k-numpy-free-import into integ/ne-20261107
+45	e98f03c3e9	integ: cpython_table V6: PyByteArray_FromStringAndSize, PyByteArray_AsString (ne3-c-samba N170), PyLong_AsLongLongAndOverflow (ne1-a-trees N002)
+46	94fb9b3758	integ: Bagging/AdaBoost/DART score uses the shared classical_score_from_codes
+47	d5d7463b99	integ: check_admitted_call DEBT lowered to the merged counts (decreases only)
+48	eb6a3a12b5	Fix linalg_ops_kit: type bracket-literal word/int vars as List[Int] (literals now infer Array)
+49	1c519cbef1	Fix mani_kit: type bracket-literal word/int vars as List[Int] (literals now infer Array)
+50	c12fa43839	Merge remote-tracking branch 'origin/lane/ne-fix-syntax-copies' into integ/ne-20261107-fix1
+51	2fea5c5a42	Merge remote-tracking branch 'origin/lane/ne-fix-instantiation' into integ/ne-20261107-fix1
+52	1eb57f55a0	core/hotpath_device: _partition_emit_split_kernel parameter out -> dest (keyword parse error)
+53	78ee2ebf4f	gaussian_process/gpc_ovr: _gpc_check_finite takes buf mut (device_first_nonfinite needs a mutable handle; no data copy)
+54	5d6d9b1914	x_decomp/resident: pool_live_count raises (get_or_create_ptr raises; its one caller dev_live_py raises)
+55	7bea561f1c	development_build: one-group input check after a compile; sliding-window scheduler with threads summing to the cores
+56	08d89762a3	test_development_build: sliding window, longest first, threads summing to the cores, one-group input check
+57	aa71e649ea	sequence resident store: move the new slot's buffer in through an untracked list pointer, after the last MutAnyOrigin store deref (fixes 'buf cannot be consumed' at :242)
+58	1cf5aa1539	identical_ce_loss_host: row_ptr is Optional like identical_ce_loss_dev and ce_loss_host_into (fixes bindings/_mojolearn_training.mojo:544 Optional->Pointer conversion)
+59	70dd7e815b	samba_checkpoint_native: libc write uses the std's lowered signature (Int fd, UInt8 pointer, Int count, Int return)
+60	800d1aa5c1	family_native: the parallel driver recurses into family_operation_routed, not the family_operation wrapper
+61	f9e06ecacf	trees_staged_input: _member_table recurses into itself; the walk returns the inner forest instead of calling back
