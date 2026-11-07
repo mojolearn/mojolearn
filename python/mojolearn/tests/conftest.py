@@ -1,0 +1,46 @@
+"""Suite-wide collection rules: environment requirements and the `slow` switch.
+
+Environment markers (registered in python/pytest.ini) skip a test at
+collection, with the exact reason, when this environment cannot run it. A
+skip is reported as a skip; it never passes. Each probe runs at most once per
+session and only when a collected test carries its marker.
+
+    needs_fast_tier          a `fast` tier binary set is installed
+    needs_identity_harness   `mojolearn._identity_break` is present (the wheel build
+                             copies tools/identity_break.py into the package)
+    needs_numpy_free_python  MOJOLEARN_NUMPY_FREE_PYTHON names an interpreter
+    needs_installed_package  `import mojolearn` works in a child with no PYTHONPATH
+                             (the package is installed or editable-installed)
+
+`slow` marks a test whose work is long by nature (each mark is listed with its
+reason in the lane table). MOJOLEARN_TEST_SLOW=0 deselects them; the default
+keeps them in.
+
+The probes live in _suite_env.py, which test modules also use
+(`identity_harness_or_skip` for a module-level import of the harness).
+"""
+import os
+
+import pytest
+
+from mojolearn.tests._suite_env import ENVIRONMENT
+
+
+def pytest_collection_modifyitems(config, items):
+    keep_slow = os.environ.get("MOJOLEARN_TEST_SLOW", "1").strip() != "0"
+    kept, dropped = [], []
+    for item in items:
+        if not keep_slow and item.get_closest_marker("slow") is not None:
+            dropped.append(item)
+            continue
+        kept.append(item)
+        for name, probe in ENVIRONMENT.items():
+            if item.get_closest_marker(name) is None:
+                continue
+            reason = probe()
+            if reason is not None:
+                item.add_marker(pytest.mark.skip(reason=f"{name}: {reason}"))
+                break
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+        items[:] = kept
