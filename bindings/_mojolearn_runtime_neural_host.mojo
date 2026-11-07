@@ -13,6 +13,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
+from bindings.native_transport import transport_initialize
 from bindings.transformer_public_native import transformer_public_c
 from providers.python.transformer_decode_pyapi import transformer_decode_native_c
 from bindings.mamba_public_native import mamba_native_c
@@ -51,6 +52,9 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_neural_host")
+        # The transport boundary these entries reach, set up as the tokenizer host does
+        # (the same values; the tokenizer host initializes it first in one process).
+        transport_initialize()
         module.def_py_c_function(transformer_public_c, "transformer_public_call")
         module.def_py_c_function(transformer_decode_native_c, "transformer_decode_native_call")
         module.def_py_c_function(mamba_native_c, "mamba_native_call")
