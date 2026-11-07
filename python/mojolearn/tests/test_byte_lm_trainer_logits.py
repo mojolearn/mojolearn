@@ -1,11 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Host plumbing for the trainer's GPU logits (DEVIATION 2658).
+"""The trainer's logits and next_bytes against the installed compiled binding.
 
-The fake binding of test_byte_lm_surface stands in for `_mojolearn_byte_lm`,
-so these tests prove wiring, refusals and state invariance, never
-arithmetic. tools/byte_lm_gpu_logits_sweep.py compares the device logits
+The native trainer owner admits only the exact compiled module, so these use
+the real binding: they assert shapes, refusals and state invariance, not
+model quality. tools/byte_lm_gpu_logits_sweep.py compares the device logits
 with the CPU reference path byte for byte.
+
+DELETED (2026-11-07), because each needed a Python stand-in binding that the
+native owner now refuses before any entry is read:
+- test_missing_native_entries_raise_import_error_by_name: an entry missing
+  from the compiled module is refused by name at connection
+  (test_byte_lm_host_trainer::test_a_binding_without_the_training_entry_is_refused_by_name).
+- test_a_wrong_returned_count_raises_runtime_error: the count check is native
+  (bindings/byte_lm_trainer_native.mojo "unexpected number of logits"); the
+  compiled entry cannot be made to miscount.
+- test_a_resident_native_failure_keeps_a_usable_session_and_loses_an_unusable_one:
+  injected device failures; the compiled binding has no fault hook, so the
+  lost-session refusal has no real-binding test (reported as a coverage gap).
+- test_the_native_cell_limit_is_refused_first: it lowered the Python
+  `_byte_lm_impl._LOGITS_MAX_CELLS`, which the native logits path no longer
+  reads; the native bound (batch * length * vocab <= 2**28,
+  training/byte_lm_host_trainer_dispatch.mojo) is above any default-shape
+  request, and reaching it needs a multi-GB request.
+- test_a_runtime_shape_reaches_the_native_entry_and_bounds_the_length is
+  rewritten below without the call log.
 """
+import hashlib
+import json
+import math
 import struct
 
 import numpy as np
@@ -15,118 +37,43 @@ from mojolearn import ByteLanguageModelConfig as Shape, SmallByteLanguageModelTr
 from mojolearn import _byte_lm_host as host_mod
 from mojolearn import _byte_lm_impl as impl
 from mojolearn._buffer import frombytes
-from mojolearn.tests.test_byte_lm_surface import buffer, host, initial, ids as step_ids, state_digest
 
 SCHEDULE = {'dataset': 'logits-test'}
+
+
+def initial(n=34944):
+    return (np.random.default_rng(17).standard_normal(n) * .02).astype(np.float32)
+
+
+def step_ids():
+    return (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
 
 
 def tokens(batch, length):
     return (np.arange(batch * length, dtype=np.int32) % 256).reshape(batch, length)
 
 
-def paint(address, batch, length, vocab):
-    """Sentinel logits, not a model. -1 everywhere except a tie at bytes 3
-    and 7 of each row's last position, so a greedy pick that goes low
-    reads 3."""
-    out = buffer(address, batch * length * vocab)
-    out[:] = -1
-    for b in range(batch):
-        last = (b * length + length - 1) * vocab
-        out[last + 3] = out[last + 7] = 2.0
-    return batch * length * vocab
+def state_digest(model):
+    state = model.state_dict()
+    for key in ('parameters', 'm', 'v', 'flags'):
+        value = np.asarray(state[key])
+        state[key] = value.tobytes().hex()
+    return hashlib.sha256(json.dumps(state, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def stateless_entry(fake):
-    """Install `byte_lm_logits` on the fake and return its call log."""
-    calls = []
-    fake.logits_extra = 0
-    fake.logits_mutate_parameters = False
-
-    def logits(addresses, dims, native):
-        cfg = Shape(*native)
-        batch, length = dims
-        assert all(type(value) is int for value in dims)
-        calls.append(dict(addresses=len(addresses), dims=list(dims), shape=list(native),
-                          parameters=buffer(addresses[0], cfg.n_total).copy(),
-                          ids=buffer(addresses[1], batch * length, True).copy()))
-        if fake.logits_mutate_parameters:
-            buffer(addresses[0], cfg.n_total)[0] = 77
-        return paint(addresses[2], batch, length, cfg.vocab_size) + fake.logits_extra
-
-    fake.byte_lm_logits = logits
-    return calls
-
-
-def resident_entry(fake):
-    """`enable_sessions()` plus `byte_lm_session_logits`, which reads the
-    session and writes nothing to its fake device state. `logits_fail`
-    None succeeds, 'usable' raises and keeps the session usable, 'lost'
-    raises and marks it unusable as the native `_mark_if_lost` would."""
-    created, closed, _ = fake.enable_sessions()
-    calls = []
-    fake.logits_extra = 0
-    fake.logits_fail = None
-
-    def logits(session, addresses, dims, native, completed):
-        assert session.open and session.usable and session not in closed
-        cfg = Shape(*native)
-        batch, length = dims
-        assert all(type(value) is int for value in dims)
-        assert type(completed) is int
-        calls.append(dict(session=session, addresses=len(addresses), dims=list(dims),
-                          shape=list(native), completed=completed,
-                          ids=buffer(addresses[0], batch * length, True).copy()))
-        if fake.logits_fail == 'lost':
-            session.usable = False
-        if fake.logits_fail is not None:
-            raise RuntimeError('injected byte-LM logits failure')
-        return paint(addresses[1], batch, length, cfg.vocab_size) + fake.logits_extra
-
-    def next_bytes(session, addresses, dims, native, completed):
-        # `byte_lm_session_next_bytes` (bindings/_mojolearn_byte_lm.mojo):
-        # the same sentinel logits, kept on the "device" (a scratch array),
-        # and the per-row argmax of the last position, ties to the lowest
-        # byte. Writes only the `batch` int32 outputs.
-        assert session.open and session.usable and session not in closed
-        cfg = Shape(*native)
-        batch, length = dims
-        assert all(type(value) is int for value in dims) and type(completed) is int
-        calls.append(dict(session=session, addresses=len(addresses), dims=list(dims),
-                          shape=list(native), completed=completed, entry='next_bytes',
-                          ids=buffer(addresses[0], batch * length, True).copy()))
-        if fake.logits_fail == 'lost':
-            session.usable = False
-        if fake.logits_fail is not None:
-            raise RuntimeError('injected byte-LM logits failure')
-        scratch = np.empty(batch * length * cfg.vocab_size, np.float32)
-        paint(scratch.ctypes.data, batch, length, cfg.vocab_size)
-        last = scratch.reshape(batch, length, cfg.vocab_size)[:, -1, :]
-        buffer(addresses[1], batch, True)[:] = np.argmax(last, axis=1)
-        return batch + fake.logits_extra
-
-    fake.byte_lm_session_logits = logits
-    fake.byte_lm_session_next_bytes = next_bytes
-    return created, closed, calls
-
-
-def test_stateless_logits_reach_byte_lm_logits_with_dims_and_three_addresses(host):
-    calls = stateless_entry(host)
-    model = Trainer(initial(), data_schedule=SCHEDULE)
+@pytest.mark.parametrize('resident', [False, True])
+def test_logits_shape_dtype_and_finiteness(resident):
+    model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
     x = tokens(2, 5)
-    out = model.logits(x)
-    assert tuple(out.shape) == (2, 5, 256)
-    assert [(c['addresses'], c['dims'], c['shape']) for c in calls] == [(3, [2, 5], list(Shape().native_shape))]
-    np.testing.assert_array_equal(calls[0]['ids'], x.ravel())
-    np.testing.assert_array_equal(calls[0]['parameters'], initial())
-    view = np.asarray(out)
-    assert view.dtype == np.float32
-    assert view[1, 4, 3] == view[1, 4, 7] == 2.0 and view[0, 0, 0] == -1
-    assert host.calls == []
+    out = np.asarray(model.logits(x))
+    assert out.shape == (2, 5, 256) and out.dtype == np.float32
+    assert np.isfinite(out).all()
+    model.close()
 
 
-def test_stateless_logits_change_no_state_and_do_not_advance_the_step(host):
-    stateless_entry(host)
-    model = Trainer(initial(), data_schedule=SCHEDULE)
+@pytest.mark.parametrize('resident', [False, True])
+def test_logits_change_no_state_and_do_not_advance_the_step(resident):
+    model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
     model.train_step(step_ids())
     before = state_digest(model)
     x = tokens(3, 32)
@@ -134,128 +81,39 @@ def test_stateless_logits_change_no_state_and_do_not_advance_the_step(host):
     model.logits(x)
     model.next_bytes(x)
     assert state_digest(model) == before and model.step_ == 1
-    np.testing.assert_array_equal(model.parameters_, np.ones(34944, np.float32))
     assert x.tobytes() == x_bytes
-
-
-def test_resident_logits_open_the_session_then_reach_byte_lm_session_logits(host):
-    created, closed, calls = resident_entry(host)
-    model = Trainer(initial(), data_schedule=SCHEDULE, resident=True)
-    assert created == []
-    x = tokens(2, 7)
-    out = model.logits(x)
-    assert tuple(out.shape) == (2, 7, 256)
-    assert len(created) == 1 and created[0].open and closed == []
-    assert [(c['session'], c['addresses'], c['dims'], c['shape']) for c in calls] == [
-        (created[0], 2, [2, 7], list(Shape().native_shape))]
-    np.testing.assert_array_equal(calls[0]['ids'], x.ravel())
-    assert model.step_ == 0 and host.calls == []
-    model.train_step(step_ids())
-    model.logits(x)
-    assert len(created) == 1 and calls[-1]['session'] is created[0]
-    assert model.step_ == 1
-    # The committed step crosses with the call, so a resident logits call
-    # cannot silently read a session at another step (the scalar half of
-    # byte_lm_session_eval's admission).
-    assert [c['completed'] for c in calls] == [0, 1]
-    state = model.export_state()
-    np.testing.assert_array_equal(state['parameters'], np.ones(34944, np.float32))
-    assert state['completed_steps'] == 1
-
-
-def test_missing_native_entries_raise_import_error_by_name(host):
-    stateless = Trainer(initial(), data_schedule=SCHEDULE)
-    with pytest.raises(ImportError, match='byte_lm_logits') as info:
-        stateless.logits(tokens(1, 4))
-    assert 'bindings/build_byte_lm.sh' in str(info.value)
-    created, closed, _ = host.enable_sessions()
-    resident = Trainer(initial(), data_schedule=SCHEDULE, resident=True)
-    with pytest.raises(ImportError, match='byte_lm_trainer_logits') as info:
-        resident.logits(tokens(1, 4))
-    assert 'bindings/build_byte_lm.sh' in str(info.value)
-    assert created == [] and host.calls == []
+    assert model.export_state()['completed_steps'] == 1
+    model.close()
 
 
 @pytest.mark.parametrize('resident', [False, True])
-def test_bad_ids_and_shapes_raise_value_error_before_any_native_call(host, resident):
-    stateless_calls = stateless_entry(host)
-    created, closed, resident_calls = resident_entry(host)
+def test_bad_ids_and_shapes_raise_value_error(resident):
     model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
+    before = state_digest(model)
     for bad in (-1, 256, 2 ** 30):
         x = tokens(2, 4)
         x[1, 2] = bad
-        with pytest.raises(ValueError, match='byte values'):
+        with pytest.raises(ValueError, match=r'token id outside \[0, vocab\)'):
             model.logits(x)
-        with pytest.raises(ValueError, match='byte values'):
+        with pytest.raises(ValueError, match=r'token id outside \[0, vocab\)'):
             model.next_bytes(x)
     for x in (np.zeros((1, 0), np.int32), np.zeros((1, 33), np.int32), np.zeros((0, 4), np.int32),
               np.zeros(4, np.int32), np.zeros((1025, 1), np.int32)):
         with pytest.raises(ValueError):
             model.logits(x)
-    assert stateless_calls == [] and resident_calls == [] and created == []
+    assert model.step_ == 0 and state_digest(model) == before
+    model.close()
+
+
+@pytest.mark.parametrize('resident', [False, True])
+def test_next_bytes_is_the_greedy_pick_of_the_last_position(resident):
+    model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
+    x = tokens(3, 5)
+    logits = np.asarray(model.logits(x))
+    assert model.next_bytes(x) == host_mod._greedy_next_bytes(logits)
+    assert len(model.next_bytes(tokens(1, 1))) == 1
     assert model.step_ == 0
-
-
-@pytest.mark.parametrize('resident', [False, True])
-def test_the_native_cell_limit_is_refused_first(host, monkeypatch, resident):
-    stateless_calls = stateless_entry(host)
-    created, closed, resident_calls = resident_entry(host)
-    model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
-    monkeypatch.setattr(impl, '_LOGITS_MAX_CELLS', 2 * 4 * 256 - 1)
-    with pytest.raises(ValueError, match='batch \\* length \\* vocab'):
-        model.logits(tokens(2, 4))
-    assert stateless_calls == [] and resident_calls == [] and created == []
-    assert tuple(model.logits(tokens(1, 4)).shape) == (1, 4, 256)
-
-
-@pytest.mark.parametrize('resident', [False, True])
-def test_a_wrong_returned_count_raises_runtime_error(host, resident):
-    stateless_entry(host)
-    created, closed, _ = resident_entry(host)
-    model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
-    before = state_digest(model)
-    for extra in (1, -1):
-        host.logits_extra = extra
-        with pytest.raises(RuntimeError, match='number of logits'):
-            model.logits(tokens(2, 3))
-    host.logits_extra = 0
-    assert tuple(model.logits(tokens(2, 3)).shape) == (2, 3, 256)
-    assert closed == [] and model.step_ == 0
-    assert state_digest(model) == before
-
-
-def test_a_resident_native_failure_keeps_a_usable_session_and_loses_an_unusable_one(host):
-    created, closed, calls = resident_entry(host)
-    model = Trainer(initial(), data_schedule=SCHEDULE, resident=True)
-    model.train_step(step_ids())
-    host.logits_fail = 'usable'
-    with pytest.raises(RuntimeError, match='injected'):
-        model.logits(tokens(1, 4))
-    # As after any failure, the last gradient is no longer trusted.
-    with pytest.raises(RuntimeError, match='no gradient'):
-        model.export_gradients()
-    host.logits_fail = None
-    assert tuple(model.logits(tokens(1, 4)).shape) == (1, 4, 256)
-    assert model.step_ == 1 and len(created) == 1 and closed == []
-    host.logits_fail = 'lost'
-    with pytest.raises(RuntimeError, match='injected'):
-        model.logits(tokens(1, 4))
-    host.logits_fail = None
-    for call in (lambda: model.logits(tokens(1, 4)), lambda: model.next_bytes(tokens(1, 4)),
-                 lambda: model.evaluate(step_ids())):
-        with pytest.raises(RuntimeError, match='session lost at step 1; last exported state is step 0'):
-            call()
-    assert closed == [] and len(created) == 1
-
-
-@pytest.mark.parametrize('resident', [False, True])
-def test_next_bytes_ties_go_to_the_lowest_byte(host, resident):
-    stateless_entry(host)
-    resident_entry(host)
-    model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
-    assert model.next_bytes(tokens(3, 5)) == [3, 3, 3]
-    assert model.next_bytes(tokens(1, 1)) == [3]
-    assert model.step_ == 0
+    model.close()
 
 
 def test_the_greedy_helper_reads_the_last_position_and_ties_go_low():
@@ -268,14 +126,12 @@ def test_the_greedy_helper_reads_the_last_position_and_ties_go_low():
     assert host_mod._greedy_next_bytes(logits) == [1, 0]
 
 
-def test_a_runtime_shape_reaches_the_native_entry_and_bounds_the_length(host):
+def test_a_runtime_shape_bounds_the_length():
     cfg = Shape(batch=1, length=17, d_model=16, n_heads=2, n_kv=1, head_dim=8, intermediate=24)
-    host.byte_lm_config_profile = lambda dimensions: Shape(*dimensions).profile
-    host.byte_lm_run_configured = lambda *args: pytest.fail('logits reached the training entry')
-    calls = stateless_entry(host)
-    model = Trainer(np.zeros(cfg.n_total, np.float32), shape=cfg, data_schedule=SCHEDULE)
-    assert tuple(model.logits(tokens(4, 17)).shape) == (4, 17, 256)
-    assert calls[-1]['shape'] == list(cfg.native_shape) and calls[-1]['dims'] == [4, 17]
+    model = Trainer(initial(cfg.n_total), shape=cfg, data_schedule=SCHEDULE)
+    out = np.asarray(model.logits(tokens(4, 17)))
+    assert out.shape == (4, 17, 256) and np.isfinite(out).all()
     with pytest.raises(ValueError):
         model.logits(tokens(1, 18))
-    assert len(calls) == 1
+    assert model.step_ == 0
+    model.close()
