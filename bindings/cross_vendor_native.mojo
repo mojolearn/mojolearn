@@ -8,7 +8,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_transport import (
-    transport_initialize, transport_send, transport_receive, _transport_exact,
+    transport_initialize, transport_send, transport_receive, transport_receive_owned, _transport_exact,
     transport_listen, transport_accept, transport_close, transport_clock, transport_sleep, transport_connect,
     transport_port, transport_address, transport_timeout, transport_hostname,
     _transport_json,
@@ -22,9 +22,8 @@ from bindings.cross_vendor_admission import (
 from bindings.byte_checkpoint_native import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from bindings.native_json import native_json_parse
-from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_sliced8
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
-from core.sha256 import Sha256
+from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 
 
@@ -133,11 +132,43 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
     return result
 
 
+# pass 3 (N110): the witness digests read the admitted buffer in place under
+# one read-only buffer export (the same pin cross_vendor_fold uses); the
+# sha256_door route copied every hashed buffer into a new array('B') first,
+# three n_total state copies plus the gradient per step. Same bytes, same
+# order, same digests.
+def _cv_pinned_hash(value: PythonObject, kind: Int, mut hasher: Sha256) raises -> String:
+    # kind 0: update `hasher`; 1: one-shot hex digest; 2: the v2 sliced digest.
+    var view = cross_vendor_bytes(value)
+    var pin = AdmittedBorrowedBuffer(view)
+    var digest = String("")
+    try:
+        var layout = pin.layout.value().copy()
+        if not layout.contiguous():
+            raise Error("cross_vendor: hashed buffers must be contiguous")
+        var count = layout.count * layout.itemsize
+        if kind == 0:
+            hasher.update(layout.address, count)
+        elif kind == 1:
+            digest = sha256_hex_addr(layout.address, count)
+        else:
+            digest = sha256_sliced8_hex(layout.address, count)
+    finally:
+        pin.release()  # the export pins the hashed bytes through the digest above
+    _ = view^
+    return digest
+
+
+def cross_vendor_hexdigest(value: PythonObject) raises -> PythonObject:
+    var unused = Sha256()
+    return PythonObject(_cv_pinned_hash(value, 1, unused))
+
+
 def cross_vendor_state_hash(state: PythonObject) raises -> PythonObject:
     cv_state(state)
     var hasher = Sha256()
     for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys): one digest update per named state field
-        sha256_update(hasher, cross_vendor_bytes(state[key]))
+        _ = _cv_pinned_hash(state[key], 0, hasher)
     return PythonObject(hasher.hexdigest())
 
 
@@ -396,18 +427,23 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
             var n = len(peer["shards"])
             if not chained and total_bytes != 0 and n > maximum // total_bytes:
                 cross_vendor_refuse(owner, "worker gradient payload exceeds coordinator byte bound")
-            var response = transport_receive(peer["sock"], 0 if chained else n * total_bytes)
+            # The payload stays the received bytearray (no bytes copy of it).
+            var response = transport_receive_owned(peer["sock"], 0 if chained else n * total_bytes)
             var head = response[0]
             var payload = response[1]
             if not Bool(py=py_get(head, "step") == PythonObject(step)) or not Bool(py=py_get(head, "shards") == peer["shards"]):
                 cross_vendor_refuse(owner, String(peer["name"]) + " answered the wrong step or shards")
             if len(head["losses"]) != n or (not chained and len(payload) != n * total_bytes):
                 cross_vendor_refuse(owner, String(peer["name"]) + " sent a wrong gradient or loss count")
+            # pass 3 (N111): shard spans are views of the received payload
+            # (ordered_fold reads them in place); slicing the bytes copied
+            # every shard gradient.
+            var received = py_call(bi.memoryview, payload)
             for k in range(n):  # driver-loop: over one worker's logical shard replies
                 var id = peer["shards"][k]
                 py_setitem(losses, id, head["losses"][k])
                 if not chained:
-                    py_setitem(gradients, id, payload[py_call(bi.slice, k * total_bytes, (k + 1) * total_bytes)])
+                    py_setitem(gradients, id, received[py_call(bi.slice, k * total_bytes, (k + 1) * total_bytes)])
             if chained:
                 py_setitem(timing, "gradients_" + String(peer["name"]), _cross_vendor_elapsed(started))
         var total = bi.bytes()
@@ -431,7 +467,7 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
         var all_losses = bi.list()
         for k in range(shards):  # driver-loop: over logical shard losses in fixed order
             _ = py_call(all_losses.append, losses[k])
-        var total_hash = sha256_hexdigest(total)
+        var total_hash = cross_vendor_hexdigest(total)
         var apply = bi.dict()
         py_setitem(apply, "cmd", PythonObject("apply"))
         py_setitem(apply, "step", PythonObject(step))
@@ -586,8 +622,9 @@ def _cross_vendor_trainer(trainer: PythonObject, operation: String, params: Pyth
         var args = c[].bi.list()
         _ = py_call(args.append, trainer)
         if operation == "export_raw":
+            # params: () or (into,), the reused snapshot dict (N110).
             _ = py_call(args.append, 0)
-            _ = py_call(args.append, PythonObject(None))
+            _ = py_call(args.append, params[0] if len(params) == 1 else PythonObject(None))
         else:
             for i in range(len(params)):  # driver-loop: over the native trainer operation envelope
                 _ = py_call(args.append, params[i])
@@ -693,7 +730,8 @@ def cross_vendor_commit_configuration(owner: PythonObject, directory: PythonObje
 def cross_vendor_sliced_hash(value: PythonObject) raises -> PythonObject:
     # The eight-slice v2 digest format is computed in core/sha256.mojo
     # (sha256_sliced8_hex) over the same bytes.
-    return sha256_sliced8(cross_vendor_bytes(value))
+    var unused = Sha256()
+    return PythonObject(_cv_pinned_hash(value, 2, unused))
 
 
 def cross_vendor_float_word(value: PythonObject) raises -> PythonObject:
@@ -964,7 +1002,10 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                         var batch = _cross_vendor_batch(owner, step, owner.shards[k])
                         var result = _cross_vendor_trainer(tr, "shard_gradient", _cross_vendor_one(batch))
                         _ = py_call(losses.append, result[0])
-                        _ = py_call(parts.append, cross_vendor_bytes(result[1]).tobytes())
+                        # pass 3 (N111): the shard's float32[n_total] Array is
+                        # held as is (fold_add and ordered_fold read it in
+                        # place); it was copied to bytes first.
+                        _ = py_call(parts.append, result[1])
                     on_device = False
                 var reply = bi.dict()
                 py_setitem(reply, "step", PythonObject(step))
@@ -976,7 +1017,11 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                         total = PythonObject(None)
                     transport_send(socket, reply, PythonObject(None))
                 else:
-                    transport_send(socket, reply, py_call(bi.bytes().join, parts))
+                    # One join of the shards' byte views is the payload copy.
+                    var wire = bi.list()
+                    for k in range(len(parts)):  # driver-loop: over this worker's shard gradients in shard order
+                        _ = py_call(wire.append, cross_vendor_bytes(parts[k]))
+                    transport_send(socket, reply, py_call(bi.bytes().join, wire))
             elif command == "fold":
                 if not chained or (len(held) == 0 and not on_device):
                     raise Error("CrossVendorMismatch: worker was asked to fold with nothing held")
@@ -1000,16 +1045,20 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                 if total is None or len(total) != n * 4:
                     raise Error("CrossVendorMismatch: summed gradient has the wrong size")
                 var expected_hash = py_get(head, "total_sha256")
-                if expected_hash is not None and not Bool(py=sha256_hexdigest(total) == expected_hash):
+                if expected_hash is not None and not Bool(py=cross_vendor_hexdigest(total) == expected_hash):
                     raise Error("CrossVendorMismatch: total hash differs from the coordinator")
-                var gradient = py_call(c[].arrays, "f")
-                _ = py_call(gradient.frombytes, total)
-                _ = _cross_vendor_trainer(tr, "apply_gradient", _cross_vendor_one(gradient))
+                # pass 3 (N111): the received float32 bytes go to the trainer
+                # as is; it reads them in place (no array('f') copy here, no
+                # host copy or host scan in the binding).
+                _ = _cross_vendor_trainer(tr, "apply_gradient", _cross_vendor_one(total))
                 var applied = total
                 total = PythonObject(None)
                 committed += 1
                 var done = _cross_vendor_trainer(tr, "step", empty_args)
-                var snapshot = _cross_vendor_trainer(tr, "export_raw", empty_args)
+                # pass 3 (N110): the witness export is written into the same
+                # four buffers every step (export_raw into=), not four new
+                # arrays; the digest below still covers every state byte.
+                var snapshot = _cross_vendor_trainer(tr, "export_raw", _cross_vendor_one(state))
                 var digest = cross_vendor_state_hash(snapshot)
                 var row = bi.dict()
                 py_setitem(row, "step", done)

@@ -22,6 +22,7 @@ from bindings.native_json import native_json_parse
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_transport import _transport_json, transport_initialize
 from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_execute
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from training.parallel_byte_impl import (
     _parallel_span,
     parallel_copy_words,
@@ -373,6 +374,100 @@ def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False,
     if not integer and finite:
         parallel_require_finite_f32(Int(py=output._addr), n)
     return output
+
+
+def _parallel_word_format(format: String, integer: Bool) -> Bool:
+    if integer:
+        return format == "i" or format == "=i" or format == "<i"
+    return format == "f" or format == "=f" or format == "<f"
+
+
+def _parallel_pin_words(value: PythonObject, dims: List[Int], n: Int, integer: Bool, raw: Bool,
+                        mut pins: List[AdmittedBorrowedBuffer]) raises -> Int:
+    # One PyObject_GetBuffer of an exact native exporter (the shared
+    # borrowed-buffer admission): format, item size, shape and strides come
+    # from the Py_buffer words, not from memoryview attributes. Returns the
+    # caller's address when the storage already is the C-contiguous,
+    # four-aligned int32/float32 cells the session reads, else -1 (the copy
+    # route then admits it, with its own refusal messages).
+    var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
+    var exporter = value
+    var own_array = py_type(value) is p[].array_cls
+    if own_array:
+        # An Array in Fortran order is transposed by the copy route.
+        if len(dims) > 1 and String(value.order) == "F":
+            return -1
+        exporter = value._mv
+    admit_native_buffer_exporter(exporter)
+    var pin = AdmittedBorrowedBuffer(exporter)
+    var layout = pin.layout.value().copy()
+    var fits = layout.contiguous() and layout.address % 4 == 0 and layout.address != 0
+    if raw:
+        # Raw float32 bytes (the transport payload): n words of four bytes.
+        fits = fits and layout.itemsize == 1 and layout.count == n * 4
+    else:
+        fits = fits and layout.itemsize == 4 and layout.count == n and _parallel_word_format(pin.format, integer)
+        if own_array:
+            var shape = value.shape
+            fits = fits and len(shape) == len(dims)
+            if fits:
+                for i in range(len(dims)):  # small-loop(dims: array rank words)
+                    fits = fits and Int(py=shape[i]) == dims[i]
+        else:
+            fits = fits and len(layout.shape) == len(dims)
+            if fits:
+                for i in range(len(dims)):  # small-loop(dims: array rank words)
+                    fits = fits and layout.shape[i] == dims[i]
+    if not fits:
+        pin.release()
+        return -1
+    var address = layout.address
+    pins.append(pin^)
+    return address
+
+
+def _parallel_borrow(value: PythonObject, dims: List[Int], integer: Bool,
+                     mut pins: List[AdmittedBorrowedBuffer], mut copies: List[PythonObject],
+                     finite: Bool = True) raises -> Int:
+    """The address of `value`'s int32/float32 cells for one session call.
+
+    pass 3 (N102, N111, N157): a C-contiguous buffer of the exact dtype and
+    shape is read in place: the caller's storage stays pinned in `pins`
+    until the caller releases it after the call, and the session's one
+    memcpy/upload reads it directly (it was a memoryview, six attribute
+    reads, a new Array and a host copy per buffer). Anything else (strided,
+    Fortran-ordered, misaligned, wrong dtype or shape, Python buffer hooks)
+    takes the copy route `_parallel_array`, which keeps its refusal
+    messages; the copy stays alive in `copies`. A float input also admits
+    raw float32 bytes (`bytes`/`bytearray`), as the gradient doors did.
+    With `finite` False the copy route skips the host scan: the session's
+    device scan refuses non-finite values (N157). Same bytes reach the
+    same kernels on every route."""
+    var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
+    var n = 1
+    for d in dims:  # small-loop(dims: array rank words)
+        n *= d
+    var cls = py_type(value)
+    var raw = not integer and (cls is p[].bi.bytes or cls is p[].bi.bytearray)
+    if n > 0:
+        var address = -1
+        try:
+            address = _parallel_pin_words(value, dims, n, integer, raw, pins)
+        except:
+            # Not an exact native exporter: the copy route admits it (or
+            # refuses it) as before.
+            address = -1
+        if address > 0:
+            return address
+    var copied = _parallel_array(_parallel_float_bytes(value) if raw else value, dims, integer, finite)
+    var copy_address = Int(py=copied._addr)
+    copies.append(copied)
+    return copy_address
+
+
+def _parallel_release(mut pins: List[AdmittedBorrowedBuffer]) raises:
+    for i in range(len(pins)):  # small-loop(pins: one per borrowed input buffer of the call)
+        pins[i].release()
 
 
 def _parallel_target(value: PythonObject, count: Int, integer: Bool, mut pins: List[PythonObject]) raises -> Int:
@@ -826,24 +921,30 @@ def parallel_byte_state(owner: PythonObject, rank: PythonObject) raises -> Pytho
     return _parallel_validate_state(state, rec.downcast_value_ptr[ParallelByteOwner]()[].shape, True)
 
 
-def parallel_byte_train_step(owner: PythonObject, shards: PythonObject) raises -> PythonObject:
+def parallel_byte_shard_words(owner: PythonObject) raises -> List[Int]:
+    """[logical_shards, batch, length] of an admitted trainer: what one step
+    consumes (logical_shards buffers of int32[batch, length + 1])."""
+    var rec = _parallel_record(owner).downcast_value_ptr[ParallelByteOwner]()
+    var words: List[Int] = [rec[].logical_shards, rec[].dims[0], rec[].dims[1]]
+    return words^
+
+
+def parallel_byte_step_shards(owner: PythonObject, shard_addresses: List[Int]) raises -> PythonObject:
+    """One committed step over `logical_shards` int32[batch, length + 1]
+    shard buffers, given by address. The caller keeps every buffer alive
+    and unchanged through this call (the session copies the ids at its
+    start, with the GIL held). Shared by `train_step` (caller buffers) and
+    the corpus door (`lm_corpus_public_native`, rows gathered natively)."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var record = _parallel_record(owner)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    if py_type(shards) is not p[].bi.list and py_type(shards) is not p[].bi.tuple:
-        raise Error("TypeError: shards must be a list or tuple of microbatches")
     var count = rec[].logical_shards
-    if len(shards) != count:
+    if len(shard_addresses) != count:
         raise Error("logical shard count mismatch")
-    var tokens = List[PythonObject]()
-    var b = rec[].dims[0]
-    var length = rec[].dims[1]
     var losses = List[Float64](length=count, fill=0)
     var addresses: List[Int] = [Int(losses.unsafe_ptr())]
-    for k in range(count):  # driver-loop: over immutable logical training shards
-        var ids = _parallel_array(shards[k], [b, length + 1], True)
-        addresses.append(Int(py=ids._addr))
-        tokens.append(ids)
+    for address in shard_addresses:  # small-loop(count: one admitted buffer per logical shard)
+        addresses.append(address)
     parallel_byte_open(owner)
     var before = _parallel_completed(record)
     # An entry failure already rolled back inside the native GPU session.
@@ -869,8 +970,31 @@ def parallel_byte_train_step(owner: PythonObject, shards: PythonObject) raises -
             rec[].lost = True
         raise error
     _parallel_commit(record, before + 1)
-    _ = tokens^
     _ = losses^
+    return result
+
+
+def parallel_byte_train_step(owner: PythonObject, shards: PythonObject) raises -> PythonObject:
+    var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
+    var record = _parallel_record(owner)
+    var rec = record.downcast_value_ptr[ParallelByteOwner]()
+    if py_type(shards) is not p[].bi.list and py_type(shards) is not p[].bi.tuple:
+        raise Error("TypeError: shards must be a list or tuple of microbatches")
+    var count = rec[].logical_shards
+    if len(shards) != count:
+        raise Error("logical shard count mismatch")
+    var b = rec[].dims[0]
+    var length = rec[].dims[1]
+    # pass 3 (N102): each shard is read in place when it already is
+    # C-contiguous int32 (pinned for the step); only other layouts copy.
+    var pins = List[AdmittedBorrowedBuffer]()
+    var copies = List[PythonObject]()
+    var shard_addresses = List[Int]()
+    for k in range(count):  # driver-loop: over immutable logical training shards
+        shard_addresses.append(_parallel_borrow(shards[k], [b, length + 1], True, pins, copies))
+    var result = parallel_byte_step_shards(owner, shard_addresses)
+    _parallel_release(pins)
+    _ = copies^
     return result
 
 
@@ -1048,12 +1172,16 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
     var n = rec[].n_total
     if operation == "shard_gradient" or operation == "shard_gradient_fold":
         var fold = operation == "shard_gradient_fold"
-        var ids = _parallel_array(args[1], [rec[].dims[0], rec[].dims[1] + 1], True)
+        # pass 3 (N102): the shard is read in place when it already is
+        # C-contiguous int32 (pinned for the call); only other layouts copy.
+        var pins = List[AdmittedBorrowedBuffer]()
+        var copies = List[PythonObject]()
+        var ids_address = _parallel_borrow(args[1], [rec[].dims[0], rec[].dims[1] + 1], True, pins, copies)
         parallel_byte_open(owner)
         _parallel_require_split(record, operation)
         var loss = List[Float64](length=1, fill=0)
         var gradient = PythonObject(None)
-        var addresses: List[Int] = [Int(py=ids._addr)]
+        var addresses: List[Int] = [ids_address]
         if not fold:
             gradient = generation_array([n])
             addresses.append(Int(py=gradient._addr))
@@ -1061,7 +1189,8 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         var ints: List[Int] = [_parallel_completed(record)]
         _ = _parallel_execute(record, PARALLEL_OP_SHARD_GRADIENT_FOLD if fold else PARALLEL_OP_SHARD_GRADIENT,
                               addresses^, ints, List[Float64]())
-        _ = ids^
+        _parallel_release(pins)
+        _ = copies^
         var value = PythonObject(loss[0])
         if fold:
             return value
@@ -1072,32 +1201,43 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
     if operation == "apply_gradient":
         # `total` is documented as the bytes `cross_vendor.ordered_fold`
         # returns; admit raw float32 bytes the way fold_reset/fold_add do.
-        var total = _parallel_array(_parallel_float_bytes(args[1]), [n])
+        # pass 3 (N111, N157): the caller's buffer (the received payload)
+        # is read in place and uploaded once; the session's device scan of
+        # the summed gradient refuses non-finite values (no host copy, no
+        # host scan).
+        var pins = List[AdmittedBorrowedBuffer]()
+        var copies = List[PythonObject]()
+        var total_address = _parallel_borrow(args[1], [n], False, pins, copies, False)
         parallel_byte_open(owner)
         _parallel_require_split(record, "apply_gradient")
         var before = _parallel_completed(record)
-        var addresses: List[Int] = [Int(py=total._addr)]
+        var addresses: List[Int] = [total_address]
         var ints: List[Int] = [before]
         var completed = _parallel_execute(record, PARALLEL_OP_APPLY_GRADIENT, addresses^, ints, List[Float64]())
+        _parallel_release(pins)
+        _ = copies^
         if completed != before + 1:
             rec[].lost = True
             raise Error("RuntimeError: apply_gradient returned wrong step")
         _parallel_commit(record, completed)
-        _ = total^
         return PythonObject(completed)
     if operation == "fold_reset" or operation == "fold_add":
-        var total = PythonObject(None)
+        # pass 3 (N111, N157): a held gradient or received prefix is read in
+        # place; the device scan in fold_reset/fold_add refuses non-finite
+        # values before the fold changes (no host copy, no host scan).
+        var pins = List[AdmittedBorrowedBuffer]()
+        var copies = List[PythonObject]()
         var addresses = List[Int]()
         if args[1] is not None:
-            total = _parallel_array(_parallel_float_bytes(args[1]), [n])
-            addresses.append(Int(py=total._addr))
+            addresses.append(_parallel_borrow(args[1], [n], False, pins, copies, False))
         elif operation == "fold_add":
             raise Error("fold_add requires a gradient")
         parallel_byte_open(owner)
         _parallel_require_split(record, operation)
         _ = _parallel_execute(record, PARALLEL_OP_FOLD_RESET if operation == "fold_reset" else PARALLEL_OP_FOLD_ADD,
                               addresses^, List[Int](), List[Float64]())
-        _ = total^
+        _parallel_release(pins)
+        _ = copies^
         return PythonObject(None)
     if operation == "fold_export":
         var into = args[1]

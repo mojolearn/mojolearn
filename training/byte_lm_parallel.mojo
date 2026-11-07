@@ -301,6 +301,10 @@ struct ByteParallelTrainer(Movable, Writable):
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
         var staged = _upload_from(self.contexts[0], prefix, n)
+        # pass 3 (N157): the binding hands the caller's buffer over unread;
+        # the finiteness refusal is this device scan of the uploaded copy,
+        # before the fold changes (it was a host scan of a host copy).
+        _require_device_finite(self.contexts[0], self.trainers[0].scan, staged, n, "fold prefix")
         _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
         self.contexts[0].synchronize()
         _ = staged^
@@ -326,6 +330,9 @@ struct ByteParallelTrainer(Movable, Writable):
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
         var staged = _upload_from(self.contexts[0], gradient, n)
+        # pass 3 (N157): device refusal of a non-finite host gradient, before
+        # it is folded (the binding no longer scans a host copy).
+        _require_device_finite(self.contexts[0], self.trainers[0].scan, staged, n, "fold gradient")
         if not self.fold_started:
             _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
             self.fold_started = True

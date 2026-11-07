@@ -36,7 +36,10 @@ class CorpusPublicSource(unittest.TestCase):
         for entry in ("tokenizer_bpe_train_corpus(data,", "tokenizer_bpe_encode_corpus(tokenizer,",
                       "tokenizer_gather_rows_native(Int(py=source._addr)",
                       "corpus_atomic_begin(final)", "corpus_atomic_commit(temporary, final)",
-                      "corpus_atomic_abort(temporary)", "corpus_hash_file(_join(final,"):
+                      "corpus_atomic_abort(temporary)", "corpus_hash_file(path)",
+                      # pass 3 (N174): one token hash per prepare, carried to batches().
+                      '"_tokens_verified"', "_batch_verified(verified, token_file, size, manifest)",
+                      "_source_data(data, src)"):
             self.assertIn(entry, source)
         for forbidden in ("Python.import_module", "tokenizer._encode_corpus", "tokenizer.identity",
                           "py_call(progress", "py_call(owner.ids", "fill(tmp)", "hashlib", "threading"):

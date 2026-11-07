@@ -41,6 +41,31 @@ class ParallelByteLanguageModelTrainer:
         """
         return _native_parallel_byte("train_step", (self, shards))
 
+    def train_step_from(self, batches, steps):
+        """Run one step on batches read straight from a token corpus.
+
+        Equivalent to ``train_step([batches.ids(s) for s in steps])``: shard
+        ``k`` is the batch of step index ``steps[k]``, read from the corpus
+        file without building an array per shard.
+
+        Parameters
+        ----------
+        batches : mojolearn.lm_corpus.TokenBatches
+            Batches whose ``batch`` and ``length`` match this trainer's.
+        steps : list or tuple of int
+            One step index per logical shard, each at least 0.
+
+        Returns
+        -------
+        dict
+            The same record ``train_step`` returns.
+
+        Examples
+        --------
+        >>> trainer.train_step_from(batches, [0, 1])  # two logical shards  # doctest: +SKIP
+        """
+        return _native_parallel_corpus("batches_parallel_step", (batches, self, steps))
+
     def state_dict(self, *, rank=0):
         """Export a replica in the existing portable byte-LM state format."""
         return _native_parallel_byte("state", (self, rank))
@@ -237,5 +262,16 @@ def _connect_parallel_byte_native():
 
 
 _native_parallel_byte = _connect_parallel_byte_native()
+
+
+def _connect_parallel_corpus_native():
+    # glue: import-time connection only. The corpus-fed step is one native
+    # call (bindings/lm_corpus_public_native.mojo, batches_parallel_step):
+    # the batches owner is admitted there and its rows gathered natively.
+    from .tokenizer import _binding as _tokenizer_binding
+    return _tokenizer_binding()._module.lm_corpus_public_call
+
+
+_native_parallel_corpus = _connect_parallel_corpus_native()
 
 from ._parallel_neural import _native_parallel_neural
