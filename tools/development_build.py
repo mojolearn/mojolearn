@@ -31,18 +31,29 @@ the release layout check; final release qualification still builds/checks the
 compact release layout. No compile-time or numerical equivalence claim follows
 from a successful cache/planning test.
 
-Multiple compilers require --jobs plus --memory-per-job-gib, a measured peak
-reservation for this source/target, including compiler subprocesses. Available
-memory and CPU allocation bound the pool. The default is one compiler until a
-group memory measurement is supplied; MOJOLEARN_COMPILE_JOBS controls its workers.
-Even one compiler must fit its worker/reservation budget. Without a measured
-serial reservation its RSS budget is 80% of current available allocation. The
-remaining 20% stays available to the system. --group-seconds, --stall-seconds
-and --lock-seconds bound active work and lock waits; defaults live in
-tools/release_limits.sh. These controller settings never reach the compiler.
+Groups compile in parallel by default (--parallel auto). Each group's need is
+its RECORDED peak RSS from the last compile (cache/peaks/, with headroom); a
+group without a record takes --memory-per-job-gib when given, else the largest
+recorded need of its set (identical or host), else the platform group floor.
+The scheduler starts the biggest groups first and packs the others beside them
+into 80% of the memory available at start, at most one group per core, and
+re-reads available memory before every launch. A group bigger than that budget
+runs alone when it fits 80% of total memory, and is refused up front otherwise.
+MOJOLEARN_BUILD_GROUP_WORKERS (or --parallel N) caps concurrent groups;
+--parallel 1 is the serial run (one compiler, 80% of available memory or the
+group floor, as before). Unless the caller sets MOJOLEARN_COMPILE_JOBS, each
+group's compiler gets max(1, cores // groups running at its launch) threads;
+that value is keyed like any compile job count, and the cache remembers which
+value built each group so the next plan reuses it. AMD identical groups keep
+their fixed worker count (MOJOLEARN_AMD_COMPILE_JOBS, default 8). Each group's
+RSS limit is its need; the run stops a compiler when available memory falls
+below the 20% kept for the system. --jobs N is the older spelling of
+--parallel N. --group-seconds, --stall-seconds and --lock-seconds bound active
+work and lock waits; defaults live in tools/release_limits.sh. These controller
+settings never reach the compiler.
 """
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 import contextlib
 from datetime import datetime, timezone
 import fcntl
@@ -103,6 +114,12 @@ GROUP_FLOOR_BYTES = {"linux": 12 * 2 ** 30, "darwin": 12 * 2 ** 30}
 # Recorded peaks of a run that passed get 20% headroom; a run stopped by a
 # limit only shows a lower bound, so it gets 50%.
 PEAK_HEADROOM = {"passed": 1.2, "limited": 1.5}
+# Cap on concurrently compiling groups (scheduling only; removed from the
+# compiler environment and from every cache key in build_environment).
+GROUP_WORKERS_ENV = "MOJOLEARN_BUILD_GROUP_WORKERS"
+# How long the parallel scheduler waits for a group to finish before it
+# re-reads available memory to see whether another group now fits.
+SCHEDULER_POLL_SECONDS = 15.0
 # Version banners are read from stdout only. On the NVIDIA L4 (2026-10-24,
 # source 50de0f93a) `mojo --version` wrote a tcmalloc mbind warning to stderr
 # ahead of its banner, carrying the PID and a random address; with stderr
@@ -316,8 +333,34 @@ def compile_recipe(scripts, mode, stem, flags_class):
             "artifact": stem + ".so"}
 
 
+def auto_compile_jobs(mode, env, plat=None):
+    """True when the scheduler picks this group's compiler threads.
+
+    The caller's MOJOLEARN_COMPILE_JOBS always wins. AMD identical groups keep
+    their fixed worker count (build_environment), since one AMD compiler
+    worker crashes."""
+    plat = plat or merged.default_platform()
+    if "MOJOLEARN_COMPILE_JOBS" in env:
+        return False
+    return not (plat != "darwin" and mode == "identical"
+                and env.get("MOJOLEARN_GPU_ARCHS", "").startswith("gfx"))
+
+
+def with_compile_jobs(row, env, jobs, plat=None):
+    """The same group row keyed for a compiler with `jobs` threads.
+
+    MOJOLEARN_COMPILE_JOBS reaches the key only through fields["environment"]
+    (it is keyed: a codegen split has not been shown byte-neutral), so only
+    that field and the key change; the source closure is reused."""
+    effective = build_environment(row["mode"], dict(env, MOJOLEARN_COMPILE_JOBS=str(int(jobs))),
+                                  plat or row["fields"]["platform"])
+    fields = dict(row["fields"], environment=bincache.build_env(effective))
+    return dict(row, fields=fields, key=digest(fields), compile_jobs=int(jobs))
+
+
 def build_environment(mode, env, plat=None):
     env = dict(env)
+    env.pop(GROUP_WORKERS_ENV, None)  # scheduling only; never a compiler input or key
     plat = plat or merged.default_platform()
     # Reject before key lookup/activation: old O0 artifacts remain evidence,
     # but must not be selected as usable development images. Keep the normal
@@ -441,7 +484,17 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
             row = {"mode": mode, "stem": stem, "members": members, "flags_class": flags_class,
                    "key": digest(fields), "fields": fields,
                    "selected": selected_group(mode, stem, selection)}
+            row["auto_compile_jobs"] = auto_compile_jobs(mode, env, plat)
+            row["compile_jobs"] = int(effective["MOJOLEARN_COMPILE_JOBS"])
             row["action"] = "reuse" if facts.get("available") and cached_artifact(cache, row) else "build"
+            if row["action"] == "build" and row["auto_compile_jobs"] and facts.get("available"):
+                # The scheduler chose this group's compiler threads last time;
+                # its exact cached build under that keyed value is current.
+                built = built_compile_jobs(cache, mode, stem)
+                if built and built != row["compile_jobs"]:
+                    alternative = with_compile_jobs(row, env, built, plat)
+                    if cached_artifact(cache, alternative):
+                        row = dict(alternative, action="reuse")
             # Sizing only; never a key field. It survives key changes.
             row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
             rows.append(row)
@@ -514,11 +567,31 @@ def recorded_need(cache, mode, stem):
         return 0
 
 
-def record_peak(cache, row, execution):
+def compile_jobs_path(cache, mode, stem):
+    return Path(cache) / "compile-jobs" / f"{mode}-{stem}.json"
+
+
+def built_compile_jobs(cache, mode, stem):
+    """Compiler threads of this group's last cached build, or 0."""
+    try:
+        jobs = int(json.loads(compile_jobs_path(cache, mode, stem).read_text())["compile_jobs"])
+        return jobs if jobs >= 1 else 0
+    except (OSError, KeyError, ValueError, TypeError):
+        return 0
+
+
+def record_compile_jobs(cache, row, jobs):
+    atomic_json(compile_jobs_path(cache, row["mode"], row["stem"]),
+                {"compile_jobs": int(jobs), "key": row["key"],
+                 "recorded_utc": datetime.now(timezone.utc).isoformat()})
+
+
+def record_peak(cache, row, execution, compile_jobs=None):
     """Keep the group's last measured peak where the next plan can size from it.
 
     A passed run replaces the record; a run stopped by a limit only raises it,
-    since its peak is a lower bound of the real need."""
+    since its peak is a lower bound of the real need. compile_jobs (the
+    compiler threads of that run) is recorded alongside, for reading only."""
     peak = int(execution.get("peak_rss_bytes") or 0)
     status = execution.get("status")
     if peak <= 0 or status not in ("passed", "rss-limit", "memory-pressure", "timeout", "stalled"):
@@ -531,8 +604,11 @@ def record_peak(cache, row, execution):
                 return
         except (OSError, KeyError, ValueError, TypeError):
             pass
-    atomic_json(path, {"peak_rss_bytes": peak, "status": "passed" if status == "passed" else "limited",
-                       "key": row["key"], "recorded_utc": datetime.now(timezone.utc).isoformat()})
+    record = {"peak_rss_bytes": peak, "status": "passed" if status == "passed" else "limited",
+              "key": row["key"], "recorded_utc": datetime.now(timezone.utc).isoformat()}
+    if compile_jobs is not None:
+        record["compile_jobs"] = int(compile_jobs)
+    atomic_json(path, record)
 
 
 def resource_budget(requested, workers, per_job_gib, resources=None, floor_bytes=0,
@@ -604,6 +680,115 @@ def planned_compiler_workers(plan):
                 for row in plan["groups"] if row["selected"] and row["action"] == "build"), default=1)
 
 
+def parse_parallel(text):
+    """--parallel value: 'auto' (None, no cap) or a positive group count."""
+    if text == "auto":
+        return None
+    if not str(text).isdigit() or int(text) < 1:
+        raise BuildError("--parallel must be 'auto' or a positive integer")
+    return int(text)
+
+
+def group_cap(parallel, jobs, env_value):
+    """The tightest of --parallel N, --jobs N and MOJOLEARN_BUILD_GROUP_WORKERS, or None."""
+    caps = []
+    if parallel is not None:
+        caps.append(parallel)
+    if jobs is not None:
+        if jobs < 1:
+            raise BuildError("--jobs must be positive")
+        caps.append(jobs)
+    if env_value not in (None, ""):
+        if not str(env_value).isdigit() or int(env_value) < 1:
+            raise BuildError(f"{GROUP_WORKERS_ENV} must be a positive integer")
+        caps.append(int(env_value))
+    return min(caps) if caps else None
+
+
+def group_needs(all_rows, wanted, per_job_gib=None, floor_bytes=0):
+    """Packing need (bytes) and its source for each wanted row, in order.
+
+    A recorded need (last measured peak plus headroom) is used as is. A group
+    with no record takes --memory-per-job-gib when given, else the largest
+    recorded need among all groups of its set (identical and host compilers
+    differ), else the platform floor."""
+    set_max = {}
+    for row in all_rows:
+        need = int(row.get("recorded_need_bytes") or 0)
+        set_max[row["mode"]] = max(set_max.get(row["mode"], 0), need)
+    out = []
+    for row in wanted:
+        need = int(row.get("recorded_need_bytes") or 0)
+        if need > 0:
+            out.append((need, "recorded"))
+        elif per_job_gib is not None:
+            out.append((int(per_job_gib * 2 ** 30), "memory-per-job-gib"))
+        elif set_max.get(row["mode"], 0) > 0:
+            out.append((set_max[row["mode"]], "set-max"))
+        else:
+            out.append((int(floor_bytes), "group-floor"))
+    if any(need < 1 for need, _ in out):
+        raise BuildError("a group has no memory need; pass --memory-per-job-gib <GiB>")
+    return out
+
+
+def packing_order(rows, needs):
+    """Biggest recorded need first; larger source closures break ties."""
+    order = sorted(range(len(rows)), key=lambda i: (-needs[i], -len(rows[i]["fields"]["source"]["files"]),
+                                                    rows[i]["mode"], rows[i]["stem"]))
+    return [rows[i] for i in order], [needs[i] for i in order]
+
+
+def next_launches(queue_needs, running_needs, budget_bytes, slots, ceiling_bytes):
+    """Indexes into queue_needs (biggest first) to start now.
+
+    Groups are packed while the reserved total stays within budget_bytes and
+    at most `slots` run. When nothing runs and the head of the queue is larger
+    than the budget, it starts alone if it fits ceiling_bytes (80% of total
+    memory); smaller groups never jump ahead of it, so the biggest groups
+    still start first."""
+    if not queue_needs:
+        return []
+    if not running_needs and queue_needs[0] > budget_bytes:
+        if queue_needs[0] > ceiling_bytes:
+            raise BuildError(f"a group compiler reservation of {queue_needs[0] / 2 ** 30:.1f} GiB cannot fit "
+                             f"{ceiling_bytes / 2 ** 30:.1f} GiB; free memory or use a larger machine, or pass "
+                             "--memory-per-job-gib <GiB> if you measured a smaller peak")
+        return [0]
+    chosen, reserved, count = [], sum(running_needs), len(running_needs)
+    for index, need in enumerate(queue_needs):
+        if count >= slots:
+            break
+        if reserved + need <= budget_bytes:
+            chosen.append(index)
+            reserved += need
+            count += 1
+    return chosen
+
+
+def current_budget(baseline_bytes, available_now, running_needs):
+    """Memory the scheduler may reserve now.
+
+    available_now already excludes what running groups use, which is at most
+    what they reserved; adding their reservation back and capping at the
+    start-of-run budget shrinks the budget only when other load appeared."""
+    return min(int(baseline_bytes), int(MEMORY_FRACTION * available_now) + int(sum(running_needs)))
+
+
+def threads_per_group(cores, concurrent):
+    """Compiler threads for a group started while `concurrent` groups run."""
+    return max(1, int(cores) // max(1, int(concurrent)))
+
+
+def pressure_floor(available_at_start, baseline_bytes, available_now, need):
+    """Available memory below which a running compiler is stopped.
+
+    The 20% of start-of-run available memory kept for the system; lower for a
+    group larger than the budget that runs alone (as the serial budget did)."""
+    reserve = max(0, int(available_at_start) - int(baseline_bytes))
+    return max(0, min(reserve, int(available_now) - int(need)))
+
+
 def run_logged(argv, repo, env, path):
     child_env = dict(env)
     encoded = child_env.pop(GUARD_ENV, None)
@@ -630,6 +815,8 @@ def compile_group(row, repo, cache, env, evidence):
             hit = cached_artifact(cache, row)
             if hit:
                 result.update(state="reused", exit_code=0)
+                if row.get("auto_compile_jobs"):
+                    record_compile_jobs(cache, row, row.get("compile_jobs") or 1)
             else:
                 target = cache / "artifacts" / row["key"]
                 work = cache / "work" / row["key"]
@@ -643,13 +830,14 @@ def compile_group(row, repo, cache, env, evidence):
                 artifact.unlink(missing_ok=True)
                 execution.unlink(missing_ok=True)
                 effective = build_environment(row["mode"], env, row["fields"]["platform"])
+                result["workers_at_launch"] = int(effective["MOJOLEARN_COMPILE_JOBS"])
                 command = group_command(row["mode"], row["stem"], output, work / "roots")
                 result.update(log=str(log), command=command, execution_receipt=str(execution))
                 code = run_logged(command, repo, effective, log)
                 result["exit_code"] = code
                 if execution.is_file():
                     result["execution"] = json.loads(execution.read_text())
-                    record_peak(cache, row, result["execution"])
+                    record_peak(cache, row, result["execution"], result["workers_at_launch"])
                     result["peak_rss_bytes"] = result["execution"].get("peak_rss_bytes")
                     if code and result["execution"].get("reason"):
                         result["reason"] = result["execution"]["reason"]
@@ -676,6 +864,9 @@ def compile_group(row, repo, cache, env, evidence):
                         if build_process.cancelled():
                             (target / "receipt.json").unlink(missing_ok=True)
                             raise KeyboardInterrupt("development build cancelled during cache publication")
+                        # The plan after this run finds the build under the
+                        # keyed thread count the scheduler chose.
+                        record_compile_jobs(cache, row, result["workers_at_launch"])
     except KeyboardInterrupt as error:
         result.update(state="interrupted", exit_code=130, reason=str(error))
     except (BuildError, ValueError, OSError, subprocess.SubprocessError) as error:
