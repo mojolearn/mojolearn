@@ -3487,6 +3487,11 @@ PUBLIC_INAPPLICABLE_PREFIXES = ("par-",)
 #: never "you are missing a feature"; it is "this claim is about two devices
 #: and you have one", which is a fact about the claim, not about the install.
 PUBLIC_INAPPLICABLE_PREFIX_REASONS = {
+    # The shipped table keeps the retired par-* cells as history (TOMBSTONE
+    # MOJOLEARN_PAR_VERIFY above); this sentence is what a user reads for them.
+    "par-": ("multi-GPU verification is retired: these lanes compared a two-device run with one "
+             "device, and `verify` no longer runs them; their cells in the reference table are "
+             "kept as history only"),
 }
 
 #: THE STATUS EVERY HARNESS LANE GETS IN `lane_exposure()`, and the whole
