@@ -1,9 +1,0 @@
-sgd synthetic before  ms=196.603 digest=0743826898a3d479  
-sgd synthetic after  ms=184.503 digest=0743826898a3d479  
-sgd synthetic restore  ms=183.489 digest=0743826898a3d479  
-adam synthetic before  ms=183.275 digest=04d59ea621486362  
-adam synthetic after  ms=203.591 digest=04d59ea621486362  
-adam synthetic restore  ms=199.254 digest=04d59ea621486362  
-adamw synthetic before  ms=185.398 digest=a56b45e6a36856e6  
-adamw synthetic after  ms=196.631 digest=a56b45e6a36856e6  
-adamw synthetic restore  ms=182.250 digest=a56b45e6a36856e6  
