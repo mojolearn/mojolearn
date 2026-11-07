@@ -57,6 +57,7 @@ from bindings.gp_classifier_native import (
 )
 from bindings.gp_common_native import gp_kernel_arrays
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
+from bindings.trees_public_inputs import trees_encode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
 
@@ -451,17 +452,28 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
 # ---------------------------------------------------------------- forests
 
 def _forest_y(y: PythonObject, regressor: Bool, context: PythonObject) raises -> PythonObject:
-    """The targets a forest shard receives: float32 for a regressor (the old
-    driver's `as_f32_c(y, ndim=1)`); a classifier's labels as given (a native
-    Array or a list), or their `tolist()` (the old driver's flat label list)
-    when the codec cannot carry the object itself."""
+    """The targets a forest shard receives, and the class list the joined
+    classifier publishes: `(float32 y, None)` for a regressor (the old
+    driver's `as_f32_c(y, ndim=1)`); `(int32 codes, classes)` for a
+    classifier.
+
+    Lane ne2-i-j (2026-11-07, plan row N450): a classifier's labels were sent
+    as given or as `y.tolist()`, one Python object per row that the codec
+    encoded element by element into every tree-range request. They are now
+    encoded ONCE here by the encoder the plain fit runs
+    (`trees_encode_labels`, bindings/trees_public_forest.mojo
+    `_rf_fit_classifier` / the ExtraTrees fit): `classes` is the list the
+    plain fit stores as `classes_`, `codes` one int32 per row, a native Array
+    the codec carries as one buffer. A shard fits on the codes: they are the
+    integers `0 .. k - 1`, every one present, so the shard's own encode
+    returns them unchanged with classes `[0, .., k - 1]`, and its trees, leaf
+    class order and votes are the words the plain fit on the labels gives
+    (class order = code order = the order of `classes`). NO BIT MOVES; the
+    driver puts `classes` back as `classes_` (`_fit_forest`)."""
     if regressor:
-        return family_as_f32(y, 1, "y", context)
-    var b = shard_b()
-    var cls = py_type(y)
-    if cls is context["array_class"] or cls is b.list or cls is b.tuple:
-        return y
-    return py_call(py_attr(y, "tolist"))
+        return Python.tuple(family_as_f32(y, 1, "y", context), PythonObject(None))
+    var labels = trees_encode_labels(y, _t("trees_context"))
+    return Python.tuple(labels.codes, labels.classes)
 
 
 def _fit_forest(args: PythonObject) raises -> PythonObject:
@@ -499,7 +511,9 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     py_setitem(params, "numeric_mode", "identical")
     var x = family_as_f32(args[1], 2, "X", context)
     var regressor = Bool(py=py_call(py_attr(regressors, "__contains__"), cls))
-    var y = _forest_y(args[2], regressor, context)
+    var targets = _forest_y(args[2], regressor, context)
+    var y = targets[0]
+    var label_classes = targets[1]
     var count = Int(py=params["n_estimators"])
     if count < 1:
         raise Error("ValueError: n_estimators must be positive")
@@ -538,9 +552,17 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     py_setitem(fields, "_n_trees", count)
     py_setitem(fields, "n_estimators", count)
     if not regressor:
+        # The shards fitted on the int32 codes (`_forest_y`): their
+        # `classes_` is `[0, .., k - 1]`; the labels are the class list the
+        # plain fit stores, encoded once above (same length, same order).
+        if len(fields["classes_"]) != len(label_classes):
+            raise Error("ValueError: forest worker returned " + String(len(fields["classes_"]))
+                        + " classes for " + String(len(label_classes)) + " labels")
+        py_setitem(fields, "classes_", label_classes)
+        py_setitem(fields, "n_classes_", PythonObject(len(label_classes)))
         # The plain fit's completed-classifier metadata: public `classes_`
-        # labels from the shards' plain list, and `feature_names_in_` from
-        # this caller's X (an object array the codec does not carry).
+        # labels, and `feature_names_in_` from this caller's X (an object
+        # array the codec does not carry).
         classifier_after_fit(fields, args[1], trees_context)
     var cfg = py_get(fields, PythonObject("_cfg"), PythonObject(None))
     if cfg is not None:
