@@ -158,7 +158,7 @@ def _transformer_decode_keep_entries(mut handle: TransformerDecodeHandle) raises
     var names = _transformer_decode_entry_names()
     handle.entries.clear()
     for name in names:  # small-loop(seven fixed decode entry names)
-        var entry = py_get(handle.binding, name)
+        var entry = py_get(handle.binding, PythonObject(name))
         handle.entries.append(entry if py_type(entry) is function_type else PythonObject(None))
 
 
