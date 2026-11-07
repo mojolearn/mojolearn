@@ -526,6 +526,64 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
     return step
 
 
+def byte_owner_steps(mut session: ByteLMSession, addr: List[Int], n_steps: Int,
+                     completed: Int) raises -> Int:
+    """`n_steps` training steps in one call on an OPEN session, from the
+    model shape, optimizer and momentum flags the session admitted when it
+    opened: no shape or optimizer words cross per step (plan section 2C,
+    rows N107 and N109).
+
+    addr = [in_ids_i32 (n_steps * batch * (length + 1): the step batches
+    one after the other, each row-major [batch, length + 1]),
+    out_loss_f32 (n_steps: one loss per step), out_flags_i32 (n_tensors:
+    the flags after the last committed step)]. Every batch is admitted
+    before any device work. The steps run in order through the same
+    per-step path as `byte_owner_step` (`byte_session_step_run`), so step k
+    here produces the bits of the k-th of k single steps; no fold order
+    changes. A failure in step k rolls the device back to `completed + k`
+    (`byte_owner_recover`) and propagates; the k earlier steps stay
+    committed with their losses and flags written, and the session's
+    status (operation 5) reports `completed + k`. Returns
+    `completed + n_steps`."""
+    var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
+    if len(addr) != 3:
+        raise Error("byte LM trainer: the multi-step entry expects 3 addresses")
+    if n_steps < 1:
+        raise Error("byte LM trainer: the multi-step entry requires n_steps >= 1")
+    _require_open(s[])
+    var cfg_shape = s[].trainer.value().config.copy()
+    var cfg = s[].trainer.value().optimizer.copy()
+    if s[].trainer.value().completed_steps != completed:
+        raise Error("byte LM: resident completed-step mismatch")
+    if completed + n_steps > 999999:
+        raise Error("byte LM: completed step outside admitted bound")
+    var n_tensors = cfg_shape.n_tensors()
+    var n_ids = cfg_shape.batch * (cfg_shape.length + 1)
+    var slots: List[Int] = [addr[0], addr[1], addr[2]]
+    var cells: List[Int] = [n_steps * n_ids, n_steps, n_tensors]
+    _validate_slot_table(slots, cells, 1)
+    # Admit every batch before the first device step (the per-step entry's
+    # order: ids first, then device work).
+    var batches = List[List[Int32]]()
+    for k in range(n_steps):  # driver-loop: over the training steps of one call
+        var ids = _read_ids(addr[0] + k * n_ids * 4, n_ids)
+        byte_validate_tokens(ids, cfg_shape)
+        batches.append(ids^)
+    var flags = s[].trainer.value().buffers.buf_initialized.copy()
+    # The flags output starts as the committed flags, so a failure in the
+    # first step leaves the committed answer there.
+    _write_flags(addr[2], flags)
+    var step = completed
+    for k in range(n_steps):  # driver-loop: over the training steps of one call
+        try:
+            step = byte_session_step_run(s[], batches[k], flags, addr[1] + k * 4, addr[2], step, cfg, cfg_shape)
+        except error:
+            byte_owner_recover(s[], completed + k)
+            raise error
+        flags = s[].trainer.value().buffers.buf_initialized.copy()
+    return step
+
+
 def byte_owner_export_state(mut session: ByteLMSession, addr: List[Int], completed: Int,
                             cfg_shape: ByteConfig, release: Bool) raises -> Int:
     """The trainer's state export: addr[5] = [in_flags_i32 (the committed
