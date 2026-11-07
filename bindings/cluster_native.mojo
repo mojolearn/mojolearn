@@ -21,7 +21,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.kmeans_native import _kmeans_optional_entry
-from bindings.x_cluster_resident_table import xc_resident_lookup, xc_resident_store
+from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_lookup, cres_store
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
     family_shape_repr,
@@ -129,7 +129,7 @@ def _xc_resident(model: PythonObject, binding: PythonObject, centers_field: Pyth
     """`(query_entry, handle)` of the device copy of `cluster_centers_`
     (lane ne1-a-cluster-spectral, N024): uploaded once at the first query
     after a fit and reused while the model's generation, the centers object,
-    the binding and the shape are the same (bindings/x_cluster_resident_table.mojo).
+    the binding and the shape are the same (bindings/cluster_resident_table.mojo).
     None where the per-call upload stays: a binding without the resident
     doors (the CPU host binding), or storage that cannot be made read-only
     (anything but an exact float32 C-order 2-D mojolearn Array of d columns)."""
@@ -138,7 +138,9 @@ def _xc_resident(model: PythonObject, binding: PythonObject, centers_field: Pyth
     if not _xc_f32_ready(centers_field, context) or Int(py=centers_field.shape[1]) != d:
         return PythonObject(None)
     var k = Int(py=centers_field.shape[0])
-    var held = xc_resident_lookup(model, binding, centers_field, k, d)
+    var objects = Python.tuple(centers_field)
+    var dims: List[Int] = [k, d]
+    var held = cres_lookup(model, CRES_X_CLUSTER, binding, objects, dims)
     if held is not None:
         return held
     var query = _kmeans_optional_entry(binding, "x_cluster_resident_query", context)
@@ -151,7 +153,7 @@ def _xc_resident(model: PythonObject, binding: PythonObject, centers_field: Pyth
     _ = fitted_freeze(centers_field, context)
     var handle = family_call(prepare, classical_address(centers_field), PythonObject(k), PythonObject(d))
     _ = centers_field  # keep the Python object alive through the native upload above
-    xc_resident_store(model, binding, centers_field, release, query, k, d, Int(py=handle))
+    cres_store(model, CRES_X_CLUSTER, binding, objects, dims^, release, query, Int(py=handle), k * d * 4)
     return Python.tuple(query, handle)
 
 

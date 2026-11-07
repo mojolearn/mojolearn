@@ -31,7 +31,7 @@ from bindings.family_common import (
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from bindings.cluster_native import cluster_operation, xc_call_floats, _xc_array
-from bindings.x_cluster_resident_table import xc_resident_forget
+from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_forget
 from providers.python.estimator_binding_pyapi import _estimator_mode_word
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
@@ -85,10 +85,10 @@ def _one_of(value: PythonObject, a: String, b: String) raises -> Bool:
 def _set(model: PythonObject, var name: String, value: PythonObject) raises:
     """`setattr(model, name, value)`. A fit storing new `cluster_centers_`
     releases the model's resident device copy of the old ones at once
-    (bindings/x_cluster_resident_table.mojo, N024); the next query uploads
+    (bindings/cluster_resident_table.mojo, N024); the next query uploads
     the new object once."""
     if name == "cluster_centers_":
-        xc_resident_forget(model)
+        cres_forget(model, CRES_X_CLUSTER)
     py_setattr(model, name^, value)
 
 
