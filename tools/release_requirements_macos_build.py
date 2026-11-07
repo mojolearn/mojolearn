@@ -12,13 +12,31 @@ adapter admits its compile-apple rows afterwards from those retained bytes:
     --producer log=REL/<commit>/macos-build.log                         (the build's own log)
     --producer cache=<MOJOLEARN_BINCACHE_DIR of that build>
 
-The provenance chain, per merged group the log says was compiled in this build
-(``BINCACHE miss+built-cached``; a cache hit is not a compilation and is refused):
+The provenance chain, per merged group of the build log. A group is either
+compiled in this build (``BINCACHE miss+built-cached``, "built") or placed from
+an archive an earlier compile of the same key wrote (``BINCACHE hit``, "placed";
+with lane post-one-mac-cache the development build of the frozen commit compiles
+every macOS group into the one Mac cache and the release places them). One
+compile per freeze, and a verdict is reused for the same bytes: a placed archive
+whose key reproduces from the frozen revision is that group's compile evidence,
+equal to a compile in this build. Any other outcome refuses.
 
-  source   the key's whole-tree source digest reproduces from the tracked bytes of
-           the wheel's own commit (plus the gitignored unicode table, as its tracked
-           generator writes it); the builder inputs digest and MOJOLEARN_MERGED_KEY
-           (merged_groups.json + merged_bindings.py) reproduce from the same commit;
+  source   closure-v2 keys (tools/bincache.py KEY_RULE): the key's source closure,
+           executed inputs and merged membership (bincache.revision_closure)
+           reproduce from the wheel's own commit, and its build_env is exactly
+           what those inputs read. Older keys (no key_rule, built only): the
+           whole-tree source digest reproduces from the tracked bytes of the
+           wheel's commit (plus the gitignored unicode table, as its tracked
+           generator writes it); the builder inputs digest and
+           MOJOLEARN_MERGED_KEY (merged_groups.json + merged_bindings.py)
+           reproduce from the same commit;
+  placed   additionally: the release cache's provenance.tsv has the hit row
+           naming the archive's bytes; the archive's manifest names its original
+           compile (source_commit, built, build_seconds, builder) and the
+           cache's placements.jsonl line for the hit names the same compile; the
+           key's closure also reproduces at that source_commit (so the revision
+           it names is the revision its bytes were compiled from). A hit of an
+           older key, or one missing any of these, refuses;
   compiler the key names the requirement's Mojo/MAX packages, pixi.lock and Apple
            toolchain, and carries exactly the binding's flags;
   bytes    the archive verifies against its key (bincache.verify_archive), and the
@@ -56,6 +74,10 @@ SCRIPT = "bindings/merged_build.sh"
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 LOG_LINE = re.compile(r"^BINCACHE (\S+) (\S+) key=([0-9a-f]{16}|-) seconds=[0-9.]+$")
+#: bincache.seed_archive's note before a lookup; the outcome line follows it.
+SEEDED_LINE = re.compile(r"^BINCACHE seeded \S+ key=[0-9a-f]{16} from .+$")
+#: Build log outcome -> how the group's compile evidence came to be.
+OUTCOMES = {"miss+built-cached": "built", "hit": "placed"}
 BUILDING = re.compile(r"^== building ([0-9]+) merged files")
 KINDS = {"identical": "gpu", "host": "host"}
 # Merged-build routing, fixed by build_release_wheel.sh: merged layout on, no reuse plan.
@@ -103,6 +125,8 @@ def _log_compiles(log_path):
     with open(log_path, errors="replace") as stream:
         for line in stream:
             line = line.rstrip("\n")
+            if SEEDED_LINE.match(line):
+                continue
             if line.startswith("BINCACHE "):
                 m = LOG_LINE.match(line)
                 require(m is not None and m.group(2) == SCRIPT, "unrecognized bincache line in the build log")
@@ -112,6 +136,38 @@ def _log_compiles(log_path):
     require(planned is not None and planned == len(compiles),
             "the build log does not record one bincache-routed compile per planned merged file")
     return compiles
+
+
+def _placements(path):
+    """{key: [placement line]} of the cache's placements.jsonl (one line per hit), {} without one."""
+    rows = {}
+    if not Path(path).is_file():
+        return rows
+    for line in Path(path).read_text().splitlines():
+        if line.strip():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                raise ValueError("malformed bincache placement record")
+            require(isinstance(row, dict), "malformed bincache placement record")
+            rows.setdefault(row.get("key"), []).append(row)
+    return rows
+
+
+def _closure_reproduces(root, revision, fields):
+    """True when a closure-v2 key's tree-derived fields (source closure, executed
+    inputs, merged membership and the build_env those inputs read) are what
+    tools/bincache.py computes at REVISION's committed bytes."""
+    import bincache
+    env = {"MOJOLEARN_NUMERIC_MODE": fields.get("numeric_mode") or "identical",
+           "MOJOLEARN_PACKAGE_BYTE_LM": (fields.get("build_env") or {}).get("MOJOLEARN_PACKAGE_BYTE_LM", "1")}
+    try:
+        want = bincache.revision_closure(root, revision, fields["script"], fields.get("args") or [], env,
+                                         plat="darwin")
+    except bincache.UnkeyableBuild as error:
+        raise ValueError("the compile key cannot be recomputed at %s: %s" % (revision, error))
+    return (all(fields.get(k) == want[k] for k in ("source", "inputs", "merged"))
+            and fields.get("build_env") == bincache.keyed_env(fields.get("build_env") or {}, want["readers"]))
 
 
 def _provenance_rows(path):
@@ -155,7 +211,7 @@ def replay(raw, tier, stem, stage, scratch):
     return sha_bytes(staged), sha_bytes(shrunk.read_bytes())
 
 
-def _group(key, rows, cache, tree, archive, generated, merged_key, stage, scratch):
+def _group(key, outcome, rows, placements, cache, tree, archive, generated, merged_key, stage, scratch):
     import bincache
     import release_compile_subunit_evidence as sub
     key_ref = reference(cache / "provenance" / "keys" / (key + ".json"))
@@ -173,22 +229,34 @@ def _group(key, rows, cache, tree, archive, generated, merged_key, stage, scratc
             "release compile output is not a merged binding group: " + outputs[0])
     tier, stem = output.parts[2], output.stem
     require(fields.get("args") == [KINDS[tier], "--group", stem], "release compile arguments differ: " + key)
-    # Keys taken before the first tokenizer host compile walk the tracked tree alone.
-    source = fields.get("source")
-    require(source == sub._tree_digest(tree, SCRIPT) or source == sub._tree_digest(tree, SCRIPT, generated),
-            "compiled source does not reproduce from the tested revision: " + key)
-    inputs = local.get("inputs") or {}
-    require(inputs.get("digest") == _inputs_digest(tree, inputs.get("files") or []),
-            "build scripts/generators differ from the tested revision: " + key)
+    how = OUTCOMES[outcome]
     environment = fields.get("build_env") or {}
-    require(environment.get("MOJOLEARN_MERGED_KEY") == merged_key,
-            "merged group plan differs from the tested revision: " + key)
+    rule = fields.get("key_rule")
+    if rule == bincache.KEY_RULE:
+        # closure-v2: the group's own closure, inputs and membership at the wheel's commit.
+        require(_closure_reproduces(tree.root, tree.revision, fields),
+                "compiled source does not reproduce from the tested revision: " + key)
+        require("MOJOLEARN_MERGED_KEY" not in environment,
+                "merged group plan differs from the tested revision: " + key)
+    else:
+        require(rule is None and how == "built",
+                "a placed group's compile key is not closure-v2, so its compile cannot be named: " + key)
+        # Keys taken before the first tokenizer host compile walk the tracked tree alone.
+        source = fields.get("source")
+        require(source == sub._tree_digest(tree, SCRIPT) or source == sub._tree_digest(tree, SCRIPT, generated),
+                "compiled source does not reproduce from the tested revision: " + key)
+        inputs = local.get("inputs") or {}
+        require(inputs.get("digest") == _inputs_digest(tree, inputs.get("files") or []),
+                "build scripts/generators differ from the tested revision: " + key)
+        require(environment.get("MOJOLEARN_MERGED_KEY") == merged_key,
+                "merged group plan differs from the tested revision: " + key)
     toolchain = fields.get("toolchain") or {}
     require(toolchain.get("platform") == MAC and toolchain.get("pixi_lock_sha256") == tree.sha256("pixi.lock"),
             "compiled lock differs from the tested revision: " + key)
-    # The log line says this build compiled it; the cache row must agree.
-    built = [r for r in rows.get(key, []) if r[1] == SCRIPT and r[2] == "miss+built-cached"]
-    require(len(built) >= 1, "bincache provenance has no compile row for: " + key)
+    # The log line says what this build did with the key; the cache rows must agree.
+    built = [r for r in rows.get(key, []) if r[1] == SCRIPT and r[2] == outcome]
+    require(len(built) >= 1, ("bincache provenance has no compile row for: " if how == "built"
+                              else "bincache provenance has no placement row for: ") + key)
     arc = cache / (key + ".tar.gz")
     try:
         manifest, blobs = bincache.verify_archive(str(arc), key, fields)
@@ -199,6 +267,29 @@ def _group(key, rows, cache, tree, archive, generated, merged_key, stage, scratc
     raw_sha = sha_bytes(raw)
     require(all(r[5] == f"{outputs[0]}={raw_sha}" for r in built),
             "bincache provenance row names other bytes: " + key)
+    origin = manifest.get("source_commit") or ""
+    compile_ = dict(outcome=how, source_commit=origin or tree.revision,
+                    compiled_at=manifest.get("built") or built[0][0],
+                    build_seconds=manifest.get("build_seconds", float(built[0][4])),
+                    builder=manifest.get("builder") or {})
+    if how == "built":
+        require(origin in ("", tree.revision), "the archive compiled in this build names another revision: " + key)
+    else:
+        # The original compile: named inside the verified archive, echoed by the
+        # hit's placement record, and reproducing the key at the revision it names.
+        require(HEX40.fullmatch(origin) is not None and bool(manifest.get("built"))
+                and isinstance(manifest.get("build_seconds"), (int, float))
+                and isinstance(manifest.get("builder"), dict) and bool(manifest["builder"]),
+                "the placed archive does not name its original compile (revision, date, seconds, builder): " + key)
+        lines = [p for p in placements.get(key, []) if p.get("script") == SCRIPT and p.get("outcome") == "hit"]
+        require(len(lines) >= 1, "bincache placement record is missing for: " + key)
+        require(all(p.get("archive_source_commit") == origin and p.get("archive_built") == manifest["built"]
+                    and p.get("archive_build_seconds") == manifest["build_seconds"]
+                    and p.get("archive_builder") == manifest["builder"]
+                    and p.get("files") == [dict(path=outputs[0], sha256=raw_sha)] for p in lines),
+                "bincache placement record names another compile or other bytes: " + key)
+        require(origin == tree.revision or _closure_reproduces(tree.root, origin, fields),
+                "the placed archive's key does not reproduce at the revision it names: " + key)
     member = f"mojolearn/{tier}/{stem}.so"
     require(member in archive.namelist(), "the wheel does not ship the compiled group: " + member)
     shipped = sha_bytes(archive.read(member))
@@ -207,7 +298,8 @@ def _group(key, rows, cache, tree, archive, generated, merged_key, stage, scratc
     index = json.loads(archive.read(f"mojolearn/{tier}/_mojolearn_merged.json"))
     members = (index.get("files") or {}).get(stem + ".so")
     require(isinstance(members, list) and members, "the wheel's merged index lacks the group: " + member)
-    return stem, dict(tier=tier, members=sorted(members), key=key, toolchain=toolchain,
+    return stem, dict(tier=tier, members=sorted(members), key=key, key_rule=rule, compile=compile_,
+                      toolchain=toolchain,
                       host_toolchain=local["host_toolchain"], build_env=environment,
                       installed_toolchain=manifest.get("installed_toolchain"), raw_sha256=raw_sha,
                       staged_sha256=staged, wheel_sha256=shipped, key_ref=key_ref,
@@ -226,16 +318,21 @@ def _facts(root, producer):
     cache = Path(producer["cache"]).resolve()
     rows_ref = reference(cache / "provenance" / "provenance.tsv")
     compiles = _log_compiles(log_ref["path"])
-    require(all(outcome == "miss+built-cached" for outcome, _ in compiles),
-            "a merged group was not compiled and cached in this build: "
-            + ", ".join(sorted({o for o, _ in compiles if o != "miss+built-cached"})))
-    keys = []
-    for _, prefix in compiles:
+    require(all(outcome in OUTCOMES for outcome, _ in compiles),
+            "a merged group was neither compiled and cached in this build nor placed from a verified compile: "
+            + ", ".join(sorted({o for o, _ in compiles if o not in OUTCOMES})))
+    keys, outcomes = [], {}
+    for outcome, prefix in compiles:
         found = sorted(p.name[:-len(".json")] for p in (cache / "provenance" / "keys").glob(prefix + "*.json"))
         require(len(found) == 1 and HEX64.fullmatch(found[0]), "the build log's key is not unique in the cache: " + prefix)
         keys.append(found[0])
+        outcomes[found[0]] = outcome
     require(len(set(keys)) == len(keys), "the build log names one key twice")
     rows = _provenance_rows(rows_ref["path"])
+    placements_path = cache / "provenance" / "placements.jsonl"
+    placed_any = any(OUTCOMES[o] == "placed" for o in outcomes.values())
+    placements = _placements(placements_path) if placed_any else {}
+    evidence = [wheel_ref, log_ref, rows_ref] + ([reference(placements_path)] if placed_any else [])
     with zipfile.ZipFile(wheel_ref["path"]) as archive:
         revision = archive.read("mojolearn/identity_columns/COMMIT").decode().strip()
         require(HEX40.fullmatch(revision) is not None, "the wheel names no source commit")
@@ -250,7 +347,8 @@ def _facts(root, producer):
         scratch = tempfile.mkdtemp(prefix="macos-release-replay-")
         try:
             stage = _stage_module(tree, scratch)
-            groups = dict(_group(k, rows, cache, tree, archive, generated, merged_key, stage, scratch) for k in keys)
+            groups = dict(_group(k, outcomes[k], rows, placements, cache, tree, archive, generated, merged_key,
+                                 stage, scratch) for k in keys)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         require(len(groups) == len(keys), "two compiles wrote one group")
@@ -275,7 +373,11 @@ def _facts(root, producer):
     return dict(producer=NAME, source_root=str(Path(root).resolve()), source_revision=revision,
                 checkout=str(checkout), merged_key=merged_key, generated=generated,
                 host_toolchain=json.loads(host.pop()), compiled_sources={}, manifest=manifest, files=files,
-                groups=groups, evidence=[wheel_ref, log_ref, rows_ref])
+                groups=groups, evidence=evidence,
+                # Which groups this build compiled and which it placed from an earlier
+                # compile of the same key (each group's `compile` names when and where).
+                compiles={how: sorted(s for s, g in groups.items() if g["compile"]["outcome"] == how)
+                          for how in ("built", "placed")})
 
 
 def _collect(root, document, producer):
@@ -322,8 +424,13 @@ def _binding_check(requirement_id, wanted, facts, unit):
             "Apple host toolchain differs")
     # Build switches as the requirement manifest defines them (credentials and the
     # scheduler's slot token are not compiler inputs); the merged key reproduced in facts.
+    import bincache
     environment = build_flags(group["build_env"])
-    require(environment.pop("MOJOLEARN_MERGED_KEY", None) == facts["merged_key"], "merged group plan differs")
+    # closure-v2 keys carry the group's exact membership (`merged`, reproduced in
+    # facts) instead of MOJOLEARN_MERGED_KEY; older keys carry the whole-plan digest.
+    merged_key = environment.pop("MOJOLEARN_MERGED_KEY", None)
+    require(merged_key is None if group.get("key_rule") == bincache.KEY_RULE else merged_key == facts["merged_key"],
+            "merged group plan differs")
     for name, value in ROUTING.items():
         require(environment.pop(name, value) == value, "release build routing flag differs: " + name)
     compiled.check_flags(binding.get("flags") or {}, environment)
