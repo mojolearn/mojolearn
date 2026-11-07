@@ -177,10 +177,14 @@ def test_target_encoder_splitters(P):
     class Splits:
         def split(self, X, y=None):
             yield from pairs
+    # A class defined here lives in `mojolearn.tests`, which the door reads as
+    # a mojolearn splitter; a user's splitter lives in the user's module.
+    Splits.__module__ = "user_splitters"
     with pytest.raises(TypeError, match="got Splits"):
         ml.TargetEncoder(cv=Splits()).fit_transform(Xb, yr)
+    # One test fold that leaves rows 150..299 in no validation fold.
     with pytest.raises(ValueError, match="cover each sample index exactly once"):
-        ml.TargetEncoder(cv=[(np.arange(300), np.arange(300))]).fit_transform(Xb, yr)
+        ml.TargetEncoder(cv=[(np.arange(150, 300), np.arange(150))]).fit_transform(Xb, yr)
     bad = [(np.arange(10), te) for _, te in pairs]
     with pytest.raises(NotImplementedError, match="training rows are not every"):
         ml.TargetEncoder(cv=bad).fit_transform(Xb, yr)

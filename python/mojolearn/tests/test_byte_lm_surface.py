@@ -1,13 +1,34 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Root-only host mocks for the authored byte-LM wrapper; no numerical claim.
+"""The public byte-LM trainer surface against the installed compiled binding.
 
-No model, GPU kernel, build, benchmark or independent numerical reference is
-executed by these tests. Native two-block learning/gradient/identity/resume
-qualification is a separate root-only remote CUDA/HIP task.
+The native trainer owner admits only the exact compiled module (it refuses a
+Python stand-in with "native provider requires an exact compiled module"),
+so these tests construct, train, evaluate, save and restore through the real
+binding at the default shape. They assert copies, refusals, transactional
+state and checkpoint bytes, not model quality; learning, gradient and
+cross-vendor identity qualification are separate.
+
+DELETED (2026-11-07) with the retired Python owner mock, because each needed
+a stand-in binding to inject a fault the compiled module cannot produce:
+- test_evaluate_refused_on_a_signed_zero_fullstate_mutation_commits_nothing
+  (an evaluate entry that rewrote state bits) and
+  test_native_failure_and_partial_writes_never_commit (a step that failed after
+  writing, wrote a NaN, changed its input, returned the wrong step or left the
+  gradient unwritten). The transactional rule they guarded is native
+  (bindings/byte_lm_trainer_native.mojo: results commit only after the step's
+  checks); the real refusals that reach it are tested below
+  (test_tokens_require_exact_int32_shape_and_range,
+  test_bad_state_refuses_transactionally). No real-binding test injects a
+  device failure: a coverage gap, reported.
+- test_checkpoint_file_api_delegates_the_exact_bounded_capture: it replaced
+  the Python classmethod `from_checkpoint_bytes`, which `from_checkpoint` no
+  longer calls (both are one native call); the same bytes reaching both is
+  tested in test_checkpoint_file_and_bytes_restore_the_same_state.
 """
 import ctypes
 import hashlib
 import json
+import math
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -15,7 +36,6 @@ import pytest
 
 from mojolearn import SmallByteLanguageModelTrainer
 from mojolearn import _byte_lm_impl as impl
-from ._byte_lm_owner_mock import TrainerOwnerEntries
 
 
 def buffer(address, count, integer=False):
@@ -24,305 +44,34 @@ def buffer(address, count, integer=False):
 
 
 def initial():
-    return np.zeros(34944, dtype=np.float32)
+    # Nonzero parameters: a real step at all-zero parameters has a zero
+    # gradient and leaves both moments zero.
+    return (np.random.default_rng(23).standard_normal(34944) * .02).astype(np.float32)
 
 
 def ids():
     return (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
 
 
-def trainer():
-    return SmallByteLanguageModelTrainer(initial(), data_schedule={
-        'corpus_sha256': '1' * 64, 'token_schedule_sha256': '2' * 64,
-        'batch_offsets': [0, 32], 'planned_steps': 4})
+SCHEDULE = {'corpus_sha256': '1' * 64, 'token_schedule_sha256': '2' * 64,
+            'batch_offsets': [0, 32], 'planned_steps': 4}
+
+
+def trainer(**options):
+    return SmallByteLanguageModelTrainer(initial(), data_schedule=dict(SCHEDULE, batch_offsets=[0, 32]),
+                                         **options)
 
 
 def state_digest(model):
     state = model.state_dict()
     for key in ('parameters', 'm', 'v', 'flags'):
-        # DEVIATION 2460: state buffers are mojolearn.Array; the typestr read
-        # through np.asarray is the same '<f4' / '<u1' string as before.
         value = np.asarray(state[key])
         state[key] = {'dtype': value.dtype.str, 'shape': value.shape,
                       'hex': value.tobytes().hex()}
     return hashlib.sha256(impl._canonical(state)).hexdigest()
 
 
-def admitted_vendor():
-    """The vendor `_load` admits on the install this process loaded: the CPU
-    byte LM binding reads back 'cpu' on a CPU-only install (no GPU set under
-    python/mojolearn/identical), a GPU set reads back its device vendor. The
-    fake stands in for whichever binding the install would serve."""
-    return 'cpu' if impl._backend._CPU_ONLY is not None else 'cuda'
-
-
-class FakeByteLM(TrainerOwnerEntries):
-    """The single-device entries of the byte LM binding, faked; the trainer
-    owner entries (`byte_lm_trainer_*`) are composed from them by
-    `TrainerOwnerEntries`, in the native owner's order."""
-
-    def __init__(self):
-        self.mode = 1
-        self.vendor = admitted_vendor()
-        self.profile = impl.PROFILE
-        self.calls = []
-        self.fail_after_write = False
-        self.nonfinite_after_write = False
-        self.modify_input = False
-        self.eval_mutation = None
-        self.wrong_step = False
-        self.leave_gradient_unwritten = False
-        self.lose_on_rollback = False
-
-    def enable_sessions(self):
-        """DEVIATION 2514: the device-owned session entries, over a fake
-        device state per session so exports and rollback are observable.
-        Not installed by default: the wrapper must refuse a binding without
-        them (ImportError) rather than fall back. Returns (created, closed,
-        calls) as the session tests read them. The fake step mirrors the
-        native contract: a failure after its update is rolled back inside
-        the call, `export_gradients` is refused unless the last completed
-        step's gradient is present, `rollback` is a no-op with no shadow.
-        Sentinel arithmetic only (p += 1, m += 2, v += 3, grad = .125,
-        loss = 1.25); no numerical reference for a language model."""
-        created, closed, calls = [], [], []
-        fake = self
-
-        class Session:
-            def __init__(self):
-                self.p = self.m = self.v = self.flags = self.grad = self.shadow = None
-                self.completed = -1
-                self.grad_step = -1
-                self.usable = True
-                self.open = False
-
-        def create():
-            session = Session()
-            created.append(session)
-            return session
-
-        def close(session):
-            assert session not in closed
-            closed.append(session)
-            session.open = False
-
-        def open_(session, addresses, params, shape):
-            assert len(addresses) == 4 and len(params) == 12 and not session.open
-            session.p, session.m, session.v = (buffer(a, 34944).copy() for a in addresses[:3])
-            session.flags = buffer(addresses[3], 20, True).copy()
-            session.completed = params[1]
-            session.grad = session.shadow = None
-            session.grad_step = -1
-            session.open = session.usable = True
-            return session.completed
-
-        def admit(session, params, in_flags):
-            assert session.open and session.usable and session not in closed
-            if params[1] != session.completed:
-                raise RuntimeError('byte LM: resident completed-step mismatch')
-            if not np.array_equal(buffer(in_flags, 20, True), session.flags):
-                raise RuntimeError('byte LM: resident flags mismatch')
-
-        def rollback(session):
-            assert session.open and session not in closed
-            if session.shadow is not None:
-                session.p, session.m, session.v, session.flags, session.completed = session.shadow
-                session.shadow = None
-            session.grad_step = -1
-            if fake.lose_on_rollback:
-                session.usable = False
-                raise RuntimeError('byte LM: session lost: rollback re-scan failed')
-            return session.completed
-
-        def step(session, addresses, params, shape):
-            assert len(addresses) == 4 and len(params) == 12 and params[0] == 1
-            calls.append(session)
-            fake.calls.append((list(addresses), list(params)))
-            admit(session, params, addresses[1])
-            if fake.modify_input:
-                buffer(addresses[0], 66, True)[0] = 99
-            session.shadow = (session.p.copy(), session.m.copy(), session.v.copy(),
-                              session.flags.copy(), session.completed)
-            session.p += 1
-            session.m += 2
-            session.v += 3
-            session.flags[:] = 1
-            session.grad = np.full(34944, .125, np.float32)
-            if fake.nonfinite_after_write:
-                session.v[0] = np.nan
-            if not np.isfinite(session.v).all():
-                # The trainer's device validate_after: refuse and roll back.
-                rollback(session)
-                raise RuntimeError('byte LM: nonfinite second moments at 0')
-            if fake.fail_after_write:
-                rollback(session)
-                raise RuntimeError('injected byte-LM failure after writes')
-            session.completed += 1
-            session.grad_step = session.completed
-            buffer(addresses[2], 1)[0] = 1.25
-            buffer(addresses[3], 20, True)[:] = session.flags
-            return session.completed + int(fake.wrong_step)
-
-        def evaluate(session, addresses, params, shape):
-            assert len(addresses) == 3 and len(params) == 12 and params[0] == 0
-            calls.append(session)
-            fake.calls.append((list(addresses), list(params)))
-            admit(session, params, addresses[1])
-            buffer(addresses[2], 1)[0] = 1.25
-            return session.completed
-
-        def export_state(session, addresses, shape):
-            assert len(addresses) == 4 and session.open and session.usable
-            for source, target in zip((session.p, session.m, session.v), addresses[:3]):
-                buffer(target, 34944)[:] = source
-            buffer(addresses[3], 20, True)[:] = session.flags
-            return session.completed
-
-        def export_gradients(session, addresses, shape):
-            assert len(addresses) == 1 and session.open and session.usable
-            if session.grad_step != session.completed:
-                raise RuntimeError('byte LM: no gradient to export; complete a step first')
-            if fake.leave_gradient_unwritten:
-                # The binding never hands back an unwritten gradient: its
-                # device finite scan (`first_nonfinite`) refuses first, and
-                # Python no longer re-scans the export (cpu2-l11-neural).
-                raise RuntimeError('byte LM: nonfinite returned gradient')
-            buffer(addresses[0], 34944)[:] = session.grad
-            return session.grad_step
-
-        def info(session):
-            return [session.completed if session.open else -1,
-                    session.grad_step if session.open else -1,
-                    int(session.usable), int(session.open)]
-
-        self.byte_lm_session_create = create
-        self.byte_lm_session_close = close
-        self.byte_lm_session_open = open_
-        self.byte_lm_session_step = step
-        self.byte_lm_session_eval = evaluate
-        self.byte_lm_session_export_state = export_state
-        self.byte_lm_session_export_gradients = export_gradients
-        self.byte_lm_session_rollback = rollback
-        self.byte_lm_session_info = info
-        return created, closed, calls
-
-    def sha256_hex(self, data):
-        return hashlib.sha256(bytes(data)).hexdigest()
-
-    def byte_lm_numeric_mode(self):
-        return self.mode
-
-    def byte_lm_vendor(self):
-        return self.vendor
-
-    def byte_lm_profile(self):
-        return self.profile
-
-    def byte_lm_arithmetic_suffix(self):
-        # The real binding exports this (bindings/_mojolearn_byte_lm.mojo,
-        # training/byte_lm_config.byte_lm_arithmetic_suffix): the IDENTICAL toggle suffix that the
-        # Python layer appends to every expected profile. A default build
-        # (no toggle defines) has the empty suffix.
-        return ''
-
-    def byte_lm_run(self, addresses, params):
-        assert len(addresses) == 11
-        assert len(params) == 12
-        assert params[2] == 2
-        assert params[8:] == [0., 0., 0, 0.]
-        # The native `byte_validate_tokens` admission, which refuses before
-        # any device work (cpu2-l11-neural: Python no longer pre-scans ids).
-        tokens = np.ctypeslib.as_array((ctypes.c_int32 * 66).from_address(addresses[4]))
-        if tokens.min() < 0 or tokens.max() >= 256:
-            raise Exception('byte LM: token ID outside configured vocabulary')
-        self.calls.append((list(addresses), list(params)))
-        # Copy all input state to fresh output buffers, then deliberately
-        # write before injecting a failure. These are plumbing sentinels,
-        # not an implementation or numerical reference for a language model.
-        for source, target in zip(addresses[:3], addresses[5:8]):
-            assert source != target
-            buffer(target, 34944)[:] = buffer(source, 34944)
-        buffer(addresses[9], 20, True)[:] = buffer(addresses[3], 20, True)
-        buffer(addresses[10], 1)[0] = 1.25
-        if params[0] == 1:
-            buffer(addresses[5], 34944)[:] += 1
-            buffer(addresses[6], 34944)[:] += 2
-            buffer(addresses[7], 34944)[:] += 3
-            buffer(addresses[9], 20, True)[:] = 1
-            assert addresses[8] > 0
-            if not self.leave_gradient_unwritten:
-                buffer(addresses[8], 34944)[:] = .125
-        else:
-            assert addresses[8] == 0
-            if self.eval_mutation in ('parameters', 'm', 'v'):
-                index = {'parameters': 5, 'm': 6, 'v': 7}[self.eval_mutation]
-                # +0.0 and -0.0 compare equal numerically; raw invariance
-                # must still detect this mutation on the initial state.
-                buffer(addresses[index], 34944)[0] = -0.0
-            elif self.eval_mutation == 'flags':
-                buffer(addresses[9], 20, True)[0] = 1
-            if self.eval_mutation is not None:
-                # The binding compares the evaluated state with the state it
-                # admitted, bit for bit (`_require_same_bits` and the flag
-                # compare in `_byte_lm_run`), and refuses.
-                raise RuntimeError('byte LM: authoritative state bits mismatch')
-        if self.modify_input:
-            # The ids are the trainer's own copy; the state inputs are the
-            # trainer's state arrays, which the binding never writes.
-            buffer(addresses[4], 66, True)[0] = 99
-            # The binding's `_require_inputs_unchanged` guard
-            # (bindings/_mojolearn_byte_lm.mojo, lane py-runtime round 2)
-            # refuses before it publishes any output.
-            raise RuntimeError('Byte-LM native call changed an input state/token buffer')
-        if self.nonfinite_after_write:
-            buffer(addresses[7], 34944)[0] = np.nan
-            # The binding validates the new state on the device before it
-            # publishes (`byte_validate_device_state`).
-            raise RuntimeError('byte LM: nonfinite second moments')
-        if params[0] == 1 and self.leave_gradient_unwritten:
-            # ... and scans the gradient (`first_nonfinite`).
-            raise RuntimeError('byte LM: nonfinite returned gradient')
-        if self.fail_after_write:
-            raise RuntimeError('injected byte-LM failure after writes')
-        return params[1] + params[0] + int(self.wrong_step)
-
-
-@pytest.fixture
-def host(monkeypatch):
-    fake = FakeByteLM()
-    # These wrapper-only tests mock native validation as well as training.
-    # Production requires these helpers; there is no Python fallback.
-    from mojolearn import _buffer
-    for key, scalar in [('all_finite_f32', ctypes.c_float),
-                        ('all_finite_f64', ctypes.c_double)]:
-        def finite(address, count, scalar=scalar):
-            values = np.ctypeslib.as_array((scalar * count).from_address(address))
-            return int(np.isfinite(values).all())
-        monkeypatch.setitem(_buffer._NATIVE, key, finite)
-    monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'identical')
-    monkeypatch.setattr(impl._backend, 'numeric_mode', lambda: 'identical')
-    real_binding = impl._backend.binding
-
-    def binding(name, mode='identical'):
-        # The base binding `_mojolearn` serves the host helpers every Array
-        # reduction calls (`reduce_stat`, `_buffer._native`, always the
-        # identical binary); only the byte-LM entries are faked.
-        if name == '_mojolearn':
-            return real_binding(name, mode=mode)
-        assert name == '_mojolearn_byte_lm' and mode == 'identical'
-        return fake
-    monkeypatch.setattr(impl._backend, 'binding', binding)
-    # the native train_step resolves its binding from the trainer context
-    # connected at import (bindings/byte_lm_trainer_native.mojo)
-    monkeypatch.setitem(impl._LM_TRAINER_CONTEXT["byte_lm_bindings"], "identical", fake)
-    monkeypatch.setattr(impl, '_binding_metadata', lambda value, shape=None: {
-        'binding_file': 'fake-byte-lm.so', 'binding_sha256': '0' * 64,
-        'native_profile': value.profile, 'native_vendor': value.vendor,
-        'native_numeric_mode': value.mode, 'source_sha256': {'fake': '3' * 64}})
-    return fake
-
-
-def test_registry_and_named_parameter_packing(host):
+def test_registry_and_named_parameter_packing():
     registry = SmallByteLanguageModelTrainer.parameter_registry()
     assert len(registry) == 20
     assert registry[0] == {'name': 'embed', 'shape': (256, 32), 'offset': 0, 'size': 8192}
@@ -333,84 +82,58 @@ def test_registry_and_named_parameter_packing(host):
     model = SmallByteLanguageModelTrainer(supplied, data_schedule={'dataset': 'test'})
     for entry in registry:
         expected = supplied[entry['name']].ravel()
-        actual = model.parameters_[entry['offset']:entry['offset'] + entry['size']]
+        actual = np.asarray(model.parameters_)[entry['offset']:entry['offset'] + entry['size']]
         np.testing.assert_array_equal(actual, expected)
     supplied['embed'][:] = 999
-    assert not np.any(model.parameters_[:8192] == 999)
+    assert not np.any(np.asarray(model.parameters_)[:8192] == 999)
     del supplied['lm_head']
     with pytest.raises(ValueError, match='registry'):
         SmallByteLanguageModelTrainer(supplied, data_schedule={'dataset': 'test'})
-    assert host.calls == []
 
 
-def test_train_copies_inputs_and_returns_all_preupdate_gradients(host):
+def test_train_copies_inputs_and_returns_all_preupdate_gradients():
     source = initial()
     model = SmallByteLanguageModelTrainer(source, data_schedule={'dataset': 'test'}, step_result='full')
+    twin = SmallByteLanguageModelTrainer(initial(), data_schedule={'dataset': 'test'}, step_result='full')
     source[:] = 999
     tokens = ids()
     tokens.setflags(write=False)
     before = tokens.tobytes()
     result = model.train_step(tokens)
-    assert result['loss'] == 1.25
+    expected = twin.train_step(ids())
+    assert math.isfinite(result['loss']) and result['loss'] == expected['loss']
     assert result['step'] == result['completed_steps'] == result['next_batch_index'] == 1
     assert list(result['gradients']) == list(impl.PARAMETER_NAMES)
-    assert result['flat_gradients'].shape == (34944,)
+    assert tuple(np.asarray(result['flat_gradients']).shape) == (34944,)
     for name, shape in zip(impl.PARAMETER_NAMES, impl.PARAMETER_SHAPES):
-        assert result['gradients'][name].shape == shape
-        np.testing.assert_array_equal(result['gradients'][name], np.full(shape, .125, np.float32))
+        gradient = np.asarray(result['gradients'][name])
+        assert gradient.shape == shape and np.isfinite(gradient).all()
     assert model.step_ == 1
-    np.testing.assert_array_equal(model.parameters_, np.ones(34944, np.float32))
+    parameters = np.asarray(model.parameters_).copy()
+    assert parameters.tobytes() == np.asarray(twin.parameters_).tobytes()
     assert tokens.tobytes() == before
-    # DEVIATION 2460: returned gradients are mojolearn.Array; np.asarray is
-    # a zero-copy writable view, so the isolation check is the same as before.
+    # Returned gradients are copies: writing them cannot reach the state.
     np.asarray(result['flat_gradients'])[:] = 900
     np.asarray(result['gradients']['embed'])[:] = 800
-    np.testing.assert_array_equal(model.parameters_, np.ones(34944, np.float32))
+    assert np.asarray(model.parameters_).tobytes() == parameters.tobytes()
 
 
-def test_evaluate_preserves_all_state_and_has_no_gradient_output(host):
+def test_evaluate_preserves_all_state_and_has_no_gradient_output():
     model = trainer()
     model.train_step(ids())
     before = state_digest(model)
-    assert model.evaluate(ids()) == 1.25
-    assert state_digest(model) == before
-    addresses, params = host.calls[-1]
-    assert params[0] == 0 and params[1] == 1 and addresses[8] == 0
-
-
-@pytest.mark.parametrize('field', ['parameters', 'm', 'v', 'flags'])
-def test_evaluate_refused_on_a_signed_zero_fullstate_mutation_commits_nothing(host, field):
-    model = trainer()
-    before = state_digest(model)
-    host.eval_mutation = field
-    with pytest.raises(RuntimeError, match='state bits mismatch'):
-        model.evaluate(ids())
+    loss = model.evaluate(ids())
+    assert math.isfinite(loss)
     assert state_digest(model) == before
 
 
-@pytest.mark.parametrize('flag', ['fail_after_write', 'nonfinite_after_write',
-                                 'modify_input', 'wrong_step', 'leave_gradient_unwritten'])
-def test_native_failure_and_partial_writes_never_commit(host, flag):
-    model = trainer()
-    model.train_step(ids())
-    before = state_digest(model)
-    tokens = ids()
-    token_bytes = tokens.tobytes()
-    setattr(host, flag, True)
-    with pytest.raises((ValueError, RuntimeError)):
-        model.train_step(tokens)
-    assert state_digest(model) == before
-    assert tokens.tobytes() == token_bytes
-    assert model.step_ == 1
-
-
-def test_state_load_snapshot_isolation_and_cursor_validation(host):
+def test_state_load_snapshot_isolation_and_cursor_validation():
     model = trainer()
     model.train_step(ids())
     state = model.state_dict()
     clone = trainer().load_state_dict(state)
     assert state_digest(model) == state_digest(clone)
-    np.asarray(state['parameters'])[:] = 7  # DEVIATION 2460: zero-copy views
+    np.asarray(state['parameters'])[:] = 7
     np.asarray(state['m'])[:] = 8
     np.asarray(state['v'])[:] = 9
     np.asarray(state['flags'])[:] = 0
@@ -424,19 +147,21 @@ def test_state_load_snapshot_isolation_and_cursor_validation(host):
     assert state_digest(clone) == before
 
 
-def test_mode_refuses_without_overriding_process(host, monkeypatch):
+def test_mode_refuses_without_overriding_process(monkeypatch):
+    # The native owner reads the backend's resolved `_DEFAULT_MODE`
+    # (bindings/byte_lm_trainer_native.mojo `_mode`); a value that is not a
+    # tier is refused, never replaced by a default.
     model = trainer()
     before = state_digest(model)
-    monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'fast')
+    monkeypatch.setattr(impl._backend, '_DEFAULT_MODE', 'unselected')
     with pytest.raises(RuntimeError, match='process-selected'):
         model.train_step(ids())
     with pytest.raises(RuntimeError, match='process-selected'):
         trainer()
-    assert host.calls == []
     assert state_digest(model) == before
 
 
-def test_checkpoint_bytes_survive_source_buffer_and_path_replacement(host, tmp_path, monkeypatch):
+def test_checkpoint_bytes_survive_source_buffer_and_path_replacement(tmp_path, monkeypatch):
     model = trainer()
     path = tmp_path / 'source.json'
     model.save_checkpoint(path)
@@ -451,100 +176,123 @@ def test_checkpoint_bytes_survive_source_buffer_and_path_replacement(host, tmp_p
     restored = SmallByteLanguageModelTrainer.from_checkpoint_bytes(captured)
     assert state_digest(restored) == state_digest(model)
     assert hashlib.sha256(captured).hexdigest() == digest
-    assert host.calls == []
 
 
 @pytest.mark.parametrize('resident', [False, True])
-def test_checkpoint_file_api_delegates_the_exact_bounded_capture(host, tmp_path, monkeypatch, resident):
+def test_checkpoint_file_and_bytes_restore_the_same_state(tmp_path, resident):
+    model = trainer()
+    model.train_step(ids())
     path = tmp_path / 'source.json'
-    trainer().save_checkpoint(path)
-    raw = path.read_bytes()
-    seen = []
-    sentinel = object()
-    def decode(cls, encoded, *, resident=False):
-        seen.append(encoded)
-        seen.append(resident)
-        return sentinel
-    monkeypatch.setattr(SmallByteLanguageModelTrainer, 'from_checkpoint_bytes', classmethod(decode))
-    assert SmallByteLanguageModelTrainer.from_checkpoint(path, resident=resident) is sentinel
-    assert seen == [raw, resident] and type(seen[0]) is bytes
+    model.save_checkpoint(path)
+    from_file = SmallByteLanguageModelTrainer.from_checkpoint(path, resident=resident)
+    from_bytes = SmallByteLanguageModelTrainer.from_checkpoint_bytes(path.read_bytes(), resident=resident)
+    assert state_digest(from_file) == state_digest(from_bytes) == state_digest(model)
 
 
 @pytest.mark.parametrize('encoded', [bytearray(b'{}'), memoryview(b'{}'), '{}', None])
-def test_checkpoint_bytes_reject_mutable_or_implicit_conversion(host, encoded):
+def test_checkpoint_bytes_reject_mutable_or_implicit_conversion(encoded):
     with pytest.raises(TypeError, match='immutable bytes'):
         SmallByteLanguageModelTrainer.from_checkpoint_bytes(encoded)
-    assert host.calls == []
 
 
-def test_checkpoint_bytes_limit_precedes_json_parsing(host, monkeypatch):
+def test_checkpoint_bytes_limit_precedes_json_parsing(monkeypatch):
     def forbidden_parse(*args, **kwargs):
         raise AssertionError('oversized capture reached JSON parser')
     monkeypatch.setattr(impl.json, 'loads', forbidden_parse)
     with pytest.raises(ValueError, match='2 MiB'):
         SmallByteLanguageModelTrainer.from_checkpoint_bytes(b' ' * (impl._CHECKPOINT_LIMIT + 1))
-    assert host.calls == []
 
 
 @pytest.mark.parametrize('encoded', [b'', b'{}', b'{"schema":1,"schema":2}',
                                    b'{"schema":"wrong","payload":{},"payload_sha256":"0"}'])
-def test_checkpoint_bytes_keep_strict_json_and_schema_admission(host, encoded):
+def test_checkpoint_bytes_keep_strict_json_and_schema_admission(encoded):
     with pytest.raises(ValueError):
         SmallByteLanguageModelTrainer.from_checkpoint_bytes(encoded)
-    assert host.calls == []
+
+
+class _Witness:
+    """The four witness entries `_byte_lm_impl._load` reads, and nothing
+    else: `_load` is Python admission over them, so a stand-in for exactly
+    those reads is enough. The native trainer owner never sees it."""
+
+    def __init__(self, vendor):
+        self.mode = 1
+        self.vendor = vendor
+        self.profile = impl.PROFILE
+
+    def byte_lm_numeric_mode(self):
+        return self.mode
+
+    def byte_lm_vendor(self):
+        return self.vendor
+
+    def byte_lm_profile(self):
+        return self.profile
+
+    def byte_lm_arithmetic_suffix(self):
+        return ''
+
+    def byte_lm_run(self, *args):
+        raise AssertionError('admission ran the binding')
+
+
+def _witness(monkeypatch, vendor):
+    witness = _Witness(vendor)
+    monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'identical')
+    monkeypatch.setattr(impl._backend, 'numeric_mode', lambda: 'identical')
+    monkeypatch.setattr(impl._backend, 'binding', lambda name, mode='identical': witness)
+    return witness
 
 
 @pytest.mark.parametrize('field,value', [('mode', 0), ('vendor', 'none'), ('profile', 'different-profile')])
-def test_native_mode_vendor_profile_witnesses_refuse_before_model(host, field, value):
-    model = trainer()
-    setattr(host, field, value)
+def test_native_mode_vendor_profile_witnesses_refuse_before_model(monkeypatch, field, value):
+    monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
+    witness = _witness(monkeypatch, 'cuda')
+    assert impl._load() is witness
+    setattr(witness, field, value)
     with pytest.raises(RuntimeError, match='native profile'):
-        model.evaluate(ids())
-    assert host.calls == []
+        impl._load()
 
 
-def test_metal_witness_is_admitted_without_weakening_profile_or_mode(host, monkeypatch):
-    host.vendor = 'metal'
+def test_metal_witness_is_admitted_without_weakening_profile_or_mode(monkeypatch):
+    witness = _witness(monkeypatch, 'metal')
     # A GPU install (no CPU-only set loaded) admits the Metal witness ...
     monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
-    assert impl._load() is host
+    assert impl._load() is witness
     # ... a CPU-only install admits only the CPU byte LM binding.
     monkeypatch.setattr(impl._backend, '_CPU_ONLY', 'no GPU set')
     with pytest.raises(RuntimeError, match='native profile'):
         impl._load()
     monkeypatch.setattr(impl._backend, '_CPU_ONLY', None)
-    host.profile = 'wrong-profile'
+    witness.profile = 'wrong-profile'
     with pytest.raises(RuntimeError, match='native profile'):
         impl._load()
-    assert host.calls == []
 
 
-def test_tokens_require_exact_int32_shape_and_range_before_gpu(host):
+def test_tokens_require_exact_int32_shape_and_range():
     model = trainer()
+    before = state_digest(model)
     candidates = [ids().astype(np.int64), ids().astype(np.float32), ids().ravel(),
                   ids()[:, :-1], np.full((2, 33), -1, np.int32),
                   np.full((2, 33), 256, np.int32)]
     for value in candidates:
         with pytest.raises((TypeError, ValueError)):
             model.train_step(value)
-    # The range refusals come from the native admission (before any device
-    # work), mapped to ValueError; no call is recorded.
-    assert host.calls == []
+    assert state_digest(model) == before and model.step_ == 0
 
 
 @pytest.mark.parametrize('options', [dict(lr=0), dict(eps=0), dict(lr=float('nan')),
                                     dict(weight_decay=-1), dict(betas=(.9, 1)),
                                     dict(eps=1e-100), dict(betas=(True, .9))])
-def test_configuration_refuses_before_gpu(host, options):
+def test_configuration_refuses_before_construction(options):
     with pytest.raises(ValueError):
         SmallByteLanguageModelTrainer(initial(), data_schedule={'dataset': 'test'}, **options)
-    assert host.calls == []
 
 
-def test_bad_state_refuses_transactionally_before_gpu(host):
+def test_bad_state_refuses_transactionally():
     model = trainer()
     before = state_digest(model)
-    for mutate in (lambda state: np.asarray(state['v']).__setitem__(0, -1),  # DEVIATION 2460
+    for mutate in (lambda state: np.asarray(state['v']).__setitem__(0, -1),
                    lambda state: np.asarray(state['flags']).__setitem__(0, 2),
                    lambda state: state['config'].__setitem__('max_norm', 1),
                    lambda state: state.__setitem__('m', np.zeros(1, np.float32)),
@@ -554,10 +302,9 @@ def test_bad_state_refuses_transactionally_before_gpu(host):
         with pytest.raises(ValueError):
             model.load_state_dict(state)
         assert state_digest(model) == before
-    assert host.calls == []
 
 
-def test_checkpoint_canonical_complete_and_resume(host, tmp_path):
+def test_checkpoint_canonical_complete_and_resume(tmp_path):
     model = trainer()
     model.train_step(ids())
     first, second = tmp_path / 'first.byte-lm.json', tmp_path / 'second.byte-lm.json'
@@ -572,7 +319,7 @@ def test_checkpoint_canonical_complete_and_resume(host, tmp_path):
     assert state_digest(restored) == state_digest(model)
 
 
-def test_checkpoint_refuses_corruption_wrong_schema_and_excess_size(host, tmp_path):
+def test_checkpoint_refuses_corruption_wrong_schema_and_excess_size(tmp_path):
     path = tmp_path / 'state.json'
     trainer().save_checkpoint(path)
     original = path.read_bytes()
@@ -597,7 +344,7 @@ def test_checkpoint_refuses_corruption_wrong_schema_and_excess_size(host, tmp_pa
         SmallByteLanguageModelTrainer.from_checkpoint(path)
 
 
-def test_per_state_lock_serializes_steps(host):
+def test_per_state_lock_serializes_steps():
     model = trainer()
     tokens = ids()
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -606,27 +353,29 @@ def test_per_state_lock_serializes_steps(host):
     assert model.step_ == 2
 
 
-def test_terminal_state_can_evaluate_but_cannot_train(host):
+def test_terminal_state_can_evaluate_but_cannot_train():
     model = trainer()
     terminal = model.state_dict()
     terminal['completed_steps'] = terminal['next_batch_index'] = 999999
     model.load_state_dict(terminal)
     before = state_digest(model)
-    assert model.evaluate(ids()) == 1.25
+    assert math.isfinite(model.evaluate(ids()))
     assert state_digest(model) == before
     with pytest.raises(ValueError, match='exhausted'):
         model.train_step(ids())
-    assert len(host.calls) == 1
+    assert state_digest(model) == before
 
 
-def test_run_metadata_retains_binding_source_profile_dataset_and_config(host):
+def test_run_metadata_retains_binding_source_profile_dataset_and_config():
     model = trainer()
     metadata = model.run_metadata()
     assert metadata['profile'] == metadata['native_profile'] == impl.PROFILE
-    assert metadata['native_vendor'] == admitted_vendor() and metadata['native_numeric_mode'] == 1
-    assert metadata['binding_sha256'] == '0' * 64 and metadata['source_sha256']
+    assert metadata['native_vendor'] in ('cpu', 'cuda', 'hip', 'metal')
+    assert metadata['native_numeric_mode'] == 1
+    sha = metadata['binding_sha256']
+    assert type(sha) is str and len(sha) == 64 and int(sha, 16) >= 0
+    assert metadata['source_sha256']
     assert metadata['config'] == model.state_dict()['config']
     assert metadata['data_schedule']['corpus_sha256'] == '1' * 64
     metadata['data_schedule']['batch_offsets'][0] = 999
     assert model.run_metadata()['data_schedule']['batch_offsets'][0] == 0
-    assert host.calls == []

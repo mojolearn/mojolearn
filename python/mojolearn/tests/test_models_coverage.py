@@ -72,12 +72,12 @@ def test_tensor_info_refuses_what_the_header_parser_refuses(fields, error, match
 def test_pattern_name_names_every_known_spelling():
     for name, spellings in PATTERNS.items():
         assert [pattern_name(s) for s in spellings] == [name] * len(spellings)
-    for unknown in (r"\w+", ""):
+    # pattern_name is total (bindings/tokenizer_public_native.mojo
+    # vocab_pattern): an unknown spelling or a non-str is not a known
+    # pattern, None; never converted. test_neural_public_coverage_p1's
+    # test_pattern_name_is_total holds the same contract.
+    for unknown in (r"\w+", "", 5, b"\\s+", None):
         assert pattern_name(unknown) is None
-    for wrong in (5, b"\\s+", None):
-        # a regex is an exact str; anything else is refused, not converted
-        with pytest.raises(TypeError, match="tokenizer regex requires an exact str"):
-            pattern_name(wrong)
 
 
 def _stream_model(tmp_path):

@@ -16,7 +16,7 @@
       "python/mojolearn/tests/test_mode_readback.py::test_legacy_artifact_without_a_path_hint_does_not_invent_a_mode",
       "python/mojolearn/tests/test_mode_readback.py::test_python_binding_override_is_refused_before_invocation",
       "python/mojolearn/tests/test_mode_readback.py::test_unknown_compiled_mode_is_not_inferred_from_path",
-      "python/mojolearn/tests/test_native_array_view_lifetime.py::test_kernel_pca_retained_training_view_survives_argument_lifetime",
+      "python/mojolearn/tests/test_native_array_view_lifetime.py::test_kernel_pca_retained_training_copy_survives_argument_lifetime",
       "python/mojolearn/tests/test_native_array_view_lifetime.py::test_mapped_preprocessing_storage_without_store_keeps_owning_slice",
       "python/mojolearn/tests/test_native_array_view_lifetime.py::test_ridge_attribute_view_retains_external_exporter[C-f2-False]",
       "python/mojolearn/tests/test_native_array_view_lifetime.py::test_ridge_attribute_view_retains_external_exporter[C-f4-False]",

@@ -444,7 +444,10 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             if n_exog > 0 and end > n_obs:
                 var fe = _exog_array(exog, batch, end - n_obs, _integer(py_get(fields, "_y_ndim", PythonObject(2)), context), "exog", context)
                 if Int(py=fe[1]) != n_exog:
-                    raise Error("ValueError: " + _A + "dimensions mismatch, future exog has the wrong regressor count")
+                    # The same wording as the cold path below, so a resident
+                    # hit and a first query refuse one bad exog identically.
+                    raise Error("ValueError: " + _A + "dimensions mismatch, `exog` has " + String(Int(py=fe[1]))
+                                + " regressor column(s) and the model was fit with " + String(n_exog))
                 fut = fe[0]
                 var fb = arima_buffer(fut, "prepared future exog", context, True)
                 fut_addr = fb.address

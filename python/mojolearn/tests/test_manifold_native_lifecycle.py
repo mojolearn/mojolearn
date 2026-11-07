@@ -74,8 +74,12 @@ def test_native_matrix_owner_avoids_legacy_matrix_hooks(monkeypatch):
     x = np.random.default_rng(17).normal(size=(8, 4)).astype(np.float32)
     model = ClassicalMDS(n_components=2)
     result = model.fit_transform(x)
-    assert type(result) is np.ndarray and result.shape == (8, 2)
-    assert result.dtype == np.float32
+    # This module is not a user boundary (no `__mojolearn_user_boundary__`),
+    # so the native owner hands back its own Array; the user-boundary NumPy
+    # return is test_manifold_installed_contract's.
+    from mojolearn._array import Array
+    assert type(result) is Array and result.shape == (8, 2)
+    assert np.asarray(result).dtype == np.float32
     assert vars(model)['_mojolearn_fitted'] is True
     assert type(vars(model)['embedding_m_']).__name__ == '_ManifoldMatrix'
     assert calls == []

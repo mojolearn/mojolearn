@@ -3568,9 +3568,8 @@ PUBLIC_PENDING_CPU_INAPPLICABLE_REASONS = ("no cpu route",)
 #: this harness makes, so comparing would report DIVERGENT for something that
 #: has nothing to do with the user's machine -- the worst failure this tool
 #: has, because it looks exactly like the identity claim being false. The
-#: lane is not executed and reads NOT RUN, which gates. No lane carries this
-#: reason today; the vocabulary is kept because a fixture change recreates it
-#: on the day it is declared resolved, which has already happened once.
+#: lane is not executed and reads NOT RUN, which gates. A fixture change
+#: creates it and the next release record clears it.
 PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 
 #: COVERED LANES HELD BACK FROM THE PUBLIC SET, each with the reason, checked
@@ -4002,6 +4001,51 @@ PUBLIC_PENDING_LANES = {
     # training binding has no device array pool.
     "training-device-cross-entropy": "no cpu route",
     "classical-float16-sequences": "unwatched",
+    # STALE UNTIL THE NEXT RELEASE RECORD (2026-11-07). The 2026-11-05 fixture
+    # shrink (tools/identity_break.py LANE_REVISIONS and NON_SIZE_REVISIONS)
+    # moved these lanes' fixtures after the shipped table was admitted, so the
+    # table's cells describe the old bytes. Each lane leaves this dict when
+    # the release record regenerates the table at the new revision.
+    "arima-exog-seasonal": "stale reference",
+    "arima-seasonal-c": "stale reference",
+    "bootstrap": "stale reference",
+    "dbscan-weighted": "stale reference",
+    "gbdt-adapter-clf": "stale reference",
+    "gbdt-binary-columns": "stale reference",
+    "gbdt-catboost-defaults": "stale reference",
+    "gbdt-class-weights": "stale reference",
+    "gbdt-multiclass": "stale reference",
+    "gbdt-multiclass-defaults": "stale reference",
+    "gbdt-multiclass-offgrid": "stale reference",
+    "gbdt-onevsall": "stale reference",
+    "gbdt-ordered": "stale reference",
+    "gbdt-ordered-bayesian-noise": "stale reference",
+    "gbdt-pointwise-l2-bayesian-eval": "stale reference",
+    "gbdt-stochastic-arms": "stale reference",
+    "gbdt-symmetric": "stale reference",
+    "gbdt-symmetric-eval": "stale reference",
+    "gbdt-yeti-rank": "stale reference",
+    "kmeans-random": "stale reference",
+    "kmeans-sqrt": "stale reference",
+    "rf-reg-gamma-ig": "stale reference",
+    "saved-model-host-infer": "stale reference",
+    "sequence-ets": "stale reference",
+    "trees-calibrated": "stale reference",
+    "trees-stacking-clf": "stale reference",
+    "trees-voting-clf": "stale reference",
+    "x-cluster-hdbscan-epsilon": "stale reference",
+    "x-decomp-eigh-wide-factor-analysis": "stale reference",
+    "x-decomp-eigh-wide-fastica": "stale reference",
+    "x-decomp-eigh-wide-linalg": "stale reference",
+    "x-decomp-eigh-wide-mincovdet": "stale reference",
+    "x-decomp-eigh-wide-rotation": "stale reference",
+    "x-decomp-manifold": "stale reference",
+    "x-decomp-umap-options": "stale reference",
+    "x-prep-da-solvers": "stale reference",
+    "x-prep-nb-weights": "stale reference",
+    "x-prep-priors": "stale reference",
+    "x-prep-rfe": "stale reference",
+    "x-prep-score-edges": "stale reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped
