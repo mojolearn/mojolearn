@@ -70,7 +70,14 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     plan_enter_all(bindings, devices, par_spec_rebuild(driver), par_spec_families(driver))
     try:
         if owner_entry is None:
-            result = family_operation(model, owner, owner_args, context)
+            # Recurse into the routed dispatcher itself, never through the
+            # `family_operation` wrapper: a three-function recursion
+            # (family_operation -> family_operation_routed -> here) stopped
+            # the Mojo compiler with no CPU use and no diagnostic on
+            # _mojolearn_runtime_classical_host (lesson 7 of
+            # docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section 4: keep the
+            # recursion direct, make the forwarder a non-recursive wrapper).
+            result = family_operation_routed(model, family_route(owner), owner, owner_args, context)
         else:
             result = family_call(owner_entry, model, PythonObject(owner), owner_args, owner_context)
     finally:
