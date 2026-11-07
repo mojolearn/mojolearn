@@ -32,12 +32,36 @@ from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from bindings.native_class_admission import class_record, class_admit
 from bindings.trees_side_records import trees_key_same
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, gpsvm_side_drop
-from bindings.native_model_records import records_key_append
+from bindings.native_model_records import (
+    records_key_append, records_stamped_get, records_stamped_put, records_stampable, records_drop,
+    ContentRecord, content_value, RECORDS_GP_SVM,
+)
 from bindings.gp_svm_records import gpsvm_key_value
 
 
 comptime _KM_ADMIT_SLOT = "kernel_public_admitted_v1"
 comptime _KM_CLASS_SLOT = "kernel_public_class_v1"
+comptime _KM_STAMP = "kernel_public_admitted_stamp_v1"
+
+
+def _km_stamp(model: PythonObject, fields: PythonObject, parameters: PythonObject, learned: PythonObject,
+              plan: PythonObject, attributes: PythonObject, context: PythonObject, residual: PythonObject) raises:
+    """Stamp the admitted state with the model's generation (lane
+    ne1-e-records, row N245): the generation proves every stored name's
+    identity and presence and the model's class; the content words cover
+    exact containers item by item and other values' classes, as
+    gpsvm_key_value does. Only when `fields` is the model's own instance
+    dictionary (the record holds it)."""
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names (content words, once per record)
+        content_value(content, fields[parameters[i]], 0, 66, True)
+    for i in range(len(learned)):  # driver-loop: fitted storage names (content words, once per record)
+        if py_contains(fields, learned[i]):
+            content_value(content, fields[learned[i]], 0, 66, True)
+    _ = records_stamped_put(RECORDS_GP_SVM, model, _KM_STAMP, content^,
+                            Python.tuple(fields, context, attributes, plan, parameters, residual))
 
 
 def _km_key(mut mods: NativeModules, model: PythonObject, fields: PythonObject, parameters: PythonObject,
@@ -76,6 +100,14 @@ def _km_admitted(mut mods: NativeModules, model: PythonObject, fields: PythonObj
     their identity passed again. False: run the full admission."""
     if class_record(mods, _KM_CLASS_SLOT, py_type(model)) is None:
         return False
+    # Generation fast path (row N245): no ~26-field key list per call.
+    var stamped = records_stamped_get(RECORDS_GP_SVM, model, _KM_STAMP)
+    if (stamped is not None and stamped[0] is fields and stamped[1] is context and stamped[2] is attributes
+            and stamped[3] is plan and stamped[4] is parameters):
+        var kept = stamped[5]
+        for i in range(len(kept)):  # driver-loop: values admitted by more than their identity
+            classical_admit_value(kept[i], context)
+        return True
     var held = gpsvm_side_get(_KM_ADMIT_SLOT, model)
     if held is None:
         return False
@@ -87,6 +119,7 @@ def _km_admitted(mut mods: NativeModules, model: PythonObject, fields: PythonObj
         return False
     for i in range(len(residual)):  # driver-loop: values admitted by more than their identity
         classical_admit_value(residual[i], context)
+    _km_stamp(model, fields, parameters, learned, plan, attributes, context, residual)
     return True
 
 
@@ -101,6 +134,7 @@ def _km_remember(mut mods: NativeModules, model: PythonObject, fields: PythonObj
     # class or an ancestor invalidates this payload.
     class_admit(mods, _KM_CLASS_SLOT, py_type(model), PythonObject(True))
     _ = gpsvm_side_put(_KM_ADMIT_SLOT, model, key)
+    _km_stamp(model, fields, parameters, learned, plan, attributes, context, residual)
 
 
 def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
@@ -130,6 +164,7 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
     if fitting:
         # A refit replaces the learned fields: release the record now.
         gpsvm_side_drop(_KM_ADMIT_SLOT, model)
+        records_drop(RECORDS_GP_SVM, model, _KM_STAMP)
     if fitting or not _km_admitted(modules, model, fields, parameters, learned, plan.plan, attributes, context):
         var direct = not fitting
         for i in range(len(parameters)):  # driver-loop: fixed constructor parameter names
