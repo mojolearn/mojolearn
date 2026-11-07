@@ -602,28 +602,75 @@ def _u64(b: DeviceBuffer[DType.uint64]) -> U64P:
     return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
-def dart_predict(
-    x_addr: Int, colids: List[Int], quesvals: List[Int], lefts: List[Int], leaf_values: List[Int], sizes: List[Int],
-    coefs: List[Float64], inits: List[Float64], out_addr: Int, n: Int, d: Int, k: Int,
-) raises:
-    """DART's predict on the device (lane cpu2-l5-trees, `x_trees_dart_predict`;
-    every GPU build, every mode). Replaces `_DARTBase._raw`'s per-tree
-    `x_trees_apply` + host `x_trees_tree_score_add` loop.
+struct DartForest(Movable):
+    """A fitted DART forest on the device (N039 / N041, lane ne1-a-trees,
+    2026-11-06): the T + 1 node offsets, the T coefficient and k class-start
+    float64 words and the four concatenated per-node arrays, exactly the
+    buffers `dart_predict` filled per call, uploaded once per fitted model
+    and kept under a handle the tree door's resident table holds."""
+    var id: Int
+    var nt: Int
+    var d: Int
+    var k: Int
+    var total: Int
+    var toff: DeviceBuffer[DType.int32]
+    var coef: DeviceBuffer[DType.uint64]
+    var inits: DeviceBuffer[DType.uint64]
+    var colid: DeviceBuffer[DType.int32]
+    var quesval: DeviceBuffer[DType.float32]
+    var left: DeviceBuffer[DType.int32]
+    var values: DeviceBuffer[DType.float32]
 
-    X is float32 n x d row-major; tree j (of T = len(sizes), class j % k)
-    is the sizes[j] nodes at colids[j] / quesvals[j] / lefts[j] (int32 /
-    float32 / int32, tree-relative children and X's columns) with float32
-    leaf values at leaf_values[j] and the float64 coefficient coefs[j];
-    inits holds the k float64 class starts. Writes the k x n class-major
-    float64 raw score to out_addr (`dart_predict_unit`: trees ascending per
-    row, soft binary64, the words of main's host adds under IDENTICAL).
-    The forest crosses once: the per-tree arrays are copied into one device
-    forest (T copies per array, no host pass over them), the T + 1 node
-    offsets and the coefficient words are model metadata. Raises when a
-    walk leaves its tree."""
+    def __init__(
+        out self, id: Int, nt: Int, d: Int, k: Int, total: Int,
+        var toff: DeviceBuffer[DType.int32], var coef: DeviceBuffer[DType.uint64],
+        var inits: DeviceBuffer[DType.uint64], var colid: DeviceBuffer[DType.int32],
+        var quesval: DeviceBuffer[DType.float32], var left: DeviceBuffer[DType.int32],
+        var values: DeviceBuffer[DType.float32],
+    ):
+        self.id = id
+        self.nt = nt
+        self.d = d
+        self.k = k
+        self.total = total
+        self.toff = toff^
+        self.coef = coef^
+        self.inits = inits^
+        self.colid = colid^
+        self.quesval = quesval^
+        self.left = left^
+        self.values = values^
+
+    def bytes(self) -> Int:
+        return 4 * (self.nt + 1) + 8 * self.nt + 8 * self.k + 16 * self.total
+
+
+struct DartForests(Defaultable, Movable):
+    var forests: List[DartForest]
+    var next_id: Int
+
+    def __init__(out self):
+        self.forests = List[DartForest]()
+        self.next_id = 1
+
+    def find(self, id: Int) raises -> Int:
+        for i in range(len(self.forests)):  # small-loop(self.forests: kept DART forests, bounded by the door's resident cap)
+            if self.forests[i].id == id:
+                return i
+        raise Error("x_trees dart: unknown or released forest handle")
+
+
+comptime DART_FORESTS = _Global[StorageType=DartForests, name="MojoXTreesDartForestsV1", init_fn=DartForests.__init__]
+
+
+def dart_forest_prepare(
+    colids: List[Int], quesvals: List[Int], lefts: List[Int], leaf_values: List[Int], sizes: List[Int],
+    coefs: List[Float64], inits: List[Float64], d: Int, k: Int,
+) raises -> Int:
+    """Upload one fitted DART forest (the per-tree host arrays of
+    `dart_predict`) once; returns its handle. The copies land before this
+    returns (one sync), so the host arrays may change afterwards."""
     var nt = len(sizes)
-    if n <= 0:
-        return
     if (
         d <= 0 or k <= 0 or nt < 1 or len(colids) != nt or len(quesvals) != nt or len(lefts) != nt
         or len(leaf_values) != nt or len(coefs) != nt or len(inits) != k
@@ -644,8 +691,6 @@ def dart_predict(
     var cw = coefs.copy()
     var iw = inits.copy()
     var ctx = process_ctx[_DART_CTX]()
-    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=F32P(unsafe_from_address=x_addr))
     var toff_d = ctx.enqueue_create_buffer[DType.int32](nt + 1)
     ctx.enqueue_copy(dst_buf=toff_d, src_ptr=toff.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]())
     var coef_d = ctx.enqueue_create_buffer[DType.uint64](nt)
@@ -667,21 +712,89 @@ def dart_predict(
         ctx.enqueue_copy(dst_buf=lsub, src_ptr=I32P(unsafe_from_address=lefts[j]))
         var vsub = values.create_sub_buffer[DType.float32](lo, cnt)
         ctx.enqueue_copy(dst_buf=vsub, src_ptr=F32P(unsafe_from_address=leaf_values[j]))
+    ctx.synchronize()
+    # the staged host lists live until the copies above landed
+    _ = toff^
+    _ = cw^
+    _ = iw^
+    var registry = DART_FORESTS.get_or_create_ptr()
+    var id = registry[].next_id
+    registry[].next_id += 1
+    registry[].forests.append(DartForest(id, nt, d, k, total, toff_d^, coef_d^, inits_d^, colid^, quesval^, left^, values^))
+    return id
+
+
+def dart_forest_bytes(id: Int) raises -> Int:
+    """The device bytes a kept forest holds (the door's resident cap)."""
+    var registry = DART_FORESTS.get_or_create_ptr()
+    return registry[].forests[registry[].find(id)].bytes()
+
+
+def dart_forest_predict(id: Int, x_addr: Int, out_addr: Int, n: Int, d: Int, k: Int) raises:
+    """DART's raw score over a kept forest: the launch `dart_predict` made,
+    on the same buffers' bytes, with only X uploaded. X is float32 n x d
+    row-major; writes the k x n class-major float64 raw score to out_addr.
+    Raises when a walk leaves its tree."""
+    if n <= 0:
+        return
+    var registry = DART_FORESTS.get_or_create_ptr()
+    var i = registry[].find(id)
+    if registry[].forests[i].d != d or registry[].forests[i].k != k:
+        raise Error("x_trees dart_predict: the forest was prepared for another feature or class count")
+    var nt = registry[].forests[i].nt
+    var ctx = process_ctx[_DART_CTX]()
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=F32P(unsafe_from_address=x_addr))
     var out = ctx.enqueue_create_buffer[DType.uint64](k * n)
     var bad = ctx.enqueue_create_buffer[DType.int32](1)
     enqueue_fill[DType.int32](ctx, bad, Int32(0))
     ctx.enqueue_function[dart_predict_kernel](
-        Int64(k * n), Int64(n), Int32(d), Int32(k), Int32(nt), _i(toff_d), _i(colid), _f(quesval), _i(left),
-        _f(values), _u64(coef_d), _u64(inits_d), _f(x), _u64(out), _i(bad),
+        Int64(k * n), Int64(n), Int32(d), Int32(k), Int32(nt), _i(registry[].forests[i].toff),
+        _i(registry[].forests[i].colid), _f(registry[].forests[i].quesval), _i(registry[].forests[i].left),
+        _f(registry[].forests[i].values), _u64(registry[].forests[i].coef), _u64(registry[].forests[i].inits),
+        _f(x), _u64(out), _i(bad),
         grid_dim=(_blocks((k * n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
     )
     ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=out_addr), src_buf=out)
     var bad_h = List[Int32](length=1, fill=0)
     ctx.enqueue_copy(dst_ptr=bad_h.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), src_buf=bad)
     ctx.synchronize()
-    # the staged host lists live until the copies above landed
-    _ = toff^
-    _ = cw^
-    _ = iw^
     if bad_h[0] != Int32(0):
         raise Error("x_trees dart_predict: a tree walk left its tree (child or column out of range)")
+
+
+def dart_forest_release(id: Int) raises:
+    var registry = DART_FORESTS.get_or_create_ptr()
+    for i in range(len(registry[].forests)):  # small-loop(registry forests: kept DART forests)
+        if registry[].forests[i].id == id:
+            # Queued launches on it finished at their own sync (every predict
+            # synchronizes before it returns).
+            _ = registry[].forests.pop(i)
+            return
+
+
+def dart_predict(
+    x_addr: Int, colids: List[Int], quesvals: List[Int], lefts: List[Int], leaf_values: List[Int], sizes: List[Int],
+    coefs: List[Float64], inits: List[Float64], out_addr: Int, n: Int, d: Int, k: Int,
+) raises:
+    """DART's predict on the device (lane cpu2-l5-trees, `x_trees_dart_predict`;
+    every GPU build, every mode). Replaces `_DARTBase._raw`'s per-tree
+    `x_trees_apply` + host `x_trees_tree_score_add` loop.
+
+    X is float32 n x d row-major; tree j (of T = len(sizes), class j % k)
+    is the sizes[j] nodes at colids[j] / quesvals[j] / lefts[j] (int32 /
+    float32 / int32, tree-relative children and X's columns) with float32
+    leaf values at leaf_values[j] and the float64 coefficient coefs[j];
+    inits holds the k float64 class starts. Writes the k x n class-major
+    float64 raw score to out_addr (`dart_predict_unit`: trees ascending per
+    row, soft binary64, the words of main's host adds under IDENTICAL).
+    The one-call form of `dart_forest_prepare` + `dart_forest_predict` +
+    `dart_forest_release` (the same buffers and launch; a kept forest skips
+    the prepare on later calls). Raises when a walk leaves its tree."""
+    if n <= 0:
+        return
+    var id = dart_forest_prepare(colids, quesvals, lefts, leaf_values, sizes, coefs, inits, d, k)
+    try:
+        dart_forest_predict(id, x_addr, out_addr, n, d, k)
+    finally:
+        dart_forest_release(id)

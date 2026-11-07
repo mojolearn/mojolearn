@@ -31,9 +31,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_staged_input import trees_stage_members, trees_stage_rounds, trees_unstage
-from bindings.native_loaded_module import NativeModules
 from bindings.classifier_public_lifecycle import classifier_label_list
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_need,
@@ -45,8 +44,14 @@ from bindings.trees_public_forest import (
     ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
     forest_capture_mode, forest_effective_mode, forest_export, forest_fit_arrays, forest_kind,
     _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
-    _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
+    _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins, ForestHandle, forest_handle_done,
 )
+from bindings.trees_resident_table import (
+    TREES_RESIDENT_DART, trees_resident_find, trees_resident_put, trees_resident_pin, trees_resident_watch,
+    trees_resident_forget,
+)
+from bindings.native_model_records import model_identity_key, model_generation
+from bindings.p3nc_fitted_freeze import fitted_freeze
 
 
 # ------------------------------------------------------------- utilities
@@ -1569,8 +1574,10 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
 def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     """DARTRegressor / DARTClassifier `fit`."""
     var fields = py_fields(model)
-    # The previous fit's cached address lists hold its trees: drop them now.
+    # The previous fit's cached address lists hold its trees: drop them now,
+    # with its kept device forest.
     trees_side_drop(_DART_SLOT, model)
+    trees_resident_forget(model_identity_key(model))
     var x = _x_f32(args[0], context)
     if not classifier:
         var y32 = trees_f32(args[1], 1, "C", "y", context)
@@ -1597,26 +1604,39 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
 comptime _DART_SLOT = "trees_dart_forest_v1"
 
 
-def _dart_key(fields: PythonObject, K: Int) raises -> PythonObject:
-    """The identities `_dart_forest` reads: the three per-tree sequences and
-    `init_score_` (with their items), and each tree's four model arrays."""
-    var mods = NativeModules()
+def _dart_key(model: PythonObject, fields: PythonObject, K: Int) raises -> PythonObject:
+    """The validity key of the kept DART forest (N003, ne1-a-trees,
+    2026-11-06): K, the model's generation word (bindings/native_model_records:
+    a refit, set_params or __setstate__ bumps it), the identities of the
+    three per-tree sequences and `init_score_`, and the sequences' lengths.
+    Nine words, no per-tree walk: the O(T) identity walk of every tree's
+    arrays it replaces cost about 9T Python reads per predict. The per-tree
+    arrays the kept forest mirrors are frozen when it is built
+    (`_dart_freeze`), so they cannot change in place; a sequence replaced by
+    assignment changes its identity. Not noticed (as for any list a family
+    does not own): an item assigned INTO an existing fitted list."""
     var trees = fields["trees_"]
     var values = fields["tree_values_"]
     var tree_coefs = fields["tree_coefs_"]
-    var key = Python.list(PythonObject(K))
-    trees_key_shallow(mods, key, values, 3)
-    trees_key_shallow(mods, key, tree_coefs, 3)
-    trees_key_shallow(mods, key, fields["init_score_"], 3)
-    trees_key_shallow(mods, key, trees, 3)
-    var count = min(len(trees), min(len(values), len(tree_coefs)))
-    for i in range(count):  # driver-loop: over the T fitted trees (identity of their model arrays)
+    return Python.list(PythonObject(K), PythonObject(model_generation(model)), trees, values, tree_coefs,
+                       fields["init_score_"], PythonObject(len(trees)), PythonObject(len(values)),
+                       PythonObject(len(tree_coefs)))
+
+
+def _dart_freeze(fields: PythonObject, context: PythonObject) raises:
+    """The read-only rule (p3nc_fitted_freeze) for every array the kept
+    forest mirrors: each tree's node arrays and leaf values. Once per
+    fitted model (the first predict)."""
+    var trees = fields["trees_"]
+    var values = fields["tree_values_"]
+    var count = min(len(trees), len(values))
+    for i in range(count):  # driver-loop: over the T fitted trees, once per fitted model
         var tf = py_fields(trees[i])
-        _ = py_call(key.append, tf["_offsets"])
-        _ = py_call(key.append, tf["_colid"])
-        _ = py_call(key.append, tf["_quesval"])
-        _ = py_call(key.append, tf["_left_child"])
-    return key
+        _ = fitted_freeze(tf["_offsets"], context)
+        _ = fitted_freeze(tf["_colid"], context)
+        _ = fitted_freeze(tf["_quesval"], context)
+        _ = fitted_freeze(tf["_left_child"], context)
+        _ = fitted_freeze(values[i], context)
 
 
 def _dart_forest(model: PythonObject, fields: PythonObject, K: Int) raises -> PythonObject:
@@ -1628,7 +1648,7 @@ def _dart_forest(model: PythonObject, fields: PythonObject, K: Int) raises -> Py
     array or sequence item changes the key and the lists are rebuilt. The
     addresses and values are the ones the per-call build produced, so the
     launch and its bits are unchanged."""
-    var key = _dart_key(fields, K)
+    var key = _dart_key(model, fields, K)
     var held = trees_side_get(_DART_SLOT, model)
     if held is not None and trees_key_same(held[0], key):
         return held
@@ -1659,6 +1679,50 @@ def _dart_forest(model: PythonObject, fields: PythonObject, K: Int) raises -> Py
     return record
 
 
+def _dart_resident_predict(model: PythonObject, fields: PythonObject, forest: PythonObject, xt: PythonObject,
+                           x_addr: Int, n: Int, d: Int, K: Int, score: PythonObject, context: PythonObject) raises:
+    """DART's raw score over the device-kept forest (N039 / N041): the
+    forest is uploaded once per fitted model (`x_trees_dart_forest_prepare`)
+    and kept in the tree resident table under the model's identity and
+    generation, the dimensions and the identities of the fitted sequences;
+    a predict uploads X only. Same buffers, same launch: no bit change."""
+    var prepare = _x(xt, "x_trees_dart_forest_prepare")
+    var query = _x(xt, "x_trees_dart_forest_predict")
+    var release = _x(xt, "x_trees_dart_forest_release")
+    var mirrors = List[PythonObject]()
+    mirrors.append(fields["trees_"])
+    mirrors.append(fields["tree_values_"])
+    mirrors.append(fields["tree_coefs_"])
+    mirrors.append(fields["init_score_"])
+    var words = List[Int]()
+    words.append(K)
+    words.append(d)
+    words.append(len(forest[2]))
+    var model_key = model_identity_key(model)
+    var generation = model_generation(model)
+    var handle = trees_resident_find(model_key, generation, TREES_RESIDENT_DART, xt, words, mirrors)
+    var kept = handle > 0
+    if not kept:
+        _dart_freeze(fields, context)
+        var made = py_call_typed(prepare, forest[1], forest[2], forest[3], forest[4], Python.list(_P(d), _P(K)))
+        handle = Int(py=made[0])
+        try:
+            if trees_resident_watch(model, model_key):
+                kept = trees_resident_put(model_key, generation, TREES_RESIDENT_DART, xt, release, handle,
+                                          words^, mirrors^, Int(py=made[1]))
+        except error:
+            _ = py_call(release, PythonObject(handle))
+            raise error^
+    if kept:
+        trees_resident_pin(handle)
+    var use = ForestHandle(handle, kept, release)
+    try:
+        _ = py_call_typed(query, PythonObject(handle), _P(x_addr), _A(score), Python.list(_P(n), _P(d), _P(K)))
+    finally:
+        forest_handle_done(use)
+    _ = score  # keep the Python object alive through the native call above
+
+
 def _dart_raw(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_DARTBase._raw`: class-major raw scores (K * n) float64 from ONE
     native walk of every row through every tree."""
@@ -1676,8 +1740,11 @@ def _dart_raw(model: PythonObject, fields: PythonObject, X: PythonObject, contex
         return score
     var forest = _dart_forest(model, fields, K)
     var xt = _xt(fields, context)
-    _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), forest[1], forest[2], forest[3],
-                      forest[4], _A(score), Python.list(_P(n), _P(d), _P(K)))
+    if trees_entry(xt, "x_trees_dart_forest_prepare") is not None:
+        _dart_resident_predict(model, fields, forest, xt, x.addr, n, d, K, score, context)
+    else:
+        _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), forest[1], forest[2], forest[3],
+                          forest[4], _A(score), Python.list(_P(n), _P(d), _P(K)))
     _ = x  # keep the Python object alive through the native call above
     _ = score  # keep the Python object alive through the native call above
     _ = x^

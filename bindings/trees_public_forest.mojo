@@ -36,7 +36,7 @@ from bindings.trees_public_inputs import (
 from bindings.trees_side_records import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
 from bindings.trees_resident_table import (
     TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_put, trees_resident_pin, trees_resident_unpin,
-    trees_resident_watch,
+    trees_resident_watch, trees_resident_forget,
 )
 from bindings.native_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze import fitted_freeze
@@ -1227,6 +1227,9 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
 def forest_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`fit` / `_fit_with_tree_start` of any connected forest class."""
     var kind = forest_kind(model, context)
+    # A refit releases the previous fit's kept snapshots now (the holder dict
+    # the fit replaced did the same), not at the next predict.
+    trees_resident_forget(model_identity_key(model))
     var result: PythonObject
     var splitter = py_get(py_fields(model), "splitter") if kind.startswith("dt_") else PythonObject(None)
     if _family(kind) == "et":
