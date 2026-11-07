@@ -28,6 +28,7 @@ from providers.python.autograd_session_lifetime_pyapi import ops_session_create_
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
+from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
 from providers.python.sequence_fit_team_pyapi import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from providers.python.sequence_ets_team_pyapi import ets_team_applies, ets_team_py
@@ -110,6 +111,18 @@ def numeric_mode_binding() raises -> PythonObject:
 
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
+
+
+def resident_release_binding(owner: PythonObject) raises -> PythonObject:
+    """`x_sequence_resident_release(owner)`: free model `owner`'s resident
+    fitted block and every posted death (sequence/perf3_seq_resident.mojo, N172)."""
+    seq_resident_release_owner(Int(py=owner))
+    return PythonObject(None)
+
+
+def resident_slots_binding() raises -> PythonObject:
+    """The number of resident fitted blocks (tests only)."""
+    return PythonObject(seq_resident_slots())
 
 
 def rnn_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -790,6 +803,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
         m.def_function[numeric_mode_binding]("x_sequence_numeric_mode")
         m.def_function[vendor_binding]("x_sequence_vendor")
+        m.def_function[resident_release_binding]("x_sequence_resident_release")
+        m.def_function[resident_slots_binding]("x_sequence_resident_slots")
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
         m.def_function[optimizer_step_binding]("optimizer_step")
