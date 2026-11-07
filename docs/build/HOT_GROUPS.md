@@ -211,7 +211,8 @@ union over the binding's exports of `tools/lane_select.py` `_MojoDefGraph` closu
 `neural_block_c[i]` / `causal_public_c[i]` registrations, before or after, so the two neural rows are low). Expected
 seconds: the parent's measured single-worker seconds per reachable function (classical 1,020 s / 6,207, tokenizer
 1,131 s / 5,711; 0.164 and 0.198 s), times the group's functions; the x groups from their members' measured
-single-worker seconds (development runs mac-n1, mac-n11, mac-n13). A linear share of a superlinear compile, so an
+single-worker seconds (development runs mac-n1, mac-n11, mac-n13, the largest of each). A group's functions are
+the union over its members. A linear share of a superlinear compile, so an
 upper estimate; the first build measures each group.
 
 | group | members | closure files | reachable functions | expected s, one worker (Mac) |
@@ -219,7 +220,7 @@ upper estimate; the first build measures each group.
 | `_mojolearn_native_classical_host` | runtime_classical | 163 | 789 | 130 |
 | `_mojolearn_native_classical_trees_host` | runtime_trees | 316 | 2,156 | 355 |
 | `_mojolearn_native_classical_family_host` | runtime_family | 353 | 3,148 | 520 |
-| `_mojolearn_native_classical_prep_host` | runtime_prep, runtime_linear | 210 | 1,986 + 968 | 485 |
+| `_mojolearn_native_classical_prep_host` | runtime_prep, runtime_linear | 210 | 2,229 | 365 |
 | `_mojolearn_native_classical_decomp_host` | runtime_decomp | 217 | 1,700 | 280 |
 | `_mojolearn_native_tokenizer_host` | tokenizer | 322 | 2,247 | 445 |
 | `_mojolearn_native_catalog_host` | runtime_catalog | 334 | 866 | 170 |
@@ -227,8 +228,8 @@ upper estimate; the first build measures each group.
 | `_mojolearn_native_byte_trainer_host` | runtime_byte_trainer | 267 | 1,165 | 230 |
 | `_mojolearn_native_parallel_host` | runtime_parallel | 383 | 2,132 | 420 |
 | `_mojolearn_native_neural_doors_host` | runtime_neural | 223 | 1,381 | 275 |
-| `_mojolearn_native_orchestration_host` | byte_lm, runtime_model_selection, runtime_manifold | 270 | 2,838 | 190 |
-| `_mojolearn_native_x_host` | x_linear, x_cluster, x_neighbors, x_decomp, x_prep, x_ann | 434 | 4,985 | 340 |
+| `_mojolearn_native_orchestration_host` | byte_lm, runtime_model_selection, runtime_manifold | 287 | 2,222 | 190 |
+| `_mojolearn_native_x_host` | x_linear, x_cluster, x_neighbors, x_decomp, x_prep, x_ann | 342 | 4,321 | 340 |
 | before: `_mojolearn_native_classical_host` | runtime_classical | 488 | 6,207 | 1,020 measured |
 | before: `_mojolearn_native_tokenizer_host` | tokenizer | 691 | 5,711 | 1,131 measured |
 
