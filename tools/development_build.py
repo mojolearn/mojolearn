@@ -1330,7 +1330,7 @@ def release_plan(repo, cache, mac_cache, modes, env, selection=(), facts=None, p
             args = [kind, "--group", stem]
             try:
                 bfields, closure = bincache.build_fields(repo, script, args, genv, "local", [output], "sh",
-                                                         local=True)
+                                                         local=True, plat=plat)
             except bincache.UnkeyableBuild as error:
                 raise BuildError(f"{mode}:{stem} cannot be keyed: {error}") from error
             key = bincache.key_of(bfields)
