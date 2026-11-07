@@ -108,13 +108,18 @@ THE STEPS
                      release HOLDS here: "IDENTITY RECORDED AT X, FREEZE IS Y: N lane(s) owed". Record
                      once at the freeze (tools/reference_refresh.sh), merge ref/<sha12>, --refreeze
   rehearsal          pixi run release-rehearsal in the source checkout, logs kept
-  cross-compile      (core-linux, beside the rehearsal) dispatch
+  cross-compile      (core-linux, beside the rehearsal AND the Linux builds) dispatch
                      .github/workflows/cross-compile-check.yml on the frozen
                      commit against the previous release's source commit and
                      wait: every changed Linux GPU binding x tier x arch
                      compiled on GitHub's free runners in parallel. Any FAIL,
                      TIMEOUT, STALLED or MISSING job stops the Linux pipelines
-                     by name before linux-builds rents a box
+                     by name at linux-wait, before anything is packed, gated,
+                     rented or published. On the default `github` backend
+                     linux-builds does not wait for it (2026-11-07: it compiles
+                     the same sources for the same targets, 2128 s that were
+                     serial in 0.8.66); on a rented backend (cpu-box, gpu-legs)
+                     linux-builds still waits, so no box is rented before it
   reuse-plan         tools/release_reuse.py: for every binding of every set
                      (cuda sm_89, the cuda sm_80 PTX slot, hip gfx942, the host bindings,
                      the runtime closure, the macOS wheel) REUSE the bytes the
@@ -904,6 +909,9 @@ def github_legs(ctx):
 BUILD_BACKENDS = {"cpu-box": cpu_legs, "github": github_legs, "gpu-legs": gpu_legs}
 #: Routes that overlay their own box-side files and take no route overlay.
 SELF_OVERLAID = ("cpu-box", "github")
+#: Routes whose linux-builds step rents a box: there linux-builds waits for the free cross-compile
+#: (Release.__init__); on `github` the two compile at once (STEP_TABLE, 2026-11-07).
+RENTED_BUILD_BACKENDS = ("cpu-box", "gpu-legs")
 
 
 def linux_legs(ctx):
@@ -1061,7 +1069,16 @@ STEP_TABLE = [
     ("rehearsal", "common", ["freeze-commit"], None),
     ("reuse-plan", "common", ["rehearsal"], None),
     ("cross-compile", "core-linux", ["freeze-commit"], None),
-    ("linux-builds", "core-linux", ["reuse-plan", "cross-compile"], None),
+    # THE CROSS-COMPILE RUNS BESIDE THE LINUX BUILDS (lane post-cross-compile-redundant, 2026-11-07). On the default
+    # `github` backend linux-builds compiles the same changed sources for the same targets (sm_89, sm_80, gfx942) and
+    # tiers with the same tier and column defines, on the same free runners, so waiting for cross-compile first cost
+    # 0.8.66 a serial 2128 s for no finding the builds lack. What cross-compile still gives alone: a per-binding name on
+    # a compile error (the merged layout's builds name the merged group) and STALLED after 240 s of flat compiler CPU
+    # (the builds only time out at their bound). It stays a check: linux-wait NEEDS it, so a FAIL stops the Linux
+    # pipeline before linux-pack and everything after it (gates, boxes, columns, every publish) exactly as before.
+    # A rented backend (cpu-box, gpu-legs) rents inside linux-builds, so there it still NEEDS cross-compile
+    # (Release.__init__, RENTED_BUILD_BACKENDS).
+    ("linux-builds", "core-linux", ["reuse-plan"], None),
     ("macos-build", "macos", ["reuse-plan"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
     # THE APPLE ADAPTER GATE (2026-10-24, AGENTS.md "Framework adapters are the same API in another format"):
@@ -1071,7 +1088,7 @@ STEP_TABLE = [
     # macos-self-test (the same `verify --self-test` macos-smoke runs on the same
     # wheel) and release-check (an Apple re-fit of the lanes the admitted table
     # already holds) are deleted: the table admit is the identity check.
-    ("linux-wait", "core-linux", ["linux-builds"], None),
+    ("linux-wait", "core-linux", ["linux-builds", "cross-compile"], None),
     ("linux-assemble", "core-linux", ["linux-wait"], None),
     ("linux-pack", "core-linux", ["linux-assemble"], "mac"),
     ("gpu-column-nvidia", "nvidia", ["linux-pack"], None),
@@ -1198,8 +1215,8 @@ AFTER["record"] = AFTER["record"] + list(PUBLISHED_STEPS)
 
 # IDENTITY ONCE, ON THE FROZEN SOURCE (lane identity-once-on-frozen-source, Andrew 2026-11-05). identity-at-freeze
 # (tools/identity_at_freeze.py) compares the frozen source with the commit each identity column was last recorded
-# at, right after freeze-commit and BEFORE anything is built or rented: rehearsal and cross-compile (so every build,
-# box and publish) need it. Records made at a source-equal commit are adopted; an owed lane HOLDS the release there.
+# at, right after freeze-commit and BEFORE anything is built or rented: rehearsal and cross-compile (so, through
+# reuse-plan and linux-wait, every build, box and publish) need it. Records made at a source-equal commit are adopted; an owed lane HOLDS the release there.
 STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "freeze-commit")) + 1,
                   ("identity-at-freeze", "common", ["freeze-commit"], None))
 STEP_TABLE = [(name, pipeline, [("identity-at-freeze" if n == "freeze-commit" else n) for n in needs]
@@ -1471,6 +1488,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         self._linux_merged = None
         if getattr(args, "build_backend", None) is None:
             args.build_backend = default_build_backend(self.commit)
+        if args.build_backend in RENTED_BUILD_BACKENDS and "cross-compile" not in self.NEEDS["linux-builds"]:
+            # a rented backend rents inside linux-builds: nothing is rented before the free cross-compile passes
+            self.NEEDS = dict(self.NEEDS, **{"linux-builds": self.NEEDS["linux-builds"] + ["cross-compile"]})
         self.dry = args.dry_run
         self.readonly = bool(getattr(args, "status", False) or getattr(args, "report", False))
         self.commands_shown = 0
