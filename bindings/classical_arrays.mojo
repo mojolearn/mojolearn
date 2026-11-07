@@ -52,7 +52,7 @@ def classical_address(value: PythonObject) raises -> PythonObject:
         if module:
             # NULL (SystemError set) for an object that is not a module:
             # cleared, and the general path below answers.
-            var fields = cpy.PyModule_GetDict(module)
+            var fields = cpython_table()[].PyModule_GetDict(module)
             if fields:
                 var array_key = PythonObject("Array")
                 var cls = t[].PyDict_GetItem(fields, array_key._obj_ptr)

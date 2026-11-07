@@ -22,6 +22,7 @@ from providers.python.transformer_resident_pyapi import transformer_resident_dec
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
+from bindings.cpython_table import cpython_table
 
 
 struct TransformerDecodeHandle(Movable, Writable):
@@ -66,7 +67,7 @@ def _transformer_decode_module(module: PythonObject, context: PythonObject) rais
     if py_type(module) is not context["admission_context"]["native_module_type"]:
         raise Error("TypeError: Transformer decode requires its connected native module")
     ref cpy = Python().cpython()
-    var raw = cpy.PyModule_GetDict(module._obj_ptr)
+    var raw = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_borrowed=raw)

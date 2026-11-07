@@ -116,7 +116,7 @@ def _prepared_cleanup_function() raises -> PythonObject:
         module.def_py_c_function(_prepared_finalize_c, "release")
         var native_module = module.finalize()
         ref cpy = Python().cpython()
-        var fields = cpy.PyModule_GetDict(native_module._obj_ptr)
+        var fields = cpython_table()[].PyModule_GetDict(native_module._obj_ptr)
         var name = String("release")
         var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemString")(fields, name.as_c_string_slice().unsafe_ptr())
         if not raw:
@@ -320,7 +320,8 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         if (flags & UInt64(1 << 8)) != 0:
             continue
         var fields = py_call(dict_get, row)
-        var raw_iterator = cpy.PyObject_GetIter(fields._obj_ptr)
+        var iter_table = cpython_table()
+        var raw_iterator = iter_table[].PyObject_GetIter(fields._obj_ptr)
         if not raw_iterator:
             raise cpy.unsafe_get_error()
         var iterator = PythonObject(from_owned=raw_iterator)
@@ -331,7 +332,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         # key can collide with an earlier ordinary key, so interleaving the
         # two checks could invoke its __eq__ before reaching its own position.
         for field_index in range(field_count):  # small-loop(field_count: class fields): admit every namespace key first
-            var raw_key = cpy.PyIter_Next(iterator._obj_ptr)
+            var raw_key = iter_table[].PyIter_Next(iterator._obj_ptr)
             if not raw_key:
                 if cpy.PyErr_Occurred():
                     raise cpy.unsafe_get_error()

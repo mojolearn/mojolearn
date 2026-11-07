@@ -5,6 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.cpython_table import cpython_table
 
 
 def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
@@ -12,7 +13,7 @@ def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
     # returns its actual dictionary without looking up mutable object or
     # invoking a module attribute hook.
     ref cpy = Python().cpython()
-    var pointer = cpy.PyModule_GetDict(module._obj_ptr)
+    var pointer = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not pointer:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_borrowed=pointer)

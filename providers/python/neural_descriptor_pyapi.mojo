@@ -76,7 +76,7 @@ def _neural_descriptor_module_fields(module: PythonObject, bi: PythonObject) rai
     # dictionary fields. Reuse its current builtins connection through this
     # GIL-held, callback-free admission rather than reconnecting per helper.
     ref cpy = Python().cpython()
-    var raw = cpy.PyModule_GetDict(module._obj_ptr)
+    var raw = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
@@ -141,7 +141,7 @@ def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject
     # namespace (filled once at module init). Exact per-edit detection would
     # need CPython dict watchers (3.12+), recorded as owed for the 3.10 floor.
     ref cpy = Python().cpython()
-    var raw = cpy.PyModule_GetDict(module._obj_ptr)
+    var raw = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=cpy.Py_NewRef(raw))

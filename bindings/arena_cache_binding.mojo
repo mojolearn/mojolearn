@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.arena_cache_stats import _attribute, _mapping, _string_keys
 from bindings.optimizer_public_words import stash_python_error
+from bindings.cpython_table import cpython_table
 
 
 def _cache_entry_name(prefix: PythonObject, suffix: String,
@@ -85,7 +86,7 @@ def cache_binding_attribute(binding: PythonObject, name: PythonObject,
     var absent = cls is context["cache_cpu_missing_proxy"]
     if cls is context["native_module_type"] or host or absent:
         ref cpy = Python().cpython()
-        var pointer = cpy.PyModule_GetDict(binding._obj_ptr)
+        var pointer = cpython_table()[].PyModule_GetDict(binding._obj_ptr)
         if not pointer:
             var failure = stash_python_error()
             raise failure^

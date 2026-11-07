@@ -79,7 +79,7 @@ struct UserObjectFlatten(Movable):
             if py_type(module) is not py_type(sys):
                 raise Error("TypeError: user-object Array metadata requires its native module")
             ref cpy = Python().cpython()
-            var raw = cpy.PyModule_GetDict(module._obj_ptr)
+            var raw = cpython_table()[].PyModule_GetDict(module._obj_ptr)
             if not raw or not native_namespace_string_keys(raw, self.b.str):
                 raise Error("TypeError: user-object Array metadata requires native string fields")
             var fields = PythonObject(from_borrowed=raw)

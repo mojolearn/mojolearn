@@ -8,6 +8,7 @@ from bindings.native_loaded_module import native_loaded_module, native_namespace
 from bindings.native_array_snapshot import native_array_snapshot, native_array_slots
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit, NATIVE_TORCH, _torch_type_fields
 from bindings.array_native import _as_c, _values, _row, _ints, _tuple, _prod, _both_orders
+from bindings.cpython_table import cpython_table
 
 comptime SMALL_MLP_ITEMS_PENDING = "small-mlp-items: native iterator exception pending"
 
@@ -138,12 +139,13 @@ def small_mlp_items(value: PythonObject, limit: Int, refusal: String,
             raise Error("TypeError: native Tensor unbind must return a tuple")
         return _plain_items(rows, limit, True)
     ref cpy = Python().cpython()
-    var raw_iterator = cpy.PyObject_GetIter(value._obj_ptr)
+    var iter_table = cpython_table()
+    var raw_iterator = iter_table[].PyObject_GetIter(value._obj_ptr)
     if not raw_iterator:
         _ = cpy.unsafe_get_error()
         raise Error("TypeError: " + refusal)
     var iterator = PythonObject(from_owned=raw_iterator)
-    var next_item = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")
+    var next_item = iter_table[].PyIter_Next
     var result = List[PythonObject]()
     while limit < 0 or len(result) < limit:  # driver-loop: remaining admitted native iterators
         var raw = next_item(iterator._obj_ptr)

@@ -28,6 +28,7 @@ from providers.python.autograd_host_provider_pyapi import imported_host_provider
 from providers.python.autograd_program_pyapi import _imported_session_dims
 from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
+from bindings.cpython_table import cpython_table
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
@@ -174,7 +175,7 @@ def _torch_loaded_namespace(modules: PythonObject, b: PythonObject,
     if py_type(module) is not module_type:
         raise Error("TypeError: Torch program execution requires an exact module: " + name)
     ref cpy = Python().cpython()
-    var raw = cpy.PyModule_GetDict(module._obj_ptr)
+    var raw = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     if not native_namespace_string_keys(raw, b.str):

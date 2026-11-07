@@ -259,12 +259,13 @@ def _objects(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var wide = False
     ref cpy = Python().cpython()
     var flat = value.flat
-    var raw_iterator = cpy.PyObject_GetIter(flat._obj_ptr)
+    var iter_table = cpython_table()
+    var raw_iterator = iter_table[].PyObject_GetIter(flat._obj_ptr)
     if not raw_iterator:
         raise cpy.unsafe_get_error()
     var iterator = PythonObject(from_owned=raw_iterator)
     for i in range(count):  # driver-loop: inspect object references before using a native scalar conversion
-        var raw = cpy.PyIter_Next(iterator._obj_ptr)
+        var raw = iter_table[].PyIter_Next(iterator._obj_ptr)
         if not raw:
             if cpy.PyErr_Occurred():
                 raise cpy.unsafe_get_error()

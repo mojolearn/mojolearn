@@ -14,7 +14,7 @@ from bindings.cpython_table import cpython_table
 def _storage_metadata() raises -> PythonObject:
     var module = native_loaded_module("mojolearn._native_array_storage")
     ref cpy = Python().cpython()
-    var fields = cpy.PyModule_GetDict(module._obj_ptr)
+    var fields = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not fields:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=cpy.Py_NewRef(fields))

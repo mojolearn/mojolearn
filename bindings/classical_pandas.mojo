@@ -52,7 +52,7 @@ def _pd_class_word(modules: PyObjectPtr, module_name: String, name: String) rais
     var module = t[].PyDict_GetItem(modules, module_key._obj_ptr)
     if not module:
         return 0
-    var fields = cpy.PyModule_GetDict(module)
+    var fields = cpython_table()[].PyModule_GetDict(module)
     if not fields:
         cpython_table()[].PyErr_Clear()  # not a module: no pandas class here
         return 0

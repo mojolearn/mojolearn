@@ -273,13 +273,14 @@ struct NativeIdentityKey(Movable, Writable):
             # before any lookup. The retained row is an exact mappingproxy
             # produced by type.__dict__; its iterator is CPython's native
             # dictionary-key iterator, never a caller-defined protocol.
-            var iterator_raw = cpy.PyObject_GetIter(row._obj_ptr)
+            var iter_table = cpython_table()
+            var iterator_raw = iter_table[].PyObject_GetIter(row._obj_ptr)
             if not iterator_raw:
                 cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return False
             var iterator = PythonObject(from_owned=iterator_raw)
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over live namespace key identities before lookup
-                var key_raw = cpy.PyIter_Next(iterator._obj_ptr)
+                var key_raw = iter_table[].PyIter_Next(iterator._obj_ptr)
                 if not key_raw:
                     cpy.lib.get_function[NoneType]("PyErr_Clear")()
                     return False
