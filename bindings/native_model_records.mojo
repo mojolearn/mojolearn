@@ -315,16 +315,27 @@ comptime RecordsReleaseHook = def(Int) thin -> None
 comptime RECORDS_RELEASE_HOOKS_MAX = 64
 
 
+def _records_no_hook(model_key: Int):
+    """The fill value of the unused registry slots (never called)."""
+    pass
+
+
 struct RecordsReleaseHooks(Defaultable, Movable):
-    var hooks: List[RecordsReleaseHook]
+    # A fixed InlineArray with a count, not a List: a List of thin function
+    # pointers inside a _Global is the prime suspect of the compiler
+    # deadlock bisected to the cluster resident table's registration
+    # (lane ne-fix-hang4, 2026-11-07). Same registration order, same calls.
+    var hooks: InlineArray[RecordsReleaseHook, RECORDS_RELEASE_HOOKS_MAX]
+    var count: Int
 
     def __init__(out self):
-        self.hooks = List[RecordsReleaseHook](capacity=RECORDS_RELEASE_HOOKS_MAX)
+        self.hooks = InlineArray[RecordsReleaseHook, RECORDS_RELEASE_HOOKS_MAX](fill=_records_no_hook)
+        self.count = 0
 
 
 # Shared by every Mojo extension in the process (one registry, like the table).
 comptime MODEL_RECORDS_HOOKS = _Global[
-    StorageType=RecordsReleaseHooks, name="MojolearnModelRecordsHooksV1",
+    StorageType=RecordsReleaseHooks, name="MojolearnModelRecordsHooksV2",
     init_fn=RecordsReleaseHooks.__init__,
 ]
 
@@ -336,12 +347,14 @@ def records_register_release_hook(hook: RecordsReleaseHook) -> Bool:
     reachable; the caller's store then keeps its own eviction."""
     try:
         var g = MODEL_RECORDS_HOOKS.get_or_create_ptr()
-        if len(g[].hooks) >= RECORDS_RELEASE_HOOKS_MAX:
+        var n = g[].count
+        if n >= RECORDS_RELEASE_HOOKS_MAX:
             return False
-        # Appends run with the GIL held (registration happens inside a
-        # native call), so no lock is needed; capacity is reserved up front,
-        # so the append never reallocates under a concurrent reader.
-        g[].hooks.append(hook)
+        # Registration runs with the GIL held (inside a native call), so no
+        # lock is needed; the slot is written before the count is raised,
+        # so a concurrent reader never sees an unwritten slot.
+        g[].hooks[n] = hook
+        g[].count = n + 1
         return True
     except:
         return False
@@ -350,7 +363,7 @@ def records_register_release_hook(hook: RecordsReleaseHook) -> Bool:
 def _records_run_release_hooks(model_key: Int):
     try:
         var g = MODEL_RECORDS_HOOKS.get_or_create_ptr()
-        var n = len(g[].hooks)
+        var n = g[].count
         for i in range(n):  # small-loop(registered release hooks, at most RECORDS_RELEASE_HOOKS_MAX)
             var hook = g[].hooks[i]
             hook(model_key)
