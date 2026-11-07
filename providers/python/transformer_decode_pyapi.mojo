@@ -22,6 +22,8 @@ from providers.python.transformer_resident_pyapi import transformer_resident_dec
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
+from bindings.native_model_records import records_stampable, model_generation
+from std.ffi import _Global
 
 
 struct TransformerDecodeHandle(Movable, Writable):
@@ -37,6 +39,15 @@ struct TransformerDecodeHandle(Movable, Writable):
     var optional: List[List[Float32]]
     var k_cache: List[Float32]
     var v_cache: List[Float32]
+    # Row N177: the words a step needs, checked once at a full admission and
+    # kept while the block's and the state's generation words are unchanged
+    # (records module, dictionary watcher). 0 = no proof: full admission.
+    var block_generation: Int
+    var state_generation: Int
+    var width: Int
+    var batch: Int
+    var params: List[Int]
+    var live_state: PythonObject
 
     def __init__(out self, binding: PythonObject, block: PythonObject, state: PythonObject):
         self.binding = binding
@@ -51,6 +62,12 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.optional = List[List[Float32]]()
         self.k_cache = List[Float32]()
         self.v_cache = List[Float32]()
+        self.block_generation = 0
+        self.state_generation = 0
+        self.width = 0
+        self.batch = 0
+        self.params = List[Int]()
+        self.live_state = PythonObject(None)
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("TransformerDecodeHandle(open=", self.open, ")")
@@ -81,6 +98,46 @@ def _transformer_decode_entry(entries: PythonObject, name: String) raises -> Pyt
     return entry
 
 
+struct _TransformerDecodeBindings(Defaultable, Movable):
+    # Row N192: the last admitted binding resolution. A session open with the
+    # same connected binding object and mode reuses the checked entries
+    # dictionary instead of copying three module dictionaries and calling
+    # the four compiled vendor/mode queries again (their answers are fixed
+    # for a compiled module).
+    var selected: PythonObject
+    var mode: String
+    var binding: PythonObject
+
+    def __init__(out self):
+        self.selected = PythonObject(None)
+        self.mode = String("")
+        self.binding = PythonObject(None)
+
+
+comptime _TRANSFORMER_DECODE_BINDINGS = _Global[
+    StorageType=_TransformerDecodeBindings, name="MojolearnTransformerDecodeBindingsV1",
+    init_fn=_TransformerDecodeBindings.__init__,
+]
+
+
+def _transformer_decode_default_mode(module: PythonObject, context: PythonObject) raises -> PythonObject:
+    # One key of the backend module: read from its dictionary in place
+    # (formerly a copy of the whole module dictionary per session open).
+    var bi = native_loaded_module("builtins")
+    if py_type(module) is bi.str:
+        raise Error("TransformerDecodeSession: " + String(module))
+    if py_type(module) is not context["admission_context"]["native_module_type"]:
+        raise Error("TypeError: Transformer decode requires its connected native module")
+    ref cpy = Python().cpython()
+    var raw = cpy.PyModule_GetDict(module._obj_ptr)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var fields = PythonObject(from_borrowed=raw)
+    if not py_contains(fields, "_DEFAULT_MODE"):
+        raise Error("KeyError: _DEFAULT_MODE")
+    return fields["_DEFAULT_MODE"]
+
+
 def _transformer_decode_binding(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     var route = String(fields["_native_route"])
@@ -90,7 +147,7 @@ def _transformer_decode_binding(fields: PythonObject, context: PythonObject) rai
     if route == "cpu":
         mode = PythonObject("identical")
     elif mode is None:
-        mode = _transformer_decode_module(context["backend"], context)["_DEFAULT_MODE"]
+        mode = _transformer_decode_default_mode(context["backend"], context)
     if py_type(mode) is not bi.str:
         raise Error("TypeError: Transformer decode mode requires an ordinary string")
     var mode_name = String(mode.strip().lower())
@@ -99,6 +156,9 @@ def _transformer_decode_binding(fields: PythonObject, context: PythonObject) rai
     var selected = py_get(context["bindings"], PythonObject(route + ":" + mode_name))
     if selected is None:
         raise Error("Transformer decode native binding connection is unavailable")
+    var held = _TRANSFORMER_DECODE_BINDINGS.get_or_create_ptr()
+    if held[].binding is not None and held[].selected is selected and held[].mode == route + ":" + mode_name:
+        return held[].binding
     var binding = _transformer_decode_module(selected["transformer"], context)
     var prefix = "neural_host" if route == "cpu" else "transformer"
     var vendor = String(_transformer_decode_entry(binding, prefix + "_vendor")())
@@ -112,6 +172,10 @@ def _transformer_decode_binding(fields: PythonObject, context: PythonObject) rai
         var math_entries = _transformer_decode_module(arithmetic, context)
         if String(_transformer_decode_entry(math_entries, "linalg_vendor")()) != vendor or Int(py=_transformer_decode_entry(math_entries, "linalg_numeric_mode")()) != mode_code:
             raise Error("Transformer decode packed binding vendor/mode differs from the model")
+    held = _TRANSFORMER_DECODE_BINDINGS.get_or_create_ptr()
+    held[].selected = selected
+    held[].mode = route + ":" + mode_name
+    held[].binding = binding
     return binding
 
 
@@ -304,6 +368,43 @@ def _transformer_decode_copy(value: PythonObject, context: PythonObject) raises 
     return result^
 
 
+def _transformer_decode_remember(hobj: PythonObject, fields: PythonObject, slots: PythonObject, context: PythonObject) raises:
+    # Row N177: after a full admission (init or a step that re-admitted),
+    # keep the checked step words and the generation words that prove them.
+    # A block whose option tail is a list (editable in place, which no
+    # dictionary watcher sees) or an object with no generation keeps the full
+    # admission on every step.
+    var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    var block = h[].block
+    var state = h[].state
+    var live_block = neural_block_fields(block, context)
+    var tail_fixed = py_type(py_get(live_block, "_opts_tail")) is native_loaded_module("builtins").tuple
+    var block_word = model_generation(block) if tail_fixed and records_stampable(block) else 0
+    var state_word = model_generation(state) if records_stampable(state) else 0
+    var width = Int(py=fields["d_model"])
+    var batch = Int(py=slots["batch_size"])
+    var params = _transformer_decode_params(fields, slots, batch, 0)
+    var live = slots["_decode_live_fields"]
+    h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    h[].width = width
+    h[].batch = batch
+    h[].params = params^
+    h[].live_state = live
+    h[].block_generation = block_word
+    h[].state_generation = state_word
+
+
+def _transformer_decode_unchanged(hobj: PythonObject) raises -> Bool:
+    var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    if h[].block_generation == 0 or h[].state_generation == 0:
+        return False
+    var block = h[].block
+    var state = h[].state
+    var block_word = h[].block_generation
+    var state_word = h[].state_generation
+    return model_generation(block) == block_word and model_generation(state) == state_word
+
+
 def transformer_decode_init(session: PythonObject, block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     var values = _transformer_decode_fields(session, context)
@@ -380,6 +481,9 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
     py_setitem(slots, "cached_tokens", PythonObject(cached))
     py_setitem(slots, "_resident_session", session)
     _transformer_decode_publish(slots)
+    # The step words are those of this admission; `fields` here is the
+    # weight snapshot, whose configuration words equal the block's.
+    _transformer_decode_remember(values["_handle"], _transformer_decode_block(block, context), slots, context)
     _ = keys^
     _ = vals^
     _ = keep^
@@ -391,21 +495,37 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
     var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     if not h[].open:
         raise Error("TransformerDecodeSession: the session is closed")
-    var fields = _transformer_decode_block(h[].block, context)
-    var slots = _transformer_decode_state_fields(h[].state, fields, context)
-    _transformer_decode_compatible(h[], fields, slots)
-    var width = Int(py=fields["d_model"])
+    # Row N177: while the block's and the state's generation words are those
+    # of the last full admission, the kept words stand for the block, state
+    # and configuration records (no re-admission per token); the step reads
+    # and writes only cached_tokens.
+    var kept = _transformer_decode_unchanged(hobj)
+    h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    var fields = PythonObject(None)
+    var slots = PythonObject(None)
+    var width = h[].width
+    var rows = h[].batch
+    if not kept:
+        fields = _transformer_decode_block(h[].block, context)
+        slots = _transformer_decode_state_fields(h[].state, fields, context)
+        h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+        _transformer_decode_compatible(h[], fields, slots)
+        width = Int(py=fields["d_model"])
+        rows = Int(py=slots["batch_size"])
     var x = _neural_input(input, width, step, context)
     var shape = x.shape
     var batch = Int(py=shape[0])
     var length = Int(py=shape[1])
-    if batch != Int(py=slots["batch_size"]):
+    if batch != rows:
         raise Error("TransformerDecodeSession: input rows differ from the state")
     var y = generation_array([batch, length, width])
     var keep = List[PythonObject]()
     var px = generation_address(x, keep)
     var py = generation_address(y, keep)
-    var cached = Int(py=slots["cached_tokens"])
+    h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    var live = h[].live_state
+    var cached = Int(py=live["cached_tokens"]) if kept else Int(py=slots["cached_tokens"])
+    h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     if h[].device is not None:
         var p: List[Int] = [cached] if step else [length, cached]
         if h[].provider is not None:
@@ -418,7 +538,13 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
         for i in range(len(h[].weights)):  # driver-loop: native session-owned weight addresses
             a.append(0 if len(h[].weights[i]) == 0 else Int(h[].weights[i].unsafe_ptr()))
         a.append(Int(h[].k_cache.unsafe_ptr())); a.append(Int(h[].v_cache.unsafe_ptr())); a.append(py)
-        var p = _transformer_decode_params(fields, slots, batch, length)
+        var p: List[Int]
+        if kept:
+            p = h[].params.copy()
+            p[1] = length
+            p[8] = cached
+        else:
+            p = _transformer_decode_params(fields, slots, batch, length)
         for i in range(len(h[].optional)):  # driver-loop: native optional-weight address slots
             a.append(0 if len(h[].optional[i]) == 0 else Int(h[].optional[i].unsafe_ptr()))
         if h[].provider is not None:
@@ -431,8 +557,18 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
                         shortened.append(p[i])
                 p = shortened^
             cached = Int(py=py_call(_transformer_decode_entry(h[].binding, "transformer_decode_step" if step else "transformer_forward"), py_ints(a), py_ints(p)))
-    py_setitem(slots, "cached_tokens", PythonObject(cached))
-    _transformer_decode_publish(slots)
+    if kept:
+        # The only state word a step changes; the publish of the full path
+        # writes arithmetic_profile and _resident_session unchanged.
+        py_setitem(live, "cached_tokens", PythonObject(cached))
+        # Fold this step's own write into the kept state word.
+        var state = hobj.downcast_value_ptr[TransformerDecodeHandle]()[].state
+        var word = model_generation(state)
+        hobj.downcast_value_ptr[TransformerDecodeHandle]()[].state_generation = word
+    else:
+        py_setitem(slots, "cached_tokens", PythonObject(cached))
+        _transformer_decode_publish(slots)
+        _transformer_decode_remember(hobj, fields, slots, context)
     _ = x^
     _ = keep^
     _ = hobj
