@@ -1844,6 +1844,20 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     var L = len(present)
     var yt = _codes(true, present, context)
     var yp = _codes(pred, present, context)
+    return _accuracy_codes(yt, yp, n, L, w^, mode, context)
+
+
+def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: Optional[LabelsMatrix],
+                    mode: PythonObject, context: PythonObject) raises -> Float64:
+    """The (weighted) matched fraction of two int32 code vectors over `L`
+    labels (a code outside [0, L) never matches), from the device COUNT
+    tail. The hit count (unweighted) and the soft binary64 weight sums over
+    row blocks (weighted) do not depend on how the labels are numbered, so
+    any numbering of the same labels gives the same bits (x_metrics
+    cm_epi.mojo `_count`, group.mojo `pair_key_unit`)."""
+    var weighted = False
+    if w:
+        weighted = True
     # `_Sums(true, pred, w, present, mode, tail=_cm_stage(..., COUNT, 11))`.
     var prog = _Program()
     var a = prog.put(yt, n)
@@ -1885,8 +1899,8 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     var arena = _run(prog^, mode, context)
     var base = _arena_address(arena)
     _ = arena  # keep the Python object alive through the native call above
-    _ = yt^
-    _ = yp^
+    _ = yt  # the code vectors stay alive through the program run above
+    _ = yp
     _ = w^
     _ = w_array^
     if weighted and Int(_I32P(unsafe_from_address=base + 4 * out)[0]) != 0:
@@ -1896,6 +1910,122 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     _ = arena  # keep the Python object alive through the native call above
     _ = arena^
     return fraction
+
+
+# ------------------------------------------- union encode, score from codes
+# Lane ne1-h-labels (plan NATIVE_ENTRY_POINTS_AFTER_0866 section H): the
+# metric doors encode both label vectors in ONE native call, and a
+# classifier's score compares its predicted codes with y encoded against
+# `classes_` (no decode of the prediction to label objects and no second
+# encode of it). The metric kernels and their inputs per row are the ones
+# `labels_accuracy` runs: no bit changes.
+
+
+def _encoded_side(labels: ScoreLabels, context: PythonObject) raises -> ClassicalLabels:
+    """One side of a metric pair as (its sorted distinct labels, one int32
+    code per row into them): encoded labels already are; a value list maps
+    through the sorted set of its values (one C dict probe per row)."""
+    if labels.encoded:
+        return ClassicalLabels(labels.classes, labels.codes, labels.n)
+    var b = labels_builtins()
+    var classes = py_call(b.sorted, py_call(b.set, labels.values))
+    return ClassicalLabels(classes, _codes(labels, classes, context), labels.n)
+
+
+def labels_union_encode(y_true: PythonObject, y_pred: PythonObject, caller: String,
+                        context: PythonObject) raises -> PythonObject:
+    """`_expansion_metrics._pair` without the weights, in one native call:
+    the multilabel refusals, both sides read as str or integer labels
+    (`_classification_encoded`), the length, kind and INT32 checks in that
+    order and with that wording, then `(true_classes, true_codes,
+    pred_classes, pred_codes, kind, present)`: each side's sorted distinct
+    labels and int32 codes into them, the kind ('string' or 'integer') and
+    the sorted union of the two label sets."""
+    var b = labels_builtins()
+    _refuse_multilabel(y_true, "y_true", caller, context)
+    _refuse_multilabel(y_pred, "y_pred", caller, context)
+    var true = _classification_encoded(y_true, "y_true", context)
+    var pred = _classification_encoded(y_pred, "y_pred", context)
+    if true.n != pred.n:
+        raise Error("ValueError: mojolearn " + caller + ": y_true and y_pred lengths differ")
+    if true.kind != pred.kind:
+        raise Error("TypeError: mojolearn " + caller + ": y_true and y_pred must use the same label type")
+    if true.n > _INT32_MAX:
+        raise Error("ValueError: mojolearn " + caller + ": at most INT32_MAX rows")
+    var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
+    var t = _encoded_side(true, context)
+    var p = _encoded_side(pred, context)
+    return Python.tuple(t.classes, t.codes, p.classes, p.codes, PythonObject(true.kind), present)
+
+
+def _classes_score_kind(classes: PythonObject, context: PythonObject) raises -> String:
+    """'string' when every class is exactly str (or NumPy str_), 'integer'
+    when every class is an exact integer scalar (bool excluded): the kind
+    the decoded prediction would have been read as. '' for anything else
+    (bool, float or object classes, an empty table), which keeps the decode
+    route."""
+    var b = labels_builtins()
+    var cls = py_type(classes)
+    if cls is not b.list and cls is not b.tuple:
+        return String("")
+    var k = len(classes)
+    if k == 0:
+        return String("")
+    var is_tuple = cls is b.tuple
+    var all_str = True
+    var all_int = True
+    var kinds = LabelTypeKinds()
+    for i in range(k):  # driver-loop: over the k fitted classes
+        var kind = kinds.admit_raw(p3_item(classes, i, is_tuple), context)
+        all_str = all_str and kind == 1
+        all_int = all_int and kind == 3
+    _ = kinds^
+    _ = classes  # keep the container alive through the borrowed item reads above
+    if all_str:
+        return String("string")
+    if all_int:
+        return String("integer")
+    return String("")
+
+
+def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, codes: PythonObject,
+                            sample_weight: PythonObject, mode: PythonObject,
+                            context: PythonObject) raises -> Float64:
+    """`accuracy_fraction(y_true, classes[codes], sample_weight, mode)` from
+    a classifier's predicted codes (an int32 or int64 vector Array into its
+    fitted `classes`): y is encoded once against `classes` (a label not in
+    it never matches) and the predicted codes go to the COUNT program as
+    they are. Same refusals in the same order as the decode route; classes
+    that are neither all str nor all integers take that route unchanged.
+    The codes are the classifier's own predict output, so each is in
+    [0, len(classes))."""
+    classes = classifier_label_list(classes, context)
+    var kind = _classes_score_kind(classes, context)
+    classical_admit_value(codes, context)
+    var code_dtype = String(codes.dtype)
+    if kind == "" or Int(py=codes.ndim) != 1 or (code_dtype != "<i4" and code_dtype != "<i8"):
+        return labels_accuracy(y_true, labels_decode_labels(classes, codes, context), sample_weight, mode, context)
+    var caller = String("accuracy_score")
+    _refuse_multilabel(y_true, "y_true", caller, context)
+    var true = _classification_encoded(y_true, "y_true", context)
+    var n = Int(py=codes.size)
+    if true.n != n:
+        raise Error("mojolearn " + caller + ": y_true and y_pred lengths differ")
+    if true.kind != kind:
+        raise Error("TypeError: mojolearn " + caller + ": y_true and y_pred must use the same label type")
+    if n > _INT32_MAX:
+        raise Error("mojolearn " + caller + ": at most INT32_MAX rows")
+    var w: Optional[LabelsMatrix] = None
+    if sample_weight is not None:
+        w = labels_sample_weight_f32(sample_weight, n, caller, context)
+    var yt = _codes(true, classes, context)
+    var yp = codes
+    if code_dtype == "<i8":
+        yp = labels_vector(n, "<i4", context)
+        labels_cast(labels_address(codes), "<i8", labels_address(yp), "<i4", n, context)
+        _ = codes  # keep the Python object alive through the native call above
+        _ = yp  # keep the Python object alive through the native call above
+    return _accuracy_codes(yt, yp, n, len(classes), w^, mode, context)
 
 
 def _owned_f32(w: LabelsMatrix, context: PythonObject) raises -> PythonObject:
@@ -1928,6 +2058,20 @@ def classical_decode_labels(classes: PythonObject, codes: PythonObject, context:
     """`_labels.decode_labels(classes, codes)` for an int32 or int64 codes
     Array."""
     return labels_decode_labels(classes, codes, context)
+
+
+def classical_union_encode(y_true: PythonObject, y_pred: PythonObject, caller: String,
+                           context: PythonObject) raises -> PythonObject:
+    """`labels_union_encode`: both metric label vectors in one call."""
+    return labels_union_encode(y_true, y_pred, caller, context)
+
+
+def classical_score_from_codes(y_true: PythonObject, classes: PythonObject, codes: PythonObject,
+                               sample_weight: PythonObject, mode: PythonObject,
+                               context: PythonObject) raises -> Float64:
+    """`labels_score_from_codes`: a classifier's accuracy from its
+    predicted codes and fitted classes."""
+    return labels_score_from_codes(y_true, classes, codes, sample_weight, mode, context)
 
 
 def classical_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject,
