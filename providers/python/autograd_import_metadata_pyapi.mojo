@@ -7,6 +7,9 @@ from bindings.native_class_admission import class_record, class_admit, dict_keys
 from bindings.optimizer_public_words import stash_python_error
 from providers.python.autograd_python_errors_pyapi import graph_int
 from providers.python.neural_descriptor_pyapi import NativeDescriptorResource
+from bindings.native_model_records import (
+    RECORDS_PREPARED, ContentRecord, content_value, records_stampable, records_stamped_get, records_stamped_put,
+)
 
 
 def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
@@ -104,9 +107,32 @@ def imported_program_snapshot(program: PythonObject) raises -> PythonObject:
     var owner = state["_lifetime"].downcast_value_ptr[NativeDescriptorResource]()
     if owner[].handle == 0 or owner[].handle != Int(py=state["_id"]):
         raise Error("TypeError: Session handle differs from its native registry owner")
-    var inputs = _program_specs(fields["inputs"])
-    var outputs = _program_specs(fields["outputs"])
+    var inputs = _program_specs_kept(program, fields, "inputs")
+    var outputs = _program_specs_kept(program, fields, "outputs")
     return Python.tuple(fields, state, inputs, outputs)
+
+
+def _program_specs_kept(program: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
+    """`_program_specs(fields[name])`, rebuilt only when the program's
+    generation word or the content of that descriptor list changed (row
+    N141: the immutable spec tuples were rebuilt item by item on every run).
+    The record lives in the native side table (bindings/native_model_records),
+    never in the program's `__dict__`; Python 3.10 / 3.11 keep the per-run
+    build. The payload holds only the spec tuples (no reference to the
+    program)."""
+    var slot = String("autograd_import_specs_v1_") + name
+    if not records_stampable(program):
+        return _program_specs(fields[name])
+    var kept = records_stamped_get(RECORDS_PREPARED, program, slot)
+    if kept is not None:
+        return kept
+    var specs = _program_specs(fields[name])
+    # The descriptor list item by item (its tuples and their shape lists):
+    # an in-place edit of any of them misses the record.
+    var content = ContentRecord()
+    content_value(content, fields[name], 0, 4, True)
+    _ = records_stamped_put(RECORDS_PREPARED, program, slot, content^, specs)
+    return specs
 
 
 def _one_of(cls: PythonObject, classes: PythonObject) raises -> Bool:

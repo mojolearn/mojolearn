@@ -57,6 +57,7 @@ from training.checkpoint import (
     CKPT_REFUSE_SHAPE, CKPT_SECTION_PROGRAM, CKPT_SECTION_SEQUENTIAL, CKPT_SECTION_SESSION, Checkpoint,
     read_checkpoint_unchecked,
     save_checkpoint,
+    save_checkpoint_sha256,
 )
 
 comptime BP = UnsafePointer[UInt8, MutUntrackedOrigin]
@@ -576,9 +577,9 @@ def ops_load_state[E: Exec & Movable & Deinitable, KIND: Int](
     return res^
 
 
-def ops_save_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: Int, file: String) raises -> Int:
-    """Write program `pid` of session `sid` and its parameters' current
-    values to `file`. Returns the byte count."""
+def _program_checkpoint[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: Int) raises -> Checkpoint:
+    """The checkpoint record of program `pid` of session `sid` with its
+    parameters' current values (downloaded once)."""
     var p = ops_session[E, KIND](sid)
     var prog = p[].program(pid)
     var K = len(prog.params)
@@ -607,8 +608,26 @@ def ops_save_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: I
     ck.ext_floats = words[1].copy()
     ck.seed = 0
     ck.t = 0
+    return ck^
+
+
+def ops_save_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: Int, file: String) raises -> Int:
+    """Write program `pid` of session `sid` and its parameters' current
+    values to `file`. Returns the byte count."""
+    var ck = _program_checkpoint[E, KIND](sid, pid)
     var h = save_checkpoint(file, ck)
     return h.bytes
+
+
+def ops_save_program_sha256[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, pid: Int, file: String,
+) raises -> Tuple[String, Int]:
+    """`ops_save_program`, returning (the SHA-256 of the written bytes, their
+    count) from the in-memory body, so the caller never re-reads the file
+    (row N167)."""
+    var ck = _program_checkpoint[E, KIND](sid, pid)
+    var saved = save_checkpoint_sha256(file, ck)
+    return (saved[1].copy(), saved[0].bytes)
 
 
 def ops_load_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, file: String) raises -> Int:

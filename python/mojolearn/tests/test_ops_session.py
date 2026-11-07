@@ -183,3 +183,42 @@ def test_refusals():
             s.numpy(x)
     with pytest.raises(ValueError):
         s.numpy(1)
+
+
+def test_program_run_reads_ndarray_inputs_through_one_buffer_view():
+    # Row N143: an ndarray input is described by one buffer export (address,
+    # shape, strides, format). Strided, Fortran-order and wider-dtype inputs
+    # give the same bits as their C-contiguous float32 copies; byte-swapped
+    # input keeps its refusal.
+    ops = _ops()
+    rng = np.random.default_rng(4)
+    w = rng.standard_normal((4, 3), dtype=np.float32)
+    with ops.Session() as s:
+        x = s.tensor(np.zeros((6, 4), np.float32))
+        y = s.softmax(s.linear(x, s.tensor(w)))
+        prog = s.capture(inputs=[x], outputs=[y])
+        s.reset()
+        base = rng.standard_normal((6, 8), dtype=np.float32)
+        strided = base[:, ::2]
+        assert not strided.flags.c_contiguous
+        want = np.asarray(prog.run(np.ascontiguousarray(strided)))
+        assert np.asarray(prog.run(strided)).tobytes() == want.tobytes()
+        fortran = np.asfortranarray(strided)
+        assert np.asarray(prog.run(fortran)).tobytes() == want.tobytes()
+        wide = strided.astype(np.float64)
+        assert np.asarray(prog.run(wide)).tobytes() == want.tobytes()
+        with pytest.raises(TypeError):
+            prog.run(strided.astype(">f4"))
+
+
+def test_session_operation_dispatch_by_code_keeps_results_and_refusals():
+    # Row N089: the operation name is looked up once in a native code table.
+    # Known operations give the same values; an unknown name is refused by name.
+    ops = _ops()
+    a = np.arange(6, dtype=np.float32).reshape(2, 3)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        assert s.numpy(s.add(x, x)).tobytes() == (a + a).tobytes()
+        assert s.numpy(s.relu(s.sub(x, s.scale(x, 2.0)))).tobytes() == np.zeros_like(a).tobytes()
+        with pytest.raises(Exception, match="unknown native session operation: no_such_op"):
+            ops._SESSION_CALL(s, "no_such_op", ())

@@ -539,6 +539,30 @@ def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries
         Bool(py=config["tie_embeddings"]), fused, chunked, fields["names"])
 
 
+def _samba_layer_name(name: String) -> Tuple[Int, String]:
+    """(i, rest) for a registry name "layers.<i>.<rest>" whose index is
+    spelled as `String(i)` spells it (no sign, no leading zero); (-1, "")
+    for any other name."""
+    comptime prefix = "layers."
+    var n = name.byte_length()
+    if n <= 7 or not name.startswith(prefix):
+        return (-1, String(""))
+    var bytes = name.as_bytes()
+    var at = 7
+    var index = 0
+    while at < n and Int(bytes[at]) >= 48 and Int(bytes[at]) <= 57:  # small-loop(the decimal layer index digits)
+        if index > 100000000:
+            return (-1, String(""))
+        index = index * 10 + Int(bytes[at]) - 48
+        at += 1
+    var digits = at - 7
+    if digits == 0 or at >= n or Int(bytes[at]) != 46:
+        return (-1, String(""))
+    if digits > 1 and Int(bytes[7]) == 48:
+        return (-1, String(""))
+    return (index, String(name[byte=at + 1:n]))
+
+
 def samba_provider_accumulated_gradients(fields: PythonObject, config: PythonObject, entries: PythonObject,
                                          primitive: PythonObject, ids: PythonObject, targets: PythonObject,
                                          stream: PythonObject, accumulation: Int, count: Int,
@@ -591,10 +615,17 @@ def samba_provider_accumulated_gradients(fields: PythonObject, config: PythonObj
             kind = 2
             size = admitted.vocab * admitted.width
         else:
-            for i in range(len(admitted.publications)):  # driver-loop: resolve one admitted named layer gradient
+            # Row N124: "layers.<i>.<name>" is parsed once (the layer index and
+            # the remainder), then only layer i's names are compared; formerly
+            # every name was compared with a freshly built string for every
+            # layer and parameter (quadratic concatenation per step). Same
+            # match: the decimal index must be spelled as String(i) spells it.
+            var found = _samba_layer_name(name)
+            var i = found[0]
+            if i >= 0 and i < len(admitted.publications):
                 ref publication = admitted.publications[i]
-                for k in range(len(publication.gradient_names)):  # driver-loop: fixed model parameter registry
-                    if name == "layers." + String(i) + "." + publication.gradient_names[k]:
+                for k in range(len(publication.gradient_names)):  # driver-loop: one layer's parameter names
+                    if found[1] == publication.gradient_names[k]:
                         kind = 3
                         layer = i
                         slot = k

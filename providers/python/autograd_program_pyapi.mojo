@@ -10,7 +10,8 @@ from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
 from providers.python.autograd_execution_profile_pyapi import execution_profile_object
 from sequence.ops import FP
-from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
+from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from autograd.rankn import ShapeN
 from providers.python.autograd_program_arrays_pyapi import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input, program_native_input, program_admit_value, program_numeric_scalar
 from autograd.tape import Tape
@@ -29,7 +30,99 @@ from providers.python.autograd_host_provider_pyapi import imported_host_provider
 from autograd.program_host_request import NativeProgramHostRun
 
 
+def _buffer_kind(format: String, itemsize: Int) -> Int:
+    """The CAST_KIND_* of a native-order buffer format of one of the
+    supported element types, or -1 (the caller then takes the attribute
+    path, which spells every refusal)."""
+    var code = format
+    if code.byte_length() == 2:
+        var order = String(code[byte=0])
+        # '@' and '=' are native order; '<' is native on every supported
+        # (little-endian) host; '>' and '!' fall back (refused there).
+        if order != "@" and order != "=" and order != "<":
+            return -1
+        var element = String(code[byte=1])
+        code = element^
+    elif code.byte_length() != 1:
+        return -1
+    if code == "?":
+        return CAST_KIND_BOOL if itemsize == 1 else -1
+    if code == "b" or code == "h" or code == "i" or code == "l" or code == "q":
+        return CAST_KIND_SIGNED
+    if code == "B" or code == "H" or code == "I" or code == "L" or code == "Q":
+        return CAST_KIND_UNSIGNED
+    if (code == "e" and itemsize == 2) or (code == "f" and itemsize == 4) or (code == "d" and itemsize == 8):
+        return CAST_KIND_FLOAT
+    return -1
+
+
+def _array_input_buffer(a: PythonObject, what: String, mut out_src: CastIn, mut out_shape: ShapeN) raises -> Bool:
+    """`array_input` from ONE PyObject_GetBuffer (row N143: about a dozen
+    attribute reads and an `__array_interface__` dict per input). False
+    leaves the outputs untouched: the caller takes the attribute path."""
+    var address = 0
+    var itemsize = 0
+    var kind = -1
+    var dims_in = List[Int]()
+    var steps = List[Int]()
+    try:
+        var pin = AdmittedBorrowedBuffer(a)
+        kind = _buffer_kind(pin.format, pin.layout.value().itemsize)
+        address = pin.layout.value().address
+        itemsize = pin.layout.value().itemsize
+        dims_in = pin.layout.value().shape.copy()
+        steps = pin.layout.value().strides.copy()
+        # An ndarray's storage lives as long as the array (the caller holds
+        # it through the synchronous upload), as with the former address read.
+        pin.release()
+    except:
+        return False
+    var nd = len(dims_in)
+    if kind < 0 or nd > 8:
+        return False
+    var count = 1
+    for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
+        count *= dims_in[k]
+    if count == 0:
+        return False
+    var dims = List[Int]()
+    if nd == 0:
+        dims.append(1)
+        dims.append(1)
+    elif nd == 1:
+        dims.append(dims_in[0])
+        dims.append(1)
+    else:
+        for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
+            dims.append(dims_in[k])
+    var sh = ShapeN.of(dims)
+    var s0 = sh.cols() * itemsize
+    var s1 = itemsize
+    if nd == 1:
+        s0 = steps[0]
+    elif nd == 2:
+        s0 = steps[0]
+        s1 = steps[1]
+    elif nd > 2:
+        # C-contiguous (NumPy's flag rule: axes of length 1 are skipped)
+        var want = itemsize
+        for r in range(nd):  # small-loop(nd: input tensor rank): stride metadata, not array elements
+            var k = nd - 1 - r
+            if dims_in[k] != 1 and steps[k] != want:
+                return False
+            want *= dims_in[k]
+    var src = CastIn(address, kind, itemsize, sh.rows(), sh.cols(), s0, s1)
+    src.check(what)
+    out_src = src
+    out_shape = sh
+    return True
+
+
 def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
+    var fast_src = CastIn(0, CAST_KIND_FLOAT, 4, 1, 1, 4, 4)
+    var fast_shape = ShapeN.of([1, 1])
+    if _array_input_buffer(a, what, fast_src, fast_shape):
+        return (fast_src, fast_shape)
     var nd = Int(py=a.ndim)
     if nd > 8:
         raise Error("ValueError: tensor rank must be at most 8")

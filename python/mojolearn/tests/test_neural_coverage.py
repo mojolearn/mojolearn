@@ -24,6 +24,19 @@ IDS = np.array([[1, 2, 3, 4]], np.int32)
 TARGETS = np.array([[2, 3, 4, 5]], np.int32)
 
 
+def test_samba_loss_is_the_cross_entropy_of_forward_logits():
+    # Row N169: loss runs the same (resident when available) forward route as
+    # SambaStack.forward; its value is the mean cross entropy of those logits.
+    config, weights = _samba()
+    model = SambaStack(config, weights=weights)
+    logits = np.asarray(model.forward(IDS), np.float64).reshape(-1, config.vocab)
+    rows = logits - logits.max(axis=1, keepdims=True)
+    log_probs = rows - np.log(np.exp(rows).sum(axis=1, keepdims=True))
+    expected = -log_probs[np.arange(logits.shape[0]), TARGETS.reshape(-1)].mean()
+    assert model.loss(IDS, TARGETS) == pytest.approx(expected, rel=1e-5)
+    assert model.loss(IDS, TARGETS) == model.loss(IDS, TARGETS)
+
+
 def test_samba_loss_and_grads_divisor_and_refusals():
     config, weights = _samba()
     model = SambaStack(config, weights=weights)

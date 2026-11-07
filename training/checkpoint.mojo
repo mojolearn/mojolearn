@@ -98,6 +98,7 @@ the owning list alive past the fold.
 from std.memory import bitcast
 
 from core.identity_trace import FNV_OFFSET, fnv1a64_bytes
+from core.sha256 import sha256_hex
 
 
 # ===========================================================================
@@ -683,7 +684,21 @@ struct CheckpointHashes(Copyable, Movable):
 
 
 def save_checkpoint(path: String, ck: Checkpoint) raises -> CheckpointHashes:
-    """Write `ck` to `path` and return its two hashes.
+    """Write `ck` to `path` and return its two hashes."""
+    var saved = _save_checkpoint(path, ck, False)
+    return saved[0]
+
+
+def save_checkpoint_sha256(path: String, ck: Checkpoint) raises -> Tuple[CheckpointHashes, String]:
+    """`save_checkpoint`, plus the SHA-256 (64 hex digits) of the bytes it
+    wrote, taken from the same in-memory body before the write (row N167:
+    the verification sidecar re-read the file it had just written)."""
+    return _save_checkpoint(path, ck, True)
+
+
+def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tuple[CheckpointHashes, String]:
+    """Write `ck` to `path` and return its two hashes (and the file's SHA-256
+    when `want_sha`, else "").
 
     THE WHOLE FILE IS BUILT IN ONE `List[UInt8]` AND WRITTEN ONCE. There is no
     seek and no buffered writer in this toolchain's surface as this repository
@@ -824,11 +839,14 @@ def save_checkpoint(path: String, ck: Checkpoint) raises -> CheckpointHashes:
             + " reached disk."
         )
 
+    var sha = String("")
+    if want_sha:
+        sha = sha256_hex(body)
     with open(path, "w") as fh:
         fh.write_bytes(Span(body))
     # `[[mojo-buffer-freed-at-last-use]]`: hold the byte list past the write.
     _ = body
-    return CheckpointHashes(h_all, h_file, want)
+    return (CheckpointHashes(h_all, h_file, want), sha^)
 
 
 # ===========================================================================

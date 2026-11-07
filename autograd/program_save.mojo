@@ -11,8 +11,11 @@ from autograd.ops_api import ops_session
 from autograd.program import PROGRAM_IN_IDS, same_shape, shape_text
 from autograd.program_io import HostArray, ProgramInput
 from autograd.program_entries import program_execute_prepare, program_execute_run
-from autograd.model_checkpoint import ops_save_program
-from autograd.model_verify import verify_digest, verify_file_sha256, verify_model_info, verify_fill
+from autograd.model_checkpoint import ops_save_program_sha256
+from autograd.program import program_words
+from autograd.model_verify import verify_digest, verify_program_info, verify_fill
+from std.os import remove
+from std.os.path import exists
 from autograd.rankn import ShapeN
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from checks.vendor import COMPILED_VENDOR
@@ -68,14 +71,24 @@ def _seeded_input(a: HostArray, ids: Bool, what: String) raises -> ProgramInput:
 
 def program_save_verified[E: Exec & Movable & Deinitable, KIND: Int](
     sid: Int, pid: Int, file: String, input_names: List[String], output_names: List[String],
-    version: String, platform: String,
+    version: String, platform: String, replay: Bool,
 ) raises:
     """Save program `pid` to `file` and write `file`.verify.json: seeded
     inputs, one replay, the inputs' and outputs' digests. `input_names` and
-    `output_names` are empty to use input<k> and output<k>."""
+    `output_names` are empty to use input<k> and output<k>. With `replay`
+    False only the program file is written, and a sidecar left by an earlier
+    save of the same path is removed (it would describe other bytes)."""
     var s = ops_session[E, KIND](sid)
     var p = s[].program(pid)
-    _ = ops_save_program[E, KIND](sid, pid, file)
+    # The file's SHA-256 and byte count come from the bytes as they are
+    # written, and kind / description hash from the program's own words, so
+    # the file is not read back twice (row N167).
+    var sha = ops_save_program_sha256[E, KIND](sid, pid, file)
+    if not replay:
+        var sidecar = file + ".verify.json"
+        if exists(sidecar):
+            remove(sidecar)
+        return
     var arrays = List[HostArray]()
     var input_json = String("[")
     var have_inputs = len(input_names) == p.n_in
@@ -109,8 +122,8 @@ def program_save_verified[E: Exec & Movable & Deinitable, KIND: Int](
         var name = output_names[k].copy() if have_outputs else "output" + String(k)
         output_json += _array_entry(r.outputs[k], name, "")
     output_json += "]"
-    var sha = verify_file_sha256(file)
-    var model = verify_model_info(file)
+    var words = program_words(p)
+    var model = verify_program_info(words[0], words[1])
     var basename = file.split("/")
     var vendor = String("cpu") if TARGET_COLUMN == COLUMN_CPU else String(COMPILED_VENDOR)
     var mode = "identical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "fast"

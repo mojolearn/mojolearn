@@ -365,7 +365,15 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
 
 
 def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
-    var logits = samba_forward(model, inputs, PythonObject(None), PythonObject(None), False, False, context)
+    # Row N169: the logits come from the resident forward when the binding
+    # has it (the route `SambaStack.forward` takes; the same kernels in the
+    # same order as the per-layer host route, training/samba_resident.mojo
+    # "NO NEW ARITHMETIC, SAME BITS"), so the layer loop no longer moves the
+    # hidden state through host arrays. Bindings without the resident
+    # session fall back inside samba_forward exactly as before.
+    # OWED: forward + cross entropy in the session (logits never leave the
+    # device) needs a resident loss entry in training/samba_resident.mojo.
+    var logits = samba_forward(model, inputs, PythonObject(None), PythonObject(None), False, True, context)
     var fields = samba_fields(model)
     var v = Int(py=samba_fields(fields["config"])["vocab"])
     var y = samba_ids(targets, v, True, context)

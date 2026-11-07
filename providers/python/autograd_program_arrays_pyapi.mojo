@@ -6,6 +6,7 @@
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
+from bindings.cpython_table import cpython_table
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import sequential_admit_value, _one_of
 from bindings.native_array_view import native_array_ndarray_view
@@ -169,13 +170,41 @@ def mapped_byte_array(path: PythonObject) raises -> PythonObject:
     return py_call(state[].ndarray, dims, dtype="uint8", buffer=mapping)
 
 
+def _uninitialized_storage(count_bytes: Int) raises -> Tuple[PythonObject, Int]:
+    """A bytearray of `count_bytes` UNINITIALIZED bytes and its data address
+    (row N170: `bytearray(n)` zero-filled every result before the memcpy
+    overwrote it, and the address came from an `__array_interface__` dict).
+    Only for results whose every byte the caller writes at once."""
+    ref cpy = Python().cpython()
+    var table = cpython_table()
+    var raw = table[].PyByteArray_FromStringAndSize(0, count_bytes)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var storage = PythonObject(from_owned=raw)
+    var address = table[].PyByteArray_AsString(storage._obj_ptr)
+    if address == 0 and count_bytes > 0:
+        raise cpy.unsafe_get_error()
+    return (storage, address)
+
+
 def host_array_py(h: HostArray) raises -> PythonObject:
-    """A float32 ndarray of a typed host result: allocation and one memcpy."""
-    var a = output_array(h.shape)
-    if h.shape.count() > 0:
-        memcpy(dest=FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])),
-               src=h.data.unsafe_ptr(), count=h.shape.count())
-    return a
+    """A float32 ndarray of a typed host result: one uninitialized allocation
+    and one memcpy that writes every element (no zero fill, no
+    `__array_interface__` dict)."""
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if not state[].ready:
+        raise Error("program array boundary must be initialized during session setup")
+    var count = h.shape.count()
+    var dims = Python.list()
+    for k in range(h.shape.ndim):  # small-loop(shape.ndim: tensor rank): shape metadata, never array elements
+        _ = py_call(dims.append, PythonObject(h.shape.d[k]))
+    var made = _uninitialized_storage(count * 4)
+    var storage = made[0]
+    var address = made[1]
+    if count > 0:
+        memcpy(dest=FP(unsafe_from_address=address), src=h.data.unsafe_ptr(), count=count)
+    # The C ndarray constructor retains storage as .base (the bytes written above).
+    return py_call(state[].ndarray, dims, dtype=PythonObject("float32"), buffer=storage)
 
 
 def host_arrays_py(hs: List[HostArray]) raises -> PythonObject:
