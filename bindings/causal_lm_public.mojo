@@ -1493,21 +1493,21 @@ def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject,
     var owner = _engine_admission(mods, model, state, batch, length, resident_refused)
     var keep = List[PythonObject]()
     var address = _addr(ids, keep)
-    var logits = List[Float32]()
+    # Row N199: allocate the result first and let the engine's head write
+    # into it (formerly a List[Float32] result copied into a new Array).
+    var result = PythonObject(None)
     try:
+        result = generation_array([batch, length, owner.native.vocab])
+        var out_address = Int(py=result._addr)
         # Common endpoints own per-call GIL release, lock acquisition and
         # session reservation. The native layer loop enters GIL-held.
-        logits = owner.native.forward(address, length)
+        owner.native.forward_to(address, length, out_address, owner.native.batch * length * owner.native.vocab)
         mods.released()
     except problem:
         mods.released()
         owner.publish()
         raise problem
     owner.publish()
-    var result = generation_array([batch, length, owner.native.vocab])
-    memcpy(dest=f32_ptr(Int(py=result._addr)), src=logits.unsafe_ptr(), count=len(logits))
-    _ = result
-    _ = logits
     _ = owner
     _ = keep^
     return result
