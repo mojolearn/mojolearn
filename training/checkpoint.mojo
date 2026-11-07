@@ -660,7 +660,7 @@ struct Checkpoint(Movable):
 
 
 @fieldwise_init
-struct CheckpointHashes(Copyable, Movable):
+struct CheckpointHashes(ImplicitlyCopyable, Movable):
     """What a save produced, so the caller can record it without re-reading
     the file it just wrote."""
 

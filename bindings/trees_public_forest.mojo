@@ -1410,7 +1410,7 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
     return ForestHandle(handle, kept, release)
 
 
-def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput, out: PythonObject,
+def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput, dest: PythonObject,
                  context: PythonObject) raises -> PythonObject:
     """The sequential vote of a host binding over its strict snapshot
     (bindings/forest_host_strict_binding.mojo), kept in the tree resident
@@ -1462,11 +1462,11 @@ def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput,
     var use = ForestHandle(handle, kept, release)
     var wrote = PythonObject(None)
     try:
-        wrote = py_call_typed(query, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+        wrote = py_call_typed(query, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(dest)),
                               Python.list(PythonObject(staged.x.rows), PythonObject(staged.x.cols), PythonObject(outputs)))
     finally:
         forest_handle_done(use)
-    _ = out  # keep the Python object alive through the native call above
+    _ = dest  # keep the Python object alive through the native call above
     return wrote
 
 
