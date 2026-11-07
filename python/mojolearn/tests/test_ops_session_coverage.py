@@ -186,7 +186,8 @@ def test_closed_session_refuses_every_operation(name):
         getattr(s, name)()
 
 
-# Scalar arguments that are not real numbers are refused naming the argument.
+# Scalar arguments that are not native real scalars are refused naming the argument
+# (no conversion hook such as __float__ runs).
 SCALAR = [
     ("pow_scalar", lambda s, a: s.pow_scalar(a, "two"), "exponent"),
     ("scale", lambda s, a: s.scale(a, "x"), "factor"),
@@ -206,5 +207,5 @@ SCALAR = [
 def test_non_numeric_scalar_argument_is_refused_by_name(name, call, argument):
     with _ops().Session() as s:
         a = s.tensor(A)
-        with pytest.raises(TypeError, match=f"^{argument} must be a real number"):
+        with pytest.raises(TypeError, match=f"^{argument} must be a native real scalar without conversion hooks"):
             call(s, a)
