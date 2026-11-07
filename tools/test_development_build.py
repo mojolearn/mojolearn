@@ -1177,8 +1177,10 @@ def test_unrecorded_groups_pack_by_what_this_run_measured():
     assert dev.live_need("group-floor", floor, 3 * GIB, floor, ceiling) == (3 * GIB, "set-max-live")
     assert dev.live_need("set-max-live", 3 * GIB, 4 * GIB, floor, ceiling) == (4 * GIB, "set-max-live")
     # ... but keep the floor as their rss limit.
-    assert dev.guard_rss(3 * GIB, "set-max-live", floor) == floor
-    assert dev.guard_rss(3 * GIB, "recorded", floor) == 3 * GIB
+    # 1.5x the need, never below 4 GiB, never below the floor for a live estimate.
+    assert dev.guard_rss(3 * GIB, "set-max-live", floor) == max(floor, int(4.5 * GIB))
+    assert dev.guard_rss(3 * GIB, "recorded", floor) == int(4.5 * GIB)
+    assert dev.guard_rss(1 * GIB, "recorded", floor) == 4 * GIB
     # A set maximum from older records only rises; own records and the flag stay.
     assert dev.live_need("set-max", 5 * GIB, 3 * GIB, floor, ceiling) == (5 * GIB, "set-max")
     assert dev.live_need("set-max", 5 * GIB, 7 * GIB, floor, ceiling) == (7 * GIB, "set-max")
