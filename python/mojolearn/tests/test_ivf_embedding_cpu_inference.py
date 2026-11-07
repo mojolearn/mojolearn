@@ -202,7 +202,9 @@ def test_a_saved_table_looks_up_on_the_shipped_binding(tmp_path):
     y = np.asarray(h.forward(ids))
     sabotaged = bool(_backend.load_host_module("_mojolearn_embedding_infer_host").embedding_infer_host_sabotage())
     assert (y.tobytes() == w[ids].tobytes()) != sabotaged
-    with pytest.raises(Exception, match="embedding_backward|internal bitwise verifier"):
+    # The host install has no training entry; the native layer owner refuses
+    # backward by name (bindings/embedding_layer_native.mojo).
+    with pytest.raises(RuntimeError, match="this Embedding install has no training entry"):
         h.backward(ids, np.zeros((5, 4), np.float32))
 
 
@@ -240,7 +242,7 @@ def test_extend_refuses_without_an_index_and_on_a_changed_metric():
     with pytest.raises(ValueError, match="features"):
         m.extend(np.zeros((2, 4), np.float32))
     m.metric = "sqeuclidean"
-    with pytest.raises(ValueError, match="a built index has one metric"):
+    with pytest.raises(ValueError, match="metric does not name the metric this index was built under"):
         m.extend(np.zeros((2, 3), np.float32))
 
 
