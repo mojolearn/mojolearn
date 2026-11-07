@@ -148,15 +148,23 @@ def kernel_ridge_fit_binding(
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var alpha = Float32(Float64(py=params[7]))
-    var x = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var y = read_f32(Int(py=addrs[1]), max(0, n * t))
+    # The host copies are taken with the GIL released (N375): the addresses
+    # are read first, every copy and the weight roots run in the block.
+    var x_address = Int(py=addrs[0])
+    var y_address = Int(py=addrs[1])
+    var weighted = len(addrs) == 5
+    var w_address = Int(py=addrs[4]) if weighted else 0
+    var x = List[Float32]()
+    var y = List[Float32]()
     var sw = List[Float32]()
-    if len(addrs) == 5:
-        # the per-row factors sqrt(sample_weight): the binary64 square root
-        # of each weight rounded once to float32 (formerly Python's loop)
-        sw = kmh_sqrt_weights(f64_ptr(Int(py=addrs[4])), n)
     var info = 0
     with GILReleased(Python()):
+        x = read_f32(x_address, max(0, n * d))
+        y = read_f32(y_address, max(0, n * t))
+        if weighted:
+            # the per-row factors sqrt(sample_weight): the binary64 square root
+            # of each weight rounded once to float32 (formerly Python's loop)
+            sw = kmh_sqrt_weights(f64_ptr(w_address), n)
         info = kmh_kernel_ridge_fit_run(
             x, y, n, d, t, kernel, degree, gamma, coef0, alpha, dp, sp, sw
         )
@@ -192,10 +200,17 @@ def kernel_ridge_predict_binding(
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var q = Int(py=params[9])
-    var x_fit = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var dual = read_f32(Int(py=addrs[1]), max(0, n * t))
-    var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
+    var fit_address = Int(py=addrs[0])
+    var dual_address = Int(py=addrs[1])
+    var new_address = Int(py=addrs[2])
+    var x_fit = List[Float32]()
+    var dual = List[Float32]()
+    var x_new = List[Float32]()
     with GILReleased(Python()):
+        # the host copies without the GIL (N375)
+        x_fit = read_f32(fit_address, max(0, n * d))
+        dual = read_f32(dual_address, max(0, n * t))
+        x_new = read_f32(new_address, max(0, q * d))
         kmh_kernel_ridge_predict_into(
             x_fit, dual, n, d, t, kernel, degree, gamma, coef0, x_new, q, op
         )
@@ -244,9 +259,11 @@ def nystroem_fit_binding(
     var coef0 = Float64(py=params[5])
     var q = Int(py=params[6])
     var seed = UInt64(Int(py=params[7]))
-    var x = read_f32(Int(py=addrs[0]), max(0, n * d))
+    var x_address = Int(py=addrs[0])
+    var x = List[Float32]()
     var sweeps = 0
     with GILReleased(Python()):
+        x = read_f32(x_address, max(0, n * d))  # without the GIL (N375)
         sweeps = kmh_nystroem_fit_run(
             x, n, d, kernel, degree, gamma, coef0, q, seed, cp, ip, np_, evp, ecp, sp
         )
@@ -281,11 +298,18 @@ def nystroem_transform_binding(
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var m = Int(py=params[8])
-    var components = read_f32(Int(py=addrs[0]), max(0, q * d))
-    var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
-    var x = read_f32(Int(py=addrs[5]), max(0, m * d))
+    var c_address = Int(py=addrs[0])
+    var n_address = Int(py=addrs[2])
+    var x_address = Int(py=addrs[5])
+    var components = List[Float32]()
+    var normalization = List[Float32]()
+    var x = List[Float32]()
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        # the host copies without the GIL (N375)
+        components = read_f32(c_address, max(0, q * d))
+        normalization = read_f32(n_address, max(0, q * q))
+        x = read_f32(x_address, max(0, m * d))
         kmh_nystroem_transform_into(
             components, normalization, q, d, kernel, degree, gamma, coef0, x, m, op
         )
@@ -352,11 +376,18 @@ def rbf_sampler_transform_binding(
     var q = Int(py=params[1])
     var scale = Float32(Float64(py=params[5]))
     var m = Int(py=params[6])
-    var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
-    var offset = read_f32(Int(py=addrs[1]), max(0, q))
-    var x = read_f32(Int(py=addrs[2]), max(0, m * d))
+    var w_address = Int(py=addrs[0])
+    var o_address = Int(py=addrs[1])
+    var x_address = Int(py=addrs[2])
+    var weights = List[Float32]()
+    var offset = List[Float32]()
+    var x = List[Float32]()
     var op = f32_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
+        # the host copies without the GIL (N375)
+        weights = read_f32(w_address, max(0, d * q))
+        offset = read_f32(o_address, max(0, q))
+        x = read_f32(x_address, max(0, m * d))
         kmh_rbf_sampler_transform_into(weights, offset, d, q, scale, x, m, op)
     _ = weights^
     _ = offset^
