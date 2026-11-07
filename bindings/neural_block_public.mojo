@@ -32,6 +32,12 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_reserved_execute,
     neural_descriptor_handle, neural_descriptor_adopt,
 )
+from bindings.causal_lm_public import _causal_array_guard
+# Lane ne3-c-blocks-embedding (row N115): the one record table (lane
+# ne1-e-records contract, bindings/native_model_records.mojo).
+from bindings.native_model_records import (
+    RECORDS_PREPARED, ContentRecord, content_value, records_stamped_get, records_stamped_put,
+)
 
 
 
@@ -1123,16 +1129,57 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         # Check the current weights and configuration directly: the same
         # admissions (connected binding, float32, key set, per-kind config
         # and shapes) the block constructor makes, without building a block.
-        var plan = bi.dict()
-        py_setitem(plan, "block_kwargs", bi.dict())
-        if kind == "mamba2":
-            py_setitem(plan["block_kwargs"], "dt_limit", fields["dt_limit"])
-        var named = bi.dict()
-        var names = fields["_neural_weight_names"]
-        for i in range(len(names)):  # driver-loop: over the fixed block weight registry
-            py_setitem(named, names[i], weights[i])
-        var route = fields["_native_route"]
-        weights = model_recurrent_weights_check(mods, named, kind, d, plan, route, _model_bindings(mods, route, kind, context, mode), context)
+        # Row N115: admitted once per weight identity. The verdict is kept
+        # on the block's record (generation word plus the block's own weight
+        # list, item by item) with the admitted tensors; a later step whose
+        # snapshot holds the very same tensor objects reuses it. Any
+        # set_params, load, attribute assignment or replaced list item
+        # misses and the full admission runs again. Only native Arrays the
+        # snapshot passes through unchanged are reused (a foreign buffer is
+        # copied per call and never matches).
+        var record_name = String("neural_block_backward_weights:") + kind + ":" + String(mode)
+        var kept = records_stamped_get(RECORDS_PREPARED, block, record_name)
+        var reused = False
+        if kept is not None and len(kept[0]) == len(weights):
+            reused = True
+            for i in range(len(weights)):  # driver-loop: over the fixed block weight registry (identity compare)
+                if not (kept[0][i] is weights[i]):
+                    reused = False
+                    break
+        if reused:
+            # The descriptor recheck the full admission makes after the
+            # GIL release above.
+            _causal_array_guard()
+            weights = kept[1]
+        else:
+            var plan = bi.dict()
+            py_setitem(plan, "block_kwargs", bi.dict())
+            if kind == "mamba2":
+                py_setitem(plan["block_kwargs"], "dt_limit", fields["dt_limit"])
+            var named = bi.dict()
+            var names = fields["_neural_weight_names"]
+            for i in range(len(names)):  # driver-loop: over the fixed block weight registry
+                py_setitem(named, names[i], weights[i])
+            var route = fields["_native_route"]
+            var snapshot_weights = py_call(bi.list, weights)
+            weights = model_recurrent_weights_check(mods, named, kind, d, plan, route, _model_bindings(mods, route, kind, context, mode), context)
+            var same_objects = False
+            if py_contains(fields, "_neural_original_w") and py_contains(fields, "_neural_live_fields"):
+                var originals = fields["_neural_original_w"]
+                same_objects = len(snapshot_weights) == len(originals)
+                if same_objects:
+                    for i in range(len(snapshot_weights)):  # driver-loop: over the fixed block weight registry (identity compare)
+                        if not (snapshot_weights[i] is originals[i]):
+                            same_objects = False
+                            break
+            if same_objects:
+                var content = ContentRecord()
+                var live = fields["_neural_live_fields"]
+                content_value(content, live["_w"], 0, 1, True)
+                if kind == "mamba2" and py_contains(live, "dt_limit"):
+                    content_value(content, live["dt_limit"], 0, 2, True)
+                _ = records_stamped_put(RECORDS_PREPARED, block, record_name, content^,
+                                        Python.tuple(snapshot_weights, weights))
     var keep = List[PythonObject]()
     var addresses = py_ints([_addr(x, keep)])
     var gradients = bi.list()

@@ -132,7 +132,14 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
     if not device:
         smoothing = training_scalar_float(values[4], "cross_entropy", context)
     var loss = new_array([1], "<f4")
-    var row_loss = new_array([rows], "<f4")
+    # Row N118 (lane ne3-c-blocks-embedding): the per-row losses are an
+    # output only under reduction='none'; for 'sum' and 'mean' no rows-long
+    # array is made and the entry gets address 0 (no row download).
+    var row_loss = PythonObject(None)
+    var row_address = PythonObject(0)
+    if reduction == 0:
+        row_loss = new_array([rows], "<f4")
+        row_address = row_loss._addr
     var gradient = PythonObject(None)
     if device:
         if want_grad:
@@ -150,10 +157,10 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
     var keep = List[List[Float32]]()
     if device:
         var output_handle = fields["h"] if gradient is None else py_fields(gradient)["h"]
-        _ = py_call(entry, loss._addr, row_loss._addr, targets[1], Python.list(output_handle, fields["h"]), params)
+        _ = py_call(entry, loss._addr, row_address, targets[1], Python.list(output_handle, fields["h"]), params)
     else:
         var address = contiguous_addr(logits, view, keep)
-        _ = py_call(entry, loss._addr, row_loss._addr, gradient._addr, address, targets[1], params)
+        _ = py_call(entry, loss._addr, row_address, gradient._addr, address, targets[1], params)
     var result = PythonObject(None)
     if reduction == 0:
         result = row_loss

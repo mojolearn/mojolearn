@@ -86,7 +86,7 @@ from providers.python.sequence_opt_resident_pyapi import adafactor_resident_step
 from providers.python.sequence_seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
-from providers.python.sequence_layernorm_dev_pyapi import layer_norm_dev_py
+from providers.python.sequence_layernorm_dev_pyapi import layer_norm_dev_py, layer_norm_dev_alloc_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -95,7 +95,7 @@ from std.sys.info import has_apple_gpu_accelerator
 # Restore: git apply experiments/removed/sched_exp_block.patch
 from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
-from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py
+from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py, moe_forward_dev_alloc_py
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
@@ -200,6 +200,9 @@ def adafactor_resident_step_dev_binding(handle: PythonObject, handles: PythonObj
 def layer_norm_dev_binding(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
                            fp: PythonObject) raises -> PythonObject:
     return layer_norm_dev_py(handles, addrs, ip, fp)
+def layer_norm_dev_alloc_binding(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
+                                 fp: PythonObject, sizes: PythonObject) raises -> PythonObject:
+    return layer_norm_dev_alloc_py(handles, addrs, ip, fp, sizes)
 def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return stl_py(ex, addrs, ip)
@@ -766,6 +769,10 @@ def moe_forward_dev_binding(handles: PythonObject, ip: PythonObject) raises -> P
     return moe_forward_dev_py(handles, ip)
 
 
+def moe_forward_dev_alloc_binding(handles: PythonObject, ip: PythonObject, sizes: PythonObject) raises -> PythonObject:
+    return moe_forward_dev_alloc_py(handles, ip, sizes)
+
+
 def moe_weights_free_binding(h: PythonObject) raises -> PythonObject:
     moe_weights_free(Int(py=h))
     return PythonObject(0)
@@ -935,6 +942,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         comptime if AF_RESIDENT:
             m.def_function[adafactor_resident_step_dev_binding]("adafactor_resident_step_dev")
         m.def_function[layer_norm_dev_binding]("layer_norm_dev")
+        m.def_function[layer_norm_dev_alloc_binding]("layer_norm_dev_alloc")
         m.def_function[theta_binding]("theta")
         m.def_function[theta_forecast_binding]("theta_forecast")
         m.def_function[croston_binding]("croston")
@@ -964,6 +972,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_py_c_function(graph_record_c, "ops_graph_record")
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
+            m.def_function[moe_forward_dev_alloc_binding]("moe_forward_dev_alloc")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))

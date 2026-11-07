@@ -8,7 +8,7 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
-from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys, shared_dict_watch, shared_dict_epoch
 from bindings.cpython_table import cpython_table
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_watch_ready
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -182,10 +182,104 @@ def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject
     return fields
 
 
+struct NeuralDescriptorEntries(Defaultable, Movable):
+    # The typed entry table per module (lane ne3-c-blocks-embedding, row
+    # N140): every entry `neural_descriptor_entry` admitted, keyed by
+    # (module address, entry name), with the module namespace's address and
+    # its dictionary-watch epoch at admission. The record holds the entry
+    # strongly; an admitted entry's owner IS the module, so the module stays
+    # alive with it and its address cannot be recycled. A hit is served
+    # while the watched namespace's epoch is unchanged: any insertion,
+    # replacement or deletion of a key bumps it (CPython >= 3.12 dictionary
+    # watcher, bindings/native_loaded_module.mojo shared_dict_watch), so a
+    # replaced entry is admitted again with the full checks. Where watchers
+    # are unavailable (3.10 / 3.11) nothing is kept and every call takes the
+    # full path, as before.
+    var keys: Dict[String, Int]
+    var modules: List[Int]
+    var dicts: List[Int]
+    var epochs: List[Int]
+    var entries: List[PythonObject]
+
+    def __init__(out self):
+        self.keys = Dict[String, Int]()
+        self.modules = List[Int]()
+        self.dicts = List[Int]()
+        self.epochs = List[Int]()
+        self.entries = List[PythonObject]()
+
+
+# Shared by every Mojo extension in the process: bump the name's version
+# whenever NeuralDescriptorEntries' layout changes.
+comptime NEURAL_DESCRIPTOR_ENTRIES = _Global[StorageType=NeuralDescriptorEntries,
+    name="MojolearnNeuralDescriptorEntriesV1", init_fn=NeuralDescriptorEntries.__init__]
+
+#: entries kept at once (memory reasoning: a few hundred compiled entries per
+#: process across every binding; past this the table starts over).
+comptime NEURAL_DESCRIPTOR_ENTRIES_MAX = 4096
+
+
+def _neural_entry_key(module_address: Int, name: String) -> String:
+    return String(module_address) + ":" + name
+
+
+def _neural_entry_cached(module: PythonObject, name: String) raises -> PythonObject:
+    """The admitted entry `name` of `module` while its namespace is
+    unchanged, else None. Native words only on a hit: no builtins fetch, no
+    new Python str, no namespace read."""
+    var g = NEURAL_DESCRIPTOR_ENTRIES.get_or_create_ptr()
+    var address = Int(module._obj_ptr)
+    var found = g[].keys.find(_neural_entry_key(address, name))
+    if not found:
+        return PythonObject(None)
+    var i = found.value()
+    if g[].modules[i] != address or shared_dict_epoch(g[].dicts[i]) != g[].epochs[i]:
+        return PythonObject(None)
+    return g[].entries[i]
+
+
+def _neural_entry_keep(module: PythonObject, fields: PythonObject, name: String, entry: PythonObject) raises:
+    """Keep an entry that just passed the full admission, when the module's
+    namespace can be watched (else nothing is kept)."""
+    if not shared_dict_watch(fields._obj_ptr):
+        return
+    var g = NEURAL_DESCRIPTOR_ENTRIES.get_or_create_ptr()
+    var address = Int(module._obj_ptr)
+    var dict_address = Int(fields._obj_ptr)
+    var epoch = shared_dict_epoch(dict_address)
+    var key = _neural_entry_key(address, name)
+    var found = g[].keys.find(key)
+    if found:
+        var i = found.value()
+        g[].modules[i] = address
+        g[].dicts[i] = dict_address
+        g[].epochs[i] = epoch
+        g[].entries[i] = entry
+        return
+    if len(g[].entries) >= NEURAL_DESCRIPTOR_ENTRIES_MAX:
+        # Start over (a released entry is a compiled function whose module
+        # stays loaded: no Python code runs).
+        g[].entries.clear()
+        g[].keys = Dict[String, Int]()
+        g[].modules.clear()
+        g[].dicts.clear()
+        g[].epochs.clear()
+    g[].keys[key] = len(g[].entries)
+    g[].modules.append(address)
+    g[].dicts.append(dict_address)
+    g[].epochs.append(epoch)
+    g[].entries.append(entry)
+
+
 def neural_descriptor_entry(module: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
     # Read an exact module dictionary, never its optional Python __getattr__.
     # Metadata/ownership doors must be compiled entries too; provider execution
     # alone would not prevent callbacks during admission or readback.
+    # Row N140: an entry admitted before, from a namespace not edited since,
+    # is served from the typed entry table (NeuralDescriptorEntries).
+    var kept = _neural_entry_cached(module, name)
+    if kept is not None:
+        return kept
     var bi = native_loaded_module("builtins")
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: native provider requires an exact compiled module")
@@ -203,6 +297,7 @@ def neural_descriptor_entry(module: PythonObject, name: String, required: Bool =
         return entry
     if entry is None or py_type(entry) is not py_type(bi.len) or _neural_descriptor_function_owner(entry) != module._obj_ptr:
         raise Error("TypeError: native provider requires compiled entry " + name)
+    _neural_entry_keep(module, fields, name, entry)
     return entry
 
 

@@ -1660,7 +1660,11 @@ def identical_ce_loss_resident[pool: StaticString = ""](
     ctx.synchronize()
 
     # ---- Transport out.
-    ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=row)
+    # Lane ne3-c-blocks-embedding (row N118): a null `row_ptr` (SUM or MEAN,
+    # admitted by the binding) skips the per-row download; the rows are
+    # still computed, so no stage and no bit changes.
+    if Int(row_ptr) != 0:
+        ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=row)
     if reduction != REDUCTION_NONE:
         ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=loss)
     ctx.synchronize()

@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host FP32 oracle of profile `mojolearn.identical.embedding.fp32.v1`. The contract is `embedding/IDENTICAL_EMBEDDING_CONTRACT.md` and this file is that contract in code -- the two must be read together and every function below cites its section."""
 
+from std.memory import bitcast
+
 from checks.numerics import ftz, identical_mul_add
 
 
@@ -67,6 +69,35 @@ def refuse_nonfinite(name: String, values: List[Float32]) raises:
         nonfinite_refusal(name, i, values[i])
 
 
+def refuse_nonfinite_at(
+    name: String, values: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises:
+    """`refuse_nonfinite` read through the caller's buffer, with no copy
+    (lane ne3-c-blocks-embedding, rows N160 / N164): the same wording and the
+    same first flat index. An OR of the exponent bits, eight cells at a time,
+    finds a clean buffer; only a buffer with a hit re-walks cell by cell, so
+    the refusal names the first bad index exactly as the list scan does. It
+    reads bits and computes nothing."""
+    if n <= 0:
+        return
+    var i = 0
+    var hit = False
+    var expm = SIMD[DType.uint32, 8](EMB_POS_INF_BITS)
+    while i + 8 <= n:
+        var e = bitcast[DType.uint32](values.unsafe_load[width=8](i)) & expm
+        if e.eq(expm).select(SIMD[DType.uint32, 8](1), SIMD[DType.uint32, 8](0)).reduce_or() != UInt32(0):
+            hit = True
+            break
+        i += 8
+    if not hit:
+        while i < n:
+            nonfinite_refusal(name, i, values.unsafe_load(i))
+            i += 1
+        return
+    for k in range(n):
+        nonfinite_refusal(name, k, values.unsafe_load(k))
+
+
 def emb_refuse_shape(cfg: EmbConfig, n_positions: Int) raises:
     """Contract section 3's shape refusals and section 8's degenerate cases."""
     if cfg.vocab <= 0:
@@ -109,6 +140,57 @@ def emb_refuse_ids(ids: List[Int32], cfg: EmbConfig) raises:
             )
 
 
+
+
+def _emb_id_refusal(t: Int, v: Int, cfg: EmbConfig) raises:
+    if v < 0 or v >= cfg.vocab:
+        raise Error(
+            String("embedding: id ")
+            + String(v)
+            + " at position "
+            + String(t)
+            + " is outside [0, "
+            + String(cfg.vocab)
+            + ") REFUSED (contract 8; never clamped)"
+        )
+
+
+def emb_refuse_ids_at(
+    ids: MutPointer[Int32, MutUntrackedOrigin], n_positions: Int, cfg: EmbConfig
+) raises:
+    """`emb_refuse_ids` read through the caller's buffer, with no copy and
+    no Python object (lane ne3-c-blocks-embedding, row N158): the same
+    wording and the same first position. Eight ids at a time are compared
+    with the range; only a buffer with a hit re-walks id by id, so the
+    refusal names the first bad position exactly as the list scan does. It
+    runs with or without the GIL (it touches no Python state)."""
+    if n_positions <= 0:
+        return
+    # An id is an int32, so with V above the int32 range only a negative id
+    # can be refused.
+    var upper = cfg.vocab <= 2147483647
+    var hi = SIMD[DType.int32, 8](Int32(cfg.vocab if upper else 2147483647))
+    var zero = SIMD[DType.int32, 8](0)
+    var one_u = SIMD[DType.uint32, 8](1)
+    var zero_u = SIMD[DType.uint32, 8](0)
+    var i = 0
+    var hit = False
+    while i + 8 <= n_positions:
+        var x = ids.unsafe_load[width=8](i)
+        var bad = x.lt(zero).select(one_u, zero_u)
+        if upper:
+            bad = bad | x.ge(hi).select(one_u, zero_u)
+        if bad.reduce_or() != UInt32(0):
+            hit = True
+            break
+        i += 8
+    if not hit:
+        while i < n_positions:
+            _emb_id_refusal(i, Int(ids.unsafe_load(i)), cfg)
+            i += 1
+        return
+    for t in range(n_positions):
+        _emb_id_refusal(t, Int(ids.unsafe_load(t)), cfg)
 
 
 def emb_counts(ids: List[Int32], cfg: EmbConfig) -> List[Int32]:

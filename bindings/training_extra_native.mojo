@@ -11,10 +11,11 @@ so every result keeps its bits.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import TensorView, tensor_view, contiguous_addr, base_format, new_array, py_ints, shape_text
-from bindings.optimizer_device_native import shape_count
+from bindings.optimizer_device_native import shape_count, device_entries, device_shape, device_allocate
+from bindings.optimizer_admission import opt_value
 from bindings.training_embedding_native import embedding_indices
 from bindings.cpython_table import cpython_table
 
@@ -86,9 +87,72 @@ def _rd_params(count: Int, p: PythonObject, seed: PythonObject, stream: PythonOb
                        py_call_typed(b.float, p))
 
 
-def training_residual_dropout(operation: String, values: PythonObject, entries: PythonObject) raises -> PythonObject:
+def _rd_device_operand(value: PythonObject, name: String, entries: PythonObject, context: PythonObject,
+                       mut shape: List[Int]) raises -> PythonObject:
+    """A training device array of the identical binding: its fields; its
+    shape into `shape`."""
+    if py_type(value) is not context["device_class"]:
+        raise Error("TypeError: mojolearn: " + name + " must be a device array like the first operand")
+    opt_value(value, context)
+    var fields = py_fields(value)
+    if fields["_b"] is not entries["module"]:
+        raise Error("ValueError: residual_dropout device arrays must belong to the identical training binding")
+    shape = device_shape(fields["shape"], context)
+    var count = shape_count(shape)
+    if count != Int(py=fields["size"]):
+        raise Error("ValueError: residual_dropout device shape does not match its stored element count")
+    if count < 1:
+        raise Error("ValueError: residual_dropout device arrays must be nonempty")
+    if count > 2147483647:
+        raise Error("ValueError: " + name + " exceeds the native element index range")
+    return fields
+
+
+def _rd_device(operation: String, values: PythonObject, entries: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """Lane ne3-c-blocks-embedding (row N117): residual dropout on training
+    device arrays. The outputs are new device arrays of the same binding and
+    the layer runs on the resident handles (`residual_dropout_dev` /
+    `residual_dropout_backward_dev`): no upload, no download. The same
+    parameter words and kernels as the host-array call."""
+    var missing = String("residual dropout on device arrays requires updated training binding: missing ")
+    var native = device_entries(entries["module"], context)
+    var shape = List[Int]()
+    var first = _rd_device_operand(values[0], "values" if operation == "residual_dropout" else "gradient",
+                                   entries, context, shape)
+    var count = shape_count(shape)
+    if operation == "residual_dropout":
+        var residual_shape = List[Int]()
+        var second = _rd_device_operand(values[1], "residual", entries, context, residual_shape)
+        if len(residual_shape) != len(shape):
+            raise Error("ValueError: values and residual must have identical shapes")
+        for i in range(len(shape)):  # driver-loop: over shape words of the two operands
+            if residual_shape[i] != shape[i]:
+                raise Error("ValueError: values and residual must have identical shapes")
+        var params = _rd_params(count, values[2], values[3], values[4], values[5])
+        var result = device_allocate(native, shape, context)
+        var written = py_call_typed(_entry(native, "residual_dropout_dev", missing),
+                                    Python.list(py_fields(result)["h"], first["h"], second["h"]), params)
+        if Int(py=written) != count:
+            raise Error("RuntimeError: residual_dropout returned an incomplete output")
+        return result
+    var params = _rd_params(count, values[1], values[2], values[3], values[4])
+    var d_values = device_allocate(native, shape, context)
+    var d_residual = device_allocate(native, shape, context)
+    var written = py_call_typed(_entry(native, "residual_dropout_backward_dev", missing),
+                                Python.list(py_fields(d_values)["h"], py_fields(d_residual)["h"], first["h"]), params)
+    if Int(py=written) != count:
+        raise Error("RuntimeError: residual_dropout_backward returned incomplete gradients")
+    return Python.tuple(d_values, d_residual)
+
+
+def training_residual_dropout(operation: String, values: PythonObject, entries: PythonObject,
+                              context: PythonObject) raises -> PythonObject:
     """values: (values, residual, p, seed, stream, offset) for the forward,
-    (gradient, p, seed, stream, offset) for the backward; identical mode."""
+    (gradient, p, seed, stream, offset) for the backward; identical mode.
+    Training device arrays run on the device (`_rd_device`)."""
+    if py_type(values[0]) is context["device_class"]:
+        return _rd_device(operation, values, entries, context)
     var missing = String("residual dropout requires updated training binding: missing ")
     if operation == "residual_dropout":
         var vv = TensorView()

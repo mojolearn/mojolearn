@@ -285,14 +285,19 @@ def ce_loss_binding(
             "ce_loss: params must contain 7 values, got " + String(len(params))
         )
     var lp = f32_ptr(_index(loss_addr))
-    var rp = f32_ptr(_index(row_addr))
+    var reduction = _index(params[3])
+    # Row N118 (lane ne3-c-blocks-embedding): the GPU binding's rule, address
+    # 0 for the rows under SUM or MEAN skips their store; NONE refuses it.
+    var row_address = _index(row_addr)
+    var rp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    if row_address != 0 or reduction == 0:
+        rp = f32_ptr(row_address)
     var dp = f32_ptr(_index(dlogits_addr))
     var x_address = _index(logits_addr)
     var t_address = _index(targets_addr)
     var n_rows = _index(params[0])
     var vocab = _index(params[1])
     var ignore_index = _index(params[2])
-    var reduction = _index(params[3])
     var num_items = _index(params[4])
     var want_grad = _index(params[5])
     var label_smoothing = Float32(Float64(py=params[6]))
