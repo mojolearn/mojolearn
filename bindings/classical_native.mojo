@@ -99,25 +99,27 @@ def operation_code_names() raises -> PythonObject:
 # hands them the caller's own argument tuple, so the owner, its steps and its
 # error mapping are the ones that ran here before. The door names and the
 # operation split are in the leaf bindings/classical_door_routes.mojo.
-def classical_door_call(context: PythonObject, key: String, args_ptr: PyObjectPtr) raises -> PyObjectPtr:
-    """The compiled door `context[key]` called with this call's argument
-    tuple: its result, or NULL with the exception it set."""
+def classical_door_call(context: PythonObject, key: String, entry: String, args_ptr: PyObjectPtr) raises -> PyObjectPtr:
+    """The compiled door `context[key]` (the export `entry` of its host
+    binding) called with this call's argument tuple: its result, or NULL with
+    the exception it set. Callers spell `entry` as a literal: it is the name
+    the door runs (tools/lane_select.py follows a native body's literal export
+    names into the binding that registers them)."""
     var door = py_get(context, PythonObject(key))
     if door is None:
-        raise Error("ImportError: the compiled " + key + " is not connected; build the complete host layout and start a fresh process")
+        raise Error("ImportError: the compiled " + entry + " is not connected; build the complete host layout and start a fresh process")
     ref cpy = Python().cpython()
     return cpy.PyObject_Call(door._obj_ptr, args_ptr, PyObjectPtr())
 
 
-def classical_coded_door(code: Int) raises -> String:
-    """The door that owns the operation with this integer code."""
+def classical_coded_trees(code: Int) raises -> Bool:
+    """Whether the operation with this integer code is the tree door's (else
+    the family door's)."""
     var table = operation_table()
     if code < 0 or code >= len(table[].names):
         raise Error("TypeError: unknown native operation code")
     var route = table[].routes[code]
-    if route == OP_ROUTE_TREES or route == OP_ROUTE_HOST_TREE:
-        return CLASSICAL_TREES_DOOR
-    return CLASSICAL_FAMILY_DOOR
+    return route == OP_ROUTE_TREES or route == OP_ROUTE_HOST_TREE
 
 
 def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -135,7 +137,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             # (bindings/native_operation_codes.mojo): no String copy of the
             # operation and no match chain before the owner, which is a tree
             # or family door (host split, above).
-            return classical_door_call(request[3], classical_coded_door(Int(py=request[1])), args_ptr)
+            if classical_coded_trees(Int(py=request[1])):
+                return classical_door_call(request[3], CLASSICAL_TREES_DOOR, "trees_native_call", args_ptr)
+            return classical_door_call(request[3], CLASSICAL_FAMILY_DOOR, "family_native_call", args_ptr)
         if py_type(request[1]) is not b.str or py_type(request[3]) is not b.dict:
             raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
         var model = request[0]
@@ -153,9 +157,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
         if classical_trees_operation(operation):
-            return classical_door_call(context, CLASSICAL_TREES_DOOR, args_ptr)
+            return classical_door_call(context, CLASSICAL_TREES_DOOR, "trees_native_call", args_ptr)
         if classical_family_operation(operation):
-            return classical_door_call(context, CLASSICAL_FAMILY_DOOR, args_ptr)
+            return classical_door_call(context, CLASSICAL_FAMILY_DOOR, "family_native_call", args_ptr)
         if operation == "linear_regressor_score":
             # The linear expansion regressors' one-call score: predict and
             # R^2 in one native operation.
