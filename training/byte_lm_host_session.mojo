@@ -8,6 +8,7 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_io import all_finite_f32_scan
 from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native, byte_host_next_native
 from core.training_state_validation import training_admit_moments_and_flags
+from core.host_helpers_impl import argmax_rows_f32
 
 
 def host_state_finite(values: List[Float32], name: String) raises:
@@ -316,6 +317,40 @@ struct ByteHostSession(Movable, Writable):
         host_state_finite(self.grad, "returned gradient")
         host_copy_f32(address, self.grad)
         return self.grad_step
+
+    def next_rows(self, a: List[Int], lengths_addr: Int, batch: Int, length: Int, cfg: ByteConfig,
+                  completed: Int) raises -> Int:
+        """The host column of the ragged device greedy pick (plan rows N091,
+        N092): the full logits through `byte_host_logits_native` (the same
+        arithmetic as `logits`), then each row's first-max argmax at its last
+        real position lengths[b] - 1 (`argmax_rows_f32`, the rule the
+        binding applied on the host before). a = [ids, out int32 (batch)];
+        `lengths_addr` holds batch int32 lengths in [1, length]."""
+        self.require_shape(cfg, completed)
+        if len(a) != 2 or a[1] == 0 or lengths_addr == 0:
+            raise Error("byte LM: next bytes expects non-null ids, output and lengths")
+        host_tokens(a[0], batch * length, cfg.vocab_size)
+        var lengths = read_i32(lengths_addr, batch)
+        for row in range(batch):  # driver-loop: over the admitted row lengths
+            if lengths[row] < 1 or Int(lengths[row]) > length:
+                raise Error("byte LM next bytes: row length outside [1, length]")
+        var vocab = cfg.vocab_size
+        var count = batch * length * vocab
+        var full = List[Float32](length=count, fill=Float32(0))
+        var descriptors: List[Int] = [Int(self.p.unsafe_ptr()), a[0], Int(full.unsafe_ptr())]
+        if byte_host_logits_native(descriptors, [batch, length], cfg, 0, 1) != count:
+            raise Error("byte LM logits: wrong logits length")
+        if not all_finite_f32_scan(f32_ptr(Int(full.unsafe_ptr())), count):
+            raise Error("byte LM logits: nonfinite logit")
+        var picked = List[Int64](length=batch, fill=0)
+        var out = i32_ptr(a[1])
+        for row in range(batch):  # driver-loop: over the batch rows (one argmax row each)
+            var base = (row * length + Int(lengths[row]) - 1) * vocab
+            argmax_rows_f32(f32_ptr(Int(full.unsafe_ptr()) + base * 4), 1, vocab,
+                            MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(picked.unsafe_ptr()) + row * 8))
+            out[row] = Int32(picked[row])
+        _ = full^
+        return batch
 
     def logits(self, a: List[Int], batch: Int, length: Int, cfg: ByteConfig,
                completed: Int, next_bytes: Bool) raises -> Int:

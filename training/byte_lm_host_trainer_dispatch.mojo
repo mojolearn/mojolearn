@@ -214,7 +214,8 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
             owner[].close()
         return step
     if op == 2 or op == 6:
-        if len(addresses) != 6:
+        # A seventh address (next bytes only): the ragged row lengths.
+        if len(addresses) != 6 and not (op == 6 and len(addresses) == 7):
             raise Error("byte LM trainer: expected 6 addresses")
         host_tokens(addresses[0], p[14] * p[15], cfg.vocab_size)
         if not owner[].opened:
@@ -222,6 +223,8 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
                 raise Error("byte LM: session is not open")
             _ = owner[].open([addresses[3], addresses[4], addresses[5], addresses[2]], cfg, opt, p[11])
         try:
+            if len(addresses) == 7:
+                return owner[].next_rows([addresses[0], addresses[1]], addresses[6], p[14], p[15], cfg, p[11])
             return owner[].logits([addresses[0], addresses[1]], p[14], p[15], cfg, p[11], op == 6)
         except error:
             if owner[].opened and (not owner[].usable or owner[].completed != p[11]):

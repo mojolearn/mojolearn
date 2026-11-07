@@ -345,6 +345,14 @@ def byte_session_rollback(mut session: ByteLMSession) raises -> Int:
 def byte_session_logits_run(mut session: ByteLMSession, ids: List[Int32], batch: Int,
                             length: Int, out_addr: Int, claimed: Int,
                             cfg_shape: ByteConfig, next_bytes: Bool) raises -> Int:
+    return byte_session_logits_rows_run(session, ids, batch, length, out_addr, claimed, cfg_shape,
+                                        next_bytes, List[Int32]())
+
+
+def byte_session_logits_rows_run(mut session: ByteLMSession, ids: List[Int32], batch: Int,
+                                 length: Int, out_addr: Int, claimed: Int,
+                                 cfg_shape: ByteConfig, next_bytes: Bool,
+                                 last_rows: List[Int32]) raises -> Int:
     """Forward-only logits (or, with `next_bytes`, the greedy next byte of
     every row, argmax on the device) on an open session, after the ids were
     read and admitted. `claimed` is the caller's committed step, which must
@@ -362,7 +370,7 @@ def byte_session_logits_run(mut session: ByteLMSession, ids: List[Int32], batch:
         ref ctx = owner[].ctx.value()
         if next_bytes:
             byte_next_bytes_resident_into(ctx, owner[].trainer.value(), ids, batch, length,
-                                          owner[].logits_scratch, i32_ptr(out_addr))
+                                          owner[].logits_scratch, i32_ptr(out_addr), last_rows)
             if owner[].trainer.value().completed_steps != step_before:
                 raise Error("byte LM next bytes changed the completed step")
         else:
@@ -661,7 +669,10 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
     var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
     var n = cfg_shape.n_total()
     var n_tensors = cfg_shape.n_tensors()
-    if len(addr) != 6:
+    # A seventh address (next bytes only, plan row N091): the int32 length of
+    # every row of a ragged batch, each in [1, length]; the greedy pick then
+    # reads each row's last real position on the device.
+    if len(addr) != 6 and not (next_bytes and len(addr) == 7):
         raise Error("byte LM trainer: expected 6 addresses")
     var m = batch * length
     var admit = addr[3] != 0 or addr[4] != 0 or addr[5] != 0
@@ -671,12 +682,23 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
         for i in range(3, 6):  # small-loop(state: three host state address slots)
             slots.append(addr[i])
             cells.append(n)
+    var ragged = len(addr) == 7
+    if ragged:
+        slots.append(addr[6])
+        cells.append(batch)
     var n_inputs = len(slots)
     slots.append(addr[1])
     cells.append(batch if next_bytes else m * cfg_shape.vocab_size)
     _validate_slot_table(slots, cells, n_inputs)
     var ids = _read_ids(addr[0], m)
     byte_logits_validate(ids, batch, length, cfg_shape)
+    var last_rows = List[Int32]()
+    if ragged:
+        var lengths = _read_ids(addr[6], batch)
+        for row in range(batch):  # small-loop(batch: one admitted length per row): checks the lengths, no data
+            if lengths[row] < 1 or Int(lengths[row]) > length:
+                raise Error("byte LM next bytes: row length outside [1, length]")
+            last_rows.append(lengths[row] - 1)
     if not s[].trainer:
         if not admit:
             raise Error("byte LM: session is not open")
@@ -684,8 +706,8 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
         _ = byte_session_open(s[], state, completed, cfg, cfg_shape)
     var written = 0
     try:
-        written = byte_session_logits_run(s[], ids, batch, length, addr[1], completed,
-                                          cfg_shape, next_bytes)
+        written = byte_session_logits_rows_run(s[], ids, batch, length, addr[1], completed,
+                                               cfg_shape, next_bytes, last_rows)
     except error:
         byte_owner_mark(s[], completed)
         raise error
