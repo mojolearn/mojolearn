@@ -2,6 +2,7 @@
 # Setup/ownership boundary for explicitly named native execution ABIs. No
 # unwrapping of arbitrary Python functions, extension layouts or signatures.
 from std.ffi import c_int, _Global
+from std.collections import Dict
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -205,6 +206,19 @@ def neural_descriptor_entry(module: PythonObject, name: String, required: Bool =
     return entry
 
 
+def neural_descriptor_module_fields(module: PythonObject) raises -> PythonObject:
+    """The live namespace of an exact module, its key walk done once per
+    module identity (`_neural_descriptor_module_fields_once`): every key an
+    exact str, so a keyed read runs no caller hash or equality hook. Unlike
+    `neural_descriptor_entry` it returns the namespace itself, for doors that
+    read plain values (a mode word) or several entries from one module
+    without copying the whole dictionary per call (N192)."""
+    var bi = native_loaded_module("builtins")
+    if py_type(module) is not py_type(bi):
+        raise Error("TypeError: native provider requires an exact compiled module")
+    return _neural_descriptor_module_fields_once(module, bi)
+
+
 def neural_descriptor_connect(factory: PythonObject, var name: String, operation_count: Int = 6) raises -> PythonObject:
     if operation_count < 1:
         raise Error("native provider: operation_count must be positive")
@@ -269,6 +283,15 @@ def neural_descriptor_connect_once(module: PythonObject, factory_name: String, v
                 and g[].counts[i] == operation_count):
             return g[].providers[i]
     var provider = neural_descriptor_connect(factory, name, operation_count)
+    _neural_descriptor_connection_store(module, factory, name, operation_count, provider)
+    return provider
+
+
+def _neural_descriptor_connection_store(module: PythonObject, factory: PythonObject, name: String,
+                                        operation_count: Int, provider: PythonObject) raises:
+    # One record per (module, ABI name, operation count): a stale record of
+    # the same module/ABI (a replaced factory entry) is overwritten in place.
+    var g = NEURAL_DESCRIPTOR_CONNECTIONS.get_or_create_ptr()
     var slot = -1
     for i in range(len(g[].modules)):  # small-loop(connected providers): replace a stale record of the same module/ABI
         if g[].modules[i] is module and g[].names[i] == name and g[].counts[i] == operation_count:
@@ -277,7 +300,7 @@ def neural_descriptor_connect_once(module: PythonObject, factory_name: String, v
     if slot >= 0:
         g[].factories[slot] = factory
         g[].providers[slot] = provider
-        return provider
+        return
     if len(g[].modules) >= 64:
         g[].modules.clear()
         g[].factories.clear()
@@ -289,6 +312,32 @@ def neural_descriptor_connect_once(module: PythonObject, factory_name: String, v
     g[].names.append(name)
     g[].counts.append(operation_count)
     g[].providers.append(provider)
+
+
+def neural_descriptor_connect_factory_once(factory: PythonObject, var name: String,
+                                           operation_count: Int = 6) raises -> PythonObject:
+    """The provider of the compiled `factory` for ABI `name`, connected on
+    first use and reused while the same factory object is retained in the
+    process record (the record holds it strongly, so its identity is sound).
+    For doors that hold the factory itself (an admitted entry record) rather
+    than its module namespace; `neural_descriptor_connect_once` is the
+    namespace form. A first or replaced factory connects with the same
+    refusals as `neural_descriptor_connect` (N188: the training tape connected
+    a fresh 41-operation provider on every forward)."""
+    if operation_count < 1:
+        raise Error("native provider: operation_count must be positive")
+    var bi = native_loaded_module("builtins")
+    if py_type(factory) is not py_type(bi.len):
+        raise Error("TypeError: neural native ABI factory must be a compiled extension entry")
+    var owner = _neural_descriptor_function_owner(factory)
+    var g = NEURAL_DESCRIPTOR_CONNECTIONS.get_or_create_ptr()
+    for i in range(len(g[].modules)):  # small-loop(connected providers): a few compiled extension modules per process, never data
+        if (g[].factories[i] is factory and g[].modules[i]._obj_ptr == owner and g[].names[i] == name
+                and g[].counts[i] == operation_count):
+            return g[].providers[i]
+    var provider = neural_descriptor_connect(factory, name, operation_count)
+    var module = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
+    _neural_descriptor_connection_store(module, factory, name, operation_count, provider)
     return provider
 
 
@@ -372,6 +421,64 @@ def neural_descriptor_handle(provider: PythonObject, factory: PythonObject, valu
     var handle = Int(py=py_call(factory, value))
     if handle == 0:
         raise Error("native provider: state admission returned a null handle")
+    return handle
+
+
+struct NeuralValueHandles(Defaultable, Movable):
+    # Answers of the address-conversion handle factories, keyed by the value's
+    # object address: the value's exact type address, the factory address and
+    # the handle. Plain integers only; no Python reference is retained.
+    var types: Dict[Int, Int]
+    var factories: Dict[Int, Int]
+    var handles: Dict[Int, Int]
+
+    def __init__(out self):
+        self.types = Dict[Int, Int]()
+        self.factories = Dict[Int, Int]()
+        self.handles = Dict[Int, Int]()
+
+
+# Bump the name's version whenever NeuralValueHandles' layout changes.
+comptime NEURAL_VALUE_HANDLES = _Global[StorageType=NeuralValueHandles,
+    name="MojolearnNeuralValueHandlesV1", init_fn=NeuralValueHandles.__init__]
+
+# Bound on remembered values (memory only: a dropped answer is recomputed).
+comptime _NEURAL_VALUE_HANDLES_MAX = 4096
+
+
+def neural_descriptor_value_handle(provider: PythonObject, factory: PythonObject, value: PythonObject) raises -> Int:
+    """`neural_descriptor_handle` for the factories that only convert an
+    owner object to the address of its inline native value and check nothing
+    else: `transformer_decode_native_handle_v1` and
+    `causal_lm_native_handle_v1` (bindings/_mojolearn_transformer.mojo,
+    `Int(session.downcast_value_ptr[T]())`). Their answer is a pure function
+    of the object's address and exact type, so a remembered answer for the
+    same address, exact type and factory is the factory's answer, also for a
+    recycled address. The factory admission (exact compiled entry of this
+    provider's module) still runs on every call; only the CPython call into
+    the factory is skipped (N176, N186: once per layer per decode step).
+    Never use it for a factory that checks state, such as
+    `transformer_native_session_handle_v1` (busy or closed refusal)."""
+    _neural_descriptor_admit_entry(provider, factory)
+    var address = Int(value._obj_ptr)
+    var cls = Int(py_type(value)._obj_ptr)
+    var entry = Int(factory._obj_ptr)
+    var g = NEURAL_VALUE_HANDLES.get_or_create_ptr()
+    var held = g[].handles.get(address)
+    if held and g[].types.get(address, 0) == cls and g[].factories.get(address, 0) == entry:
+        return held.value()
+    var handle = Int(py=py_call(factory, value))
+    if handle == 0:
+        raise Error("native provider: state admission returned a null handle")
+    g = NEURAL_VALUE_HANDLES.get_or_create_ptr()
+    if len(g[].handles) >= _NEURAL_VALUE_HANDLES_MAX:
+        g[].types.clear()
+        g[].factories.clear()
+        g[].handles.clear()
+    g[].types[address] = cls
+    g[].factories[address] = entry
+    g[].handles[address] = handle
+    _ = value
     return handle
 
 
