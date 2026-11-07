@@ -186,6 +186,7 @@ def test_ordered_sum_of_many_shards_is_the_ascending_pair_fold():
     rng = np.random.default_rng(11)
     shards = [[rng.standard_normal((3, 5)).astype(np.float32), rng.standard_normal(7).astype(np.float32)]
               for _ in range(4)]
+    before = shards[0][0].tobytes()
     whole = audit_native_call(ordered_sum_gradients, shards).assert_native()
     running = shards[0]
     for shard in shards[1:]:
@@ -194,7 +195,7 @@ def test_ordered_sum_of_many_shards_is_the_ascending_pair_fold():
     for got, want in zip(whole, running):
         assert np.asarray(got).tobytes() == np.asarray(want).tobytes()
     # the caller's shard arrays are not written
-    assert shards[0][0].tobytes() == shards[0][0].copy().tobytes()
+    assert shards[0][0].tobytes() == before
 
 
 def test_coordinator_drain_events_is_empty_before_any_step():
