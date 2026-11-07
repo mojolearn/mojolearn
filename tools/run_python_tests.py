@@ -83,6 +83,41 @@ def heaviest_first(files, order_tsv):
     return known + [f for f in files if total(f) is None]
 
 
+DURATIONS_ROOT = Path.home() / 'mojolearn-evidence' / 'test-durations'
+
+
+def durations_dir():
+    """This run's per-test duration directory (conftest records into it; on by default, "0" turns it off)."""
+    value = os.environ.get('MOJOLEARN_TEST_DURATIONS_DIR', '').strip()
+    if value == '0':
+        return None
+    if value:
+        return Path(value)
+    import time
+    path = DURATIONS_ROOT / time.strftime('%Y%m%d-%H%M%S')
+    os.environ['MOJOLEARN_TEST_DURATIONS_DIR'] = str(path)
+    return path
+
+
+def newest_order():
+    """The newest run's heaviest-first tsv, so the parallel pass starts long files first without being told."""
+    try:
+        runs = sorted(p for p in DURATIONS_ROOT.glob('*/all.tsv'))
+    except OSError:
+        return ''
+    return str(runs[-1]) if runs else ''
+
+
+def write_duration_report(directory, workers):
+    """After the run: the per-file and per-test report (tools/test_duration_report.py) and all.tsv next to it."""
+    if directory is None or not any(directory.glob('durations-*.json')):
+        return
+    report = ROOT / 'tools' / 'test_duration_report.py'
+    subprocess.call([sys.executable, str(report), str(directory), '--workers', str(workers), '--top', '40',
+                     '--tsv', str(directory / 'all.tsv')])
+    print(f'durations: {directory} (all.tsv feeds the next run\'s order)', flush=True)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--tests-root', type=Path, default=ROOT / 'python/mojolearn/tests')
@@ -122,6 +157,7 @@ raise SystemExit(pytest.main(sys.argv[1:]))
         return subprocess.call([sys.executable, '-I', '-c', code, str(args.tests_root),
                                 '-q', '--import-mode=importlib',
                                 *map(str, suites['pytest']), *pytest_args])
+    durations = durations_dir()
     files = [str(p) for p in suites['pytest']]
     pytest = [sys.executable, '-m', 'pytest', '-q']
     workers = worker_count()
@@ -132,12 +168,16 @@ raise SystemExit(pytest.main(sys.argv[1:]))
         pytest_args = ['--durations', durations, '--durations-min', '0.5', *pytest_args]
     have_xdist = importlib.util.find_spec('xdist') is not None
     if user_chose_workers(pytest_args) or workers == 1:
-        return subprocess.call([*pytest, *files, *pytest_args], cwd=ROOT / 'python')
+        rc = subprocess.call([*pytest, *files, *pytest_args], cwd=ROOT / 'python')
+        write_duration_report(durations, 1)
+        return rc
     if not have_xdist:
         print('pytest-xdist is not installed in this environment; running serially', flush=True)
-        return subprocess.call([*pytest, *files, *pytest_args], cwd=ROOT / 'python')
+        rc = subprocess.call([*pytest, *files, *pytest_args], cwd=ROOT / 'python')
+        write_duration_report(durations, 1)
+        return rc
     serial = [str(p) for p in serial_files(suites['pytest'])]
-    order = os.environ.get('MOJOLEARN_TEST_ORDER', '').strip()
+    order = os.environ.get('MOJOLEARN_TEST_ORDER', '').strip() or newest_order()
     if order:
         files = heaviest_first(files, order)
         print(f'parallel pass order: heaviest first from {order}', flush=True)
@@ -145,12 +185,14 @@ raise SystemExit(pytest.main(sys.argv[1:]))
     rc = subprocess.call([*pytest, '-n', str(workers), '--dist', 'loadfile', '-m', 'not serial',
                           *files, *pytest_args], cwd=ROOT / 'python')
     if not serial:
+        write_duration_report(durations, workers)
         return rc
     print('serial pass: tests marked serial, one process', flush=True)
     rc_serial = subprocess.call([*pytest, '-p', 'no:xdist', '-m', 'serial', *serial, *pytest_args],
                                 cwd=ROOT / 'python')
     if rc_serial == 5:  # no test selected: the files only mention the mark
         rc_serial = 0
+    write_duration_report(durations, workers)
     return rc or rc_serial
 
 
