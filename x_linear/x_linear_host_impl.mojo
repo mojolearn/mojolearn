@@ -9,6 +9,9 @@ pure move, no bit change)."""
 from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS, ENETCV_FOLD_BLOCKS
 from x_linear.enetcv_blocks import fb_host_words
 from x_linear.ops import FP, IP
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.py2mojo_rows import ROWS_LRCV_PROBA, ROWS_SGD_PROBA, rows_one
 from x_linear.dispatch_host import fit_dispatch
 from x_linear.dispatch import decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
@@ -138,6 +141,51 @@ def x_linear_decision_host(
     for t in range(n * k):
         out.unsafe_store(t, decision_one(x, t // k, d, wb, t % k, link))
     return n * k
+
+
+def x_linear_decision_rows_host(
+    x_addr: Int, wb_addr: Int, n: Int, d: Int, k: Int, link: Int, rows_mode: Int, out_addr: Int,
+) raises -> Int:
+    """The GPU binding's `x_linear_decision_rows` on the host: the
+    `decision_one` cells, then `py2mojo_rows`' `rows_one` per row (mode
+    ROWS_SGD_PROBA or ROWS_LRCV_PROBA, float32 out n x max(k, 2)), rows
+    split across host tasks (no reduction crosses rows, so the split moves
+    no bit). Returns n."""
+    # ne2-g-linear (N362): the host column of decision_rows_device.
+    if n < 0 or d < 0 or k <= 0:
+        raise Error("x_linear: positive dimensions required")
+    if rows_mode != ROWS_SGD_PROBA and rows_mode != ROWS_LRCV_PROBA:
+        raise Error("x_linear_decision_rows: rows mode must be SGD_PROBA or LRCV_PROBA")
+    if n == 0:
+        return 0
+    var x = _fp(x_addr)
+    var wb = _fp(wb_addr)
+    var out = _fp(out_addr)
+    var s = List[Float32](length=max(n * k, 1), fill=Float32(0))
+    var sp = s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var u64 = List[UInt64](length=1, fill=UInt64(0))
+    var u64p = u64.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var u8 = List[UInt8](length=1, fill=UInt8(0))
+    var u8p = u8.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var t = max(1, min(host_predict_task_count(n), n))
+    var chunk = host_predict_chunk(n, t)
+
+    def _rows(c: Int) {imm x, imm wb, imm out, imm sp, imm u64p, imm u8p, imm chunk, imm n, imm d, imm k, imm link, imm rows_mode}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            for j in range(k):
+                sp.unsafe_store(i * k + j, decision_one(x, i, d, wb, j, link))
+            rows_one(rows_mode, sp, u64p, k, i, out, u64p, sp, UInt64(0), u8p)
+
+    if t == 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, t)
+    _ = s^
+    _ = u64^
+    _ = u8^
+    return n
 
 
 def x_linear_decision_codes_host(
