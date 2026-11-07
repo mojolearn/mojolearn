@@ -69,7 +69,7 @@ def test_manifest_covers_both_lanes():
     sentence = host_surface.no_cpu_path_sentence()
     assert sentence.startswith("(1) gradient boosting training"), sentence
     assert "(6) gradient boosting training at a (loss, grow_policy" in sentence, sentence
-    assert "sample weights" in sentence and "CTR categorical column" in sentence, sentence
+    assert "sample weights" in sentence and "categorical or one-hot column" in sentence, sentence
     # and it must NOT claim the two lanes above have no CPU route
     assert "Depthwise with Logloss" not in sentence, sentence
 
