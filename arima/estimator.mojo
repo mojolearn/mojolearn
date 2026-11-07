@@ -609,6 +609,38 @@ def _predict_into(
     _ = fut_stage^
     _ = exog_stage^
     _ = y_host^
+    var written = arima_predict_device(
+        ctx, y, exog, exog_fut, xin, out_ptr, batch_size, n_obs, start, end, order
+    )
+    _ = xin^
+    _ = exog_fut^
+    _ = exog^
+    _ = y^
+    _ = ctx^
+    return written
+
+
+def arima_predict_device(
+    ctx: DeviceContext,
+    mut y: DeviceBuffer[DType.float32],
+    mut exog: DeviceBuffer[DType.float32],
+    mut exog_fut: DeviceBuffer[DType.float32],
+    xin: DeviceBuffer[DType.float32],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    batch_size: Int,
+    n_obs: Int,
+    start: Int,
+    end: Int,
+    order: ARIMAOrder,
+) raises -> Int:
+    """The device half of `_predict_into`, shared with the resident fitted
+    state (arima/resident_state.mojo, lane ne1-a-decomp-tsa): `y`, `exog`
+    (filter layout) and `xin` (the packed fitted parameters) are already on
+    `ctx`, `exog_fut` holds this call's future regressors. Every one of them
+    is only read (`predict_x` writes its own differenced copies), so a
+    resident copy serves any number of calls with the bytes a per-call
+    upload would have staged: the same kernels over the same words."""
+    var predict_ld = end - start
     var params = ARIMAParams(ctx, order, batch_size)
     unpack(ctx, params, order, batch_size, xin)
     ctx.synchronize()
@@ -621,14 +653,8 @@ def _predict_into(
         ctx, y, exog, exog_fut, batch_size, n_obs, start, end, order, params, True
     )
     _download_f32(ctx, res.y_p, out_ptr, predict_ld * batch_size)
-
     _ = res^
     _ = params^
-    _ = xin^
-    _ = exog_fut^
-    _ = exog^
-    _ = y^
-    _ = ctx^
     return predict_ld * batch_size
 
 
