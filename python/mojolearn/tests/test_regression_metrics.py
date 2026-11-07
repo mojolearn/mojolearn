@@ -51,19 +51,28 @@ def binding(monkeypatch):
     return fake
 
 
+# The public call resolves its binding inside the native operation
+# (d7415403cd, "Move public metric binding selection inside native
+# operations"): a Python fake planted in `_backend.binding` is never reached,
+# so the value and overflow tests below check the real binding's answer.
+_EXPECTED = {
+    "mean_squared_error": lambda t, p: float(np.mean((t - p) ** 2, dtype=np.float32)),
+    "mean_absolute_error": lambda t, p: float(np.mean(np.abs(t - p), dtype=np.float32)),
+    "root_mean_squared_error":
+        lambda t, p: float(np.sqrt(np.mean((t - p) ** 2, dtype=np.float32))),
+}
+
+
 @pytest.mark.parametrize("name", NAMES)
-def test_public_export_and_borrowed_array_contents(name, binding):
+def test_public_export_and_borrowed_array_contents(name):
     assert name in metrics.__all__
     source = np.arange(20, dtype=np.float32)
     source.flags.writeable = False
     true, pred = source[::3], source[::-3].reshape(-1, 1)
     before = source.copy()
     result = getattr(metrics, name)(true, pred)
-    assert type(result) is float and result == 2.5
-    called, arrays, params = binding.calls.pop()
-    assert called == name and params == [7]
-    np.testing.assert_array_equal(arrays[0], true)
-    np.testing.assert_array_equal(arrays[1], pred.ravel())
+    assert type(result) is float
+    assert result == pytest.approx(_EXPECTED[name](true, pred.ravel()), rel=1e-6)
     np.testing.assert_array_equal(source, before)
 
 
@@ -134,11 +143,13 @@ def test_supported_options_reach_expansion(name, kwargs, binding):
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_singleton_and_overflow_result_are_preserved(name, binding):
-    binding.result = np.inf
-    x = np.array([np.finfo(np.float32).max], dtype=np.float32)
-    assert getattr(metrics, name)(x, x) == float("inf")
-    assert binding.calls[0][2] == [1]
+def test_singleton_and_overflow_result_are_preserved(name):
+    # float32 residuals with no wider accumulator: max - (-max) overflows to
+    # inf, as the public docstring says, and a single sample is accepted.
+    top = np.finfo(np.float32).max
+    x = np.array([top], dtype=np.float32)
+    assert getattr(metrics, name)(x, -x) == float("inf")
+    assert getattr(metrics, name)(x, x) == 0.0
 
 
 @pytest.mark.parametrize("mode", ["", "bogus", False, 1, [], np.array(["fast"])])
@@ -150,63 +161,59 @@ def test_invalid_mode_refused(mode, binding):
 
 
 def test_shared_loader_resolves_live_default_and_explicit_mode(monkeypatch):
-    """`_mojolearn_metrics` ships fast and identical (classical FAST,
-    2026-09-25): the live default resolves the identical set, an explicit
-    'identical' does too, 'fast' explicit or as the process default resolves
-    the fast set.
+    """`_mojolearn_metrics` ships fast and identical. The native operation
+    reads the live `_backend._DEFAULT_MODE` when `numeric_mode` is None and
+    selects that mode's import-connected set from `_backend._SETS`; an
+    explicit mode selects its own set. No Python loader runs at call time.
 
-    This is the GPU install's resolution, so the CPU-only marker is cleared:
-    on a CPU-only install `binding()` never reaches `load_set` (it serves
-    the host proxy, see the test below)."""
-    fakes = {m: Binding(m) for m in ("identical", "fast")}
-    loaded = []
-    current = ["identical"]
-    monkeypatch.setattr(_backend, "_CPU_ONLY", None)
-    monkeypatch.setattr(_backend, "default_mode", lambda: current[0])
-    # The input path's finiteness check resolves from the identical base
-    # binding through the same `binding()`; plant it so this test sees only
-    # the metrics binding's resolution.
-    from mojolearn import _buffer
-    monkeypatch.setitem(_buffer._NATIVE, "all_finite_f32", lambda addr, n: 1)
+    This is the GPU install's resolution (a CPU-only install serves the host
+    module, see the test below)."""
+    if _backend._CPU_ONLY is not None:
+        pytest.skip("GPU install resolution; this install is CPU-only")
 
     def load(mode):
-        loaded.append(mode)
-        return SimpleNamespace(mode=mode, _mojolearn_metrics=fakes[mode])
+        raise AssertionError(f"load_set({mode!r}) reached at operation time")
 
     monkeypatch.setattr(_backend, "load_set", load)
     x = np.ones(2, dtype=np.float32)
-    metrics.mean_squared_error(x, x)
-    metrics.mean_squared_error(x, x, numeric_mode="identical")
-    assert loaded == ["identical", "identical"]
-    for explicit, default in [("fast", "identical"), (None, "fast")]:
-        current[0] = default
-        metrics.mean_squared_error(x, x, numeric_mode=explicit)
-    assert loaded == ["identical", "identical", "fast", "fast"]
+    monkeypatch.setattr(_backend, "_DEFAULT_MODE", "identical")
+    assert metrics.mean_squared_error(x, x) == 0.0
+    assert metrics.mean_squared_error(x, x, numeric_mode="identical") == 0.0
+    # An explicit mode overrides the live default.
+    monkeypatch.setattr(_backend, "_DEFAULT_MODE", "fast")
+    assert metrics.mean_squared_error(x, x, numeric_mode="identical") == 0.0
+    # The set is looked up per call, not captured at import: without the
+    # identical set the live default and the explicit mode are both refused,
+    # and putting it back serves the next call.
+    saved = _backend._SETS["identical"]
+    monkeypatch.setattr(_backend, "_DEFAULT_MODE", "identical")
+    monkeypatch.delitem(_backend._SETS, "identical")
+    with pytest.raises(TypeError, match="mode set"):
+        metrics.mean_squared_error(x, x)
+    with pytest.raises(TypeError, match="mode set"):
+        metrics.mean_squared_error(x, x, numeric_mode="identical")
+    _backend._SETS["identical"] = saved
+    assert metrics.mean_squared_error(x, x) == 0.0
 
 
 def test_cpu_only_install_serves_the_installed_module_without_load_set(monkeypatch):
-    """On a CPU-only install (`_backend._CPU_ONLY` set by `_select_cpu_only`)
-    `binding()` answers with the module installed under the canonical name,
-    the host proxy of the metrics host binding (e3dcae470), and never opens a
-    tier directory; a lower tier still refuses by name before anything
-    resolves."""
+    """On a CPU-only install (`_backend._CPU_ONLY` set) the native operation
+    reads the module installed under the canonical name from `sys.modules`
+    on every call and never opens a tier directory. Only the exact extension
+    module is served: a replaced module is refused by type and a removed one
+    by name."""
     import sys
-    from mojolearn import _buffer
-    fake = Binding("identical")
     monkeypatch.setattr(_backend, "_CPU_ONLY", "no GPU binding on this box (test)")
-    monkeypatch.setattr(_backend, "default_mode", lambda: "identical")
-    monkeypatch.setitem(sys.modules, "mojolearn._mojolearn_metrics", fake)
-    monkeypatch.setitem(_buffer._NATIVE, "all_finite_f32", lambda addr, n: 1)
+    monkeypatch.setattr(_backend, "_DEFAULT_MODE", "identical")
 
     def load(mode):
         raise AssertionError(f"load_set({mode!r}) reached on a CPU-only install")
 
     monkeypatch.setattr(_backend, "load_set", load)
     x = np.arange(3, dtype=np.float32)
-    assert metrics.mean_squared_error(x, x) == 2.5
-    assert metrics.mean_squared_error(x, x, numeric_mode="identical") == 2.5
-    assert [c[0] for c in fake.calls] == ["mean_squared_error"] * 2
-    for explicit in ("fast",):
-        with pytest.raises(ValueError, match="IDENTICAL only"):
-            metrics.mean_squared_error(x, x, numeric_mode=explicit)
-    assert len(fake.calls) == 2
+    monkeypatch.setitem(sys.modules, "mojolearn._mojolearn_metrics", Binding("identical"))
+    with pytest.raises(TypeError, match="exact extension module"):
+        metrics.mean_squared_error(x, x)
+    monkeypatch.delitem(sys.modules, "mojolearn._mojolearn_metrics", raising=False)
+    with pytest.raises(ImportError, match="removed after import"):
+        metrics.mean_squared_error(x, x, numeric_mode="identical")
