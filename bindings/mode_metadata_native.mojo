@@ -8,7 +8,7 @@ from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_error_class import error_without_class
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
@@ -187,9 +187,30 @@ def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, con
     if py_contains(state, "_bind") or py_contains(state, "_BINDING"):
         raise Error("TypeError: native binary metadata requires its import-connected class binding; Python binding overrides are not accepted")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var plans = context["plans"]
+    # Row N219 (ne1-e-admitted-call): the ancestry walk below reads only class
+    # rows, which the type watchers of native_class_admission report on any
+    # change of the class or an ancestor. While the class is unchanged, reuse
+    # the admitted (plan, binding, bind, row); the plan lookups up to the
+    # selected row and the binding/bind comparison are repeated, so a plan
+    # connected later for a nearer row or a changed plan is still seen, as in
+    # public_attributes_native._plan_reused. Python 3.10/3.11 always walk.
+    var record = class_record(mods, _MODE_PLAN_SLOT, cls)
+    if record is not None and record[4] is plans:
+        var row = Int(py=record[3])
+        if row >= 0 and row < len(ancestry) and py_get(plans, ancestry[row]) is record[0]:
+            var nearer = False
+            for i in range(row):  # driver-loop: over nearer ancestry rows without a connected plan
+                if py_get(plans, ancestry[i]) is not None:
+                    nearer = True
+                    break
+            var reused = record[0]
+            if not nearer and record[1] == reused["binding"] and record[2] is reused["bind"]:
+                return reused
     var binding = PythonObject(None)
     var bind = PythonObject(None)
     var plan = PythonObject(None)
+    var plan_row = -1
     for i in range(len(ancestry)):  # driver-loop: over class ancestry to resolve the native route
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: native metadata refuses Python metaclass protocols")
@@ -199,12 +220,21 @@ def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, con
         if bind is None and py_contains(fields, "_bind"):
             bind = fields["_bind"]
         if plan is None:
-            plan = py_get(context["plans"], ancestry[i])
+            plan = py_get(plans, ancestry[i])
+            if plan is not None:
+                plan_row = i
     if plan is None:
         raise Error("RuntimeError: this estimator's native binary metadata route was not connected")
     if py_type(binding) is not b.str or binding != plan["binding"] or bind is not plan["bind"]:
         raise Error("TypeError: estimator binding metadata changed after native connection")
+    if class_watch_ready():
+        # The payload holds the admitted plan, its binding word and bind
+        # function, the row and the plans mapping; never the class itself.
+        class_admit(mods, _MODE_PLAN_SLOT, cls, Python.tuple(plan, binding, bind, PythonObject(plan_row), plans))
     return plan
+
+
+comptime _MODE_PLAN_SLOT = "mode_metadata_plan_v1"
 
 
 def _mode(value: PythonObject) raises -> String:
