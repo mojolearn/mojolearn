@@ -115,6 +115,7 @@ from glm.estimator import (
     ridge_fit_resident_host,
 )
 from glm.impl.gram_solve import linear_gram_fit_host
+from core.gram_multi_gpu import gram_plan_current
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
@@ -949,9 +950,13 @@ def linear_gram_fit_binding(
         # name there); the same answer here: the caller's route decides.
         return PythonObject(1)
     var status = 1
+    # The Gram family's device plan, read once at this entry
+    # (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md); one device unless a
+    # parallel driver (`fit_gram_estimator(..., devices=...)`) bound one.
+    var plan = gram_plan_current()
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        status = linear_gram_fit_host(ctx, xp, yp, wp, mp, ymp, nr, nf, alpha, center)
+        status = linear_gram_fit_host(plan, ctx, xp, yp, wp, mp, ymp, nr, nf, alpha, center)
         ctx.synchronize()
     return PythonObject(status)
 

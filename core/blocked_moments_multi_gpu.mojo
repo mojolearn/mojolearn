@@ -34,7 +34,6 @@ from core.device_plan import DevicePlan
 from core.multi_gpu import peer_clone
 from core.blocked_moments import (
     BmPtr,
-    _bp,
     bm_centered_cross_panels,
     bm_centered_gram_panels,
     bm_leaf_cross_kernel,
@@ -42,6 +41,12 @@ from core.blocked_moments import (
     bm_sum_fold,
 )
 from core.blocked_moments_ops import BM_TILE, BM_TPB, bm_leaf_count
+
+
+@always_inline
+def _bp(buf: DeviceBuffer[DType.float32]) -> BmPtr:
+    # the address form `core/blocked_moments.mojo` passes to its kernels
+    return BmPtr(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
 struct _MomentShard(Movable):
