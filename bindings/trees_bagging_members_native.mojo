@@ -15,6 +15,31 @@ from bindings.classical_arrays import classical_wrap_array
 from bindings.gp_label_snapshot_native import gp_label_list
 
 
+def _member_like(base: PythonObject, first: PythonObject, member_seed: Int) raises -> PythonObject:
+    """A member of `base`'s class holding `first`'s validated state (the
+    first member's fields after its constructor checks, `forest_refresh`, and
+    `forest_capture_mode`) with its own `random_state`: the state
+    `_clone_from` + `forest_refresh` + `forest_capture_mode` give it, key for
+    key in the same order. Only `random_state` differs between members of
+    one template, and the only derived field that reads it is `_cfg`'s
+    `random_state` entry (the RF and ET derivations store the int seed; a
+    member seed is always an exact nonnegative int), which gets its own
+    mapping."""
+    var b = native_loaded_module("builtins")
+    var member = py_call(b.object.__new__, py_type(base))
+    var mf = py_fields(member)
+    _ = py_call(mf.update, first)
+    if py_contains(mf, "random_state"):
+        var own_seed = PythonObject(member_seed)
+        py_setitem(mf, "random_state", own_seed)
+        var cfg = py_get(mf, "_cfg")
+        if cfg is not None and py_type(cfg) is b.dict and py_contains(cfg, "random_state"):
+            var own = py_call(b.dict, cfg)
+            py_setitem(own, "random_state", own_seed)
+            py_setitem(mf, "_cfg", own)
+    return member
+
+
 def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> PythonObject:
     var context = py_fields(native_loaded_module("mojolearn._expansion_trees"))["_TREES_CONTEXT"]
     var fields = boost_admit(model, context)
@@ -54,13 +79,26 @@ def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> Pyt
     var width = PythonObject(outputs)
     var kind = forest_kind(base, context)
     var template = forest_get_params(base, context) if count > 0 else PythonObject(None)
+    # The constructor checks run once per call (lane ne2-b-members, N049):
+    # every member is a clone of the one `base` with only its random_state
+    # changed, so the first member is validated (`forest_refresh`, the full
+    # constructor check and field rebuild) and captured, and every later
+    # member copies that validated state with its own seed (`_member_like`).
+    # Same fields, same values: nothing a member predicts changes.
+    var first = PythonObject(None)
+    var b = native_loaded_module("builtins")
     for t in range(count):  # driver-loop: one fitted member per native forest tree
         var lo = Int(py=offsets[t])
         var hi = Int(py=offsets[t + 1])
-        var member = _clone_from(base, template, _sub_seed(seed, t), context)
+        var member: PythonObject
+        if first is None:
+            member = _clone_from(base, template, _sub_seed(seed, t), context)
+            _ = forest_refresh(member, kind, context)
+            _ = forest_capture_mode(py_fields(member), context)
+            first = py_call(b.dict, py_fields(member))
+        else:
+            member = _member_like(base, first, _sub_seed(seed, t))
         var mf = py_fields(member)
-        _ = forest_refresh(member, kind, context)
-        _ = forest_capture_mode(mf, context)
         py_setitem(mf, "_offsets", classical_wrap_array(native_array_from_values("i", Python.list(0, hi - lo)), Python.tuple(2), "<i4", "C", context))
         py_setitem(mf, "_colid", _copy_block(colid, lo, hi, "<i4", context))
         py_setitem(mf, "_quesval", _copy_block(quesval, lo, hi, "<f4", context))
