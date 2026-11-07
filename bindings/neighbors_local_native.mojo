@@ -813,7 +813,8 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var binding = args[0]
     var q = _f32(args[1], context)
     var classes = labels if labels is not None else classifier_label_list(family_field(fields, "classes_"), context)
-    var fused = _nc_fused_available(binding)
+    # An empty query keeps the op chain (the descriptor refuses a null address).
+    var fused = _rows(q) > 0 and _nc_fused_available(binding)
     if _nc_uniform(fields, context):
         var cent = family_field(fields, "centroids_")
         if fused:
@@ -884,8 +885,10 @@ def _nc_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     # identical bindings correctly omit the optional float64 softmax export.
     var wide = neural_descriptor_entry(xn_module(binding), "xn_softmax64", False) is not None
     if _nc_fused_available(binding):
-        return _nc_proba_fused(binding, py_fields(model), args[1], 2 if wide else 0, "<f8" if wide else "<f4",
-                               context)
+        var fused = _nc_proba_fused(binding, py_fields(model), args[1], 2 if wide else 0, "<f8" if wide else "<f4",
+                                    context)
+        if fused is not None:
+            return fused
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
     var shape = py_call(b.tuple, dec.shape)
     var out = _out(shape, "<f8" if wide else "<f4", context)
@@ -902,6 +905,8 @@ def _nc_proba_fused(binding: PythonObject, fields: PythonObject, source: PythonO
     matrix and its softmax in one session, the (n, C) result downloaded once."""
     var inputs = _nc_decision_inputs(fields, source, context)
     var C = _size(inputs[3])
+    if _rows(inputs[0]) == 0:
+        return PythonObject(None)  # an empty query: the caller takes the op chain
     var out = _out(Python.tuple(_rows(inputs[0]), C), typestr, context)
     _nc_fused(binding, "nc_proba", inputs[0], inputs[1], inputs[2], inputs[3], out, C, mode, context)
     return out
@@ -912,7 +917,9 @@ def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: Pyth
     # metric/fitted checks and native decision matrix preparation.
     var binding = args[0]
     if _nc_fused_available(binding):
-        return _nc_proba_fused(binding, py_fields(model), args[1], 1, "<f4", context)
+        var fused = _nc_proba_fused(binding, py_fields(model), args[1], 1, "<f4", context)
+        if fused is not None:
+            return fused
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
     var rows = _rows(dec)
     var cols = _cols(dec)
