@@ -86,31 +86,21 @@ from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_operation_owner import CausalExecutionEntries
 from bindings.native_identity_type import native_identity_type
-from bindings.causal_lm_construct import causal_model_c
-from bindings.neural_block_public import neural_block_c, NativeBlockPlan
-from bindings.transformer_public_native import transformer_public_c, TransformerPublicTapeOwner
-from bindings.lm_corpus_public_native import lm_corpus_public_c, LmCorpusIteratorHandle
-from bindings.model_catalog_native import catalog_public_c
+from bindings.neural_block_public import NativeBlockPlan
+from bindings.transformer_public_native import TransformerPublicTapeOwner
+from bindings.lm_corpus_public_native import LmCorpusIteratorHandle
 from bindings.tokenizer_public_native import (
     tokenizer_public_c, tokenizer_vocab_encode, tokenizer_vocab_decode,
     tokenizer_vocab_pretokenize, tokenizer_vocab_fingerprint,
 )
-from providers.python.transformer_decode_pyapi import transformer_decode_native_c, TransformerDecodeHandle
-from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
-from bindings.samba_config_native import samba_config_c
-from bindings.samba_public_native import samba_public_c
+from providers.python.transformer_decode_pyapi import TransformerDecodeHandle
+from bindings.mamba_public_native import MambaDecodeHandle
 from bindings.native_transport import transport_c, transport_initialize
 from bindings.cross_vendor_native import cross_vendor_c
-from bindings.parallel_byte_native import parallel_byte_c, ParallelByteOwner
+from bindings.parallel_byte_native import ParallelByteOwner
 from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
-from bindings.parallel_mlp_native import parallel_mlp_c
-from bindings.small_mlp_native import small_mlp_c, small_mlp_finalize_c
-from bindings.parallel_neural_native import parallel_neural_c
-from bindings.parallel_forecast_native import parallel_forecast_c
-from bindings.parallel_shard_native import parallel_shard_c
-from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
-from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
+from bindings.parallel_causal_native import RemoteStateLifetime
 from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
@@ -118,11 +108,6 @@ from bindings.optimizer_device_native import device_finalize_c
 from bindings.sequence_device_native import sequence_tensor_finalize_c
 from bindings.runtime_sequential_forward import runtime_sequential_forward_c
 from bindings.runtime_classical_unavailable import runtime_classical_unavailable_c
-from bindings.xseq_native import xseq_c
-from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
-from bindings.byte_lm_trainer_native import byte_lm_trainer_c, byte_lm_pooled_finalize_c
-from bindings.xcnn_native import xcnn_c
-from bindings.tsa_public_native import tsa_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.mode_metadata_native import mode_metadata_c
 from bindings.backend_public_native import backend_public_c
@@ -226,7 +211,7 @@ from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, N
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_operation_owner import CausalExecutionEntries
 from bindings.causal_lm_public import (
-    GenerationHandle, PreparedGenerationLayer, causal_public_c, causal_lm_allocate_binding,
+    GenerationHandle, PreparedGenerationLayer, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
     causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
@@ -300,7 +285,12 @@ def tokenizer_host_sabotage_binding() raises -> PythonObject:
 def tokenizer_host_runtime_classical_abi_binding() raises -> PythonObject:
     # Import-time ownership witness: this module no longer registers
     # TreesResident, so its canonical native owner may safely initialize.
-    return PythonObject(1)
+    # 2 (2026-11-07 host split, docs/build/HOT_GROUPS.md section 6): the
+    # catalog, sequence expansion, byte LM trainer, multi-device and public
+    # neural entries are native refusals here too, replaced at import by
+    # their own host bindings; an older tokenizer (1) registers them itself
+    # and is refused with the complete-layout message.
+    return PythonObject(2)
 
 
 def bpe_load_binding(ranks_path: PythonObject) raises -> PythonObject:
@@ -1249,20 +1239,20 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         transport_initialize()
         module.def_py_c_function(transport_c, "native_transport_call")
         module.def_py_c_function(cross_vendor_c, "cross_vendor_call")
-        module.def_py_c_function(parallel_byte_c, "parallel_byte_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "parallel_byte_call")
         # Native owner record of each byte-LM multi-device trainer.
         _ = module.add_type[ParallelByteOwner]("_ParallelByteOwner")
         module.def_py_c_function(codec_c, "native_codec_call")
         module.def_py_c_function(process_c, "native_process_call")
-        module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
-        module.def_py_c_function(small_mlp_c, "small_mlp_call")
-        module.def_py_c_function(small_mlp_finalize_c, "small_mlp_finalize")
-        module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
-        module.def_py_c_function(parallel_forecast_c, "parallel_forecast_call")
-        module.def_py_c_function(parallel_shard_c, "parallel_shard_call")
-        module.def_py_c_function(neighbor_query_c, "neighbor_query_call")
-        module.def_py_c_function(neighbor_query_attribute_c, "neighbor_query_attribute_call")
-        module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "parallel_mlp_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "small_mlp_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "small_mlp_finalize")
+        module.def_py_c_function(runtime_classical_unavailable_c, "parallel_neural_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "parallel_forecast_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "parallel_shard_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neighbor_query_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neighbor_query_attribute_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "parallel_causal_call")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")
@@ -1271,13 +1261,15 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")
         module.def_py_c_function(sequence_tensor_finalize_c, "sequence_tensor_finalize")
         module.def_py_c_function(runtime_sequential_forward_c, "sequential_native_call")
-        module.def_py_c_function(xseq_c, "xseq_native_call")
-        module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")
-        module.def_py_c_function(byte_lm_trainer_c, "byte_lm_trainer_call")
-        module.def_py_c_function(byte_lm_pooled_finalize_c, "byte_lm_pooled_finalize_call")
-        module.def_py_c_function(xcnn_c, "xcnn_native_call")
-        module.def_py_c_function(tsa_c, "tsa_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "xseq_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "byte_lm_host_trainer_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "byte_lm_trainer_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "byte_lm_pooled_finalize_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "xcnn_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "tsa_native_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "classical_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "trees_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "family_native_call")
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(mode_metadata_c, "mode_metadata_native_call")
@@ -1324,8 +1316,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "standard_scaler_attribute_call")
         module.def_py_c_function(generator_draw_c, "generator_draw")
         module.def_py_c_function(user_objects_c, "user_objects_native_call")
-        module.def_py_c_function(samba_config_c, "samba_config_call")
-        module.def_py_c_function(samba_public_c, "samba_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "samba_config_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "samba_native_call")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")
         module.def_function[tokenizer_host_vendor_binding]("tokenizer_host_vendor")
         module.def_function[tokenizer_host_column_binding]("tokenizer_host_column")
@@ -1394,29 +1386,29 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(checkpoint_c[19], "checkpoint_widen_f16")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[sha256_hex_binding]("sha256_hex")
-        module.def_py_c_function(transformer_public_c, "transformer_public_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "transformer_public_call")
         _ = module.add_type[TransformerPublicTapeOwner]("_TransformerPublicTapeOwner")
         module.def_py_c_function(tokenizer_public_c, "tokenizer_public_call")
-        module.def_py_c_function(lm_corpus_public_c, "lm_corpus_public_call")
-        module.def_py_c_function(catalog_public_c, "catalog_public_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "lm_corpus_public_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "catalog_public_call")
         _ = module.add_type[LmCorpusIteratorHandle]("_LmCorpusIteratorHandle")
-        module.def_py_c_function(neural_block_c[0], "neural_block_init")
-        module.def_py_c_function(neural_block_c[4], "neural_block_set_params")
-        module.def_py_c_function(neural_block_c[5], "neural_block_getstate")
-        module.def_py_c_function(neural_block_c[6], "neural_block_setstate")
-        module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
-        module.def_py_c_function(neural_block_c[2], "neural_block_forward")
-        module.def_py_c_function(neural_block_c[3], "neural_block_backward")
-        module.def_py_c_function(neural_block_c[7], "neural_block_inference_backward")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_init")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_set_params")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_getstate")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_setstate")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_allocate")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_forward")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_backward")
+        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_inference_backward")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
-        module.def_py_c_function(transformer_decode_native_c, "transformer_decode_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "transformer_decode_native_call")
         _ = module.add_type[TransformerDecodeHandle]("_TransformerDecodeHandle")
-        module.def_py_c_function(mamba_native_c, "mamba_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "mamba_native_call")
         _ = module.add_type[MambaDecodeHandle]("_MambaDecodeHandle")
-        module.def_py_c_function(causal_model_c[0], "causal_model_init")
-        module.def_py_c_function(causal_model_c[1], "causal_model_load")
-        module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_init")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_load")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
         _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
@@ -1440,23 +1432,23 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[PreparedGenerationLayer]("_PreparedGenerationLayer")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
-        module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
-        module.def_py_c_function(causal_public_c[2], "causal_lm_reset")
-        module.def_py_c_function(causal_public_c[3], "causal_lm_forward")
-        module.def_py_c_function(causal_public_c[4], "causal_lm_stream")
-        module.def_py_c_function(causal_public_c[5], "causal_lm_read")
-        module.def_py_c_function(causal_public_c[6], "causal_lm_info")
-        module.def_py_c_function(causal_public_c[7], "causal_lm_generate")
-        module.def_py_c_function(causal_public_c[8], "causal_lm_text_stream")
-        module.def_py_c_function(causal_public_c[9], "causal_lm_generate_text")
-        module.def_py_c_function(causal_public_c[10], "causal_lm_resident")
-        module.def_py_c_function(causal_public_c[11], "causal_lm_snapshot")
-        module.def_py_c_function(causal_public_c[12], "causal_lm_resume")
-        module.def_py_c_function(causal_public_c[13], "causal_lm_parameters")
-        module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
-        module.def_py_c_function(causal_public_c[15], "causal_state_init")
-        module.def_py_c_function(causal_public_c[16], "causal_lm_repr")
-        module.def_py_c_function(causal_public_c[17], "causal_state_repr")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_allocate")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_reset")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_forward")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_stream")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_read")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_info")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_generate")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_text_stream")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_generate_text")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_resident")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_snapshot")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_resume")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_parameters")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_blocks")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_init")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_repr")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_repr")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))
