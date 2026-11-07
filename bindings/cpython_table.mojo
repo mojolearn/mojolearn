@@ -1,20 +1,42 @@
 # SPDX-License-Identifier: Apache-2.0
-# CPython C-API functions resolved ONCE per process (lane perf-cpython-table,
-# 2026-11-06).
+# THE CPython function table of Mojolearn: C-API functions resolved ONCE per
+# process (lane perf-cpython-table, 2026-11-06; made the only table by lane
+# ne1-e-table, 2026-11-06, absorbing perf2_shared_cpython_table.mojo,
+# p3_lm_tokenizer_cpython.mojo, the 18 entries of p3_labels_metrics_native.mojo
+# and ClusterCPython of cluster_side_records.mojo).
 #
 # `cpy.lib.get_function[R]("Name")` runs `dlsym` on every call: the dynamic
 # loader walks the loaded images by name (about 50 host bindings or one merged
 # file, plus NumPy, on a CPU install) for each CPython call a native door makes.
-# The standard library's `CPython` handle already holds typed pointers for the
-# functions it wraps (`cpy.PyDict_Next`, `cpy.PyModule_GetDict`,
-# `cpy.PyErr_Clear`, `cpy.PyDict_GetItemWithError`, `cpy.PyObject_GetIter`,
-# `cpy.PyIter_Next`, ...): callers use those directly. This table holds the
-# stable-API functions it does not wrap, typed exactly as the C prototypes,
-# loaded from the same interpreter library the standard library selected
+# This table holds the functions typed exactly as the C prototypes, loaded
+# from the same interpreter library the standard library selected
 # (`cpy.lib`), so no global symbol linkage is assumed.
 #
-# Every symbol below is part of CPython's stable C API since before 3.10, the
-# package floor, so loading cannot miss on a supported interpreter.
+# THE ONE FORM (every caller, every lane):
+#   from bindings.cpython_table import cpython_table
+#   var table = cpython_table()            # once per function, outside loops
+#   var fields = table[].PyModule_GetDict(module._obj_ptr)
+# - A C-API function the tree needs that is not here is ADDED here (field,
+#   comptime prototype, load line, global name version bump); no lane builds a
+#   second table, calls `get_function[...]("Py...")` on a per-call or per-item
+#   path, or registers another `_Global` of CPython symbols.
+# - `PyModule_GetDict`, `PyObject_GetIter` and `PyIter_Next` (the 26 calls of
+#   plan item A whose `cpy.<Name>` method form was doubtful) go through this
+#   table only: the `ExternalFunction` form is the one the 0.8.66 candidate
+#   compiled for all 78 entries of the former tables, so it carries no open
+#   question.
+# - The standard library handle (`ref cpy = Python().cpython()`) stays for
+#   reference counts (`Py_NewRef`, `Py_DecRef`, `Py_IncRef`), `PyObject_Type`,
+#   `PyObject_Call`, the tuple builders and `unsafe_get_error`, the calls main
+#   already compiled in that form.
+# - Pointers to C strings and raw buffers travel as an address `Int` (same
+#   register class as a pointer under the C ABI on every supported target);
+#   callers pass `Int(ptr)`.
+#
+# Every symbol below is exported by CPython 3.10 through 3.14 (the package
+# floor and the newest supported interpreter), so loading cannot miss.
+# Version-dependent symbols (PyWeakref_GetRef from 3.13, PyWeakref_GetObject
+# removed in 3.15) are deliberately absent.
 from std.ffi import _Global, c_int
 from std.python import Python
 from std.python._cpython import ExternalFunction, PyObjectPtr
@@ -129,6 +151,97 @@ comptime _PyLong_FromString = ExternalFunction[
 comptime _PyBuffer_ToContiguous = ExternalFunction[
     "PyBuffer_ToContiguous", def(UnsafePointer[UInt8, MutUntrackedOrigin], UnsafePointer[Int, MutUntrackedOrigin], Int, Int8) thin abi("C") -> c_int]
 
+# Absorbed from perf2_shared_cpython_table.mojo (lane perf2-shared).
+# Py_ssize_t PyTuple_Size(PyObject *p)
+comptime _PyTuple_Size = ExternalFunction[
+    "PyTuple_Size", def(PyObjectPtr) thin abi("C") -> Int]
+# Py_ssize_t PyList_Size(PyObject *list)
+comptime _PyList_Size = ExternalFunction[
+    "PyList_Size", def(PyObjectPtr) thin abi("C") -> Int]
+# PyObject *PyList_GetItem(PyObject *list, Py_ssize_t index)  (borrowed)
+comptime _PyList_GetItem = ExternalFunction[
+    "PyList_GetItem", def(PyObjectPtr, Int) thin abi("C") -> PyObjectPtr]
+# PyObject *PyTuple_GetItem(PyObject *p, Py_ssize_t pos)  (borrowed)
+comptime _PyTuple_GetItem = ExternalFunction[
+    "PyTuple_GetItem", def(PyObjectPtr, Int) thin abi("C") -> PyObjectPtr]
+# long long PyLong_AsLongLong(PyObject *obj)  (-1 with an error set on failure)
+comptime _PyLong_AsLongLong = ExternalFunction[
+    "PyLong_AsLongLong", def(PyObjectPtr) thin abi("C") -> Int64]
+# PyObject *PyMethod_New(PyObject *func, PyObject *self)  (new)
+comptime _PyMethod_New = ExternalFunction[
+    "PyMethod_New", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyWeakref_NewRef(PyObject *ob, PyObject *callback)  (new)
+comptime _PyWeakref_NewRef = ExternalFunction[
+    "PyWeakref_NewRef", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyObject_CallNoArgs(PyObject *callable)  (new, NULL on error)
+comptime _PyObject_CallNoArgs = ExternalFunction[
+    "PyObject_CallNoArgs", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyObject_GenericGetAttr(PyObject *o, PyObject *name)  (new)
+comptime _PyObject_GenericGetAttr = ExternalFunction[
+    "PyObject_GenericGetAttr", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyFrameObject *PyEval_GetFrame(void)  (borrowed)
+comptime _PyEval_GetFrame = ExternalFunction[
+    "PyEval_GetFrame", def() thin abi("C") -> PyObjectPtr]
+# PyCodeObject *PyFrame_GetCode(PyFrameObject *frame)  (new)
+comptime _PyFrame_GetCode = ExternalFunction[
+    "PyFrame_GetCode", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyFrameObject *PyFrame_GetBack(PyFrameObject *frame)  (new, or NULL)
+comptime _PyFrame_GetBack = ExternalFunction[
+    "PyFrame_GetBack", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyFunction_GetCode(PyObject *op)  (borrowed)
+comptime _PyFunction_GetCode = ExternalFunction[
+    "PyFunction_GetCode", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# Absorbed from p3_lm_tokenizer_cpython.mojo (lane p3-lm-tokenizer).
+# const char *PyUnicode_AsUTF8AndSize(PyObject *unicode, Py_ssize_t *size)
+# (size as the address of one Int word; result an address, 0 on error)
+comptime _PyUnicode_AsUTF8AndSize = ExternalFunction[
+    "PyUnicode_AsUTF8AndSize", def(PyObjectPtr, Int) thin abi("C") -> Int]
+# PyObject *PyBytes_FromStringAndSize(const char *v, Py_ssize_t len)  (new)
+comptime _PyBytes_FromStringAndSize = ExternalFunction[
+    "PyBytes_FromStringAndSize", def(Int, Int) thin abi("C") -> PyObjectPtr]
+# PyObject *PyNumber_Index(PyObject *o)  (new exact int, NULL on error)
+comptime _PyNumber_Index = ExternalFunction[
+    "PyNumber_Index", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# int PyDict_Next(PyObject *p, Py_ssize_t *ppos, PyObject **pkey, PyObject **pvalue)
+# (the three out-pointers as addresses; keys and values borrowed)
+comptime _PyDict_Next = ExternalFunction[
+    "PyDict_Next", def(PyObjectPtr, Int, Int, Int) thin abi("C") -> c_int]
+# PyObject *PyCodec_LookupError(const char *name)  (new; name as an address)
+comptime _PyCodec_LookupError = ExternalFunction[
+    "PyCodec_LookupError", def(Int) thin abi("C") -> PyObjectPtr]
+# Absorbed from p3_labels_metrics_native.mojo (lane p3-labels-metrics).
+# PyObject *PyObject_CallObject(PyObject *callable, PyObject *args)  (new)
+comptime _PyObject_CallObject = ExternalFunction[
+    "PyObject_CallObject", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# int PyObject_IsTrue(PyObject *o)
+comptime _PyObject_IsTrue = ExternalFunction[
+    "PyObject_IsTrue", def(PyObjectPtr) thin abi("C") -> c_int]
+# PyObject *PyDict_GetItemWithError(PyObject *p, PyObject *key)  (borrowed; NULL: missing or error)
+comptime _PyDict_GetItemWithError = ExternalFunction[
+    "PyDict_GetItemWithError", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# double PyFloat_AsDouble(PyObject *o)  (-1.0 with an error set on failure)
+comptime _PyFloat_AsDouble = ExternalFunction[
+    "PyFloat_AsDouble", def(PyObjectPtr) thin abi("C") -> Float64]
+# PyObject *PyDict_Copy(PyObject *p)  (new)
+comptime _PyDict_Copy = ExternalFunction[
+    "PyDict_Copy", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# Lane ne1-e-table: the 26 calls of plan item A, and per-call by-name lookups.
+# PyObject *PyModule_GetDict(PyObject *module)  (borrowed)
+comptime _PyModule_GetDict = ExternalFunction[
+    "PyModule_GetDict", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyObject_GetIter(PyObject *o)  (new, NULL on error)
+comptime _PyObject_GetIter = ExternalFunction[
+    "PyObject_GetIter", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyIter_Next(PyObject *o)  (new; NULL at the end or on error)
+comptime _PyIter_Next = ExternalFunction[
+    "PyIter_Next", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PyType_GetModule(PyTypeObject *type)  (borrowed, NULL with an error)
+comptime _PyType_GetModule = ExternalFunction[
+    "PyType_GetModule", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# PyObject *PySequence_Repeat(PyObject *o, Py_ssize_t count)  (new)
+comptime _PySequence_Repeat = ExternalFunction[
+    "PySequence_Repeat", def(PyObjectPtr, Int) thin abi("C") -> PyObjectPtr]
+
 
 struct CPythonTable(Movable):
     var PyImport_GetModuleDict: _PyImport_GetModuleDict.type
@@ -164,6 +277,34 @@ struct CPythonTable(Movable):
     var PyUnicode_DecodeUTF8: _PyUnicode_DecodeUTF8.type
     var PyOS_string_to_double: _PyOS_string_to_double.type
     var PyLong_FromString: _PyLong_FromString.type
+    var PyTuple_Size: _PyTuple_Size.type
+    var PyList_Size: _PyList_Size.type
+    var PyList_GetItem: _PyList_GetItem.type
+    var PyTuple_GetItem: _PyTuple_GetItem.type
+    var PyLong_AsLongLong: _PyLong_AsLongLong.type
+    var PyMethod_New: _PyMethod_New.type
+    var PyWeakref_NewRef: _PyWeakref_NewRef.type
+    var PyObject_CallNoArgs: _PyObject_CallNoArgs.type
+    var PyObject_GenericGetAttr: _PyObject_GenericGetAttr.type
+    var PyEval_GetFrame: _PyEval_GetFrame.type
+    var PyFrame_GetCode: _PyFrame_GetCode.type
+    var PyFrame_GetBack: _PyFrame_GetBack.type
+    var PyFunction_GetCode: _PyFunction_GetCode.type
+    var PyUnicode_AsUTF8AndSize: _PyUnicode_AsUTF8AndSize.type
+    var PyBytes_FromStringAndSize: _PyBytes_FromStringAndSize.type
+    var PyNumber_Index: _PyNumber_Index.type
+    var PyDict_Next: _PyDict_Next.type
+    var PyCodec_LookupError: _PyCodec_LookupError.type
+    var PyObject_CallObject: _PyObject_CallObject.type
+    var PyObject_IsTrue: _PyObject_IsTrue.type
+    var PyDict_GetItemWithError: _PyDict_GetItemWithError.type
+    var PyFloat_AsDouble: _PyFloat_AsDouble.type
+    var PyDict_Copy: _PyDict_Copy.type
+    var PyModule_GetDict: _PyModule_GetDict.type
+    var PyObject_GetIter: _PyObject_GetIter.type
+    var PyIter_Next: _PyIter_Next.type
+    var PyType_GetModule: _PyType_GetModule.type
+    var PySequence_Repeat: _PySequence_Repeat.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -201,13 +342,41 @@ struct CPythonTable(Movable):
         self.PyUnicode_DecodeUTF8 = _PyUnicode_DecodeUTF8.load(lib)
         self.PyOS_string_to_double = _PyOS_string_to_double.load(lib)
         self.PyLong_FromString = _PyLong_FromString.load(lib)
+        self.PyTuple_Size = _PyTuple_Size.load(lib)
+        self.PyList_Size = _PyList_Size.load(lib)
+        self.PyList_GetItem = _PyList_GetItem.load(lib)
+        self.PyTuple_GetItem = _PyTuple_GetItem.load(lib)
+        self.PyLong_AsLongLong = _PyLong_AsLongLong.load(lib)
+        self.PyMethod_New = _PyMethod_New.load(lib)
+        self.PyWeakref_NewRef = _PyWeakref_NewRef.load(lib)
+        self.PyObject_CallNoArgs = _PyObject_CallNoArgs.load(lib)
+        self.PyObject_GenericGetAttr = _PyObject_GenericGetAttr.load(lib)
+        self.PyEval_GetFrame = _PyEval_GetFrame.load(lib)
+        self.PyFrame_GetCode = _PyFrame_GetCode.load(lib)
+        self.PyFrame_GetBack = _PyFrame_GetBack.load(lib)
+        self.PyFunction_GetCode = _PyFunction_GetCode.load(lib)
+        self.PyUnicode_AsUTF8AndSize = _PyUnicode_AsUTF8AndSize.load(lib)
+        self.PyBytes_FromStringAndSize = _PyBytes_FromStringAndSize.load(lib)
+        self.PyNumber_Index = _PyNumber_Index.load(lib)
+        self.PyDict_Next = _PyDict_Next.load(lib)
+        self.PyCodec_LookupError = _PyCodec_LookupError.load(lib)
+        self.PyObject_CallObject = _PyObject_CallObject.load(lib)
+        self.PyObject_IsTrue = _PyObject_IsTrue.load(lib)
+        self.PyDict_GetItemWithError = _PyDict_GetItemWithError.load(lib)
+        self.PyFloat_AsDouble = _PyFloat_AsDouble.load(lib)
+        self.PyDict_Copy = _PyDict_Copy.load(lib)
+        self.PyModule_GetDict = _PyModule_GetDict.load(lib)
+        self.PyObject_GetIter = _PyObject_GetIter.load(lib)
+        self.PyIter_Next = _PyIter_Next.load(lib)
+        self.PyType_GetModule = _PyType_GetModule.load(lib)
+        self.PySequence_Repeat = _PySequence_Repeat.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
 # them load the same interpreter library). Bump the name's version whenever a
 # field is added, removed or reordered.
 comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name="MojolearnCPythonTableV4",
+    StorageType=CPythonTable, name="MojolearnCPythonTableV5",
     init_fn=CPythonTable.__init__,
 ]
 
