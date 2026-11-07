@@ -97,6 +97,11 @@ raise SystemExit(pytest.main(sys.argv[1:]))
     files = [str(p) for p in suites['pytest']]
     pytest = [sys.executable, '-m', 'pytest', '-q']
     workers = worker_count()
+    # The slowest tests are printed at the end of every run (Andrew, 2026-11-06: the suite's heavy tail is
+    # cut from measured durations, never guessed). MOJOLEARN_TEST_DURATIONS=0 turns the report off.
+    durations = os.environ.get('MOJOLEARN_TEST_DURATIONS', '80').strip()
+    if durations != '0' and not any(a.startswith('--durations') for a in pytest_args):
+        pytest_args = ['--durations', durations, '--durations-min', '0.5', *pytest_args]
     have_xdist = importlib.util.find_spec('xdist') is not None
     if user_chose_workers(pytest_args) or workers == 1:
         return subprocess.call([*pytest, *files, *pytest_args], cwd=ROOT / 'python')
