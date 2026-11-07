@@ -1615,11 +1615,20 @@ def decomp_resident_freeze(source: PythonObject) raises -> Bool:
 
 
 def decomp_resident_find(owner: PythonObject, alloc: PythonObject, free: PythonObject, source: PythonObject,
-                         name: String, own_words: Bool) raises -> PythonObject:
+                         name: String, own_words: Bool, check_generation: Bool = True) raises -> PythonObject:
     """`owner`'s entry `name` when it was taken from exactly this `source`
     object, still read-only, on the binding whose `alloc` / `free` entries
     minted it, at `owner`'s current generation (and, with `own_words`,
-    holding the source's own words); else None."""
+    holding the source's own words); else None.
+
+    An entry a fitting call adopted (`decomp_resident_adopt`: generation
+    word -1, pending) is stamped with the generation of its first query:
+    the fit's own bookkeeping writes the instance dictionary after the
+    state is published, so the word at adoption would never match. The
+    source's identity and read-only flag prove the words until then.
+    `check_generation` False: a fitting call reading the state it extends
+    (its lifecycle already wrote the dictionary in this call), proven by
+    the same identity and read-only rule."""
     if owner is None:
         return PythonObject(None)
     var mods = NativeModules()
@@ -1633,21 +1642,32 @@ def decomp_resident_find(owner: PythonObject, alloc: PythonObject, free: PythonO
         return PythonObject(None)
     if not decomp_resident_frozen(source):
         return PythonObject(None)
-    if Int(py=held[8]) != decomp_resident_generation(owner):
+    if not check_generation:
+        return held
+    var generation = decomp_resident_generation(owner)
+    var taken = Int(py=held[8])
+    if taken == -1:
+        var stamped = Python.tuple(held[0], held[1], held[2], held[3], held[4], held[5], held[6], held[7],
+                                   PythonObject(generation))
+        py_setitem(record, PythonObject(name), stamped)
+        return stamped
+    if taken != generation:
         return PythonObject(None)
     return held
 
 
 def decomp_resident_hold(owner: PythonObject, alloc: PythonObject, free: PythonObject, source: PythonObject,
-                         name: String, rows: Int, cols: Int, handle: Int, own_words: Bool) raises -> PythonObject:
+                         name: String, rows: Int, cols: Int, handle: Int, own_words: Bool,
+                         pending: Bool = False) raises -> PythonObject:
     """Give the pool buffer `handle` (rows x cols words, already written) to
     `owner`'s record under `name` and return the entry; the previous entry
     of that name (and so its buffer) goes. The caller keeps the entry alive
     through its call: where `owner` takes no weak reference no record is
     kept and the entry's capsule frees the buffer when the caller drops it.
-    On a failure the buffer is returned at once."""
+    On a failure the buffer is returned at once. `pending`: the generation
+    is stamped by the first query (see `decomp_resident_find`)."""
     var capsule = resident_capsule(free, handle)
-    var generation = decomp_resident_generation(owner)
+    var generation = -1 if pending else decomp_resident_generation(owner)
     var held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle),
                             capsule, PythonObject(own_words), PythonObject(generation))
     var mods = NativeModules()
@@ -1665,3 +1685,70 @@ def decomp_resident_drop(owner: PythonObject) raises:
     rather than at the next query."""
     var mods = NativeModules()
     prepared_drop(mods, _DK_RESIDENT_SLOT, owner)
+
+
+def decomp_resident_binding(entries: PythonObject) raises -> Bool:
+    """A GPU x_decomp binding's entries dict: the pool entries a resident
+    operand is held through (`DecompKit.resident` reads the same marker)."""
+    return (py_get(entries, "x_decomp_dev_ew") is not None and py_get(entries, "x_decomp_dev_alloc") is not None
+            and py_get(entries, "x_decomp_dev_upload") is not None and py_get(entries, "x_decomp_dev_free") is not None)
+
+
+def decomp_resident_cached(owner: PythonObject, entries: PythonObject, source: PythonObject, name: String,
+                           check_generation: Bool = True) raises -> PythonObject:
+    """`owner`'s entry `name` when it holds the own words of exactly this
+    frozen `source` on the binding of `entries` (a connected x_decomp
+    entries dict): the caller may then skip the per-call admission of
+    `source` (neither its values nor its shape can have changed). None on
+    any miss, a host binding, or no `source`."""
+    if source is None or not decomp_resident_binding(entries):
+        return PythonObject(None)
+    return decomp_resident_find(owner, entries["x_decomp_dev_alloc"], entries["x_decomp_dev_free"], source, name,
+                                True, check_generation)
+
+
+def decomp_resident_operand(owner: PythonObject, entries: PythonObject, source: PythonObject, name: String,
+                            rows: Int, cols: Int) raises -> PythonObject:
+    """The entry (word 5: the pool id) of the device copy of the fitted
+    float32 array `source` (rows x cols words, its own words: the caller
+    passes the stored object, not a converted copy): served from `owner`'s
+    record, else uploaded once and recorded (the read-only rule first).
+    None on a host binding, an empty array, or storage that cannot be
+    frozen: the caller then uploads it per call, as before. The caller
+    keeps the entry alive through its native call."""
+    var n = rows * cols
+    if owner is None or n < 1 or not decomp_resident_binding(entries):
+        return PythonObject(None)
+    var alloc = entries["x_decomp_dev_alloc"]
+    var upload = entries["x_decomp_dev_upload"]
+    var free = entries["x_decomp_dev_free"]
+    var held = decomp_resident_find(owner, alloc, free, source, name, True)
+    if held is not None and Int(py=held[3]) == rows and Int(py=held[4]) == cols:
+        return held
+    if not decomp_resident_freeze(source):
+        return PythonObject(None)
+    var handle = Int(py=py_call(alloc, n))
+    try:
+        _ = py_call(upload, handle, classical_address(source), n)
+    except error:
+        _ = py_call(free, handle)
+        raise error^
+    _ = source  # keep the Python object alive through the native call above
+    return decomp_resident_hold(owner, alloc, free, source, name, rows, cols, handle, True)
+
+
+def decomp_resident_adopt(owner: PythonObject, entries: PythonObject, source: PythonObject, name: String,
+                          rows: Int, cols: Int, handle: Int) raises -> PythonObject:
+    """Record the pool buffer `handle` a fitting driver kept on the device
+    (it holds the words just published into the fresh Array `source`, rows
+    x cols) as `owner`'s entry `name`, its generation pending until the
+    first query. When `source` cannot be frozen, or there is no owner, the
+    buffer is returned at once and None comes back. Never leaks `handle`."""
+    if handle < 0:
+        return PythonObject(None)
+    var free = entries["x_decomp_dev_free"]
+    if owner is None or not decomp_resident_freeze(source):
+        _ = py_call(free, handle)
+        return PythonObject(None)
+    return decomp_resident_hold(owner, entries["x_decomp_dev_alloc"], free, source, name, rows, cols, handle, True,
+                                True)

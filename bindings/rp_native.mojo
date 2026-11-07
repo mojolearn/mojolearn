@@ -19,9 +19,7 @@ from bindings.decomp_owner_common import (
     decomp_lt, decomp_le, decomp_seed, decomp_set_mode,
 )
 from bindings.jl_native import jl_min_dim
-from bindings.decomp_kit_native import (
-    decomp_resident_find, decomp_resident_freeze, decomp_resident_hold, decomp_resident_drop,
-)
+from bindings.decomp_kit_native import decomp_resident_cached, decomp_resident_operand, decomp_resident_drop
 
 
 def _str(value: PythonObject) raises -> String:
@@ -31,53 +29,6 @@ def _str(value: PythonObject) raises -> String:
 def _components(fields: PythonObject) raises -> PythonObject:
     """The fitted matrix the `components_` property reads (`_rp_components`)."""
     return py_get(fields, "_rp_components")
-
-
-def _resident_entry(model: PythonObject, entries: PythonObject, source: PythonObject, name: String,
-                    rows: Int, cols: Int) raises -> PythonObject:
-    """The record entry (word 5: the pool id) of the device copy of the
-    fitted matrix `source` (rows x
-    cols float32 words; lane ne1-a-decomp-resident, row N350), uploaded at
-    the first projection of a fitted state and kept in the model's resident
-    record (bindings/decomp_kit_native.mojo `decomp_resident_*`: keyed by
-    the model, its generation word and the matrix object; the read-only
-    rule makes the matrix read-only first). None on a host binding, for
-    storage that cannot be frozen, or for an empty matrix: the projection
-    then uploads it per call, as before. The caller keeps the entry alive
-    through its native call (where the model takes no weak reference no
-    record is kept and the entry alone owns the buffer). The device words
-    are the host words, read where the per-call upload was read: no bit
-    change."""
-    var n = rows * cols
-    var alloc = py_get(entries, "x_decomp_dev_alloc")
-    var upload = py_get(entries, "x_decomp_dev_upload")
-    var free = py_get(entries, "x_decomp_dev_free")
-    if n < 1 or alloc is None or upload is None or free is None or py_get(entries, "x_decomp_dev_ew") is None:
-        return PythonObject(None)
-    var held = decomp_resident_find(model, alloc, free, source, name, True)
-    if held is not None and Int(py=held[3]) == rows and Int(py=held[4]) == cols:
-        return held
-    if not decomp_resident_freeze(source):
-        return PythonObject(None)
-    var handle = Int(py=py_call(alloc, n))
-    try:
-        _ = py_call(upload, handle, classical_address(source), n)
-    except error:
-        _ = py_call(free, handle)
-        raise error^
-    _ = source  # keep the Python object alive through the native call above
-    return decomp_resident_hold(model, alloc, free, source, name, rows, cols, handle, True)
-
-
-def _resident_hit(model: PythonObject, entries: PythonObject, source: PythonObject, name: String) raises -> PythonObject:
-    """The record entry of a fitted matrix already resident as its own frozen
-    words: the per-call admission (classical_host_f32) is skipped for it,
-    since neither its values nor its shape can have changed. None on a miss."""
-    var alloc = py_get(entries, "x_decomp_dev_alloc")
-    var free = py_get(entries, "x_decomp_dev_free")
-    if alloc is None or free is None or py_get(entries, "x_decomp_dev_ew") is None or source is None:
-        return PythonObject(None)
-    return decomp_resident_find(model, alloc, free, source, name, True)
 
 
 def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: PythonObject) raises -> PythonObject:
@@ -191,7 +142,7 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
         stored = _components(fields)
     # A fitted matrix already resident as its own frozen words is not
     # admitted again (N350); otherwise the per-call admission, as before.
-    var hit = _resident_hit(model, entries, stored, name)
+    var hit = decomp_resident_cached(model, entries, stored, name)
     if hit is not None:
         matrix = stored
     else:
@@ -203,12 +154,17 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     var tiled = not inverse and host_sparse_format(source).byte_length() == 0
     var params = Python.list(
         classical_address(x), m, width, classical_address(matrix), rows, 1 if tiled else 0, classical_address(out))
-    # The device copy of the fitted matrix (word 7, GPU bindings only): only
+    # The device copy of the fitted matrix (word 7, GPU bindings only; lane
+    # ne1-a-decomp-resident, N350): uploaded at the first projection of a
+    # fitted state and kept in the model's resident record
+    # (bindings/decomp_kit_native.mojo `decomp_resident_*`: the model, its
+    # generation word and the matrix object; the read-only rule first). Only
     # when the converted matrix is the stored object itself (a cast copy
-    # would be a new object per call).
+    # would be a new object per call); else the per-call upload, as before.
+    # The device words are the host words: no bit change.
     var held = hit
     if held is None and matrix is stored:
-        held = _resident_entry(model, entries, stored, name, rows, Int(py=matrix.shape[1]))
+        held = decomp_resident_operand(model, entries, stored, name, rows, Int(py=matrix.shape[1]))
     if held is not None:
         _ = py_call(params.append, held[5])
     var flagged = Int(py=py_call_typed(entries["x_decomp_rp_project"], params))

@@ -12,7 +12,11 @@ def connect(ipca_class):
 
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
-    names = ("x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project")
+    names = ("x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project",
+             # the pool entries the resident running state is held through
+             # (GPU bindings only; bindings/ipca_native.mojo, lane
+             # ne1-a-decomp-resident): a build without them uploads per call
+             "x_decomp_dev_alloc", "x_decomp_dev_upload", "x_decomp_dev_free", "x_decomp_dev_ew")
     decomp = {}
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
