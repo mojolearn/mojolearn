@@ -935,14 +935,19 @@ def bagging_predict_proba(model: PythonObject, args: PythonObject, context: Pyth
     return _bagging_proba(model, py_fields(model), args[0], context)
 
 
+def bagging_codes(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """BaggingClassifier's predicted class codes (int32), undecoded."""
+    var p = _bagging_proba(model, fields, X, context)
+    var n = Int(py=p.shape[0])
+    var k = Int(py=_int(fields["n_classes_"]))
+    return _argmax(_xt(fields, context), p, n, k, context)
+
+
 def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     """BaggingClassifier/BaggingRegressor `predict`."""
     var fields = py_fields(model)
     if classifier:
-        var p = _bagging_proba(model, fields, args[0], context)
-        var n = Int(py=p.shape[0])
-        var k = Int(py=_int(fields["n_classes_"]))
-        return trees_decode_labels(fields["classes_"], _argmax(_xt(fields, context), p, n, k, context), context)
+        return trees_decode_labels(fields["classes_"], bagging_codes(model, fields, args[0], context), context)
     var x = _bagging_x(fields, args[0], context)
     var n = x.rows
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
@@ -1280,23 +1285,35 @@ def ada_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
+def _ada_codes_of(fields: PythonObject, x: TreesMatrix, xt: PythonObject, context: PythonObject) raises -> PythonObject:
+    """AdaBoostClassifier's predicted class codes (int32), undecoded."""
+    var n = x.rows
+    var k = Int(py=_int(fields["n_classes_"]))
+    var acc = _ada_decision(fields, x, xt, context)
+    var codes = PythonObject(None)
+    if k == 2:
+        codes = trees_vector(n, "<i4", context)
+        _ = py_call_typed(_x(xt, "x_trees_margin2"), _A(acc), _A(codes), Python.list(_P(n), _P(1)))
+        _ = codes  # keep the Python object alive through the native call above
+        _ = acc  # keep the Python object alive through the native call above
+    else:
+        codes = _argmax(xt, acc, n, k, context)
+    return codes
+
+
+def ada_codes(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """AdaBoostClassifier's predicted class codes for X."""
+    var x = _ada_x(fields, X, context)
+    return _ada_codes_of(fields, x, _xt(fields, context), context)
+
+
 def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var x = _ada_x(fields, args[0], context)
     var xt = _xt(fields, context)
     var n = x.rows
     if classifier:
-        var k = Int(py=_int(fields["n_classes_"]))
-        var acc = _ada_decision(fields, x, xt, context)
-        var codes = PythonObject(None)
-        if k == 2:
-            codes = trees_vector(n, "<i4", context)
-            _ = py_call_typed(_x(xt, "x_trees_margin2"), _A(acc), _A(codes), Python.list(_P(n), _P(1)))
-            _ = codes  # keep the Python object alive through the native call above
-            _ = acc  # keep the Python object alive through the native call above
-        else:
-            codes = _argmax(xt, acc, n, k, context)
-        return trees_decode_labels(fields["classes_"], codes, context)
+        return trees_decode_labels(fields["classes_"], _ada_codes_of(fields, x, xt, context), context)
     # `AdaBoostRegressor.predict`: the weighted median of the members.
     var members = fields["estimators_"]
     var m = len(members)
@@ -1767,23 +1784,42 @@ def _multiclass(fields: PythonObject) raises -> Bool:
     return Int(py=_int(py_get(fields, "n_classes_", _P(1)))) > 1
 
 
-def dart_predict(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
-    var fields = py_fields(model)
-    if not classifier:
-        return _dart_raw(model, fields, args[0], context)
+def dart_codes(model: PythonObject, fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """DARTClassifier's predicted class codes (int32), undecoded."""
     var xt = _xt(fields, context)
     if _multiclass(fields):
-        var acc = _dart_raw_rows(model, fields, args[0], context)
+        var acc = _dart_raw_rows(model, fields, X, context)
         var n = Int(py=acc.shape[0])
         var K = Int(py=acc.shape[1])
-        return trees_decode_labels(fields["classes_"], _argmax(xt, acc, n, K, context), context)
-    var raw = _dart_raw(model, fields, args[0], context)
+        return _argmax(xt, acc, n, K, context)
+    var raw = _dart_raw(model, fields, X, context)
     var n = Int(py=raw.size)
     var codes = trees_vector(n, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_positive_codes"), _A(raw), _A(codes), Python.list(_P(n)))
     _ = codes  # keep the Python object alive through the native call above
     _ = raw  # keep the Python object alive through the native call above
-    return trees_decode_labels(fields["classes_"], codes, context)
+    return codes
+
+
+def dart_predict(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
+    var fields = py_fields(model)
+    if not classifier:
+        return _dart_raw(model, fields, args[0], context)
+    return trees_decode_labels(fields["classes_"], dart_codes(model, fields, args[0], context), context)
+
+
+def boost_predict_codes(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A Bagging / AdaBoost / DART classifier's `(classes_, codes)`: the
+    prediction before its label decode (N043, ne1-a-trees). `predict`
+    decodes exactly these codes."""
+    var fields = py_fields(model)
+    if kind.startswith("bagging_"):
+        return Python.tuple(fields["classes_"], bagging_codes(model, fields, X, context))
+    if kind.startswith("ada_"):
+        return Python.tuple(fields["classes_"], ada_codes(model, fields, X, context))
+    if kind.startswith("dart_"):
+        return Python.tuple(fields["classes_"], dart_codes(model, fields, X, context))
+    raise Error("unknown tree ensemble classifier " + kind)
 
 
 def dart_decision_function(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
