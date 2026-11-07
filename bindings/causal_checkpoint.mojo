@@ -13,13 +13,13 @@ from gemm.f16_widen import f16_bits_to_f32
 from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_instance_item import native_instance_item
-from bindings.native_array_storage import native_array_from_bytes
+from bindings.native_array_storage import native_array_empty, native_array_zeros
+from std.memory import memcpy
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot
 from bindings.mode_metadata_native import _class_fields
 from bindings.native_class_admission import class_record, class_admit
-from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
 from bindings.causal_model_config import model_record_fields, model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.linalg_ops_lowbit import _lin_from_f16, lin_connected_binding
@@ -179,41 +179,6 @@ def _info_map(mut mods: NativeModules, value: PythonObject) raises -> PythonObje
     return value
 
 
-def _checkpoint_pinned_bytes(pin: AdmittedBorrowedBuffer) raises -> PythonObject:
-    var count = pin.layout.value().count * pin.layout.value().itemsize
-    ref cpy0 = Python().cpython()
-    if count > 0 and pin.layout.value().contiguous():
-        # One copy: the bytes object is built straight from the pinned
-        # contiguous storage (no zero-filled intermediate List).
-        var direct = lm_cpython_table()[].PyBytes_FromStringAndSize(pin.layout.value().address, count)
-        _ = pin
-        if not direct:
-            raise cpy0.unsafe_get_error()
-        return PythonObject(from_owned=direct)
-    var bytes = List[UInt8](length=count, fill=0)
-    pin.layout.value().copy_to(Int(bytes.unsafe_ptr()))
-    ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(bytes.unsafe_ptr(), count)
-    _ = bytes  # The C API copies from this native owner before it can be released.
-    _ = pin
-    if not raw:
-        raise cpy.unsafe_get_error()
-    return PythonObject(from_owned=raw)
-
-
-def _checkpoint_bytes(value: PythonObject) raises -> PythonObject:
-    admit_native_buffer_exporter(value)
-    var pin = AdmittedBorrowedBuffer(value)
-    var raw = PythonObject(None)
-    try:
-        raw = _checkpoint_pinned_bytes(pin)
-    except error:
-        pin.release()
-        raise error
-    pin.release()
-    return raw
-
-
 def _checkpoint_read_bytes(mut mods: NativeModules, fd: PythonObject, count: Int) raises -> PythonObject:
     var pieces = Python.list()
     var total = 0
@@ -229,7 +194,60 @@ def _checkpoint_read_bytes(mut mods: NativeModules, fd: PythonObject, count: Int
     return py_call(empty.join, pieces)
 
 
+def _checkpoint_store_pinned(pin: AdmittedBorrowedBuffer, code: String) raises -> PythonObject:
+    # Row N204: the store is allocated zero-filled at its final size and the
+    # pinned bytes (an mmap slice, a caller buffer) are copied straight to its
+    # address: one copy (formerly bytes object, then array.frombytes).
+    ref layout = pin.layout.value()
+    var nbytes = layout.count * layout.itemsize
+    var itemsize = Int(py=native_array_empty(code).itemsize)
+    if itemsize <= 0 or nbytes % itemsize != 0:
+        raise Error("ValueError: bytes length not a multiple of item size")
+    var store = native_array_zeros(code, nbytes // itemsize)
+    if nbytes > 0:
+        var destination = native_buffer_address(store)
+        if layout.contiguous():
+            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
+                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=layout.address), count=nbytes)
+        else:
+            layout.copy_to(destination)
+    _ = pin
+    return store
+
+
+def _checkpoint_store(raw: PythonObject, code: String) raises -> PythonObject:
+    admit_native_buffer_exporter(raw)
+    var pin = AdmittedBorrowedBuffer(raw)
+    var store = PythonObject(None)
+    try:
+        store = _checkpoint_store_pinned(pin, code)
+    except error:
+        pin.release()
+        raise error
+    pin.release()
+    return store
+
+
 def checkpoint_array(mut mods: NativeModules, raw: PythonObject, shape: PythonObject, code: String, array_class: PythonObject) raises -> PythonObject:
+    return _checkpoint_array_from(mods, _checkpoint_store(raw, code), shape, code, array_class)
+
+
+def checkpoint_zeros(mut mods: NativeModules, count: Int, shape: PythonObject, code: String, array_class: PythonObject) raises -> PythonObject:
+    # A zero-filled checkpoint Array of `count` items: the store is allocated
+    # directly (formerly bytes(itemsize * count) sent through the byte copies).
+    if count < 0:
+        raise Error("ValueError: negative checkpoint element count")
+    return _checkpoint_array_from(mods, native_array_zeros(code, count), shape, code, array_class)
+
+
+def checkpoint_zeros(count: Int, shape: PythonObject, code: String, array_class: PythonObject) raises -> PythonObject:
+    var mods = NativeModules()
+    return checkpoint_zeros(mods, count, shape, code, array_class)
+
+
+def _checkpoint_array_from(mut mods: NativeModules, store: PythonObject, shape: PythonObject, code: String,
+                           array_class: PythonObject) raises -> PythonObject:
+    # `store` is the native array.array storage, already holding its bytes.
     var context = _checkpoint_context()
     if array_class is not context["array_class"]:
         raise Error("TypeError: checkpoint output requires its connected Array class")
@@ -237,8 +255,6 @@ def checkpoint_array(mut mods: NativeModules, raw: PythonObject, shape: PythonOb
     var bi = mods.module("builtins")
     model_sequence(mods, shape)
     var captured_shape = model_plain(mods, shape)
-    var bytes = _checkpoint_bytes(raw)
-    var store = native_array_from_bytes(code, bytes)
     var result = py_call(bi.object.__new__, array_class)
     var itemsize = Int(py=store.itemsize)
     var count = 1
@@ -438,7 +454,7 @@ def _safetensors_read(mut mods: NativeModules, fields: PythonObject, info: Pytho
     _ = py_call(view.release)
     if dtype == "F16" or (dtype == "BF16" and format == "widen"):
         var count = Int(py=info["count"])
-        var out = checkpoint_array(mods, py_call(bi.bytes, 4 * count), info["shape"], "f", context["array_class"])
+        var out = checkpoint_zeros(mods, count, info["shape"], "f", context["array_class"])
         if count != 0:
             var source = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(py=owned._addr))
             var dest = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
@@ -697,8 +713,14 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
         var shape = Python.list()
         for axis in range(len(pin.layout.value().shape)):  # small-loop(captured native buffer shape)
             _ = py_call(shape.append, PythonObject(pin.layout.value().shape[axis]))
-        var raw = _checkpoint_pinned_bytes(pin)
-        captured = checkpoint_array(mods, raw, shape, "H", cls)
+        # Row N204: the pinned bits go straight into the store (one copy).
+        var store = PythonObject(None)
+        try:
+            store = _checkpoint_store_pinned(pin, "H")
+        except error:
+            pin.release()
+            raise error
+        captured = _checkpoint_array_from(mods, store, shape, "H", cls)
         pin.release()
     var dtype = model_string(mods, captured.dtype)
     if dtype != "<f2" and dtype != "<u2":
@@ -709,7 +731,7 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
     _ = py_call(slots["dtype"].__set__, captured, PythonObject("<u2"))
     var source = neural_array_snapshot(captured, context)
     if Int(py=source.size) == 0:
-        return checkpoint_array(mods, py_call(mods.module("builtins").bytes), source.shape, "f", cls)
+        return checkpoint_zeros(mods, 0, source.shape, "f", cls)
     var linalg = context["linalg_context"]
     var binding = lin_connected_binding(linalg)
     mods.released()

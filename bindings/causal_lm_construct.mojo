@@ -19,7 +19,7 @@ from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initiali
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard
 from bindings.causal_operation_owner import _causal_namespace, causal_snapshot_fields
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_checkpoint_names_snapshot, _model_layer_weights, model_plain, model_record_fields
-from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
+from bindings.causal_checkpoint import checkpoint_array, checkpoint_zeros, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
 from bindings.native_json import native_path, native_path_exists
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.neural_block_admission import neural_block_f32, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
@@ -74,8 +74,7 @@ def _model_native_buffer(mut mods: NativeModules, value: PythonObject, code: Str
         raise Error("TypeError: CausalLM packed storage has the wrong item size")
     _ = neural_array_slots(context)
     var bi = mods.module("builtins")
-    var result = checkpoint_array(mods, py_call(bi.bytes, layout.count * size),
-        py_ints(layout.shape), code, context["array_class"])
+    var result = checkpoint_zeros(mods, layout.count, py_ints(layout.shape), code, context["array_class"])
     layout.copy_to(Int(py=result._addr))
     _ = pin^
     return result
@@ -126,7 +125,7 @@ def _model_pack(mut mods: NativeModules, value: PythonObject, format: String, li
     var fields = model_record_fields(mods, packed, cls, Python.tuple("shape", "bits", "codes", "exponents"))
     py_setitem(fields, "shape", value.shape)
     if format == "bfloat16":
-        var bits = checkpoint_array(mods, py_call(bi.bytes, rows * cols * 2), value.shape, "H", context["array_class"])
+        var bits = checkpoint_zeros(mods, rows * cols, value.shape, "H", context["array_class"])
         _ = py_call(_native_function(mods, linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
         mods.released()
         _ = bits  # keep the Python object alive through the native call above
