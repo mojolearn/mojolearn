@@ -1203,6 +1203,41 @@ class SmallByteLanguageModelTrainer:
         # step in one native call (bindings/byte_lm_trainer_native.mojo)
         return _LM_TRAINER(self, "train_step", (ids,), _LM_TRAINER_CONTEXT)
 
+    def train_steps(self, ids):
+        """Run several training steps in one call.
+
+        Equivalent to calling :meth:`train_step` once per batch, in order,
+        with the same losses and the same final state, but the batches are
+        handed over together and the steps run back to back on the device.
+
+        Parameters
+        ----------
+        ids : array-like of shape (n_steps, batch, length + 1), int32
+            ``n_steps`` batches of token ids, each as for :meth:`train_step`.
+
+        Returns
+        -------
+        dict
+            ``losses`` (float32 array of shape ``(n_steps,)``, one loss per
+            step), and for the last step ``loss``, ``step``,
+            ``completed_steps``, ``next_batch_index`` and, by default,
+            ``flags``. With ``step_result="full"`` the last step's
+            ``flat_gradients`` and ``gradients`` instead of ``flags``.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> shape = mojolearn.LanguageModelConfig()
+        >>> rng = np.random.default_rng(0)
+        >>> weights = (rng.standard_normal(shape.n_total) * 0.02).astype(np.float32)
+        >>> trainer = mojolearn.LanguageModelTrainer(weights, data_schedule={"corpus": "demo"})
+        >>> ids = rng.integers(0, 256, (4, shape.batch, shape.length + 1), dtype=np.int32)
+        >>> losses = trainer.train_steps(ids)["losses"]
+        """
+        # one native call: the lock, the ids, the binding and the steps
+        # (bindings/byte_lm_trainer_native.mojo byte_lm_train_steps)
+        return _LM_TRAINER(self, "train_steps", (ids,), _LM_TRAINER_CONTEXT)
+
     def evaluate(self, ids):
         """Mean loss on ``ids`` without changing any state.
 
