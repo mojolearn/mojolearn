@@ -90,26 +90,48 @@ def imported_device_provider_run(snapshot: PythonObject, descriptors: PythonObje
             raise Error("TypeError: program input metadata requires name, shape and native dtype text")
         _metadata_sequence(descriptor[1])
         _metadata_sequence(inputs[k][1])
-        var given = py_call(b.tuple, descriptor[1])
-        var wanted = py_call(b.tuple, inputs[k][1])
-        if not Bool(py=given == wanted):
-            raise Error("ValueError: input " + String(py=py_call(b.repr, inputs[k][0])) + " must have the shape "
-                + String(py=py_call(b.repr, wanted)) + ", got " + String(py=py_call(b.repr, given)))
+        # Row N142: the dims are compared as native Ints (the declared ones
+        # are the kept spec tuples of exact ints, imported_program_snapshot);
+        # the Python tuple build and `==` run only to spell a mismatch.
+        var given = descriptor[1]
+        var wanted = inputs[k][1]
+        var rank = len(given)
+        var same = rank == len(wanted)
+        var dims = List[Int]()
+        if same:
+            for axis in range(rank):  # small-loop(given: admitted input rank, at most eight)
+                if py_type(given[axis]) is not b.int:
+                    same = False
+                    break
+                var d = Int(py=given[axis])
+                if d != Int(py=wanted[axis]):
+                    same = False
+                    break
+                dims.append(d)
+        if not same:
+            var given_t = py_call(b.tuple, given)
+            var wanted_t = py_call(b.tuple, wanted)
+            if not Bool(py=given_t == wanted_t):
+                raise Error("ValueError: input " + String(py=py_call(b.repr, inputs[k][0])) + " must have the shape "
+                    + String(py=py_call(b.repr, wanted_t)) + ", got " + String(py=py_call(b.repr, given_t)))
+            dims.clear()
+            for axis in range(len(given_t)):  # small-loop(given: admitted input rank, at most eight)
+                dims.append(Int(py=given_t[axis]))
         var kind = _descriptor_kind(String(descriptor[2]))
-        if len(given) > 8:
+        if len(dims) > 8:
             raise Error("ValueError: program descriptor rank must be at most eight")
         addresses.append(Int(py=descriptor[0]))
         words.append(kind[0])
         words.append(kind[1])
-        words.append(len(given))
-        for axis in range(len(given)):  # small-loop(given: admitted input rank, at most eight)
-            words.append(Int(py=given[axis]))
+        words.append(len(dims))
+        for axis in range(len(dims)):  # small-loop(dims: admitted input rank, at most eight)
+            words.append(dims[axis])
     for k in range(len(outputs)):  # driver-loop: over admitted device output metadata
         _metadata_sequence(outputs[k])
         if len(outputs[k]) != 3:
             raise Error("TypeError: program output metadata requires name, shape and dtype")
         _metadata_sequence(outputs[k][1])
-        var dims = py_call(b.tuple, outputs[k][1])
+        var dims = outputs[k][1]
         if len(dims) > 8:
             raise Error("ValueError: program descriptor rank must be at most eight")
         addresses.append(Int(py=output_addresses[k]))
