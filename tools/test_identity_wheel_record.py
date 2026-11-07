@@ -153,3 +153,20 @@ def test_the_full_lane_list_drops_only_declared_gpu_only_lanes_on_cpu(tmp_path):
     r = R.Run(a, run=run)
     assert r.all_lanes(pathlib.Path(sys.executable), "cpu", "cpu") == (["a", "b"], 0)
     assert r.all_lanes(pathlib.Path(sys.executable), "amd", "amd-x") == (["a", "b", "gpu1"], 0)
+
+
+def test_the_venv_gets_the_harness_numpy_after_the_release_wheels(tmp_path):
+    # identity_break.py imports numpy at module level and the wheels carry none: the venv must install it, after the
+    # exact wheels, in its own pip call (so the wheel install line stays the release's bytes only).
+    w = tmp_path / "w.whl"
+    w.write_bytes(b"w")
+    calls = []
+    a = R.parse(["--columns", "cpu", "--wheel", str(w), "--sha256", "w.whl=" + R.sha256(str(w)),
+                 "--out", str(tmp_path / "o"), "--venv", str(tmp_path / "venv")])
+    (tmp_path / "o").mkdir()
+    R.Run(a, run=lambda cmd, **kw: calls.append(list(cmd))).install()
+    pips = [c for c in calls if c[1:3] == ["-m", "pip"]]
+    assert len(pips) == 2
+    assert pips[0][-1] == str(w) and not any(x.startswith("numpy") for x in pips[0])
+    assert pips[1][-len(R.HARNESS_REQUIREMENTS):] == list(R.HARNESS_REQUIREMENTS)
+    assert any(x.startswith("numpy>=") for x in pips[1])
