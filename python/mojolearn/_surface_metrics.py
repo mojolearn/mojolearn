@@ -152,7 +152,9 @@ TRAINING_LANE_NAMES = {
 }
 PUBLIC_PENDING_LANES = {
     "x-metrics-classification-report": "unwatched",
-    "x-metrics-permutation-test-score": "unwatched",
+    # LANE_REVISIONS moved it to perms-4-20261105-1 (4 permutations per call, 2026-11-05);
+    # the shipped table describes the former fixture until the next record.
+    "x-metrics-permutation-test-score": "stale reference",
     "public-scorer-factories": "unwatched",
     "public-validation-learning-curves": "unwatched",
     "public-randomized-search": "unwatched",

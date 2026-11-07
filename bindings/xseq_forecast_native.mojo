@@ -575,16 +575,19 @@ def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, co
     var kind = "theta" if operation.startswith("theta_") else "croston" if operation.startswith("croston_") else "ets" if operation.startswith("ets_") else "garch"
     var target = _forecast_fields(model, kind, context)
     var fields = py_call(native_loaded_module("builtins").dict, target)
-    if operation.endswith("predict"):
-        _setting(args[0], context["xseq_lifecycle_context"])
-    elif operation == "garch_fit":
-        _setting(args[1], context["xseq_lifecycle_context"])
     if operation.endswith("_predict"):
         # The fitted check the former `_mode` class-creation guard made:
         # NotFittedError (the xseq error boundary raises the active class)
         # unless a fit completed (`_mojolearn_fitted`) or a public fitted
-        # attribute is set (scikit-learn's check_is_fitted rule).
+        # attribute is set (scikit-learn's check_is_fitted rule). It comes
+        # before the horizon is read, as that guard ran before the method
+        # body: an unfitted predict raises NotFittedError whatever h is. It
+        # reads only the model's own fields, never the arguments.
         classical_require_fitted(model, False, "predict", context["xseq_lifecycle_context"])
+    if operation.endswith("predict"):
+        _setting(args[0], context["xseq_lifecycle_context"])
+    elif operation == "garch_fit":
+        _setting(args[1], context["xseq_lifecycle_context"])
     var result = PythonObject(None)
     if operation == "theta_fit":
         result = _theta_fit(model, fields, args, context)

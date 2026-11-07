@@ -31,7 +31,8 @@ _NAME_OF = {spelling: name for name, spellings in PATTERNS.items() for spelling 
 
 
 def pattern_name(regex):
-    """The name of a known pattern spelling, or None."""
+    """The name of a known pattern spelling, or None. ``regex`` must be a
+    ``str``; anything else raises ``TypeError``."""
     return _NATIVE.tokenizer_public_call('vocab_pattern', (regex,), _TOKENIZER_CONTEXT)
 
 

@@ -103,8 +103,16 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
         raise Error("NotImplementedError: ETS: season_length above 58 is not implemented (Nelder-Mead over at most 63 coordinates)")
     if e == "A" and season == "M":
         raise Error("ValueError: ETS: Forbidden model combination (additive errors with a multiplicative season)")
-    py_setitem(updates, "season_length", period)
-    py_setitem(updates, "model", text)
+    # scikit-learn's clone requires each constructor parameter stored as the
+    # very object passed (`param is get_params()[name]`). An exact str or int
+    # argument is stored itself; a converted one (NumPy scalar) as its value.
+    var str_type = py_type(PythonObject(""))
+    var int_type = py_type(PythonObject(0))
+    py_setitem(updates, "season_length", args[0] if py_type(args[0]) is int_type else PythonObject(period))
+    if damped_ctor or py_type(args[1]) is not str_type:
+        py_setitem(updates, "model", text)
+    else:
+        py_setitem(updates, "model", args[1])
     py_setitem(updates, "damped", damped)
     py_setitem(updates, "alpha", args[2] if damped_ctor else args[3])
     py_setitem(updates, "beta", args[3] if damped_ctor else args[4])

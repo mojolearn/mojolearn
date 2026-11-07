@@ -399,9 +399,11 @@ def test_tsne_source_leaves_both_binding_routes_for_native_admission():
         call = statements[0].value
         assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "_NATIVE"
         arguments = call.args[2]
-        assert isinstance(arguments, ast.Tuple) and len(arguments.elts) == 3
+        # (binding, binding, X, y): the ignored target goes to native admission too
+        assert isinstance(arguments, ast.Tuple) and len(arguments.elts) == 4
         assert all(isinstance(arg, ast.Constant) and arg.value is None for arg in arguments.elts[:2])
         assert isinstance(arguments.elts[2], ast.Name) and arguments.elts[2].id == "X"
+        assert isinstance(arguments.elts[3], ast.Name) and arguments.elts[3].id == "y"
 
 
 @pytest.mark.parametrize("name", ("Nystroem", "RBFSampler"))

@@ -96,7 +96,12 @@ def test_binding_exports_no_training_entry(binding):
                      # (neural_inference.py; the IDENTICAL toggle suffix)
                      "neural_arithmetic_profile",
                      # checkpoint integrity digest (core/sha256.mojo)
-                     "sha256_hex"}, names
+                     "sha256_hex",
+                     # the native descriptor tables of the inference blocks,
+                     # their decode state and the shared primitives (the same
+                     # forward entries, connected once; no training entry)
+                     "neural_primitives_api_v1", "mamba_block_api_v1", "mamba_state_api_v1",
+                     "transformer_block_api_v1"}, names
     # the decode cache is here (lane/stateful-cpu-decoding); training is not
     assert not [n for n in names if "backward" in n or "loss" in n or "optim" in n
                 or n.endswith("_fit") or "train" in n], names

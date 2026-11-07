@@ -121,6 +121,8 @@ FAMILIES = (
             "x_neighbors_kfeat_pcs_draw_idn", "x_neighbors_ocsvm_labels",
             "x_neighbors_nc_labels", "x_neighbors_nc_proba", "x_neighbors_lp_dense_proba",
             # END GENERATED EXPORTS
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "x_neighbors_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the neighbors + kernel expansion lane's CPU route (x_neighbors/).",

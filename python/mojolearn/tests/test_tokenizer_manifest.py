@@ -160,7 +160,7 @@ def test_missing_vocabulary_refused_by_name_before_any_load():
     try:
         mojolearn.BpeTokenizer()
     except ValueError as exc:
-        assert "needs a vocabulary, and mojolearn ships none" in str(exc)
+        assert "needs a vocabulary; mojolearn ships none" in str(exc)
     else:
         raise AssertionError("a tokenizer with no vocabulary was not refused")
     missing = os.path.join(tempfile.mkdtemp(), "ranks.tsv")

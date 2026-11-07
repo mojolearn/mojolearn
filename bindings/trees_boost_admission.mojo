@@ -131,6 +131,25 @@ def boost_tree_admit(model: PythonObject, context: PythonObject, cloning: Bool =
         classical_admit_value(classifier_label_list(fields["classes_"], context), context)
 
 
+def _require_connected_member(model: PythonObject, estimator: PythonObject, context: PythonObject) raises:
+    """The documented refusal of a member that is not a mojolearn tree
+    estimator (trees_public_boost.mojo `_require_tree`), before the member's
+    storage admission refuses it as an unconnected class. The class is named
+    by its type name: a foreign object's Python __repr__ never runs."""
+    var classes = py_get(context, "trees_classes")
+    if classes is None:
+        return
+    var b = native_loaded_module("builtins")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(estimator))
+    for i in range(len(mro)):  # driver-loop: over the member class ancestry metadata
+        if py_contains(classes, mro[i]):
+            return
+    raise Error("NotImplementedError: " + String(py_type(model).__name__) + ": estimator="
+                + String(py_type(estimator).__name__) + "() is not a mojolearn DecisionTree*, RandomForest* "
+                + "or ExtraTrees* estimator; the native ensemble fits only those members. Refused by name "
+                + "rather than accepted and ignored.")
+
+
 def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = False) raises -> PythonObject:
     var fields = classical_family_admit(model)
     var b = native_loaded_module("builtins")
@@ -147,6 +166,7 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
                 host_inference_scalar(fields[name], context, True)
         var estimator = py_get(fields, "estimator")
         if estimator is not None:
+            _require_connected_member(model, estimator, context)
             boost_tree_admit(estimator, context, True)
         # A refit replaces the fitted state: forget the record now so the
         # old members are not kept alive until the next call.

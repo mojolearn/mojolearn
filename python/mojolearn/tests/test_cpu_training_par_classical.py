@@ -41,7 +41,10 @@ ROOT = Path(__file__).resolve().parents[3]
 #: The Python-sharded drivers: {module: (its native owner entry, the operations it calls)}.
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("_native_parallel_shard", ("fit_scaler", "transform_scaler")),
-    "python/mojolearn/parallel_classical.py": ("_native_parallel_shard", ("transform_rbf_sampler",)),
+    # parallel_classical's drivers enter the family door, which routes the
+    # row-sharded operation to the same native shard owner (checked below).
+    "python/mojolearn/parallel_classical.py": ("_FAMILY(estimator, 'family_par_public', ",
+                                               ("transform_rbf_sampler",)),
     "python/mojolearn/parallel_neighbors.py": ("_native_parallel_shard", ("parallel_queries",)),
     "python/mojolearn/parallel_neighbors_reference.py": ("_native_parallel_shard", ("reference_query",)),
     "python/mojolearn/parallel_ensemble.py": ("_native_parallel_shard", ("fit_forest",)),
@@ -70,7 +73,10 @@ def test_python_sharded_drivers_are_native_pools():
     assert "var pool = process_pool_create(devices, False, child)" in common
     assert "native_require_worker_inventory(identities, p[].vendor, pids, " in common
     assert "var pool = shard_open(devices, child)" in common
-    assert owner.count("process_pool_create(") == 0 and forecast.count("shard_run(requests, devices, _CHILD)") == 1
+    # the forecast drivers open no pool of their own: every run (the fits
+    # keep their shard parts, so they call it directly) is shard_run
+    assert owner.count("process_pool_create(") == 0 and forecast.count("process_pool_create(") == 0
+    assert "shard_run(requests, devices, _CHILD)" in forecast
     for op in ("transform_rbf_sampler", "fit_scaler", "transform_scaler", "fit_gaussian_process_classifier",
                "predict_gaussian_process_classifier", "fit_forest", "reference_query", "parallel_queries",
                "ivf_from_index", "ivf_search"):

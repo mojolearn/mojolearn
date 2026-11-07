@@ -50,7 +50,6 @@ def _connect_pcs_rng():
     # NumPy's documented BitGenerator capsule is used; no RandomState/private
     # layout is read. See providers/python/pcs_rng_pyapi.mojo for pinned sources.
     from types import GetSetDescriptorType, MethodDescriptorType
-    import _thread
     try:
         from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64
     except ImportError:
@@ -62,7 +61,11 @@ def _connect_pcs_rng():
     state_getter = vars(mtrand.RandomState)['_bit_generator']
     capsule_getter = vars(BitGenerator)['capsule']
     lock_getter = vars(BitGenerator)['lock']
-    lock_type = _thread.LockType
+    # The lock class NumPy's BitGenerator actually holds (read once from a
+    # fresh generator's native getter at import): not necessarily
+    # _thread.LockType, and a mismatch refused every RandomState fit. The
+    # descriptor checks below still refuse a Python-defined lock class.
+    lock_type = type(lock_getter.__get__(MT19937(0), MT19937))
     acquire, release = vars(lock_type)['acquire'], vars(lock_type)['release']
     if any(type(value) is not GetSetDescriptorType for value in (state_getter, capsule_getter, lock_getter)):  # glue: fixed native descriptor admission
         raise TypeError('PCS RNG requires native NumPy state/capsule/lock getters')

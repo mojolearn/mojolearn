@@ -41,4 +41,9 @@ def graph_python_error(error: Error) -> PyObjectPtr:
         return raise_python_exception(Error(message[byte=19:]), ExceptionType("PyExc_FileNotFoundError"))
     if message.startswith("ImportError: "):
         return raise_python_exception(Error(message[byte=13:]), ExceptionType("PyExc_ImportError"))
+    if message.startswith("RuntimeError: "):
+        # The graph owners' RuntimeError refusals (an ONNX reader status
+        # outside 1-4, truncated reader metadata, a missing reader entry)
+        # keep their class instead of a bare Exception.
+        return raise_python_exception(Error(message[byte=14:]), ExceptionType("PyExc_RuntimeError"))
     return raise_python_exception(error)

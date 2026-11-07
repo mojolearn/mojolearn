@@ -31,6 +31,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_pandas import classical_admit_value
 from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.label_admission_native import labels_primitive_kind
 from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -945,8 +946,13 @@ def _imp_check(fields: PythonObject, context: PythonObject) raises:
     """`KNNImputer._check`."""
     var b = _b()
     var mv = family_field(fields, "missing_values")
+    # The former numbers.Real test, by exact class identity: isinstance with
+    # the numbers ABC runs ABCMeta.__instancecheck__ (a Python frame) on every
+    # fit. Kinds 3 and 4 are the exact native integer and real scalar classes
+    # (Python and connected NumPy); bool and NumPy bool_ (kind 2) are refused
+    # as before.
     if (mv is None or family_isinstance(mv, Python.tuple(b.str, b.bool))
-            or not family_isinstance(mv, context["labels_real_type"])):
+            or labels_primitive_kind(py_type(mv), context) < 3):
         raise Error("NotImplementedError: KNNImputer: missing_values must be a number or NaN (float input)")
     if _ne(family_field(fields, "metric"), PythonObject("nan_euclidean")):
         raise Error("NotImplementedError: KNNImputer: metric must be 'nan_euclidean'")

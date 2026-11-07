@@ -278,6 +278,10 @@ def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObje
     var kernel = family_field(fields, "kernel")
     var metric = family_field(fields, "metric")
     var bandwidth = family_field(fields, "bandwidth")
+    if family_is_str(bandwidth):
+        # A rule name set after fit ('scott'): its documented refusal, before
+        # the key's float() conversion would raise a bare conversion error.
+        _kde_validate(fields)
     var key = Python.tuple(classical_address(x), py_call(b.tuple, x.shape), w_address,
                            kernel if py_type(kernel) is b.str else family_call(b.str, kernel),
                            metric if py_type(metric) is b.str else family_call(b.str, metric),
@@ -322,6 +326,10 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var binding = args[0]
+    # The constructor stores its settings verbatim (scikit-learn's deferred
+    # validation); fit checks them first, so a refused setting raises the
+    # documented error here instead of scoring with it.
+    _kde_validate(fields)
     # A refit drops the device copy of the previous fit set HERE, as
     # NearestNeighbors.fit does (DEVIATION 2921's key rule).
     _kde_release(fields)

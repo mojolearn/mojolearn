@@ -271,8 +271,12 @@ def test_numpy_free_import_and_standard_buffers():
         import array, importlib.abc, sys
         class NoArrays(importlib.abc.MetaPathFinder):
             def find_spec(self, fullname, path=None, target=None):
+                # absent, as on an install without them: the package's optional
+                # import-time connections catch ModuleNotFoundError; the last
+                # line checks no import succeeded
                 if fullname.split('.')[0] in ('numpy', 'scipy', 'sklearn'):
-                    raise AssertionError('optional array dependency imported: ' + fullname)
+                    raise ModuleNotFoundError('optional array dependency imported: ' + fullname,
+                                              name=fullname.split('.')[0])
         sys.meta_path.insert(0, NoArrays())
         from mojolearn.model_selection import train_test_split
         from mojolearn._verify_native_runtime import audit_native_call

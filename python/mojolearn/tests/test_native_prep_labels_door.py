@@ -96,9 +96,11 @@ def _state(est):
     return out
 
 
-def _outcome(fn):
+def _outcome(fn, owner=None):
     try:
-        return ("ok", _bytes(fn()))
+        result = fn()
+        # fit returns the estimator: compare "returned self", not two objects
+        return ("ok", "self") if owner is not None and result is owner else ("ok", _bytes(result))
     except Exception as error:  # noqa: BLE001 - the refusal class and text are the result
         return ("raised", type(error).__name__, str(error))
 
@@ -117,8 +119,8 @@ def pair():
 
 def _compare(new, old, calls):
     for name, args in calls:
-        a = _outcome(lambda: getattr(new, name)(*args))
-        b = _outcome(lambda: getattr(old, name)(*args))
+        a = _outcome(lambda: getattr(new, name)(*args), new)
+        b = _outcome(lambda: getattr(old, name)(*args), old)
         assert a == b, (type(new).__name__, name)
         assert _state(new) == _state(old), (type(new).__name__, name)
 

@@ -50,8 +50,15 @@ def owned_program_create_devices(request: NativeOwnedProgramCreateRequest) raise
         raise Error("TypeError: captured program creation requires native option storage")
     # Validate all options before allocating any device worker. Native integer
     # values are immutable; input-buffer descriptors are captured only at fit/run.
+    # Each option is refused by its public keyword (ops.Program.partition and
+    # distribute pass them in this order).
+    var names = List[String]()
+    if op == "partition":
+        names = [String("stages"), String("tensor_shards"), String("microbatches"), String("optimizer")]
+    else:
+        names = [String("logical_shards"), String("optimizer")]
     for i in range(count - 2):  # small-loop(count: topology words and optimizer handle)
-        _ = _integer(options[i], "captured program option", 1)
+        _ = _integer(options[i], names[i], 1)
     _ = _integer(options[count - 1], "seed", 0)
     var parameters = program_native_input(options[count - 2])
     for i in range(len(parameters)):  # driver-loop: over explicit trainable parameter handles

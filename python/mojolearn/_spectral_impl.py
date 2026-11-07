@@ -198,7 +198,7 @@ class SpectralClustering(ParamsMixin):
         0.0, which disables the convergence test.
     affinity : str, default "nearest_neighbors"
         ``"nearest_neighbors"`` (symmetrized k-NN connectivity of ``X``),
-        ``"precomputed"`` (``X`` is a square affinity matrix, dense or sparse),
+        ``"precomputed"`` (``X`` is a square dense affinity matrix),
         ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``, scikit-learn's kernel)
         or ``"precomputed_nearest_neighbors"`` (k-NN connectivity of a
         precomputed distance matrix, symmetrized as ``0.5 * (C + C.T)``). A
@@ -306,7 +306,7 @@ class SpectralClustering(ParamsMixin):
         ----------
         X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
             Training data, or with ``affinity="precomputed"`` a square
-            nonnegative affinity matrix (dense or sparse); with
+            nonnegative dense affinity matrix; with
             ``"precomputed_nearest_neighbors"`` a square distance matrix.
             Values must be finite.
         y : ignored
@@ -385,7 +385,7 @@ class SpectralClustering(ParamsMixin):
           (Euclidean), each with weight 0.5. Training degrees are unchanged.
         - ``"precomputed"``: ``X`` is the affinity between the new rows and
           the training rows, shape ``(n_new, n_train)``, finite and
-          nonnegative. A sparse matrix is densified.
+          nonnegative.
 
         Training rows passed to ``predict`` are not guaranteed to get their
         ``labels_``: as a query, a row sees itself with weight 0.5 rather
@@ -553,10 +553,10 @@ class SpectralEmbedding(ParamsMixin):
         must number fewer than ``n_samples``.
     affinity : str, default "nearest_neighbors"
         ``"nearest_neighbors"`` (symmetrized k-NN connectivity of ``X``),
-        ``"precomputed"`` (``X`` is a square affinity matrix, dense or
-        sparse), ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``) or
-        ``"precomputed_nearest_neighbors"`` (``X`` is a distance matrix or
-        sparse distance graph; the ``n_neighbors`` nearest per row,
+        ``"precomputed"`` (``X`` is a square dense affinity matrix),
+        ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``) or
+        ``"precomputed_nearest_neighbors"`` (``X`` is a dense distance
+        matrix; the ``n_neighbors`` nearest per row,
         symmetrized as ``0.5 * (C + C.T)``). A callable or any other name
         raises ``ValueError``.
     random_state : int or None, default None
@@ -643,8 +643,8 @@ class SpectralEmbedding(ParamsMixin):
         ----------
         X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
             Training data, or a square affinity (``"precomputed"``) or
-            distance (``"precomputed_nearest_neighbors"``) matrix, dense or
-            sparse. Values must be finite.
+            distance (``"precomputed_nearest_neighbors"``) matrix, dense.
+            Values must be finite; a SciPy sparse matrix raises ``TypeError``.
         y : ignored
 
         Returns

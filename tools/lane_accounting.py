@@ -106,6 +106,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HARNESS = os.path.join(ROOT, "tools", "identity_break.py")
 SURFACE = os.path.join(ROOT, "python", "mojolearn", "host_surface.py")
 TABLE = os.path.join(ROOT, "python", "mojolearn", "verify_reference", "table.json")
+VERIFY_REFERENCE = os.path.join(ROOT, "python", "mojolearn", "_verify_reference.py")
 
 #: PUBLIC ALGORITHMS WITH NO IDENTITY LANE, each with what is owed.
 #:
@@ -151,6 +152,37 @@ DECLARED_LANELESS = {
         "and run it performs are covered by the sequence-onnx-import lane"
     ),
 }
+
+#: The cooperative multi-GPU drivers. Their par-* identity lanes were retired
+#: with multi-GPU verification (owner, 2026-10-31); the drivers stay in the
+#: tree and out of the public docs (docs-site/api_exclude.txt), so each is
+#: laneless by that decision, not by omission.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
+_RETIRED_MULTI_GPU = (
+    "DistributedIVFIndex", "OffloadedByteLanguageModelTrainer", "ParallelByteLanguageModelTrainer",
+    "PooledByteLanguageModelTrainer", "model_pool_training.PooledByteLanguageModelTrainer", "models.ParallelCausalLM",
+    "offload_training.OffloadedByteLanguageModelTrainer", "parallel_classical.apply_kernel_method", "parallel_classical.bootstrap",
+    "parallel_classical.fit_arima", "parallel_classical.fit_cholesky", "parallel_classical.fit_coordinate_descent",
+    "parallel_classical.fit_dbscan", "parallel_classical.fit_exponential_smoothing", "parallel_classical.fit_gaussian_mixture",
+    "parallel_classical.fit_gaussian_process", "parallel_classical.fit_gram_estimator", "parallel_classical.fit_hdbscan",
+    "parallel_classical.fit_kernel_method", "parallel_classical.fit_kmeans", "parallel_classical.fit_logistic",
+    "parallel_classical.fit_svm", "parallel_classical.monte_carlo_integrate", "parallel_classical.permutation_test",
+    "parallel_classical.predict_gaussian_mixture", "parallel_classical.predict_gaussian_process", "parallel_classical.predict_svm",
+    "parallel_classical.solve_cholesky", "parallel_classical.transform_rbf_sampler", "parallel_ensemble.ParallelForestPredictor",
+    "parallel_ensemble.fit_boosting", "parallel_ensemble.fit_feature_freq", "parallel_ensemble.fit_forest",
+    "parallel_ensemble.fit_isolation_forest", "parallel_ensemble.fit_ordered_rmse", "parallel_ensemble.score_isolation_forest",
+    "parallel_forecasting.forecast_arima", "parallel_forecasting.forecast_exponential_smoothing", "parallel_forecasting.predict_arima",
+    "parallel_forecasting.predict_exponential_smoothing", "parallel_gaussian_process.fit_gaussian_process_classifier", "parallel_gaussian_process.predict_gaussian_process_classifier",
+    "parallel_graph.fit_graph", "parallel_graph.transform_umap", "parallel_ivf.DistributedIVFIndex",
+    "parallel_model_selection.cross_val_score", "parallel_neighbors.ParallelQueries", "parallel_neighbors_reference.ReferenceShardedNeighbors",
+    "parallel_preprocessing.fit_scaler", "parallel_preprocessing.transform_scaler", "parallel_training.ParallelByteLanguageModelTrainer",
+)
+DECLARED_LANELESS.update({
+    name: ("retired: multi-GPU verification (owner, 2026-10-31; docs/TOMBSTONES.md "
+           "MOJOLEARN_PAR_VERIFY); no identity lane runs this multi-GPU driver")
+    for name in _RETIRED_MULTI_GPU
+})
 
 #: A reason has to say something. The shortest real one in the vocabulary is
 #: `no reference` at 13 characters; below this it is a placeholder.
@@ -251,12 +283,29 @@ def harness_lanes(path=HARNESS):
         return None
 
 
+def retired_lane_prefixes(path=VERIFY_REFERENCE):
+    """`_verify_reference.RETIRED_LANE_PREFIXES`, read as the literal it is
+    (importing the module would load the package)."""
+    with open(path, "r", encoding="utf-8") as fh:
+        tree = ast.parse(fh.read(), filename=path)
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "RETIRED_LANE_PREFIXES"):
+            return tuple(ast.literal_eval(node.value))
+    raise RuntimeError(f"{path} defines no RETIRED_LANE_PREFIXES literal")
+
+
 def table_lanes(path=TABLE, table=None):
-    """Every lane the SHIPPED table carries at least one cell for."""
+    """Every lane the SHIPPED table carries at least one cell for, minus the
+    retired lanes (RETIRED_LANE_PREFIXES): the table keeps their cells as
+    history, admission ignores them, and no harness lane is left to read."""
     if table is None:
         with open(path, "r", encoding="utf-8") as fh:
             table = json.load(fh)
-    return {key.partition("/")[0] for key in table.get("cells", {})}
+    retired = retired_lane_prefixes()
+    return {lane for lane in (key.partition("/")[0] for key in table.get("cells", {}))
+            if not lane.startswith(retired)}
 
 
 # -------------------------------------------------------------------- check

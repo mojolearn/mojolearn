@@ -55,6 +55,11 @@ def composition_fields(model: PythonObject, context: PythonObject) raises -> Pyt
         if String(names[i]) == "estimator":
             if value is not None:
                 prep_estimator_admit(value, String(cls.__name__), context)
+        elif String(names[i]) == "importance_getter" and py_type(value) is not b.str and Bool(py=py_call(b.callable, value)):
+            # RFE's documented refusal of a callable getter. The generic
+            # admission below would refuse it too, but without naming the
+            # supported alternative; callable() reads the type slot only.
+            raise Error("TypeError: mojolearn: RFE importance_getter must be 'auto' or an attribute path; a callable is not supported")
         else:
             composition_value(value, context)
     return fields

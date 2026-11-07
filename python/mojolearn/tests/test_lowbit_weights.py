@@ -175,12 +175,12 @@ def test_packed_containers_are_arrays():
     """`pack`/`unpack` hand back mojolearn Arrays, never NumPy (the
     conversion itself runs in the linalg binding)."""
     from mojolearn import Array
+    # the packed containers are Arrays, never NumPy (the former `_linalg()`
+    # probe left lowbit; an install without the binding refuses pack itself)
     try:
-        lowbit._linalg()
+        packed = lowbit.pack({"a": _hw((8, 4), 3), "n": _hw((4,), 4)}, "int8")
     except ImportError as e:
         pytest.skip(f"no linalg binding: {e}")
-    # the packed containers are Arrays, never NumPy
-    packed = lowbit.pack({"a": _hw((8, 4), 3), "n": _hw((4,), 4)}, "int8")
     assert isinstance(packed["a"].codes, Array) and isinstance(packed["a"].exponents, Array)
     assert lowbit.is_packed(packed["a"]) and not lowbit.is_packed(packed["n"])
     packed = lowbit.pack({"a": _hw((8, 4), 3)}, "bfloat16")

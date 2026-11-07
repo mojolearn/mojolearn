@@ -181,6 +181,13 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
                     memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped_address),
                            src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=projection_address),
                            count=rows * keep * 4)
+                # Keep the full projection alive through the solver call and
+                # the copy above. Its last read was the address taken before
+                # the solver; reassigning below is no read, so Mojo's ASAP
+                # destruction freed it before the solver wrote into it (the
+                # fit_transform rows of n_components=0.8/'mle' came back with
+                # the allocator's free-list words in their first 16 bytes).
+                _ = projection
                 projection = cropped
     # Publish only after the solver and all finished-output allocations pass.
     # Writes target the admitted original dict; no live settings are reread.

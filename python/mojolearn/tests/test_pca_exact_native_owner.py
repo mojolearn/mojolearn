@@ -233,9 +233,13 @@ def test_refuses_python_protocols_before_their_hooks(monkeypatch):
         raise AssertionError("Python model attribute access reached")
 
     with monkeypatch.context() as patch:
+        # A replaced storage hook is refused before it can run.
         patch.setattr(PCA, "__getattribute__", poisoned_attribute)
-        assert clean(audit_native_call(native_fit, model, fixture())) is model
+        audit = audit_native_call(native_fit, model, fixture())
+        clean(audit, TypeError)
+        assert "refuses changed Python storage hooks" in str(audit.exception)
     assert calls == []
+    assert clean(audit_native_call(native_fit, model, fixture())) is model
 
 
 @pytest.mark.parametrize("whiten", [False, True])

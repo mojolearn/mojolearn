@@ -315,6 +315,15 @@ UNFITTED_EXEMPT = {
 }
 
 
+#: Methods documented as never available, whatever the fitted state: they
+#: raise NotImplementedError before and after fit, so there is no fitted-state
+#: error to check. Each says why.
+ALWAYS_UNSUPPORTED = {
+    # fit_inverse_transform (the learned pre-image) is not implemented
+    ("KernelPCA", "inverse_transform"),
+}
+
+
 @pytest.mark.parametrize("name", sorted(set(ESTIMATOR_NAMES) - UNFITTED_EXEMPT))
 def test_unfitted_calls_raise_not_fitted_error(name):
     from sklearn.exceptions import NotFittedError as SklearnNotFittedError
@@ -332,6 +341,10 @@ def test_unfitted_calls_raise_not_fitted_error(name):
         if not callable(getattr(est, method, None)):
             continue
         args = (X, y) if method == "score" else (X,)
+        if (name, method) in ALWAYS_UNSUPPORTED:
+            with pytest.raises(NotImplementedError):
+                getattr(est, method)(*args)
+            continue
         with pytest.raises(NotFittedError) as caught:
             getattr(est, method)(*args)
         assert isinstance(caught.value, (SklearnNotFittedError, ValueError, AttributeError)), (name, method)
