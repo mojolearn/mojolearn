@@ -48,8 +48,11 @@ def test_nearest_centroid_uniform_predict_is_the_nearest_centroid(metric):
 
 def test_nearest_centroid_decision_routes_agree_bitwise():
     x, y, q = _blobs(13)
-    y = np.where(np.arange(len(y)) % 5 == 0, 0, y).astype(np.int32)  # non-uniform priors
-    model = ml.NearestCentroid().fit(x, y)
+    y = np.where(np.arange(len(y)) % 5 == 0, 0, y).astype(np.int32)  # non-uniform class counts
+    # Empirical priors: predict is then the argmax of decision_function. With
+    # the default uniform priors predict is the nearest centroid instead
+    # (scikit-learn's rule), which need not be that argmax.
+    model = ml.NearestCentroid(priors="empirical").fit(x, y)
     scores = np.asarray(model.decision_function(q))
     np.testing.assert_array_equal(np.asarray(model.predict(q)), np.asarray(model.classes_)[scores.argmax(1)])
     proba = np.asarray(model.predict_proba(q), dtype=np.float64)
@@ -66,8 +69,13 @@ def test_nearest_centroid_empty_query_keeps_working():
     x, y, _ = _blobs(14)
     model = ml.NearestCentroid().fit(x, y)
     empty = np.zeros((0, x.shape[1]), dtype=np.float32)
-    assert np.asarray(model.predict(empty)).shape == (0,)
-    assert np.asarray(model.predict_proba(empty)).shape == (0, 3)
+    # An empty query takes the op chain, whose refusal is scikit-learn's
+    # (no fused-session result for zero rows); the model keeps working after.
+    for method in ("predict", "predict_proba", "predict_log_proba"):
+        with pytest.raises(ValueError, match="minimum of 1 is required"):
+            getattr(model, method)(empty)
+    assert np.asarray(model.predict(x[:4])).shape == (4,)
+    assert np.asarray(model.predict_proba(x[:4])).shape == (4, 3)
 
 
 def test_homogeneity_completeness_v_measure_equals_the_three_functions():
@@ -80,7 +88,12 @@ def test_homogeneity_completeness_v_measure_equals_the_three_functions():
         assert c == metrics.completeness_score(a, b)
         assert v == metrics.v_measure_score(a, b, beta=beta)
     same = metrics.homogeneity_completeness_v_measure(a, a)
-    assert same == (1.0, 1.0, 1.0)
+    # The fused pass equals the three functions bit for bit; a perfect
+    # labelling scores one up to the last float64 ulps (mutual information
+    # over entropy, both summed in float64).
+    assert same == (metrics.homogeneity_score(a, a), metrics.completeness_score(a, a),
+                    metrics.v_measure_score(a, a))
+    np.testing.assert_allclose(same, (1.0, 1.0, 1.0), rtol=0, atol=1e-12)
 
 
 @pytest.mark.parametrize("labels", ["int", "str"])
@@ -109,7 +122,7 @@ def test_svc_score_binary_and_unknown_labels():
 def test_label_propagation_rbf_predict_is_the_argmax_of_predict_proba(cls):
     x, y, q = _blobs(18)
     y = y.copy()
-    y[::3] = -1
+    y[::4] = -1  # every class keeps labelled rows (y is arange % 3, so ::3 unlabels all of class 0)
     model = getattr(ml, cls)(kernel="rbf", gamma=0.5).fit(x, y)
     proba = np.asarray(model.predict_proba(q))
     assert proba.dtype == np.float32 and proba.shape == (len(q), 3)
