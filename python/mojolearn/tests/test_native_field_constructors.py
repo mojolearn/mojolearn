@@ -70,8 +70,41 @@ def assert_same(actual, expected):
             assert current is value
 
 
+# Owners whose constructor admits values natively: UMAP validates its
+# parameters at construction (bindings/umap_parameters_native.mojo) and the
+# retained Croston original is the native `croston_initialize`, which takes
+# native scalars only. Their probes pass valid values (the defaults, a str
+# alias), not opaque sentinels; the replacement in the reinitialization probe
+# is valid too.
+_VALUE_CHECKED = {
+    'UMAP': dict(replacement=dict(n_neighbors=7)),
+    'CrostonClassic': dict(alias='croston-alias', replacement=dict(alias='croston-replaced')),
+    'CrostonOptimized': dict(alias='croston-alias', replacement=dict(alias='croston-replaced')),
+    'CrostonSBA': dict(alias='croston-alias', replacement=dict(alias='croston-replaced')),
+}
+
+
 def sentinels(cls):
-    return {name: object() for name in inspect.signature(cls).parameters}
+    parameters = inspect.signature(cls).parameters
+    checked = _VALUE_CHECKED.get(cls.__name__)
+    if checked is None:
+        return {name: object() for name in parameters}
+    values = {name: p.default for name, p in parameters.items()}
+    values.update({k: v for k, v in checked.items() if k != 'replacement'})
+    return values
+
+
+def replacement_for(cls, values):
+    """The first parameter replaced. A native owner initializer (the retained
+    original of the cluster and density owners) refuses to release an
+    arbitrary Python object it would drop (bindings/native_owner_lifetime.mojo,
+    `native_release_admit`), so the replaced field starts as an exact str."""
+    checked = _VALUE_CHECKED.get(cls.__name__)
+    if checked is not None:
+        return values, dict(values, **checked['replacement'])
+    first = next(iter(values))
+    values = dict(values, **{first: first + '-initial'})
+    return values, dict(values, **{first: object()})
 
 
 def required(cls):
@@ -137,11 +170,10 @@ def test_argument_errors_are_the_original_words_without_mutation(cls):
 
 @pytest.mark.parametrize('cls', OWNERS, ids=lambda cls: cls.__name__)
 def test_reinitialization_keeps_unrelated_fields_in_place(cls):
-    values = sentinels(cls)
+    values, replacement = replacement_for(cls, sentinels(cls))
     model = construct(cls, **values)
     marker = array.array('f', [1.0])
     vars(model)['fitted_'] = marker
-    replacement = dict(values, **{next(iter(values)): object()})
     clean(model.__init__, **replacement)
     expected = oracle(cls, **values)
     vars(expected)['fitted_'] = marker
@@ -157,7 +189,9 @@ def test_numeric_mode_rule_matches_the_wrapper():
     expected = oracle(ml.KMeans, numeric_mode='identical')
     _CONTEXT['originals'][ml.KMeans](expected, n_clusters=3)
     assert_same(model, expected)
-    assert vars(model)['numeric_mode'] == 'identical'
+    # KMeans takes numeric_mode in its own signature: a reinitialization that
+    # omits it writes the default, as every other parameter.
+    assert vars(model)['numeric_mode'] is None
 
 
 def test_passive_subclass_class_mode_and_user_initializer():
