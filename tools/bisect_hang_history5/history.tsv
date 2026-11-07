@@ -1,0 +1,19 @@
+index	sha	subject
+0	adcba183c6	cluster_resident_table: CresHeld is Copyable (Dict iteration, keys() included, requires Copyable values)
+1	c1176f1e86	tools/bisect_hang_group.sh: per-file revert bisect of a development group that hangs the Mojo compiler
+2	3809f2951f	tools/bisect_hang_base: e49ac7df70 content of the 25 classical-host suspects (for the CPU leg, which has no git history)
+3	3419123a9c	bisect_hang_group: HISTORY mode, one candidate per first-parent commit base..head
+4	ccfdf98c68	tools/bisect_hang_history: export of e49ac7df70..f9e06ecacf (62 first-parent commits, 387 .mojo paths, 20 overlaid from head, 782 blobs)
+5	3ce420d7b1	Merge remote-tracking branch 'origin/lane/ne-fix-hang2' into lane/ne-bisect-hang
+6	97441d7217	bisect: history2 = the four hang cuts on f9e06ecacf (cumulative candidates)
+7	cf8028055b	bisect_hang_group: patch overlay (--overlay-patches, --overlay-extra) and --history-range
+8	348f3644c3	tools/bisect_hang_history: re-export with the patch overlay (22 per-file patches: 94fb9b3758 + the first-parent commits after d5d7463b99)
+9	fd96ef7cf3	bisect: history copy without the 94fb9b3758 patch, to test h15..h19 unmasked
+10	a7a4f72830	bisect: ship only the unmasked history copy (the leg refuses source tarballs over 50 MB)
+11	ac56039c75	bisect: also drop the family_native hang-fix patch (it references h-labels' family_operation_routed and masks h15..h19)
+12	40bfe52a31	Merge remote-tracking branch 'origin/lane/ne-fix-hang3' into lane/ne-bisect-hang
+13	92a31b54e6	bisect: history3 = the five h-labels cuts on f9e06ecacf
+14	699c0f8691	bisect_hang_group: --root-ddmin, leave-one-out / leave-one-in over a member root's imports
+15	7765e3f328	Merge remote-tracking branch 'origin/lane/ne-fix-hang4' into lane/ne-bisect-hang
+16	4b9594bc6f	bisect: history4 = the four cluster-lane cuts on f9e06ecacf (drop history3)
+17	7e4d1f1873	Merge remote-tracking branch 'origin/integ/ne-20261107' into lane/ne-bisect-hang
