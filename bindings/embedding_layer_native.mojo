@@ -37,7 +37,7 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.neural_block_admission import neural_record_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_inputs import sequential_input
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_interpreter_finalizing
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from core.xseq_marshal import xseq_cast_nd
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
@@ -896,7 +896,11 @@ def embedding_layer_lifetime_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         var context = args[0]
         var model = args[1]
         if len(args) == 2:
-            _drop_table(_fields(model), context)
+            # A layer collected during interpreter teardown releases nothing:
+            # the loaded-module reads in _drop_table are a fatal error once the
+            # interpreter's modules are cleared (host_archive_lifetime.mojo).
+            if not native_interpreter_finalizing():
+                _drop_table(_fields(model), context)
             return PythonObject(None).steal_data()
         opt_guards(context)
         door_ready()

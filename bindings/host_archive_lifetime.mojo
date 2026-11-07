@@ -7,12 +7,18 @@
 # ("entry" plans): their device handle is released through the compiled
 # release entry of the binding that minted it.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_interpreter_finalizing
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 
 
 def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
+    # An instance collected during interpreter teardown (a model held in
+    # `__main__` at exit) releases nothing: the process is ending, and the
+    # loaded-module read below is a fatal error once the interpreter's modules
+    # are cleared (test_host_density_save_native's KDE child exited -6).
+    if native_interpreter_finalizing():
+        return
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:

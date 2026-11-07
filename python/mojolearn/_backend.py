@@ -2450,13 +2450,14 @@ def binding(name, mode=None):
     # refuses by name) is the answer, and it is IDENTICAL only.
     if _CPU_ONLY is not None:
         return _cpu_only_binding(name, requested)
-    # `requested` is already normalized: a loaded set and an already
-    # resolved member are read directly (no second strip/lower in load_set,
-    # no failed attribute lookup before _ModeSet.__getattr__).
-    selected = _SETS.get(requested)
-    if selected is None:
-        selected = load_set(requested)
-    module = selected._modules.get(name)
+    # load_set stays the one choke point that picks the set (it answers a
+    # cached set from _SETS itself); reading _SETS here directly bypassed a
+    # replaced load_set (test_binding_mode_guard). An already resolved member
+    # of a _ModeSet is read directly (no failed attribute lookup before
+    # _ModeSet.__getattr__); any other set object is read by attribute.
+    selected = load_set(requested)
+    members = getattr(selected, "_modules", None)
+    module = members.get(name) if members is not None else None
     if module is None:
         module = getattr(selected, name)
     # A correctly built GBDT sibling does not establish RF/ET (or any other

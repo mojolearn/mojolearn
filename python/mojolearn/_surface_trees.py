@@ -104,6 +104,8 @@ FAMILIES = (
             "x_trees_dart_open", "x_trees_dart_step", "x_trees_dart_add", "x_trees_dart_close",
             "x_trees_dart_predict",
             "x_trees_tree_shape",
+            # perf lanes: the fused OneVsRest and calibrated-probability epilogues
+            "x_trees_ovr_assemble", "x_trees_calibrated_proba",
             "x_trees_agn_model_load", "x_trees_agn_model_release", "x_trees_kshap_solve_model", "x_trees_pshap_values_model",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_trees_tree_shap_cache_create", "x_trees_tree_shap_cache_values", "x_trees_tree_shap_cache_release",

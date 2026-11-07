@@ -87,6 +87,9 @@ def test_prediction_sources_reach_no_fit():
         # the shared shell's balanced Python calls and its own kernel module
         # (core/holtwinters_host_predict_impl.mojo, std imports only)
         "bindings.py_balanced", "core.holtwinters_host_predict_impl",
+        # the connected-module lookup through the shared CPython table
+        # (bindings/native_loaded_module.mojo imports std and that table only)
+        "bindings.native_loaded_module",
     }
     for src in ("holtwinters/host/hw_predict.mojo", SHARED, "core/holtwinters_host_predict_impl.mojo"):
         imports = set(re.findall(r"^from ([\w.]+) import", _code(_read(src)), re.M))
