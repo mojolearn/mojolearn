@@ -1753,7 +1753,13 @@ def decomp_resident_adopt(owner: PythonObject, entries: PythonObject, source: Py
     if handle < 0:
         return PythonObject(None)
     var free = entries["x_decomp_dev_free"]
-    if owner is None or not decomp_resident_freeze(source):
+    var frozen = False
+    try:
+        frozen = owner is not None and decomp_resident_freeze(source)
+    except error:
+        _ = py_call(free, handle)
+        raise error^
+    if not frozen:
         _ = py_call(free, handle)
         return PythonObject(None)
     return decomp_resident_hold(owner, entries["x_decomp_dev_alloc"], free, source, name, rows, cols, handle, True,
