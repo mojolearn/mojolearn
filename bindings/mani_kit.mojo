@@ -27,6 +27,16 @@ from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family
 from core.family_cast_impl import family_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module
 from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_optional_entry
+# The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows
+# N290-N301): the kit's primitive operations call one abi("C") dispatch
+# function per operation (bindings/kit_call.mojo).
+from bindings.kit_call import kit_connect, kit_provider, kit_call
+from x_decomp.descriptor_schema import (
+    XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES,
+    XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE,
+    XD_DEV_ALLOC, XD_DEV_UPLOAD, XD_DEV_EW, XD_DEV_GEMM, XD_DEV_COLSUM, XD_DEV_ROWSUM,
+    XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN,
+)
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -421,6 +431,7 @@ struct MKit(Movable):
     var optional: Dict[String, PythonObject]  # optional entries (None when absent), once each
     var one_host: PythonObject  # `_M._one`, read from the context once per kit
     var one_dev: PythonObject  # `_dev_one(kit)`'s buffer, looked up once per kit
+    var table: PythonObject  # the binding's x_decomp_native_api_v1 provider, connected once per kit
 
     def __init__(out self, mode: String, binding: PythonObject, ctx: PythonObject) raises:
         self.mode = mode
@@ -440,6 +451,42 @@ struct MKit(Movable):
         self.optional = Dict[String, PythonObject]()
         self.one_host = PythonObject(None)
         self.one_dev = PythonObject(None)
+        self.table = PythonObject(None)
+
+    # ---- the native kernel-call table (x_decomp/descriptor_schema.mojo)
+    def xd(mut self) raises -> PythonObject:
+        """The binding's kernel-call provider: admitted on the first
+        operation of this kit (a process-wide record keyed by the module and
+        its live factory entry, so later kits pay one namespace read)."""
+        if self.table is None:
+            var snapshot = kit_connect(self.raw, "x_decomp_native_api_v1", String(XD_ABI_NAME),
+                                       XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES)
+            self.table = kit_provider(snapshot)
+        return self.table
+
+    def dcall(mut self, op: Int, ints: List[Int], s: Float64 = 0.0) raises -> Int:
+        """A device-resident operation on pool ids (enqueue-only, under the
+        GIL, as the `dev_*_py` doors ran)."""
+        var floats = List[Float64]()
+        if op == XD_DEV_EW or op == XD_DEV_SQDIST:
+            floats.append(s)
+        return kit_call(self.xd(), op, List[Int](), ints, floats, False)
+
+    def hcall(mut self, op: Int, addresses: List[Int], ints: List[Int], s: Float64 = 0.0) raises -> Int:
+        """A host-address operation (the GIL released, as the doors did).
+        The caller keeps every addressed holder alive through the call."""
+        var floats = List[Float64]()
+        if op == XD_EW or op == XD_SQDIST:
+            floats.append(s)
+        return kit_call(self.xd(), op, addresses, ints, floats, True)
+
+    def upload(mut self, identifier: Int, address: Int, n: Int) raises:
+        """`x_decomp_dev_upload`: synchronous, the GIL released."""
+        _ = kit_call(self.xd(), XD_DEV_UPLOAD, [address], [identifier, n], List[Float64](), True)
+
+    def dix(mut self, m: PythonObject) raises -> Int:
+        """`did(m)` as the pool id word."""
+        return Int(py=self.did(m))
 
     def fn(mut self, name: String) raises -> PythonObject:
         """`self.b.<name>`: resolved (module dict read and compiled-entry
@@ -466,7 +513,7 @@ struct MKit(Movable):
         buffer keeps for every later download, move or buffer made from it."""
         var release = self.fn("x_decomp_dev_free")
         var alloc = self.fn("x_decomp_dev_alloc")
-        var identifier = family_call(alloc, PythonObject(max(n, 1)))
+        var identifier = PythonObject(self.dcall(XD_DEV_ALLOC, [max(n, 1)]))
         return PythonObject(alloc=ManifoldDevice(self.raw, release, identifier, n, alloc,
                                                  self.fn_opt("x_decomp_dev_upload"),
                                                  self.fn_opt("x_decomp_dev_download"),
