@@ -239,8 +239,13 @@ def _resident_params_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin
     store[].counts.append(n)
     store[].used.append(store[].tick)
     store[].pins.append(1)  # released by seq_resident_unpin after the launch is queued
-    store[].bufs.append(buf^)
     store[].bytes += n * 4
+    # `store` carries MutAnyOrigin, which may alias every local, so a deref of
+    # it in the same expression as `buf^` (or after it) keeps `buf` alive past
+    # its move ("cannot be consumed, because it is used later"). The move goes
+    # through an untracked pointer to the list, as the last use of the store.
+    var bufs = UnsafePointer(to=store[].bufs).unsafe_origin_cast[MutUntrackedOrigin]()
+    bufs[].append(buf^)
     return address
 
 
