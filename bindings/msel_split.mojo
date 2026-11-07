@@ -18,6 +18,7 @@ from std.builtin.sort import sort
 from std.os import getenv
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
+from bindings.msel_common import msel_signed32
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.classical_arrays import classical_wrap_array
@@ -1075,62 +1076,104 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
         raise Error("The train_size = " + String(n_train) + " should be greater or equal to the number of classes = " + String(k))
     if n_test < k:
         raise Error("The test_size = " + String(n_test) + " should be greater or equal to the number of classes = " + String(k))
-    var rows = Python.list()
-    var row_addresses = List[Int]()
-    for c in range(k):  # driver-loop: over classes (one row selection each)
-        var words = gc.codes
-        var size = gc.counts[c]
-        var selected = gc.only(words, c, size, context)
-        row_addresses.append(msel_addr(selected))
-        _ = py_call(rows.append, selected)
-    # These class-row buffers are private and unchanged across splits. Keep
-    # their owners in rows and reuse native addresses in the split/class loop.
-    var gather = msel_entry("gather_i64", context)
+    # N086 (lane ne2-b-search-workers): ONE program per split. The rows
+    # class by class (a stable group_sort of the class codes: class c's
+    # ascending rows, what `gc.only` selected) are read back once per call;
+    # each split's program then runs the two approx_mode stages, the class
+    # draws and the two final draws as `permute_drawn` stages (their draw
+    # numbers follow the approx_mode draws the same program consumed), the
+    # per-class selection (`strat_take`) and the final orders (`take_rows64`),
+    # and reads back the train and test rows and the consumed draw count.
+    # The same draws in the same order, the same gathers: no bit changes.
+    # approx_mode hands out exactly n_train (then n_test) draws, so the
+    # train and test lengths are known before the program runs.
+    var classed = _class_order(gc.codes, n, k, context)
+    var ord32 = classed[0]
+    var off32 = classed[1]
+    var offsets = List[Int]()
+    var at = 0
+    for c in range(k):  # driver-loop: over classes (offsets of the class-ordered rows)
+        offsets.append(at)
+        at += gc.counts[c]
+    var counts32 = msel_i32_list(gc.counts, context)
     var rng = MselRng(random_state, context)
     var out = Python.list()
-    for _ in range(max(n_splits, 0)):  # driver-loop: over splits
-        var modes = rng.approximate_modes(gc.counts, n_train, n_test, context)
-        var tr_len = 0
-        var te_len = 0
-        for c in range(k):  # driver-loop: over classes
-            tr_len += modes[c]
-            te_len += modes[k + c]
-        var train = msel_new(tr_len, "<i8", context)
-        var test = msel_new(te_len, "<i8", context)
-        var train_address = msel_addr(train)
-        var test_address = msel_addr(test)
-        var at_tr = 0
-        var at_te = 0
-        var perms = rng.permutation_rows(gc.counts, context)
-        for c in range(k):  # driver-loop: over classes (two device gathers each)
-            var p0 = msel_addr(perms[c])
-            var tab = row_addresses[c]
-            _ = family_call(gather, PythonObject(tab), PythonObject(gc.counts[c]), PythonObject(p0), PythonObject(modes[c]),
-                            PythonObject(train_address + 8 * at_tr))
-            _ = train  # keep the Python object alive through the native call above
-            _ = family_call(gather, PythonObject(tab), PythonObject(gc.counts[c]), PythonObject(p0 + 8 * modes[c]),
-                            PythonObject(modes[k + c]), PythonObject(test_address + 8 * at_te))
-            _ = test  # keep the Python object alive through the native call above
-            at_tr += modes[c]
-            at_te += modes[k + c]
-        # p0 and tab do not carry the owners of the per-class index buffers.
-        _ = perms
-        _ = rows
-        var last = rng.permutation_rows([tr_len, te_len], context)
-        var out_tr = msel_new(tr_len, "<i8", context)
-        var out_te = msel_new(te_len, "<i8", context)
-        _ = family_call(gather, PythonObject(train_address), PythonObject(tr_len), PythonObject(msel_addr(last[0])),
-                        PythonObject(tr_len), PythonObject(msel_addr(out_tr)))
-        _ = train  # keep the Python object alive through the native call above
-        _ = out_tr  # keep the Python object alive through the native call above
-        _ = family_call(gather, PythonObject(test_address), PythonObject(te_len), PythonObject(msel_addr(last[1])),
-                        PythonObject(te_len), PythonObject(msel_addr(out_te)))
-        _ = test  # keep the Python object alive through the native call above
-        _ = out_te  # keep the Python object alive through the native call above
-        _ = last
+    for _ in range(max(n_splits, 0)):  # driver-loop: over splits (one program each)
+        var prog = _Prog(context["family_metrics_ops"])
+        var cnt = prog.put_i32(counts32)
+        var ordr = prog.put_i32(ord32)
+        var off = prog.put_i32(off32)
+        var modes = prog.alloc(2 * k)
+        var used_slot = prog.alloc(2)
+        var used = prog.want(used_slot, 2)
+        var w0 = msel_signed32(rng.seed)
+        var w1 = msel_signed32(rng.seed >> 32)
+        var w2 = msel_signed32(rng.draws)
+        var w3 = msel_signed32(rng.draws >> 32)
+        prog.stage("approx_mode", k, [k, cnt, MSEL_NONE, n_train, modes, MSEL_NONE, used, w0, w1, w2, w3])
+        prog.stage("approx_mode", k, [k, cnt, modes, n_test, modes + k, used, used + 1, w0, w1, w2, w3])
+        var draws = prog.alloc(n)
+        for c in range(k):  # driver-loop: over classes (one draw stage each, all in this program)
+            var d = rng.draws + UInt64(c)
+            prog.stage("permute_drawn", 1, [gc.counts[c], draws + offsets[c], w0, w1, msel_signed32(d),
+                                            msel_signed32(d >> 32), used, 2])
+        var train = prog.alloc(n_train)
+        var test = prog.alloc(n_test)
+        prog.stage("strat_take", n, [k, ordr, off, draws, modes, train, test])
+        var last_tr = prog.alloc(n_train)
+        var last_te = prog.alloc(n_test)
+        var d_tr = rng.draws + UInt64(k)
+        var d_te = rng.draws + UInt64(k + 1)
+        prog.stage("permute_drawn", 1, [n_train, last_tr, w0, w1, msel_signed32(d_tr), msel_signed32(d_tr >> 32), used, 2])
+        prog.stage("permute_drawn", 1, [n_test, last_te, w0, w1, msel_signed32(d_te), msel_signed32(d_te >> 32), used, 2])
+        var tr_slot = prog.alloc(2 * n_train)
+        var tr_words = prog.want(tr_slot, 2 * n_train)
+        var te_slot = prog.alloc(2 * n_test)
+        var te_words = prog.want(te_slot, 2 * n_test)
+        prog.stage("take_rows64", n_train, [train, last_tr, tr_words])
+        prog.stage("take_rows64", n_test, [test, last_te, te_words])
+        var arena = _reg_run(prog, PythonObject(None), context)
+        var base = _arena_base(arena)
+        var words = FAMILY_I32P(unsafe_from_address=base)
+        rng.draws += UInt64(Int(words[used]) + Int(words[used + 1]) + k + 2)
+        var out_tr = msel_new(n_train, "<i8", context)
+        var out_te = msel_new(n_test, "<i8", context)
+        memcpy(dest=msel_p64(out_tr), src=FAMILY_I64P(unsafe_from_address=base + 4 * tr_words), count=n_train)
+        _ = out_tr  # keep the Python object alive through the native copy above
+        memcpy(dest=msel_p64(out_te), src=FAMILY_I64P(unsafe_from_address=base + 4 * te_words), count=n_test)
+        _ = out_te  # keep the Python object alive through the native copy above
+        # The copied addresses point into this arena: keep it through the copies.
+        _ = arena^
+        _ = prog^
         _ = py_call(out.append, Python.tuple(out_tr, out_te))
-    _ = rows
+    _ = counts32
+    _ = ord32
+    _ = off32
     return out
+
+
+def _class_order(codes: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    """(rows class by class, class offsets) as int32 Arrays: a stable
+    group_sort of the n int32 class codes (class c's rows ascending at
+    OFF[c] ..), in one program, read back once (N086)."""
+    var prog = _Prog(context["family_metrics_ops"])
+    var key = prog.put_i32(codes)
+    var off_slot = prog.alloc(k + 1)
+    var off = prog.want(off_slot, k + 1)
+    var ord_slot = prog.alloc(n)
+    var ordr = prog.want(ord_slot, n)
+    prog.stage("group_sort", 1, [key, n, k, off_slot, ord_slot])
+    var arena = _reg_run(prog, PythonObject(None), context)
+    var base = _arena_base(arena)
+    var ord32 = msel_new(n, "<i4", context)
+    var off32 = msel_new(k + 1, "<i4", context)
+    memcpy(dest=msel_p32(ord32), src=FAMILY_I32P(unsafe_from_address=base + 4 * ordr), count=n)
+    _ = ord32  # keep the Python object alive through the native copy above
+    memcpy(dest=msel_p32(off32), src=FAMILY_I32P(unsafe_from_address=base + 4 * off), count=k + 1)
+    _ = off32  # keep the Python object alive through the native copy above
+    _ = arena^
+    _ = prog^
+    return Python.tuple(ord32, off32)
 
 
 def msel_predefined_split(sp: MselSplitter, context: PythonObject) raises -> PythonObject:
