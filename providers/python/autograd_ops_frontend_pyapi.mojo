@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
@@ -24,6 +25,297 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_resource_
 from providers.python.autograd_execution_profile_pyapi import execution_profile_object
 from providers.python.autograd_control_checkpoint_pyapi import control_save_py, control_load_py
 from providers.python.autograd_gradient_diagnostics_pyapi import gradient_report_py
+
+
+# Session operation codes (row N089, lesson 12): the operation name is looked up
+# once per call in one native table built at first use, and the dispatch below
+# compares integers. The codes are private to this file (the public entry still
+# takes the operation name); 0 = unknown.  Dispatch only, no arithmetic.
+comptime _SOP_PROGRAM_PUBLIC = 1
+comptime _SOP_PROGRAM_INIT = 2
+comptime _SOP_ENTER = 3
+comptime _SOP_FREE_PROGRAM = 4
+comptime _SOP_CLOSE = 5
+comptime _SOP_EXIT = 6
+comptime _SOP_PROFILE_RESET = 7
+comptime _SOP_PROFILE_REPORT = 8
+comptime _SOP_LOAD_PARTITIONED = 9
+comptime _SOP_LOAD_DISTRIBUTED = 10
+comptime _SOP_PROGRAM_RUN = 11
+comptime _SOP_FIT = 12
+comptime _SOP_FIT_IF = 13
+comptime _SOP_GRADIENT_REPORT = 14
+comptime _SOP_EXECUTION_PROFILE_BEGIN = 15
+comptime _SOP_EXECUTION_PROFILE_END = 16
+comptime _SOP_SAVE_CONTROL = 17
+comptime _SOP_LOAD_CONTROL = 18
+comptime _SOP_SAVE_PROGRAM = 19
+comptime _SOP_LOAD_WEIGHTS = 20
+comptime _SOP_TENSOR = 21
+comptime _SOP_IDS = 22
+comptime _SOP_SHAPE = 23
+comptime _SOP_NUMPY = 24
+comptime _SOP_GRAD = 25
+comptime _SOP_SCALAR = 26
+comptime _SOP_CAPTURE = 27
+comptime _SOP_LOAD_PROGRAM = 28
+comptime _SOP_SAVE_STATE = 29
+comptime _SOP_LOAD_STATE = 30
+comptime _SOP_RESET = 31
+comptime _SOP_FREE = 32
+comptime _SOP_BACKWARD = 33
+comptime _SOP_GRAD_TENSOR = 34
+comptime _SOP_VJP = 35
+comptime _SOP_HVP = 36
+comptime _SOP_JVP = 37
+comptime _SOP_ZERO_GRAD = 38
+comptime _SOP_OPTIMIZER = 39
+comptime _SOP_STEP = 40
+comptime _SOP_SCHEDULER_STEP = 41
+comptime _SOP_LEARNING_RATE = 42
+comptime _SOP_OPTIMIZER_STATE = 43
+comptime _SOP_LOAD_OPTIMIZER_STATE = 44
+comptime _SOP_COPY = 45
+comptime _SOP_DETACH = 46
+comptime _SOP_MATMUL = 47
+comptime _SOP_ADD = 48
+comptime _SOP_SUB = 49
+comptime _SOP_MUL = 50
+comptime _SOP_DIV = 51
+comptime _SOP_RELU = 52
+comptime _SOP_SIGMOID = 53
+comptime _SOP_TANH = 54
+comptime _SOP_EXP = 55
+comptime _SOP_LOG = 56
+comptime _SOP_SQRT = 57
+comptime _SOP_ERF = 58
+comptime _SOP_SOFTPLUS = 59
+comptime _SOP_SILU = 60
+comptime _SOP_HARD_SWISH = 61
+comptime _SOP_ABS = 62
+comptime _SOP_FLOOR = 63
+comptime _SOP_CEIL = 64
+comptime _SOP_ROUND = 65
+comptime _SOP_SIN = 66
+comptime _SOP_COS = 67
+comptime _SOP_SIGN = 68
+comptime _SOP_RECIPROCAL = 69
+comptime _SOP_POW = 70
+comptime _SOP_MINIMUM = 71
+comptime _SOP_MAXIMUM = 72
+comptime _SOP_WHERE = 73
+comptime _SOP_FULL = 74
+comptime _SOP_EXPAND = 75
+comptime _SOP_SCALE = 76
+comptime _SOP_LEAKY_RELU = 77
+comptime _SOP_ELU = 78
+comptime _SOP_POW_SCALAR = 79
+comptime _SOP_HARD_SIGMOID = 80
+comptime _SOP_TRANSPOSE = 81
+comptime _SOP_PERMUTE = 82
+comptime _SOP_RESHAPE = 83
+comptime _SOP_FLATTEN = 84
+comptime _SOP_SQUEEZE = 85
+comptime _SOP_UNSQUEEZE = 86
+comptime _SOP_SUM = 87
+comptime _SOP_MEAN = 88
+comptime _SOP_MAX = 89
+comptime _SOP_ANY = 90
+comptime _SOP_ALL = 91
+comptime _SOP_SOFTMAX = 92
+comptime _SOP_LOG_SOFTMAX = 93
+comptime _SOP_CONCAT = 94
+comptime _SOP_SPLIT = 95
+comptime _SOP_EMBEDDING = 96
+comptime _SOP_TAKE = 97
+comptime _SOP_CONV2D = 98
+comptime _SOP_LINEAR = 99
+comptime _SOP_MAX_POOL2D = 100
+comptime _SOP_AVG_POOL2D = 101
+comptime _SOP_GELU = 102
+comptime _SOP_CLIP = 103
+comptime _SOP_EQUAL = 104
+comptime _SOP_NOT_EQUAL = 105
+comptime _SOP_GREATER = 106
+comptime _SOP_GREATER_EQUAL = 107
+comptime _SOP_LESS = 108
+comptime _SOP_LESS_EQUAL = 109
+comptime _SOP_LOGICAL_NOT = 110
+comptime _SOP_LOGICAL_AND = 111
+comptime _SOP_LOGICAL_OR = 112
+comptime _SOP_ARGMAX = 113
+comptime _SOP_PAD = 114
+comptime _SOP_CUMSUM = 115
+comptime _SOP_INDEX = 116
+comptime _SOP_LAYER_NORM = 117
+comptime _SOP_TRANSFORMER_SOFTMAX = 118
+comptime _SOP_TRANSFORMER_LINEAR = 119
+comptime _SOP_RMS_NORM = 120
+comptime _SOP_ROTARY = 121
+comptime _SOP_DROPOUT = 122
+comptime _SOP_PERMUTATION = 123
+comptime _SOP_GATHER_ROWS = 124
+comptime _SOP_MSE = 125
+comptime _SOP_MAE = 126
+comptime _SOP_HUBER = 127
+comptime _SOP_BCE_WITH_LOGITS = 128
+comptime _SOP_CROSS_ENTROPY = 129
+comptime _SOP_ACCURACY = 130
+comptime _SOP_LOG_LOSS = 131
+comptime _SOP_ROC_AUC = 132
+
+
+struct _SessionOpCodes(Defaultable, Movable):
+    var codes: Dict[String, Int]
+
+    def __init__(out self):
+        self.codes = Dict[String, Int]()
+        self.codes["program_public"] = _SOP_PROGRAM_PUBLIC
+        self.codes["program_init"] = _SOP_PROGRAM_INIT
+        self.codes["enter"] = _SOP_ENTER
+        self.codes["free_program"] = _SOP_FREE_PROGRAM
+        self.codes["close"] = _SOP_CLOSE
+        self.codes["exit"] = _SOP_EXIT
+        self.codes["profile_reset"] = _SOP_PROFILE_RESET
+        self.codes["profile_report"] = _SOP_PROFILE_REPORT
+        self.codes["load_partitioned"] = _SOP_LOAD_PARTITIONED
+        self.codes["load_distributed"] = _SOP_LOAD_DISTRIBUTED
+        self.codes["program_run"] = _SOP_PROGRAM_RUN
+        self.codes["fit"] = _SOP_FIT
+        self.codes["fit_if"] = _SOP_FIT_IF
+        self.codes["gradient_report"] = _SOP_GRADIENT_REPORT
+        self.codes["execution_profile_begin"] = _SOP_EXECUTION_PROFILE_BEGIN
+        self.codes["execution_profile_end"] = _SOP_EXECUTION_PROFILE_END
+        self.codes["save_control"] = _SOP_SAVE_CONTROL
+        self.codes["load_control"] = _SOP_LOAD_CONTROL
+        self.codes["save_program"] = _SOP_SAVE_PROGRAM
+        self.codes["load_weights"] = _SOP_LOAD_WEIGHTS
+        self.codes["tensor"] = _SOP_TENSOR
+        self.codes["ids"] = _SOP_IDS
+        self.codes["shape"] = _SOP_SHAPE
+        self.codes["numpy"] = _SOP_NUMPY
+        self.codes["grad"] = _SOP_GRAD
+        self.codes["scalar"] = _SOP_SCALAR
+        self.codes["capture"] = _SOP_CAPTURE
+        self.codes["load_program"] = _SOP_LOAD_PROGRAM
+        self.codes["save_state"] = _SOP_SAVE_STATE
+        self.codes["load_state"] = _SOP_LOAD_STATE
+        self.codes["reset"] = _SOP_RESET
+        self.codes["free"] = _SOP_FREE
+        self.codes["backward"] = _SOP_BACKWARD
+        self.codes["grad_tensor"] = _SOP_GRAD_TENSOR
+        self.codes["vjp"] = _SOP_VJP
+        self.codes["hvp"] = _SOP_HVP
+        self.codes["jvp"] = _SOP_JVP
+        self.codes["zero_grad"] = _SOP_ZERO_GRAD
+        self.codes["optimizer"] = _SOP_OPTIMIZER
+        self.codes["step"] = _SOP_STEP
+        self.codes["scheduler_step"] = _SOP_SCHEDULER_STEP
+        self.codes["learning_rate"] = _SOP_LEARNING_RATE
+        self.codes["optimizer_state"] = _SOP_OPTIMIZER_STATE
+        self.codes["load_optimizer_state"] = _SOP_LOAD_OPTIMIZER_STATE
+        self.codes["copy"] = _SOP_COPY
+        self.codes["detach"] = _SOP_DETACH
+        self.codes["matmul"] = _SOP_MATMUL
+        self.codes["add"] = _SOP_ADD
+        self.codes["sub"] = _SOP_SUB
+        self.codes["mul"] = _SOP_MUL
+        self.codes["div"] = _SOP_DIV
+        self.codes["relu"] = _SOP_RELU
+        self.codes["sigmoid"] = _SOP_SIGMOID
+        self.codes["tanh"] = _SOP_TANH
+        self.codes["exp"] = _SOP_EXP
+        self.codes["log"] = _SOP_LOG
+        self.codes["sqrt"] = _SOP_SQRT
+        self.codes["erf"] = _SOP_ERF
+        self.codes["softplus"] = _SOP_SOFTPLUS
+        self.codes["silu"] = _SOP_SILU
+        self.codes["hard_swish"] = _SOP_HARD_SWISH
+        self.codes["abs"] = _SOP_ABS
+        self.codes["floor"] = _SOP_FLOOR
+        self.codes["ceil"] = _SOP_CEIL
+        self.codes["round"] = _SOP_ROUND
+        self.codes["sin"] = _SOP_SIN
+        self.codes["cos"] = _SOP_COS
+        self.codes["sign"] = _SOP_SIGN
+        self.codes["reciprocal"] = _SOP_RECIPROCAL
+        self.codes["pow"] = _SOP_POW
+        self.codes["minimum"] = _SOP_MINIMUM
+        self.codes["maximum"] = _SOP_MAXIMUM
+        self.codes["where"] = _SOP_WHERE
+        self.codes["full"] = _SOP_FULL
+        self.codes["expand"] = _SOP_EXPAND
+        self.codes["scale"] = _SOP_SCALE
+        self.codes["leaky_relu"] = _SOP_LEAKY_RELU
+        self.codes["elu"] = _SOP_ELU
+        self.codes["pow_scalar"] = _SOP_POW_SCALAR
+        self.codes["hard_sigmoid"] = _SOP_HARD_SIGMOID
+        self.codes["transpose"] = _SOP_TRANSPOSE
+        self.codes["permute"] = _SOP_PERMUTE
+        self.codes["reshape"] = _SOP_RESHAPE
+        self.codes["flatten"] = _SOP_FLATTEN
+        self.codes["squeeze"] = _SOP_SQUEEZE
+        self.codes["unsqueeze"] = _SOP_UNSQUEEZE
+        self.codes["sum"] = _SOP_SUM
+        self.codes["mean"] = _SOP_MEAN
+        self.codes["max"] = _SOP_MAX
+        self.codes["any"] = _SOP_ANY
+        self.codes["all"] = _SOP_ALL
+        self.codes["softmax"] = _SOP_SOFTMAX
+        self.codes["log_softmax"] = _SOP_LOG_SOFTMAX
+        self.codes["concat"] = _SOP_CONCAT
+        self.codes["split"] = _SOP_SPLIT
+        self.codes["embedding"] = _SOP_EMBEDDING
+        self.codes["take"] = _SOP_TAKE
+        self.codes["conv2d"] = _SOP_CONV2D
+        self.codes["linear"] = _SOP_LINEAR
+        self.codes["max_pool2d"] = _SOP_MAX_POOL2D
+        self.codes["avg_pool2d"] = _SOP_AVG_POOL2D
+        self.codes["gelu"] = _SOP_GELU
+        self.codes["clip"] = _SOP_CLIP
+        self.codes["equal"] = _SOP_EQUAL
+        self.codes["not_equal"] = _SOP_NOT_EQUAL
+        self.codes["greater"] = _SOP_GREATER
+        self.codes["greater_equal"] = _SOP_GREATER_EQUAL
+        self.codes["less"] = _SOP_LESS
+        self.codes["less_equal"] = _SOP_LESS_EQUAL
+        self.codes["logical_not"] = _SOP_LOGICAL_NOT
+        self.codes["logical_and"] = _SOP_LOGICAL_AND
+        self.codes["logical_or"] = _SOP_LOGICAL_OR
+        self.codes["argmax"] = _SOP_ARGMAX
+        self.codes["pad"] = _SOP_PAD
+        self.codes["cumsum"] = _SOP_CUMSUM
+        self.codes["index"] = _SOP_INDEX
+        self.codes["layer_norm"] = _SOP_LAYER_NORM
+        self.codes["transformer_softmax"] = _SOP_TRANSFORMER_SOFTMAX
+        self.codes["transformer_linear"] = _SOP_TRANSFORMER_LINEAR
+        self.codes["rms_norm"] = _SOP_RMS_NORM
+        self.codes["rotary"] = _SOP_ROTARY
+        self.codes["dropout"] = _SOP_DROPOUT
+        self.codes["permutation"] = _SOP_PERMUTATION
+        self.codes["gather_rows"] = _SOP_GATHER_ROWS
+        self.codes["mse"] = _SOP_MSE
+        self.codes["mae"] = _SOP_MAE
+        self.codes["huber"] = _SOP_HUBER
+        self.codes["bce_with_logits"] = _SOP_BCE_WITH_LOGITS
+        self.codes["cross_entropy"] = _SOP_CROSS_ENTROPY
+        self.codes["accuracy"] = _SOP_ACCURACY
+        self.codes["log_loss"] = _SOP_LOG_LOSS
+        self.codes["roc_auc"] = _SOP_ROC_AUC
+
+
+# One table per process (identical contents in every extension that links this file).
+comptime _SESSION_OP_CODES = _Global[
+    StorageType=_SessionOpCodes, name="MojolearnSessionOpCodesV1",
+    init_fn=_SessionOpCodes.__init__,
+]
+
+
+def _session_op_code(name: String) raises -> Int:
+    var g = _SESSION_OP_CODES.get_or_create_ptr()
+    if name in g[].codes:
+        return g[].codes[name]
+    return 0
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -110,6 +402,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject, fields: PythonObject,
 ) raises -> PythonObject:
     var name = String(operation)
+    var op = _session_op_code(name)
     var resource_scope: List[Int] = [ops_session_registry_token(), KIND]
     if not _nil(fields["_id"]):
         if py_type(fields["_id"]) is not py_type(PythonObject(0)):
@@ -117,37 +410,37 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         var admitted_id = neural_descriptor_resource_handle(fields["_lifetime"], resource_scope)
         if admitted_id == 0 or admitted_id != Int(py=fields["_id"]):
             raise Error("TypeError: Session handle differs from its native registry owner")
-    if name == "program_public":
+    if op == _SOP_PROGRAM_PUBLIC:
         return ops_program_public_execute_py[E, KIND](session, fields, args)
-    if name == "program_init":
+    if op == _SOP_PROGRAM_INIT:
         var out = args[0]
         program_initialize_owner(out, session, args[1])
         return PythonObject(None)
-    if name == "enter":
+    if op == _SOP_ENTER:
         return session
-    if name == "free_program":
+    if op == _SOP_FREE_PROGRAM:
         if not _nil(fields["_id"]) and not _nil(args[0]._id):
             var owner = ops_session[E, KIND](Int(py=fields["_id"]))
             owner[].program_free(Int(py=args[0]._id))
         var program = args[0]
         py_setattr(program, "_id", PythonObject(None))
         return PythonObject(None)
-    if name == "close" or name == "exit":
+    if op == _SOP_CLOSE or op == _SOP_EXIT:
         if not _nil(fields["_id"]):
             neural_descriptor_resource_close(fields["_lifetime"], resource_scope)
             py_setitem(fields, "_id", PythonObject(None))
-        return PythonObject(False) if name == "exit" else PythonObject(None)
-    if name == "profile_reset":
+        return PythonObject(False) if op == _SOP_EXIT else PythonObject(None)
+    if op == _SOP_PROFILE_RESET:
         _ = ops_profile_reset_py()
         return PythonObject(None)
-    if name == "profile_report":
+    if op == _SOP_PROFILE_REPORT:
         return ops_profile_report_py()
     if _nil(fields["_id"]):
         raise Error("ValueError: this session is closed")
     var sid = fields["_id"]
-    if name == "load_partitioned" or name == "load_distributed":
+    if op == _SOP_LOAD_PARTITIONED or op == _SOP_LOAD_DISTRIBUTED:
         return ops_owned_program_create_request_py(fields, 0, name, args)
-    if name == "program_run":
+    if op == _SOP_PROGRAM_RUN:
         if len(args) != 4:
             raise Error("TypeError: Session.run requires a Program, arrays and two flags")
         var program = program_owner_fields(args[0])
@@ -158,13 +451,13 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         var pid = _integer(program["_id"], "program", 1)
         return ops_program_execute_py[E, KIND](sid, PythonObject(pid), sid, args[1], args[2], args[3], PythonObject(False))
     var s = ops_session[E, KIND](Int(py=sid))
-    if name == "fit" or name == "fit_if":
+    if op == _SOP_FIT or op == _SOP_FIT_IF:
         var program = args[0]
         if program._s is not session:
             raise Error("ValueError: training components must belong to the same session")
         var condition = 0
         var otherwise = 0
-        if name == "fit_if":
+        if op == _SOP_FIT_IF:
             if args[1]._s is not session or args[2]._s is not session:
                 raise Error("ValueError: training components must belong to the same session")
             condition = _int(args[1]._id, "condition", 1)
@@ -175,65 +468,65 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             options[4], options[5], options[6], options[7], condition, otherwise)
         py_setattr(program, "loss_curve_", result[0])
         py_setattr(program, "n_iter_", result[1])
-        if name == "fit_if":
+        if op == _SOP_FIT_IF:
             py_setattr(program, "branch_counts_", result[2])
         return program
-    if name == "gradient_report":
+    if op == _SOP_GRADIENT_REPORT:
         return gradient_report_py[E, KIND](Int(py=sid), _ints(args[0], "handle", 1), Bool(py=args[1]))
-    if name == "execution_profile_begin":
+    if op == _SOP_EXECUTION_PROFILE_BEGIN:
         s[].ex.execution_profile_begin()
         return PythonObject(None)
-    if name == "execution_profile_end":
+    if op == _SOP_EXECUTION_PROFILE_END:
         return execution_profile_object(s[].ex.execution_profile_end())
-    if name == "save_control":
+    if op == _SOP_SAVE_CONTROL:
         var opt = 0 if _nil(args[5]) else _int(args[5], "optimizer", 1)
         return control_save_py[E, KIND](sid, args[0], args[2], args[3], args[4], args[1], opt, uint64_input(args[6], "seed"))
-    if name == "load_control":
+    if op == _SOP_LOAD_CONTROL:
         var bundle = control_load_py[E, KIND](sid, args[0])
         py_setitem(bundle, "body", program_new_owner(session, bundle["body"]))
         py_setitem(bundle, "condition", program_new_owner(session, bundle["condition"]))
         if bundle["otherwise"] is not PythonObject(None):
             py_setitem(bundle, "otherwise", program_new_owner(session, bundle["otherwise"]))
         return bundle
-    if name == "save_program":
+    if op == _SOP_SAVE_PROGRAM:
         return ops_program_save_native_py[E, KIND](args[0], args[1])
-    if name == "load_weights":
+    if op == _SOP_LOAD_WEIGHTS:
         return ops_weights_native_py[E, KIND](sid, args[0], args[1], args[2])
-    if name == "tensor" or name == "ids":
-        var input = program_input(args[0], name == "ids")
+    if op == _SOP_TENSOR or op == _SOP_IDS:
+        var input = program_input(args[0], op == _SOP_IDS)
         var handle: Int
-        if name == "ids":
+        if op == _SOP_IDS:
             handle = s[].upload_ids(input.src, input.shape)
         else:
             handle = s[].upload_nd(input.src, input.shape, Bool(py=args[1]))
         _ = input^  # keep all scalar-list storage alive across the upload
         _ = args  # retain original external array exporters through upload
         return PythonObject(handle)
-    if name == "shape":
+    if op == _SOP_SHAPE:
         var sh = s[].shape_nd(_int(args[0], "handle", 1))
         var dims = List[Int]()
         for k in range(sh.ndim):  # small-loop(sh.ndim: tensor rank): shape metadata
             dims.append(sh.d[k])
         return _tuple_ints(dims)
-    if name == "numpy" or name == "grad":
+    if op == _SOP_NUMPY or op == _SOP_GRAD:
         var handle = _int(args[0], "handle", 1)
         var out = output_array(s[].shape_nd(handle))
         var dst = FP(unsafe_from_address=Int(py=out.__array_interface__["data"][0]))
-        if name == "numpy":
+        if op == _SOP_NUMPY:
             s[].download(handle, dst)
         else:
             s[].gradient_into(handle, dst)
         return out
-    if name == "scalar":
+    if op == _SOP_SCALAR:
         return PythonObject(Float64(s[].scalar(_int(args[0], "handle", 1))))
-    if name == "capture":
+    if op == _SOP_CAPTURE:
         var pid = s[].capture(_ints(args[0], "input", 1), _ints(args[1], "output", 1))
         return program_new_owner(session, program_info(pid, s[].program(pid)))
-    if name == "load_program":
+    if op == _SOP_LOAD_PROGRAM:
         if s[].tape.is_recording():
             raise Error("ValueError: programs run in an inference session (Session(record=False))")
         return program_new_owner(session, ops_load_program_py[E, KIND](sid, native_path(args[0])))
-    if name == "save_state":
+    if op == _SOP_SAVE_STATE:
         var params = _ints(args[1], "handle", 1)
         if len(params) == 0:
             raise Error("ValueError: params must hold at least one tensor handle")
@@ -248,7 +541,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         _ = py_call(counters.append, _int(args[5], "step", 0))
         _ = ops_save_state_py[E, KIND](sid, native_path(args[0]), _tuple_ints(params), PythonObject(opt), counters)
         return PythonObject(None)
-    if name == "load_state":
+    if op == _SOP_LOAD_STATE:
         var opt = 0 if _nil(args[1]) else _int(args[1], "optimizer", 1)
         if opt != 0:
             _ = s[]._opt_index(opt)
@@ -260,13 +553,13 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         py_setitem(result, "epoch", res[4])
         py_setitem(result, "step", res[5])
         return result
-    if name == "reset":
+    if op == _SOP_RESET:
         s[].reset()
         return PythonObject(None)
-    if name == "free":
+    if op == _SOP_FREE:
         s[].free(_int(args[0], "handle", 1))
         return PythonObject(None)
-    if name == "backward":
+    if op == _SOP_BACKWARD:
         if Bool(py=args[2]):
             if Bool(py=args[1]):
                 raise Error("ValueError: accumulate=True cannot be combined with create_graph=True")
@@ -274,28 +567,28 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         else:
             s[].backward(_int(args[0], "loss", 1), Bool(py=args[1]))
         return PythonObject(None)
-    if name == "grad_tensor":
+    if op == _SOP_GRAD_TENSOR:
         return PythonObject(s[].grad_handle(_int(args[0], "handle", 1)))
-    if name == "vjp" or name == "hvp" or name == "jvp":
+    if op == _SOP_VJP or op == _SOP_HVP or op == _SOP_JVP:
         var inputs = _ints(args[1], "input", 1)
         var out = List[Int]()
-        if name == "vjp":
+        if op == _SOP_VJP:
             out = s[].vjp(_int(args[0], "output", 1), inputs, _int(args[2], "v", 1), Bool(py=args[3]))
         else:
             var directions = _ints(args[2], "direction", 1)
             if len(directions) != len(inputs):
                 raise Error("ValueError: one direction is required per input")
-            if name == "jvp":
+            if op == _SOP_JVP:
                 return PythonObject(s[].jvp(_int(args[0], "output", 1), inputs, directions))
             out = s[].hvp(_int(args[0], "loss", 1), inputs, directions)
         var result = Python.list()
         for k in range(len(out)):  # driver-loop: over derivative result handles
             _ = py_call(result.append, out[k])
         return result
-    if name == "zero_grad":
+    if op == _SOP_ZERO_GRAD:
         s[].zero_grad()
         return PythonObject(None)
-    if name == "optimizer":
+    if op == _SOP_OPTIMIZER:
         var kind = String(args[0])
         var kind_code = 0 if kind == "sgd" else (1 if kind == "adam" else (2 if kind == "adamw" else -1))
         var schedule = String(args[8])
@@ -310,20 +603,20 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         var opt = s[].optimizer(ip, fp)
         py_setitem(session._opt_kind, opt, args[0])
         return PythonObject(opt)
-    if name == "step" or name == "scheduler_step" or name == "learning_rate" or name == "optimizer_state" or name == "load_optimizer_state":
+    if op == _SOP_STEP or op == _SOP_SCHEDULER_STEP or op == _SOP_LEARNING_RATE or op == _SOP_OPTIMIZER_STATE or op == _SOP_LOAD_OPTIMIZER_STATE:
         var opt = _int(args[0], "optimizer", 1)
         var oi = s[]._opt_index(opt)
-        if name == "step":
+        if op == _SOP_STEP:
             s[].step(opt, _ints(args[1], "parameter", 1))
             return PythonObject(None)
-        if name == "scheduler_step":
+        if op == _SOP_SCHEDULER_STEP:
             s[].scheduler_step(opt)
             return PythonObject(None)
-        if name == "learning_rate":
+        if op == _SOP_LEARNING_RATE:
             return PythonObject(Float64(s[].learning_rate(opt)))
         var kind = s[].opts[oi].cfg.kind
         var b = native_loaded_module("builtins")
-        if name == "optimizer_state":
+        if op == _SOP_OPTIMIZER_STATE:
             var st = s[].optimizer_state(opt, _int(args[1], "param", 1))
             var state = b.dict()
             py_setitem(state, "step", st[0])
@@ -359,133 +652,133 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     var fs = List[Float32]()
     # One exclusive chain: each operation name matches at most one branch, so
     # after a match no later name is compared (was ~90 independent `if`s).
-    if name == "copy":
+    if op == _SOP_COPY:
         code = 31
         hs.append(_int(args[0], "handle", 1))
-    elif name == "detach":
+    elif op == _SOP_DETACH:
         code = 29
         hs.append(_int(args[0], "handle", 1))
-    elif name == "matmul":
+    elif op == _SOP_MATMUL:
         code = 1
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "add":
+    elif op == _SOP_ADD:
         code = 2
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "sub":
+    elif op == _SOP_SUB:
         code = 3
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "mul":
+    elif op == _SOP_MUL:
         code = 4
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "div":
+    elif op == _SOP_DIV:
         code = 5
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "relu":
+    elif op == _SOP_RELU:
         code = 6
         hs.append(_int(args[0], "handle", 1))
-    elif name == "sigmoid":
+    elif op == _SOP_SIGMOID:
         code = 7
         hs.append(_int(args[0], "handle", 1))
-    elif name == "tanh":
+    elif op == _SOP_TANH:
         code = 8
         hs.append(_int(args[0], "handle", 1))
-    elif name == "exp":
+    elif op == _SOP_EXP:
         code = 9
         hs.append(_int(args[0], "handle", 1))
-    elif name == "log":
+    elif op == _SOP_LOG:
         code = 10
         hs.append(_int(args[0], "handle", 1))
-    elif name == "sqrt":
+    elif op == _SOP_SQRT:
         code = 11
         hs.append(_int(args[0], "handle", 1))
-    elif name == "erf":
+    elif op == _SOP_ERF:
         code = 48
         hs.append(_int(args[0], "handle", 1))
-    elif name == "softplus":
+    elif op == _SOP_SOFTPLUS:
         code = 50
         hs.append(_int(args[0], "handle", 1))
-    elif name == "silu":
+    elif op == _SOP_SILU:
         code = 51
         hs.append(_int(args[0], "handle", 1))
-    elif name == "hard_swish":
+    elif op == _SOP_HARD_SWISH:
         code = 55
         hs.append(_int(args[0], "handle", 1))
-    elif name == "abs":
+    elif op == _SOP_ABS:
         code = 57
         hs.append(_int(args[0], "handle", 1))
-    elif name == "floor":
+    elif op == _SOP_FLOOR:
         code = 58
         hs.append(_int(args[0], "handle", 1))
-    elif name == "ceil":
+    elif op == _SOP_CEIL:
         code = 59
         hs.append(_int(args[0], "handle", 1))
-    elif name == "round":
+    elif op == _SOP_ROUND:
         code = 60
         hs.append(_int(args[0], "handle", 1))
-    elif name == "sin":
+    elif op == _SOP_SIN:
         code = 61
         hs.append(_int(args[0], "handle", 1))
-    elif name == "cos":
+    elif op == _SOP_COS:
         code = 62
         hs.append(_int(args[0], "handle", 1))
-    elif name == "sign":
+    elif op == _SOP_SIGN:
         code = 63
         hs.append(_int(args[0], "handle", 1))
-    elif name == "reciprocal":
+    elif op == _SOP_RECIPROCAL:
         code = 64
         hs.append(_int(args[0], "handle", 1))
-    elif name == "pow":
+    elif op == _SOP_POW:
         code = 65
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "minimum":
+    elif op == _SOP_MINIMUM:
         code = 66
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "maximum":
+    elif op == _SOP_MAXIMUM:
         code = 67
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
-    elif name == "where":
+    elif op == _SOP_WHERE:
         code = 68
         hs.append(_int(args[0], "handle", 1))
         hs.append(_int(args[1], "handle", 1))
         hs.append(_int(args[2], "handle", 1))
-    elif name == "full" or name == "expand":
-        code = 30 if name == "full" else 71
-        ints = _ints(args[0 if name == "full" else 1], "shape", 1)
+    elif op == _SOP_FULL or op == _SOP_EXPAND:
+        code = 30 if op == _SOP_FULL else 71
+        ints = _ints(args[0 if op == _SOP_FULL else 1], "shape", 1)
         if len(ints) < 1 or len(ints) > 8:
             raise Error("ValueError: shape must have one to eight dimensions")
-        if name == "full":
+        if op == _SOP_FULL:
             fs.append(_float(args[1], "value"))
         else:
             hs.append(_int(args[0], "handle", 1))
-    elif name == "scale" or name == "leaky_relu" or name == "elu" or name == "pow_scalar":
-        code = 12 if name == "scale" else (52 if name == "leaky_relu" else (53 if name == "elu" else 65))
+    elif op == _SOP_SCALE or op == _SOP_LEAKY_RELU or op == _SOP_ELU or op == _SOP_POW_SCALAR:
+        code = 12 if op == _SOP_SCALE else (52 if op == _SOP_LEAKY_RELU else (53 if op == _SOP_ELU else 65))
         hs.append(_int(args[0], "handle", 1))
-        fs.append(_float(args[1], "factor" if name == "scale" else ("exponent" if name == "pow_scalar" else "alpha")))
-    elif name == "hard_sigmoid":
+        fs.append(_float(args[1], "factor" if op == _SOP_SCALE else ("exponent" if op == _SOP_POW_SCALAR else "alpha")))
+    elif op == _SOP_HARD_SIGMOID:
         code = 54
         hs.append(_int(args[0], "handle", 1))
         fs = [_float(args[1], "alpha"), _float(args[2], "beta")]
-    elif name == "transpose":
+    elif op == _SOP_TRANSPOSE:
         hs.append(_int(args[0], "handle", 1))
         var a = _int(args[1], "a")
         var b = _int(args[2], "b")
         code = 13 if a == -2 and b == -1 else 34
         if code == 34:
             ints = [1, a, b]
-    elif name == "permute":
+    elif op == _SOP_PERMUTE:
         code = 34
         hs.append(_int(args[0], "handle", 1))
         ints.append(0)
         _append(ints, _axes(args[1]))
-    elif name == "reshape":
+    elif op == _SOP_RESHAPE:
         hs.append(_int(args[0], "handle", 1))
         var dims = _ints(args[1], "shape")
         if len(dims) < 1 or len(dims) > 8:
@@ -498,37 +791,37 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         else:
             ints.append(0)
         _append(ints, dims)
-    elif name == "flatten" or name == "squeeze" or name == "unsqueeze":
+    elif op == _SOP_FLATTEN or op == _SOP_SQUEEZE or op == _SOP_UNSQUEEZE:
         code = 33
         hs.append(_int(args[0], "handle", 1))
-        if name == "flatten":
+        if op == _SOP_FLATTEN:
             ints = [1, _int(args[1], "start"), _int(args[2], "end")]
-        elif name == "squeeze":
+        elif op == _SOP_SQUEEZE:
             ints.append(2)
             _append(ints, _axes(args[1]))
         else:
             ints = [3, _int(args[1], "axis")]
-    elif name == "sum" or name == "mean" or name == "max" or name == "any" or name == "all":
-        code = 35 if name == "sum" else (36 if name == "mean" else (37 if name == "max" else 74))
+    elif op == _SOP_SUM or op == _SOP_MEAN or op == _SOP_MAX or op == _SOP_ANY or op == _SOP_ALL:
+        code = 35 if op == _SOP_SUM else (36 if op == _SOP_MEAN else (37 if op == _SOP_MAX else 74))
         hs.append(_int(args[0], "handle", 1))
         if code == 74:
-            ints.append(1 if name == "all" else 0)
+            ints.append(1 if op == _SOP_ALL else 0)
         ints.append(_keep(args[2]))
         _append(ints, _axes(args[1]))
-    elif name == "softmax" or name == "log_softmax":
+    elif op == _SOP_SOFTMAX or op == _SOP_LOG_SOFTMAX:
         hs.append(_int(args[0], "handle", 1))
         var axis = _int(args[1], "axis")
-        code = 17 if name == "softmax" else 18
+        code = 17 if op == _SOP_SOFTMAX else 18
         if axis != -1:
-            code = 42 if name == "softmax" else 43
+            code = 42 if op == _SOP_SOFTMAX else 43
             ints.append(axis)
-    elif name == "concat":
+    elif op == _SOP_CONCAT:
         code = 39
         hs = _ints(args[0], "handle", 1)
         if len(hs) == 0:
             raise Error("ValueError: concat needs at least one tensor")
         ints.append(_int(args[1], "axis"))
-    elif name == "split":
+    elif op == _SOP_SPLIT:
         hs.append(_int(args[0], "handle", 1))
         var axis = _int(args[2], "axis")
         var count: Int
@@ -548,11 +841,11 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(views)):  # small-loop(views: one handle per requested section): result packing, no data
             _ = py_call(out.append, views[k])
         return out
-    elif name == "embedding" or name == "take":
-        code = 32 if name == "embedding" else 41
+    elif op == _SOP_EMBEDDING or op == _SOP_TAKE:
+        code = 32 if op == _SOP_EMBEDDING else 41
         hs.append(_int(args[0], "handle", 1))
-        var option = -1 if name == "embedding" and _nil(args[2]) else _int(args[2], "padding_idx" if name == "embedding" else "axis")
-        if name == "embedding" and not _nil(args[2]) and option < 0:
+        var option = -1 if op == _SOP_EMBEDDING and _nil(args[2]) else _int(args[2], "padding_idx" if op == _SOP_EMBEDDING else "axis")
+        if op == _SOP_EMBEDDING and not _nil(args[2]) and option < 0:
             raise Error("ValueError: padding_idx must be >= 0")
         if _is_int(args[1]):
             hs.append(_int(args[1], "handle", 1))
@@ -571,12 +864,12 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             var out = s[].op(code, hs, ints, fs)
             _ = input^  # scalar sequence owner remains alive through upload
             return PythonObject(out)
-    elif name == "conv2d" or name == "linear":
-        code = 44 if name == "conv2d" else 19
+    elif op == _SOP_CONV2D or op == _SOP_LINEAR:
+        code = 44 if op == _SOP_CONV2D else 19
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
         if not _nil(args[2]):
             hs.append(_int(args[2], "bias", 1))
-        if name == "conv2d":
+        if op == _SOP_CONV2D:
             ints = [_int(args[3], "stride", 1), _int(args[4], "padding", 0), _int(args[5], "groups", 1)]
         else:
             var act = "none" if _nil(args[3]) else String(args[3])
@@ -592,60 +885,60 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             elif act != "none":
                 raise Error("ValueError: activation must be None, 'relu', 'sigmoid', 'tanh' or 'softmax'")
             ints.append(activation)
-    elif name == "max_pool2d" or name == "avg_pool2d":
-        code = 45 if name == "max_pool2d" else 46
+    elif op == _SOP_MAX_POOL2D or op == _SOP_AVG_POOL2D:
+        code = 45 if op == _SOP_MAX_POOL2D else 46
         hs.append(_int(args[0], "handle", 1))
         var kernel = _int(args[1], "kernel_size", 1)
         ints = [kernel, kernel if _nil(args[2]) else _int(args[2], "stride", 1)]
-    elif name == "gelu":
+    elif op == _SOP_GELU:
         code = 49
         hs.append(_int(args[0], "handle", 1))
         var approx = String(args[1])
         if approx != "none" and approx != "tanh":
             raise Error("ValueError: approximate must be 'none' or 'tanh'")
         ints.append(1 if approx == "tanh" else 0)
-    elif name == "clip":
+    elif op == _SOP_CLIP:
         code = 56
         hs.append(_int(args[0], "handle", 1))
         fs.append(clip_low_unbounded() if _nil(args[1]) else _float(args[1], "min"))
         fs.append(clip_high_unbounded() if _nil(args[2]) else _float(args[2], "max"))
-    elif name == "equal" or name == "not_equal" or name == "greater" or name == "greater_equal" or name == "less" or name == "less_equal":
+    elif op == _SOP_EQUAL or op == _SOP_NOT_EQUAL or op == _SOP_GREATER or op == _SOP_GREATER_EQUAL or op == _SOP_LESS or op == _SOP_LESS_EQUAL:
         code = 69
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         var comparison = 0
-        if name == "not_equal":
+        if op == _SOP_NOT_EQUAL:
             comparison = 5
-        elif name == "greater":
+        elif op == _SOP_GREATER:
             comparison = 1
-        elif name == "less":
+        elif op == _SOP_LESS:
             comparison = 2
-        elif name == "greater_equal":
+        elif op == _SOP_GREATER_EQUAL:
             comparison = 3
-        elif name == "less_equal":
+        elif op == _SOP_LESS_EQUAL:
             comparison = 4
         ints.append(comparison)
-    elif name == "logical_not" or name == "logical_and" or name == "logical_or":
+    elif op == _SOP_LOGICAL_NOT or op == _SOP_LOGICAL_AND or op == _SOP_LOGICAL_OR:
         code = 70
         hs.append(_int(args[0], "handle", 1))
-        if name != "logical_not":
+        if op != _SOP_LOGICAL_NOT:
             hs.append(_int(args[1], "handle", 1))
-        ints.append(0 if name == "logical_not" else (1 if name == "logical_and" else 2))
-    elif name == "argmax":
+        ints.append(0 if op == _SOP_LOGICAL_NOT else (1 if op == _SOP_LOGICAL_AND else 2))
+    elif op == _SOP_ARGMAX:
         code = 72
         hs.append(_int(args[0], "handle", 1))
         ints = [_int(args[1], "axis"), Int(Bool(py=args[2])), Int(not Bool(py=args[3]))]
-    elif name == "pad":
+    elif op == _SOP_PAD:
         code = 73
         hs.append(_int(args[0], "handle", 1))
         ints = _ints(args[1], "pads")
         if len(ints) < 1 or len(ints) > 16:
             raise Error("ValueError: pads must list two counts for each of one to eight axes")
         fs.append(_float(args[2], "value"))
-    elif name == "cumsum":
+    elif op == _SOP_CUMSUM:
         code = 75
         hs.append(_int(args[0], "handle", 1))
         ints = [_int(args[1], "axis"), Int(Bool(py=args[2])), Int(Bool(py=args[3]))]
-    elif name == "index":
+    elif op == _SOP_INDEX:
         code = 76
         hs.append(_int(args[0], "handle", 1))
         var indices = _ints(args[1], "indices", 1)
@@ -659,27 +952,27 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             ints = _ints(args[2], "axes")
         if len(ints) != len(indices):
             raise Error("ValueError: index takes one axis for each index tensor")
-    elif name == "layer_norm":
+    elif op == _SOP_LAYER_NORM:
         code = 20
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1), _int(args[2], "bias", 1)]
         var eps = _float(args[3], "eps")
         if not eps > 0:
             raise Error("ValueError: eps must be positive")
         fs.append(eps)
-    elif name == "transformer_softmax":
+    elif op == _SOP_TRANSFORMER_SOFTMAX:
         var b = native_loaded_module("builtins")
         if not (py_type(args[0]) is b.int):
             raise Error("TypeError: transformer handles must be exact native integers")
         code = 80
         hs = [_int(args[0], "input", 1)]
-    elif name == "transformer_linear":
+    elif op == _SOP_TRANSFORMER_LINEAR:
         var b = native_loaded_module("builtins")
         for j in range(2):  # small-loop(2: projection handles): exact native scalar admission
             if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: transformer handles must be exact native integers")
         code = 79
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
-    elif name == "rms_norm":
+    elif op == _SOP_RMS_NORM:
         var b = native_loaded_module("builtins")
         for j in range(2):  # small-loop(2: RMSNorm handles): exact native scalar admission
             if not (py_type(args[j]) is b.int):
@@ -690,7 +983,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         code = 77
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
         fs.append(Float32(py=args[2]))
-    elif name == "rotary":
+    elif op == _SOP_ROTARY:
         var b = native_loaded_module("builtins")
         for j in range(3):  # small-loop(3: rotary handle/position metadata): exact native scalar admission
             if not (py_type(args[j]) is b.int):
@@ -702,7 +995,7 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs = [_int(args[0], "input", 1)]
         ints = [_int(args[1], "head_dim", 1), _int(args[2], "offset", 0)]
         fs.append(_float(args[3], "theta"))
-    elif name == "dropout":
+    elif op == _SOP_DROPOUT:
         code = 21
         hs.append(_int(args[0], "handle", 1))
         var prob = _float(args[1], "p")
@@ -711,29 +1004,29 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         fs.append(prob)
         ints = _seed_words(args[2])
         ints.append(_int(args[3], "counter", 0))
-    elif name == "permutation":
+    elif op == _SOP_PERMUTATION:
         code = 23
         ints.append(_int(args[0], "n", 1))
         _append(ints, _seed_words(args[1]))
         ints.append(_int(args[2], "epoch", 0))
-    elif name == "gather_rows":
+    elif op == _SOP_GATHER_ROWS:
         code = 22
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         ints = [_int(args[2], "start", 0), 0 if _nil(args[3]) else _int(args[3], "count", 1)]
-    elif name == "mse" or name == "mae" or name == "huber" or name == "bce_with_logits" or name == "cross_entropy":
-        code = 24 if name == "mse" else (25 if name == "mae" else (26 if name == "huber" else (27 if name == "bce_with_logits" else 28)))
+    elif op == _SOP_MSE or op == _SOP_MAE or op == _SOP_HUBER or op == _SOP_BCE_WITH_LOGITS or op == _SOP_CROSS_ENTROPY:
+        code = 24 if op == _SOP_MSE else (25 if op == _SOP_MAE else (26 if op == _SOP_HUBER else (27 if op == _SOP_BCE_WITH_LOGITS else 28)))
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
-        var reduction = String(args[3 if name == "huber" else 2])
+        var reduction = String(args[3 if op == _SOP_HUBER else 2])
         if reduction != "mean" and reduction != "sum":
             raise Error("ValueError: reduction must be 'mean' or 'sum'")
         ints.append(0 if reduction == "mean" else 1)
-        if name == "huber":
+        if op == _SOP_HUBER:
             var delta = _float(args[2], "delta")
             if not delta > 0:
                 raise Error("ValueError: delta must be positive")
             fs.append(delta)
-    elif name == "accuracy" or name == "log_loss" or name == "roc_auc":
-        var metric = 1 if name == "accuracy" else (2 if name == "log_loss" else 3)
+    elif op == _SOP_ACCURACY or op == _SOP_LOG_LOSS or op == _SOP_ROC_AUC:
+        var metric = 1 if op == _SOP_ACCURACY else (2 if op == _SOP_LOG_LOSS else 3)
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         return PythonObject(Float64(s[].metric(metric, hs)))
     if code == 0:
