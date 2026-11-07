@@ -23,6 +23,10 @@ from bindings.sequential_arrays import sequential_array, sequential_address
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from core.classical_ridge_impl import classical_widen_f32_f64
 from core.host_inference_impl import host_inference_nd_finite
+from bindings.native_model_records import (
+    RECORDS_PREPARED, ContentRecord, content_value, records_drop, records_stampable, records_stamped_get,
+    records_stamped_put,
+)
 
 
 # perf3-seq-neural (2026-11-06): the admitted-fields record. A predict on a
@@ -39,9 +43,38 @@ from core.host_inference_impl import host_inference_nd_finite
 # noticed: attribute edits inside a field object that keeps its identity
 # (an ndarray's header reassigned in place, `est.coefs_[0].shape = ...`).
 comptime _OWNER_SLOT = "perf3_xseq_owner_fields_v1"
+# N137 (ne3-c-cnn, 2026-11-07): the same record, stamped with the model's
+# generation word (bindings/native_model_records.mojo: the watched instance
+# dictionary) and the content words of the fields, so a hit is one
+# generation compare plus native word compares, without the per-field
+# identity walk. History lists the call never reads (`loss_curve_`,
+# `validation_scores_`) stay out of the content words. Python 3.10 / 3.11
+# (generation 0) keep the identity-key record above.
+comptime _OWNER_STAMP = "ne3_xseq_owner_stamp_v1"
+
+
+def _owner_stamp_hit(model: PythonObject, fields: PythonObject) raises -> Bool:
+    var stamped = records_stamped_get(RECORDS_PREPARED, model, _OWNER_STAMP)
+    return stamped is not None and py_fields(model) is fields
+
+
+def _owner_stamp_put(model: PythonObject, fields: PythonObject) raises:
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    var b = native_loaded_module("builtins")
+    var items = py_call(b.list, py_call(fields.items))
+    for i in range(len(items)):  # driver-loop: over the model's stored fields (content words, once per record)
+        var name = items[i][0]
+        if py_type(name) is b.str and (String(py=name) == "loss_curve_" or String(py=name) == "validation_scores_"):
+            continue
+        content_value(content, items[i][1], 0, 4, False)
+    _ = records_stamped_put(RECORDS_PREPARED, model, _OWNER_STAMP, content^, PythonObject(True))
 
 
 def _owner_record_hit(mut mods: NativeModules, model: PythonObject, fields: PythonObject) raises -> Bool:
+    if _owner_stamp_hit(model, fields):
+        return True
     var record = prepared_get(mods, _OWNER_SLOT, model)
     if record is None:
         return False
@@ -78,6 +111,7 @@ def _owner_record_put(mut mods: NativeModules, model: PythonObject, fields: Pyth
             if py_type(key.objects[k]) is defaultdict:
                 return
     prepared_put(mods, _OWNER_SLOT, model, PythonObject(alloc=key^))
+    _owner_stamp_put(model, fields)
 
 
 def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool = True) raises -> PythonObject:
@@ -98,6 +132,7 @@ def xseq_public_owner(model: PythonObject, context: PythonObject, fitting: Bool 
     var mods = NativeModules()
     if fitting:
         prepared_drop(mods, _OWNER_SLOT, model)  # the fit replaces the fields
+        records_drop(RECORDS_PREPARED, model, _OWNER_STAMP)
     elif _owner_record_hit(mods, model, fields):
         # Every field is the object admitted before. A schedule object can
         # change its own fields in place, so it is admitted again.
@@ -222,7 +257,8 @@ struct XseqPublicLifecycle(Movable):
         self.nested = Int(py=depth) > 0
         if not self.fitting:
             classical_require_fitted(model, False, self.method, self.lifecycle)
-        classical_connect_numpy(self.lifecycle)
+        # N137: `xseq_public_owner` above connected this same lifecycle
+        # context (its second connection per call is gone).
         classical_refuse_sparse(self.source, self.name)
         var x = xseq_private_input(self.source, context, "X")
         var prepared = Python.list(x)

@@ -1370,6 +1370,31 @@ def fit_epoch_d_binding(
     beta1, beta2, eps, weight_decay, decoupled] or SGD's [lr, momentum,
     weight_decay, dampening, nesterov, 0]; losses = float64 per step; spec
     as `x_cnn_fit_epoch_r`."""
+    return _fit_d_epochs(spec, losses_addr, params, fparams, 1)
+
+
+def fit_d_binding(
+    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
+) raises -> PythonObject:
+    """N099 (ne3-c-cnn, 2026-11-07): the whole device fit in one call.
+    params = `x_cnn_fit_epoch_d`'s eight words (the epoch word is the first
+    epoch) plus the epoch count; losses = float64 (epochs x steps), epoch e's
+    step losses at e * steps. The spec and both plans are parsed once; each
+    epoch is exactly `x_cnn_fit_epoch_d`'s epoch e (the same device function,
+    the same words, steps already taken = done + e * steps), so no bit
+    moves. Returns the steps per epoch."""
+    if Int(py=len(params)) != 9:
+        raise Error("x_cnn fit: params is the epoch entry's eight words and the epoch count")
+    var epochs = Int(py=params[8])
+    if epochs < 0:
+        raise Error("x_cnn fit: a nonnegative epoch count required")
+    return _fit_d_epochs(spec, losses_addr, params, fparams, epochs)
+
+
+def _fit_d_epochs(
+    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject, epochs: Int,
+) raises -> PythonObject:
+    """`epochs` device epochs from epoch params[4] on, the spec parsed once."""
     var n = Int(py=params[0])
     var batch = Int(py=params[1])
     var adam = Int(py=params[2]) != 0
@@ -1378,7 +1403,7 @@ def fit_epoch_d_binding(
     var shuffle = Int(py=params[5]) != 0
     if n <= 0 or batch <= 0 or n >= 2147483647 or done < 0:
         raise Error("x_cnn fit epoch: positive rows and batch required")
-    var key = epoch_key(_seed64(params[6], params[7]), epoch)
+    var seed = _seed64(params[6], params[7])
     var blocks = spec["blocks"]
     var nb = Int(py=len(blocks))
     var bh = List[List[Int]]()
@@ -1401,28 +1426,88 @@ def fit_epoch_d_binding(
     var flat = dims[0]
     var k = dims[1]
     var steps = (n + batch - 1) // batch
-    var losses = f64_ptr(Int(py=losses_addr))
-    # the hyper rows: Adam's from the device kernel; SGD's two rows (the
-    # first step's, flag 1, then every later step's), words only
-    var base = List[Float32]()
-    if adam:
-        base = _adam_base(fparams)
-    else:
-        if Int(py=len(fparams)) != 6:
-            raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
-        var f5 = List[Float64]()
-        for e in range(5):  # small-loop(the five sgd hyper words)
-            f5.append(Float64(py=fparams[e]))
-        sgd_base_rows(base, f5)
-    var l32 = List[Float32](length=steps, fill=Float32(0))
-    with GILReleased(Python()):
-        fit_epoch_d_device(
-            n, batch, adam, done, nb, steps, flat, k, shuffle, key, bh, head, a, data, t, cs, ps, pools, base, l32,
-        )
-    widen_f32_into(losses, l32, steps)
-    _ = base^
-    _ = l32^
+    var losses_base = Int(py=losses_addr)
+    for ep in range(epochs):  # driver-loop: over the fit's epochs (training structure, one device epoch each)
+        var key = epoch_key(seed, epoch + ep)
+        var losses = f64_ptr(losses_base + 8 * ep * steps)
+        # the hyper rows: Adam's from the device kernel; SGD's two rows (the
+        # first step's, flag 1, then every later step's), words only. Built
+        # per epoch exactly as the one-epoch entry builds them.
+        var base = List[Float32]()
+        if adam:
+            base = _adam_base(fparams)
+        else:
+            if Int(py=len(fparams)) != 6:
+                raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
+            var f5 = List[Float64]()
+            for e in range(5):  # small-loop(the five sgd hyper words)
+                f5.append(Float64(py=fparams[e]))
+            sgd_base_rows(base, f5)
+        var l32 = List[Float32](length=steps, fill=Float32(0))
+        var taken = done + ep * steps
+        with GILReleased(Python()):
+            fit_epoch_d_device(
+                n, batch, adam, taken, nb, steps, flat, k, shuffle, key, bh, head, a, data, t, cs, ps, pools, base, l32,
+            )
+        widen_f32_into(losses, l32, steps)
+        _ = base^
+        _ = l32^
     return PythonObject(steps)
+
+
+def predict_r_binding(
+    spec: PythonObject, x_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """N090 (ne3-c-cnn, 2026-11-07): the classifier's whole resident predict
+    in one call. params = [n, cap, row words, codes (0/1)]: n host float32
+    rows of `row` words at x, cap rows per chunk; out = int32 (n) class
+    indices (codes) or float32 (n, k) probabilities. spec: blocks [[w, b,
+    out, idx, saved] per block], head [w, b], a [x, y, logits, glog, proba]
+    (y holds -1 targets), dims [flat, k], plans [full, last] ([[conv
+    params, pool params] per block] at cap rows and at the last chunk's).
+    Per chunk exactly the launches the per-launch entries ran from Python
+    (`x_cnn_res_upload`, `x_cnn_conv_block_forward_r` per block,
+    `x_cnn_linear_forward_r`, `x_cnn_softmax_xent_r`, `x_cnn_res_argmax` or
+    `x_cnn_res_download`), the same functions with the same words in the
+    same order, so no bit moves; only the interpreter crossings are gone."""
+    if Int(py=len(params)) != 4:
+        raise Error("x_cnn predict: params is [n, cap, row, codes]")
+    var n = Int(py=params[0])
+    var cap = Int(py=params[1])
+    var row = Int(py=params[2])
+    var codes = Int(py=params[3]) != 0
+    if n < 0 or cap <= 0 or row <= 0:
+        raise Error("x_cnn predict: nonnegative rows, a positive chunk and row size required")
+    var blocks = spec["blocks"]
+    var head = spec["head"]
+    var a = spec["a"]
+    var dims = spec["dims"]
+    var plans = spec["plans"]
+    var nb = Int(py=len(blocks))
+    if Int(py=len(plans)) != 2 or Int(py=len(plans[0])) != nb or Int(py=len(plans[1])) != nb:
+        raise Error("x_cnn predict: plans is [full, last], one [conv, pool] pair per block")
+    var flat = Int(py=dims[0])
+    var k = Int(py=dims[1])
+    var x0 = Int(py=x_addr)
+    var o0 = Int(py=out_addr)
+    var s = 0
+    while s < n:  # driver-loop: over the prediction chunks (cap rows each)
+        var m = min(cap, n - s)
+        var plan = plans[0] if m == cap else plans[1]
+        _ = res_upload_binding(a[0], PythonObject(x0 + 4 * s * row), PythonObject(m * row))
+        var src = a[0]
+        for j in range(nb):  # driver-loop: one launch per conv block (model structure)
+            var bj = blocks[j]
+            _ = conv_block_forward_r_binding(src, bj[0], bj[1], bj[2], bj[3], plan[j][0], plan[j][1], bj[4])
+            src = bj[2]
+        _ = linear_forward_binding[True](src, head[0], head[1], a[2], Python.list(m, flat, k))
+        _ = softmax_xent_binding[True](a[2], a[1], a[3], a[4], Python.list(m, k))
+        if codes:
+            _ = res_argmax_binding(a[4], PythonObject(o0 + 4 * s), Python.list(m, k))
+        else:
+            _ = res_download_binding(a[4], PythonObject(o0 + 4 * s * k), PythonObject(m * k))
+        s += m
+    return PythonObject(n)
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -1512,6 +1597,8 @@ def build__mojolearn_x_cnn() -> PythonObject:
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
         m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
         m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
+        m.def_function[fit_d_binding]("x_cnn_fit_d")
+        m.def_function[predict_r_binding]("x_cnn_predict_r")
         m.def_function[adaptive_pool_m_binding]("x_cnn_adaptive_pool_m")
         m.def_function[graph_op_m_binding]("x_cnn_graph_op_m")
         m.def_function[gcn_norm_m_binding]("x_cnn_gcn_norm_m")

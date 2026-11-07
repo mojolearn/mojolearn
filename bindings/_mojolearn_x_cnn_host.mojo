@@ -1020,6 +1020,91 @@ def fit_epoch_d_binding(
     return out
 
 
+def fit_d_binding(
+    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's `x_cnn_fit_d` contract on the host (N099,
+    ne3-c-cnn, 2026-11-07): params = `x_cnn_fit_epoch_d`'s eight words plus
+    the epoch count; epoch e is exactly `x_cnn_fit_epoch_d`'s epoch
+    params[4] + e with done + e * steps steps already taken, its losses at
+    e * steps of the (epochs x steps) float64 buffer. One crossing per fit;
+    the host column re-reads the spec per epoch inside the native call
+    (the `_r` contract it shares), with no Python code between epochs."""
+    if Int(py=len(params)) != 9:
+        raise Error("x_cnn fit: params is the epoch entry's eight words and the epoch count")
+    var epochs = Int(py=params[8])
+    if epochs < 0:
+        raise Error("x_cnn fit: a nonnegative epoch count required")
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    if n <= 0 or batch <= 0:
+        raise Error("x_cnn fit epoch: positive rows and batch required")
+    var steps = (n + batch - 1) // batch
+    var done = Int(py=params[3])
+    var epoch = Int(py=params[4])
+    var base = Int(py=losses_addr)
+    for ep in range(epochs):  # driver-loop: over the fit's epochs (training structure, one host epoch each)
+        var words = Python.list(params[0], params[1], params[2], done + ep * steps, epoch + ep, params[5],
+                                params[6], params[7])
+        _ = fit_epoch_d_binding(spec, PythonObject(base + 8 * ep * steps), words, fparams)
+    return PythonObject(steps)
+
+
+def predict_r_binding(
+    spec: PythonObject, x_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """N090 (ne3-c-cnn, 2026-11-07): the classifier's whole resident predict
+    in one call. params = [n, cap, row words, codes (0/1)]: n host float32
+    rows of `row` words at x, cap rows per chunk; out = int32 (n) class
+    indices (codes) or float32 (n, k) probabilities. spec: blocks [[w, b,
+    out, idx, saved] per block], head [w, b], a [x, y, logits, glog, proba]
+    (y holds -1 targets), dims [flat, k], plans [full, last] ([[conv
+    params, pool params] per block] at cap rows and at the last chunk's).
+    Per chunk exactly the launches the per-launch entries ran from Python
+    (`x_cnn_res_upload`, `x_cnn_conv_block_forward_r` per block,
+    `x_cnn_linear_forward_r`, `x_cnn_softmax_xent_r`, `x_cnn_res_argmax` or
+    `x_cnn_res_download`), the same functions with the same words in the
+    same order, so no bit moves; only the interpreter crossings are gone."""
+    if Int(py=len(params)) != 4:
+        raise Error("x_cnn predict: params is [n, cap, row, codes]")
+    var n = Int(py=params[0])
+    var cap = Int(py=params[1])
+    var row = Int(py=params[2])
+    var codes = Int(py=params[3]) != 0
+    if n < 0 or cap <= 0 or row <= 0:
+        raise Error("x_cnn predict: nonnegative rows, a positive chunk and row size required")
+    var blocks = spec["blocks"]
+    var head = spec["head"]
+    var a = spec["a"]
+    var dims = spec["dims"]
+    var plans = spec["plans"]
+    var nb = Int(py=len(blocks))
+    if Int(py=len(plans)) != 2 or Int(py=len(plans[0])) != nb or Int(py=len(plans[1])) != nb:
+        raise Error("x_cnn predict: plans is [full, last], one [conv, pool] pair per block")
+    var flat = Int(py=dims[0])
+    var k = Int(py=dims[1])
+    var x0 = Int(py=x_addr)
+    var o0 = Int(py=out_addr)
+    var s = 0
+    while s < n:  # driver-loop: over the prediction chunks (cap rows each)
+        var m = min(cap, n - s)
+        var plan = plans[0] if m == cap else plans[1]
+        _ = res_upload_binding(a[0], PythonObject(x0 + 4 * s * row), PythonObject(m * row))
+        var src = a[0]
+        for j in range(nb):  # driver-loop: one launch per conv block (model structure)
+            var bj = blocks[j]
+            _ = conv_block_forward_r_binding(src, bj[0], bj[1], bj[2], bj[3], plan[j][0], plan[j][1], bj[4])
+            src = bj[2]
+        _ = linear_forward_binding(src, head[0], head[1], a[2], Python.list(m, flat, k))
+        _ = softmax_xent_binding(a[2], a[1], a[3], a[4], Python.list(m, k))
+        if codes:
+            _ = res_argmax_binding(a[4], PythonObject(o0 + 4 * s), Python.list(m, k))
+        else:
+            _ = res_download_binding(a[4], PythonObject(o0 + 4 * s * k), PythonObject(m * k))
+        s += m
+    return PythonObject(n)
+
+
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
@@ -1089,6 +1174,8 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
         m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
         m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
+        m.def_function[fit_d_binding]("x_cnn_fit_d")
+        m.def_function[predict_r_binding]("x_cnn_predict_r")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))

@@ -24,6 +24,7 @@ from bindings.xcnn_common import (
 )
 from bindings.xcnn_bn_native import xcnn_bn_forward_dev, xcnn_bn_forward, xcnn_bn_layers, xcnn_bn_backward, xcnn_bn_backward_dev, _bn_admit
 from bindings.xseq_native_common import xseq_f32
+from x_cnn.shape_words import conv_params, CP_OH, CP_OW
 from bindings.sequential_inputs import sequential_input
 
 
@@ -279,15 +280,16 @@ def _save_gradients(fields: PythonObject, dw: PythonObject, db: PythonObject, co
 
 # ---------------------------------------------------------------- backward, with both host and resident routes
 
-def _conv_backward_host(layer: PythonObject, fields: PythonObject, grad: PythonObject, source: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
+def _conv_backward_host(layer: PythonObject, fields: PythonObject, entries: PythonObject, grad: PythonObject,
+                        source: PythonObject, context: PythonObject) raises -> PythonObject:
     # `fields`: admitted once by the caller (`_conv_backward`); not re-admitted here.
-    var entries = xcnn_entries(fields, context)
+    # `entries`: the caller's one `xcnn_entries(fields)` of this call (N136,
+    # ne3-c-cnn: it was resolved again here).
     var x = xcnn_host_of(source, context) if xcnn_is_t(source, context) else source
     var xs = xcnn_shape(x)
     _check_x(fields, xs)
     var g = xcnn_host_of(grad, context) if xcnn_is_t(grad, context) else grad
-    var expected = _conv_out(fields, entries, xs)
+    var expected = _conv_out(fields, xs)
     if not _same_shape(xcnn_shape(g), expected):
         raise Error("mojolearn: grad_out shape differs from the convolution output shape")
     var xp = x
@@ -343,16 +345,16 @@ def _conv_backward_host(layer: PythonObject, fields: PythonObject, grad: PythonO
     return dx
 
 
-def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, grad: PythonObject, source: PythonObject,
-                          context: PythonObject) raises -> PythonObject:
+def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, entries: PythonObject, grad: PythonObject,
+                          source: PythonObject, context: PythonObject) raises -> PythonObject:
     # `fields`: admitted once by the caller (`_conv_backward`); not re-admitted here.
-    var entries = xcnn_entries(fields, context)
+    # `entries`: the caller's one resolution of this call (N136).
     if not (_res_ok(fields, entries, source, context) and xcnn_on_dev(entries, grad, context)):
-        var dx = _conv_backward_host(layer, fields, grad, source, context)
+        var dx = _conv_backward_host(layer, fields, entries, grad, source, context)
         return xcnn_wrap(entries, dx, context) if xcnn_is_t(grad, context) else dx
     var xs = xcnn_shape(source)
     _check_x(fields, xs)
-    var shape = _conv_out(fields, entries, xs)
+    var shape = _conv_out(fields, xs)
     if not _same_shape(xcnn_shape(grad), shape):
         raise Error("mojolearn: grad_out shape differs from the convolution output shape")
     var xp = _pad_t(layer, fields, entries, source, context)
@@ -451,16 +453,16 @@ def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: Pytho
     var entries = xcnn_entries(fields, context)
     var out = PythonObject(None)
     if xcnn_is_t(grad, context) or xcnn_is_t(source, context):
-        out = _conv_backward_tensor(layer, fields, grad, source, context)
+        out = _conv_backward_tensor(layer, fields, entries, grad, source, context)
     elif _group_dev(fields, entries):
         var xs = source
         var gs = grad
-        out = xcnn_host_of(_conv_backward_tensor(layer, fields, xcnn_wrap(entries, gs, context),
+        out = xcnn_host_of(_conv_backward_tensor(layer, fields, entries, xcnn_wrap(entries, gs, context),
                                                          xcnn_wrap(entries, xs, context), context), context)
         _set(fields, "_x", xs)
         _set(fields, "_xp", PythonObject(None))
     else:
-        out = _conv_backward_host(layer, fields, grad, source, context)
+        out = _conv_backward_host(layer, fields, entries, grad, source, context)
     if one:
         if py_get(fields, "_gw_dev") is not None:
             _set(fields, "_gw_1d", PythonObject(True))
@@ -476,15 +478,24 @@ def _conv_backward_fields(layer: PythonObject, fields: PythonObject, args: Pytho
 
 # ---------------------------------------------------------------- conv words
 
-def _conv_params(fields: PythonObject, shape: List[Int]) raises -> PythonObject:
-    """`Conv2d._params(shape)`: one group's conv over the (padded) input."""
+def _conv_words(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
+    """`Conv2d._params(shape)` as native words: one group's conv over the
+    (padded) input (the launch block before `conv_params` fills OH, OW)."""
     var groups = Int(py=fields["groups"])
     var k = _pair(fields, "kernel_size")
     var s = _pair(fields, "stride")
     var p = _pair(fields, "_conv_pad")
     var d = _pair(fields, "dilation")
-    return Python.list(shape[0], shape[1] // groups, shape[2], shape[3], Int(py=fields["out_channels"]) // groups,
-                       k[0], k[1], s[0], s[1], p[0], p[1], d[0], d[1], 0, 0, 1 if _truth(fields["bias"]) else 0, 0)
+    return [shape[0], shape[1] // groups, shape[2], shape[3], Int(py=fields["out_channels"]) // groups,
+            k[0], k[1], s[0], s[1], p[0], p[1], d[0], d[1], 0, 0, 1 if _truth(fields["bias"]) else 0, 0]
+
+
+def _conv_params(fields: PythonObject, shape: List[Int]) raises -> PythonObject:
+    """`Conv2d._params(shape)`: the launch words of `_conv_words` as the
+    entries' list argument."""
+    var w = _conv_words(fields, shape)
+    return Python.list(w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10], w[11], w[12],
+                       w[13], w[14], w[15], w[16])
 
 
 def _pads(fields: PythonObject) raises -> List[Int]:
@@ -515,10 +526,13 @@ def _padded(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
     return [shape[0], shape[1], shape[2] + p[0] + p[1], shape[3] + p[2] + p[3]]
 
 
-def _conv_out(fields: PythonObject, entries: PythonObject, shape: List[Int]) raises -> List[Int]:
-    """`Conv2d._out_shape(shape)` (`x_cnn_conv_shape`)."""
-    var oh_ow = py_call_typed(xcnn_entry(entries, "x_cnn_conv_shape"), _conv_params(fields, _padded(fields, shape)))
-    return [shape[0], Int(py=fields["out_channels"]), Int(py=oh_ow[0]), Int(py=oh_ow[1])]
+def _conv_out(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
+    """`Conv2d._out_shape(shape)`. N149 (ne3-c-cnn, 2026-11-07): the same
+    integer rule the binding's `x_cnn_conv_shape` runs (`conv_params`,
+    x_cnn/shape_words.mojo, with the same refusals), imported natively: no
+    binding crossing and no Python launch-word list per call."""
+    var prm = conv_params(_conv_words(fields, _padded(fields, shape)))
+    return [shape[0], Int(py=fields["out_channels"]), Int(prm[CP_OH]), Int(prm[CP_OW])]
 
 
 def _check_x(fields: PythonObject, shape: List[Int]) raises:
@@ -657,16 +671,17 @@ def _pad_t(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: 
     return xp
 
 
-def _conv_forward_t(layer: PythonObject, fields: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+def _conv_forward_t(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
     """`Conv2d._forward_t(x)`: x and the output resident."""
     # `fields`: admitted once by the caller; not re-admitted here.
-    var entries = xcnn_entries(fields, context)
+    # `entries`: the caller's one `xcnn_entries(fields)` of this call (N136).
     var xs = xcnn_shape(x)
     _check_x(fields, xs)
     if not _res_ok(fields, entries, x, context):
         return xcnn_wrap(entries, xcnn_conv2d_forward_fields(layer, fields, xcnn_host_of(x, context), context), context)
     var values = _weight_pair(fields, context)
-    var oshape = _conv_out(fields, entries, xs)
+    var oshape = _conv_out(fields, xs)
     var out = xcnn_out_new(entries, oshape, context)   # the conv stores every word
     var xp = _pad_t(layer, fields, entries, x, context)
     var ps = xcnn_shape(xp)
@@ -724,7 +739,8 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
     """`Conv2d.forward(x)` for direct callers: admits the layer, then runs."""
     # The tensor test stays ahead of the admission, as before.
     if xcnn_is_t(x, context):
-        return _conv_forward_t(layer, _conv_admit(layer, context), x, context)
+        var admitted = _conv_admit(layer, context)
+        return _conv_forward_t(layer, admitted, xcnn_entries(admitted, context), x, context)
     return xcnn_conv2d_forward_fields(layer, _conv_admit(layer, context), x, context)
 
 
@@ -732,13 +748,13 @@ def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: Pyt
                                context: PythonObject) raises -> PythonObject:
     """`Conv2d.forward(x)` on fields the caller admitted once."""
     if xcnn_is_t(x, context):
-        return _conv_forward_t(layer, fields, x, context)
+        return _conv_forward_t(layer, fields, xcnn_entries(fields, context), x, context)
     var a = x
     var xs = xcnn_shape(a)
     _check_x(fields, xs)
     var entries = xcnn_entries(fields, context)
     if _group_dev(fields, entries):
-        var out = xcnn_host_of(_conv_forward_t(layer, fields, xcnn_wrap(entries, a, context), context), context)
+        var out = xcnn_host_of(_conv_forward_t(layer, fields, entries, xcnn_wrap(entries, a, context), context), context)
         _set(fields, "_x", a)
         _set(fields, "_xp", PythonObject(None))
         return out
@@ -752,7 +768,7 @@ def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: Pyt
     var values = _weight_pair(fields, context)
     var ps = xcnn_shape(xp)
     var prm = _conv_params(fields, ps)
-    var oshape = _conv_out(fields, entries, xs)   # the entries resolved above (was a second resolution)
+    var oshape = _conv_out(fields, xs)   # native shape rule (N149)
     var out = xcnn_host_f32(oshape, context)
     var groups = Int(py=fields["groups"])
     var cg = Int(py=fields["in_channels"]) // groups
@@ -806,8 +822,10 @@ def xcnn_conv_forward(layer: PythonObject, fields: PythonObject, x: PythonObject
 def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_ReLU.forward(x)`."""
     var fields = _fields(layer)
+    var entries = PythonObject(None)   # resolved once per call (N136)
     if xcnn_is_t(x, context):
         var b = xcnn_entries(fields, context)
+        entries = b
         var xs = xcnn_shape(x)
         if xcnn_on_dev(b, x, context) and xcnn_idn(b, XCNN_F_LAYER_IO) and xcnn_size(xs) > 0:
             var out = xcnn_new(b, xs, False, context)
@@ -818,7 +836,9 @@ def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObjec
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
     var out = xcnn_host_f32(xs, context)
-    _ = py_call_typed(xcnn_entry(xcnn_entries(fields, context), "x_cnn_relu_forward"), xcnn_addr(a), xcnn_addr(out),
+    if entries is None:
+        entries = xcnn_entries(fields, context)
+    _ = py_call_typed(xcnn_entry(entries, "x_cnn_relu_forward"), xcnn_addr(a), xcnn_addr(out),
                       Python.list(xcnn_size(xs)))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -1104,7 +1124,10 @@ def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, cf
     """`BasicBlock._conv_dev`: conv of resident `xh` into the block's
     resident array `name`; (handle, out shape). `cf`: the conv's fields as
     `_chain_fields` admitted them."""
-    var oshape = _conv_out(cf, xcnn_entries(cf, context), xshape)
+    # The conv's own mode check and `numeric_mode_` record stay (they were a
+    # side effect of resolving its entries for the shape crossing).
+    _ = xcnn_entries(cf, context)
+    var oshape = _conv_out(cf, xshape)
     var yh = xcnn_dev_get(block, entries, name, xcnn_size(oshape), context)
     var values = _weight_pair(cf, context)
     var pins = _res_w_values(conv, cf, entries, values, context)   # G3: the auto-pinned weights (None with the switch off)

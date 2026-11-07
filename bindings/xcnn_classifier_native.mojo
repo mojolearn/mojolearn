@@ -38,6 +38,11 @@ from bindings.sequential_arrays import sequential_array
 from bindings.xcnn_common import xcnn_shape, xcnn_tuple, xcnn_reshape, xcnn_numpy
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.array_helpers_impl import nsum_f64
+from bindings.native_model_records import (
+    RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stampable, records_stamped_get,
+    records_stamped_put,
+)
+from x_cnn.shape_words import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
 
 comptime _PREDICT_ROWS = 2048
 comptime _PREDICT_SLOT = "xcnn_clf_predict_v1"  # p3-cnn-sequence-tsa resident predict record
@@ -96,8 +101,15 @@ def _float_words(values: PythonObject) raises -> PythonObject:
     """`values.tolist()` of a float64 array: one PyList_New and a stolen
     PyList_SetItem per word (p3-cnn-sequence-tsa: it was a bound `append`
     call per word)."""
-    var count = Int(py=values.size)
-    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(values)))
+    var result = _float_words_at(Int(py=xcnn_addr(values)), Int(py=values.size))
+    _ = values
+    return result
+
+
+def _float_words_at(address: Int, count: Int) raises -> PythonObject:
+    """`_float_words` of `count` float64 words at `address` (the caller keeps
+    their owner alive)."""
+    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=address)
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
     if not raw:
@@ -110,7 +122,6 @@ def _float_words(values: PythonObject) raises -> PythonObject:
         # SetItem steals the reference on both success and failure.
         if set_item(result._obj_ptr, i, item.steal_data()) != 0:
             raise cpy.unsafe_get_error()
-    _ = values
     return result
 
 
@@ -123,8 +134,46 @@ def _minus_one(count: Int, context: PythonObject) raises -> PythonObject:
     return array
 
 
+# N135 (ne3-c-cnn, 2026-11-07): the admission record. A call on a classifier
+# whose generation word (bindings/native_model_records.mojo: the watched
+# instance dictionary) and content words (exact list items of `layers_` /
+# `_blocks`, every held object's class, and each layer's own generation and
+# field contents) are the ones the last full admission saw skips the walk
+# below: 18 settings, 16 options and both learned buffers per layer. Any
+# fit, set_params, setattr or layer field write changes a generation and
+# misses; Python 3.10 / 3.11 (generation 0) always take the full walk. The
+# payload is whether the fitted attributes were all present then. Not
+# noticed, as in the other records: an ndarray header edited in place
+# (`layer.weight_.shape = ...`); the shape reads downstream still check it.
+comptime _ADMIT_STAMP = "xcnn_clf_admission_v1"
+
+
+def _admission_stamp(model: PythonObject, fields: PythonObject, fitted_ok: Bool) raises:
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    content_fields(content, fields, 4)
+    var layers = py_get(fields, "layers_")
+    if layers is not None and py_type(layers) is _b().list:
+        for i in range(len(layers)):  # driver-loop: over the classifier layers (content words, once per record)
+            content_object(content, layers[i], 4)
+    var head = py_get(fields, "head_")
+    if head is not None:
+        content_object(content, head, 4)
+    var blocks = py_get(fields, "_blocks")
+    if blocks is not None and py_type(blocks) is _b().list:
+        for i in range(len(blocks)):  # driver-loop: over the block pairs (content words, once per record)
+            content_object(content, blocks[i][0], 4)
+            if blocks[i][1] is not None:
+                content_object(content, blocks[i][1], 4)
+    _ = records_stamped_put(RECORDS_PREPARED, model, _ADMIT_STAMP, content^, PythonObject(fitted_ok))
+
+
 def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool = False) raises -> PythonObject:
     var fields = _fields(model)
+    var stamped = records_stamped_get(RECORDS_PREPARED, model, _ADMIT_STAMP)
+    if stamped is not None and py_fields(model) is fields and (not fitted or Bool(py=stamped)):
+        return fields
     var mods = NativeModules()   # one module view for every field and child layer below
     for name in ["input_shape", "conv_channels", "kernel_size", "pool_size", "learning_rate",  # driver-loop: over passive classifier settings
                  "momentum", "weight_decay", "batch_size", "max_iter", "shuffle", "random_state", "numeric_mode",
@@ -170,6 +219,8 @@ def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool 
                 raise Error("TypeError: CNN blocks require their native convolution class")
             if blocks[i][1] is not None and py_type(blocks[i][1]) is not context["xcnn_maxpool_class"]:
                 raise Error("TypeError: CNN blocks require their native pooling class")
+    _admission_stamp(model, fields, py_contains(fields, "classes_") and py_contains(fields, "layers_")
+                     and py_contains(fields, "head_"))
     return fields
 
 
@@ -412,14 +463,16 @@ def _plan(fields: PythonObject, entries: PythonObject, n: Int) raises -> List[_B
         var conv = blocks[i][0]
         var pool = blocks[i][1]
         var prm = _conv_params(conv, shape)
-        var hw = py_call(_e(entries, "x_cnn_conv_shape"), _ints(prm))
-        var cshape: List[Int] = [shape[0], Int(py=_fields(conv)["out_channels"]), Int(py=hw[0]), Int(py=hw[1])]
+        # N149 (ne3-c-cnn): the binding's shape rules imported natively
+        # (x_cnn/shape_words.mojo), no x_cnn_conv_shape / x_cnn_pool_shape crossing.
+        var hw = conv_params(prm)
+        var cshape: List[Int] = [shape[0], Int(py=_fields(conv)["out_channels"]), Int(hw[CP_OH]), Int(hw[CP_OW])]
         var pprm = List[Int]()
         var oshape = cshape.copy()
         if pool is not None:
             pprm = _pool_params(pool, cshape)
-            var phw = py_call(_e(entries, "x_cnn_pool_shape"), _ints(pprm))
-            oshape = [cshape[0], cshape[1], Int(py=phw[0]), Int(py=phw[1])]
+            var phw = pool_params(pprm)
+            oshape = [cshape[0], cshape[1], Int(phw[PP_OH]), Int(phw[PP_OW])]
         var ny = _prod(cshape)
         var wsize = Int(py=_fields(conv)["weight_"].size) // Int(py=_fields(conv)["out_channels"])
         plans.append(_BlockPlan(prm^, pprm^, _prod(shape), _prod(oshape), ny // Int(py=_fields(conv)["out_channels"]) * wsize, ny))
@@ -708,25 +761,44 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
             size_words = b.list()
             for q in range(len(params)):  # driver-loop: one size word list per parameter array
                 _ = py_call(size_words.append, Python.list(sizes[q]))
+        # N099 (ne3-c-cnn, 2026-11-07): a binding with `x_cnn_fit_d` runs every
+        # epoch in one call (the spec and both plans parsed once natively;
+        # each epoch is `x_cnn_fit_epoch_d`'s epoch ep with `ep * nsteps`
+        # steps taken, the same words). The epoch loop below then only
+        # publishes each epoch's losses from the (max_iter x nsteps) buffer.
+        var whole = epoch_entry and max_iter > 0 and _has(entries, "x_cnn_fit_d")
+        var all_losses = PythonObject(None)
+        if whole:
+            all_losses = _empty(Python.tuple(max_iter * nsteps), "float64", context)
+            _ = py_call(_e(entries, "x_cnn_fit_d"), spec, xcnn_addr(all_losses),
+                        Python.list(n, batch, 0 if sgd else 1, step, 0, shuffle, seed_lo, seed_hi, max_iter), fpar)
+            _ = all_losses  # keep the Python object alive through the native call above
         for ep in range(max_iter):  # driver-loop: over the device epochs
             var epoch = b.list()
             var total = 0.0
             var count = 0
             if epoch_entry:
-                var losses = _empty(Python.tuple(nsteps), "float64", context)
-                _ = py_call(_e(entries, "x_cnn_fit_epoch_d"), spec, xcnn_addr(losses),
-                            Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
-                _ = losses  # keep the Python object alive through the native call above
+                var losses = PythonObject(None)
+                var at = 0
+                if whole:
+                    at = Int(py=xcnn_addr(all_losses)) + 8 * ep * nsteps
+                else:
+                    losses = _empty(Python.tuple(nsteps), "float64", context)
+                    _ = py_call(_e(entries, "x_cnn_fit_epoch_d"), spec, xcnn_addr(losses),
+                                Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
+                    _ = losses  # keep the Python object alive through the native call above
+                    at = Int(py=xcnn_addr(losses))
                 step += nsteps
-                epoch = _float_words(losses)
+                epoch = _float_words_at(at, nsteps)
                 # CPython 3.12+'s sum spelled out (`_portable_math.nsum`: the
                 # same Neumaier fold in the same order, core/array_helpers_impl.mojo),
                 # read straight from the float64 loss words (they were copied
                 # into a Python list and then into an array('d') first).
                 count = nsteps
                 if count:
-                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(losses))), count)
+                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at), count)
                 _ = losses  # keep the Python object alive through the native read above
+                _ = all_losses  # keep the Python object alive through the native read above
             else:
                 var order_rows = _empty(Python.tuple(n), "int32", context)
                 _ = py_call(_e(entries, "x_cnn_epoch_rows"), xcnn_addr(order_rows), Python.list(n, ep, shuffle, seed_lo, seed_hi))
@@ -955,7 +1027,12 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
             _free_all(entries, handles)
             raise error^
         owner = _predict_owner(entries, handles, context)
-    py_setitem(fields, "_rw", rw)
+    # N135 (ne3-c-cnn): `_rw` is no longer published on the model during a
+    # predict (no native or Python reader takes it from the fields; every
+    # helper here receives `rw`). Writing it twice per call bumped the
+    # model's generation word on every predict, so no stamped record could
+    # survive to the next call. Its value after a predict was an empty dict
+    # before and is the empty dict the fit left now.
     try:
         var ishape = fields["input_shape"]
         var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
@@ -969,6 +1046,29 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
         var planned_m = -1
         var words = PythonObject(None)
         var s = 0
+        if _has(entries, "x_cnn_predict_r") and n > 0:
+            # N090 (ne3-c-cnn, 2026-11-07): every chunk in one native call:
+            # the same launches with the same words in the same order as the
+            # loop below (`x_cnn_predict_r`), the plan words built twice per
+            # call at most (full chunks, the last chunk).
+            var last = n - ((n + cap - 1) // cap - 1) * cap
+            var full_words = _plan_words(_plan(fields, entries, cap))
+            var last_words = full_words if last == cap else _plan_words(_plan(fields, entries, last))
+            var blocks = b.list()
+            for j in range(len(hws)):  # driver-loop: over the conv blocks (model structure)
+                _ = py_call(blocks.append, Python.list(hws[j][0], hws[j][1], a["out"][j], a["idx"][j], a["saved"][j]))
+            var spec = b.dict()
+            py_setitem(spec, "blocks", blocks)
+            py_setitem(spec, "head", Python.list(head_hw[0], head_hw[1]))
+            py_setitem(spec, "a", Python.list(a["x"], a["y"], a["logits"], a["glog"], a["proba"]))
+            py_setitem(spec, "dims", Python.list(flat, k))
+            py_setitem(spec, "plans", Python.list(full_words, last_words))
+            var dst = xcnn_addr(lab) if codes else xcnn_addr(proba)
+            _ = py_call(_e(entries, "x_cnn_predict_r"), spec, base, dst, Python.list(n, cap, row, 1 if codes else 0))
+            _ = x  # keep the Python objects alive through the native call above
+            _ = lab
+            _ = proba
+            s = n
         while s < n:  # driver-loop: over the device prediction batches (cap-sized)
             var m = min(cap, n - s)
             _ = py_call(_e(entries, "x_cnn_res_upload"), a["x"], base + 4 * s * row, m * row)
@@ -985,10 +1085,8 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
                 _ = py_call(_e(entries, "x_cnn_res_download"), a["proba"], Int(py=xcnn_addr(proba)) + 4 * s * k, m * k)
                 _ = proba  # keep the Python object alive through the native call above
             s += m
-        py_setitem(fields, "_rw", b.dict())
     except error:
         # no field names a handle after a failure; the owner frees them
-        py_setitem(fields, "_rw", b.dict())
         raise error^
     # keep the state for the next predict when every weight can stay
     # read-only; otherwise `owner` is released here and frees its handles
