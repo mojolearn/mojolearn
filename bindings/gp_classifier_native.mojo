@@ -25,7 +25,7 @@ from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32
 from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
-from bindings.fitted_resident_door import fitted_resident_lease
+from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
 from bindings.mcls_classify import mcls_accuracy_fraction
 from bindings.mcls_common import mc_shape_of
 from bindings.host_inference_scalars import host_inference_scalar
@@ -437,6 +437,8 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
         var lease = 0
         if mirrors is not None:
             lease = fitted_resident_lease(model, _GPC_RESIDENT_SLOT, ext, "gp_resident_lease", mirrors)
+        else:
+            fitted_resident_drop(model, _GPC_RESIDENT_SLOT)
         _ = py_call(params.append, PythonObject(lease))
         name = String("gpc_predict_all_resident")
     _ = family_call(gp_entry(ext, name), addrs, params)
