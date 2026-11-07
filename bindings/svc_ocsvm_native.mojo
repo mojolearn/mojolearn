@@ -289,6 +289,23 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
 def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     """`OneClassSVM.score_samples`: (n,) float32."""
+    return _ocsvm_run(model, binding, source, False, context)
+
+
+def _ocsvm_labels_available(binding: PythonObject) raises -> Bool:
+    """The binding carries `ocsvm_labels` (export on a loaded module,
+    capability bit 4 on the native descriptor route)."""
+    if xn_is_module(binding):
+        return py_call(svc_builtins().getattr, xn_module(binding), PythonObject("x_neighbors_ocsvm_labels"),
+                       PythonObject(None)) is not None
+    return (xn_capabilities(binding) & 16) != 0
+
+
+def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject, labels: Bool,
+               context: PythonObject) raises -> PythonObject:
+    """`score_samples` as (n,) float32 scores; with `labels`, `predict`'s
+    (n,) int32 labels when the fused device chain applies (the caller then
+    finishes the int64 cast), the scores otherwise."""
     var fields = py_fields(model)
     # The door's admitted X is used as is (see _ocsvm_fit).
     var q = source if gp_x_known(source, context) else svc_f32(source, 2, "X", True, context)[0]
@@ -313,6 +330,25 @@ def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObje
         var coef0 = svc_float(svc_field(fields, "coef0"))
         # the fused chain: kernel then matmul per row tile on the device
         var d = Int(py=q.shape[1])
+        if labels and _ocsvm_labels_available(binding):
+            # N369 (lane ne3-g-svc-gp-neighbors): kernel_matmul, the offset
+            # step (`xn_unary` U_IDENTITY 1.0, -offset_) and the sign
+            # (`p2m_sign_label` mode 2, threshold 0) in one native session
+            # (x_neighbors op_ocsvm_labels): the same launches with the same
+            # parameter words, the n scores never come to the host.
+            var offset = svc_float(svc_field(fields, "offset_"))
+            var lab = family_array(Python.tuple(PythonObject(nq)), "<i4", context)
+            _op(binding, "ocsvm_labels", Python.list(_a(q), _a(sv), _a(coef), _a(lab)),
+                _dims(nq, n_sv, d, Int(py=context["family_svc_xn_kernels"][kernel]), degree, 2),
+                Python.list(PythonObject(_f32_scalar(gamma)), PythonObject(_f32_scalar(coef0)), PythonObject(1.0),
+                            PythonObject(-offset), PythonObject(0.0)), context)
+            _ = lab  # keep the Python object alive through the native call above
+            _ = sv  # keep the Python object alive through the native call above
+            _ = coef  # keep the Python object alive through the native call above
+            _ = q  # keep the Python object alive through the native call above
+            _ = q^
+            _ = coef^
+            return lab
         var s = family_array(Python.tuple(PythonObject(nq)), "<f4", context)
         _op(binding, "kernel_matmul", Python.list(_a(q), _a(sv), _a(coef), _a(s)),
             _dims(nq, n_sv, d, 1, Int(py=context["family_svc_xn_kernels"][kernel]), degree),
@@ -345,27 +381,38 @@ def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObje
 def _ocsvm_decision(model: PythonObject, binding: PythonObject, source: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     """`OneClassSVM.decision_function`: score_samples(X) - offset_ (`xn_unary`)."""
-    var scores = _ocsvm_scores(model, binding, source, context)
+    return _ocsvm_decision_of(model, binding, _ocsvm_scores(model, binding, source, context), context)
+
+
+def _ocsvm_decision_of(model: PythonObject, binding: PythonObject, scores: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """score_samples - offset_ (`xn_unary`) over computed scores."""
     var out = family_array(Python.tuple(PythonObject(Int(py=scores.size))), "<f4", context)
     var offset = svc_float(svc_field(py_fields(model), "offset_"))
     _op(binding, "unary", Python.list(_a(scores), _a(out)), _dims(Int(py=scores.size), _U_IDENTITY),
         Python.list(PythonObject(1.0), PythonObject(-offset)), context)
     _ = out  # keep the Python object alive through the native call above
     _ = scores  # keep the Python object alive through the native call above
-    _ = scores^
     return out
 
 
 def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`OneClassSVM.predict`: 1 inliers, -1 outliers, int64."""
-    var dec = _ocsvm_decision(model, binding, source, context)
-    var n = Int(py=dec.size)
-    var lab = family_array(Python.tuple(PythonObject(n)), "<i4", context)
-    if n > 0:
-        _op(binding, "p2m_sign_label", Python.list(_a(dec), _a(lab)), _dims(n, 2), Python.list(PythonObject(0.0)), context)
-        _ = lab  # keep the Python object alive through the native call above
-        _ = dec  # keep the Python object alive through the native call above
+    var first = _ocsvm_run(model, binding, source, True, context)
+    var dec = PythonObject(None)
+    var lab: PythonObject
+    var n = Int(py=first.size)
+    if String(first.dtype) == "<i4":
+        lab = first  # the fused chain's labels (op_ocsvm_labels)
+    else:
+        dec = _ocsvm_decision_of(model, binding, first, context)
+        lab = family_array(Python.tuple(PythonObject(n)), "<i4", context)
+        if n > 0:
+            _op(binding, "p2m_sign_label", Python.list(_a(dec), _a(lab)), _dims(n, 2), Python.list(PythonObject(0.0)),
+                context)
+            _ = lab  # keep the Python object alive through the native call above
+            _ = dec  # keep the Python object alive through the native call above
     var out = family_array(Python.tuple(PythonObject(n)), "<i8", context)
     if n > 0:
         _ = family_call(svc_base("cast_elements", context), _a(lab), PythonObject(2), _a(out), PythonObject(3),

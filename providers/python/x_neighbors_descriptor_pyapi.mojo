@@ -75,6 +75,8 @@ def xn_execute(binding: PythonObject, name: String, addresses: PythonObject,
             export_name = "x_neighbors_" + name
         elif name == "ocsvm_resident":
             export_name = "x_neighbors_ocsvm_resident_idn"
+        elif name == "ocsvm_labels":
+            export_name = "x_neighbors_ocsvm_labels"
         _ = py_call(neural_descriptor_entry(binding, export_name), addresses, ints, floats)
         return
     var a = List[Int]()
