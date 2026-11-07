@@ -17,6 +17,7 @@ from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_co
 from bindings.native_array_snapshot import native_array_slots, native_array_snapshot
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
+from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
@@ -230,7 +231,10 @@ def generation_weight_address(value: PythonObject, mut keep: List[PythonObject])
     # kernel only reads. A C-contiguous foreign buffer (ndarray, array.array,
     # memoryview) aligned for its item width is read in place through the
     # private memoryview kept in `keep` (formerly copied whole into a new
-    # native store on every call). Never use this for an output or a state
+    # native store on every call) once the read-only rule holds for it
+    # (lesson 10): `fitted_freeze_foreign` clears an exact ndarray's
+    # writeable flag; a buffer that cannot be frozen keeps the per-call
+    # copy. Never use this for an output or a state
     # buffer: a kernel write would then reach the caller's buffer, where the
     # copy used to absorb it. Array weights take the snapshot path as before.
     if value is None:
@@ -246,7 +250,7 @@ def generation_weight_address(value: PythonObject, mut keep: List[PythonObject])
         raise Error("generation: unsupported native model buffer format " + format)
     var itemsize = Int(py=view.itemsize)
     var address = native_buffer_address(view)
-    if address != 0 and (itemsize == 1 or address % itemsize == 0):
+    if address != 0 and (itemsize == 1 or address % itemsize == 0) and fitted_freeze_foreign(value):
         keep.append(view)
         return address
     return _generation_pack_foreign(view, format, keep)

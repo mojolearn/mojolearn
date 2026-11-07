@@ -55,3 +55,25 @@ def fitted_freeze_any(value: PythonObject) raises -> Bool:
         return False
     py_setattr(value, "_readonly", PythonObject(True))
     return True
+
+
+def fitted_freeze_foreign(value: PythonObject) raises -> Bool:
+    """The read-only rule for a foreign buffer read in place (no copy) by the
+    kernels: an exact `numpy.ndarray` gets its writeable flag cleared (NumPy
+    then refuses writes through it and through views taken from it later);
+    True only when the flag reads back cleared. An exact mojolearn Array is
+    frozen as in `fitted_freeze_any`. Any other exporter (array.array,
+    memoryview, bytearray, an ndarray subclass) cannot be frozen: False,
+    and the caller keeps its per-call copy. Same caveat as above: a view
+    taken before the freeze keeps its own writeable flag."""
+    if fitted_freeze_any(value):
+        return True
+    var numpy = py_get(native_loaded_module("sys").modules, "numpy")
+    if numpy is None or py_type(value) is not numpy.ndarray:
+        return False
+    var flags = value.flags
+    try:
+        py_setattr(flags, "writeable", PythonObject(False))
+    except:
+        return False
+    return not Bool(py=flags.writeable)
