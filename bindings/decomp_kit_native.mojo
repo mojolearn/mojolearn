@@ -19,6 +19,7 @@ from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
+from bindings.native_resident_capsule import resident_capsule
 from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
@@ -217,82 +218,10 @@ def decomp_freeze_array(array: PythonObject) raises:
 comptime _DK_RESIDENT_SLOT = "decomp_resident_operands_v1"
 
 
-struct _ResidentNames(Defaultable, Movable):
-    var capsule_name: String
-
-    def __init__(out self):
-        # PyCapsule keeps this name pointer, not a copy: the DSO-global owner
-        # is never reassigned and outlives every capsule.
-        self.capsule_name = String("mojolearn.decomp_kit.resident.v1")
-
-
-comptime _RESIDENT_NAMES = _Global[
-    StorageType=_ResidentNames, name="MojolearnDecompResidentNamesV1",
-    init_fn=_ResidentNames.__init__,
-]
-
-comptime _ResidentWords = MutPointer[Int, MutUntrackedOrigin]
-comptime _ResidentBytes = MutPointer[UInt8, MutUntrackedOrigin]
-
-
-def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
-    # Native destructor: returns the device buffer through the binding's
-    # compiled `x_decomp_dev_free` (no Python function runs). A pending
-    # exception of the code that dropped the record is kept; a failing free
-    # (interpreter shutdown: the pool dies with the process) is quiet, as
-    # the Python `_DevBuf.__del__` was.
-    try:
-        ref cpy = Python().cpython()
-        var names = _RESIDENT_NAMES.get_or_create_ptr()
-        var raw = cpy.lib.get_function[Optional[_ResidentBytes]]("PyCapsule_GetPointer")(
-            capsule, names[].capsule_name.as_c_string_slice().unsafe_ptr())
-        if not raw:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
-            return None
-        var words = _ResidentWords(unsafe_from_address=Int(raw.value()))
-        var free = words[0]
-        var handle = words[1]
-        words[0] = 0
-        if free != 0:
-            var pending = cpy.PyErr_FetchTriple()
-            var argument = cpy.lib.get_function[PyObjectPtr]("PyLong_FromSsize_t")(handle)
-            if argument:
-                # both arguments as address words, as words[0] is (no call
-                # on main mixes an Int and a PyObjectPtr argument; pass 2 C8)
-                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(free, Int(argument))
-                if result:
-                    cpy.lib.get_function[NoneType]("Py_DecRef")(result)
-                cpy.lib.get_function[NoneType]("Py_DecRef")(argument)
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
-            cpy.lib.get_function[NoneType]("Py_DecRef")(free)
-            cpy.PyErr_Restore(pending[0], pending[1], pending[2])
-        external_call["free", NoneType](raw.value())
-    except:
-        pass
-    return None
-
-
-def _resident_capsule(free: PythonObject, handle: Int) raises -> PythonObject:
-    # Two words: a strong reference to the minting binding's free entry and
-    # the device buffer id. On failure the buffer is returned at once.
-    ref cpy = Python().cpython()
-    var raw = external_call["malloc", Optional[_ResidentBytes]](c_size_t(16))
-    if not raw:
-        _ = py_call(free, handle)
-        raise Error("decomposition resident operand allocation failed")
-    var words = _ResidentWords(unsafe_from_address=Int(raw.value()))
-    words[0] = Int(cpy.Py_NewRef(free._obj_ptr))
-    words[1] = handle
-    var names = _RESIDENT_NAMES.get_or_create_ptr()
-    var result = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
-        raw.value(), names[].capsule_name.as_c_string_slice().unsafe_ptr(), _resident_destroy)
-    if not result:
-        cpy.lib.get_function[NoneType]("Py_DecRef")(words[0])
-        external_call["free", NoneType](raw.value())
-        var failure = cpy.unsafe_get_error()
-        _ = py_call(free, handle)
-        raise failure^
-    return PythonObject(from_owned=result)
+# The capsule that returns a resident device buffer to its minting binding
+# when the record holding it is dropped lives in
+# bindings/native_resident_capsule.mojo (shared with the TSA and projection
+# owners, lane ne1-a-decomp-tsa).
 
 
 struct DecompMatrix(Copyable, Movable):
@@ -485,7 +414,7 @@ struct DecompKit(Movable):
             # The capsule owns the device buffer from here on: replacing or
             # dropping the record (refit, a new array, the model's death)
             # returns it to the minting binding's pool.
-            var capsule = _resident_capsule(free, handle)
+            var capsule = resident_capsule(free, handle)
             _ = py_call(upload, handle, PythonObject(address), n)
             _ = keep  # keep the host owner alive through the upload above
             # Word 7: the uploaded words are the frozen source's own (no cast
