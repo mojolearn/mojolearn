@@ -341,7 +341,7 @@ def rows_log_host_inplace(dst_address: Int, n: Int, tasks: Int):
         var lo = c * chunk
         var hi = min(lo + chunk, n)
         for i in range(lo, hi):
-            dst[i] = log_or_inf(dst[i])
+            dst.unsafe_store(i, log_or_inf(dst.unsafe_load(i)))
 
     if t == 1:
         _part(0)
