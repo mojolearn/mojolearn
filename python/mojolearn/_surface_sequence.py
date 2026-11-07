@@ -78,6 +78,8 @@ FAMILIES = (
             "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "layer_norm", "theta", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "moe_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "prophet_days", "prophet_features",
+            # manifest sync (ne-fix-tests-b, 2026-11-07): registered in the binding source
+            "theta_forecast", "prophet_predict_days",
             "prophet_changepoints",
             # the model-description trainer (autograd/model.mojo)
             "model_native_api_v1", "model_fit", "model_predict", "model_n_params", "model_labels", "model_gather_labels",

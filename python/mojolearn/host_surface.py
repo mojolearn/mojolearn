@@ -2116,6 +2116,8 @@ FAMILIES = (
             "metrics_numeric_mode", "accuracy_score", "adjusted_rand_score",
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
+            # manifest sync (ne-fix-tests-b, 2026-11-07): registered in the binding source
+            "homogeneity_completeness_v_measure",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
             # lane/spectral-predict (2026-09-15): the fit entries that keep
             # the prediction data and SpectralClustering.predict (DEVIATION

@@ -53,6 +53,13 @@ def x_cluster():
 def test_x_cluster_centers_resident(x_cluster, make):
     x = _blobs()
     q = np.ascontiguousarray(x[::7] + np.float32(0.1))
+    # A model's copy is released lazily: its key goes on the dead-key ring
+    # and the next lookup or store drains it (bindings/cluster_resident_table.mojo).
+    # So drain the previous case's copy first: a throwaway query (drain, then
+    # mint) and a refit (which releases its own copy at once).
+    w = make().fit(x)
+    _ = w.transform(q) if hasattr(w, "transform") else w.predict(q)
+    w.fit(x)
     m = make().fit(x)
     before = x_cluster.x_cluster_centers_count()
     labels = _bytes(m.predict(q)) if not isinstance(m, ml.BisectingKMeans) else None

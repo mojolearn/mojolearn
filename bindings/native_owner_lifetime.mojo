@@ -10,15 +10,46 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
+from bindings.cpython_table import cpython_table
 
 
 comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"
 
 
+def _records_death_callback(callback: PythonObject, context: PythonObject) raises -> Bool:
+    """True for the death callback of bindings/native_model_records.mojo:
+    an exact bound method (PyMethod_New) of the compiled `release` entry of
+    its `_mojolearn_model_records_lifetime` module, bound to an int token.
+    Each binding holds its own records table, so the entry is recognized by
+    its exact types and its module name, not by identity. Releasing its
+    referent runs only that native release; no Python callback runs. The
+    reads below are C getset slots of exact built-in types; the classes come
+    from the import-time owner context (_native_owner_lifetime)."""
+    var method_class = py_get(context, "owner_method_class")
+    var builtin_class = py_get(context, "owner_builtin_function_class")
+    if method_class is None or builtin_class is None or py_type(callback) is not method_class:
+        return False
+    var b = context["owner_native_types"]
+    var function = callback.__func__
+    if py_type(function) is not builtin_class or py_type(callback.__self__) is not b["int"]:
+        return False
+    var module = function.__module__
+    var name = function.__name__
+    if py_type(module) is not b["str"] or py_type(name) is not b["str"]:
+        return False
+    return String(py=module) == "_mojolearn_model_records_lifetime" and String(py=name) == "release"
+
+
 def native_release_weakrefs(value: PythonObject, context: PythonObject) raises:
     var refs = py_call(context["owner_getweakrefs"],value)
     for i in range(len(refs)):  # driver-loop: over retained weakrefs before releasing any application callback
-        if py_type(refs[i]) is not context["owner_weakref_class"] or py_call(context["owner_weakref_callback"].__get__,refs[i]) is not None:
+        if py_type(refs[i]) is not context["owner_weakref_class"]:
+            raise Error("TypeError: native owner reinitialization cannot release weak-reference callbacks")
+        var callback = py_call(context["owner_weakref_callback"].__get__,refs[i])
+        # Since lane ne1-e-records every stamped model carries the records'
+        # native death callback; releasing such a model (a fitted member, a
+        # kernel node, a learner) runs only that native release.
+        if callback is not None and not _records_death_callback(callback, context):
             raise Error("TypeError: native owner reinitialization cannot release weak-reference callbacks")
 
 
@@ -80,6 +111,29 @@ def _released_object_elements(value: PythonObject, context: PythonObject, depth:
             native_release_admit(_native_item(flattened,PythonObject(i)),context,depth+1)
 
 
+def _is_class_labels(cls: PythonObject, b: PythonObject, context: PythonObject) raises -> Bool:
+    """`cls` is exactly the loaded mojolearn._labels.ClassLabels, still a
+    direct list subclass whose class dictionary defines no finalizer, no
+    slots and no __getattribute__ (read through the type's own descriptors,
+    as the Array admission below does)."""
+    var modules = py_get(context, "owner_sys_modules")
+    if modules is None:
+        return False
+    var module = py_get(modules, "mojolearn._labels")
+    if module is None:
+        return False
+    if cls is not py_get(module.__dict__, "ClassLabels"):
+        return False
+    var fields = py_call(b["type"].__dict__["__dict__"].__get__, cls)
+    var ancestry = py_call(b["type"].__dict__["__mro__"].__get__, cls)
+    if len(ancestry) != 3 or ancestry[1] is not b["list"] or ancestry[2] is not b["object"]:
+        return False
+    if py_get(fields, "__del__") is not None or py_get(fields, "__getattribute__") is not None:
+        return False
+    var slots = py_get(fields, "__slots__")
+    return slots is not None and py_type(slots) is b["tuple"] and len(slots) == 0
+
+
 def native_release_admit(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     # Reinitialization decrements the previous fields' references. Admit the
     # complete owners that could be destroyed before replacing any field.
@@ -94,6 +148,16 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
     if cls is b["tuple"] or cls is b["list"]:
         for i in range(len(value)):  # driver-loop: old metadata containers may own application finalizers transitively
             native_release_admit(value[i],context,depth+1)
+        return
+    if _is_class_labels(cls, b, context):
+        # A fitted classifier's `classes_` (mojolearn._labels.ClassLabels, an
+        # exact list subclass with empty __slots__ and no finalizer): its
+        # labels are read through the C list accessors, never its Python
+        # __getitem__, and admitted as a list's elements are.
+        var table = cpython_table()
+        var n_classes = table[].PyList_Size(value._obj_ptr)
+        for i in range(n_classes):  # driver-loop: over the fitted classes of the model, no element protocols
+            native_release_admit(PythonObject(from_borrowed=table[].PyList_GetItem(value._obj_ptr, i)),context,depth+1)
         return
     if cls is b["dict"]:
         var pairs = py_call(b["list"],value.items())

@@ -9,6 +9,10 @@ _SYMBOLS = {
         "spectral_fit_predict_dense", "spectral_fit_predict_graph", "spectral_fit_predict_graph_state",
         "spectral_fit_predict_dataset", "spectral_fit_predict_dataset_state", "spectral_predict",
         "spectral_embedding_dense", "spectral_embedding_graph", "spectral_embedding_dataset",
+        # The resident prediction state (lane ne1-a-cluster-spectral, N326;
+        # bindings/cfb_spectral.mojo `_sc_resident`): optional, absent on the
+        # CPU host binding, where predict keeps the per-call entry.
+        "spectral_predict_prepare", "spectral_predict_release", "spectral_predict_resident",
     )),
     "decomp": ("_mojolearn_x_decomp", (
         "x_decomp_dev_alloc", "x_decomp_dev_free", "x_decomp_dev_upload", "x_decomp_dev_download",
@@ -19,6 +23,9 @@ _SYMBOLS = {
         "x_decomp_move", "x_decomp_dev_move", "x_decomp_absmax_sign", "x_decomp_dev_absmax",
         "x_decomp_order_f", "x_decomp_dev_order_f", "x_decomp_reduce", "x_decomp_dev_reduce",
         "x_decomp_argmin_all", "x_decomp_dev_argmin_all",
+        # The kernel-call provider the manifold kit connects once
+        # (bindings/mani_kit.mojo `xd`, x_decomp/descriptor_schema.mojo).
+        "x_decomp_native_api_v1",
     )),
     "base": ("_mojolearn", (
         "nonzero_f32_count", "nonzero_f32_fill", "nonzero_f64_count", "nonzero_f64_fill", "knn_affinity_f32",
@@ -42,6 +49,15 @@ def _capture(binding, name, symbols):
     return module
 
 
+def _exact_owner(binding):
+    # glue: an exact compiled module (no proxy, no module __getattr__) whose
+    # provider entry it owns itself
+    if type(binding) is not ModuleType or "__getattr__" in binding.__dict__:
+        return False
+    entry = binding.__dict__.get("x_decomp_native_api_v1")
+    return type(entry) is BuiltinFunctionType and entry.__self__ is binding
+
+
 def connect():
     global _CONNECTED
     if _CONNECTED is not None:
@@ -58,7 +74,15 @@ def connect():
                 continue
             try:
                 binding = _get_binding(mode) if group == "metrics" else _backend.binding(binding_name, mode)
-                choices[mode] = _capture(binding, binding_name + "." + mode, symbols)
+                if group == "decomp" and _exact_owner(binding):
+                    # The manifold kit connects the binding's kernel-call
+                    # provider (x_decomp_native_api_v1), which is admitted
+                    # only from the module that owns the entry, so the exact
+                    # compiled module itself is retained, as
+                    # _native_decomp_kit_bridge retains it.
+                    choices[mode] = binding
+                else:
+                    choices[mode] = _capture(binding, binding_name + "." + mode, symbols)
             except (ImportError, AttributeError, ValueError, TypeError, RuntimeError) as error:
                 # Missing tiers remain named refusals, never a Python fallback.
                 choices[mode] = type(error).__name__ + ": " + str(error)

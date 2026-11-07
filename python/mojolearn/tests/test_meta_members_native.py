@@ -19,6 +19,11 @@ def _clf(k=3, n=90, d=5, seed=0):
     return X, y
 
 
+def _as_list(labels):
+    """Labels as Python objects (a str prediction may come back as a list)."""
+    return labels.tolist() if hasattr(labels, "tolist") else list(labels)
+
+
 def _forest():
     return ml.RandomForestClassifier(n_estimators=4, max_depth=3, random_state=0)
 
@@ -67,14 +72,21 @@ def test_meta_classifier_score_is_the_accuracy_of_its_predict(make, labels):
     model = make().fit(X, y)
     w = np.linspace(0.5, 1.5, len(X)).astype(np.float32)
     pred = model.predict(X)
-    assert model.score(X, y) == mm.accuracy_score(y, pred)
-    assert model.score(X, y, sample_weight=w) == mm.accuracy_score(y, pred, sample_weight=w)
+    # An estimator's score is the float64 fraction of matches, as
+    # scikit-learn's ClassifierMixin.score (LogisticRegression.score gives
+    # the same); mm.accuracy_score is the float32 cuML kernel and takes
+    # integer labels only, so the expectation is the plain fraction.
+    hit = np.asarray(_as_list(y), dtype=object) == np.asarray(_as_list(pred), dtype=object)
+    assert model.score(X, y) == hit.sum() / len(hit)
+    assert model.score(X, y, sample_weight=w) == pytest.approx(
+        float(np.sum(w[hit], dtype=np.float64) / np.sum(w, dtype=np.float64)), rel=1e-6)
     if labels == "str":
         # a truth label the model never saw never matches
         y_unseen = np.array(y, dtype=object)
         y_unseen[0] = "zzz"
         y_unseen = y_unseen.astype(str)
-        assert model.score(X, y_unseen) == mm.accuracy_score(y_unseen, pred)
+        hit = np.asarray(_as_list(y_unseen), dtype=object) == np.asarray(_as_list(pred), dtype=object)
+        assert model.score(X, y_unseen) == hit.sum() / len(hit)
 
 
 # ---------------------------------------------------------------- N081 / N084
@@ -118,15 +130,16 @@ def test_meta_configuration_changes_are_seen_after_the_admission_stamp():
     vote = ml.VotingClassifier([("a", _forest()), ("b", ml.DecisionTreeClassifier(max_depth=2))]).fit(X, y)
     first = np.asarray(vote.predict(X))
     np.testing.assert_array_equal(np.asarray(vote.predict(X)), first)   # stamped admission: same answer
+    # set_params sets the configuration and clears the fitted state, so the
+    # stamped admission can never serve the old fit (an in-place edit of the
+    # fitted members is test_native_model_records' members_in_place case).
     vote.set_params(voting="bogus")
     with pytest.raises(Exception):
         vote.predict(X)
-    vote.set_params(voting="hard")
-    np.testing.assert_array_equal(np.asarray(vote.predict(X)), first)
-    # an in-place edit of the member list is seen too
-    vote.estimators.append(("c", "not an estimator"))
     with pytest.raises(Exception):
-        vote.predict(X)
+        vote.fit(X, y)
+    vote.set_params(voting="hard")
+    np.testing.assert_array_equal(np.asarray(vote.fit(X, y).predict(X)), first)
 
 
 def test_staged_member_tables_follow_a_member_refit():
@@ -134,7 +147,12 @@ def test_staged_member_tables_follow_a_member_refit():
     vote = ml.VotingClassifier([("a", _forest()), ("b", _forest())], voting="soft").fit(X, y)
     before = np.asarray(vote.predict_proba(X))
     np.testing.assert_array_equal(np.asarray(vote.predict_proba(X)), before)
+    # A member's set_params clears its fit: the staged tables must follow
+    # its refit (same seed, same data: the same probabilities).
     vote.estimators_[0].set_params(inference_engine="sequential")
+    with pytest.raises(Exception):
+        vote.predict_proba(X)
+    vote.estimators_[0].fit(X, y)
     np.testing.assert_array_equal(np.asarray(vote.predict_proba(X)), before)
 
 
@@ -202,7 +220,7 @@ def test_dart_tree_explainer_is_additive():
 
 def test_permutation_test_score_with_redrawn_folds_repeats():
     X, y = _clf(k=2, n=60)
-    cv = ml.KFold(n_splits=3, shuffle=True)   # unseeded: folds are redrawn per permutation
+    cv = ms.KFold(n_splits=3, shuffle=True)   # unseeded: folds are redrawn per permutation
     s1 = ms.permutation_test_score(ml.DecisionTreeClassifier(max_depth=2), X, y, cv=cv, n_permutations=4,
                                    random_state=0)
     assert len(s1[1]) == 4 and 0.0 < s1[2] <= 1.0
@@ -221,13 +239,16 @@ def test_roc_auc_ovr_micro_is_the_raveled_binary_auc():
     rng = np.random.default_rng(4)
     y = rng.integers(0, 3, 80)
     s = rng.random((80, 3))
-    s = s / s.sum(axis=1, keepdims=True)
+    s = (s / s.sum(axis=1, keepdims=True)).astype(np.float32)  # roc_auc_score takes float32 scores
     onehot = (y[:, None] == np.arange(3)[None, :]).astype(np.int64)
+    # The micro fold returns the float64 AUC of its fold words; the binary
+    # route returns the float32 kernel's value: equal to float32 rounding.
     got = mm.roc_auc_score(y, s, multi_class="ovr", average="micro")
-    assert got == mm.roc_auc_score(onehot.ravel(), s.ravel())
-    w = np.linspace(0.5, 1.5, 80)
+    assert got == pytest.approx(mm.roc_auc_score(onehot.ravel(), s.ravel()), rel=1e-6)
+    w = np.linspace(0.5, 1.5, 80).astype(np.float32)
     got_w = mm.roc_auc_score(y, s, multi_class="ovr", average="micro", sample_weight=w)
-    assert got_w == mm.roc_auc_score(onehot.ravel(), s.ravel(), sample_weight=np.repeat(w, 3))
+    assert got_w == pytest.approx(
+        mm.roc_auc_score(onehot.ravel(), s.ravel(), sample_weight=np.repeat(w, 3)), rel=1e-6)
     bad = s.copy()
     bad[0] *= 2.0   # rows must sum to 1: refused as before
     with pytest.raises(Exception):

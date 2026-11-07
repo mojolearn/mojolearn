@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 from mojolearn import TransformerBlock
-from test_transformer_surface import _weights
+from mojolearn.tests.test_transformer_surface import _weights
 
 
 class TransformerStateRefusals(unittest.TestCase):

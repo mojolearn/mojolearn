@@ -466,16 +466,18 @@ def _label_lists():
 
 @pytest.mark.parametrize("name", list(_label_lists()))
 def test_encode_labels_list_matches_the_order_rule(name):
+    # Since lane ne1-h-labels (N413) encode_labels is ONE native call
+    # (labels_encode_labels), which no longer goes through the
+    # prepare_targets helper: no helper is expected; the outcomes are still
+    # compared, and test_labels_native_entry.py pins the native contract.
     y = _label_lists()[name]
-    native = name in ("ints", "tuple", "one class", "int64 edge")
-    _same(lambda: _labels.encode_labels(y), ("prepare_targets",) if native else (),
-          group="labels")
+    _same(lambda: _labels.encode_labels(y), (), group="labels")
 
 
 def test_encode_labels_float_list_takes_the_helper():
     for name in ("floats", "zeros a", "zeros b"):
         y = _label_lists()[name]
-        ref = _same(lambda: _labels.encode_labels(y), ("prepare_targets",), group="labels")
+        ref = _same(lambda: _labels.encode_labels(y), (), group="labels")  # one native call (N413)
         assert ref[0][0] == "ok"
     classes, _ = _labels.encode_labels(_label_lists()["zeros b"])
     assert math.copysign(1.0, classes[0]) == -1.0  # the first-seen zero is kept
@@ -485,9 +487,10 @@ def test_encode_labels_float_list_takes_the_helper():
                                      [False, True, 2], [2**70, 1, 2]])
 def test_decode_labels_int32_codes(classes):
     codes = _RNG.integers(0, 3, 4000).astype(np.int32)
-    numeric = _labels.label_kind(classes) in ("int", "float") and classes[0] != 2**70
-    _same(lambda: _labels.decode_labels(classes, _arr(codes)),
-          ("cast_elements",) if numeric else (), group="labels")
+    # Since lane ne1-h-labels (N437) decode_labels of int codes is ONE
+    # native call (labels_decode_labels, the widening included), so the
+    # cast_elements helper is no longer expected.
+    _same(lambda: _labels.decode_labels(classes, _arr(codes)), (), group="labels")
     negative = codes.copy()
     negative[17] = -1  # Python indexes from the end; the gather refuses; same answer
     _same(lambda: _labels.decode_labels(classes, _arr(negative)), (), group="labels")

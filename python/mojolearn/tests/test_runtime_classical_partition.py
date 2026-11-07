@@ -18,7 +18,7 @@ def owners():
 def test_every_legacy_classical_name_is_the_exact_new_native_entry():
     legacy, native = owners()
     spec, = host_surface.HOST_IMPORT_ALIASES['_mojolearn_tokenizer_host']
-    assert len(spec['functions']) == 29
+    assert len(spec['functions']) == 30
     assert legacy.tokenizer_host_runtime_classical_abi() == 1
     for name in spec['functions']:
         entry = getattr(legacy, name)

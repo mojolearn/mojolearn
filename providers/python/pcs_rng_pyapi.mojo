@@ -73,12 +73,24 @@ def _pcs_connect(context: PythonObject) raises -> PythonObject:
     if (py_type(state_getter) is not getset_type or py_type(capsule_getter) is not getset_type
             or py_type(lock_getter) is not getset_type):
         raise Error("TypeError: PCS RNG requires native NumPy state/capsule/lock getters")
-    var lock_type = native_loaded_module("_thread").LockType
+    var thread = native_loaded_module("_thread")
+    var lock_type = thread.LockType
     var lock_fields = _class_fields(lock_type)
     var acquire = py_get(lock_fields, "acquire")
     var release = py_get(lock_fields, "release")
     if py_type(acquire) is not method_type or py_type(release) is not method_type:
         raise Error("TypeError: PCS RNG requires ordinary native lock methods")
+    # NumPy 2.5 BitGenerators hold a `_thread.RLock` (the C re-entrant lock),
+    # older ones a `_thread.lock`; both are native, with C acquire/release.
+    var rlock_type = py_get(_loaded_fields(thread), "RLock")
+    var rlock_acquire = PythonObject(None)
+    var rlock_release = PythonObject(None)
+    if rlock_type is not None:
+        var rlock_fields = _class_fields(rlock_type)
+        rlock_acquire = py_get(rlock_fields, "acquire")
+        rlock_release = py_get(rlock_fields, "release")
+        if py_type(rlock_acquire) is not method_type or py_type(rlock_release) is not method_type:
+            raise Error("TypeError: PCS RNG requires ordinary native lock methods")
     var record = Python.dict()
     py_setitem(record, "mtrand", mtrand)
     py_setitem(record, "randomstate", randomstate)
@@ -93,6 +105,9 @@ def _pcs_connect(context: PythonObject) raises -> PythonObject:
     py_setitem(record, "lock_type", lock_type)
     py_setitem(record, "acquire", acquire)
     py_setitem(record, "release", release)
+    py_setitem(record, "rlock_type", rlock_type)
+    py_setitem(record, "rlock_acquire", rlock_acquire)
+    py_setitem(record, "rlock_release", rlock_release)
     # A second thread that connects concurrently (the import above may run
     # Python and switch threads) stores a record of the same identities.
     py_setitem(context, "family_pcs_rng", record)
@@ -133,10 +148,17 @@ def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("TypeError: NumPy native capsule/lock getters changed")
     var capsule = py_call(record["capsule_get"], bitgen, py_type(bitgen))
     var lock = py_call(record["lock_get"], bitgen, py_type(bitgen))
-    if py_type(lock) is not record["lock_type"]:
-        raise Error("TypeError: native PCS RNG requires NumPy's ordinary native lock")
-    var lock_fields = _class_fields(record["lock_type"])
-    if py_get(lock_fields, "acquire") is not record["acquire"] or py_get(lock_fields, "release") is not record["release"]:
+    var held_type = record["lock_type"]
+    var acquire = record["acquire"]
+    var release = record["release"]
+    if py_type(lock) is not held_type:
+        if record["rlock_type"] is None or py_type(lock) is not record["rlock_type"]:
+            raise Error("TypeError: native PCS RNG requires NumPy's ordinary native lock")
+        held_type = record["rlock_type"]
+        acquire = record["rlock_acquire"]
+        release = record["rlock_release"]
+    var lock_fields = _class_fields(held_type)
+    if py_get(lock_fields, "acquire") is not acquire or py_get(lock_fields, "release") is not release:
         raise Error("TypeError: native PCS RNG lock methods changed")
     ref cpy = Python().cpython()
     var name = String("BitGenerator")
@@ -158,8 +180,6 @@ def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
     # the one native draw needs no Python execution and keeps every owner alive.
     # Allocate the call envelope before acquisition. In particular, do not use
     # py_call in finally: a failed tuple allocation there could strand the lock.
-    var acquire = record["acquire"]
-    var release = record["release"]
     var lock_args = cpy.PyTuple_New(1)
     if not lock_args:
         raise cpy.unsafe_get_error()
