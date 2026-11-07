@@ -31,6 +31,9 @@ Rules (plan section 2A):
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.family_common import family_call
+from bindings.py_balanced import py_type
+from bindings.native_loaded_module import native_loaded_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.native_model_records import model_identity_key, model_generation
 
 comptime CRES_X_CLUSTER = 1
@@ -85,6 +88,15 @@ struct CresTable(Defaultable, Movable):
 
 
 comptime _CRES = _Global[StorageType=CresTable, name="MojolearnClusterResidentHeldV1", init_fn=CresTable.__init__]
+
+
+def cres_optional_entry(binding: PythonObject, name: String) raises -> PythonObject:
+    """The compiled resident door `name` of `binding`, or None: a binding
+    that is not an exact compiled module (a host binding proxy) or that
+    does not export the door keeps the per-call route."""
+    if py_type(binding) is not py_type(native_loaded_module("builtins")):
+        return PythonObject(None)
+    return neural_descriptor_entry(binding, name, False)
 
 
 def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:

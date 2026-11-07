@@ -20,8 +20,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
-from bindings.kmeans_native import _kmeans_optional_entry
-from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_lookup, cres_store
+from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_lookup, cres_store, cres_optional_entry
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
     family_shape_repr,
@@ -143,7 +142,7 @@ def _xc_resident(model: PythonObject, binding: PythonObject, centers_field: Pyth
     var held = cres_lookup(model, CRES_X_CLUSTER, binding, objects, dims)
     if held is not None:
         return held
-    var query = _kmeans_optional_entry(binding, "x_cluster_resident_query", context)
+    var query = cres_optional_entry(binding, "x_cluster_resident_query")
     if query is None:
         return PythonObject(None)
     var prepare = family_entry(binding, "x_cluster_centers_prepare", context)
