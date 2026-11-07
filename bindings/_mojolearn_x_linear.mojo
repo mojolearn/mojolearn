@@ -24,7 +24,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP, IP
 from x_linear.ridgecv import ridge_best_alpha
-from x_linear.device import fit_device, decision_device, decision_codes_device, SGD_IDN_DEV_FINITE
+from x_linear.device import fit_device, decision_device, decision_codes_device, decision_rows_device, SGD_IDN_DEV_FINITE
 from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.class_prep_device import class_prep_device
@@ -128,6 +128,29 @@ def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Py
 # Restore: git apply experiments/removed/dead_entries_x_linear.patch
 
 
+def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
+                          out_addr: PythonObject) raises -> PythonObject:
+    """predict_proba in one call: link(X W^T + b) then `py2mojo_rows` mode
+    `rows_mode` (2 SGD_PROBA, 3 LRCV_PROBA) on the device; dims = [n, d, k,
+    link, rows_mode]; out float32 n x max(k, 2). Returns n."""
+    # ne2-g-linear (N362): the scores stay on the device between the two steps.
+    if len(dims) != 5:
+        raise Error("x_linear_decision_rows: dims must contain n, d, k, link, rows_mode")
+    var n = Int(py=dims[0])
+    var d = Int(py=dims[1])
+    var k = Int(py=dims[2])
+    var link = Int(py=dims[3])
+    var mode = Int(py=dims[4])
+    if n < 0 or d < 0 or k <= 0:
+        raise Error("x_linear: positive dimensions required")
+    var x = _fp(Int(py=x_addr))
+    var wb = _fp(Int(py=wb_addr))
+    var out = _fp(Int(py=out_addr))
+    with GILReleased(Python()):
+        decision_rows_device(x, wb, n, d, k, link, mode, out)
+    return PythonObject(n)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -209,6 +232,7 @@ def build__mojolearn_x_linear() -> PythonObject:
         m.def_function[spearman_sign_binding]("x_linear_spearman_sign")
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
+        m.def_function[decision_rows_binding]("x_linear_decision_rows")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch

@@ -778,10 +778,28 @@ def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, cont
     var entries = _xl_entries(fields, context)
     var x = _xl_matrix(source, context)
     _xl_width(x, fields, model)
-    var scores = _xl_decision(model, x, fields["coef_"], fields["intercept_"],
-                              LINK_IDENTITY if lrcv else LINK_SIGMOID, lrcv, entries, context)
     var k = len(fields["intercept_"])
     var n = x.rows
+    var link = LINK_IDENTITY if lrcv else LINK_SIGMOID
+    var rows_mode = _ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA
+    # ne2-g-linear (N362): decision and row link in one crossing when the
+    # binding has `x_linear_decision_rows` (the same two kernels' words).
+    var fused = py_get(entries, "x_linear_decision_rows")
+    if fused is not None:
+        var block = _xl_block(fields["coef_"], fields["intercept_"], context)
+        var wb = block[0]
+        var kb = block[1]
+        var res = labels_empty(Python.tuple(n, 2 if kb == 1 else kb), "<f4", context)
+        _ = py_call_typed(fused, PythonObject(x.addr), PythonObject(labels_address(wb)),
+                          Python.list(PythonObject(n), PythonObject(x.cols), PythonObject(kb), PythonObject(link),
+                                      PythonObject(rows_mode)),
+                          PythonObject(labels_address(res)))
+        _ = wb  # keep the Python object alive through the native call above
+        _ = res  # keep the Python object alive through the native call above
+        _ = wb^
+        _ = x^
+        return res
+    var scores = _xl_decision(model, x, fields["coef_"], fields["intercept_"], link, lrcv, entries, context)
     var out = labels_empty(Python.tuple(n, 2 if k == 1 else k), "<f4", context)
     if n > 0:
         _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA),
