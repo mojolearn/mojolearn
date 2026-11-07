@@ -209,3 +209,16 @@ def test_program_run_reads_ndarray_inputs_through_one_buffer_view():
         assert np.asarray(prog.run(wide)).tobytes() == want.tobytes()
         with pytest.raises(TypeError):
             prog.run(strided.astype(">f4"))
+
+
+def test_session_operation_dispatch_by_code_keeps_results_and_refusals():
+    # Row N089: the operation name is looked up once in a native code table.
+    # Known operations give the same values; an unknown name is refused by name.
+    ops = _ops()
+    a = np.arange(6, dtype=np.float32).reshape(2, 3)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        assert s.numpy(s.add(x, x)).tobytes() == (a + a).tobytes()
+        assert s.numpy(s.relu(s.sub(x, s.scale(x, 2.0)))).tobytes() == np.zeros_like(a).tobytes()
+        with pytest.raises(Exception, match="unknown native session operation: no_such_op"):
+            ops._SESSION_CALL(s, "no_such_op", ())
