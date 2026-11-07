@@ -486,6 +486,19 @@ def _flushed(v: List[Float32]) -> List[Float32]:
     return out^
 
 
+def svc_predict_batch_rows(n_rows: Int, n_support: Int, buffer_size_mib: Float64) -> Int:
+    """The query rows one decision batch holds: their `buffer_size`
+    (`param.cache_size` MiB) over `n_support` float32 kernel cells per row,
+    at least one row."""
+    var n_batch = n_rows
+    var buffer_bytes = buffer_size_mib * 1024.0 * 1024.0
+    if n_support > 0 and Float64(n_batch * n_support * 4) > buffer_bytes:
+        n_batch = Int(buffer_bytes / Float64(n_support * 4))
+        if n_batch < 1:
+            n_batch = 1
+    return n_batch
+
+
 def svc_predict(
     ctx: DeviceContext,
     model: SvmModel,
@@ -511,12 +524,7 @@ def svc_predict(
         return List[Float32]()
     check_finite_list(x_host, "predict X")  # DEVIATION 636
     var n_support = model.n_support
-    var n_batch = n_rows
-    var buffer_bytes = buffer_size_mib * 1024.0 * 1024.0
-    if n_support > 0 and Float64(n_batch * n_support * 4) > buffer_bytes:
-        n_batch = Int(buffer_bytes / Float64(n_support * 4))
-        if n_batch < 1:
-            n_batch = 1
+    var n_batch = svc_predict_batch_rows(n_rows, n_support, buffer_size_mib)
 
     var preds = List[Float32]()
     if n_support == 0:
@@ -539,6 +547,40 @@ def svc_predict(
     var x = upload_f32(ctx, _flushed(x_host)) if precomputed else upload_f32(ctx, x_host)
     var sv = upload_f32(ctx, List[Float32](length=1, fill=Float32(0.0))) if precomputed else upload_f32(ctx, model.support_matrix)
     var dual = upload_f32(ctx, model.dual_coefs)
+    var decided = svc_predict_dev(
+        ctx, model, x, sv, dual, n_rows, n_cols, n_batch, kp, predict_class, card, plan,
+    )
+    _ = x^
+    _ = sv^
+    _ = dual^
+    _ = preds^
+    return decided^
+
+
+def svc_predict_dev(
+    ctx: DeviceContext,
+    model: SvmModel,
+    mut x: DeviceBuffer[DType.float32],
+    mut sv: DeviceBuffer[DType.float32],
+    mut dual: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    n_batch: Int,
+    kp: KernelParams,
+    predict_class: Bool,
+    mut card: IdentityTrace,
+    plan: DevicePlan,
+) raises -> List[Float32]:
+    """The decision launches of `svc_predict` over device copies of the
+    checked query `x` (n_rows x n_cols; for kernel='precomputed' the flushed
+    cross-kernel), the support rows `sv` and the dual coefficients `dual`,
+    with `model`'s scalars (n_support, b, the label pair). `svc_predict`
+    runs it after its own uploads and the resident predicts
+    (svm/svm_resident_state.mojo) over the kept copies of the same bytes, so
+    both give the same bits. The caller keeps the three buffers."""
+    var n_support = model.n_support
+    var precomputed = kp.kernel == KERNEL_PRECOMPUTED
+    var preds = List[Float32]()
     var d_preds = ctx.enqueue_create_buffer[DType.float32](n_rows)
     # DEVIATION 2493: FAST with no card recording folds the decision inside
     # the kernel evaluation; no tile, no batch loop. Apple only, like the
@@ -562,9 +604,6 @@ def svc_predict(
                             "svm predict: NaN decision value at row " + String(i)
                             + " (floating point overflow; DEVIATION 637)"
                         )
-                _ = x^
-                _ = sv^
-                _ = dual^
                 _ = d_preds^
                 return preds^
     var K = ctx.enqueue_create_buffer[DType.float32](n_batch * n_support)
@@ -622,9 +661,6 @@ def svc_predict(
                 + " (floating point overflow; DEVIATION 637)"
             )
     card.record_device[DType.float32](ctx, ptag + "out", d_preds, n_rows)
-    _ = x^
-    _ = sv^
-    _ = dual^
     _ = K^
     _ = l2_input^
     _ = l2_support^
