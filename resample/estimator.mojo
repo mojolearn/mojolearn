@@ -1288,11 +1288,11 @@ def bootstrap_host(
     map_tpb: Int = RESAMPLE_MAP_TPB,
     plan: Optional[DevicePlan] = None,
 ) raises -> BootstrapResult:
-    """`bootstrap_into` over a List sample, the distribution returned as a
+    """`bootstrap_host_into` over a List sample, the distribution returned as a
     List (the checks, the speed driver and `resample_main` read it). The
-    refusals and the bits are `bootstrap_into`'s."""
+    refusals and the bits are `bootstrap_host_into`'s."""
     var dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
-    var r = bootstrap_into(
+    var r = bootstrap_host_into(
         _list_f32_ptr(x), len(x), n, n_features, statistic, n_resamples, seed, method,
         _list_f32_ptr(dist), confidence_level, alternative, q_or_prop, r_first,
         tpb, with_bca_diagnostics, map_tpb, plan,
@@ -1301,7 +1301,7 @@ def bootstrap_host(
     return r^
 
 
-def bootstrap_into(
+def bootstrap_host_into(
     xp: ResampleF32Ptr,
     x_words: Int,
     n: Int,
@@ -1575,10 +1575,10 @@ def bootstrap_unpaired_host(
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
 ) raises -> BootstrapResult:
-    """`bootstrap_unpaired_into` over List samples, the distribution
+    """`bootstrap_unpaired_host_into` over List samples, the distribution
     returned as a List. The refusals and the bits are the pointer form's."""
     var dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
-    var r = bootstrap_unpaired_into(
+    var r = bootstrap_unpaired_host_into(
         _list_f32_ptr(x), len(x), n_x, _list_f32_ptr(y), len(y), n_y,
         n_resamples, seed, method, _list_f32_ptr(dist), confidence_level,
         alternative, r_first, tpb,
@@ -1587,7 +1587,7 @@ def bootstrap_unpaired_host(
     return r^
 
 
-def bootstrap_unpaired_into(
+def bootstrap_unpaired_host_into(
     xp: ResampleF32Ptr,
     x_words: Int,
     n_x: Int,
@@ -1750,10 +1750,10 @@ def permutation_test_host(
     tpb: Int = RESAMPLE_TPB,
     plan: Optional[DevicePlan] = None,
 ) raises -> PermutationResult:
-    """`permutation_test_into` over List samples, the null returned as a
+    """`permutation_test_host_into` over List samples, the null returned as a
     List. The refusals and the bits are the pointer form's."""
     var null_dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
-    var r = permutation_test_into(
+    var r = permutation_test_host_into(
         _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), statistic,
         n_resamples, seed, alternative, _list_f32_ptr(null_dist), r_first, tpb,
         plan,
@@ -1762,7 +1762,7 @@ def permutation_test_host(
     return r^
 
 
-def permutation_test_into(
+def permutation_test_host_into(
     xp: ResampleF32Ptr,
     n_x: Int,
     yp: ResampleF32Ptr,
@@ -1898,10 +1898,10 @@ def permutation_samples_host(
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
 ) raises -> PermutationResult:
-    """`permutation_samples_into` over List samples, the null returned as a
+    """`permutation_samples_host_into` over List samples, the null returned as a
     List. The refusals and the bits are the pointer form's."""
     var null_dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
-    var r = permutation_samples_into(
+    var r = permutation_samples_host_into(
         _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), two, n_resamples,
         seed, alternative, _list_f32_ptr(null_dist), r_first, tpb,
     )
@@ -1909,7 +1909,7 @@ def permutation_samples_host(
     return r^
 
 
-def permutation_samples_into(
+def permutation_samples_host_into(
     xp: ResampleF32Ptr,
     n: Int,
     yp: ResampleF32Ptr,

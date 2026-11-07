@@ -36,12 +36,12 @@ from resample.estimator import (
     BootstrapResult,
     MonteCarloResult,
     PermutationResult,
-    bootstrap_into,
-    bootstrap_unpaired_into,
+    bootstrap_host_into,
+    bootstrap_unpaired_host_into,
     mc_closed_form_for,
     monte_carlo_integrate_host,
-    permutation_samples_into,
-    permutation_test_into,
+    permutation_samples_host_into,
+    permutation_test_host_into,
     resample_indices_host,
     resample_indices_replace_into,
     resample_indices_permute_into,
@@ -117,9 +117,9 @@ def _bootstrap_run(
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
     # lane ne2-b-rounds (N078): the sample is uploaded from the caller's
-    # buffer and the distribution downloaded into `dp` (bootstrap_into); the
+    # buffer and the distribution downloaded into `dp` (bootstrap_host_into); the
     # sorted distribution is the List the interval read, copied once.
-    var r = bootstrap_into(
+    var r = bootstrap_host_into(
         xp,
         max(0, n * d),
         n,
@@ -267,7 +267,7 @@ def bootstrap_unpaired_binding(
     with GILReleased(Python()):
         # lane ne2-b-rounds (N078): both samples read in place, the
         # distribution downloaded into `dp`
-        var r = bootstrap_unpaired_into(
+        var r = bootstrap_unpaired_host_into(
             xp, max(0, n_x), n_x, yp, max(0, n_y), n_y, n_resamples, seed,
             method, dp, confidence_level, alternative, r_first,
         )
@@ -296,7 +296,7 @@ def _permutation_run(
 ) raises:
     # lane ne2-b-rounds (N078): x and y read in place, the null downloaded
     # into `np_`
-    var r = permutation_test_into(
+    var r = permutation_test_host_into(
         xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, np_, r_first,
         plan=Optional[DevicePlan](_resample_entry_plan()),
     )
@@ -402,7 +402,7 @@ def permutation_samples_binding(
     with GILReleased(Python()):
         # lane ne2-b-rounds (N078): the samples read in place, the null
         # downloaded into `np_`
-        var r = permutation_samples_into(
+        var r = permutation_samples_host_into(
             xp, max(0, n), yp, max(0, n_y), n_y > 0, n_resamples, seed,
             alternative, np_, r_first,
         )
