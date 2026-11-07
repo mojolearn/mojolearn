@@ -19,6 +19,7 @@ from std.os import getenv
 from bindings.native_json import native_json_parse
 from core.sha256 import sha256_hex_addr
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.parallel_byte_native import parallel_byte_shard_words, parallel_byte_step_shards
 
 comptime TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"
 comptime CORPUS_SCHEMA = "mojolearn.byte-lm.corpus.v1"
@@ -349,6 +350,70 @@ def _batch_ids(value: PythonObject, step_value: PythonObject, context: PythonObj
     return result
 
 
+def lm_corpus_gather_steps(owner: PythonObject, steps: List[Int], batch: Int, length: Int,
+                           target_address: Int, context: PythonObject) raises:
+    """`ids(steps[k])` for every k, gathered straight into caller storage of
+    len(steps) * batch * (length + 1) int32 cells at `target_address`, under
+    ONE admission of the batches owner (fields, ids method, token snapshot).
+    The same rows, in the same order, as `ids`: `ids(s)` reads base
+    s * batch * length; here the base is computed natively for exact ints."""
+    var fields = _batch_fields(owner, context)
+    _batch_method(owner, fields, context)
+    var have_batch = corpus_int(fields["batch"], "batch", True)
+    var have_length = corpus_int(fields["length"], "length", True)
+    var lo = corpus_int(fields["lo"], "lo", True)
+    var modulus = corpus_int(fields["modulus"], "modulus", True)
+    if have_batch < 0 or have_length < 1:
+        raise Error("ValueError: tokens_gather_rows: bad dims")
+    if have_batch != batch or have_length != length:
+        raise Error("ValueError: parallel input has wrong shape")
+    var source = corpus_ids_snapshot(fields["ids_all"], context)
+    var source_address = Int(py=source._addr)
+    var source_count = Int(py=source.size)
+    var cells = batch * (length + 1)
+    var row = batch * length
+    for k in range(len(steps)):  # driver-loop: over the step's logical shards, one batch each
+        var step = steps[k]
+        if step < 0:
+            raise Error("ValueError: tokens_gather_rows: bad dims")
+        if row > 0 and step > 9223372036854775807 // row:
+            raise Error("ValueError: token row position exceeds native indexing")
+        _ = tokenizer_gather_rows_native(source_address, source_count, target_address + k * cells * 4, cells,
+            batch, length, lo, modulus, step * row)
+    _ = source^
+
+
+def _batch_parallel_step(owner: PythonObject, trainer: PythonObject, steps_value: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    # pass 3 (N105): one parallel byte-LM step fed from a TokenBatches owner.
+    # Shard k is `ids(steps[k])`, gathered natively into one staging buffer
+    # the session copies at its start: no per-shard Python crossing by
+    # operation name, no per-shard Array, and no second admission of the
+    # ids by the trainer (it was ids() per shard, then train_step).
+    var bi = native_loaded_module("builtins")
+    if py_type(steps_value) is not bi.list and py_type(steps_value) is not bi.tuple:
+        raise Error("TypeError: steps must be a list or tuple of step indices")
+    var words = parallel_byte_shard_words(trainer)
+    var count = words[0]
+    var batch = words[1]
+    var length = words[2]
+    if len(steps_value) != count:
+        raise Error("ValueError: logical shard count mismatch")
+    var steps = List[Int]()
+    for k in range(count):  # driver-loop: over the step's logical shards
+        steps.append(corpus_int(steps_value[k], "step_index", True))
+    var cells = batch * (length + 1)
+    var staging = List[Int32](length=count * cells, fill=0)
+    var base = Int(staging.unsafe_ptr())
+    lm_corpus_gather_steps(owner, steps, batch, length, base, context)
+    var shard_addresses = List[Int]()
+    for k in range(count):  # small-loop(count: one staged buffer per logical shard)
+        shard_addresses.append(base + k * cells * 4)
+    var result = parallel_byte_step_shards(trainer, shard_addresses)
+    _ = staging^
+    return result
+
+
 struct LmCorpusIteratorHandle(Movable, Writable):
     # The batches owner is admitted once, at prefetch: the iterator keeps the
     # admitted scalars and the token source snapshot (which owns the mapped
@@ -567,6 +632,9 @@ def lm_corpus_public_call(operation: String, args: PythonObject) raises -> Pytho
     if operation == "batches_ids":
         _arity(args, 2)
         return _batch_ids(args[0], args[1], context, _batch_fields(args[0], context))
+    if operation == "batches_parallel_step":
+        _arity(args, 3)
+        return _batch_parallel_step(args[0], args[1], args[2], context)
     if operation == "batches_prefetch":
         _arity(args, 4)
         return _prefetch(args[0], args[1], args[2], args[3], context)

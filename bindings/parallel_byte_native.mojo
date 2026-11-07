@@ -921,6 +921,14 @@ def parallel_byte_state(owner: PythonObject, rank: PythonObject) raises -> Pytho
     return _parallel_validate_state(state, rec.downcast_value_ptr[ParallelByteOwner]()[].shape, True)
 
 
+def parallel_byte_shard_words(owner: PythonObject) raises -> List[Int]:
+    """[logical_shards, batch, length] of an admitted trainer: what one step
+    consumes (logical_shards buffers of int32[batch, length + 1])."""
+    var rec = _parallel_record(owner).downcast_value_ptr[ParallelByteOwner]()
+    var words: List[Int] = [rec[].logical_shards, rec[].dims[0], rec[].dims[1]]
+    return words^
+
+
 def parallel_byte_step_shards(owner: PythonObject, shard_addresses: List[Int]) raises -> PythonObject:
     """One committed step over `logical_shards` int32[batch, length + 1]
     shard buffers, given by address. The caller keeps every buffer alive
