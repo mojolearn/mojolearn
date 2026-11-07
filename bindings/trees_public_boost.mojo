@@ -408,6 +408,9 @@ def _member_codes(member: PythonObject, X: PythonObject, context: PythonObject) 
     if String(codes.dtype) != "<i4":
         narrow = trees_vector(n, "<i4", context)
         trees_cast(trees_address(codes), String(codes.dtype), trees_address(narrow), "<i4", n, context)
+        # `codes` is the only owner of the argmax result here (`pair` ended
+        # above): without this use it is released before the cast reads it.
+        _ = codes  # keep the Python object alive through the native call above
         _ = narrow  # keep the Python object alive through the native call above
     if identity:
         return narrow
