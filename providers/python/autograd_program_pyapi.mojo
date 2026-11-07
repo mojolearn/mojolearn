@@ -106,7 +106,8 @@ def _array_input_buffer(a: PythonObject, what: String, mut out_src: CastIn, mut 
     elif nd > 2:
         # C-contiguous (NumPy's flag rule: axes of length 1 are skipped)
         var want = itemsize
-        for k in range(nd - 1, -1, -1):  # small-loop(nd: input tensor rank): stride metadata
+        for r in range(nd):  # small-loop(nd: input tensor rank): stride metadata, not array elements
+            var k = nd - 1 - r
             if dims_in[k] != 1 and steps[k] != want:
                 return False
             want *= dims_in[k]
