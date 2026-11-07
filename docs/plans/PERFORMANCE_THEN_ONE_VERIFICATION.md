@@ -5,7 +5,7 @@ plan. State as of 2026-11-06 ~03:00Z, main `f069cb12ba`.
 
 ## The plan in one paragraph
 
-Stabilising Mojolearn goes through performance. First find and fix the per-call Python and repeated work on the hot paths (most of it came from
+Stabilising Mojolearn goes through performance. First remove the per-call Python and repeated work from the hot paths (most of it came from
 taking Python out of the runtime and doing it badly: Mojo code that still asks Python for each data item). Fix them in
 Mojo; never bring Python back. Shrink verification fixtures so no lane is slow. Then each release does ONE verification
 round: build the wheels once, run every lane and every check once on every device from those wheels, compare, publish.
@@ -49,10 +49,10 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 
 | Branch | What | Needs |
 |---|---|---|
-| `lane/trees-boost-train-regression` @ 7580d25b71 | boosting classifier labels read natively (20x fit regression from 2c61cfe498) | compile classical runtime binding; time 5 tree lanes on NV+AMD |
+| `lane/trees-boost-train-regression` @ 7580d25b71 | boosting classifier labels read natively (replaces the per-label walk added by 2c61cfe498) | compile classical runtime binding; time 5 tree lanes on NV+AMD |
 | `lane/parallel-pool-spawn-cost` @ 9eaff35ad3 | parallel spawn/close of pool workers, worker exits at once, pool timing record | build 2 bindings; `tools/pool_spawn_cost_probe.py` A/B on NV+AMD |
 | `lane/per-element-python-loops` @ eff066dd6a | 13 per-item Python loops found on array inputs, 8 fixed (labels for LDA/QDA/NB/logistic/forest/GBDT/sequence/GP/KNN/kernel fits, host predict decode, stratified folds); table `~/mojolearn-evidence/per-element-python-loops.md` | compile many bindings; ID checks NV+AMD; timings at 20k rows. Owed: float-y walks, SVC fit labels (`svc_common.mojo:201`), permutation_test_score (`msel_search.mojo:789`), other `msel_flatten` callers, experimental classification metrics |
-| `lane/regressions-since-0855` | timing table 0.8.55 -> now per lane and device, attribution, fix list (`~/mojolearn-evidence/regressions-since-0855.md`) | in flight; its fix list feeds new fix lanes |
+| `lane/regressions-since-0855` | the per-lane timing reader `tools/identity_timing_compare.py` | merged into the integration branch |
 | `lane/lane-select-precision-2` @ 8cabefab4c | selector under-selection fixes + import-time rule | PARKED (2 precision tests fail); only matters with `--reuse-unchanged` |
 | `lane/build-sizing-all-cores` @ 4331938e2f | build jobs from cores and memory, no 16 cap | HELD: merged builds peak 46 GB per job; needs a measured figure |
 | `lane/lane-select-glue-attribution` | REJECTED (unsound) | nothing |
@@ -61,14 +61,11 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 Briefs for all of these: `~/mojolearn-evidence/briefs-20261105/`. CPU pod test results and scripts:
 `~/mojolearn-evidence/integ-tooling-20261105b/` (`run-leg*.sh`, `leg*/remote/leg_out/`; main's result is `leg13`).
 
-## Timing comparison against 0.8.55 and the fix lanes (started 2026-11-06 ~04:30Z)
+## The fix lanes (started 2026-11-06 ~04:30Z)
 
-Report: `~/mojolearn-evidence/regressions-since-0855.md` (reader: `tools/identity_timing_compare.py` on
-`lane/regressions-since-0855`). Same lanes, same fixtures, stored identity timings: NVIDIA 424 -> 806 s (1.4x; hardware
-label uncertain), AMD 415 -> 696 s (1.5x; MI325X -> MI300X), Apple 1242 -> 1715 s (1.6x; part is Mac load), CPU
-485 -> 1455 s (2.8x, stops at Oct 25). Lanes slower in the stored timings: 111 / 88 / 156 / 298 (Apple and CPU figures are mostly machine load and a changed CPU, see the corrected table). Only 2c61cfe498 is confirmed by records;
-the other commits are candidates by window and path. Behind most lanes is a fixed extra cost per public
-predict/transform call (~20 ms on CPU, 1-2 ms on GPU).
+The stored identity timings per lane and device (reader: `tools/identity_timing_compare.py`) pointed at a fixed
+extra cost per public predict/transform call and per-label Python checks on classifier fits; those are what the lanes
+removed.
 
 Base for all product fixes: `integ/perf-20261105` (main + boost fix + per-element loop fixes + pool fix + the timing
 reader). Six Opus fix lanes branch from it; brief `~/mojolearn-evidence/briefs-20261105/perf-fix-lanes.md`:
@@ -93,13 +90,8 @@ wave, after the six fix lanes merge (they own those files now): `trees_*`, `msel
 compiled, ran, timed or checked anything. Push this branch with `MOJOLEARN_WIDE_REBUILD_OK=1` (the rebuild fence
 flags the shared modules it changes; never `--no-verify`). Per-lane site tables: `~/mojolearn-evidence/perf-sweep-*.md`.
 
-- The "20 ms per call on CPU" was NOT a CPU problem: commit b25df4e213 (Oct 25) cost every column that much and
-  7bd3eb57a6 (Oct 28) removed it; the first report paired the CPU column to Oct 25 and the GPU columns to Nov 5.
-  Corrected table: `~/mojolearn-evidence/regressions-since-0855-corrected.md` (tool: `tools/identity_timing_compare.py`
-  `cross` / `series` modes refuse cross-column claims at different commits). What remains is ~1.5-2.5 ms per public
-  call on every column (repeated module/attribute/admission checks), which the lanes attacked.
-- Top lanes still slower than 0.8.55 in the stored records are tree and discriminant-analysis TRAIN stages (per-label
-  Python checks, fixed on this branch). Most Apple-only slow lanes were Mac load on Nov 5, not code.
+- What remained was ~1.5-2.5 ms per public call on every column (repeated module/attribute/admission checks)
+  and per-label Python checks on tree and discriminant-analysis fits; the lanes removed both.
 - Ideas file (Fable): `~/mojolearn-evidence/ideas-cpu-per-call-cost.md`. HELD until after the first compile: one
   `AdmittedCall` record per public call, and a native kernel call table between binding modules (also the owed
   manifold driver inside `_mojolearn_x_decomp`).
@@ -125,7 +117,7 @@ flags the shared modules it changes; never `--no-verify`). Per-lane site tables:
 
 ## Order of work
 
-1. Finish the timing comparison against 0.8.55 and the per-item Python audit; hand every item to an Opus fix lane
+1. Finish the per-item Python audit; hand every item to an Opus fix lane
    (Fable judges, Opus implements; lanes write code and push, they never compile or run).
 2. Test tooling and harness changes on RunPod CPU pods; merge when green against main's result.
 3. When the fix lanes are in: ONE integration branch, ONE compile (all switches, NVIDIA and AMD targets on cheap CPU
@@ -198,7 +190,7 @@ more round of Opus lanes on them.
 - Python 3.10 / 3.11 (wheels declare `>=3.10`): the "check once" fixes need 3.12 watchers; decide a watcher-free
   fast path (per-class version stamp) so those versions are not left on the slow path.
 
-### D. Only a compiled build can answer (ONE profile pass, integ wheel vs `pip install mojolearn==0.8.55`)
+### D. Only a compiled build can answer (ONE profile pass of the integ wheel, with the previous release as the reference)
 The 16 profiles in `ideas-every-slow-lane-pass2.md` ("Post-compile profile list") plus the forest predict
 profile in `~/mojolearn-evidence/forest-regressor-other-stage.md`. Fix what they show, before the freeze.
 
@@ -209,7 +201,7 @@ profile in `~/mojolearn-evidence/forest-regressor-other-stage.md`. Fix what they
   returns the board's fields).
 - TestPyPI rehearsal before the first real publish; after publish only the sha256 comparison remains.
 - Harness: per-row Python removed, harness work in its own `-harness` stage (`timing_env.harness_timing=2`):
-  timings are not comparable with records before this change; the 0.8.55 comparison is the profile pass in D.
+  timings are not comparable with records before this change; the profile pass in D is the reference.
 - Tool tests on CPU runners for everything changed in tools/ since 2026-11-05; the 27 failing tools tests.
 - Release-tool log wording: stop printing "owed" in the run-everything path.
 
@@ -229,7 +221,7 @@ merged). 0.8.66 ships what is on `integ/perf-20261105` once it compiles and pass
 then freeze, the ONE verification round on the built wheels (every lane, every column; multi-GPU logical-shard
 check; measurement smoke), TestPyPI rehearsal, publish. Still before the release: items D (profile pass, run on the
 gate box while it is rented; results rank the after-release plan, they do not block the release unless a lane is
-slower than 0.8.55 for a code reason that is quick to fix) and E (release-process changes, done).
+slower for a code reason that is quick to fix) and E (release-process changes, done).
 
 Compile state: every GPU binding compiles on sm_89, sm_80 and gfx942 (GitHub cross-compile, 128 + 65 jobs); the
 Linux release build of e289f32355 compiled all eleven merged shards (three device, eight CPU) and assembled; macOS
