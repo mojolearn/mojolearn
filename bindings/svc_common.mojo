@@ -25,7 +25,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_pandas import _pd_class
 from bindings.classical_labels import _pandas_values, labels_type_name
 from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
-from bindings.classical_labels import labels_encode_labels, labels_accuracy
+from bindings.classical_labels import labels_encode_labels, labels_accuracy, classical_score_from_codes
 from bindings.label_admission_native import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.family_common import (
@@ -416,3 +416,19 @@ def svc_accuracy(y_true: PythonObject, y_pred: PythonObject, n_pred: Int, contex
     if len(shape) != 1 or Int(py=shape[0]) != n_pred:
         raise Error("mojolearn: y must be 1-D with one entry per row of X")
     return labels_accuracy(y_true, y_pred, PythonObject(None), PythonObject(None), context)
+
+
+def svc_accuracy_codes(y_true: PythonObject, classes: PythonObject, codes: PythonObject, n_pred: Int,
+                       context: PythonObject) raises -> Float64:
+    """`svc_accuracy(y_true, classes[codes])` without the decode: the same
+    shape refusal, then y encoded once against `classes` and compared with
+    the predicted int64 codes in the x_metrics COUNT program (unweighted,
+    the process mode). `classical_score_from_codes` keeps the decode route
+    for classes that are neither all str nor all integers, so every refusal
+    is the one the decoded prediction raised."""
+    # N382 (lane ne3-g-svc-gp-neighbors). classical_score_from_codes is the
+    # shared helper of lane ne1-h-labels (bindings/classical_labels.mojo).
+    var shape = svc_shape_of(y_true, context)
+    if len(shape) != 1 or Int(py=shape[0]) != n_pred:
+        raise Error("mojolearn: y must be 1-D with one entry per row of X")
+    return classical_score_from_codes(y_true, classes, codes, PythonObject(None), PythonObject(None), context)
