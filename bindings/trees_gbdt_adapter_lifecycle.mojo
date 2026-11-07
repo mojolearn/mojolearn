@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
 from bindings.params_metadata_native import _read, _resolved
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_refuse_sparse, classical_check_y, classical_check_width, classical_estimator_name
@@ -22,6 +22,10 @@ from bindings.trees_public_state import _release_tree_values, tree_is_fitted
 from bindings.trees_public_inputs import trees_view, trees_check_rank, trees_f32_view
 from bindings.native_loaded_module import NativeModules
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_fields
+from bindings.native_model_records import (
+    records_stamped_get, records_stamped_put, records_stampable, records_drop, ContentRecord, content_fields,
+    content_object, RECORDS_TREES,
+)
 from bindings.trees_public_gbdt_fit import adapter_classifier_fit, adapter_regressor_fit, _adapter_eval
 from bindings.trees_public_gbdt_fit import gbdt_fit, _tables as _gbdt_tables, _in as _gbdt_in
 from bindings.trees_public_gbdt import adapter_decision_function, adapter_predict, adapter_predict_proba
@@ -63,6 +67,23 @@ def _learner_state(learner: PythonObject, context: PythonObject) raises:
 
 
 comptime _STATE_SLOT = "trees_gbdt_adapter_state_v1"
+comptime _STATE_STAMP = "trees_gbdt_adapter_state_stamp_v1"
+
+
+def _state_stamp(model: PythonObject, fields: PythonObject) raises:
+    """Stamp the admitted adapter state with the adapter's generation and the
+    native content words of what `_state_key` reads (lane ne1-e-records, row
+    N253): the adapter's field contents and the learner's class, generation
+    word and field contents. Only when `fields` is the adapter's own
+    instance dictionary (the one its generation watches; the record holds it)."""
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    content_fields(content, fields, 4)
+    var learner = py_get(fields, "_learner_")
+    if learner is not None:
+        content_object(content, learner, 4)
+    _ = records_stamped_put(RECORDS_TREES, model, _STATE_STAMP, content^, Python.tuple(fields))
 
 
 def _state_key(fields: PythonObject) raises -> PythonObject:
@@ -98,6 +119,14 @@ def _adapter_state(model: PythonObject, context: PythonObject) raises -> PythonO
     # native side table; while it matches, the admission below would accept
     # again. The model's own layout check above still runs on every call, and
     # so does the learner's (class-cached) layout check.
+    # Generation fast path (lane ne1-e-records, row N253): one word for the
+    # adapter plus the learner's native words instead of the ~60-entry key.
+    var stamped = records_stamped_get(RECORDS_TREES, model, _STATE_STAMP)
+    if stamped is not None and stamped[0] is fields:
+        var learner = py_get(fields, "_learner_")
+        if learner is not None:
+            classical_check_layout(learner, context["trees_state_layouts"][py_type(learner)])
+        return fields
     var key = _state_key(fields)
     if key is not None:
         var held = trees_side_get(_STATE_SLOT, model)
@@ -105,10 +134,12 @@ def _adapter_state(model: PythonObject, context: PythonObject) raises -> PythonO
             var learner = py_get(fields, "_learner_")
             if learner is not None:
                 classical_check_layout(learner, context["trees_state_layouts"][py_type(learner)])
+            _state_stamp(model, fields)
             return fields
     _adapter_admit(model, fields, context)
     if key is not None:
         _ = trees_side_put(_STATE_SLOT, model, key)
+        _state_stamp(model, fields)
     return fields
 
 
@@ -152,6 +183,7 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     if fitting:
         # A refit replaces the state the record holds: forget it now.
         trees_side_drop(_STATE_SLOT, model)
+        records_drop(RECORDS_TREES, model, _STATE_STAMP)
     var method = String("fit")
     if not fitting:
         method = "score" if operation.endswith("_score") else ("decision_function" if operation.endswith("_decision") else ("predict_proba" if operation.endswith("_proba") else "predict"))
