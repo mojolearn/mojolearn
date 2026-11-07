@@ -397,6 +397,16 @@ ph portable_math_end
 ph run_start
 export MOJOLEARN_COMMIT=@COMMIT@ PYTHONPATH="$R/python" LEG_OUT="$OUT"
 unset MOJOLEARN_BINCACHE_OUT
+# busy cores of total while the command runs (Andrew's rule: every report on a rented host states it): one
+# /proc/stat sample per minute, "<epoch>\t<busy cores x10>\t<cores>" lines in $OUT/busy.tsv
+( exec > /dev/null 2>&1 < /dev/null; n=$(nproc); read -r _ a < /proc/stat
+  while [ ! -f "$OUT/cmd.exit" ]; do
+      sleep 60; read -r _ b < /proc/stat
+      set -- $a; t0=0; for x in $a; do t0=$((t0 + x)); done; i0=$(($4 + $5))
+      set -- $b; t1=0; for x in $b; do t1=$((t1 + x)); done; i1=$(($4 + $5))
+      [ $((t1 - t0)) -gt 0 ] && printf '%s\t%s\t%s\n' "$(date +%s)" $((n * 10 * ((t1 - t0) - (i1 - i0)) / (t1 - t0))) "$n" >> "$OUT/busy.tsv"
+      a=$b
+  done ) &
 bash /root/leg_user_cmd.sh > "$OUT/cmd.log" 2>&1
 echo $? > "$OUT/cmd.exit"
 ph run_end
@@ -470,6 +480,14 @@ span("cache upload (misses only)", ph.get("upload_start"), ph.get("upload_end"))
 span("fetch", done, fetched)
 span("teardown (DELETE to verified gone)", del0, del1)
 span("billed (POST to verified gone)", post, del1)
+b = os.path.join(out, "remote", "leg_out", "busy.tsv")
+samples = [line.split("\t") for line in open(b)] if os.path.exists(b) else []
+if samples:
+    busy = [int(x[1]) / 10.0 for x in samples]
+    rows.append(("busy cores of total (command, 1 sample/min)", "mean %.1f max %.1f of %s over %d sample(s)" % (
+        sum(busy) / len(busy), max(busy), samples[-1][2].strip(), len(busy))))
+else:
+    rows.append(("busy cores of total (command, 1 sample/min)", "no sample (command under 60 s)"))
 with open(os.path.join(out, "timings.tsv"), "w") as fh:
     for k, v in rows:
         fh.write("%s\t%s\n" % (k, v))

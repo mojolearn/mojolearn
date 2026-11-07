@@ -11,6 +11,17 @@ Mojo; never bring Python back. Shrink verification fixtures so no lane is slow. 
 round: build the wheels once, run every lane and every check once on every device from those wheels, compare, publish.
 Nothing is verified after a release. Narrow re-verification ("only what changed") is no longer a goal.
 
+## Timing ledger
+
+The report reads the evidence each tool already writes (Andrew, 2026-11-07: measure everything in time, every
+test, so each round starts from measured numbers). It writes nothing, and no tool gained a hook for it. The
+sources are: the pytest `durations-*.json`, the development-build group results (seconds and peak RSS), the release
+`state.json` step seconds, the identity records' lane times, box-job `persist.log` START/EXIT lines and saved
+GitHub `run.json` job timestamps. The RunPod CPU leg also prints busy cores of total for its command. The two
+commands: `python3 tools/timing_ledger.py report --since 24h --top 50` (totals, the top items and each kind's
+share of wall time), and `python3 tools/timing_ledger.py report --kind test --by file` for the suite's heavy
+files. `--tests`, `--builds`, `--release`, `--identity`, `--jobs` and `--workflow` point it at other evidence.
+
 ## Decisions taken on 2026-11-05 (Andrew)
 
 1. Verification is pre-release only. No step after the first publish runs a lane on any device (also in `CLAUDE.md`).
