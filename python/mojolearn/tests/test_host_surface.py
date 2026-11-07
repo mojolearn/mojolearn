@@ -1259,7 +1259,7 @@ def test_every_lane_is_either_in_the_shipped_table_or_declared_pending():
     assert bad == [], "lanes that no mechanism accounts for:\n  " + "\n  ".join(bad)
 
 
-def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
+def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys, monkeypatch):
     """A CHECK THAT HAS NOT BEEN SEEN TO REFUSE ANYTHING is the counting
     nobody did. `--self-test` builds eight worlds from the real tree -- a
     lane whose table cells vanish, a deleted pending declaration, a new lane
@@ -1281,6 +1281,28 @@ def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
     algorithm, and an excuse for one that has since gained a lane. Fifteen in
     all, each refused by the message that names it."""
     mod = _lane_accounting()
+    # Every world is built from the same unchanged tree, and each `check`
+    # call re-reads it: host_surface loaded by path again, and the harness and
+    # verification_matrix imported again for the laneless half. Read each
+    # once for this test; the worlds still differ only in the input that
+    # `self_test` perturbs, so every refusal is still seen by name.
+    surface, laneless = mod.surface, mod.laneless_algorithms
+    surfaces, found = {}, {}
+
+    def surface_once(path=mod.SURFACE):
+        if path not in surfaces:
+            surfaces[path] = surface(path)
+        return surfaces[path]
+
+    def laneless_once(declared=None):
+        if declared is not None:
+            return laneless(declared)
+        if "tree" not in found:
+            found["tree"] = laneless()
+        return found["tree"]
+
+    monkeypatch.setattr(mod, "surface", surface_once)
+    monkeypatch.setattr(mod, "laneless_algorithms", laneless_once)
     assert mod.self_test(verbose=True) is True, capsys.readouterr().out
 
 
