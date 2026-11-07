@@ -8,6 +8,32 @@ from mojolearn._buffer import as_f32_colmajor, as_f32_c, empty, addr, addr_ro, a
 from mojolearn.cluster import _METRIC_NAMES
 
 
+def decode_labels(classes, codes):
+    """Frozen pre-ne1-h-labels `_labels.decode_labels` (before 9829871102).
+
+    The product decode now hands int32/int64 `Array` codes to one native
+    entry; the oracles keep the former shell rule so the host owners are
+    still compared with the frozen label contract (ndarray and complex
+    classes, and int classes whose selected values fit int64)."""
+    from mojolearn import _labels
+    from mojolearn._array import Array
+    kind = _labels.label_kind(classes)
+    fast = _labels._decode_labels_native(classes, codes, kind)
+    if fast is not None:
+        return fast
+    values = _labels._decode_list_native(classes, codes)
+    if values is None:
+        values = list(map(classes.__getitem__, map(int, codes)))
+    try:
+        if kind == "int":
+            return Array.from_list(list(map(int, values)), "<i8")
+        if kind == "float":
+            return Array.from_list(list(map(float, values)), "<f8")
+    except (OverflowError, TypeError):
+        pass
+    return values
+
+
 def kde_fit(model, X, y=None, sample_weight=None):
     """Frozen 32011bb32 public CPU fit, including outer validation/state."""
     from mojolearn import _sk_validate
@@ -216,7 +242,7 @@ def projection(model, X, name, inverse=False):
 
 def logistic(model, X, method):
     """Frozen 32011bb32 CPU logistic decision/link/label orchestration."""
-    from mojolearn._labels import decode_labels, argmax_rows
+    from mojolearn._labels import argmax_rows
     binding = model._bind("_mojolearn_estimators")
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, d = x.shape
@@ -295,7 +321,7 @@ def svc(model, X, method):
     """Frozen 32011bb32 SVC binary/pair ordering and epilogue contract."""
     import array
     from mojolearn._buffer import as_f32_dense_c
-    from mojolearn._labels import decode_labels, argmax_rows
+    from mojolearn._labels import argmax_rows
     from mojolearn._array import Array
 
     binding = model._bind("_mojolearn_svm")
