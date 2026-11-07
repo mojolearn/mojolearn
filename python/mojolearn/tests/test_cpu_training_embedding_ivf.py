@@ -55,13 +55,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 EMB_LANES = ("embedding", "embedding-sort")
 IVF_LANES = ("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")
-#: par-ivf joined the ivf family on 2026-09-19 (lane/laneless-public-classes):
-#: DistributedIVFIndex over the same host binding, through the
-#: `ivf_flat_partial_search` and `ivf_finalize_distances` entries that lane
-#: added to it. It is a multi-device driver, so it is named apart from the
-#: three single-index lanes this file is about, and the family assertion
-#: below names it rather than widening to "contains".
-IVF_DRIVER_LANES = ("par-ivf",)
+#: par-ivf (DistributedIVFIndex) left the ivf family with the multi-GPU
+#: verification retirement (docs/TOMBSTONES.md MOJOLEARN_PAR_VERIFY, 2026-10-31).
 #: `ivf-short-fill` joined on 2026-10-21 (lane/verify-coverage-audit): IVF-Flat
 #: queries with fewer candidates than neighbours asked for, a coverage lane
 #: over the same host binding.
@@ -91,7 +86,7 @@ def test_manifest_declares_both_families():
         fam = host_surface.family(name)
         assert fam["routes"] == route
         assert host_surface.routed_modules()[route] == f"{route}_host"
-        assert fam["training_lanes"] == lanes + (IVF_DRIVER_LANES + IVF_COVERAGE_LANES if name == "ivf" else ())
+        assert fam["training_lanes"] == lanes + (IVF_COVERAGE_LANES if name == "ivf" else ())
         # Ships since lane/ship-cpu-host-families (2026-09-16): a wheel that
         # leaves the fit out cannot check the lane that hashes the fit.
         assert fam["ships_in_wheel"], "a host family with covered lanes must ship, or the lanes are unverifiable"
@@ -283,13 +278,16 @@ def test_manifest_declares_the_byte_lm_trainer_lanes():
     assert "host_surface.ADAPTED_MODULES.get(name)" in backend
 
 
-def test_adapter_holds_no_arithmetic_and_calls_the_host_entries():
+def test_adapter_is_an_import_time_connection_only():
+    # The adapter no longer drives the host entries from Python (that contract
+    # is gone; test_byte_lm_host_trainer.py checks no Python step remains):
+    # it loads the host binding once and checks its native entries.
     text = _read(ADAPTER)
     imports = re.findall(r"^(?:from|import) (\S+)", text, re.M)
-    assert set(imports) <= {"ctypes", "math", "operator", "struct", ".", "._bufcheck", "._buffer",
-                            "._byte_lm_config"}, imports
-    for entry in ("byte_lm_host_train_step", "byte_lm_host_loss", "byte_lm_host_logits"):
-        assert f"self._host.{entry}(" in text, entry
+    assert set(imports) <= {".", "types"}, imports
+    for entry in ("byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1", "byte_lm_session_create",
+                  "byte_lm_trainer_step", "byte_lm_run_configured"):
+        assert f'"{entry}"' in text, entry
     assert "_backend.load_host_module(HOST_BASENAME)" in text
     impl = _read("python/mojolearn/_byte_lm_impl.py")
     # cpu-gpu-cleanup n-pyneural: the install decides the vendor set, so the
