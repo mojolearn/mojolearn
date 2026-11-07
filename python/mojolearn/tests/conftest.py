@@ -44,3 +44,35 @@ def pytest_collection_modifyitems(config, items):
     if dropped:
         config.hook.pytest_deselected(items=dropped)
         items[:] = kept
+
+
+# Per-test durations for the whole run (setup + call + teardown, seconds), one
+# JSON file per process, when MOJOLEARN_TEST_DURATIONS_DIR names a directory:
+# tools/test_duration_report.py sums them per file and per test so the heavy
+# tail is cut from measurements. Off by default; costs one dict entry per test.
+# Under pytest-xdist the controller receives every worker's reports, so only
+# the controller (or a run without xdist) records; workers write nothing.
+_DURATIONS = {}
+
+
+def _records():
+    return bool(os.environ.get("MOJOLEARN_TEST_DURATIONS_DIR")) and not os.environ.get("PYTEST_XDIST_WORKER")
+
+
+def pytest_runtest_logreport(report):
+    if _records():
+        entry = _DURATIONS.setdefault(report.nodeid, {"seconds": 0.0, "outcome": "passed"})
+        entry["seconds"] += report.duration
+        if report.outcome != "passed" and entry["outcome"] == "passed":
+            entry["outcome"] = report.outcome if report.when == "call" or report.outcome != "failed" else "error"
+
+
+def pytest_sessionfinish(session):
+    if not _records() or not _DURATIONS:
+        return
+    import json
+    directory = os.environ["MOJOLEARN_TEST_DURATIONS_DIR"]
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"durations-{os.getpid()}.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"tests": _DURATIONS}, handle)

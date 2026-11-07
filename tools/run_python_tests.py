@@ -12,6 +12,11 @@ may use; MOJOLEARN_TEST_WORKERS overrides it and MOJOLEARN_TEST_WORKERS=1 is
 the old serial run. Tests marked `serial` (python/pytest.ini) are left out of
 the parallel pass and run afterwards in one process. Without pytest-xdist in
 the environment the run is serial and says so.
+
+python/mojolearn/tests/conftest.py adds two switches: MOJOLEARN_TEST_SLOW=0
+deselects the tests marked `slow` (kept by default), and
+MOJOLEARN_TEST_DURATIONS_DIR=<dir> records every test's duration for
+tools/test_duration_report.py.
 """
 import argparse
 import importlib.util
