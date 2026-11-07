@@ -16,8 +16,8 @@
 #
 # Class facts are kept per class state (bindings/native_class_admission.mojo:
 # a type watcher invalidates them on any modification of the class or an
-# ancestor). Model facts are kept per model in the prepared-owner registry
-# (bindings/native_prepared_owner.mojo, through bindings/trees_side_records.mojo):
+# ancestor). Model facts are kept per model in the CLUSTER slot of the one
+# record table (bindings/native_model_records.mojo, lane ne1-e-records):
 # keyed by a weak reference to the model, outside its `__dict__`, so a query
 # leaves `__dict__` unchanged, pickles and copies carry no record, and a
 # record dies with its model. A model record is valid while its key matches:
@@ -38,7 +38,8 @@ from bindings.classical_attributes import _type_mro
 from bindings.py_balanced import py_call, py_type, py_contains, py_get
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_arrays import classical_address
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
+from bindings.trees_side_records import trees_key_same, trees_key_shallow
+from bindings.native_model_records import records_get, records_put, records_drop, records_key_append, RECORDS_CLUSTER
 
 # int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b)
 comptime _PyType_IsSubtype = ExternalFunction[
@@ -120,17 +121,17 @@ def cluster_record_key(model: PythonObject, fields: PythonObject, required: Pyth
         var name = required[i]
         if not py_contains(fields, name):
             return PythonObject(None)
-        _ = py_call(key.append, name)
+        records_key_append(key, name)
         trees_key_shallow(mods, key, fields[name], 0)
     for i in range(len(optional)):  # driver-loop: over fitted field names (identity key)
         var name = optional[i]
-        _ = py_call(key.append, name)
+        records_key_append(key, name)
         if py_contains(fields, name):
-            _ = py_call(key.append, PythonObject(1))
+            records_key_append(key, PythonObject(1))
             trees_key_shallow(mods, key, fields[name], 0)
             _cluster_array_words(key, fields[name])
         else:
-            _ = py_call(key.append, PythonObject(0))
+            records_key_append(key, PythonObject(0))
     return key
 
 
@@ -149,21 +150,21 @@ def _cluster_array_words(key: PythonObject, value: PythonObject) raises:
     var is_ndarray = numpy is not None and cls is numpy.ndarray
     if not is_ndarray and (arrays is None or cls is not arrays.Array):
         return
-    _ = py_call(key.append, classical_address(value))
+    records_key_append(key, classical_address(value))
     var shape = value.shape
-    _ = py_call(key.append, PythonObject(len(shape)))
+    records_key_append(key, PythonObject(len(shape)))
     for axis in range(len(shape)):  # small-loop(fitted array rank)
-        _ = py_call(key.append, PythonObject(Int(py=shape[axis])))
+        records_key_append(key, PythonObject(Int(py=shape[axis])))
     if is_ndarray:
-        _ = py_call(key.append, value.dtype)
-        _ = py_call(key.append, value.flags.c_contiguous)
+        records_key_append(key, value.dtype)
+        records_key_append(key, value.flags.c_contiguous)
 
 
 def cluster_record_get(slot: String, model: PythonObject, key: PythonObject) raises -> PythonObject:
     """The payload `slot` holds for `model` under an identical key, or None."""
     if key is None:
         return PythonObject(None)
-    var held = trees_side_get(slot, model)
+    var held = records_get(RECORDS_CLUSTER, model, slot)
     if held is None or not trees_key_same(held[0], key):
         return PythonObject(None)
     return held[1]
@@ -175,10 +176,10 @@ def cluster_record_put(slot: String, model: PythonObject, key: PythonObject, pay
     no weak reference (it then runs the full path on every call)."""
     if key is None:
         return
-    _ = trees_side_put(slot, model, Python.tuple(key, payload))
+    _ = records_put(RECORDS_CLUSTER, model, slot, Python.tuple(key, payload))
 
 
 def cluster_record_drop(slot: String, model: PythonObject) raises:
     """Forget `model`'s record in `slot` (a fit: the fitted arrays a record
     holds are released now, not at the next query)."""
-    trees_side_drop(slot, model)
+    records_drop(RECORDS_CLUSTER, model, slot)
