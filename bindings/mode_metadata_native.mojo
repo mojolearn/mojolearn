@@ -205,7 +205,9 @@ def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, con
                     nearer = True
                     break
             var reused = record[0]
-            if not nearer and record[1] == reused["binding"] and record[2] is reused["bind"]:
+            # Same comparison form as the full check below.
+            var changed = nearer or record[1] != reused["binding"] or record[2] is not reused["bind"]
+            if not changed:
                 return reused
     var binding = PythonObject(None)
     var bind = PythonObject(None)
