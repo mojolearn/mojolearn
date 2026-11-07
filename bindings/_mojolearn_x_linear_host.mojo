@@ -16,7 +16,7 @@ from x_linear.spearman import spearman_sign_host
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
 from x_linear.ridgecv import ridge_best_alpha
 from x_linear.class_prep import class_prep_host
-from x_linear.x_linear_host_impl import x_linear_fit_host, x_linear_decision_host, x_linear_decision_codes_host, x_linear_decision_rows_host
+from x_linear.x_linear_host_impl import x_linear_fit_host, x_linear_decision_host, x_linear_decision_codes_host, x_linear_decision_rows_host, x_linear_decision_huber_out_host
 
 
 # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
@@ -151,6 +151,26 @@ def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Pyt
     return PythonObject(rows)
 
 
+def decision_huber_out_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
+                               out_addr: PythonObject) raises -> PythonObject:
+    """The GPU binding's `x_linear_decision_huber_out` on the host: dims =
+    [n, d, link, y_addr, thr]; out uint8 n. Returns n."""
+    if len(dims) != 5:
+        raise Error("x_linear_decision_huber_out: dims must contain n, d, link, y address, thr")
+    var n = Int(py=dims[0])
+    var d = Int(py=dims[1])
+    var link = Int(py=dims[2])
+    var ya = Int(py=dims[3])
+    var thr = Float64(py=dims[4])
+    var xa = Int(py=x_addr)
+    var wa = Int(py=wb_addr)
+    var oa = Int(py=out_addr)
+    var rows = 0
+    with GILReleased(Python()):
+        rows = x_linear_decision_huber_out_host(xa, wa, n, d, link, ya, thr, oa)
+    return PythonObject(rows)
+
+
 def x_linear_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
@@ -196,6 +216,7 @@ def build__mojolearn_x_linear_host() -> PythonObject:
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[decision_rows_binding]("x_linear_decision_rows")
+        m.def_function[decision_huber_out_binding]("x_linear_decision_huber_out")
         m.def_function[x_linear_numeric_mode_binding]("x_linear_numeric_mode")
         m.def_function[x_linear_vendor_binding]("x_linear_vendor")
         m.def_function[py2mojo_rows_host_binding]("py2mojo_rows")

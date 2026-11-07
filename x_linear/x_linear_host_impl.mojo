@@ -11,7 +11,8 @@ from x_linear.enetcv_blocks import fb_host_words
 from x_linear.ops import FP, IP
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-from core.py2mojo_rows import ROWS_LRCV_PROBA, ROWS_SGD_PROBA, rows_one
+from core.py2mojo_rows import ROWS_HUBER_OUT, ROWS_LRCV_PROBA, ROWS_SGD_PROBA, rows_one
+from std.memory import bitcast
 from x_linear.dispatch_host import fit_dispatch
 from x_linear.dispatch import decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
@@ -185,6 +186,47 @@ def x_linear_decision_rows_host(
     _ = s^
     _ = u64^
     _ = u8^
+    return n
+
+
+def x_linear_decision_huber_out_host(
+    x_addr: Int, wb_addr: Int, n: Int, d: Int, link: Int, y_addr: Int, thr: Float64, flags_addr: Int,
+) raises -> Int:
+    """The GPU binding's `x_linear_decision_huber_out` on the host: each
+    row's `decision_one` prediction, then `rows_one` ROWS_HUBER_OUT on it,
+    rows split across host tasks. Returns n."""
+    # ne2-g-linear (N302): the host column of decision_huber_out_device.
+    if n < 0 or d < 0:
+        raise Error("x_linear: positive dimensions required")
+    if n == 0:
+        return 0
+    if flags_addr == 0:
+        raise Error("x_linear: null flag buffer address")
+    var x = _fp(x_addr)
+    var wb = _fp(wb_addr)
+    var y = _fp(y_addr)
+    var flags = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=flags_addr)
+    var p = List[Float32](length=n, fill=Float32(0))
+    var pp = p.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var u64 = List[UInt64](length=1, fill=UInt64(0))
+    var u64p = u64.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var scal = bitcast[DType.uint64](thr)
+    var t = max(1, min(host_predict_task_count(n), n))
+    var chunk = host_predict_chunk(n, t)
+
+    def _rows(c: Int) {imm x, imm wb, imm y, imm flags, imm pp, imm u64p, imm scal, imm chunk, imm n, imm d, imm link}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            pp.unsafe_store(i, decision_one(x, i, d, wb, 0, link))
+            rows_one(ROWS_HUBER_OUT, y, u64p, 1, i, pp, u64p, pp, scal, flags)
+
+    if t == 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, t)
+    _ = p^
+    _ = u64^
     return n
 
 

@@ -25,7 +25,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from core.py2mojo_rows import ROWS_LRCV_PROBA, ROWS_MAX_BLOCKS, ROWS_SGD_PROBA, ROWS_TPB, rows_kernel
+from core.py2mojo_rows import ROWS_HUBER_OUT, ROWS_LRCV_PROBA, ROWS_MAX_BLOCKS, ROWS_SGD_PROBA, ROWS_TPB, rows_kernel
 from x_linear.dispatch import decision_one, decision_code_row, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
 from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
@@ -5829,6 +5829,52 @@ def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_
     _ = d_d64^
     _ = d_s2^
     _ = d_d8^
+    _ = ctx^
+
+
+def decision_huber_out_device(
+    x: FP, wb: FP, n: Int, d: Int, link: Int, y: FP, thr: Float64, flags: MutPointer[UInt8, MutAnyOrigin],
+) raises:
+    """HuberRegressor.outliers_ in one device session: `decision_device`'s
+    one-target block on the training rows, then `py2mojo_rows`
+    ROWS_HUBER_OUT (|y - pred| > thr in binary64) on the prediction while it
+    is on the device; only the n uint8 flags come down."""
+    # ne2-g-linear (N302): was x_linear_decision (pred downloaded) then
+    # py2mojo_rows (y and pred uploaded again); the same two kernels' words.
+    var ctx = linear_ctx()
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
+    var dwb = ctx.enqueue_create_buffer[DType.float32](d + 1)
+    var dpred = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dflags = ctx.enqueue_create_buffer[DType.uint8](max(n, 1))
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_d32 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_d64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+        ctx.enqueue_function[decision_kernel](
+            dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(link), dpred.unsafe_ptr(),
+            grid_dim=(n + 127) // 128, block_dim=128,
+        )
+        var blocks = max(1, min(ROWS_MAX_BLOCKS, (n + ROWS_TPB - 1) // ROWS_TPB))
+        ctx.enqueue_function[rows_kernel](
+            Int32(ROWS_HUBER_OUT), dy.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(1), Int64(n),
+            d_d32.unsafe_ptr(), d_d64.unsafe_ptr(), dpred.unsafe_ptr(), bitcast[DType.uint64](thr), dflags.unsafe_ptr(),
+            grid_dim=blocks, block_dim=ROWS_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=flags, src_buf=dflags.create_sub_buffer[DType.uint8](0, n))
+    ctx.synchronize()
+    _ = dx^
+    _ = dwb^
+    _ = dpred^
+    _ = dy^
+    _ = dflags^
+    _ = d_s64^
+    _ = d_d32^
+    _ = d_d64^
     _ = ctx^
 
 

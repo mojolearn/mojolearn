@@ -24,7 +24,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP, IP
 from x_linear.ridgecv import ridge_best_alpha
-from x_linear.device import fit_device, decision_device, decision_codes_device, decision_rows_device, SGD_IDN_DEV_FINITE
+from x_linear.device import fit_device, decision_device, decision_codes_device, decision_rows_device, decision_huber_out_device, SGD_IDN_DEV_FINITE
 from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.class_prep_device import class_prep_device
@@ -151,6 +151,32 @@ def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Pyt
     return PythonObject(n)
 
 
+def decision_huber_out_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
+                               out_addr: PythonObject) raises -> PythonObject:
+    """HuberRegressor.outliers_ in one call: the one-target decision on the
+    training rows, then |y - pred| > thr (`py2mojo_rows` ROWS_HUBER_OUT) on
+    the device; dims = [n, d, link, y_addr, thr]; out uint8 n. Returns n."""
+    # ne2-g-linear (N302): the prediction stays on the device.
+    if len(dims) != 5:
+        raise Error("x_linear_decision_huber_out: dims must contain n, d, link, y address, thr")
+    var n = Int(py=dims[0])
+    var d = Int(py=dims[1])
+    var link = Int(py=dims[2])
+    if n < 0 or d < 0:
+        raise Error("x_linear: positive dimensions required")
+    var y = _fp(Int(py=dims[3]))
+    var thr = Float64(py=dims[4])
+    var x = _fp(Int(py=x_addr))
+    var wb = _fp(Int(py=wb_addr))
+    var oa = Int(py=out_addr)
+    if oa == 0:
+        raise Error("x_linear: null flag buffer address")
+    var flags = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=oa)
+    with GILReleased(Python()):
+        decision_huber_out_device(x, wb, n, d, link, y, thr, flags)
+    return PythonObject(n)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -233,6 +259,7 @@ def build__mojolearn_x_linear() -> PythonObject:
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[decision_rows_binding]("x_linear_decision_rows")
+        m.def_function[decision_huber_out_binding]("x_linear_decision_huber_out")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
