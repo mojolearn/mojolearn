@@ -50,7 +50,9 @@ python3 "$REPO/packaging/linux/ptx_baseline.py" validate-config \
 mkdir -p "$DEST/build_logs" "$DEST/sets"
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
 JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
-[[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+# 1..128: a sanity range, not a sizing cap (tools/build_sizing.py MAX_JOBS; a rented
+# box runs every core, Andrew 2026-11-05).
+[[ "$JOBS" =~ ^[1-9][0-9]{0,2}$ && "$JOBS" -le 128 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..128' >&2; exit 2; }
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 # AMD GPU COMPILER WORKERS ARE A CHOICE, NOT A FIXED ONE (lane/amd-compile-speed,
 # 2026-10-20). History: the Mojo compiler's gfx942 output varies run to run with

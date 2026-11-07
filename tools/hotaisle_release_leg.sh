@@ -98,9 +98,9 @@ REMOTE_OUT=$BR/rel061-build; REMOTE_LOG=$BR/rel061-build.log
 FETCH_RESERVE=${FETCH_RESERVE:-600}
 # `auto` (default): the box sizes the build (tools/build_sizing.py, run on
 # the box by release_ubuntu22_build.sh or release061_remote_build.sh); N is an
-# explicit override, 1..16.
+# explicit override, 1..128.
 BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-auto}
-[[ "$BUILD_JOBS" = auto || ( "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ) ]] || die 'MOJOLEARN_BUILD_JOBS must be auto or 1..16'
+[[ "$BUILD_JOBS" = auto || ( "$BUILD_JOBS" =~ ^[1-9][0-9]{0,2}$ && "$BUILD_JOBS" -le 128 ) ]] || die 'MOJOLEARN_BUILD_JOBS must be auto or 1..128'
 LEG_EVIDENCE_ROOT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}"
 RELEASE_ROOT="${MOJOLEARN_RELEASE_RESULTS_ROOT:-$LEG_EVIDENCE_ROOT/releases/$COMMIT}"
 OUT="$RELEASE_ROOT/hip-gfx942"
