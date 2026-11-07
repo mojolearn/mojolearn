@@ -101,8 +101,15 @@ def _float_words(values: PythonObject) raises -> PythonObject:
     """`values.tolist()` of a float64 array: one PyList_New and a stolen
     PyList_SetItem per word (p3-cnn-sequence-tsa: it was a bound `append`
     call per word)."""
-    var count = Int(py=values.size)
-    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(values)))
+    var result = _float_words_at(Int(py=xcnn_addr(values)), Int(py=values.size))
+    _ = values
+    return result
+
+
+def _float_words_at(address: Int, count: Int) raises -> PythonObject:
+    """`_float_words` of `count` float64 words at `address` (the caller keeps
+    their owner alive)."""
+    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=address)
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
     if not raw:
@@ -115,7 +122,6 @@ def _float_words(values: PythonObject) raises -> PythonObject:
         # SetItem steals the reference on both success and failure.
         if set_item(result._obj_ptr, i, item.steal_data()) != 0:
             raise cpy.unsafe_get_error()
-    _ = values
     return result
 
 
@@ -755,25 +761,44 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
             size_words = b.list()
             for q in range(len(params)):  # driver-loop: one size word list per parameter array
                 _ = py_call(size_words.append, Python.list(sizes[q]))
+        # N099 (ne3-c-cnn, 2026-11-07): a binding with `x_cnn_fit_d` runs every
+        # epoch in one call (the spec and both plans parsed once natively;
+        # each epoch is `x_cnn_fit_epoch_d`'s epoch ep with `ep * nsteps`
+        # steps taken, the same words). The epoch loop below then only
+        # publishes each epoch's losses from the (max_iter x nsteps) buffer.
+        var whole = epoch_entry and max_iter > 0 and _has(entries, "x_cnn_fit_d")
+        var all_losses = PythonObject(None)
+        if whole:
+            all_losses = _empty(Python.tuple(max_iter * nsteps), "float64", context)
+            _ = py_call(_e(entries, "x_cnn_fit_d"), spec, xcnn_addr(all_losses),
+                        Python.list(n, batch, 0 if sgd else 1, step, 0, shuffle, seed_lo, seed_hi, max_iter), fpar)
+            _ = all_losses  # keep the Python object alive through the native call above
         for ep in range(max_iter):  # driver-loop: over the device epochs
             var epoch = b.list()
             var total = 0.0
             var count = 0
             if epoch_entry:
-                var losses = _empty(Python.tuple(nsteps), "float64", context)
-                _ = py_call(_e(entries, "x_cnn_fit_epoch_d"), spec, xcnn_addr(losses),
-                            Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
-                _ = losses  # keep the Python object alive through the native call above
+                var losses = PythonObject(None)
+                var at = 0
+                if whole:
+                    at = Int(py=xcnn_addr(all_losses)) + 8 * ep * nsteps
+                else:
+                    losses = _empty(Python.tuple(nsteps), "float64", context)
+                    _ = py_call(_e(entries, "x_cnn_fit_epoch_d"), spec, xcnn_addr(losses),
+                                Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
+                    _ = losses  # keep the Python object alive through the native call above
+                    at = Int(py=xcnn_addr(losses))
                 step += nsteps
-                epoch = _float_words(losses)
+                epoch = _float_words_at(at, nsteps)
                 # CPython 3.12+'s sum spelled out (`_portable_math.nsum`: the
                 # same Neumaier fold in the same order, core/array_helpers_impl.mojo),
                 # read straight from the float64 loss words (they were copied
                 # into a Python list and then into an array('d') first).
                 count = nsteps
                 if count:
-                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(losses))), count)
+                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at), count)
                 _ = losses  # keep the Python object alive through the native read above
+                _ = all_losses  # keep the Python object alive through the native read above
             else:
                 var order_rows = _empty(Python.tuple(n), "int32", context)
                 _ = py_call(_e(entries, "x_cnn_epoch_rows"), xcnn_addr(order_rows), Python.list(n, ep, shuffle, seed_lo, seed_hi))

@@ -1020,6 +1020,36 @@ def fit_epoch_d_binding(
     return out
 
 
+def fit_d_binding(
+    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's `x_cnn_fit_d` contract on the host (N099,
+    ne3-c-cnn, 2026-11-07): params = `x_cnn_fit_epoch_d`'s eight words plus
+    the epoch count; epoch e is exactly `x_cnn_fit_epoch_d`'s epoch
+    params[4] + e with done + e * steps steps already taken, its losses at
+    e * steps of the (epochs x steps) float64 buffer. One crossing per fit;
+    the host column re-reads the spec per epoch inside the native call
+    (the `_r` contract it shares), with no Python code between epochs."""
+    if Int(py=len(params)) != 9:
+        raise Error("x_cnn fit: params is the epoch entry's eight words and the epoch count")
+    var epochs = Int(py=params[8])
+    if epochs < 0:
+        raise Error("x_cnn fit: a nonnegative epoch count required")
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    if n <= 0 or batch <= 0:
+        raise Error("x_cnn fit epoch: positive rows and batch required")
+    var steps = (n + batch - 1) // batch
+    var done = Int(py=params[3])
+    var epoch = Int(py=params[4])
+    var base = Int(py=losses_addr)
+    for ep in range(epochs):  # driver-loop: over the fit's epochs (training structure, one host epoch each)
+        var words = Python.list(params[0], params[1], params[2], done + ep * steps, epoch + ep, params[5],
+                                params[6], params[7])
+        _ = fit_epoch_d_binding(spec, PythonObject(base + 8 * ep * steps), words, fparams)
+    return PythonObject(steps)
+
+
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
@@ -1089,6 +1119,7 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
         m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
         m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
+        m.def_function[fit_d_binding]("x_cnn_fit_d")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))

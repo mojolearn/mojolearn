@@ -38,6 +38,7 @@ _NAMES = (
     "x_cnn_dropout2d",
     "x_cnn_dropout2d_m",
     "x_cnn_epoch_rows",
+    "x_cnn_fit_d",
     "x_cnn_fit_epoch_d",
     "x_cnn_fit_epoch_r",
     "x_cnn_gcn_loops",
