@@ -16,7 +16,10 @@ the environment the run is serial and says so.
 python/mojolearn/tests/conftest.py adds two switches: MOJOLEARN_TEST_SLOW=0
 deselects the tests marked `slow` (kept by default), and
 MOJOLEARN_TEST_DURATIONS_DIR=<dir> records every test's duration for
-tools/test_duration_report.py.
+tools/test_duration_report.py. MOJOLEARN_TEST_ORDER=<tsv> (that tool's
+`--tsv` output from an earlier run) hands the parallel pass its files heaviest
+first, so a long file starts at once instead of finishing last; files the tsv
+does not name follow in their usual order.
 """
 import argparse
 import importlib.util
@@ -58,6 +61,26 @@ def user_chose_workers(pytest_args):
 def serial_files(paths):
     """Files that mark tests `serial`, found by text like the inventory (never imported)."""
     return [p for p in paths if SERIAL_MARK in p.read_text(errors='replace')]
+
+
+def heaviest_first(files, order_tsv):
+    """`files` sorted by their total seconds in `order_tsv` (seconds<TAB>outcome<TAB>nodeid
+    lines), heaviest first; files it does not name keep their order after them."""
+    totals = {}
+    for line in Path(order_tsv).read_text(encoding='utf-8').splitlines():
+        parts = line.split('\t')
+        if len(parts) >= 3:
+            name = parts[2].split('::', 1)[0]
+            totals[name] = totals.get(name, 0.0) + float(parts[0])
+    def total(path):
+        # nodeids are relative to python/ (the rootdir); match on that suffix
+        text = Path(path).as_posix()
+        for name, seconds in totals.items():
+            if text == name or text.endswith('/' + name):
+                return seconds
+        return None
+    known = sorted((f for f in files if total(f) is not None), key=lambda f: -total(f))
+    return known + [f for f in files if total(f) is None]
 
 
 def main(argv=None):
@@ -114,6 +137,10 @@ raise SystemExit(pytest.main(sys.argv[1:]))
         print('pytest-xdist is not installed in this environment; running serially', flush=True)
         return subprocess.call([*pytest, *files, *pytest_args], cwd=ROOT / 'python')
     serial = [str(p) for p in serial_files(suites['pytest'])]
+    order = os.environ.get('MOJOLEARN_TEST_ORDER', '').strip()
+    if order:
+        files = heaviest_first(files, order)
+        print(f'parallel pass order: heaviest first from {order}', flush=True)
     print(f'parallel pass: {workers} workers, --dist loadfile; serial pass: {len(serial)} file(s)', flush=True)
     rc = subprocess.call([*pytest, '-n', str(workers), '--dist', 'loadfile', '-m', 'not serial',
                           *files, *pytest_args], cwd=ROOT / 'python')

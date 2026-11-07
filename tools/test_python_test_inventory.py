@@ -48,3 +48,15 @@ def test_entrypoint_serial_override_preserves_failure(tmp_path):
                          env=dict(__import__('os').environ, MOJOLEARN_TEST_WORKERS='1'))
     assert run.returncode == 1
     assert '1 failed' in run.stdout
+
+
+def test_heaviest_first_orders_known_files_and_keeps_the_rest(tmp_path):
+    sys.path.insert(0, str(Path(__file__).parent))
+    import run_python_tests as runner
+    order = tmp_path / 'order.tsv'
+    order.write_text('9.0\tpassed\tmojolearn/tests/test_b.py::test_x\n'
+                     '4.0\tfailed\tmojolearn/tests/test_c.py::test_y\n'
+                     '6.0\tpassed\tmojolearn/tests/test_c.py::test_z\n')
+    files = [f'/r/python/mojolearn/tests/test_{n}.py' for n in 'abcd']
+    assert [Path(f).name for f in runner.heaviest_first(files, order)] == [
+        'test_c.py', 'test_b.py', 'test_a.py', 'test_d.py']
