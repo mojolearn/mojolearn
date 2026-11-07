@@ -128,8 +128,16 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             py_setitem(output_fields, "branch_counts_", result[2])
         return owner
     if name == "save":
-        _arguments(args, 1)
-        return ops_program_save_fields_py[E, KIND](fields, state, args[0], output_fields)
+        # (path,) or (path, verify): `verify` False skips the seeded replay
+        # and the sidecar (row N167: checkpoints saved in a loop).
+        var replay = True
+        if py_type(args) is py_type(Python.tuple()) and len(args) == 2:
+            if py_type(args[1]) is not py_type(PythonObject(True)):
+                raise Error("TypeError: Program.save verify must be True or False")
+            replay = Bool(py=args[1])
+        else:
+            _arguments(args, 1)
+        return ops_program_save_fields_py[E, KIND](fields, state, args[0], output_fields, replay)
     if name == "save_control":
         _arguments(args, 6)
         var condition = Int(py=_component(args[1], session))

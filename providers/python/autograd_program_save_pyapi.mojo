@@ -68,11 +68,12 @@ def ops_program_save_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("TypeError: Program save requires its native admission context")
     var fields = _save_fields(program, context)
     var state = ops_session_fields(fields["_s"])
-    return ops_program_save_fields_py[E, KIND](fields, state, path, fields)
+    return ops_program_save_fields_py[E, KIND](fields, state, path, fields, True)
 
 
 def ops_program_save_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     fields: PythonObject, state: PythonObject, path: PythonObject, metadata: PythonObject,
+    replay: Bool,
 ) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var context = program_admission_context()["program_save_context"]
@@ -92,7 +93,7 @@ def ops_program_save_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     var output_names = _names(metadata, "outputs", len(p.outs))
     var provenance = _save_provenance(context)
     program_save_verified[E, KIND](sid, pid, String(py=normalized), input_names,
-                                  output_names, provenance[0], provenance[1])
+                                  output_names, provenance[0], provenance[1], replay)
     _ = fields
     _ = state
     return PythonObject(None)

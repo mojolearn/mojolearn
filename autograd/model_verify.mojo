@@ -126,6 +126,16 @@ def verify_model_info(file: String) raises -> Tuple[String, String]:
     return (kind, _hex16(h))
 
 
+def verify_program_info(ext_ints: List[Int64], ext_floats: List[Float32]) -> Tuple[String, String]:
+    """`verify_model_info` of a program file, from the program's description
+    words in memory (`program_words`, the exact words `ops_save_program`
+    writes as the file's extension), so a save does not parse the file it
+    just wrote (row N167). Same fold, same digest."""
+    var h = _fold_i64(FNV_OFFSET, ext_ints)
+    h = _fold_f32(h, ext_floats)
+    return (String(VERIFY_KIND_PROGRAM), _hex16(h))
+
+
 # ---------------------------------------------------------------- seeded inputs
 
 def verify_fill(addr: Int, count: Int, s: Int, st: Int) raises -> Int:

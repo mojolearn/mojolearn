@@ -1472,17 +1472,24 @@ class Program:
         """Save control components, shared parameters and optional optimizer state."""
         return _PROGRAM_CALL(self, "save_control", (path, condition, otherwise, max_iterations, optimizer, seed))
 
-    def save(self, path):
+    def save(self, path, *, verify=True):
         """Write the program and its parameters' current values to ``path``,
         for :meth:`Session.load_program` on any install.
 
-        Beside it, ``<path>.verify.json`` records this install's report: the
-        program run once on seeded inputs, with the digest of every input and
-        output. On another install, ``python -m mojolearn verify-model
-        <path>`` runs the saved program on the same inputs and checks that
-        every output has the same bits.
+        With ``verify=True`` (the default), ``<path>.verify.json`` beside it
+        records this install's report: the program run once on seeded
+        inputs, with the digest of every input and output. On another
+        install, ``python -m mojolearn verify-model <path>`` runs the saved
+        program on the same inputs and checks that every output has the same
+        bits. ``verify=False`` writes only the program file (and removes a
+        report left by an earlier save to the same path), for checkpoints
+        saved often during training.
+
+        Example
+        -------
+        >>> program.save("model.mlp", verify=False)  # doctest: +SKIP
         """
-        return _PROGRAM_CALL(self, "save", (path,))
+        return _PROGRAM_CALL(self, "save", (path, verify))
 
     def free(self):
         """Release the program (its parameters stay session tensors)."""
