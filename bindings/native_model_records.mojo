@@ -18,8 +18,10 @@ Accessor list (the ne1 contract; other lanes code against exactly these):
                                                    object takes no weak reference
     records_live(model) raises -> Bool             a live entry exists for this object
     records_release(model_key: Int)                drop every family slot (death callback),
-                                                   then run every registered release hook
-    records_register_release_hook(hook) -> Bool    hook: def(Int) thin -> None
+                                                   then post the key on the dead-key ring
+    records_death_seq() -> Int                     releases posted so far
+    records_dead_keys_since(seq, mut keys) -> Int  keys released after `seq`; returns the
+                                                   new seq, negated when the ring overflowed
   Generation word
     model_generation(model) raises -> Int          0 = no proof (never stamped, or no
                                                    dictionary watcher); else >= 1
@@ -48,21 +50,17 @@ Accessor list (the ne1 contract; other lanes code against exactly these):
     (each raises when `model_key` has no entry: call records_open first)
   Family codes: RECORDS_PREPARED, RECORDS_TREES, RECORDS_CLUSTER, RECORDS_GP_SVM.
 
-Release hooks (2026-11-06): a family store keyed by model identity outside
-this table (the cluster/spectral resident table `cres_forget_key`, the
-sequence store's `seq_resident_owner_died`) registers a non-raising
-`def(Int) thin -> None` with `records_register_release_hook`; records_release
-calls every hook with the model key after the entry is gone. This module
-imports no family module (no import cycle, no family code in every
-binding). Rules for a hook: non-raising, runs no Python code (it runs inside a
-weakref callback), may release native or device memory it owns or post the
-death for its store's next call, and is idempotent (it may run for a key the
-store never saw). Mojo has no module
-initializer, so the owner registers at its store's first use and keeps a
-shared `_Global` "registered" flag, so one registration serves every
-extension (each extension holds its own copy of the hook function; any one
-of them is correct because they all act on the same shared store). The
-registry holds at most RECORDS_RELEASE_HOOKS_MAX hooks.
+Dead-key ring (2026-11-07, replaces the 2026-11-06 release hooks): a family
+store keyed by model identity outside this table (the cluster/spectral
+resident table, the sequence resident store) is never called back.
+records_release posts the key on a fixed ring with a monotonically increasing
+sequence word; each store keeps the last word it drained and, at its own
+entry points and under its own lock, calls `records_dead_keys_since` and
+forgets those keys (everything, when the ring overflowed since its last
+poll). A store drains before it stores, so a later death on the ring always
+names a model that died after the store's entry was made. This module
+imports no family module and holds no function pointer (no import cycle, no
+callback, no family code in every binding).
 
 The generation word, and the `__setattr__` hook question of rows N050, N071
 and N320, settled here once (2026-11-06):
@@ -96,6 +94,7 @@ every access confirms the weak referent is the object itself.
 Nothing here computes on data or changes an arithmetic or fold order.
 """
 from std.ffi import _Global
+from std.atomic import Atomic, Ordering
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
@@ -289,7 +288,8 @@ comptime MODEL_RECORDS = _Global[
 
 
 def records_release(model_key: Int):
-    """Drop the entry of `model_key` and every family slot it holds."""
+    """Drop the entry of `model_key` and every family slot it holds, then
+    post the key on the dead-key ring (records_dead_keys_since)."""
     try:
         var g = MODEL_RECORDS.get_or_create_ptr()
         if model_key not in g[].entries:
@@ -304,71 +304,116 @@ def records_release(model_key: Int):
         _ = released^
     except:
         return
-    # Every registered release hook (the families' resident device stores
-    # keyed by this model; see records_register_release_hook).
-    _records_run_release_hooks(model_key)
+    # The families' resident stores keyed by this model poll the ring at
+    # their next call (no callback into a family module).
+    _records_post_death(model_key)
 
 
-# ------------------------------------------------------------------ release hooks
+# ------------------------------------------------------------------ dead-key ring
+#
+# Replaces the release-hook registry (thin function pointers in a _Global,
+# the trigger of the compiler deadlock bisected to the cluster resident
+# table's registration, lanes ne-fix-hang4/5, 2026-11-07): no function
+# pointer, no cross-module callback, no cycle. Every released key is written
+# to a fixed ring with a monotonically increasing sequence word; a store
+# keeps the last sequence it drained and polls at its own entry points.
 
-comptime RecordsReleaseHook = def(Int) thin -> None
-comptime RECORDS_RELEASE_HOOKS_MAX = 64
+comptime RECORDS_DEAD_RING = 1024
+"""Released keys kept for polling. A store that has not drained for more
+releases than this forgets everything it holds (its next call re-uploads):
+a bound on host memory (8 KiB), not a shape rule."""
 
 
-def _records_no_hook(model_key: Int):
-    """The fill value of the unused registry slots (never called)."""
-    pass
-
-
-struct RecordsReleaseHooks(Defaultable, Movable):
-    # A fixed InlineArray with a count, not a List: a List of thin function
-    # pointers inside a _Global is the prime suspect of the compiler
-    # deadlock bisected to the cluster resident table's registration
-    # (lane ne-fix-hang4, 2026-11-07). Same registration order, same calls.
-    var hooks: InlineArray[RecordsReleaseHook, RECORDS_RELEASE_HOOKS_MAX]
-    var count: Int
+struct RecordsDeathRing(Defaultable, Movable):
+    var keys: InlineArray[Int, RECORDS_DEAD_RING]
+    # Releases posted so far; the release numbered s (1-based) sits at
+    # keys[(s - 1) % RECORDS_DEAD_RING].
+    var seq: Int
+    # One lock word: the post runs with the GIL held (a weakref callback),
+    # a poll may run from a device entry with the GIL released.
+    var lock: List[Int64]
 
     def __init__(out self):
-        self.hooks = InlineArray[RecordsReleaseHook, RECORDS_RELEASE_HOOKS_MAX](fill=_records_no_hook)
-        self.count = 0
+        self.keys = InlineArray[Int, RECORDS_DEAD_RING](fill=0)
+        self.seq = 0
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-# Shared by every Mojo extension in the process (one registry, like the table).
-comptime MODEL_RECORDS_HOOKS = _Global[
-    StorageType=RecordsReleaseHooks, name="MojolearnModelRecordsHooksV2",
-    init_fn=RecordsReleaseHooks.__init__,
+# Shared by every Mojo extension in the process (one ring, like the table).
+comptime MODEL_RECORDS_DEATHS = _Global[
+    StorageType=RecordsDeathRing, name="MojolearnModelRecordsDeathsV1",
+    init_fn=RecordsDeathRing.__init__,
 ]
 
 
-def records_register_release_hook(hook: RecordsReleaseHook) -> Bool:
-    """Register `hook` to run with the model key whenever an entry is
-    released (model death, a stale entry, an explicit records_release).
-    False when the registry is full (RECORDS_RELEASE_HOOKS_MAX) or not
-    reachable; the caller's store then keeps its own eviction."""
-    try:
-        var g = MODEL_RECORDS_HOOKS.get_or_create_ptr()
-        var n = g[].count
-        if n >= RECORDS_RELEASE_HOOKS_MAX:
-            return False
-        # Registration runs with the GIL held (inside a native call), so no
-        # lock is needed; the slot is written before the count is raised,
-        # so a concurrent reader never sees an unwritten slot.
-        g[].hooks[n] = hook
-        g[].count = n + 1
-        return True
-    except:
-        return False
+def _deaths() raises -> UnsafePointer[RecordsDeathRing, MutAnyOrigin]:
+    return MODEL_RECORDS_DEATHS.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
-def _records_run_release_hooks(model_key: Int):
+def _deaths_lock(ring: UnsafePointer[RecordsDeathRing, MutAnyOrigin]):
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](ring[].lock.unsafe_ptr())
+    while True:  # driver-loop: spin on the ring's lock word (held for a few word copies only)
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, Int64(1)):
+            return
+
+
+def _deaths_unlock(ring: UnsafePointer[RecordsDeathRing, MutAnyOrigin]):
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](ring[].lock.unsafe_ptr())
+    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
+
+
+def _records_post_death(model_key: Int):
+    """Append `model_key` to the ring (overwriting the oldest when full).
+    Non-raising: it runs from death callbacks."""
     try:
-        var g = MODEL_RECORDS_HOOKS.get_or_create_ptr()
-        var n = g[].count
-        for i in range(n):  # small-loop(registered release hooks, at most RECORDS_RELEASE_HOOKS_MAX)
-            var hook = g[].hooks[i]
-            hook(model_key)
+        var ring = _deaths()
+        _deaths_lock(ring)
+        ring[].keys[ring[].seq % RECORDS_DEAD_RING] = model_key
+        ring[].seq += 1
+        _deaths_unlock(ring)
     except:
         pass
+
+
+def records_death_seq() -> Int:
+    """The number of releases posted so far (a store's starting point)."""
+    try:
+        var ring = _deaths()
+        _deaths_lock(ring)
+        var seq = ring[].seq
+        _deaths_unlock(ring)
+        return seq
+    except:
+        return 0
+
+
+def records_dead_keys_since(seq: Int, mut keys: List[Int]) -> Int:
+    """Append to `keys` every key released after sequence word `seq` (oldest
+    first) and return the current sequence word, the caller's next `seq`.
+    When more keys were released since `seq` than the ring holds, nothing is
+    appended and the NEGATED current sequence word is returned (always < 0):
+    the caller forgets everything it holds and keeps `-result` as its next
+    `seq`. Non-raising; any thread (the ring has its own lock word)."""
+    try:
+        var ring = _deaths()
+        _deaths_lock(ring)
+        var now = ring[].seq
+        if seq >= now:
+            _deaths_unlock(ring)
+            return now
+        if seq < 0 or now - seq > RECORDS_DEAD_RING:
+            _deaths_unlock(ring)
+            return -now
+        for s in range(seq, now):  # driver-loop: over releases posted since the caller's last poll (at most RECORDS_DEAD_RING)
+            keys.append(ring[].keys[s % RECORDS_DEAD_RING])
+        _deaths_unlock(ring)
+        return now
+    except:
+        return seq
 
 
 def _records_release_token(token: Int) raises:
