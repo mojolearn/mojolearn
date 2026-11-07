@@ -5,7 +5,7 @@ plan. State as of 2026-11-06 ~03:00Z, main `f069cb12ba`.
 
 ## The plan in one paragraph
 
-Stabilising Mojolearn goes through performance. First find and fix the time regressions since 0.8.55 (most come from
+Stabilising Mojolearn goes through performance. First find and fix the per-call Python and repeated work on the hot paths (most of it came from
 taking Python out of the runtime and doing it badly: Mojo code that still asks Python for each data item). Fix them in
 Mojo; never bring Python back. Shrink verification fixtures so no lane is slow. Then each release does ONE verification
 round: build the wheels once, run every lane and every check once on every device from those wheels, compare, publish.
@@ -61,12 +61,12 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 Briefs for all of these: `~/mojolearn-evidence/briefs-20261105/`. CPU pod test results and scripts:
 `~/mojolearn-evidence/integ-tooling-20261105b/` (`run-leg*.sh`, `leg*/remote/leg_out/`; main's result is `leg13`).
 
-## Regressions since 0.8.55 and the fix lanes (started 2026-11-06 ~04:30Z)
+## Timing comparison against 0.8.55 and the fix lanes (started 2026-11-06 ~04:30Z)
 
 Report: `~/mojolearn-evidence/regressions-since-0855.md` (reader: `tools/identity_timing_compare.py` on
 `lane/regressions-since-0855`). Same lanes, same fixtures, stored identity timings: NVIDIA 424 -> 806 s (1.4x; hardware
 label uncertain), AMD 415 -> 696 s (1.5x; MI325X -> MI300X), Apple 1242 -> 1715 s (1.6x; part is Mac load), CPU
-485 -> 1455 s (2.8x, stops at Oct 25). Regressed lanes: 111 / 88 / 156 / 298. Only 2c61cfe498 is confirmed by records;
+485 -> 1455 s (2.8x, stops at Oct 25). Lanes slower in the stored timings: 111 / 88 / 156 / 298 (Apple and CPU figures are mostly machine load and a changed CPU, see the corrected table). Only 2c61cfe498 is confirmed by records;
 the other commits are candidates by window and path. Behind most lanes is a fixed extra cost per public
 predict/transform call (~20 ms on CPU, 1-2 ms on GPU).
 
@@ -125,7 +125,7 @@ flags the shared modules it changes; never `--no-verify`). Per-lane site tables:
 
 ## Order of work
 
-1. Finish the regression table against 0.8.55 and the per-item Python audit; hand every item to an Opus fix lane
+1. Finish the timing comparison against 0.8.55 and the per-item Python audit; hand every item to an Opus fix lane
    (Fable judges, Opus implements; lanes write code and push, they never compile or run).
 2. Test tooling and harness changes on RunPod CPU pods; merge when green against main's result.
 3. When the fix lanes are in: ONE integration branch, ONE compile (all switches, NVIDIA and AMD targets on cheap CPU
