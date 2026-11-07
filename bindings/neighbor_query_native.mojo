@@ -24,7 +24,7 @@ from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.neighbors_knn_native import knn_door, knn_state_values, knn_state_unchanged
 from bindings.neighbors_ann_native import _ivf_metric, _ann_release, IVF_QUERY_STATE_SLOT
 from bindings.neighbors_ann_query_native import ann_pq_materialize
-from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, _i32_vector, _flag
+from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, neighbor_radius_rows, _i32_vector, _flag
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.parallel_public_result import parallel_public_result
 from bindings.scaler_lifecycle_native import _outside
@@ -663,7 +663,10 @@ def neighbor_query(model: PythonObject, op: String, args: PythonObject, context:
         if _flag(args[3], "sort_results", context):
             py_setitem(entries, "_mojolearn_x_neighbors", _query_route(model, kind, "sort", context))
         py_setitem(tables, "worker_bindings", entries)
-        return _radius(model, args[0], kwargs, binding, tables, context)
+        # N451 (lane ne2-i-j) made `_radius` return its CSR triple for the
+        # parallel worker; the public query builds the documented ragged
+        # rows from it here, as the parallel parent does.
+        return neighbor_radius_rows(_radius(model, args[0], kwargs, binding, tables, context), context)
     raise Error("TypeError: unsupported native neighbor query for this model")
 
 
