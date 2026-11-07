@@ -10,6 +10,8 @@ opt-in) and the planner its workflow calls.
     python3 tools/release_github_build.py plan --src SRC --sets 'sm_89 gfx942' --shards 6   (the workflow)
     python3 tools/release_github_build.py job-map ...                                       (the workflow)
     python3 tools/release_github_build.py layout --commit C [--planner]    merged | per-binding
+
+`run` writes every job of the finished run to the timing ledger (kind workflow; tools/timing_ledger.py).
     python3 tools/release_github_build.py run --commit C --host --host-donor <leg>/release-build/build --out DIR
     python3 tools/release_github_build.py estimate [--sets 'sm_89 sm_80 gfx942 host'] [--modes identical]
 
@@ -857,6 +859,15 @@ def seconds(a, b):
         return None
 
 
+def ledger_workflow(view, run_id):
+    """Every job of the finished run into the timing ledger (kind workflow; GitHub's own startedAt/completedAt)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import timing_ledger
+    timing_ledger.safe(timing_ledger.ingest_workflow,
+                       dict(view, databaseId=view.get("databaseId", run_id),
+                            workflowName=view.get("workflowName") or "github-build"))
+
+
 def wait_run(run_id, timeout_min, pause):
     deadline = time.time() + timeout_min * 60
     last = None
@@ -1198,6 +1209,7 @@ def cmd_run(a):
                      j.get("completedAt"), seconds(j.get("startedAt"), j.get("completedAt")), j.get("url", "")))
     (gha / "jobs.tsv").write_text("".join("\t".join(str(x) for x in r) + "\n" for r in rows))
     (gha / "run.json").write_text(json.dumps(view, indent=1) + "\n")
+    ledger_workflow(view, a.run_id)
     failed = [r for r in rows if r[1] not in ("success", "skipped")]
     if a.compile_groups:
         # These archives qualify only their actual compilation. They are not
