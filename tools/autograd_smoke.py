@@ -85,6 +85,11 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+#: THE TESTS COME FROM THE FROZEN SOURCE, THE TOOL FROM THE TOOLING CHECKOUT (tools/release.py: the source is
+#: frozen, the tooling runs from HEAD). MOJOLEARN_SMOKE_SOURCE_ROOT names the source tree the pytest entries and
+#: the tests' fixture are read from (the CPU checks job checks the frozen commit out beside the tooling);
+#: unset, the tool's own tree.
+SOURCE = Path(os.environ.get("MOJOLEARN_SMOKE_SOURCE_ROOT") or ROOT).resolve()
 VENDORS = ("metal", "nvidia", "amd")
 BINDING_VENDOR = {"metal": "metal", "nvidia": "cuda", "amd": "hip", "cpu": "cpu"}
 #: THE CPU ROUTE (release.py --identity-on-wheels, Andrew 2026-11-05: every check that needs no card runs on
@@ -329,7 +334,7 @@ def probe_import():
     import numpy as np
     import mojolearn
     spec = importlib.util.spec_from_file_location(
-        "smoke_onnx_fixture", ROOT / "python" / "mojolearn" / "tests" / "_onnx_fixture.py")
+        "smoke_onnx_fixture", SOURCE / "python" / "mojolearn" / "tests" / "_onnx_fixture.py")
     fx = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = fx      # its dataclasses resolve their module by name
     spec.loader.exec_module(fx)
@@ -350,7 +355,7 @@ def _load_onnx_fixture():
     """The tests' fixture module, loaded by path (the wheel ships no tests)."""
     import importlib.util
     spec = importlib.util.spec_from_file_location(
-        "smoke_onnx_fixture", ROOT / "python" / "mojolearn" / "tests" / "_onnx_fixture.py")
+        "smoke_onnx_fixture", SOURCE / "python" / "mojolearn" / "tests" / "_onnx_fixture.py")
     fx = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = fx      # its dataclasses resolve their module by name
     spec.loader.exec_module(fx)
@@ -424,6 +429,12 @@ def probe_real_model():
         import torch  # noqa: F401
         import torchvision  # noqa: F401
     except ImportError as exc:
+        # The CPU column installs no torch: the framework interop runs on a GPU (the adapters refuse
+        # MOJOLEARN_VENDOR=cpu by design), so there it reads SKIPPED with the reason, like import-torch-smoke.
+        if mojolearn.vendor() == "cpu" and os.environ.get("MOJOLEARN_REQUIRE_TORCH") != "1":
+            print("SKIPPED no torch or torchvision on the cpu column (%s: %s)"
+                  % (type(exc).__name__, str(exc)[:160]), flush=True)
+            return 0
         print("SMOKE_FAIL real-model torch or torchvision is not installed (%s)" % exc)
         return 1
     model = dict(rm.MODELS["squeezenet1_1"], input=(lambda b: (1, 3, 64, 64), "image"))
@@ -499,7 +510,7 @@ def python_entry(entry, vendor, binding_report, junit, source_package=None):
     deselect = os.environ.get("MOJOLEARN_GATE_DESELECT_K")
     return int(pytest.main(["-q", "-s", "-x", "-p", "no:cacheprovider", "--import-mode=importlib",
                            *(["-k", deselect] if deselect else []),
-                           "--junitxml=" + str(junit), str(ROOT / entry["pytest"])]))
+                           "--junitxml=" + str(junit), str(SOURCE / entry["pytest"])]))
 
 
 def pytest_result(path):
