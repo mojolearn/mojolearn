@@ -47,9 +47,7 @@ WHAT THIS DOES NOT COVER (say it plainly):
     multi-device is not a Metal feature, and this option does not change that; the CPU column: a CPU-only install
     has no cooperative multi-device plan (the same door refuses it), so there is nothing to check there;
   * the families not on the list (QR panels, hierarchy and neighbors kNN rows, the optimizer / training and
-    autograd distributed programs, which open DeviceContext(device_id=rank) without a plan), and two dispatchers
-    no public IDENTICAL call reaches: the GLM gradient columns (glm/impl/qn/multi_gpu.mojo; every GLM takes the QN
-    tiled order) and the Gram of an unweighted Ridge / LinearRegression (`linear_gram_fit`, no plan).
+    autograd distributed programs, which open DeviceContext(device_id=rank) without a plan).
 tools/two_device_checks.sh remains THE real two-GPU check (2x L40S; run it after any multi_gpu.mojo or device plan
 change).
 
@@ -76,6 +74,8 @@ LOGICAL_ENV = "MOJOLEARN_DEVICE_PLAN_LOGICAL"
 #: the device counts every lane runs: 1 is the single-device plan, the rest are logical devices on one card
 COUNTS = (1, 2, 3)
 LANE_TIMEOUT = 1200
+#: the most lanes the list may hold (one per dispatcher family; 15 since lane ne2-i-j added GLM, Ridge, OLS)
+MAX_LANES = 16
 
 # ---------------------------------------------------------------------------------------------------- THE LIST
 # lane, dispatcher family (the multi_gpu file whose shard path the call reaches), recipe, fixture, rows, features,
@@ -90,9 +90,6 @@ LANE_TIMEOUT = 1200
 #                (kernels.mojo `device_plan_setting("MOJOLEARN_GP_DEVICE_COUNT")`): rows >= 3. The defaults are
 #                optimizer=None and a fixed ConstantKernel * RBF kernel (python/mojolearn/_gp_impl.py), so no
 #                hyperparameter search runs; the n x n Cholesky stays on the root, so 512 rows keeps it small.
-#                (Not LogisticRegression: in IDENTICAL every GLM gradient takes the QN tiled order, binary
-#                `qn_tiled_applies` and C > 1 `qn_tiled_multi_applies` in glm/impl/qn/glm_base.mojo, which never calls
-#                glm/impl/qn/multi_gpu.mojo `gradient_columns`, so a GLM lane never spreads.)
 #   lasso-cd     row leaves of 128 (bench/gemm_shapes.mojo contract_leaf_size), k <= 128 stays single
 #                (solver/multi_gpu.mojo:63): rows >= 2*128 + 1; only the column mean / norm passes before the
 #                Gram sweeps reach it
@@ -102,8 +99,6 @@ LANE_TIMEOUT = 1200
 #                features <= GRAM_MAX_COLS = 128 (core/gram_splitk.mojo `gram_splitk_applies`) -> core/gram_multi_gpu.mojo
 #                `gram_splitk_parallel`: kc = ceil(rows/128) over the 128 pinned chunks, live = min(128, ceil(rows/kc)),
 #                active = min(count, live). Rule: features <= 128 and rows >= 3*128 give >= 3 live chunks.
-#                (Not Ridge / LinearRegression: their unweighted IDENTICAL fit takes `linear_gram_fit` first,
-#                bindings/classical_ridge.mojo:103-109, which reads no DevicePlan, so it never spreads.)
 #   kmeans       row tiles of mblk = 4*8 = 32 rows below 32 features (cluster/multi_gpu.mojo:84-85,
 #                fused_distance_nn/simt_kernel.mojo:201-230): rows >= 2*32 + 1
 #   dbscan       query rows, active = min(count, rows) (dbscan/impl/multi_gpu.mojo:47): rows >= 3; the default
@@ -118,6 +113,17 @@ LANE_TIMEOUT = 1200
 #                features >= 2*4 + 1
 #   forest       groves = min(32, trees), active = min(count, groves) (core/forest_inference_pool.mojo:418):
 #                n_estimators >= 3 (the recipe fits 16)
+#   logistic     gradient columns, active = min(count, features) (glm/impl/qn/multi_gpu.mojo `gradient_columns`,
+#                lane ne2-i-j 2026-11-07): features >= 3. The recipe fits a binary model (the C == 1 tiled objective,
+#                glm_base.mojo `_enqueue_tiled_columns`) and a 3-class one (C > 1, `linear_bwd`), so both arms of
+#                the GLM objective shard.
+#   ridge-gram   Ridge's identical fit takes `linear_gram_fit` first (bindings/classical_ridge.mojo); its centered
+#                Gram and cross go in whole leaves of contract_leaf_size(n) rows (= 128 below 128 * 128 rows),
+#                active = min(count, leaves) (core/blocked_moments_multi_gpu.mojo): rows >= 3 * 128 + 1
+#   ols-tsqr     LinearRegression's identical fit (fit_intercept, no weights) takes the centered TSQR
+#                (x_decomp/device.mojo `ols_tsqr_factor`); whole row blocks of TS_ROWS rows (4096, or 2048 under
+#                C24_ROWS2048; x_decomp/tsqr_core.mojo), blocks = rows // TS_ROWS, active = min(count, blocks)
+#                (x_decomp/tsqr_multi_gpu.mojo): rows >= 3 * 4096
 LANES = (
     ("svm-rbf", "svm/multi_gpu.mojo", "svm", "classify", 600, 16, 11),
     ("gp-regress", "gaussian_process/checks/kernels.mojo", "gp", "regress", 512, 8, 12),
@@ -131,6 +137,9 @@ LANES = (
     ("iforest", "isolation_forest/multi_gpu.mojo", "iforest", "regress", 2000, 8, 20),
     ("gbdt", "gbdt/methods/pointwise_multi_gpu.mojo", "gbdt", "regress", 2000, 16, 21),
     ("forest-predict", "core/forest_inference_pool.mojo", "forest", "classify", 2000, 16, 22),
+    ("glm-logistic", "glm/impl/qn/multi_gpu.mojo", "logistic", "blobs", 2000, 8, 23),
+    ("ridge-gram", "core/blocked_moments_multi_gpu.mojo", "ridge", "regress", 2000, 16, 24),
+    ("ols-tsqr", "x_decomp/tsqr_multi_gpu.mojo", "ols", "regress", 13000, 8, 25),
 )
 
 
@@ -142,8 +151,8 @@ def lane_errors(lanes=LANES):
     """Why the fixed list is malformed, or [] (checked before anything runs, and by the unit tests)."""
     errors = []
     names = [row[0] for row in lanes]
-    if not 6 <= len(lanes) <= 12:
-        errors.append("the list holds %d lanes, not 6..12" % len(lanes))
+    if not 6 <= len(lanes) <= MAX_LANES:
+        errors.append("the list holds %d lanes, not 6..%d" % (len(lanes), MAX_LANES))
     if len(set(names)) != len(names):
         errors.append("duplicate lane names")
     if len({row[1] for row in lanes}) != len(lanes):
@@ -403,8 +412,31 @@ def _forest(ml, X, y, devices):
         return [("predict_proba", pool.predict_proba(X))]
 
 
+def _logistic(ml, X, y, devices):
+    import numpy as np  # test control only: the two label vectors are built in the harness
+    from mojolearn import parallel_classical as pc
+    # the blobs fixture's 4 labels: a 3-class fit (C > 1) on min(label, 2) and a binary one (C == 1) on label > 1
+    multi = pc.fit_logistic(ml.LogisticRegression(max_iter=50), X, np.minimum(y, 2), devices=devices)
+    binary = pc.fit_logistic(ml.LogisticRegression(max_iter=50), X, (y > 1).astype(np.int32), devices=devices)
+    return [("multi coef_", multi.coef_), ("multi intercept_", multi.intercept_),
+            ("binary coef_", binary.coef_), ("binary intercept_", binary.intercept_)]
+
+
+def _ridge(ml, X, y, devices):
+    from mojolearn import parallel_classical as pc
+    est = pc.fit_gram_estimator(ml.Ridge(alpha=1.0), X, y, devices=devices)
+    return [("coef_", est.coef_), ("intercept_", [est.intercept_])]
+
+
+def _ols(ml, X, y, devices):
+    from mojolearn import parallel_classical as pc
+    est = pc.fit_gram_estimator(ml.LinearRegression(), X, y, devices=devices)
+    return [("coef_", est.coef_), ("intercept_", [est.intercept_])]
+
+
 RECIPES = dict(svm=_svm, gp=_gp, lasso=_lasso, tsvd=_tsvd, kmeans=_kmeans, dbscan=_dbscan,
-               gmm=_gmm, bootstrap=_bootstrap, cholesky=_cholesky, iforest=_iforest, gbdt=_gbdt, forest=_forest)
+               gmm=_gmm, bootstrap=_bootstrap, cholesky=_cholesky, iforest=_iforest, gbdt=_gbdt, forest=_forest,
+               logistic=_logistic, ridge=_ridge, ols=_ols)
 
 
 # ---------------------------------------------------------------------------------------------------- WORKER
