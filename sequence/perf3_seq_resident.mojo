@@ -37,6 +37,15 @@ before any lookup, so a block leaves at the model's death instead of
 waiting for the least-recently-used eviction, and a new model at a reused
 address never meets the old block. `seq_resident_release_owner` frees one
 model's block directly (the GPU binding's release door).
+A slot whose device address was handed to a predict is PINNED from the
+lookup until that predict's launches are queued (`seq_resident_resolve`
+returns the pinned owner, the dispatch calls `seq_resident_unpin` after
+`neural_model_execute`, sequence/model_device_dispatch.mojo): eviction picks
+the least recently used UNPINNED slot (none free: the call takes the
+per-call upload), a stale-token replacement of a pinned slot is deferred
+(per-call upload for that call), and a posted death of a pinned slot is
+posted again for the next drain. Every free synchronizes the shared context
+first, so launches queued before the unpin finish before the block goes.
 """
 from std.ffi import _Global
 from std.atomic import Atomic, Ordering
@@ -44,7 +53,7 @@ from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec, _pcopy
-from sequence.perf3_seq_resident_words import SEQ_RESIDENT_ON_EXEC, seq_resident_take_dead
+from sequence.perf3_seq_resident_words import SEQ_RESIDENT_ON_EXEC, seq_resident_take_dead, seq_resident_owner_died
 
 comptime _SLOTS = 64
 comptime _KEEP_BYTES = 1 << 30
@@ -56,6 +65,11 @@ struct _SeqResidentStore(Defaultable, Movable):
     var tokens: List[Int]
     var counts: List[Int]
     var used: List[Int]
+    # Per-slot pin counts: a predict that was handed a slot's device address
+    # holds a pin from the lookup until its launches are queued
+    # (`seq_resident_unpin`); no eviction, replacement or death drain frees a
+    # pinned slot.
+    var pins: List[Int]
     var bufs: List[DeviceBuffer[DType.float32]]
     var tick: Int
     var bytes: Int
@@ -68,6 +82,7 @@ struct _SeqResidentStore(Defaultable, Movable):
         self.tokens = List[Int]()
         self.counts = List[Int]()
         self.used = List[Int]()
+        self.pins = List[Int]()
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.tick = 0
         self.bytes = 0
@@ -77,8 +92,8 @@ struct _SeqResidentStore(Defaultable, Movable):
 # One store per numeric tier, next to that tier's sequence context (a FAST
 # and an IDENTICAL binding in one process never share device memory).
 comptime _STORE_NAME = (
-    "MojoXSequenceResidentParamsIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojoXSequenceResidentParamsFastV2"
+    "MojoXSequenceResidentParamsIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojoXSequenceResidentParamsFastV3"
 )
 comptime _STORE = _Global[StorageType=_SeqResidentStore, name=_STORE_NAME, init_fn=_SeqResidentStore.__init__]
 
@@ -106,7 +121,9 @@ def _store_unlock(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin]):
 
 def _evict_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin], mut ex: DeviceExec, i: Int) raises:
     """Free slot i, after every queued launch that may still read it (the
-    caller holds the lock)."""
+    caller holds the lock and has checked the slot is not pinned)."""
+    if store[].pins[i] > 0:
+        raise Error("sequence resident store: a pinned slot cannot be freed")
     ex.ctx.synchronize()
     store[].bytes -= store[].counts[i] * 4
     _ = store[].owners.pop(i)
@@ -114,6 +131,7 @@ def _evict_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin], mut ex:
     _ = store[].tokens.pop(i)
     _ = store[].counts.pop(i)
     _ = store[].used.pop(i)
+    _ = store[].pins.pop(i)
     _ = store[].bufs.pop(i)
 
 
@@ -121,6 +139,11 @@ def _drop_owner_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin], mu
                        owner: Int) raises:
     for i in range(len(store[].owners)):  # driver-loop: over resident fitted-model slots (at most _SLOTS), owner lookup
         if store[].owners[i] == owner:
+            if store[].pins[i] > 0:
+                # A predict is between its lookup and its launch: keep the
+                # slot and post the death again for the next drain.
+                seq_resident_owner_died(owner)
+                return
             _evict_locked(store, ex, i)
             return
 
@@ -180,16 +203,25 @@ def _resident_params_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin
         if store[].owners[i] == owner:
             if store[].tokens[i] == token and store[].counts[i] == n and store[].devices[i] == device:
                 store[].used[i] = store[].tick
+                store[].pins[i] += 1  # released by seq_resident_unpin after the launch is queued
                 return Int(store[].bufs[i].unsafe_ptr())
+            if store[].pins[i] > 0:
+                # Another thread's predict still reads the old block: this
+                # call takes the per-call upload, the slot is replaced later.
+                return 0
             _evict_locked(store, ex, i)  # refit, replaced or edited fitted block of this model, or another device
             break
     if token <= 0 or n <= 0 or src == 0 or n * 4 > _KEEP_BYTES:
         return 0
     while len(store[].owners) > 0 and (len(store[].owners) >= _SLOTS or store[].bytes + n * 4 > _KEEP_BYTES):
-        var oldest = 0
-        for i in range(1, len(store[].used)):  # driver-loop: over resident fitted-model slots (at most _SLOTS), least recently used
-            if store[].used[i] < store[].used[oldest]:
+        var oldest = -1
+        for i in range(len(store[].used)):  # driver-loop: over resident fitted-model slots (at most _SLOTS), least recently used unpinned
+            if store[].pins[i] == 0 and (oldest < 0 or store[].used[i] < store[].used[oldest]):
                 oldest = i
+        if oldest < 0:
+            # Every slot is pinned by a running predict: keep none for this
+            # call (the per-call upload), free nothing.
+            return 0
         _evict_locked(store, ex, oldest)
     var buf = ex.ctx.enqueue_create_buffer[DType.float32](n)
     # The executor's own upload route: the caller's floats are copied into a
@@ -206,22 +238,48 @@ def _resident_params_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin
     store[].tokens.append(token)
     store[].counts.append(n)
     store[].used.append(store[].tick)
+    store[].pins.append(1)  # released by seq_resident_unpin after the launch is queued
     store[].bufs.append(buf^)
     store[].bytes += n * 4
     return address
 
 
-def seq_resident_resolve(mut ex: DeviceExec, mut addresses: List[Int], base: Int) raises:
+def seq_resident_unpin(owner: Int):
+    """Drop the pin `seq_resident_resolve` took for `owner` (0: nothing was
+    pinned). Called once the predict's launches are queued, on success and
+    on error; a free after this synchronizes the shared context first
+    (`_evict_locked`), so the queued launches finish before the block goes.
+    Non-raising."""
+    if owner == 0:
+        return
+    try:
+        var store = _store()
+        _store_lock(store)
+        for i in range(len(store[].owners)):  # driver-loop: over resident fitted-model slots (at most _SLOTS), owner lookup
+            if store[].owners[i] == owner:
+                if store[].pins[i] > 0:
+                    store[].pins[i] -= 1
+                break
+        _store_unlock(store)
+    except:
+        pass
+
+
+def seq_resident_resolve(mut ex: DeviceExec, mut addresses: List[Int], base: Int) raises -> Int:
     """A predict's address list (`base` own words, params at index 1): a
     named block (`base + 3` words) becomes `base` words with params replaced
     by its resident device copy plus the marker word; an unnamed one is left
     as it is. A list that already carries the marker is refused: only this
-    dispatch may say params is device memory."""
+    dispatch may say params is device memory.
+
+    Returns the owner word whose slot is now PINNED (0 when no device
+    address was handed out). The caller must call `seq_resident_unpin` with
+    it after the launches that read the address are queued, on every path."""
     var n = len(addresses)
     if n == base + 1:
         raise Error("native model: invalid predict address descriptor")
     if n != base + 3:
-        return
+        return 0
     var owner = addresses[base]
     var token = addresses[base + 1]
     var count = addresses[base + 2]
@@ -231,3 +289,5 @@ def seq_resident_resolve(mut ex: DeviceExec, mut addresses: List[Int], base: Int
     if resident != 0:
         addresses[1] = resident
         addresses.append(SEQ_RESIDENT_ON_EXEC)
+        return owner
+    return 0
