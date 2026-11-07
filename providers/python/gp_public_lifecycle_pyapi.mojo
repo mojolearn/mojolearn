@@ -5,6 +5,7 @@
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.admitted_call import AdmittedCall
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native import _fields, _class_fields, _plan, _configuration_value
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
@@ -189,14 +190,16 @@ def _gp_finished(value: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 
-def _gp_public_arguments(model: PythonObject, fields: PythonObject, args: PythonObject,
+def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    var metadata = py_fields(native_loaded_module("mojolearn._mode"))["_MODE_METADATA_CONTEXT"]
-    var plan = _plan(model, fields, metadata)
+    # `call`: the door's admission record (modules, fields, the resolved
+    # binding), so the binding is resolved once per public call (N219).
+    var b = call.builtins()
+    var metadata = py_fields(call.module("mojolearn._mode"))["_MODE_METADATA_CONTEXT"]
+    var plan = _plan(call.modules, model, fields, metadata)
     var route = String(plan["route"])
     if route != "host" and route != "host_gp":
-        return estimator_arguments(model, "_mojolearn_gp", args, context)
+        return estimator_arguments(call, model, "_mojolearn_gp", args, context)
     # cpu-route: inherited methods of explicit HostGaussianProcess* classes
     # retain their import-connected host route, even in a GPU installation.
     # This is never a fallback from a GPU estimator or process-selected mode.
@@ -222,7 +225,7 @@ def _gp_public_arguments(model: PythonObject, fields: PythonObject, args: Python
     var module_name = py_get(py_fields(module), "__name__")
     if py_type(module_name) is not b.str:
         raise Error("TypeError: GP host module name must be an exact string")
-    var live = py_get(native_loaded_module("sys").modules, module_name)
+    var live = py_get(call.module("sys").modules, module_name)
     if live is None:
         raise Error("ImportError: GP host binding was removed after import-time connection")
     var live_reader = neural_descriptor_entry(live, String(reader.__name__))
@@ -250,9 +253,14 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     if guarded and not fitting:
         classical_require_fitted(model, False, method, context)
     fields = _gp_admit_state(model, context, classifier, fitting)
+    # One admission record for this public call (ne1-e-admitted-call): the
+    # binding resolutions below (the GP binding and, for a classifier, the
+    # base binding) read it instead of resolving per helper (N219, N256).
+    var call = AdmittedCall()
+    call.admit_fields(fields)
     var name = classical_estimator_name(model)
     var source = args[x_index] if guarded else PythonObject(None)
-    var values = py_call(native_loaded_module("builtins").list, args)
+    var values = py_call(call.builtins().list, args)
     var rows = 0
     var columns = 0
     var input_copied = False
@@ -283,12 +291,15 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
         classical_admit_value(args[1], context)
     if guarded and method == "score":
         classical_admit_value(args[x_index + 1], context)
-    var prepared = _gp_public_arguments(model, fields, values, context)
+    # The X / y admissions above may run in GIL release windows and take no
+    # record: re-admit the record's modules before resolving the bindings.
+    call.released()
+    var prepared = _gp_public_arguments(call, model, fields, values, context)
     if double_binding and prepared[1] is None:
-        var base = estimator_binding_mode(PythonObject("identical"), "_mojolearn", context)
-        values = py_call(native_loaded_module("builtins").list, prepared)
+        var base = estimator_binding_mode(call, PythonObject("identical"), "_mojolearn", context)
+        values = py_call(call.builtins().list, prepared)
         py_setitem(values, 1, base)
-        prepared = py_call(native_loaded_module("builtins").tuple, values)
+        prepared = py_call(call.builtins().tuple, values)
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
