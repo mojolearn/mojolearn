@@ -182,11 +182,18 @@ def test_optimizer_config_refuses(options):
         SmallMLPTrainer(*weights(), data_schedule={'dataset': 'test'}, **options)
 
 
-@pytest.mark.parametrize('schedule', [{}, [1], {'a': float('nan')}, {'a': object()},
+@pytest.mark.parametrize('schedule', [{}, [1], {'a': float('nan')},
                                       {'a': 'x' * 3000}, {1: 'x'}])
 def test_data_schedule_refuses(schedule):
     with pytest.raises(ValueError):
         SmallMLPTrainer(*weights(), data_schedule=schedule)
+
+
+def test_data_schedule_refuses_a_python_object_value_by_type():
+    # A value of a Python-defined type is refused by the native input
+    # admission (TypeError) before any of its methods could run.
+    with pytest.raises(TypeError, match='native input types'):
+        SmallMLPTrainer(*weights(), data_schedule={'a': object()})
 
 
 def test_checkpoint_is_canonical_complete_and_resumable(tmp_path):
