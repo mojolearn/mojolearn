@@ -1673,26 +1673,40 @@ def _predict_staged(model: PythonObject, fields: PythonObject, kind: String, sta
 def forest_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict_proba`: RF and DT the float32 vote fractions; ET the vote
     widened to float64; a random-splitter tree its inner forest's."""
-    var fields = py_fields(model)
-    var kind = forest_kind(model, context)
+    # A random-splitter tree answers through its inner forest: followed in a
+    # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
+    # the compile hang was elsewhere); same model reached, same calls on it.
+    var target = model
+    var fields = py_fields(target)
+    var kind = forest_kind(target, context)
     var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
-    if inner is not None:
-        return forest_predict_proba(inner, args, context)
-    var staged = _predict_input(model, fields, kind, args[0], context)
-    return _proba_staged(model, fields, kind, staged, context)
+    while inner is not None:  # driver-loop: over a tree's inner-forest chain
+        target = inner
+        fields = py_fields(target)
+        kind = forest_kind(target, context)
+        inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
+    var staged = _predict_input(target, fields, kind, args[0], context)
+    return _proba_staged(target, fields, kind, staged, context)
 
 
 def forest_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict`: a classifier's labels (the resident fused labels, else the
     first-max argmax of the vote) decoded through `classes_`; a regressor's
     values (RF and DT float32, ET float64)."""
-    var fields = py_fields(model)
-    var kind = forest_kind(model, context)
+    # A random-splitter tree answers through its inner forest: followed in a
+    # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
+    # the compile hang was elsewhere); same model reached, same calls on it.
+    var target = model
+    var fields = py_fields(target)
+    var kind = forest_kind(target, context)
     var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
-    if inner is not None:
-        return forest_predict(inner, args, context)
-    var staged = _predict_input(model, fields, kind, args[0], context)
-    return _predict_staged(model, fields, kind, staged, context)
+    while inner is not None:  # driver-loop: over a tree's inner-forest chain
+        target = inner
+        fields = py_fields(target)
+        kind = forest_kind(target, context)
+        inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
+    var staged = _predict_input(target, fields, kind, args[0], context)
+    return _predict_staged(target, fields, kind, staged, context)
 
 
 def forest_predict_codes(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1700,15 +1714,22 @@ def forest_predict_codes(model: PythonObject, args: PythonObject, context: Pytho
     `(classes_, codes)`, the codes an int32 or int64 Array indexing
     `classes_`. Internal callers that work in codes (AdaBoost's members,
     the string-class accuracy of `score`) skip the decode and re-encode."""
-    var fields = py_fields(model)
-    var kind = forest_kind(model, context)
+    # A random-splitter tree answers through its inner forest: followed in a
+    # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
+    # the compile hang was elsewhere); same model reached, same calls on it.
+    var target = model
+    var fields = py_fields(target)
+    var kind = forest_kind(target, context)
     var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
-    if inner is not None:
-        return forest_predict_codes(inner, args, context)
+    while inner is not None:  # driver-loop: over a tree's inner-forest chain
+        target = inner
+        fields = py_fields(target)
+        kind = forest_kind(target, context)
+        inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
     if not _classifier(kind):
         raise Error("TypeError: forest class codes require a classifier")
-    var staged = _predict_input(model, fields, kind, args[0], context)
-    return Python.tuple(fields["classes_"], _codes_staged(model, fields, kind, staged, context))
+    var staged = _predict_input(target, fields, kind, args[0], context)
+    return Python.tuple(fields["classes_"], _codes_staged(target, fields, kind, staged, context))
 
 
 def forest_public_predict(model: PythonObject, kind: String, x: TreesMatrix, proba: Bool, codes: Bool,

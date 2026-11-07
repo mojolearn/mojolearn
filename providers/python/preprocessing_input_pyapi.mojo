@@ -3,7 +3,9 @@
 # Only this edge reads the user's mutable array metadata. The fit/transform
 # stages share a frozen Array view and retain its original buffer owners.
 from std.python import Python, PythonObject
-from std.python.bindings import PythonModuleBuilder
+from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.py_balanced import py_call, py_type, py_setattr, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
@@ -40,7 +42,17 @@ struct ScalerInputSnapshot(Movable, Writable):
 def register_scaler_snapshot(mut module: PythonModuleBuilder) raises:
     # The owning module must register every PythonObject(alloc=...) value
     # before its public lifecycle can create the operation-local snapshot.
-    _ = module.add_type[ScalerInputSnapshot]("_ScalerInputSnapshot")
+    # Once per process: a second initialization of the owner attaches the
+    # existing type object (bindings/py_type_registry.mojo).
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[ScalerInputSnapshot]()
+    except error:
+        if not py_type_absent(error, String(reflect[ScalerInputSnapshot].name())):
+            raise error
+        _ = module.add_type[ScalerInputSnapshot]("_ScalerInputSnapshot")
+        return
+    py_type_attach(module.module, "_ScalerInputSnapshot", existing)
 
 
 def _frozen_values(metadata: ArrayMetadata, view: PythonObject, context: PythonObject) raises -> PythonObject:

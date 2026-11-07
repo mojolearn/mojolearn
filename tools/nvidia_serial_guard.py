@@ -16,7 +16,7 @@ import sys
 import time
 
 
-RSS_GIB_MAX = 64
+RSS_GIB_MAX = 512
 
 
 def gpu_memory():
@@ -65,13 +65,16 @@ def run(args):
     if sys.platform != 'linux' or not Path('/proc').is_dir():
         raise RuntimeError('Refusing local work: this guard requires Linux NVIDIA')
     # RSS_GIB_MAX: the release build's cap is sized from the box
-    # (tools/build_sizing.py: 3 GiB per job + 2, at most 16 jobs = 50 GiB);
+    # (tools/build_sizing.py: 3 GiB per job + 2; at the 128-job sanity ceiling
+    # 386 GiB, so 512 admits it);
     # every other job keeps the 12 GiB default.
     if not args.command or args.seconds < 1 or not 1 <= args.rss_gib <= RSS_GIB_MAX:
         raise ValueError('Require command, positive deadline and RSS cap of 1..%d GiB' % RSS_GIB_MAX)
     core_count = getattr(args, 'cores', 2)
-    if not 1 <= core_count <= 64:
-        raise ValueError('Require a CPU core count of 1..64')
+    # 256 = 2 compiler workers x tools/build_sizing.py MAX_JOBS (128): a sanity
+    # range, not a sizing cap; the build uses every core the box has.
+    if not 1 <= core_count <= 256:
+        raise ValueError('Require a CPU core count of 1..256')
     lock = open('/tmp/mojolearn-nvidia-root-job.lock', 'a')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     used, total = gpu_memory()

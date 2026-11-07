@@ -70,14 +70,16 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     plan_enter_all(bindings, devices, par_spec_rebuild(driver), par_spec_families(driver))
     try:
         if owner_entry is None:
-            # Recurse into the routed dispatcher itself, never through the
-            # `family_operation` wrapper: a three-function recursion
-            # (family_operation -> family_operation_routed -> here) stopped
-            # the Mojo compiler with no CPU use and no diagnostic on
-            # _mojolearn_runtime_classical_host (lesson 7 of
-            # docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section 4: keep the
-            # recursion direct, make the forwarder a non-recursive wrapper).
-            result = family_operation_routed(model, family_route(owner), owner, owner_args, context)
+            # No recursion back into the dispatcher (lane ne-fix-hang3): the
+            # owner runs through `_family_owner_call`, which never reaches
+            # this driver. A recursion through the dispatcher (first three
+            # functions, then two) stopped the Mojo compiler with no CPU use
+            # and no diagnostic on _mojolearn_runtime_classical_host (lesson
+            # 7 of docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section 4).
+            # Same steps: no driver spec in bindings/parallel_plan_specs.mojo
+            # admits `family_par_run` as its owner, so the owner is never the
+            # driver itself.
+            result = _family_owner_call(model, family_route(owner), owner, owner_args, context)
         else:
             result = family_call(owner_entry, model, PythonObject(owner), owner_args, owner_context)
     finally:
@@ -99,6 +101,19 @@ def family_operation_routed(model: PythonObject, route: Int, operation: String, 
     (bindings/native_operation_codes.mojo `family_route`, precomputed per
     name for coded calls): one integer switch instead of the former prefix
     chain, same steps in the same order."""
+    # `family_par_run` has no estimator-argument step and no cluster flag
+    # (`family_route("family_par_run")` is FR_PAR_RUN alone), so running the
+    # driver before those steps is the former order.
+    if family_route_owner(route) == FR_PAR_RUN:
+        return _family_par_run(model, args, context)
+    return _family_owner_call(model, route, operation, args^, context)
+
+
+def _family_owner_call(model: PythonObject, route: Int, operation: String, var args: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """Every family owner except the parallel driver: the estimator-argument
+    step, the cluster refusal, then the owner. Non-recursive: no owner here
+    reaches `_family_par_run` or `family_operation_routed`."""
     # These public frontdoors share one import-connected binding provider.
     # Deeper algorithm dispatch is migrated separately; do not equate this
     # boundary repair with completion of every transitive runtime path.
@@ -114,13 +129,23 @@ def family_operation_routed(model: PythonObject, route: Int, operation: String, 
     if family_route_cluster(route):
         if len(args) > 0 and args[0] is None:
             return cluster_public_operation(model, operation, args, context)
+    # Two-level switch (lane ne-fix-hang3, lesson 12): the owner word picks
+    # one of two halves of about ten owners each, instead of one chain of
+    # twenty-one calls to distinct owners in this function. Same owners,
+    # same order (the halves split the former chain at FR_MSEL).
     var owner = family_route_owner(route)
+    if owner < FR_MSEL:
+        return _family_owner_first(model, owner, operation, args, context)
+    return _family_owner_second(model, owner, operation, args, context)
+
+
+def _family_owner_first(model: PythonObject, owner: Int, operation: String, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """Owners FR_DENSITY .. FR_CHOL (and FR_UNKNOWN, refused)."""
     if owner == FR_DENSITY:
         return density_public_operation(model, operation, args, context)
     if owner == FR_PAR_PUBLIC:
         return parallel_public_operation(model, args, context)
-    if owner == FR_PAR_RUN:
-        return _family_par_run(model, args, context)
     if owner == FR_KMEANS:
         return kmeans_operation(model, operation, args, context)
     if owner == FR_KM:
@@ -135,6 +160,12 @@ def family_operation_routed(model: PythonObject, route: Int, operation: String, 
         return neighbors_operation(model, operation, args, context)
     if owner == FR_CHOL:
         return linalg_operation(model, operation, args, context)
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
+def _family_owner_second(model: PythonObject, owner: Int, operation: String, args: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    """Owners FR_MSEL .. FR_LINALG_OPS."""
     if owner == FR_MSEL:
         # Preserve the existing generic entry ABI without importing the
         # independently compiled model-selection owner. Import setup retains

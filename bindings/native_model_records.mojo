@@ -848,57 +848,74 @@ def content_value(mut rec: ContentRecord, value: PythonObject, depth: Int, limit
     lists, tuples and dicts item by item to `limit` levels, every other
     non-scalar by class. `sets_fail`: an exact set / frozenset makes the
     record unusable (the trees_key_value walk reads their items)."""
-    if not rec.ok or value is None or depth >= limit:
+    # Iterative (ne-fix-hang2): an explicit stack in place of the former
+    # self-recursion (the compile hang was the dead-key ring, not this). Children
+    # are pushed in reverse so they pop in item order: the same depth-first
+    # pre-order, the same words in `rec.ops`, the same `limit` cut and the
+    # same stop once `rec.ok` is False.
+    if not rec.ok:
         return
     var b = native_loaded_module("builtins")
-    var cls = py_type(value)
-    if cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes:
-        return
-    if cls is b.list:
-        var n = len(value)
-        var h = _hold(rec, value)
-        rec.ops.append(_OP_LIST)
+    var pending = List[PythonObject]()
+    var depths = List[Int]()
+    pending.append(value)
+    depths.append(depth)
+    while len(pending) > 0 and rec.ok:  # driver-loop: over a stored value's nested containers (once per record)
+        var item = pending.pop()
+        var level = depths.pop()
+        if item is None or level >= limit:
+            continue
+        var cls = py_type(item)
+        if cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes:
+            continue
+        if cls is b.list:
+            var n = len(item)
+            var h = _hold(rec, item)
+            rec.ops.append(_OP_LIST)
+            rec.ops.append(h)
+            rec.ops.append(n)
+            var t = cpython_table()
+            for i in range(len(item)):  # driver-loop: over a stored list's items (identity words, once per record)
+                rec.ops.append(Int(t[].PyList_GetItem(item._obj_ptr, i)))
+            for i in range(len(item) - 1, -1, -1):  # driver-loop: over a stored list's items (nested words, once per record)
+                pending.append(item[i])
+                depths.append(level + 1)
+            continue
+        if cls is b.tuple:
+            for i in range(len(item) - 1, -1, -1):  # driver-loop: over a stored tuple's items (nested words, once per record)
+                pending.append(item[i])
+                depths.append(level + 1)
+            continue
+        if cls is b.dict:
+            # items() of an exact dict never hashes or compares keys.
+            var items = py_call(b.list, py_call(item.items))
+            var h = _hold(rec, item)
+            rec.ops.append(_OP_DICT)
+            rec.ops.append(h)
+            rec.ops.append(len(items))
+            for i in range(len(items)):  # driver-loop: over a stored mapping's entries (once per record)
+                var name = items[i][0]
+                var kind = py_type(name)
+                # The per-call lookup hashes the key: only exact str (cached
+                # hash) and exact int keys, whose hashing runs no user code.
+                if kind is not b.str and kind is not b.int:
+                    rec.ok = False
+                    return
+                var held_key = _hold(rec, name)
+                rec.ops.append(held_key)
+                rec.ops.append(Int(items[i][1]._obj_ptr))
+            for i in range(len(items) - 1, -1, -1):  # driver-loop: over a stored mapping's values (nested words, once per record)
+                pending.append(items[i][1])
+                depths.append(level + 1)
+            continue
+        if sets_fail and (cls is b.set or cls is b.frozenset):
+            rec.ok = False
+            return
+        # Any other object: its class can be reassigned in place.
+        var h = _hold(rec, item)
+        rec.ops.append(_OP_TYPE)
         rec.ops.append(h)
-        rec.ops.append(n)
-        var t = cpython_table()
-        for i in range(len(value)):  # driver-loop: over a stored list's items (identity words, once per record)
-            rec.ops.append(Int(t[].PyList_GetItem(value._obj_ptr, i)))
-        for i in range(len(value)):  # driver-loop: over a stored list's items (nested words, once per record)
-            content_value(rec, value[i], depth + 1, limit, sets_fail)
-        return
-    if cls is b.tuple:
-        for i in range(len(value)):  # driver-loop: over a stored tuple's items (nested words, once per record)
-            content_value(rec, value[i], depth + 1, limit, sets_fail)
-        return
-    if cls is b.dict:
-        # items() of an exact dict never hashes or compares keys.
-        var items = py_call(b.list, py_call(value.items))
-        var h = _hold(rec, value)
-        rec.ops.append(_OP_DICT)
-        rec.ops.append(h)
-        rec.ops.append(len(items))
-        for i in range(len(items)):  # driver-loop: over a stored mapping's entries (once per record)
-            var name = items[i][0]
-            var kind = py_type(name)
-            # The per-call lookup hashes the key: only exact str (cached
-            # hash) and exact int keys, whose hashing runs no user code.
-            if kind is not b.str and kind is not b.int:
-                rec.ok = False
-                return
-            var held_key = _hold(rec, name)
-            rec.ops.append(held_key)
-            rec.ops.append(Int(items[i][1]._obj_ptr))
-        for i in range(len(items)):  # driver-loop: over a stored mapping's values (nested words, once per record)
-            content_value(rec, items[i][1], depth + 1, limit, sets_fail)
-        return
-    if sets_fail and (cls is b.set or cls is b.frozenset):
-        rec.ok = False
-        return
-    # Any other object: its class can be reassigned in place.
-    var h = _hold(rec, value)
-    rec.ops.append(_OP_TYPE)
-    rec.ops.append(h)
-    rec.ops.append(Int(cls._obj_ptr))
+        rec.ops.append(Int(cls._obj_ptr))
 
 
 def content_fields(mut rec: ContentRecord, fields: PythonObject, limit: Int) raises:
