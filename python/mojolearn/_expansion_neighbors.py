@@ -2412,7 +2412,9 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
 
         Returns
         -------
-        mean : Array of shape (n_queries,), float32
+        mean : ndarray of shape (n_queries,)
+            float64 when NumPy is installed (scikit-learn's regressor dtype),
+            otherwise a float32 Array.
         """
         return _NATIVE(self, "family_xn_graph_svgp_predict", (None, X), _NATIVE_CONTEXT)
 
