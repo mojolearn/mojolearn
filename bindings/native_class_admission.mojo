@@ -17,8 +17,13 @@ next modification of the class or any ancestor notifies the watcher, which bumps
 the class epoch and invalidates every record of that class. The callback runs no
 Python and touches only a native map.
 
-Python 3.10 and 3.11 have no type watcher API: every call there runs the full
-admission exactly as before (no record is ever admitted).
+Python 3.10 and 3.11 have no type watcher API. There (lane ne2-i-j,
+2026-11-07) a record carries the class's own `tp_version_tag` instead of the
+epoch, and is valid while the class holds `Py_TPFLAGS_VALID_VERSION_TAG` with
+that tag: `PyType_Modified` clears the flag on the class and every subclass
+holding one, and a new tag never repeats (bindings/py_version_tags.mojo, whose
+layout is proven once per process; unproven, no record is admitted and every
+call runs the full admission, as before).
 
 Records live in the prepared-owner registry keyed by a weak reference to the
 class, so a dead class's records are dropped and a recycled address never
@@ -90,9 +95,12 @@ def _class_watcher() raises -> Int:
 
 def class_watch_ready() raises -> Bool:
     """True where class records can be kept (Python >= 3.12 with a type
-    watcher). Where False, `class_admit` is a no-op and `class_record` always
-    misses, so callers skip building record payloads."""
-    return _class_watcher() >= 0
+    watcher, or CPython 3.10 / 3.11 with proven version tags). Where False,
+    `class_admit` is a no-op and `class_record` always misses, so callers
+    skip building record payloads."""
+    if _class_watcher() >= 0:
+        return True
+    return type_version_tags()
 
 
 def _class_epoch(cls: PythonObject) raises -> Int:
@@ -124,7 +132,16 @@ def class_record(mut mods: NativeModules, slot: String, cls: PythonObject) raise
     record or the class (or an ancestor) changed since it was admitted."""
     var g = CLASS_WATCH.get_or_create_ptr()
     if g[].watcher < 0:
-        return PythonObject(None)
+        if g[].watcher == -2 or not type_version_tags():
+            return PythonObject(None)
+        # CPython 3.10 / 3.11: the record holds the class's version tag
+        var tagged = prepared_get(mods, slot, cls)
+        if tagged is None:
+            return PythonObject(None)
+        var tag = type_version_tag(cls)
+        if tag == 0 or Int(py=tagged[0]) != tag:
+            return PythonObject(None)
+        return tagged[1]
     var record = prepared_get(mods, slot, cls)
     if record is None:
         return PythonObject(None)
@@ -142,12 +159,25 @@ def class_admit(mut mods: NativeModules, slot: String, cls: PythonObject, payloa
     """Keep `payload` for `cls` under `slot` after a full admission passed.
     No-op where type watchers are unavailable. `payload` must not strongly
     retain `cls`."""
+    if _class_watcher() < 0:
+        # CPython 3.10 / 3.11: keyed on the class's version tag (assigned now
+        # when it has none); no tag, no record
+        if not type_version_tags():
+            return
+        var tag = type_version_tag_assign(cls)
+        if tag == 0:
+            return
+        prepared_put(mods, slot, cls, Python.tuple(PythonObject(tag), payload))
+        return
     if not _class_arm(cls):
         return
     prepared_put(mods, slot, cls, Python.tuple(PythonObject(_class_epoch(cls)), payload))
 
 
 # ---------------------------------------------------------------- dictionaries
+# Lane ne2-i-j (2026-11-07): the CPython 3.10 / 3.11 stamps.
+from bindings.native_loaded_module import shared_dict_stamped
+from bindings.py_version_tags import type_version_tags, type_version_tag, type_version_tag_assign
 # The same idea for exact dictionaries whose key admission (every key an
 # exact str, so a keyed lookup cannot run a foreign __eq__) used to be
 # repeated per call: module namespaces read by native metadata. Python >=
@@ -176,8 +206,9 @@ comptime DICT_WATCH = _Global[
 
 def dict_keys_admitted(fields: PythonObject) raises -> Bool:
     """True when `fields` passed a full key admission and has not changed
-    since (watched). Always False where dictionary watchers are unavailable."""
-    if shared_dict_watcher() < 0:
+    since (watched, or on CPython 3.10 / 3.11 its version tag unchanged).
+    Always False where neither is available."""
+    if not shared_dict_stamped():
         return False
     var g = DICT_WATCH.get_or_create_ptr()
     var address = Int(fields._obj_ptr)
