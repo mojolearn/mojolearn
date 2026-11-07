@@ -1635,12 +1635,17 @@ def decomp_resident_find(owner: PythonObject, alloc: PythonObject, free: PythonO
     var record = prepared_get(mods, _DK_RESIDENT_SLOT, owner)
     if record is None:
         return PythonObject(None)
-    var held = py_get(record, PythonObject(name))
-    if held is None or held[0] is not source or held[1] is not alloc or held[2] is not free:
+    var key = PythonObject(name)
+    var held = py_get(record, key)
+    if held is None:
+        return PythonObject(None)
+    if (held[0] is not source or held[1] is not alloc or held[2] is not free
+            or not decomp_resident_frozen(source)):
+        # A replaced array or another binding: the stale copy goes now, not
+        # at the model's death (the entry also kept the old array alive).
+        _ = py_call(record.pop, key, PythonObject(None))
         return PythonObject(None)
     if own_words and not Bool(py=held[7]):
-        return PythonObject(None)
-    if not decomp_resident_frozen(source):
         return PythonObject(None)
     if not check_generation:
         return held
@@ -1649,9 +1654,10 @@ def decomp_resident_find(owner: PythonObject, alloc: PythonObject, free: PythonO
     if taken == -1:
         var stamped = Python.tuple(held[0], held[1], held[2], held[3], held[4], held[5], held[6], held[7],
                                    PythonObject(generation))
-        py_setitem(record, PythonObject(name), stamped)
+        py_setitem(record, key, stamped)
         return stamped
     if taken != generation:
+        _ = py_call(record.pop, key, PythonObject(None))
         return PythonObject(None)
     return held
 
