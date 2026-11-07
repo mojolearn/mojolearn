@@ -108,6 +108,7 @@ from std.sys.compile import is_defined
 from std.math import sqrt
 
 from core.host_parallel import host_parallelize
+from core.rows_log_word import log_or_inf
 
 from checks.numerics import (
     ftz,
@@ -734,3 +735,28 @@ def host_pca_whiten_inverse_transform_into(
             )
     _ = components_t^
     _ = components_w^
+
+
+def host_rows_log_inplace(dst: HostF64Ptr, n: Int, tasks: Int):
+    """`py2mojo_rows` ROWS_LOG in place over n binary64 words, split by
+    elements across `tasks` host tasks (`log_or_inf` per word, the device
+    kernel's statements; no reduction crosses elements, so the split moves
+    no bit). The host `qn_proba` entry's log_proba."""
+    # ne2-g-linear (N361): log_proba in the qn_proba call on the host column.
+    if n <= 0:
+        return
+    var words = dst.bitcast[UInt64]()
+    # A soft-float log is on the order of 60 operations per word.
+    var t = host_grain_cap(max(1, min(tasks, n)), 60 * n)
+    var chunk = host_predict_chunk(n, t)
+
+    def _part(c: Int) {imm words, imm chunk, imm n}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            words.unsafe_store(i, log_or_inf(words.unsafe_load(i)))
+
+    if t == 1:
+        _part(0)
+    else:
+        host_parallelize(_part, t)

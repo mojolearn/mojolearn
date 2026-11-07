@@ -33,8 +33,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_grain_cap, host_predict_chunk
+from core.rows_log_word import log_or_inf
 
 from checks.numerics import portable_sqrtf
 from checks.soft_f64 import (
@@ -123,15 +122,6 @@ struct NSum(Copyable, Movable, TrivialRegisterPassable):
         if not _is_zero(self.c) and _finite(self.c):
             return sf64_add(self.total, self.c)
         return self.total
-
-
-@always_inline
-def log_or_inf(p: UInt64) -> UInt64:
-    if sf64_gt(p, SF64_ZERO) and not sf64_is_nan(p):
-        return sf64_log(p)
-    if _is_zero(p):
-        return _NEG_INF
-    return SF64_NAN
 
 
 @always_inline
@@ -323,27 +313,3 @@ def rows_log_device_buffers(
     _ = d_d32^
     _ = d_s2^
     _ = d_d8^
-
-
-def rows_log_host_inplace(dst_address: Int, n: Int, tasks: Int):
-    """ROWS_LOG in place over n binary64 words at `dst_address`, split by
-    elements across `tasks` host tasks (`log_or_inf` per word, no reduction
-    across elements, so the split moves no bit). The host `qn_proba`
-    entry's log_proba."""
-    if n <= 0 or dst_address == 0:
-        return
-    var dst = _U64P(unsafe_from_address=dst_address)
-    # A soft-float log is on the order of 60 operations per word.
-    var t = host_grain_cap(max(1, min(tasks, n)), 60 * n)
-    var chunk = host_predict_chunk(n, t)
-
-    def _part(c: Int) {imm dst, imm chunk, imm n}:
-        var lo = c * chunk
-        var hi = min(lo + chunk, n)
-        for i in range(lo, hi):
-            dst.unsafe_store(i, log_or_inf(dst.unsafe_load(i)))
-
-    if t == 1:
-        _part(0)
-    else:
-        host_parallelize(_part, t)
