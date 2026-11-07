@@ -5,6 +5,7 @@
 def connect_owner_context(context):
     # glue: retain supported native slot/weak-reference identities at import
     from types import BuiltinFunctionType, MemberDescriptorType, MethodType, ModuleType
+    import datetime
     import mmap
     import sys
     import weakref
@@ -31,6 +32,9 @@ def connect_owner_context(context):
                    # admitted while sys.modules still holds it (read through the
                    # ModuleType __dict__ slot, never a module __getattr__)
                    owner_module_class=ModuleType, owner_module_dict=vars(ModuleType)["__dict__"],
+                   # the exact capsule type (datetime's C API capsule is one);
+                   # only the resident capsules' own name is admitted natively
+                   owner_capsule_class=type(datetime.datetime_CAPI),
                    owner_native_types=dict(type=type, object=object, list=list, tuple=tuple,
                                            dict=dict, str=str, bytes=bytes, bytearray=bytearray,
                                            bool=bool, int=int, float=float, complex=complex,

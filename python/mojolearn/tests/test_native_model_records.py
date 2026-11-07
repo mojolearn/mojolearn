@@ -163,3 +163,57 @@ def test_records_never_keep_their_model_alive(name, params, classifier):
     references = recorded_references()
     gc.collect()
     assert [ref for ref in references if ref() is not None] == []
+
+
+# One estimator per family with a resident device store: fit, predict (the
+# resident copy now exists), set_params, fit again. The reset must release
+# the resident owners natively and the refit must match a fresh model.
+def _tabular(kind):
+    rng = np.random.default_rng(1)
+    X = rng.random((48, 4), dtype=np.float32)
+    if kind == "clf":
+        return (X, (X[:, 0] > 0.5).astype(np.int64)), "predict", (X,)
+    if kind == "reg":
+        return (X, X @ np.arange(1, 5, dtype=np.float32)), "predict", (X,)
+    if kind == "predict":
+        return (X,), "predict", (X,)
+    return (X,), "transform", (X,)
+
+
+def _series(_kind):
+    rng = np.random.default_rng(1)
+    y = np.cumsum(rng.random(80)).astype(np.float64)
+    return (y,), "forecast", (3,)
+
+
+def _sequences(_kind):
+    rng = np.random.default_rng(1)
+    X = rng.random((24, 6, 3), dtype=np.float32)
+    return (X, (X[:, 0, 0] > 0.5).astype(np.int64)), "predict", (X,)
+
+
+RESIDENT_CASES = [
+    ("GaussianProcessRegressor", {}, _tabular, "reg"),
+    ("SVC", {}, _tabular, "clf"),
+    ("KernelRidge", {"alpha": 1.0}, _tabular, "reg"),
+    ("TruncatedSVD", {"n_components": 2, "random_state": 0}, _tabular, "transform"),
+    ("KMeans", {"n_clusters": 3, "random_state": 0, "n_init": 1}, _tabular, "predict"),
+    ("RandomForestClassifier", {"n_estimators": 4, "random_state": 0}, _tabular, "clf"),
+    ("ARIMA", {"order": (1, 0, 0)}, _series, None),
+    ("GRUClassifier", {"hidden_size": 4, "max_epochs": 1, "random_state": 0}, _sequences, None),
+]
+
+
+@pytest.mark.parametrize("name,params,data,kind", RESIDENT_CASES, ids=[c[0] for c in RESIDENT_CASES])
+def test_set_params_after_resident_predict_then_refit(name, params, data, kind):
+    fit_args, method, call_args = data(kind)
+    try:
+        model = _estimator(name, params).fit(*fit_args)
+    except TypeError as error:
+        pytest.skip(f"{name} does not take these settings: {error}")
+    first = _outcome(lambda: getattr(model, method)(*call_args))
+    assert _outcome(lambda: getattr(model, method)(*call_args)) == first
+    assert model.set_params(**model.get_params(deep=False)) is model
+    refit = model.fit(*fit_args)
+    fresh = _estimator(name, params).fit(*fit_args)
+    assert _outcome(lambda: getattr(refit, method)(*call_args)) == _outcome(lambda: getattr(fresh, method)(*call_args))

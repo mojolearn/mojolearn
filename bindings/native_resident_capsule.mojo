@@ -75,6 +75,17 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
     return None
 
 
+def resident_capsule_owned(value: PythonObject) raises -> Bool:
+    """True when `value` (already known to be an exact capsule) is one of
+    these resident capsules: its name is this module's capsule name. Its
+    destructor is `_resident_destroy` above (the binding's compiled free; no
+    Python function runs), so dropping it is admitted by the owner release."""
+    var names = _RESIDENT_NAMES.get_or_create_ptr()
+    var valid = cpython_table()[].PyCapsule_IsValid(
+        value._obj_ptr, Int(names[].capsule_name.as_c_string_slice().unsafe_ptr()))
+    return Int(valid) != 0
+
+
 def resident_capsule(free: PythonObject, handle: Int) raises -> PythonObject:
     # Two words: a strong reference to the minting binding's free entry and
     # the device buffer id. On failure the buffer is returned at once.

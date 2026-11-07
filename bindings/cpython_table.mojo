@@ -272,6 +272,11 @@ comptime _PyByteArray_AsString = ExternalFunction[
 # long long PyLong_AsLongLongAndOverflow(PyObject *obj, int *overflow)  (overflow as an address word)
 comptime _PyLong_AsLongLongAndOverflow = ExternalFunction[
     "PyLong_AsLongLongAndOverflow", def(PyObjectPtr, Int) thin abi("C") -> Int64]
+# Added by lane ne-fix-tests-d (2026-11-07) for the owner-release admission of
+# the resident device capsules (bindings/native_resident_capsule.mojo).
+# int PyCapsule_IsValid(PyObject *capsule, const char *name)  (name as an address word)
+comptime _PyCapsule_IsValid = ExternalFunction[
+    "PyCapsule_IsValid", def(PyObjectPtr, Int) thin abi("C") -> c_int]
 
 
 struct CPythonTable(Movable):
@@ -343,6 +348,7 @@ struct CPythonTable(Movable):
     var PyByteArray_FromStringAndSize: _PyByteArray_FromStringAndSize.type
     var PyByteArray_AsString: _PyByteArray_AsString.type
     var PyLong_AsLongLongAndOverflow: _PyLong_AsLongLongAndOverflow.type
+    var PyCapsule_IsValid: _PyCapsule_IsValid.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -415,13 +421,14 @@ struct CPythonTable(Movable):
         self.PyByteArray_FromStringAndSize = _PyByteArray_FromStringAndSize.load(lib)
         self.PyByteArray_AsString = _PyByteArray_AsString.load(lib)
         self.PyLong_AsLongLongAndOverflow = _PyLong_AsLongLongAndOverflow.load(lib)
+        self.PyCapsule_IsValid = _PyCapsule_IsValid.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
 # them load the same interpreter library). Bump the name's version whenever a
 # field is added, removed or reordered.
 comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name="MojolearnCPythonTableV6",
+    StorageType=CPythonTable, name="MojolearnCPythonTableV7",
     init_fn=CPythonTable.__init__,
 ]
 

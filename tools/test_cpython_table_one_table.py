@@ -43,7 +43,7 @@ def test_table_fields_loads_and_prototypes_agree():
     assert len(names) == len(set(names))
     assert names == [a for a, _ in loads]
     assert sorted(names) == sorted(a for a, _ in protos)
-    assert 'name="MojolearnCPythonTableV6"' in text
+    assert 'name="MojolearnCPythonTableV7"' in text
 
 
 def test_absorbed_tables_are_gone():
