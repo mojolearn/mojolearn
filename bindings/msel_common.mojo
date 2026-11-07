@@ -69,9 +69,8 @@ def msel_try(callable: PythonObject, args: PythonObject, classes: PythonObject,
     var result = cpy.PyObject_Call(callable._obj_ptr, args._obj_ptr, PyObjectPtr())
     if result:
         return PythonObject(from_owned=result)
-    var table = cpython_table()
-    if table[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
-        table[].PyErr_Clear()  # N066: the one CPython table, not a dlsym per miss
+    if cpython_table()[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return context["family_msel_miss"]
     var failure = stash_python_error()
     raise failure^
@@ -112,9 +111,9 @@ def msel_catch(error: Error, classes: PythonObject) raises -> Bool:
     var message = String(error)
     if message == PYTHON_ERROR_PENDING:
         _ = _restore_python_error()
-        var table = cpython_table()
-        if table[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
-            table[].PyErr_Clear()  # N066: the one CPython table, not a dlsym per miss
+        ref cpy = Python().cpython()
+        if cpython_table()[].PyErr_ExceptionMatches(classes._obj_ptr) != 0:
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
             return True
         _ = stash_python_error()
         return False
