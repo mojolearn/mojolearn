@@ -7,6 +7,13 @@ Python face `python/mojolearn/linalg_fast.py`. Every changed line is behind
 `AFN_GEMM_APPLE` (FAST tier, Apple GPU build) and one `MOJOLEARN_AFN_GEMM_*`
 define; IDENTICAL compiles main's code unchanged.
 
+Nothing in the package imports `linalg_fast`; it is reached by its own path on a
+FAST Apple build:
+
+```python
+from mojolearn.linalg_fast import matmul_fused, has_fused
+```
+
 ## What the FAST Apple path does today (read from the code, not measured)
 
 ### fp32, `mojolearn.linalg.matmul` (board lane `gemm`, 4096 x 4096 x 4096)
