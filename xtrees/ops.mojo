@@ -1410,9 +1410,9 @@ def stack_w64(cols: List[Int], n: Int, dst: MutPointer[UInt64, MutUntrackedOrigi
 
 def rows_any_unset(
     eq: MutPointer[UInt8, MutUntrackedOrigin], n: Int, m: Int, col_major: Bool,
-    out: MutPointer[Int32, MutUntrackedOrigin],
+    miss_out: MutPointer[Int32, MutUntrackedOrigin],
 ):
-    """out[r] = 1 when any of row r's m equality flags is 0, else 0; the flags
+    """miss_out[r] = 1 when any of row r's m equality flags is 0, else 0; the flags
     row-major (n x m) or, `col_major`, the m columns of n flags one after
     another (lane ne2-b-members, N081: MultiOutputClassifier.score's per-row
     all-outputs-match flag in one pass; the host column of
@@ -1424,7 +1424,7 @@ def rows_any_unset(
             if eq[unsafe_offset=at] == UInt8(0):
                 miss = Int32(1)
                 break
-        out[unsafe_offset=r] = miss
+        miss_out[unsafe_offset=r] = miss
 
 
 def binary_proba(p: MutPointer[Float32, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin]):

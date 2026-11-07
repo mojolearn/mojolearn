@@ -167,15 +167,15 @@ def _tree_offsets_size(source: PythonObject, context: PythonObject, snapshots: P
     return hi - lo
 
 
-def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, out: PythonObject, at: Int,
+def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, dest: PythonObject, at: Int,
                context: PythonObject, snapshots: PythonObject) raises:
-    """Write a DART member's `size` node words into the flat buffer `out`
+    """Write a DART member's `size` node words into the flat buffer `dest`
     at element `at` (4-byte words). A C-order buffer already of `dtype` is
     admitted and copied in place, one block copy while the GIL is held (as
     `_snapshot` copies); any other storage (another dtype, strides, a
     source already snapshotted in this operation) goes through `_snapshot`
     (its copy and cast) and then one block copy."""
-    var dst = _U8(unsafe_from_address=trees_address(out)) + at * 4
+    var dst = _U8(unsafe_from_address=trees_address(dest)) + at * 4
     var identity = PythonObject(Int(source._obj_ptr))
     if not py_contains(snapshots, identity):
         classical_admit_value(source, context)
@@ -188,7 +188,7 @@ def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, out
             memcpy(dest=dst, src=_U8(unsafe_from_address=view.addr), count=size * 4)
             _ = view
             _ = owners
-            _ = out
+            _ = dest
             return
         _ = view
         _ = owners
@@ -197,7 +197,7 @@ def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, out
         raise Error("ValueError: DART node buffers differ from tree offsets")
     memcpy(dest=dst, src=_U8(unsafe_from_address=trees_address(part)), count=size * 4)
     _ = part
-    _ = out
+    _ = dest
 
 
 def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,

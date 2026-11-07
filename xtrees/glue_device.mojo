@@ -130,9 +130,9 @@ def stack_w64_device(cols: List[Int], n: Int, dst: MutPointer[UInt64, MutUntrack
 
 
 def rows_any_unset_kernel(
-    eq: MutPointer[UInt8, MutAnyOrigin], n: Int64, m: Int64, col_major: Int32, out: MutPointer[Int32, MutAnyOrigin],
+    eq: MutPointer[UInt8, MutAnyOrigin], n: Int64, m: Int64, col_major: Int32, miss_out: MutPointer[Int32, MutAnyOrigin],
 ):
-    """out[r] = 1 when any of row r's m flags is 0, else 0, one thread per row
+    """miss_out[r] = 1 when any of row r's m flags is 0, else 0, one thread per row
     (lane ne2-b-members, N081: compares only)."""
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
@@ -143,13 +143,13 @@ def rows_any_unset_kernel(
             if eq.unsafe_load(at) == UInt8(0):
                 miss = Int32(1)
                 break
-        out.unsafe_store(r, miss)
+        miss_out.unsafe_store(r, miss)
         r += stride
 
 
 def rows_any_unset_device(
     eq: MutPointer[UInt8, MutUntrackedOrigin], n: Int, m: Int, col_major: Bool,
-    out: MutPointer[Int32, MutUntrackedOrigin],
+    miss_out: MutPointer[Int32, MutUntrackedOrigin],
 ) raises:
     """`ops.rows_any_unset` on the device: one upload of the n * m flags,
     one launch, one readback of the n row flags."""
@@ -165,7 +165,7 @@ def rows_any_unset_device(
         d_eq.unsafe_ptr(), Int64(n), Int64(m), Int32(1) if col_major else Int32(0), d_out.unsafe_ptr(),
         grid_dim=_blocks(n), block_dim=OPS_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=out, src_buf=d_out)
+    ctx.enqueue_copy(dst_ptr=miss_out, src_buf=d_out)
     ctx.synchronize()
     _ = d_eq^
     _ = d_out^
