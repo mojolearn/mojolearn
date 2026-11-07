@@ -168,9 +168,14 @@ def test_each_driver_is_one_native_call_with_no_pool_or_loop():
 
 
 def test_each_door_dispatches_its_operation():
-    assert 'operation == "family_par_public"' in _read("bindings/family_native.mojo")
+    # The family door routes by the operation code table since the route
+    # table moved there (bindings/native_operation_codes.mojo, FR_PAR_PUBLIC).
+    assert 'operation == "family_par_public"' in _read("bindings/native_operation_codes.mojo")
     for module, name, op, door, _ in DRIVERS:
-        assert 'operation == "' + op + '"' in _read(door), (op, door)
+        text = _read(door)
+        if door == "bindings/family_native.mojo":
+            text += _read("bindings/native_operation_codes.mojo")
+        assert 'operation == "' + op + '"' in text, (op, door)
 
 
 def test_sharded_drivers_keep_the_partition_and_the_negative_control():
