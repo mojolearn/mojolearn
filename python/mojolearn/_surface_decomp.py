@@ -57,6 +57,8 @@ FAMILIES = (
             "x_decomp_tsvd_randomized", "x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project",
             "x_decomp_ica_fit", "x_decomp_ica_project", "x_decomp_nmf_fit", "x_decomp_nmf_inverse",
             "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig", "x_decomp_rp_fit", "x_decomp_rp_project",
+            # manifest sync (ne-fix-tests-b, 2026-11-07): the native API version marker
+            "x_decomp_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the decomp expansion lane's CPU route (lane/algos-decomp).",
