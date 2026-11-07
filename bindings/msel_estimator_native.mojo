@@ -139,8 +139,14 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     var method_plan = py_get(plan["methods"], PythonObject(method))
     if method_plan is None:
         raise Error("AttributeError: native estimator has no " + method)
-    var allowed = py_get(py_get(plan, "keywords", Python.dict()), PythonObject(method), Python.tuple())
     if keywords is not None:
+        # The method's keyword names, read only when keywords were passed
+        # (lane ne2-b-members, N068: an empty dict and tuple were built as
+        # lookup defaults on every call).
+        var table = py_get(plan, "keywords")
+        var allowed = PythonObject(None) if table is None else py_get(table, PythonObject(method))
+        if allowed is None:
+            allowed = Python.tuple()
         # This context is independent of the public prep owner's context.
         # Connect NumPy here before admitting a first-call ndarray keyword;
         # the positional inputs may not have reached a native owner yet.
@@ -163,6 +169,11 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
                            if keywords is not None else PythonObject(None), plan["context"])
     var values = Python.list()
     var recipe = method_plan[1]
+    # The model's mode is read once per call, at the first binding item
+    # (lane ne2-b-members, N068: the fields and mode were read again for
+    # every binding item of the recipe). Same refusals in the same order.
+    var mode = PythonObject(None)
+    var have_mode = False
     for k in range(len(recipe)):  # driver-loop: fixed native ABI arguments
         var item = recipe[k]
         var kind = String(item[0])
@@ -172,12 +183,14 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
         elif kind == "keyword":
             value = py_get(keywords, item[1], item[2]) if keywords is not None else item[2]
         elif kind == "binding":
-            var fields = py_call(plan["fields_get"], model, py_type(model))
-            var mode = py_get(fields, "numeric_mode")
-            if mode is None:
-                mode = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
-            if py_type(mode) is not b.str:
-                raise Error("TypeError: native estimator numeric_mode must be an exact string or None")
+            if not have_mode:
+                var fields = py_call(plan["fields_get"], model, py_type(model))
+                mode = py_get(fields, "numeric_mode")
+                if mode is None:
+                    mode = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
+                if py_type(mode) is not b.str:
+                    raise Error("TypeError: native estimator numeric_mode must be an exact string or None")
+                have_mode = True
             var modes = context["family_msel_bindings"][item[1]]
             value = py_get(modes, mode)
             if value is None:
