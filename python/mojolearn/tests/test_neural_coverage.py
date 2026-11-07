@@ -152,7 +152,8 @@ def test_causal_lm_counts_refuse_str_and_bool(tmp_path):
         model.allocate_state("1", 8)
     block = model.blocks[0]
     assert block.allocate_state(1, 8) is not None
-    with pytest.raises(TypeError, match="batch_size and max_tokens must be integers"):
+    # The block owner's own wording (the model's is above).
+    with pytest.raises(TypeError, match="batch_size and max_tokens require native integers"):
         block.allocate_state("1", 8)
 
 
