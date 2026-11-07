@@ -1,0 +1,7 @@
+index	sha	subject
+0	f9e06ecacf	trees_staged_input: _member_table recurses into itself; the walk returns the inner forest instead of calling back
+1	410fc5aa93	family_native: the parallel driver runs its owner through a non-recursive _family_owner_call (no recursion through the dispatcher)
+2	cbafbbe8a8	family_native: the family owner dispatch as a two-level switch (two halves of about ten owners)
+3	7a49d36f7a	native_operation_codes: family_route finds the owner in a runtime row list, not a 25-branch prefix chain
+4	3b24ef0ffd	native_operation_codes: the _Global initializer only makes empty lists; the table is filled at first use
+5	23d145442e	native_operation_codes: the 163 operation names in four straight-line group functions
