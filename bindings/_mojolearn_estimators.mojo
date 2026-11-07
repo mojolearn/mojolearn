@@ -119,6 +119,7 @@ from glm.impl.gram_solve import linear_gram_fit_host
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
+from glm.impl.ols_prep_device import ols_prep_device
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
@@ -804,6 +805,33 @@ def pca_fit_randomized_binding(
             ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
         )
     return PythonObject(noise)
+
+
+def lm_ols_prep_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
+    """LinearRegression / Ridge general-route preparation in one call:
+    addresses = [x, y, w (0: none), work_x, work_y, xmean64, xmean32,
+    ymean64, ymean32]; params = [rows, cols, intercept, means_mode (0
+    separate, 1 paired, 2 weighted)]. work_x / work_y receive X and y
+    centered by their means (with intercept) and row-scaled by sqrt(w)
+    (with weights); the means are written with intercept. Returns 0."""
+    # ne2-g-linear (N403): one crossing for what was up to fourteen.
+    if len(addresses) != 9 or len(params) != 4:
+        raise Error("lm_ols_prep: 9 addresses (x, y, w, work_x, work_y, xm64, xm32, ym64, ym32) and "
+                    "params rows, cols, intercept, means_mode required")
+    var a = List[Int](capacity=9)
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        a.append(Int(py=addresses[i]))
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    var intercept = Int(py=params[2]) != 0
+    var mode = Int(py=params[3])
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        if a[i] == 0 and i != 2 and (intercept or i < 5):
+            raise Error("lm_ols_prep: null buffer address")
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ols_prep_device(ctx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], rows, cols, intercept, mode)
+    return PythonObject(0)
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1596,6 +1624,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
+        m.def_function[lm_ols_prep_binding]("lm_ols_prep")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[qn_proba_binding]("qn_proba")
         m.def_function[ols_predict_wide_binding]("ols_predict_wide")

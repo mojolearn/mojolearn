@@ -2019,6 +2019,8 @@ FAMILIES = (
             # perf lanes: the wide-matrix OLS predict and the fused
             # QN probability epilogue (one native call per predict_proba)
             "ols_predict_wide", "qn_proba",
+            # ne2-g-linear: the general-route OLS/Ridge preparation in one call
+            "lm_ols_prep",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
             # inverse_transform refused on a CPU-only install; the

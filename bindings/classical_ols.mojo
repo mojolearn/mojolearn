@@ -41,6 +41,30 @@ def classical_weighted_means(x: PythonObject, weight: PythonObject, rows: Int, c
     return Python.tuple(m64, m32)
 
 
+def classical_ols_prepare(x: PythonObject, y: PythonObject, weights: PythonObject, rows: Int, cols: Int,
+                          intercept: Bool, mode: Int, prep: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`lm_ols_prep`: (work_x, work_y, xmean32, ymean64) of the general
+    route in one native call. mode 0 separate means, 1 paired, 2 weighted."""
+    var work_x = classical_array(rows, cols, context)
+    var work_y = classical_array(rows, 0, context)
+    var xm64 = classical_array(cols, 0, context, True)
+    var xm32 = classical_array(cols, 0, context)
+    var ym64 = classical_array(1, 0, context, True)
+    var ym32 = classical_array(1, 0, context)
+    var w_address = PythonObject(0) if weights is None else classical_address(weights)
+    _ = py_call_typed(prep, Python.list(classical_address(x), classical_address(y), w_address,
+                                        classical_address(work_x), classical_address(work_y),
+                                        classical_address(xm64), classical_address(xm32),
+                                        classical_address(ym64), classical_address(ym32)),
+                      Python.list(rows, cols, 1 if intercept else 0, mode))
+    _ = x  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = xm64^
+    _ = ym32^
+    return Python.tuple(work_x, work_y, xm32, ym64)
+
+
 def classical_paired_means(x: PythonObject, y: PythonObject, rows: Int, cols: Int,
                            entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var sx = classical_array(cols, 0, context, True)
@@ -117,7 +141,24 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
     if not done:
         var work_x = x
         var work_y = y
-        if intercept:
+        var prep = py_get(entries, "lm_ols_prep")
+        if prep is not None and (intercept or weights is not None):
+            # ne2-g-linear (N403): the means, centering, weight roots and row
+            # scaling below in one native call (the same typed steps, the
+            # same words); the solve and the intercept follow as before.
+            var mode = 0
+            if weights is not None:
+                mode = 2
+            elif py_get(entries, "lm_classical_stats") is not None and py_get(entries, "lm_col_sums_pair") is not None:
+                if Bool(py=entries["lm_classical_stats"]()):
+                    mode = 1
+            var prepared = classical_ols_prepare(x, y, weights, rows, cols, intercept, mode, prep, context)
+            work_x = prepared[0]
+            work_y = prepared[1]
+            if intercept:
+                mean = prepared[2]
+                ymean = classical_word(prepared[3])
+        elif intercept:
             var xm = PythonObject(None)
             var ym = PythonObject(None)
             if weights is not None:
@@ -135,7 +176,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
             ymean = classical_word(ym[0])
             work_x = classical_center(x, mean, rows, cols, entries, context)
             work_y = classical_center(y, ym[1], rows, 1, entries, context)
-        if weights is not None:
+        if weights is not None and prep is None:
             var root = classical_array(rows, 0, context)
             _ = py_call_typed(entries["py2mojo_rows"], PythonObject(5), classical_address(weights), classical_address(root), Python.list(rows, 1))
             work_x = classical_scale_rows(work_x, root, rows, cols, entries, context)

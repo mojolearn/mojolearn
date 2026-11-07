@@ -115,6 +115,7 @@ from decomposition.host.pca_full_oracle import (
 )
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
+from glm.host.ols_prep_host import ols_prep_host
 from glm.host.gram_solve_host import host_linear_gram_fit
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
@@ -604,6 +605,32 @@ def pca_fit_randomized_binding(
             x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
         )
     return PythonObject(noise)
+
+
+def lm_ols_prep_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
+    """LinearRegression / Ridge general-route preparation in one call:
+    addresses = [x, y, w (0: none), work_x, work_y, xmean64, xmean32,
+    ymean64, ymean32]; params = [rows, cols, intercept, means_mode (0
+    separate, 1 paired, 2 weighted)]. work_x / work_y receive X and y
+    centered by their means (with intercept) and row-scaled by sqrt(w)
+    (with weights); the means are written with intercept. Returns 0."""
+    # ne2-g-linear (N403): one crossing for what was up to fourteen.
+    if len(addresses) != 9 or len(params) != 4:
+        raise Error("lm_ols_prep: 9 addresses (x, y, w, work_x, work_y, xm64, xm32, ym64, ym32) and "
+                    "params rows, cols, intercept, means_mode required")
+    var a = List[Int](capacity=9)
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        a.append(Int(py=addresses[i]))
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    var intercept = Int(py=params[2]) != 0
+    var mode = Int(py=params[3])
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        if a[i] == 0 and i != 2 and (intercept or i < 5):
+            raise Error("lm_ols_prep: null buffer address")
+    with GILReleased(Python()):
+        ols_prep_host(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], rows, cols, intercept, mode)
+    return PythonObject(0)
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1554,6 +1581,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         module.def_function[lm_center_binding]("lm_center")
         module.def_function[lm_scale_rows_binding]("lm_scale_rows")
+        module.def_function[lm_ols_prep_binding]("lm_ols_prep")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[linear_gram_fit_binding]("linear_gram_fit")
         module.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
