@@ -625,7 +625,7 @@ def arima_predict_device(
     mut y: DeviceBuffer[DType.float32],
     mut exog: DeviceBuffer[DType.float32],
     mut exog_fut: DeviceBuffer[DType.float32],
-    xin: DeviceBuffer[DType.float32],
+    mut xin: DeviceBuffer[DType.float32],
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
     n_obs: Int,
