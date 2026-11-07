@@ -45,10 +45,18 @@ def test_prefetch_is_lazy_and_closes_after_native_field_failure(tmp_path):
             touched.append("int")
             return 3
 
+    # The iterator admits its owner once, at prefetch, and keeps the admitted
+    # scalars and the ids snapshot (lane p3-lm-tokenizer row 28): a later
+    # field replacement is never read by the running iterator, and a new
+    # prefetch refuses it without calling the hostile conversion.
     batches.length = Conversion()
-    with pytest.raises(TypeError):
-        next(iterator)
+    step, rows = next(iterator)
+    assert step == 3 and rows.shape == (2, 4)
     assert touched == []
+    with pytest.raises(TypeError):
+        batches.prefetch(2, 3)
+    assert touched == []
+    assert next(iterator)[0] == 4
     with pytest.raises(StopIteration):
         next(iterator)
 
