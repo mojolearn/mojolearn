@@ -157,7 +157,7 @@ def _drain_dead_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin], mu
     var dead = seq_resident_take_dead(forget_all)
     if forget_all:
         var i = len(store[].owners) - 1
-        while i >= 0:  # driver-loop: over resident fitted-model slots (at most _SLOTS), newest first so pops keep indices
+        while i >= 0:  # driver-loop: over resident fitted-model slots (at most _SLOTS), last index first so a pop keeps the lower indices
             if store[].pins[i] == 0:
                 _evict_locked(store, ex, i)
             i -= 1
