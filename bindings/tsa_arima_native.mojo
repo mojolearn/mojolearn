@@ -441,7 +441,8 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
         if end > n_obs:
             var e = _exog_array(exog, batch, end - n_obs, _integer(py_get(fields, "_y_ndim", PythonObject(2)), context), "exog", context)
             if Int(py=e[1]) != n_exog:
-                raise Error("ValueError: " + _A + "dimensions mismatch, future exog has the wrong regressor count")
+                raise Error("ValueError: " + _A + "dimensions mismatch, `exog` has " + String(Int(py=e[1]))
+                            + " regressor column(s) and the model was fit with " + String(n_exog))
             future = e[0]
             future_owner = arima_buffer(future, "prepared future exog", context, True)
             future_addr = future_owner.address
