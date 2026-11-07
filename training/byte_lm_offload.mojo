@@ -369,7 +369,7 @@ struct ByteOffloadedReplay(Movable, Writable):
         self.require_open()
         if len(slots) != len(addresses) or len(slots) < 1:
             raise Error("byte offloaded replay: export_into expects one address per slot")
-        for j in range(len(slots)):  # small-loop(slots: at most four exported arrays)
+        for j in range(len(slots)):  # driver-loop: over the exported state arrays (at most four)
             var slot = slots[j]
             if slot < 0 or slot > 3 or (slot == 3 and self.gradient_step != self.completed):
                 raise Error("byte offloaded replay: invalid export slot or no committed gradient")
@@ -378,17 +378,17 @@ struct ByteOffloadedReplay(Movable, Writable):
             var held = len(self.p) if slot == 0 else (len(self.m) if slot == 1 else (len(self.v) if slot == 2 else len(self.g)))
             if held != self.config.n_total():
                 raise Error("byte offloaded replay: held state differs from the configured size")
-        for j in range(len(slots)):  # small-loop(slots: at most four exported arrays)
+        for j in range(len(slots)):  # driver-loop: over the exported state arrays (at most four)
             var slot = slots[j]
-            var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addresses[j])
+            var target = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addresses[j])
             if slot == 0:
-                memcpy(dest=dst, src=self.p.unsafe_ptr(), count=len(self.p))
+                memcpy(dest=target, src=self.p.unsafe_ptr(), count=len(self.p))
             elif slot == 1:
-                memcpy(dest=dst, src=self.m.unsafe_ptr(), count=len(self.m))
+                memcpy(dest=target, src=self.m.unsafe_ptr(), count=len(self.m))
             elif slot == 2:
-                memcpy(dest=dst, src=self.v.unsafe_ptr(), count=len(self.v))
+                memcpy(dest=target, src=self.v.unsafe_ptr(), count=len(self.v))
             else:
-                memcpy(dest=dst, src=self.g.unsafe_ptr(), count=len(self.g))
+                memcpy(dest=target, src=self.g.unsafe_ptr(), count=len(self.g))
 
     def export_values(mut self, slot: Int) raises -> List[Float32]:
         self.require_open()

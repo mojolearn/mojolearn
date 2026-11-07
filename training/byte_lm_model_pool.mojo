@@ -111,6 +111,12 @@ struct ByteModelChunk(Movable):
         self.validate(ctx)
 
 
+def _chunk_target(address: Int, first: Int) -> MutPointer[Float32, MutUntrackedOrigin]:
+    """The caller's float32 cell `first` of the flat state at `address`: the
+    destination of one chunk's copy in `ByteModelPool.export_into`."""
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address + 4 * first)
+
+
 struct ByteModelPool(Movable, Writable):
     var layers: ByteLayerPool
     var head_context: Optional[DeviceContext]
@@ -338,7 +344,7 @@ struct ByteModelPool(Movable, Writable):
         self.require_open()
         if len(slots) != len(addresses) or len(slots) < 1:
             raise Error("byte model pool: export_into expects one address per slot")
-        for j in range(len(slots)):  # small-loop(slots: at most four exported arrays)
+        for j in range(len(slots)):  # driver-loop: over the exported state arrays (at most four)
             var slot = slots[j]
             if slot < 0 or slot > 3 or (slot == 3 and self.gradient_step != self.completed):
                 raise Error("byte model pool: invalid export slot or no committed gradient")
@@ -355,21 +361,19 @@ struct ByteModelPool(Movable, Writable):
             covered += len(chunk.p)
         if covered != n_all:
             raise Error("byte model pool: chunks do not cover the flat state")
-        for j in range(len(slots)):  # small-loop(slots: at most four exported arrays)
+        for j in range(len(slots)):  # driver-loop: over the exported state arrays (at most four)
             var slot = slots[j]
-            var base = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addresses[j])
             for i in range(len(self.chunks)):  # driver-loop: over the model's state chunks
                 ref chunk = self.chunks[i]
                 ref ctx = self.layers.contexts[chunk.owner]
-                var dst = base + chunk.first
                 if slot == 0:
-                    ctx.enqueue_copy(dst_ptr=dst, src_buf=chunk.p)
+                    ctx.enqueue_copy(dst_ptr=_chunk_target(addresses[j], chunk.first), src_buf=chunk.p)
                 elif slot == 1:
-                    ctx.enqueue_copy(dst_ptr=dst, src_buf=chunk.m)
+                    ctx.enqueue_copy(dst_ptr=_chunk_target(addresses[j], chunk.first), src_buf=chunk.m)
                 elif slot == 2:
-                    ctx.enqueue_copy(dst_ptr=dst, src_buf=chunk.v)
+                    ctx.enqueue_copy(dst_ptr=_chunk_target(addresses[j], chunk.first), src_buf=chunk.v)
                 else:
-                    ctx.enqueue_copy(dst_ptr=dst, src_buf=chunk.g)
+                    ctx.enqueue_copy(dst_ptr=_chunk_target(addresses[j], chunk.first), src_buf=chunk.g)
         for i in range(len(self.layers.contexts)):  # small-loop(contexts: devices, at most 64): one wait per device context
             self.layers.contexts[i].synchronize()
 
