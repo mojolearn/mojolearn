@@ -45,6 +45,7 @@ from bindings.trees_public_inputs import trees_decode_labels
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_labels import _text_buffer_labels as score_text_buffer_labels, _text_list_labels as score_text_list_labels
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
+from bindings.classical_labels import classical_score_from_codes
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -681,46 +682,21 @@ def _score_values(model: PythonObject, prediction: PythonObject, y: PythonObject
 def _score_codes(model: PythonObject, pair: PythonObject, y: PythonObject, sample_weight: PythonObject,
                  n: Int, context: PythonObject) raises -> PythonObject:
     """A classifier's accuracy from its `(classes_, codes)` prediction.
-    String classes are scored in codes (lane perf-trees-owed, 2026-11-06):
-    before, each row was decoded to its class string, then each string
-    re-read, type-checked and looked up again. The distinct predicted codes
-    come from one native encode of the code buffer, their class strings
-    form the prediction's label set, and `_codes` maps them through one
-    gather, so the label set, the codes and the device program are the
-    ones the decoded strings produced. Any other classes decode as before."""
+    Lane ne1-h-labels (plan section H, N435): the one shared score from
+    codes (bindings/classical_labels.mojo `classical_score_from_codes`): y
+    is encoded once against `classes_` and the predicted codes go to the
+    COUNT program as they are, for str and integer classes alike (lane
+    perf-trees-owed scored str classes in codes through a private copy,
+    folded here; lesson 8). Other classes decode as before inside it. The
+    match count and the soft binary64 weight sums do not depend on label
+    numbering: the same bits."""
     var classes = pair[0]
     var codes = pair[1]
     var rows = Int(py=codes.size)
     if rows != n:
         raise Error("score target and prediction lengths differ")
     var mode = PythonObject(forest_effective_mode(py_fields(model), context))
-    var encoded = _string_class_codes(classes, codes, rows, context)
-    if encoded:
-        return PythonObject(trees_accuracy_labels(y, encoded.value(), sample_weight, mode, context))
-    return PythonObject(trees_accuracy(y, trees_decode_labels(classes, codes, context), sample_weight, mode, context))
-
-
-def _string_class_codes(classes: PythonObject, codes: PythonObject, rows: Int,
-                        context: PythonObject) raises -> Optional[ScoreLabels]:
-    """The prediction as encoded string labels: the predicted classes (each
-    an exact str) and one int32 code per row into them; None when a class is
-    not an exact str or a code is out of range (the decode then reports it)."""
-    var labels = classifier_label_list(classes, context)
-    var k = len(labels)
-    if k == 0 or rows < 1:
-        return None
-    var str_t = trees_builtins().str
-    for c in range(k):  # driver-loop: over the k fitted classes
-        if py_type(labels[c]) is not str_t:
-            return None
-    var present = _native_labels(_view_of_array(codes), False, context)
-    var values = Python.list()
-    for j in range(len(present.classes)):  # driver-loop: over the distinct predicted codes
-        var c = Int(py=present.classes[j])
-        if c < 0 or c >= k:
-            return None
-        _ = py_call(values.append, labels[c])
-    return ScoreLabels(True, values, present.codes, PythonObject(None), rows, "string")
+    return PythonObject(classical_score_from_codes(y, classes, codes, sample_weight, mode, context))
 
 
 def _as_array(m: TreesMatrix, context: PythonObject) raises -> PythonObject:
