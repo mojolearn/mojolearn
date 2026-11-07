@@ -250,8 +250,9 @@ def arima_resident_prepare(
     the handle every later `arima_predict_resident` names. The refusals are
     the ones the per-call path makes before its upload, in the same order
     (`_refuse_shape`, the order, the regressors' layout and finite scan)."""
-    _refuse_shape(batch_size, n_obs, "arima_predict")
+    # `arima_predict_ptr_host`'s order: the order, then the shape.
     var order = _order(p, d, q, P, D, Q, s, k, n_exog)
+    _refuse_shape(batch_size, n_obs, "arima_predict")
     var exog_host = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
     var words: List[Int] = [batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog]
     var entry = ResidentArimaFit(y_ptr, exog_host, params_ptr, words^, order.complexity() * batch_size)
@@ -331,6 +332,7 @@ def arima_predict_resident(
     var n_obs = w[1]
     var start = n_obs if forecast else start_in
     var end = n_obs + end_in if forecast else end_in
+    var order = _order(w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10])
     _refuse_shape(batch_size, n_obs, who)
     if start < 0 or end <= start:
         raise Error(
@@ -343,7 +345,6 @@ def arima_predict_resident(
             " prediction (start=" + String(start) + ", n_obs="
             + String(n_obs) + ")"
         )
-    var order = _order(w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10])
     var num_steps = end - n_obs if end > n_obs else 0
     var fut_host = exog_filter_layout(
         exog_fut_address, batch_size, num_steps, order.n_exog, "exog (future values)"
