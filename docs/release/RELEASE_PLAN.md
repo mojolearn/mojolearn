@@ -85,6 +85,62 @@ built in `~/mojolearn-wt/integ-0864` and 0.8.65 in the main checkout
   `repo_path`; when they differ every darwin group is `compile` with both paths named
   (`release_plan.compile_rows`, `macos_paths`).
 
+## The development build of the frozen commit is the macOS wheel's compile
+
+Andrew's rule: one compile per freeze. On 2026-11-07 the Mac compiled 0.8.66 (`bc4ecd4518`) twice:
+`tools/development_build.py build --sets identical,host` (79 development groups, in
+`~/mojolearn-wt/integ-perf`), then `tools/release.py` step `macos-build` again (15 merged groups,
+8,582 s wall, 25,700+ compiler seconds, every group `miss+built-cached` in
+`<release>/macos-bincache/`, seeded only from earlier releases). The two could not share a key,
+whatever the directory:
+
+| key field | development layout (before) | macOS wheel (`build_release_wheel.sh`) | changes the compile? |
+|---|---|---|---|
+| key system, cache | `development_build.py` KEY_SCHEMA, `~/.cache/mojolearn-development` | `bincache.py` closure-v2, release-scoped `macos-bincache/` | two disjoint caches |
+| groups | `bindings/development_groups.json`: 79 `_mojolearn_dev_*`, one member each | `bindings/merged_groups.json`: 15 `_mojolearn_native*`, 1 to 10 members | yes: other compile units |
+| merged root text (`merged.root_sha256`) | one member's `PyInit` | every member's `PyInit` | yes |
+| `merged_build.sh` args | `gpu\|host --layout development --group S --outdir --rootdir` | `gpu\|host --group S` | yes (layout); the paths are placeholders |
+| declared output (`local.outputs`) | `<cache>/work/<key>/output/S.so` | `python/mojolearn/<set>/S.so` | keyed |
+| `MOJOLEARN_COMPILE_JOBS` | the scheduler's share of free cores | `1` (`mac_slot.py run` pins it) | keyed: a codegen split is not shown byte-neutral |
+| `repo_path` | where the build ran | the release's source checkout | yes: absolute paths are embedded |
+| build environment | v1 sweep, also `MOJOLEARN_MERGED_PYTHON`, `MOJOLEARN_RUNPOD_KEY_FILE` | only what `merged_build.sh`, `build_defines.sh`, `compile_jobs.sh` read | no: closure-v2 already drops both |
+| `MOJOLEARN_PACKAGE_BYTE_LM` | `1` | `1` | equal (not a difference) |
+| numeric mode, host column, Metal flags | identical; cpu, no accelerator; per flags class | the same | equal |
+
+None of the differing fields is a field no input reads, so no key field is dropped: the fix makes
+the compile the same compile. Since lane `post-one-mac-cache`:
+
+- On macOS `tools/development_build.py build` defaults to `--layout release`: it runs every merged
+  release group of the selected sets as `tools/bincache.py build ./bindings/merged_build.sh <kind>
+  --group <stem>` with the wheel build's per-group environment (`bincache.macos_merged_group`) and
+  the release's keyed settings (`bincache.MACOS_RELEASE_COMPILE_ENV`: one compiler worker, byte LM),
+  into ONE Mac cache: `--mac-cache`, else `MOJOLEARN_BINCACHE_DIR`, else
+  `~/mojolearn-evidence/bincache-mac/`. Groups the cache holds are placed in parallel; the rest
+  compile under the memory-packed scheduler (groups in parallel up to the cores and 80% of available
+  memory, recorded peaks). Each set's `_mojolearn_merged.json` is then written from the plan, as the
+  wheel build writes it. A different `MOJOLEARN_COMPILE_JOBS` or `MOJOLEARN_PACKAGE_BYTE_LM=0` is
+  refused, not overridden. `--layout development` keeps the per-binding groups (the Linux default).
+- `tools/release.py` step `macos-build` keeps its release-scoped cache (the admitted provenance),
+  seeds it from the one Mac cache first (then earlier releases), and after the build copies every
+  archive it holds back into the one Mac cache (verified; a key that holds other bytes is a
+  conflict and is never replaced).
+
+To get the hits, run the development build of the frozen commit in the checkout the release will
+build in (`repo_path` is keyed; `Release.source_checkout`: the main checkout when its HEAD is the
+source commit, else `--source-checkout`), from the same shell environment class (no extra
+`MOJO_*`/`MODULAR_*` or keyed `MOJOLEARN_*` variables):
+
+    cd <release source checkout>   # HEAD = the frozen commit
+    bash tools/compile_slot.sh python3 tools/development_build.py build --sets identical,host
+    pixi run release <version> ...  # macos-build: `macos identical/<stem>: hit (...)` per group
+
+The `macos-build` step prints `hit` or `compile: <reason>` per group before it starts
+(`macos_cache_plan`), naming the field that differs. Expected macOS wheel wall when the development
+build already compiled every group: about 3 minutes, against 8,582 s on 2026-11-07. Basis: that
+build's log spans 17:59:53Z to 20:22:55Z with compiles from 18:00:18Z to 20:20:52Z, so about 150 s
+went to things other than compiling (planning, index, readbacks, staging, packing, the audit). The
+15 placements add about 20 s (key and archive verify, four at a time).
+
 ## Temporary dependency worktrees
 
 `tools/release_requirement_dependencies.py` analyses a frozen revision in a temporary worktree
@@ -209,6 +265,10 @@ build reads 1.6 to 2.1 times as many. The saving is not a smaller compile per ch
 the release stops compiling a second time.
 
 ### Dev-to-release build gap (deliverable c)
+
+Closed on macOS since lane `post-one-mac-cache`: the development build there compiles the release
+layout itself ("The development build of the frozen commit is the macOS wheel's compile" above).
+The analysis below is the development layout's, which Linux still uses.
 
 `tools/development_build.py` caches one artifact per development group
 (`bindings/development_groups.json`, one logical owner each) under its own key schema; the release
