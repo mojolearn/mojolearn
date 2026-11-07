@@ -1988,6 +1988,23 @@ def _classes_score_kind(classes: PythonObject, context: PythonObject) raises -> 
     return String("")
 
 
+def _codes_in_range(codes: PythonObject, code_dtype: String, n: Int, k: Int,
+                    context: PythonObject) raises -> Bool:
+    """Every code in [0, k): the base binding's `reduce_stat` min and max
+    over the code vector (a device tile reduction on a GPU install, the core
+    host helper on a CPU-only one); no per-code Python or host loop here."""
+    if n == 0:
+        return True
+    var address = labels_address(codes)
+    var native = _native_code(code_dtype)
+    var low = Int(py=py_call_typed(labels_helper(context, "reduce_stat"), PythonObject(address),
+                                   PythonObject(native), PythonObject(n), PythonObject(0)))
+    var high = Int(py=py_call_typed(labels_helper(context, "reduce_stat"), PythonObject(address),
+                                    PythonObject(native), PythonObject(n), PythonObject(1)))
+    _ = codes  # keep the Python object alive through the native calls above
+    return low >= 0 and high < k
+
+
 def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, codes: PythonObject,
                             sample_weight: PythonObject, mode: PythonObject,
                             context: PythonObject) raises -> Float64:
@@ -1996,19 +2013,24 @@ def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, cod
     fitted `classes`): y is encoded once against `classes` (a label not in
     it never matches) and the predicted codes go to the COUNT program as
     they are. Same refusals in the same order as the decode route; classes
-    that are neither all str nor all integers take that route unchanged.
-    The codes are the classifier's own predict output, so each is in
-    [0, len(classes))."""
+    that are neither all str nor all integers, and any code outside
+    [0, len(classes)) (checked by one native min/max reduction), take that
+    route unchanged, so a bad code raises as the decode raised."""
     classes = classifier_label_list(classes, context)
     var kind = _classes_score_kind(classes, context)
     classical_admit_value(codes, context)
     var code_dtype = String(codes.dtype)
     if kind == "" or Int(py=codes.ndim) != 1 or (code_dtype != "<i4" and code_dtype != "<i8"):
         return labels_accuracy(y_true, labels_decode_labels(classes, codes, context), sample_weight, mode, context)
+    var n = Int(py=codes.size)
+    if not _codes_in_range(codes, code_dtype, n, len(classes), context):
+        # The decode route's contract for a code outside [0, len(classes)):
+        # the decode raises (IndexError) before y is read, exactly as
+        # before; a bad code is never scored as a miss.
+        return labels_accuracy(y_true, labels_decode_labels(classes, codes, context), sample_weight, mode, context)
     var caller = String("accuracy_score")
     _refuse_multilabel(y_true, "y_true", caller, context)
     var true = _classification_encoded(y_true, "y_true", context)
-    var n = Int(py=codes.size)
     if true.n != n:
         raise Error("mojolearn " + caller + ": y_true and y_pred lengths differ")
     if true.kind != kind:

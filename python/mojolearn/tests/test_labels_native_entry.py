@@ -95,3 +95,14 @@ def test_score_from_codes_same_bits(classes, y, weighted):
     got = entry(LABELS_OP_SCORE_FROM_CODES, (y, classes, codes, w, None), context)
     want = accuracy_fraction(y, _labels.decode_labels(classes, codes), w)
     assert np.float64(got).tobytes() == np.float64(want).tobytes()
+
+
+@pytest.mark.parametrize("bad", [2, 7])
+def test_score_from_codes_out_of_range_raises_like_decode(bad):
+    entry, context = labels_entry()
+    classes = ["cat", "dog"]
+    codes = Array.from_list([1, 0, bad, 1], "<i4")
+    with pytest.raises(IndexError):
+        _labels.decode_labels(classes, codes)
+    with pytest.raises(IndexError):
+        entry(LABELS_OP_SCORE_FROM_CODES, (["dog", "cat", "cat", "dog"], classes, codes, None, None), context)
