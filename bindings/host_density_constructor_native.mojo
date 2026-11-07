@@ -9,7 +9,6 @@ from bindings.classical_pandas import _pd_type_fields
 from bindings.host_logistic_native import _logistic_label_kind
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 def _density_option(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -69,11 +68,11 @@ def _density_get_slot(model: PythonObject, name: PythonObject, context: PythonOb
     # by-name symbol lookup per slot read (PyErr_Clear only on a miss).
     ref cpy = Python().cpython()
     var attribute_error = context["host_density_attribute_error"]
-    var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, name._obj_ptr)
+    var result = cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, name._obj_ptr)
     if result:
         return Python.tuple(PythonObject(from_owned=result), True)
     if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return Python.tuple(PythonObject(None), False)
     raise cpy.unsafe_get_error()
 

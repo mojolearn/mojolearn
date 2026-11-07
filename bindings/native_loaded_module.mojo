@@ -67,12 +67,13 @@ def native_mapping_string_keys(fields: PythonObject, string_type: PythonObject) 
     # Python >=3.10 support precludes PyType_GetDict; the supported iterator
     # removes keys-view/list materialization without accessing private layout.
     ref cpy = Python().cpython()
-    var raw = cpy.PyObject_GetIter(fields._obj_ptr)
+    var iter_table = cpython_table()
+    var raw = iter_table[].PyObject_GetIter(fields._obj_ptr)
     if not raw:
         raise cpy.unsafe_get_error()
     var iterator = PythonObject(from_owned=raw)
     while True:  # driver-loop: over exact native class mapping keys before keyed reads
-        var key = cpy.PyIter_Next(iterator._obj_ptr)
+        var key = iter_table[].PyIter_Next(iterator._obj_ptr)
         if not key:
             if cpy.PyErr_Occurred():
                 raise cpy.unsafe_get_error()
@@ -87,9 +88,9 @@ def native_mapping_string_keys(fields: PythonObject, string_type: PythonObject) 
 
 def _loaded_fields(module: PythonObject, pinned_hook: Bool = False) raises -> PythonObject:
     ref cpy = Python().cpython()
-    var fields = cpy.PyModule_GetDict(module._obj_ptr)
+    var fields = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not fields:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         raise Error("TypeError: native module connection is not a native module")
     var cls = _loaded_type(module)
     var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
@@ -123,9 +124,9 @@ def _native_loaded_module_full(name: String) raises -> PythonObject:
     # CONNECTIONS is private import-only metadata, like the binding context
     # tables. Do not rescan its fixed records on every lookup; all mutable
     # target modules and the exports actually consumed remain checked below.
-    var fields = cpy.PyModule_GetDict(metadata._obj_ptr)
+    var fields = cpython_table()[].PyModule_GetDict(metadata._obj_ptr)
     if not fields:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         raise Error("TypeError: native module connection metadata is not a module")
     var raw = _loaded_lookup(fields, "CONNECTIONS")
     if not raw:
@@ -313,7 +314,7 @@ def shared_dict_watcher() raises -> Int:
         return -1
     var identifier = cpy.lib.get_function[Int32]("PyDict_AddWatcher")(_shared_dict_modified_c)
     if identifier < 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         g[].watcher = -1
         return -1
     g[].watcher = Int(identifier)
@@ -336,7 +337,7 @@ def shared_dict_watch(fields: PyObjectPtr) raises -> Bool:
         return False
     ref cpy = Python().cpython()
     if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields) < 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return False
     return True
 
@@ -354,7 +355,7 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     var t = cpython_table()
     var modules = t[].PyImport_GetModuleDict()
     if not modules:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return False
     var found = t[].PyDict_GetItem(modules, entry.name_key._obj_ptr)
     if not found or found != entry.module._obj_ptr:
@@ -364,9 +365,9 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     cpy.Py_DecRef(cls)
     if not same_type:
         return False
-    var fields = cpy.PyModule_GetDict(entry.module._obj_ptr)
+    var fields = cpython_table()[].PyModule_GetDict(entry.module._obj_ptr)
     if not fields or fields != entry.fields._obj_ptr:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return False
     if entry.watched:
         # Watched namespace (Python >= 3.12): any key or value edit since the
@@ -399,7 +400,7 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
             var j = entry.unslotted[k]
             var current = cpy.PyDict_GetItemWithError(fields, entry.key_ptrs[j])
             if not current or current != entry.value_ptrs[j]:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return False
     return True
 
@@ -410,8 +411,8 @@ def _admit_module(name: String, module: PythonObject) raises:
     var registry = _loaded_lookup(cpython_table()[].PyImport_GetModuleDict(), "mojolearn._native_loaded_modules")
     var metadata = PythonObject(from_owned=cpy.Py_NewRef(registry))
     var connections = PythonObject(from_owned=cpy.Py_NewRef(
-        _loaded_lookup(cpy.PyModule_GetDict(metadata._obj_ptr), "CONNECTIONS")))
-    var fields = PythonObject(from_owned=cpy.Py_NewRef(cpy.PyModule_GetDict(module._obj_ptr)))
+        _loaded_lookup(cpython_table()[].PyModule_GetDict(metadata._obj_ptr), "CONNECTIONS")))
+    var fields = PythonObject(from_owned=cpy.Py_NewRef(cpython_table()[].PyModule_GetDict(module._obj_ptr)))
     var keys = List[PythonObject]()
     var values = List[PythonObject]()
     # driver-loop: over the fixed import-time module inventory, once per process

@@ -47,7 +47,8 @@ from providers.python.metrics_vector_input_pyapi import metric_vector_exact, met
 from bindings.metrics_reg_native import _reg_weights
 from bindings.native_array_storage import native_array_zeros
 from bindings.p3_labels_metrics_native import (
-    p3_integral_list, p3_text_codes, p3_text_classes, p3_table, P3_TEXT_OK)
+    p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK)
+from bindings.cpython_table import cpython_table
 
 comptime MC_NONE = -1
 comptime MC_PARAMS = 14
@@ -416,16 +417,16 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     _ = store  # keep the label store alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     ref cpy = Python().cpython()
-    var t = p3_table()
-    var raw = t[].list_new(k)
+    var t = cpython_table()
+    var raw = t[].PyList_New(k)
     if not raw:
         raise cpy.unsafe_get_error()
     var listed = PythonObject(from_owned=raw)
     for c in range(k):  # driver-loop: over the k distinct classes
-        var item = t[].long_from(classes[c])
+        var item = t[].PyLong_FromLongLong(classes[c])
         if not item:
             raise cpy.unsafe_get_error()
-        _ = t[].list_set(listed._obj_ptr, c, item)
+        _ = t[].PyList_SetItem(listed._obj_ptr, c, item)
     _ = classes^
     return Python.tuple(listed, codes)
 

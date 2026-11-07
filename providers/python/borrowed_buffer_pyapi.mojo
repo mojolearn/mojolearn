@@ -34,14 +34,34 @@ def connect_native_mmap_exporter(cls: PythonObject) raises:
     state[].cls = cls
 
 
+struct NativeNdarrayExporter(Defaultable, Movable):
+    # numpy.ndarray, retained the first time the full check below admits it
+    # (a static extension type, the one read from the imported numpy module):
+    # the common ndarray case is then one identity compare, before the
+    # sys.modules, array and mmap probes (lane ne1-e-table, row N233). A
+    # static type cannot be created or replaced from Python, so the retained
+    # identity stays the canonical one for the process.
+    var cls: PythonObject
+
+    def __init__(out self):
+        self.cls = PythonObject(None)
+
+
+comptime NATIVE_NDARRAY_EXPORTER = _Global[StorageType=NativeNdarrayExporter,
+    name="MojolearnNativeNdarrayExporterV1", init_fn=NativeNdarrayExporter.__init__]
+
+
 def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:
     # Shared no-context exporter admission. Exact memoryviews may retain a
     # Python-defined exporter, so inspect their base before acquiring a pin.
     # This routine never invokes a buffer protocol while deciding admission.
     if depth > 64:
         raise Error("TypeError: native buffer exporter nesting exceeds the supported limit")
-    var bi = native_loaded_module("builtins")
     var cls = py_type(value)
+    var ndarray_state = NATIVE_NDARRAY_EXPORTER.get_or_create_ptr()
+    if ndarray_state[].cls is not None and cls is ndarray_state[].cls:
+        return
+    var bi = native_loaded_module("builtins")
     if cls is bi.bytes or cls is bi.bytearray:
         return
     if cls is bi.memoryview:
@@ -76,6 +96,7 @@ def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:
         ref cpy = Python().cpython()
         var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
         if (flags & UInt64(512)) == 0 and cls is py_get(py_fields(numpy_module), "ndarray"):
+            ndarray_state[].cls = cls
             return
     var ctypes_module = py_get(sys.modules, "_ctypes")
     if ctypes_module is not None and py_type(ctypes_module) is py_type(sys):

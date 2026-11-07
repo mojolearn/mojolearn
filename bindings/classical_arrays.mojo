@@ -12,7 +12,7 @@
 from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
-from bindings.p3_labels_metrics_native import p3_type_word, p3_table
+from bindings.p3_labels_metrics_native import p3_type_word
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_setattr
@@ -52,14 +52,14 @@ def classical_address(value: PythonObject) raises -> PythonObject:
         if module:
             # NULL (SystemError set) for an object that is not a module:
             # cleared, and the general path below answers.
-            var fields = cpy.PyModule_GetDict(module)
+            var fields = cpython_table()[].PyModule_GetDict(module)
             if fields:
                 var array_key = PythonObject("Array")
                 var cls = t[].PyDict_GetItem(fields, array_key._obj_ptr)
                 if cls and p3_type_word(value._obj_ptr) == Int(cls):
                     return value._addr
                 return sequential_address(value)
-            p3_table()[].err_clear()
+            cpython_table()[].PyErr_Clear()
     var module = py_get(native_loaded_module("sys").modules, "mojolearn._array")
     if module is not None and py_type(value) is module.Array:
         return value._addr

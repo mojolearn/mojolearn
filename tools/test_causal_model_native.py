@@ -9,9 +9,9 @@ def test_compiled_entry_resolution_admits_raw_storage_before_keyed_reads():
     fields = PUBLIC.split("def _native_entry_fields", 1)[1].split("def _native_has_entry", 1)[0]
     assert 'py_type(entries) is types.ModuleType' in fields
     assert 'py_type(entries) is types.SimpleNamespace' in fields
-    # CPython calls use the std handle's pointers and the process-wide typed
-    # table (bindings/cpython_table.mojo), never a per-call by-name lookup.
-    assert 'cpy.PyModule_GetDict(entries._obj_ptr)' in fields
+    # CPython calls use the process-wide typed table
+    # (bindings/cpython_table.mojo), never a per-call by-name lookup.
+    assert 'cpython_table()[].PyModule_GetDict(entries._obj_ptr)' in fields
     assert 'cpython_table()[].PyObject_GenericGetDict(entries._obj_ptr, PyObjectPtr())' in fields
     assert 'get_function' not in PUBLIC
     assert 'from bindings.cpython_table import cpython_table' in PUBLIC

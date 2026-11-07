@@ -27,9 +27,8 @@
 # changes the key and the full admission runs again, with its refusals in
 # their original order. A record is written only after the full path
 # succeeded, and never holds its own model.
-from std.ffi import _Global, c_int
 from std.python import Python, PythonObject
-from std.python._cpython import ExternalFunction, PyObjectPtr
+from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
@@ -40,29 +39,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_arrays import classical_address
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
 
-# int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b)
-comptime _PyType_IsSubtype = ExternalFunction[
-    "PyType_IsSubtype", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
-
-
-struct ClusterCPython(Movable):
-    # Resolved once per process from the interpreter library the standard
-    # library selected (the bindings/cpython_table.mojo pattern): no dlsym by
-    # name per call.
-    var PyType_IsSubtype: _PyType_IsSubtype.type
-
-    def __init__(out self):
-        ref cpy = Python().cpython()
-        var lib = cpy.lib.borrow()
-        self.PyType_IsSubtype = _PyType_IsSubtype.load(lib)
-
-
-# Shared by every Mojo extension in the process: bump the name's version
-# whenever a field is added, removed or reordered.
-comptime CLUSTER_CPYTHON = _Global[
-    StorageType=ClusterCPython, name="MojolearnClusterCPythonV1",
-    init_fn=ClusterCPython.__init__,
-]
+# PyType_IsSubtype comes from the one CPython table (ClusterCPython,
+# MojolearnClusterCPythonV1, folded into it by lane ne1-e-table, 2026-11-06).
 
 # Py_TPFLAGS_TYPE_SUBCLASS: set on `type` and every metaclass.
 comptime _TYPE_SUBCLASS_FLAG = UInt64(1) << 31
@@ -79,8 +57,7 @@ def cluster_is_subclass(cls: PythonObject, owner: PythonObject) raises -> Bool:
             if ancestry[i] is owner:
                 return True
         return False
-    var t = CLUSTER_CPYTHON.get_or_create_ptr()
-    return Int(t[].PyType_IsSubtype(cls._obj_ptr, owner._obj_ptr)) != 0
+    return Int(cpython_table()[].PyType_IsSubtype(cls._obj_ptr, owner._obj_ptr)) != 0
 
 
 comptime _AFTER_FIT_SLOT = "cluster_after_fit_free_v1"

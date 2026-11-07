@@ -141,7 +141,7 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
         var runtime = context["runtime"]
         if py_type(runtime) is not types.ModuleType:
             raise Error("TypeError: parallel execution requires its connected native runtime")
-        var raw = cpy.PyModule_GetDict(runtime._obj_ptr)
+        var raw = cpython_table()[].PyModule_GetDict(runtime._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         var connected = PythonObject(from_owned=cpy.Py_NewRef(raw))
@@ -410,15 +410,16 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
         var count = len(keys)
         if len(row) != count:
             return False
-        var iterator_raw = cpy.PyObject_GetIter(row._obj_ptr)
+        var iter_table = cpython_table()
+        var iterator_raw = iter_table[].PyObject_GetIter(row._obj_ptr)
         if not iterator_raw:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
             return False
         var iterator = PythonObject(from_owned=iterator_raw)
         for j in range(count):  # driver-loop: over live class namespace key identities before lookup
-            var key_raw = cpy.PyIter_Next(iterator._obj_ptr)
+            var key_raw = iter_table[].PyIter_Next(iterator._obj_ptr)
             if not key_raw:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return False
             var key = PythonObject(from_owned=key_raw)
             if key is not keys[j]:
@@ -426,7 +427,7 @@ def _causal_block_class_unchanged(mut mods: NativeModules, record: PythonObject,
         for j in range(count):  # driver-loop: over retained class namespace values
             var raw = table[].PyObject_GetItem(row._obj_ptr, keys[j]._obj_ptr)
             if not raw:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return False
             var current = PythonObject(from_owned=raw)
             if current is not values[j]:

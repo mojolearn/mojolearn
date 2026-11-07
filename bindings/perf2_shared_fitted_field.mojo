@@ -92,7 +92,7 @@ def _instance_value(mut mods: NativeModules, model: PythonObject, key: PythonObj
     if not raw:
         # No instance dictionary: getattr decides, with its own error.
         ref cpy = Python().cpython()
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return (False, PythonObject(None))
     var fields = PythonObject(from_owned=raw)
     if py_type(fields) is not b.dict or not native_namespace_string_keys(fields._obj_ptr, b.str):

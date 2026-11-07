@@ -230,7 +230,8 @@ struct NativeArrayAdmission(Copyable, Movable):
         ref cpy = Python().cpython()
         for i in range(len(self.rows)):  # small-loop(self.rows: Array namespaces): fixed native storage class hierarchy
             var row = py_call(self.dict_get, self.rows[i])
-            var raw_iterator = cpy.PyObject_GetIter(row._obj_ptr)
+            var iter_table = cpython_table()
+            var raw_iterator = iter_table[].PyObject_GetIter(row._obj_ptr)
             if not raw_iterator:
                 raise cpy.unsafe_get_error()
             var iterator = PythonObject(from_owned=raw_iterator)
@@ -239,7 +240,7 @@ struct NativeArrayAdmission(Copyable, Movable):
             # Python keys view and list on every check; exact strings still
             # prevent foreign hash/equality hooks during the later lookups.
             for k in range(len(row)):  # small-loop(row: class namespace): validate every live metadata name first
-                var raw_key = cpy.PyIter_Next(iterator._obj_ptr)
+                var raw_key = iter_table[].PyIter_Next(iterator._obj_ptr)
                 if not raw_key:
                     if cpy.PyErr_Occurred():
                         raise cpy.unsafe_get_error()

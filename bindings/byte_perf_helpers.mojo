@@ -6,13 +6,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
-from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
+from bindings.cpython_table import cpython_table
 
 
 def byte_int_list_from_i32(address: Int, count: Int) raises -> PythonObject:
     """A new list of `count` Python ints read from native int32 storage."""
     ref cpy = Python().cpython()
-    var table = lm_cpython_table()
+    var table = cpython_table()
     var raw = table[].PyList_New(count)
     if not raw:
         raise cpy.unsafe_get_error()
@@ -35,7 +35,7 @@ def byte_int_list_from_i32(address: Int, count: Int) raises -> PythonObject:
 def byte_int_list_from_i64(address: Int, count: Int) raises -> PythonObject:
     """A new list of `count` Python ints read from native int64 storage."""
     ref cpy = Python().cpython()
-    var table = lm_cpython_table()
+    var table = cpython_table()
     var raw = table[].PyList_New(count)
     if not raw:
         raise cpy.unsafe_get_error()

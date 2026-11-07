@@ -15,6 +15,7 @@ from bindings.native_numpy_metadata import native_numpy_type
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
 from gemm.f16_widen import f16_bits_to_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
+from bindings.cpython_table import cpython_table
 
 
 def embedding_native_call(entry: PythonObject, args: PythonObject, list_store: Bool = False) raises -> PythonObject:
@@ -25,7 +26,7 @@ def embedding_native_call(entry: PythonObject, args: PythonObject, list_store: B
         if list_store:
             # Array._from_flat wrapped native numeric storage construction
             # failures in TypeError. The admitted inputs have no hooks.
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
             raise Error("TypeError: cannot build an index Array from these native values")
         var failure = stash_python_error()
         raise failure^

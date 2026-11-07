@@ -4,7 +4,6 @@ from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_class_admission import class_record, class_admit
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.native_array_snapshot import native_array_snapshot
@@ -80,7 +79,7 @@ struct UserObjectFlatten(Movable):
             if py_type(module) is not py_type(sys):
                 raise Error("TypeError: user-object Array metadata requires its native module")
             ref cpy = Python().cpython()
-            var raw = cpy.PyModule_GetDict(module._obj_ptr)
+            var raw = cpython_table()[].PyModule_GetDict(module._obj_ptr)
             if not raw or not native_namespace_string_keys(raw, self.b.str):
                 raise Error("TypeError: user-object Array metadata requires native string fields")
             var fields = PythonObject(from_borrowed=raw)
@@ -211,7 +210,7 @@ struct UserObjectFlatten(Movable):
         if cls is self.list_type or cls is self.tuple_type:
             var size = len(value)
             # Entries resolved once per process (perf2 table), not twice per container.
-            var t = perf2_cpython_table()
+            var t = cpython_table()
             var is_list = cls is self.list_type
             for i in range(size):  # cpu-route: walk exact native nested list/tuple slots once
                 var raw = t[].PyList_GetItem(value._obj_ptr, i) if is_list else t[].PyTuple_GetItem(value._obj_ptr, i)

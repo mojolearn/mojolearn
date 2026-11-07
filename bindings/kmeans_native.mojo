@@ -32,6 +32,7 @@ from core.p3nc_scan import p3nc_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from bindings.cpython_table import cpython_table
 
 comptime _INIT_ARRAY = 2
 comptime _HOLDER = "_resident_holder"
@@ -51,7 +52,7 @@ def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonO
             raise error
         _ = optimizer_python_error(error)
         ref cpy = Python().cpython()
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         _kmeans_mark_absent(binding, name)
         return PythonObject(None)
 

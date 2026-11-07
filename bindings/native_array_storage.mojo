@@ -9,13 +9,12 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_address import native_buffer_address
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 def _storage_metadata() raises -> PythonObject:
     var module = native_loaded_module("mojolearn._native_array_storage")
     ref cpy = Python().cpython()
-    var fields = cpy.PyModule_GetDict(module._obj_ptr)
+    var fields = cpython_table()[].PyModule_GetDict(module._obj_ptr)
     if not fields:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=cpy.Py_NewRef(fields))
@@ -31,7 +30,7 @@ def _storage_type(metadata: PythonObject) raises -> PythonObject:
         raise Error("TypeError: native array storage requires its extension type")
     var module = native_loaded_module("array")
     ref cpy = Python().cpython()
-    var owner = cpy.lib.get_function[PyObjectPtr]("PyType_GetModule")(cls._obj_ptr)
+    var owner = cpython_table()[].PyType_GetModule(cls._obj_ptr)
     if not owner:
         cpython_table()[].PyErr_Clear()
         raise Error("TypeError: native array storage requires its extension type")
@@ -61,7 +60,7 @@ def native_array_zeros(code: String, count: Int) raises -> PythonObject:
         if bytes[i] != 0:
             raise Error("TypeError: native array storage seed changed")
     ref cpy = Python().cpython()
-    var result = cpy.lib.get_function[PyObjectPtr]("PySequence_Repeat")(seed._obj_ptr, count)
+    var result = cpython_table()[].PySequence_Repeat(seed._obj_ptr, count)
     _ = seed  # retain the original owner through the native repeat operation
     if not result:
         raise cpy.unsafe_get_error()
@@ -97,7 +96,7 @@ def native_array_from_values(code: String, source: PythonObject) raises -> Pytho
         # PythonObject item per element (an array.array source needs no
         # check: its iteration yields exact primitives).
         ref cpy = Python().cpython()
-        var t = perf2_cpython_table()
+        var t = cpython_table()
         var is_list = cls is b.list
         var int_type = b.int._obj_ptr
         var float_type = b.float._obj_ptr

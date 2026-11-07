@@ -11,6 +11,7 @@ from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequence_array_warnings import sequence_array_exception, sequence_array_report
 from core.sequence_array_format import sequence_float_text
 from core.sequence_array_cast import sequence_signaling, SEQ_CAST_INVALID
+from bindings.cpython_table import cpython_table
 
 comptime StringStoragePointer = MutPointer[UInt8, MutUntrackedOrigin]
 
@@ -91,7 +92,7 @@ def sequence_string_missing(dtype: PythonObject, context: PythonObject) raises -
     if result:
         return PythonObject(from_owned=result)
     if cpy.lib.get_function[c_int]("PyErr_ExceptionMatches")(context["sequence_attribute_error"]._obj_ptr) != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return PythonObject(None)
     raise cpy.unsafe_get_error()
 

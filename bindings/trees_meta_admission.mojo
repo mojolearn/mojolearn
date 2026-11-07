@@ -20,7 +20,7 @@
 # a value runs before the full admission has accepted it.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.prep_native_estimator import prep_estimator_call, prep_estimator_plan
@@ -98,7 +98,7 @@ def _record_of(model: PythonObject, context: PythonObject) raises -> PythonObjec
 # accessors (borrowed references, no Python temporaries); sets keep the
 # `list(value)` copy. A miss builds the record exactly as before.
 def _held_at(held: PythonObject, pos: Int) raises -> PythonObject:
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     return PythonObject(from_borrowed=table[].PyList_GetItem(held._obj_ptr, pos))
 
 
@@ -127,7 +127,7 @@ def _match_into(held: PythonObject, mut pos: Int, value: PythonObject, context: 
     var kind = py_type(value)
     if kind is b.bool or kind is b.int or kind is b.float or kind is b.str:
         return True
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     if kind is b.dict:
         var size = len(value)
         if not _held_count(held, pos, size):

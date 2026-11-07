@@ -2,7 +2,8 @@
 # Explicit CPU model operations. Each connected family enters one native
 # owner; other families remain unchanged until their full contract is ported.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact
@@ -26,6 +27,9 @@ from core.host_tree_impl import host_tree_column_copy
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
 
 
+comptime _HOST_KIND_SLOT = "host_inference_kind_v1"
+
+
 def host_inference_entry(name: String, context: PythonObject) raises -> PythonObject:
     var entry = py_get(context["host_inference_entries"], name)
     if entry is None:
@@ -39,14 +43,23 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     classical_connect_numpy(context)
     var fields = host_tree_constructor_fields(model, context)
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    var kind = PythonObject(None)
-    for i in range(len(mro)):  # driver-loop: fixed explicit CPU class ancestry
-        kind = py_get(context["host_inference_kinds"], mro[i])
-        if kind is not None:
-            break
+    # The owner kind of the class is kept per class state (class_record; the
+    # payload is the kind str, so the record never retains the class): the
+    # type watcher drops it when the class or an ancestor changes (lane
+    # ne1-e-table, row N225). The stored-field admissions below stay per
+    # call until the model record (bindings/native_model_records.mojo) holds them.
+    var mods = NativeModules()
+    var cls = py_type(model)
+    var kind = class_record(mods, _HOST_KIND_SLOT, cls)
     if kind is None:
-        raise Error("TypeError: no native explicit CPU prediction owner for this class")
+        var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+        for i in range(len(mro)):  # driver-loop: fixed explicit CPU class ancestry
+            kind = py_get(context["host_inference_kinds"], mro[i])
+            if kind is not None:
+                break
+        if kind is None:
+            raise Error("TypeError: no native explicit CPU prediction owner for this class")
+        class_admit(mods, _HOST_KIND_SLOT, cls, kind)
     var logistic = String(kind) == "logistic"
     var svc = String(kind) == "svc"
     var kde = String(kind) == "kde"

@@ -28,7 +28,6 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module, shared_dict_watcher, shared_dict_epoch, shared_dict_watch
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call
@@ -81,7 +80,7 @@ def _class_watcher() raises -> Int:
     if identifier < 0:
         # All interpreter watcher slots are taken: keep the full per-call
         # admission instead of failing the operation.
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         g[].watcher = -1
         return -1
     g[].watcher = Int(identifier)
@@ -114,7 +113,7 @@ def _class_arm(cls: PythonObject) raises -> Bool:
         # Watch refused (e.g. a sub-interpreter that does not know this
         # watcher ID): admit no record, so the caller keeps the full per-call
         # admission instead of failing the user's call.
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return False
     return cpy.lib.get_function[Int32]("PyUnstable_Type_AssignVersionTag")(cls._obj_ptr) != 0
 
@@ -130,7 +129,7 @@ def class_record(mut mods: NativeModules, slot: String, cls: PythonObject) raise
         return PythonObject(None)
     # Pointers resolved once per process (perf2-shared table), not three
     # dlsym lookups per record read: doors read records per MRO row.
-    var t = perf2_cpython_table()
+    var t = cpython_table()
     var raw_epoch = t[].PyTuple_GetItem(record._obj_ptr, 0)
     var epoch = t[].PyLong_AsLongLong(raw_epoch)
     if Int(epoch) != _class_epoch(cls):

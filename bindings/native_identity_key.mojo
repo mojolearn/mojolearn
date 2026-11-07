@@ -12,7 +12,6 @@ from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_type, py_call
 from bindings.native_array_snapshot import native_array_slots
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 struct NativeIdentityKey(Movable, Writable):
@@ -111,7 +110,7 @@ struct NativeIdentityKey(Movable, Writable):
         else:
             # Container kind is stable during this GIL-held native walk; choose
             # the supported accessor once, outside the item loop.
-            var table = perf2_cpython_table()
+            var table = cpython_table()
             var is_list = cls is self.list_type
             for i in range(size):  # driver-loop: over retained exact container metadata
                 var item = table[].PyList_GetItem(value._obj_ptr, i) if is_list else table[].PyTuple_GetItem(value._obj_ptr, i)
@@ -142,7 +141,7 @@ struct NativeIdentityKey(Movable, Writable):
         else:
             # Container kind is stable during this GIL-held native walk; choose
             # the supported accessor once, outside the item loop.
-            var table = perf2_cpython_table()
+            var table = cpython_table()
             var is_list = cls is self.list_type
             for i in range(size):  # driver-loop: over live retained container pointers
                 var item = table[].PyList_GetItem(value._obj_ptr, i) if is_list else table[].PyTuple_GetItem(value._obj_ptr, i)
@@ -274,15 +273,16 @@ struct NativeIdentityKey(Movable, Writable):
             # before any lookup. The retained row is an exact mappingproxy
             # produced by type.__dict__; its iterator is CPython's native
             # dictionary-key iterator, never a caller-defined protocol.
-            var iterator_raw = cpy.PyObject_GetIter(row._obj_ptr)
+            var iter_table = cpython_table()
+            var iterator_raw = iter_table[].PyObject_GetIter(row._obj_ptr)
             if not iterator_raw:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return False
             var iterator = PythonObject(from_owned=iterator_raw)
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over live namespace key identities before lookup
-                var key_raw = cpy.PyIter_Next(iterator._obj_ptr)
+                var key_raw = iter_table[].PyIter_Next(iterator._obj_ptr)
                 if not key_raw:
-                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                    cpython_table()[].PyErr_Clear()
                     return False
                 var key = PythonObject(from_owned=key_raw)
                 if py_type(key) is not self.str_type or key is not self.array_row_keys[i][j]:
@@ -290,7 +290,7 @@ struct NativeIdentityKey(Movable, Writable):
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over retained native namespace keys
                 var raw = cpython_table()[].PyObject_GetItem(row._obj_ptr, self.array_row_keys[i][j]._obj_ptr)
                 if not raw:
-                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                    cpython_table()[].PyErr_Clear()
                     return False
                 var current = PythonObject(from_owned=raw)
                 if current is not self.array_row_values[i][j]:

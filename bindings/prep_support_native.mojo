@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.mode_metadata_native import _fields, _truth
 from bindings.params_metadata_native import _resolved, _value
 from bindings.sequential_admission import _one_of
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
+from bindings.cpython_table import cpython_table
 
 
 def _support_truth(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -50,7 +50,7 @@ def prep_support(model: PythonObject, indices: PythonObject, context: PythonObje
     # tuple C storage by pointer; other items keep the scalar truth check.
     var result = Python.list()
     var is_list = py_type(mask) is b.list
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     var true_ptr = PythonObject(True)._obj_ptr
     var false_ptr = PythonObject(False)._obj_ptr
     for i in range(len(mask)):  # driver-loop: completed support metadata, no input arithmetic

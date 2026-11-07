@@ -14,7 +14,7 @@ from bindings.native_array_storage import native_array_from_bytes
 from bindings.optimizer_public_words import stash_python_error
 from bindings.umap_parameters_native import umap_is_string
 from bindings.manifold_temporal_native import temporal_object_kind
-from bindings.manifold_storage_native import manifold_calls
+from bindings.cpython_table import cpython_table
 from core.native_scalar_decode import NativeRealBits
 
 
@@ -232,7 +232,7 @@ def _builtin_number(value: PythonObject, integer: Bool) raises -> PythonObject:
     if cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.complex and cls is not b.str and cls is not b.bytes and cls is not b.bytearray and cls is not b.memoryview and cls is not b.list and cls is not b.tuple and cls is not b.dict and value is not None:
         raise Error("TypeError: manifold scalar settings require native numbers or text; Python conversion protocols cannot execute")
     # Resolved once per process (was a by-name lookup per setting; p3 rank 703).
-    var calls = manifold_calls()
+    var calls = cpython_table()
     var pointer = calls[].PyNumber_Long(value._obj_ptr) if integer else calls[].PyNumber_Float(value._obj_ptr)
     if not pointer:
         var error = stash_python_error()
@@ -250,13 +250,13 @@ def _buffer_number(state: ManifoldScalarSnapshot, integer: Bool) raises -> Pytho
         return _builtin_number(state.raw, True)
     ref cpy = Python().cpython()
     var input = state.raw if state.char == "memoryview" else state.item
-    var pointer = manifold_calls()[].PyNumber_Float(input._obj_ptr)
+    var pointer = cpython_table()[].PyNumber_Float(input._obj_ptr)
     if pointer:
         return PythonObject(from_owned=pointer)
     if state.char == "memoryview":
         var b = native_loaded_module("builtins")
         if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(b.ValueError._obj_ptr) != 0:
-            cpy.PyErr_Clear()
+            cpython_table()[].PyErr_Clear()
             var message = String("could not convert string to float: ") + String(state.item)
             cpy.PyErr_SetString(b.ValueError._obj_ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
     var error = stash_python_error()

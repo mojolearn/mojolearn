@@ -161,7 +161,7 @@ def _native_entry_fields(mut mods: NativeModules, entries: PythonObject) raises 
     ref cpy = Python().cpython()
     var fields = PythonObject(None)
     if py_type(entries) is types.ModuleType:
-        var raw = cpy.PyModule_GetDict(entries._obj_ptr)
+        var raw = cpython_table()[].PyModule_GetDict(entries._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         fields = PythonObject(from_owned=cpy.Py_NewRef(raw))

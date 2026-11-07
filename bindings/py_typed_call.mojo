@@ -23,9 +23,9 @@ def _connected_builtin(name: String) raises -> PythonObject:
     var registry = _loaded_lookup(modules, "mojolearn._native_loaded_modules")
     if not registry:
         return PythonObject(None)
-    var fields = cpy.PyModule_GetDict(registry)
+    var fields = cpython_table()[].PyModule_GetDict(registry)
     if not fields:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return PythonObject(None)
     var raw = _loaded_lookup(fields, "CONNECTIONS")
     if not raw:

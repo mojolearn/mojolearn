@@ -30,7 +30,7 @@ from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
 from bindings.str_labels_native import str_lookup
 from bindings.user_objects_native import _Env, _f32_exact, _indicator
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
+from bindings.cpython_table import cpython_table
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -987,7 +987,7 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
     # sets OverflowError, which is cleared and takes the label input step):
     # no Python rich comparison or Int conversion per label (p3-prep).
     ref cpy = Python().cpython()
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     var nw = 2 * total
     var words = classical_wrap_array(native_array_zeros("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
     var dest = I64P(unsafe_from_address=Int(py=classical_address(words)))
@@ -1002,7 +1002,7 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
             var v = row[j]
             var word = table[].PyLong_AsLongLong(v._obj_ptr)
             if word == -1 and cpy.PyErr_Occurred():
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return None
             dest[at] = word
             _ = words  # keep the Python object alive through the native call above

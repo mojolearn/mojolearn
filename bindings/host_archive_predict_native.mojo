@@ -10,6 +10,15 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.family_common import family_call, family_repr
 from bindings.host_archive_native import host_archive_build
 from bindings.host_svc_native import host_svc_probability
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
+
+# Per class state and method: the verdict that the class ancestry is the
+# connected one and the public method resolves to the connected descriptor
+# (payload True, so the record never retains the class). The type watcher
+# drops it on any change of the class or an ancestor and the full walk runs
+# again (lane ne1-e-table, row N229). Python 3.10 / 3.11 keep the full walk.
+comptime _ARCHIVE_PREDICT_SLOT = "host_archive_predict_descriptor_v1_"
 
 
 def _class_name(record: PythonObject) raises -> String:
@@ -31,23 +40,27 @@ def _archive_prediction_record(model: PythonObject, method: Int, context: Python
         var record = records[i]
         if cls is not record[0]:
             continue
-        var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
-        if ancestry is not record[1]:
-            raise Error("TypeError: saved host prediction class ancestry changed")
         var name = String("predict") if method == 0 else String("predict_proba")
         var key = PythonObject(name)
-        var descriptor = PythonObject(None)
-        for k in range(len(ancestry)):  # driver-loop: over the class's method resolution order, without descriptors
-            var fields = py_call(b.type.__dict__["__dict__"].__get__, ancestry[k])
-            var keys = py_call(b.list, fields)
-            for j in range(len(keys)):  # driver-loop: over class field names, admitted before any keyed lookup
-                if py_type(keys[j]) is not b.str:
-                    raise Error("TypeError: saved host prediction requires native class field names")
-            if py_contains(fields, key):
-                descriptor = fields[key]
-                break
-        if descriptor is not record[3][method]:
-            raise Error("TypeError: saved host prediction cannot invoke a replaced public method or descriptor")
+        var mods = NativeModules()
+        var slot = String(_ARCHIVE_PREDICT_SLOT) + String(method)
+        if class_record(mods, slot, cls) is None:
+            var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+            if ancestry is not record[1]:
+                raise Error("TypeError: saved host prediction class ancestry changed")
+            var descriptor = PythonObject(None)
+            for k in range(len(ancestry)):  # driver-loop: over the class's method resolution order, without descriptors
+                var fields = py_call(b.type.__dict__["__dict__"].__get__, ancestry[k])
+                var keys = py_call(b.list, fields)
+                for j in range(len(keys)):  # driver-loop: over class field names, admitted before any keyed lookup
+                    if py_type(keys[j]) is not b.str:
+                        raise Error("TypeError: saved host prediction requires native class field names")
+                if py_contains(fields, key):
+                    descriptor = fields[key]
+                    break
+            if descriptor is not record[3][method]:
+                raise Error("TypeError: saved host prediction cannot invoke a replaced public method or descriptor")
+            class_admit(mods, slot, cls, PythonObject(True))
         if record[4][method] is None:
             raise Error("AttributeError: '" + _class_name(record) + "' object has no attribute '" + name + "'")
         # Method availability formerly ran during attribute lookup, before

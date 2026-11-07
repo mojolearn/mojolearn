@@ -5,7 +5,8 @@
 # torch.utils._python_dispatch helpers. The C entries are the ones used by
 # those helpers in the supported installed Torch, and are checked before cache.
 from std.ffi import _Global
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_class_admission import class_record, class_admit
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 
@@ -150,19 +151,29 @@ def _torch_connect() raises:
     cache[].module = module
 
 
+comptime _TORCH_BASE_SLOT = "native_torch_tensor_base_v1"
+
+
 def native_torch_admit(value: PythonObject) raises:
     _torch_connect()
     var cache = NATIVE_TORCH.get_or_create_ptr()
     var cls = py_type(value)
     if cls is not cache[].tensor and cls is not cache[].parameter:
         raise Error("TypeError: Torch buffers require an exact Tensor or Parameter without Python subclass hooks")
-    var bi = native_loaded_module("builtins")
-    var hierarchy = py_call(bi.type.__dict__["__mro__"].__get__, cls)
-    var has_base = False
-    for i in range(len(hierarchy)):  # driver-loop: over native Tensor class ancestry metadata
-        has_base = has_base or hierarchy[i] is cache[].base
-    if not has_base:
-        raise Error("TypeError: Torch Tensor class metadata does not derive from its native TensorBase")
+    # The ancestry verdict is kept per class state (class_record; payload
+    # True, so the record never retains the class): the type watcher drops it
+    # when the class or an ancestor changes (lane ne1-e-table, row N232).
+    # The thread-local mode checks below stay per call.
+    var mods = NativeModules()
+    if class_record(mods, _TORCH_BASE_SLOT, cls) is None:
+        var bi = native_loaded_module("builtins")
+        var hierarchy = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+        var has_base = False
+        for i in range(len(hierarchy)):  # driver-loop: over native Tensor class ancestry metadata
+            has_base = has_base or hierarchy[i] is cache[].base
+        if not has_base:
+            raise Error("TypeError: Torch Tensor class metadata does not derive from its native TensorBase")
+        class_admit(mods, _TORCH_BASE_SLOT, cls, PythonObject(True))
     native_torch_modes_admit()
 
 

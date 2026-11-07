@@ -6,6 +6,15 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes import _type_mro
 from bindings.mode_metadata_native import _class_fields
+from bindings.native_loaded_module import NativeModules
+from bindings.native_class_admission import class_record, class_admit
+from bindings.cpython_table import cpython_table
+
+# Per class state: the MRO row of the connected result owner (an int, so the
+# record never retains the class). A type watcher drops it when the class or
+# an ancestor changes, and the full ancestry and namespace check runs again
+# (lane ne1-e-table, row N241). Python 3.10 / 3.11 keep the full check.
+comptime _RESULT_SLOT = "linalg_result_owner_v1"
 
 
 def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -13,7 +22,15 @@ def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObje
     if py_type(cls) is not b.type:
         raise Error("TypeError: linalg results require native class metadata")
     var schemas = context["family_lin_result_schemas"]
+    var mods = NativeModules()
+    var known = class_record(mods, _RESULT_SLOT, cls)
     var ancestry = _type_mro(cls)
+    if known is not None:
+        var row = Int(py=known)
+        if row >= 0 and row < len(ancestry):
+            var recorded = py_get(schemas, ancestry[row])
+            if recorded is not None:
+                return recorded
     var schema = PythonObject(None)
     var start = -1
     for i in range(len(ancestry)):  # driver-loop: over result class ancestry to find the connected tuple owner
@@ -43,6 +60,7 @@ def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObje
         for hook in ["__getattribute__", "__getattr__", "__getitem__", "__iter__", "__len__", "__del__"]:  # small-loop(native result protocol names)
             if py_contains(fields, hook):
                 raise Error("TypeError: linalg results cannot invoke Python tuple protocols")
+    class_admit(mods, _RESULT_SLOT, cls, PythonObject(start))
     return schema
 
 
@@ -70,10 +88,11 @@ def linalg_result_operation(operation: String, args: PythonObject, context: Pyth
         raise Error("TypeError: linalg result field index must be a native integer")
     var index = Int(py=args[1])
     ref cpy = Python().cpython()
-    var count = cpy.lib.get_function[Int]("PyTuple_Size")(value._obj_ptr)
+    var table = cpython_table()
+    var count = table[].PyTuple_Size(value._obj_ptr)
     if index < 0 or index >= count:
         raise Error("IndexError: tuple index out of range")
-    var item = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(value._obj_ptr, index)
+    var item = table[].PyTuple_GetItem(value._obj_ptr, index)
     if not item:
         raise cpy.unsafe_get_error()
     return PythonObject(from_borrowed=item)

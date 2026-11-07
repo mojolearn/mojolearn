@@ -5,7 +5,6 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
@@ -31,7 +30,7 @@ def _string_keys(fields: PythonObject) raises:
 
 def _outside() raises -> Bool:
     ref cpy = Python().cpython()
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     var pointer = table[].PyEval_GetFrame()
     if not pointer:
         return True
@@ -221,7 +220,7 @@ def _bound_function(function: PythonObject, model: PythonObject) raises -> Pytho
     if py_type(function) is not native_loaded_module("types").FunctionType:
         raise Error("TypeError: native method binding requires an exact function")
     ref cpy = Python().cpython()
-    var pointer = perf2_cpython_table()[].PyMethod_New(function._obj_ptr, model._obj_ptr)
+    var pointer = cpython_table()[].PyMethod_New(function._obj_ptr, model._obj_ptr)
     if not pointer:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=pointer)
@@ -260,7 +259,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
     ref cpy = Python().cpython()
     # Direct CPython function metadata access avoids the object.__getattr__
     # audit event emitted by Python's function.__code__ getset descriptor.
-    var code = perf2_cpython_table()[].PyFunction_GetCode(schema["check"]._obj_ptr)
+    var code = cpython_table()[].PyFunction_GetCode(schema["check"]._obj_ptr)
     if not code:
         raise cpy.unsafe_get_error()
     if PythonObject(from_borrowed=code) is not schema["code"]:
@@ -505,7 +504,7 @@ def public_attribute_generic_slot_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr)
 def _public_attribute_generic_entry[slot: Bool](args_ptr: PyObjectPtr) -> PyObjectPtr:
     try:
         ref cpy = Python().cpython()
-        var table = perf2_cpython_table()
+        var table = cpython_table()
         if table[].PyTuple_Size(args_ptr) != 3:
             raise Error("TypeError: generic public attribute expects model, name and native context")
         # CPython owns this METH_VARARGS tuple throughout the C call. Borrow

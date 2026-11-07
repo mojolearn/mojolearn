@@ -13,7 +13,7 @@ from std.os import getenv
 from std.math import isfinite
 from core.sha256 import Sha256, sha256_hex_addr
 from core.sha256_file import sha256_file
-from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
+from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path, native_json_parse
 from bindings.mode_metadata_native import _class_fields
@@ -259,7 +259,7 @@ def corpus_hash_bytes(data: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var address: Int
     if py_type(data) is bi.bytes:
-        address = lm_cpython_table()[].PyBytes_AsString(data._obj_ptr)
+        address = cpython_table()[].PyBytes_AsString(data._obj_ptr)
     else:
         address = Int(cpy.lib.get_function[UnsafePointer[Int8, MutExternalOrigin]]("PyByteArray_AsString")(data._obj_ptr))
     var digest = sha256_hex_addr(address, len(data))
@@ -286,7 +286,7 @@ def corpus_hash_file(path: PythonObject) raises -> PythonObject:
             var part = py_call(f["read"], fd, 1 << 22)
             if len(part) == 0:
                 break
-            hash.update(lm_cpython_table()[].PyBytes_AsString(part._obj_ptr), len(part))
+            hash.update(cpython_table()[].PyBytes_AsString(part._obj_ptr), len(part))
             _ = part
     finally:
         py_call(f["close"], fd)

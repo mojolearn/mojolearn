@@ -13,7 +13,6 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_class_admission import static_builtin_type
 from bindings.optimizer_public_words import stash_python_error
@@ -24,7 +23,7 @@ def family_raw_get(model: PythonObject, name: String) raises -> PythonObject:
     unchanged at the door."""
     ref cpy = Python().cpython()
     var key = PythonObject(name)
-    var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
+    var result = cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
     if not result:
         var failure = stash_python_error()
         raise failure^
@@ -42,7 +41,7 @@ def family_raw_get_or(model: PythonObject, name: String, default: PythonObject) 
     # non-AttributeError exceptions (BGMM first fit, extended GMM, GMM reload).
     # Reproduction: tests/native_family_raw_attr_probe.mojo and its Python test.
     var attribute_error = static_builtin_type("builtins", "AttributeError")
-    var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
+    var result = cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
     if not result:
         if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
             cpython_table()[].PyErr_Clear()
@@ -58,7 +57,7 @@ def family_raw_has(model: PythonObject, name: String) raises -> Bool:
     # fresh Python sentinel list per probe.
     var key = PythonObject(name)
     var attribute_error = static_builtin_type("builtins", "AttributeError")
-    var result = perf2_cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
+    var result = cpython_table()[].PyObject_GenericGetAttr(model._obj_ptr, key._obj_ptr)
     if not result:
         if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
             cpython_table()[].PyErr_Clear()

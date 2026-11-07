@@ -753,13 +753,14 @@ def _member_addresses(members: PythonObject) raises -> List[Int]:
     context retains the set, so the members stay alive)."""
     ref cpy = Python().cpython()
     var out = List[Int]()
-    var raw_iterator = cpy.PyObject_GetIter(members._obj_ptr)
+    var iter_table = cpython_table()
+    var raw_iterator = iter_table[].PyObject_GetIter(members._obj_ptr)
     if not raw_iterator:
         var failure = stash_python_error()
         raise failure^
     var iterator = PythonObject(from_owned=raw_iterator)
     while True:  # driver-loop: over the few connected class-set members
-        var raw = cpy.PyIter_Next(iterator._obj_ptr)
+        var raw = iter_table[].PyIter_Next(iterator._obj_ptr)
         if not raw:
             if cpy.PyErr_Occurred():
                 var failure = stash_python_error()

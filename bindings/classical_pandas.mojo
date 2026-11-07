@@ -15,7 +15,7 @@ from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.p3_labels_metrics_native import p3_table, p3_type_word
+from bindings.p3_labels_metrics_native import p3_type_word
 
 
 def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
@@ -52,9 +52,9 @@ def _pd_class_word(modules: PyObjectPtr, module_name: String, name: String) rais
     var module = t[].PyDict_GetItem(modules, module_key._obj_ptr)
     if not module:
         return 0
-    var fields = cpy.PyModule_GetDict(module)
+    var fields = cpython_table()[].PyModule_GetDict(module)
     if not fields:
-        p3_table()[].err_clear()  # not a module: no pandas class here
+        cpython_table()[].PyErr_Clear()  # not a module: no pandas class here
         return 0
     var name_key = PythonObject(name)
     var cls = t[].PyDict_GetItem(fields, name_key._obj_ptr)
@@ -260,9 +260,9 @@ def _pd_cell_bits(raw: PyObjectPtr, int_word: Int, float_word: Int, bool_word: I
         raise Error("TypeError: pandas object storage must contain native numeric scalars without Python conversion hooks")
     var word = p3_type_word(raw)
     if word == int_word or word == float_word or word == bool_word:
-        var number = p3_table()[].float_as(raw)
+        var number = cpython_table()[].PyFloat_AsDouble(raw)
         if number == -1.0:
-            if p3_table()[].err_occurred():
+            if cpython_table()[].PyErr_Occurred():
                 raise cpy.unsafe_get_error()
         return f64_to_f32_bits(bitcast[DType.uint64](number))
     return _pd_object_bits(PythonObject(from_borrowed=raw), context)
