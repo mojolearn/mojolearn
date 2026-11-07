@@ -130,7 +130,7 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
             var scaled = k.ew1(OP_SCALE, u, 20.0)
             return Optional(family_f32_snapshot(mk_out2(k.ew1(OP_ADDS, scaled, -10.0), context), 2, "init", context))
         # 'pca'
-        var m = mk_from_snapshot(x, "X", context)
+        var m = k.from_snapshot(x, "X")
         if nc > min(mk_r(m), mk_c(m)):
             raise Error("UMAP init='pca' needs n_components <= min(n_samples, n_features)")
         # k.center(M, k.colmean(M))

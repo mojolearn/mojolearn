@@ -711,6 +711,29 @@ struct MKit(Movable):
         _ = a^
         return device_identifier(nd)
 
+    def from_snapshot(mut self, value: ArrayMetadata, name: String) raises -> PythonObject:
+        """`mk_from_snapshot` on this kit (row N296). A resident kit uploads
+        straight from the admitted snapshot's address into a pooled device
+        buffer: no host words copy and no later upload of that copy (the
+        matrix the first device operation would have uploaded is device
+        resident from the start; every route the input takes is an exact
+        copy or a device route on either side, so no bit changes). The
+        finiteness refusal reads the same immutable snapshot, before the
+        upload, with the same sentence. A host kit keeps mk_from_snapshot."""
+        if not self.res():
+            return mk_from_snapshot(value, name, self.ctx)
+        var r = value.source.rows
+        var c = value.source.cols
+        if len(value.shape) != 2 or r == 0 or c == 0:
+            raise Error(name + ": a nonempty two-dimensional input is required")
+        var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
+        if not family_all_finite_f32(src, r * c):
+            raise Error(name + ": input must be finite; NaN/inf are unsupported")
+        var nd = self._devbuf(r * c)
+        self.upload(Int(py=device_identifier(nd)), value.source.addr, r * c)
+        _ = value  # keep the snapshot's owners alive through the synchronous upload
+        return mk_dev_view(nd, r, c, self.ctx)
+
     def dout(mut self, r: Int, c: Int) raises -> PythonObject:
         return mk_dev_view(self._devbuf(r * c), r, c, self.ctx)
 

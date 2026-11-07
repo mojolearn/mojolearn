@@ -379,7 +379,7 @@ def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var mode = settings.mode
     py_setitem(settings.fields, "numeric_mode_", mode)
     var k = _mani_kit(mode, args[0], context)
-    var got = _cmds_core(k, mk_from_snapshot(x, "X", context), family_field(fields, "metric"), family_field(fields, "metric_params"),
+    var got = _cmds_core(k, k.from_snapshot(x, "X"), family_field(fields, "metric"), family_field(fields, "metric_params"),
                          family_field(fields, "n_components"), context)
     py_setitem(settings.fields, "dissimilarity_matrix_", got[0])
     py_setitem(settings.fields, "eigenvalues_", got[1])
@@ -400,7 +400,7 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var mode = settings.mode
     py_setitem(settings.fields, "numeric_mode_", mode)
     var k = _mani_kit(mode, args[0], context)
-    var m = mk_from_snapshot(x, "X", context)
+    var m = k.from_snapshot(x, "X")
     var metric = family_field(fields, "metric")
     var dis: PythonObject
     if _mani_eq(metric, "precomputed", context):
@@ -525,7 +525,7 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     py_setitem(settings.fields, "_kind", PythonObject(kind))
     py_setitem(settings.fields, "_pw", PythonObject(pw))
     var k = _mani_kit(mode, args[0], context)
-    var m = mk_from_snapshot(x, "X", context)
+    var m = k.from_snapshot(x, "X")
     var n = mk_r(m)
     var graph = _iso_graph(settings, fields, k, m, n, kind, pw)
     var d = k.dijkstra(graph[0])
@@ -557,7 +557,7 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     classical_connect_numpy(context)
     var fields = settings.values
     var k = _mani_kit(settings.mode, args[0], context)
-    var q = mk_from_snapshot(x, "X", context)
+    var q = k.from_snapshot(x, "X")
     var fit_x = family_field(fields, "_fit_X")
     var n = mk_r(fit_x)
     var d = family_field(fields, "dist_matrix_m_")
@@ -767,7 +767,7 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     _mani_eigen_solver(solver, "LocallyLinearEmbedding", context)
     var k = _mani_kit(mode, args[0], context)
     var hk = _mani_host_kit(settings.default_mode, args[1], context)
-    var m = mk_from_snapshot(x, "X", context)
+    var m = k.from_snapshot(x, "X")
     var n = mk_r(m)
     var nn = _mani_int(family_field(fields, "n_neighbors"), context)
     var nc = _mani_int(family_field(fields, "n_components"), context)
@@ -822,7 +822,7 @@ def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     classical_connect_numpy(context)
     var fields = settings.values
     var k = _mani_kit(settings.mode, args[0], context)
-    var q = mk_from_snapshot(x, "X", context)
+    var q = k.from_snapshot(x, "X")
     var fit_x = family_field(fields, "_fit_X")
     var knn = _mani_knn(k, q, fit_x, _mani_int(family_field(fields, "_knn"), context), False, 0, 2.0)
     var idm = knn[0]
