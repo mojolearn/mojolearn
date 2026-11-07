@@ -40,10 +40,11 @@ comptime XD_DEV_ROWSUM = 15    # i: [a, dst, n, d]
 comptime XD_DEV_SQDIST = 16    # i: [a, b, dst, na, nb, d, kind]  f: [pw]
 comptime XD_DEV_MOVE = 17      # i: [src, idx, dst, op, count, a1, a2, a3, ist, ioff, nsrc, ndst, nidx]
 # Isomap.transform's geodesic gather-min (row N295): for each neighbor rank
-# a < nn, rows im[t * nn + a] of D plus column a of SQ, folded by MIN into G,
+# a < nn, rows im[t * nn + a] of D (dc columns, dn words; im holds imn
+# words) plus column a of SQ (q x nn), folded by MIN into G (q x dc),
 # exactly the take_rows / take_cols / ew ADD / ew MIN sequence the kit made
 # with seven crossings per rank. -> the id of G (q x n), caller-owned.
-comptime XD_DEV_ISO_GATHER_MIN = 18  # i: [d, im, sq, q, n, nn, one]
+comptime XD_DEV_ISO_GATHER_MIN = 18  # i: [d, im, sq, q, dc, nn, one, dn, imn]
 comptime XD_OPERATION_COUNT = 19
 
 comptime XD_CAP_HOST = 1       # the host-address operations
@@ -86,7 +87,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_DEV_MOVE:
         return (0, 13, 0)
     if op == XD_DEV_ISO_GATHER_MIN:
-        return (0, 7, 0)
+        return (0, 9, 0)
     raise Error("x_decomp native ABI: unknown operation " + String(op))
 
 
