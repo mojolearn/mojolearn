@@ -183,7 +183,7 @@ def _parameter(value: LayerInput, d: Int, name: String) raises:
 
 def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, eps: Float64,
          dy: PythonObject, mode: PythonObject, stats: PythonObject, grad_shape: List[Int],
-         context: PythonObject) raises -> PythonObject:
+         context: PythonObject, alloc_stats: Bool = False) raises -> PythonObject:
     var w = LayerInput(weight, context)
     var b = LayerInput(bias, context)
     _parameter(w, d, "weight")
@@ -218,6 +218,40 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
                 raise Error("ValueError: layer_norm: stats must use x's native binding")
             handles = Python.list(mean.handle, rstd.handle)
             _ = py_call(flags.append, PythonObject(1))
+        # Lane ne3-c-blocks-embedding (row N162): a device forward allocates
+        # y (and, with `alloc_stats`, the kept mean and rstd) inside the one
+        # `layer_norm_dev_alloc` crossing instead of one `seq_tensor_alloc`
+        # crossing per tensor. The same handles, the same launches: no bit
+        # moves. The result then carries the kept stats as a fifth item.
+        var fused = PythonObject(None)
+        if not backward:
+            fused = py_get(input.entries, "layer_norm_dev_alloc")
+        if fused is not None:
+            var out_count = max(1, shape_count(input.shape))
+            var fused_hs = Python.list(input.handle, PythonObject(0), PythonObject(0), PythonObject(0))
+            var sizes = Python.list(0, out_count, 0, 0)
+            var make_stats = stats is None and alloc_stats
+            if stats is not None:
+                _ = py_call(fused_hs.extend, handles)
+                _ = py_call(sizes.extend, Python.list(0, 0))
+            elif make_stats:
+                _ = py_call(fused_hs.extend, Python.list(0, 0))
+                _ = py_call(sizes.extend, Python.list(m, m))
+                _ = py_call(flags.append, PythonObject(1))
+            var fused_addrs = Python.list(w.address, b.address, PythonObject(0), PythonObject(0))
+            var made = py_call_typed(fused, fused_hs, fused_addrs, flags, fp, sizes)
+            var module = input.entries["module"]
+            var fused_output = seq_device_make(module, input.shape, made[1], PythonObject(None), context)
+            var kept = PythonObject(None)
+            if make_stats:
+                kept = Python.tuple(seq_device_make(module, [m], made[4], PythonObject(None), context),
+                                    seq_device_make(module, [m], made[5], PythonObject(None), context))
+            _ = mean^
+            _ = rstd^
+            _ = gradient^
+            _ = w^
+            _ = b^
+            return Python.tuple(fused_output, PythonObject(None), PythonObject(None), PythonObject(None), kept)
         var output = _new(input.entries, input.shape, context)
         var dy_owner = PythonObject(None)
         var dy_handle = PythonObject(0)
@@ -357,7 +391,11 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
     if not same:
         raise Error("ValueError: LayerNorm input trailing shape differs from normalized_shape")
     var stats = PythonObject(None)
-    if input.device and not Bool(py=context["seqln_keep_stats_off"]):
+    var keep_stats = input.device and not Bool(py=context["seqln_keep_stats_off"])
+    # Row N162: with the fused entry the kept stats are made inside the
+    # forward's one crossing (`_run`, alloc_stats) and published after it.
+    var fused = keep_stats and py_get(input.entries, "layer_norm_dev_alloc") is not None
+    if keep_stats and not fused:
         var m = input.count // d
         stats = Python.tuple(_new(input.entries, [m], context), _new(input.entries, [m], context))
     # Keep the same normalized input owner and resident statistics for the
@@ -365,7 +403,9 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
     py_setitem(fields, "_x", input.owner)
     py_setitem(fields, "_stats", stats)
     var result = _run(input, d, fields["weight"], fields["bias"], Float64(py=fields["eps"]), PythonObject(None),
-        py_get(fields, "numeric_mode"), stats, shape, context)
+        py_get(fields, "numeric_mode"), stats, shape, context, fused)
+    if fused and len(result) == 5:
+        py_setitem(fields, "_stats", result[4])
     _ = input^
     return result[0]
 

@@ -287,12 +287,31 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
             if t > 2147483647 // e or t > 2147483647 // k:
                 raise Error("ValueError: MoEBlock routing output exceeds signed 32-bit indexing")
             var h = _weights(fields, entries, words, r, gu, dn, context)
-            var y = _new(entries, snapshot.shape, context)
-            var logits = _new(entries, [t, e], context)
-            var sel = _new(entries, [t, k], context)
-            var w = _new(entries, [t, k], context)
-            _ = py_call_typed(entries["moe_forward_dev"], Python.list(snapshot.handle, _handle(y, context),
-                _handle(logits, context), _handle(sel, context), _handle(w, context)), Python.list(t, d, f, e, k, words[4], h))
+            var y = PythonObject(None)
+            var logits = PythonObject(None)
+            var sel = PythonObject(None)
+            var w = PythonObject(None)
+            var fused = py_get(entries, "moe_forward_dev_alloc")
+            if fused is not None:
+                # Lane ne3-c-blocks-embedding (row N163): the four outputs are
+                # allocated inside the forward's one crossing instead of four
+                # `seq_tensor_alloc` crossings; the same tensors and launches,
+                # so no bit moves.
+                var sizes = Python.list(0, max(1, shape_count(snapshot.shape)), max(1, t * e), max(1, t * k), max(1, t * k))
+                var made = py_call_typed(fused, Python.list(snapshot.handle, 0, 0, 0, 0),
+                    Python.list(t, d, f, e, k, words[4], h), sizes)
+                var module = entries["module"]
+                y = seq_device_make(module, snapshot.shape, made[1], PythonObject(None), context)
+                logits = seq_device_make(module, [t, e], made[2], PythonObject(None), context)
+                sel = seq_device_make(module, [t, k], made[3], PythonObject(None), context)
+                w = seq_device_make(module, [t, k], made[4], PythonObject(None), context)
+            else:
+                y = _new(entries, snapshot.shape, context)
+                logits = _new(entries, [t, e], context)
+                sel = _new(entries, [t, k], context)
+                w = _new(entries, [t, k], context)
+                _ = py_call_typed(entries["moe_forward_dev"], Python.list(snapshot.handle, _handle(y, context),
+                    _handle(logits, context), _handle(sel, context), _handle(w, context)), Python.list(t, d, f, e, k, words[4], h))
             py_setitem(fields, "_routing", Python.list(logits, sel, w, PythonObject(None)))
             _ = snapshot^
             _ = r^
