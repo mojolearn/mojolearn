@@ -73,6 +73,61 @@ def family_route_cluster(route: Int) -> Bool:
     return route >= FR_CLUSTER_FLAG
 
 
+def _owner_row(mut prefixes: List[String], mut owners: List[Int], mut exact: List[Bool],
+               prefix: String, owner: Int, is_exact: Bool):
+    prefixes.append(prefix)
+    owners.append(owner)
+    exact.append(is_exact)
+
+
+def _family_owner_rows(mut prefixes: List[String], mut owners: List[Int], mut exact: List[Bool]):
+    """The family owner prefixes (or exact names), in the priority order of
+    the former prefix chain of bindings/family_native.mojo: the first row
+    that matches names the owner. Straight-line appends, no branch."""
+    _owner_row(prefixes, owners, exact, "family_density_", FR_DENSITY, False)
+    _owner_row(prefixes, owners, exact, "family_par_public", FR_PAR_PUBLIC, True)
+    _owner_row(prefixes, owners, exact, "family_par_run", FR_PAR_RUN, True)
+    _owner_row(prefixes, owners, exact, "family_kmeans_", FR_KMEANS, False)
+    _owner_row(prefixes, owners, exact, "family_km_", FR_KM, False)
+    _owner_row(prefixes, owners, exact, "family_svm_", FR_SVM, False)
+    _owner_row(prefixes, owners, exact, "family_xc_", FR_XC, False)
+    _owner_row(prefixes, owners, exact, "family_metric_", FR_METRIC, False)
+    _owner_row(prefixes, owners, exact, "family_xn_", FR_XN, False)
+    _owner_row(prefixes, owners, exact, "family_chol_", FR_CHOL, False)
+    _owner_row(prefixes, owners, exact, "family_msel_", FR_MSEL, False)
+    _owner_row(prefixes, owners, exact, "family_svc_", FR_SVC, False)
+    _owner_row(prefixes, owners, exact, "family_gp_", FR_GP, False)
+    _owner_row(prefixes, owners, exact, "family_mcls_", FR_MCLS, False)
+    _owner_row(prefixes, owners, exact, "family_mexp_", FR_MEXP, False)
+    _owner_row(prefixes, owners, exact, "family_hdbscan_public_", FR_HDBSCAN_PUBLIC, False)
+    _owner_row(prefixes, owners, exact, "family_cfa_", FR_CFA, False)
+    _owner_row(prefixes, owners, exact, "family_cfb_", FR_CFB, False)
+    _owner_row(prefixes, owners, exact, "family_mix_", FR_MIX, False)
+    _owner_row(prefixes, owners, exact, "family_mani_", FR_MANI, False)
+    _owner_row(prefixes, owners, exact, "family_low_", FR_LOW, False)
+    _owner_row(prefixes, owners, exact, "family_lin_", FR_LINALG_OPS, False)
+    _owner_row(prefixes, owners, exact, "family_rs_", FR_LINALG_OPS, False)
+    _owner_row(prefixes, owners, exact, "family_pg_", FR_LINALG_OPS, False)
+
+
+def _family_owner_of(operation: String) -> Int:
+    """The owner of one `family_*` name: the first matching row of
+    `_family_owner_rows` (lane ne-fix-hang3, lesson 12: a loop over a
+    runtime row list instead of a 25-branch prefix chain in one function;
+    same tests in the same order)."""
+    var prefixes = List[String]()
+    var owners = List[Int]()
+    var exact = List[Bool]()
+    _family_owner_rows(prefixes, owners, exact)
+    for i in range(len(prefixes)):  # driver-loop: over the fixed owner rows of one name
+        if exact[i]:
+            if operation == prefixes[i]:
+                return owners[i]
+        elif operation.startswith(prefixes[i]):
+            return owners[i]
+    return FR_UNKNOWN
+
+
 def family_route(operation: String) -> Int:
     """The packed route word of one `family_*` operation name: the same
     tests, in the same order, the family dispatcher ran on every call (now
@@ -90,52 +145,7 @@ def family_route(operation: String) -> Int:
     var cluster = ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
                    or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
                        and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_"))
-    var owner = FR_UNKNOWN
-    if operation.startswith("family_density_"):
-        owner = FR_DENSITY
-    elif operation == "family_par_public":
-        owner = FR_PAR_PUBLIC
-    elif operation == "family_par_run":
-        owner = FR_PAR_RUN
-    elif operation.startswith("family_kmeans_"):
-        owner = FR_KMEANS
-    elif operation.startswith("family_km_"):
-        owner = FR_KM
-    elif operation.startswith("family_svm_"):
-        owner = FR_SVM
-    elif operation.startswith("family_xc_"):
-        owner = FR_XC
-    elif operation.startswith("family_metric_"):
-        owner = FR_METRIC
-    elif operation.startswith("family_xn_"):
-        owner = FR_XN
-    elif operation.startswith("family_chol_"):
-        owner = FR_CHOL
-    elif operation.startswith("family_msel_"):
-        owner = FR_MSEL
-    elif operation.startswith("family_svc_"):
-        owner = FR_SVC
-    elif operation.startswith("family_gp_"):
-        owner = FR_GP
-    elif operation.startswith("family_mcls_"):
-        owner = FR_MCLS
-    elif operation.startswith("family_mexp_"):
-        owner = FR_MEXP
-    elif operation.startswith("family_hdbscan_public_"):
-        owner = FR_HDBSCAN_PUBLIC
-    elif operation.startswith("family_cfa_"):
-        owner = FR_CFA
-    elif operation.startswith("family_cfb_"):
-        owner = FR_CFB
-    elif operation.startswith("family_mix_"):
-        owner = FR_MIX
-    elif operation.startswith("family_mani_"):
-        owner = FR_MANI
-    elif operation.startswith("family_low_"):
-        owner = FR_LOW
-    elif (operation.startswith("family_lin_") or operation.startswith("family_rs_")
-            or operation.startswith("family_pg_")):
-        owner = FR_LINALG_OPS
+    var owner = _family_owner_of(operation)
     return owner + FR_PRE_SCALE * pre + (FR_CLUSTER_FLAG if cluster else 0)
 
 
