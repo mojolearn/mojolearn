@@ -1,0 +1,6 @@
+index	sha	subject
+0	f9e06ecacf	trees_staged_input: _member_table recurses into itself; the walk returns the inner forest instead of calling back
+1	807b57ef0d	native_model_records: release-hook registry in a fixed InlineArray with a count, not a List
+2	3b913067b3	cluster_resident_table: the release-hook registration leaves _table(); cres_lookup/cres_store take it as a separate step
+3	41fb524e5a	cluster_native: _xc_optional_entry is a plain namespace read plus family_entry, no neural descriptor probe
+4	fd39b43fc0	cluster_resident_table: release-hook registration disabled (last-resort proof cut)
