@@ -23,7 +23,7 @@ from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from providers.python.byte_lm_json_checkpoint_pyapi import byte_json_payload, byte_json_arrays, byte_json_read
 from bindings.linalg_ops_native import linalg_ops_operation
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_numpy_metadata import native_numpy_type
+from bindings.native_numpy_metadata import native_numpy_type, native_numpy_dtype
 from bindings.native_buffer_owner import native_storage_allocate
 from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
 from providers.python.training_buffer_pyapi import training_f32_cast_owned
@@ -347,7 +347,11 @@ def byte_lm_host_construct(mut mods: NativeModules, trainer: PythonObject, args:
         var cls = py_type(values[i])
         var floating = cls is bi.float
         if numpy is not None:
-            floating = floating or cls is native_numpy_type("float64", context)
+            # np.float64 is not a name in numpy._core._multiarray_umath
+            # (NumPy 2), so native_numpy_type("float64") always refused: the
+            # float64 scalar class is read off the native dtype instead, as
+            # bindings/host_inference_scalars.mojo reads its aliases.
+            floating = floating or cls is py_call(native_numpy_dtype(context), "d").type
         if cls is not bi.int and not floating:
             raise Error(names[i] + " must be a real number")
         var value = Float64(py=values[i])
