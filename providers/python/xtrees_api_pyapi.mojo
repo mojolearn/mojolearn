@@ -21,6 +21,7 @@ from std.math import ceil
 from xtrees.folds_device import device_folds, leaf_numbering
 from xtrees.glue_device import (
     binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
+    rows_any_unset_device,
     positive_codes_device, spread_leaves_device, code_counts_device, class_rows_device, code_counts_host,
     class_rows_host,
 )
@@ -60,6 +61,7 @@ from xtrees.ops import (
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
     bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
+    rows_any_unset,
     spread_leaves, tree_shape, margin2, normalized_weights, iota_i32, fill_class_major_f64,
 )
 
@@ -967,6 +969,27 @@ def stack_w64_binding(cols: PythonObject, dst: PythonObject, params: PythonObjec
     return PythonObject(n * len(addrs))
 
 
+def rows_any_unset_binding(eq: PythonObject, out_i: PythonObject, params: PythonObject) raises -> PythonObject:
+    """eq: n * m uint8 equality flags (row-major, or column-major when
+    params[2] != 0); out_i int32 (n): 1 when any flag of the row is 0, else
+    0; params = [n, m, col_major] (lane ne2-b-members, N081:
+    MultiOutputClassifier.score). Compares only."""
+    _need(params, 3, "x_trees_rows_any_unset")
+    var n = _count(_i(params, 0), "x_trees_rows_any_unset")
+    var m = _count(_i(params, 1), "x_trees_rows_any_unset")
+    var col_major = _i(params, 2) != 0
+    if n > 0:
+        var e = Int(py=eq)
+        if m > 0 and e == 0:
+            raise Error("x_trees_rows_any_unset: null flag address")
+        var flags = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=e)
+        comptime if XTREES_DEVICE_OPS:
+            rows_any_unset_device(flags, n, m, col_major, i32_ptr(Int(py=out_i)))
+        else:
+            rows_any_unset(flags, n, m, col_major, i32_ptr(Int(py=out_i)))
+    return PythonObject(n)
+
+
 def binary_proba_binding(p: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
     """p float32 (n); res float64 (n x 2) = rows (1 - p, p), p widened
     exactly; params = [n] (lane apple-fast-py2mojo-trees)."""
@@ -1778,6 +1801,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[fast_switches_binding]("x_trees_fast_switches")
     m.def_function[device_folds_binding]("x_trees_device_folds")
     m.def_function[stack_w64_binding]("x_trees_stack_w64")
+    m.def_function[rows_any_unset_binding]("x_trees_rows_any_unset")
     m.def_function[binary_proba_binding]("x_trees_binary_proba")
     m.def_function[py2mojo_binding]("x_trees_py2mojo")
     m.def_function[exact_sum_binding]("x_trees_exact_sum")
