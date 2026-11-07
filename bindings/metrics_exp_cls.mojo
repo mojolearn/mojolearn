@@ -566,7 +566,11 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # fed by a host copy of the same k words (a device round trip and a
     # second binding call). Same stage, same input words, same result.
     var total_src = s.g_out[1] if s.weighted else s.cnt[1]
-    var total_out = s.prog.want(s.prog.alloc(2), 2)
+    # A plain alloc, never `want`: this program declares no outputs, so it
+    # downloads every non-input, non-scratch word (the epilogues' slots and
+    # this total). One `want` would switch the plan to declared-only
+    # downloads and every epilogue result would read back as zero.
+    var total_out = s.prog.alloc(2)
     s.prog.stage("cm_epi", 1, [_CM_TOTAL, total_src, k, 1 if s.weighted else 0, total_out])
     var arena = mx_run(s.prog, mode, context)
     var all_for = Python.tuple(PythonObject("precision"), PythonObject("recall"), PythonObject("f-score"))
