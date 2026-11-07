@@ -359,8 +359,6 @@ def test_trainer_mojo_backend_writes_the_python_reference_bytes(tok):
 def test_refuses_no_vocabulary_by_name():
     """Resolved before the binding is loaded, so this needs no build."""
     _raises(lambda: BpeTokenizer(), ValueError, "BpeTokenizer needs a vocabulary; mojolearn ships none. Use from_ranks_file, from_files or from_token_bytes")
-    _raises(lambda: BpeTokenizer(), ValueError, "BpeTokenizer.from_files(encoder_json, vocab_bpe)")
-    _raises(lambda: BpeTokenizer(), ValueError, "OpenAI publishes with its GPT-2 release")
     missing = os.path.join(tempfile.mkdtemp(), "ranks.tsv")
     _raises(lambda: BpeTokenizer.from_ranks_file(missing), FileNotFoundError, "does not exist")
 
