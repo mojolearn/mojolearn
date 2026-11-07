@@ -30,7 +30,7 @@ covers the protected-name refusal.
 """
 from std.python import PythonObject
 from bindings.native_class_admission import dict_keys_admit, dict_keys_admitted
-from bindings.native_loaded_module import shared_dict_epoch, shared_dict_watcher
+from bindings.native_loaded_module import shared_dict_epoch, shared_dict_stamped
 from bindings.native_model_records import records_live, records_open, records_slot_msel_plan
 
 # Storage (lane ne1-e-records, 2026-11-06): the record lives in the model's
@@ -47,7 +47,7 @@ def msel_fields_admitted(model: PythonObject, fields: PythonObject, plan: Python
     """True when `fields` (the instance dictionary of `model`) passed the full
     instance check for `plan` and the watched dictionary has not changed
     since."""
-    if shared_dict_watcher() < 0:
+    if not shared_dict_stamped():
         return False
     if not records_live(model):
         return False
@@ -67,7 +67,7 @@ def msel_fields_admit(model: PythonObject, fields: PythonObject, plan: PythonObj
     # Arms the dictionary watcher on `fields` (and records the exact-str key
     # admission, which the caller has just made).
     dict_keys_admit(fields)
-    if shared_dict_watcher() < 0:
+    if not shared_dict_stamped():
         return
     # `dict_keys_admit` returns silently when PyDict_Watch refuses this
     # dictionary (for example a watcher id registered by another

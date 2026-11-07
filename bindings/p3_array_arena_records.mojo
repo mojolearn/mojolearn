@@ -32,7 +32,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready
-from bindings.native_loaded_module import shared_dict_watcher, shared_dict_epoch
+from bindings.native_loaded_module import shared_dict_watcher, shared_dict_epoch, shared_dict_watch
 from bindings.cpython_table import cpython_table
 from bindings.native_model_records import records_live, records_open, records_slot_array_arena
 
@@ -213,13 +213,10 @@ def p3_dict_admitted(kind: Int, fields: PythonObject) raises -> Bool:
 def p3_dict_admit(kind: Int, fields: PythonObject) raises:
     """Record that `fields` just passed the full `kind` key admission (or
     that only this owner's own admitted keys went in since it did)."""
-    var watcher = shared_dict_watcher()
-    if watcher < 0:
-        return
-    ref cpy = Python().cpython()
-    if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields._obj_ptr) < 0:
-        # Watch refused: record nothing; the full walk stays per call.
-        cpython_table()[].PyErr_Clear()
+    # The shared watch (lane ne2-i-j): the 3.12+ dictionary watcher, or on
+    # CPython 3.10 / 3.11 the dictionary's own version tag. False = watch
+    # refused or unavailable: record nothing; the full walk stays per call.
+    if not shared_dict_watch(fields._obj_ptr):
         return
     var address = Int(fields._obj_ptr)
     var g = P3_DICT_RECORDS.get_or_create_ptr()
