@@ -832,7 +832,12 @@ class ExponentialSmoothing:
     _LAZY_COMPONENTS = ("level_", "trend_", "season_")
 
     def __getattr__(self, name):
-        # only reached when normal lookup fails: a component not built yet
+        # only reached when normal lookup fails: a component not built yet.
+        # Any other name (hasattr / copy / pickle probes, numeric_mode reads
+        # in _bind) is refused here with the native owner's own message, so
+        # it costs no binding crossing (argument routing only; row N224).
+        if name not in self._LAZY_COMPONENTS:
+            raise AttributeError("ExponentialSmoothing has no such attribute")
         return _TSA(self, "hw_attribute", (name,), _TSA_CONTEXT)
 
     def _component(self, comp, index, who):
