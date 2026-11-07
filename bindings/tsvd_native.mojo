@@ -27,11 +27,14 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.decomp_inputs import decomp_input, decomp_copied
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes
 comptime _TS_MAX_N = 512
 #: x_decomp/qfix.mojo TSVD_QFIX's bit in `x_decomp_qfix_flags`
 comptime _QFIX_TSVD = 2
+#: The prepared-owner slot of the device-resident components (N351).
+comptime _TSVD_RESIDENT_SLOT = "tsvd_resident_fitted_v1"
 
 
 def _repr(value: PythonObject) raises -> String:
@@ -278,6 +281,8 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     """`TruncatedSVD.fit`; returns the converted X (kept for fit_transform)."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
+    # New components replace the old: their device copy goes now (N351).
+    fitted_resident_drop(model, _TSVD_RESIDENT_SLOT)
     if Float64(py=py_call(b.float, _attr(model, fields, "tol"))) != 0.0:
         raise Error("NotImplementedError: mojolearn TruncatedSVD: tol is ARPACK's convergence tolerance "
                     + "and algorithm='arpack' is not implemented; leave tol=0.0")
@@ -320,6 +325,29 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     return x
 
 
+def _resident_lease(model: PythonObject, mode: String, entries: PythonObject, entry: String, stored: PythonObject,
+                    components: PythonObject, context: PythonObject) raises -> Int:
+    """The lease of `model`'s device copy of its fitted components (lane
+    ne1-a-decomp-resident, row N351): taken once per fitted state through
+    bindings/fitted_resident_door.mojo (prepared-owner record with the
+    model's generation word and the components object; the read-only rule
+    makes `components_` read-only), so transform and inverse_transform
+    upload only X. 0 when the binding has no resident entry `entry` (the
+    host binding), the converted components are not the stored object (a
+    cast copy), or the components cannot be made read-only: the caller then
+    takes the per-call entry, as before."""
+    if py_get(entries, PythonObject(entry)) is None:
+        return 0
+    var modules = py_get(context, "tsvd_modules")
+    var module = PythonObject(None) if modules is None else py_get(modules, PythonObject(mode))
+    if module is None:
+        return 0
+    if components is not stored:
+        fitted_resident_drop(model, _TSVD_RESIDENT_SLOT)
+        return 0
+    return fitted_resident_lease(model, _TSVD_RESIDENT_SLOT, module, "tsvd_resident_lease", Python.list(stored))
+
+
 def _project(model: PythonObject, fields: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`transform` of a converted X: X V^T through tsvd_transform."""
     var rows = Int(py=x.shape[0])
@@ -328,10 +356,18 @@ def _project(model: PythonObject, fields: PythonObject, x: PythonObject, context
         raise Error("mojolearn TruncatedSVD feature count differs from fit")
     var nc = _int(_attr(model, fields, "n_components_"))
     var out = _f32(Python.tuple(rows, nc), context)
-    var entries = _entries(_mode(fields, context), context)
-    var components = classical_host_f32(fields["components_"], 2, "components_", context)
-    _ = py_call_typed(entries["tsvd_transform"], classical_address(x), classical_address(components),
-                      classical_address(out), Python.list(rows, cols, nc))
+    var mode = _mode(fields, context)
+    var entries = _entries(mode, context)
+    var stored = fields["components_"]
+    var components = classical_host_f32(stored, 2, "components_", context)
+    var lease = _resident_lease(model, mode, entries, "tsvd_transform_resident", stored, components, context)
+    if lease > 0:
+        # The same gemm over the lease's device copy of the same words.
+        _ = py_call_typed(entries["tsvd_transform_resident"], classical_address(x), classical_address(components),
+                          classical_address(out), Python.list(rows, cols, nc, lease))
+    else:
+        _ = py_call_typed(entries["tsvd_transform"], classical_address(x), classical_address(components),
+                          classical_address(out), Python.list(rows, cols, nc))
     _ = components  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = components^
@@ -359,10 +395,18 @@ def tsvd_inverse_transform(model: PythonObject, source: PythonObject, context: P
         raise Error("mojolearn TruncatedSVD component count differs from fit")
     var nf = _int(_attr(model, fields, "n_features_in_"))
     var out = _f32(Python.tuple(rows, nf), context)
-    var entries = _entries(_mode(fields, context), context)
-    var components = classical_host_f32(_attr(model, fields, "components_"), 2, "components_", context)
-    _ = py_call_typed(entries["inverse_transform"], classical_address(z), classical_address(components),
-                      classical_address(components), classical_address(out), Python.list(rows, nf, nc, 0))
+    var mode = _mode(fields, context)
+    var entries = _entries(mode, context)
+    var stored = _attr(model, fields, "components_")
+    var components = classical_host_f32(stored, 2, "components_", context)
+    var lease = _resident_lease(model, mode, entries, "tsvd_inverse_transform_resident", stored, components, context)
+    if lease > 0:
+        # The same transpose and gemm over the lease's device copy (N351).
+        _ = py_call_typed(entries["tsvd_inverse_transform_resident"], classical_address(z),
+                          classical_address(components), classical_address(out), Python.list(rows, nf, nc, lease))
+    else:
+        _ = py_call_typed(entries["inverse_transform"], classical_address(z), classical_address(components),
+                          classical_address(components), classical_address(out), Python.list(rows, nf, nc, 0))
     _ = z  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above

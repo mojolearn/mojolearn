@@ -99,6 +99,14 @@ from decomposition.estimator import (
     tsvd_fit_host,
     tsvd_transform_host,
 )
+# Device-resident TruncatedSVD components (lane ne1-a-decomp-resident, N351).
+from decomposition.tsvd_resident_state import (
+    TsvdResidentLease,
+    tsvd_resident_lease_open,
+    tsvd_resident_stats_words,
+    tsvd_transform_resident_device,
+    tsvd_inverse_resident_device,
+)
 from core.p3_linear_impl import ols_predict_wide_device
 from glm.estimator import (
     ols_fit_host,
@@ -550,6 +558,74 @@ def tsvd_transform_binding(
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         tsvd_transform_host(ctx, xp, cp, op, nr, nf, nc)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def tsvd_resident_lease_binding() raises -> PythonObject:
+    """A new lease of this binding's TruncatedSVD store: `(owner, lease)`.
+    `owner` is the native object whose destruction frees the device copy the
+    lease holds; the caller keeps it as long as the copy may be used
+    (bindings/fitted_resident_door.mojo)."""
+    var lease = tsvd_resident_lease_open()
+    var owner = PythonObject(alloc=TsvdResidentLease(lease))
+    return Python.tuple(owner, PythonObject(lease))
+
+
+def tsvd_resident_stats_binding() raises -> PythonObject:
+    """`(live leases, kept entries, kept bytes, uploads, cap bytes)` of this
+    binding's TruncatedSVD store: a test-only readout."""
+    var words = tsvd_resident_stats_words()
+    return Python.tuple(PythonObject(words[0]), PythonObject(words[1]), PythonObject(words[2]),
+                        PythonObject(words[3]), PythonObject(words[4]))
+
+
+def _tsvd_resident_params(params: PythonObject, who: String) raises -> Tuple[Int, Int, Int, Int]:
+    if len(params) != 4:
+        raise Error(who + ": params must contain 4 values (n_rows, n_features, n_components, lease), got "
+                    + String(len(params)))
+    var lease = Int(py=params[3])
+    if lease < 0:
+        raise Error(who + ": the lease must be 0 or a lease, got " + String(lease))
+    return (Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), lease)
+
+
+def tsvd_transform_resident_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`tsvd_transform` with `params` = its 3 values followed by the lease
+    (`tsvd_resident_lease`; 0 uploads the components for this call only).
+    The components are read from the lease's device copy. Returns 0."""
+    var words = _tsvd_resident_params(params, "tsvd_transform_resident")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var c_address = Int(py=components_addr)
+    var op = _f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        tsvd_transform_resident_device(ctx, words[3], xp, c_address, op, words[0], words[1], words[2])
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def tsvd_inverse_transform_resident_binding(
+    scores_addr: PythonObject,
+    components_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """TruncatedSVD's `inverse_transform` (scores @ components, no mean) with
+    `params` = (n_rows, n_features, n_components, lease); the components are
+    read from the lease's device copy. Returns 0."""
+    var words = _tsvd_resident_params(params, "tsvd_inverse_transform_resident")
+    var zp = _f32_ptr(Int(py=scores_addr))
+    var c_address = Int(py=components_addr)
+    var op = _f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        tsvd_inverse_resident_device(ctx, words[3], zp, c_address, op, words[0], words[1], words[2])
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1583,6 +1659,12 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[tsvd_explained_binding]("tsvd_explained")
         m.def_function[tsvd_fit_explained_binding]("tsvd_fit_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
+        # Device-resident TruncatedSVD components (lane ne1-a-decomp-resident).
+        _ = m.add_type[TsvdResidentLease]("_TsvdResidentLease")
+        m.def_function[tsvd_resident_lease_binding]("tsvd_resident_lease")
+        m.def_function[tsvd_resident_stats_binding]("tsvd_resident_stats")
+        m.def_function[tsvd_transform_resident_binding]("tsvd_transform_resident")
+        m.def_function[tsvd_inverse_transform_resident_binding]("tsvd_inverse_transform_resident")
         m.def_function[ols_fit_binding]("ols_fit")
         m.def_function[ols_fit_resident_binding]("ols_fit_resident")
         m.def_function[ols_normal_eq_default_binding]("ols_normal_eq_default")

@@ -678,15 +678,32 @@ def tsvd_transform_host(
     n_features: Int,
     n_components: Int,
 ) raises:
+    var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    tsvd_transform_dev(ctx, x_ptr, components, out_ptr, n_rows, n_features, n_components)
+    _ = components^
+
+
+def tsvd_transform_dev(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut components: DeviceBuffer[DType.float32],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """`tsvd_transform_host` on components already on the device (the
+    per-call upload above, or a resident copy of the same words:
+    decomposition/tsvd_resident_state.mojo, lane ne1-a-decomp-resident):
+    X goes up, `out = X . components^T` by the same gemm_nt, out comes down."""
     var x: DeviceBuffer[DType.float32]
     comptime if TSVD_FAST_POOL:
         x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
     else:
         x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.synchronize()
     gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
@@ -708,13 +725,31 @@ def inverse_transform_host(
     n_components: Int,
     add_mean: Bool,
 ) raises:
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    inverse_transform_dev(ctx, scores_ptr, components, mean_ptr, out_ptr, n_rows, n_features, n_components, add_mean)
+    _ = components^
+
+
+def inverse_transform_dev(
+    ctx: DeviceContext,
+    scores_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut components: DeviceBuffer[DType.float32],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    add_mean: Bool,
+) raises:
+    """`inverse_transform_host` on components already on the device (the
+    per-call upload above, or a resident copy of the same words; lane
+    ne1-a-decomp-resident): the same transpose, gemm_nt and mean shift."""
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var components_t = ctx.enqueue_create_buffer[DType.float32](n_features * n_components)
     var mean = ctx.enqueue_create_buffer[DType.float32](n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
-    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     if add_mean:
         ctx.enqueue_copy(dst_buf=mean, src_ptr=mean_ptr)
     ctx.enqueue_function[transpose_kernel](
