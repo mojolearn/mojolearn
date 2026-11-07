@@ -46,8 +46,21 @@ def xcnn_builtins() raises -> PythonObject:
 
 
 def xcnn_connect_numpy(context: PythonObject) raises:
-    """Connect optional already-loaded native metadata without requiring arrays."""
+    """Connect the optional NumPy metadata without requiring arrays."""
     classical_connect_numpy(context)
+    if py_get(context, "ndarray") is None and py_get(context, "xcnn_numpy_import_tried") is None:
+        # The CNN host buffers are ndarrays. Importing the package never loads
+        # NumPy (NUMPY_FREE_CONTRACT.md; the former import-time `import numpy`
+        # in _native_xcnn_bridge.connect is gone), so the first CNN operation
+        # of a process imports an installed NumPy here, once, and connects it.
+        # A NumPy-free install records the attempt and keeps running
+        # scalar-only metadata operations; host arrays refuse in xcnn_numpy.
+        py_setitem(context, "xcnn_numpy_import_tried", PythonObject(True))
+        try:
+            _ = Python.import_module("numpy")
+        except:
+            pass  # NumPy is optional; xcnn_numpy raises the ImportError when arrays are needed
+        classical_connect_numpy(context)
     var admission = py_get(context, "admission_context")
     if admission is not None:
         classical_connect_numpy(admission)
