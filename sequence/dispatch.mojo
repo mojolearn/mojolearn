@@ -76,6 +76,7 @@ from sequence.ops import (
     OP_LN_BWD_X,
     OP_LN_BWD_W,
     OP_THETA,
+    OP_THETA_FORECAST,
     OP_CROSTON,
     OP_ETS,
     OP_GARCH,
@@ -137,7 +138,7 @@ from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp
 from autograd.kernels.linear import op_agk_gemm_epi, op_colsum_div
 from sequence.mlp import op_mlp_lb_epoch_fold, op_mlp_lb_epoch_part, op_mlp_lb_fold, op_mlp_lb_part
 from sequence.stl import op_stl
-from sequence.theta import op_theta
+from sequence.theta import op_theta, op_theta_forecast
 from sequence.croston import op_croston
 from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
@@ -676,6 +677,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_ln_bwd_w(t, a)
     elif OP == OP_THETA:
         op_theta(t, a)
+    elif OP == OP_THETA_FORECAST:
+        op_theta_forecast(t, a)
     elif OP == OP_CROSTON:
         op_croston(t, a)
     elif OP == OP_ETS:

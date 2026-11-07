@@ -71,6 +71,7 @@ from sequence.ops import (
     OP_LAMB_TRUST,
     OP_STL,
     OP_THETA,
+    OP_THETA_FORECAST,
     OP_CROSTON,
     OP_ETS,
     OP_GARCH,
@@ -137,7 +138,7 @@ def _element_weight[OP: Int](a: Args) -> Int:
     elif OP == OP_LAMB_SEGFOLD or OP == OP_LAMB_CLIP or OP == OP_LAMB_TRUST:
         return _HEAVY
     elif (
-        OP == OP_STL or OP == OP_THETA or OP == OP_CROSTON or OP == OP_ETS
+        OP == OP_STL or OP == OP_THETA or OP == OP_THETA_FORECAST or OP == OP_CROSTON or OP == OP_ETS
         or OP == OP_GARCH or OP == OP_PROPHET_FIT or OP == OP_CHOLSOLVE
         or OP == OP_VAR_FORECAST or OP == OP_SEG_SUMSQ or OP == OP_LAMB_RATIO
     ):

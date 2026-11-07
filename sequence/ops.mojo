@@ -228,6 +228,9 @@ comptime OP_SEQ_IOTA = 95
 #: lane cpu4-python: ProphetForecaster's scaled time and seasonal phases on the
 #: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
 comptime OP_PROPHET_PREP = 96
+#: lane ne1-a-decomp-tsa (N031): op_theta's forecast-only tail from its own
+#: fitted info row (sequence/theta.mojo op_theta_forecast).
+comptime OP_THETA_FORECAST = 99
 #: TOMBSTONE (lane/postmerge-act-5, 2026-10-09: -D MOJOLEARN_IDN_AF_VEC_FUSED (Adafactor fused vector step)): OP_AF_VFUSE = 97 and OP_AF_VFIN = 98
 #: was NOISE: NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), avg 0.98x, digest aa99a3dc unchanged. Deleted; codes 97/98 stay unused; recoverable at main 0a7b206f1.
 

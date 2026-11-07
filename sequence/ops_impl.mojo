@@ -11,6 +11,7 @@ from std.memory import bitcast, memcpy
 from sequence.perf3_seq_resident_words import seq_resident_words
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
+from sequence.ops import OP_THETA_FORECAST
 from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
@@ -1263,6 +1264,42 @@ def theta_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Flo
     ex.sync()
     ex.download(fptr(addrs[1], "forecast"), F, B * h)
     ex.download(fptr(addrs[2], "info"), I, B * 8)
+    return B * h
+
+
+def theta_forecast_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
+    """`theta_impl`'s forecast from its own fitted info rows, no fit (lane
+    ne1-a-decomp-tsa, N031; sequence/theta.mojo op_theta_forecast).
+    addrs = [y (B, n), info (B, 8) in (theta's info output), forecast (B, h)
+    out]; ip = [B, n, h, season_length]. Returns B * h."""
+    if len(addrs) != 3 or len(ip) != 4:
+        raise Error("theta_forecast: requires 3 addresses and 4 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var h = ival(ip, 2)
+    var m = ival(ip, 3)
+    if B < 1 or n <= 3 or h < 1 or m < 1:
+        raise Error("theta: B >= 1, n > 3 (the reference refuses tiny series), h >= 1, season_length >= 1")
+    # theta_impl's scratch row, so op_theta_forecast reads op_theta's layout
+    var stride = n + n + m + 5 * (n + h) + n + 64 + 12 + h
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var I = ex.alloc(B * 8)
+    ex.upload(I, fptr(addrs[1], "info"), B * 8)
+    var F = ex.alloc(B * h)
+    var S = ex.alloc(B * stride)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = F
+    a.p2 = I
+    a.p3 = S
+    a.i0 = n
+    a.i1 = h
+    a.i2 = m
+    a.i6 = stride
+    ex.launch[OP_THETA_FORECAST](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[2], "forecast"), F, B * h)
     return B * h
 
 

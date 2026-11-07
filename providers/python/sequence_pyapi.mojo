@@ -41,6 +41,7 @@ from sequence.ops_impl import (
     rnn_predict_impl,
     stl_impl,
     theta_impl,
+    theta_forecast_impl,
     var_fit_impl,
     var_forecast_impl,
 )
@@ -139,6 +140,11 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
 def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """The Python door of `theta_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(theta_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
+
+
+def theta_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """The Python door of `theta_forecast_impl` (sequence/ops_impl.mojo)."""
+    return PythonObject(theta_forecast_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:

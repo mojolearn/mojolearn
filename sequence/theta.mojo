@@ -621,3 +621,64 @@ def op_theta(t: Int, a: Args):
     st(info, 5, Float32(1.0) if decompose else Float32(0.0))
     st(info, 6, Float32(1.0) if (decompose and mult) else Float32(0.0))
     st(info, 7, Float32(iters))
+
+
+def op_theta_forecast(t: Int, a: Args):
+    """The forecast-only tail of `op_theta` for series t (lane
+    ne1-a-decomp-tsa, plan section A, row N031): the fitted level, alpha,
+    theta, model and decomposition words come from op_theta's own info row,
+    so a later `predict` with another horizon runs no Nelder-Mead. p0 y
+    [B, n]; p1 forecast [B, h] out; p2 info [B, 8] in (op_theta's: level,
+    alpha, theta, mse, model, decomposed, multiplicative, iters); p3
+    scratch [B, stride]. i0 n, i1 h, i2 m, i6 scratch stride (op_theta's
+    layout).
+
+    WHAT DOES NOT CHANGE. The fit does not read h (the horizon only sizes
+    scratch), the decomposition is recomputed by the same `_decompose` with
+    the multiplicative flag the fit settled on (it overwrites trend and
+    season in full, so its last call in op_theta is the one that counts),
+    and the run and the forecast are op_theta's final two calls with the
+    same arguments in the same comptime form (`theta_run_reg` is
+    bit-identical to `theta_run` by construction, the THETA_SPEC tail is the
+    register form): the forecast words are op_theta's."""
+    var n = a.i0
+    var h = a.i1
+    var m = a.i2
+    var sc = a.p3 + t * a.i6
+    var y = a.p0 + t * n
+    var yd = sc
+    var trend = yd + n
+    var seas = trend + n
+    var states = seas + (m if m > 0 else 1)
+    var e = states + 5 * (n + h)
+    var nm_scr = e + n
+    var x = nm_scr + 64
+    var lo = x + 4
+    var hi = lo + 4
+    var f = hi + 4
+    var info = a.p2 + t * 8
+    var decompose = ld(info, 5) != Float32(0.0)
+    var mult = ld(info, 6) != Float32(0.0)
+    for i in range(n):
+        st(yd, i, ld(y, i))
+    if decompose:
+        _decompose(y, n, m, mult, trend, seas)
+        for i in range(n):
+            var s = ld(seas, i % m)
+            st(yd, i, div(ld(y, i), s) if mult else sub(ld(y, i), s))
+    var bl = ld(info, 0)
+    var ba = ld(info, 1)
+    var bt = ld(info, 2)
+    var best_model = Int(ld(info, 4))
+    comptime if THETA_REG:
+        _ = theta_run_reg(yd, n, best_model, bl, ba, bt, states)
+        theta_forecast_reg(n, h, best_model, ba, bt, states, f)
+    else:
+        _ = theta_run(yd, n, best_model, bl, ba, bt, states, e)
+        theta_forecast(n, h, best_model, ba, bt, states, f)
+    for j in range(h):
+        var v = ld(f, j)
+        if decompose:
+            var s = ld(seas, (n - m + (j % m)) % m)
+            v = mul(v, s) if mult else add(v, s)
+        st(a.p1, t * h + j, v)
