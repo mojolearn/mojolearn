@@ -103,6 +103,7 @@
 # line from tools/identity_columns.py check (admissible=yes|NO), and
 # <outdir>/<file>.provenance.txt. The last line of stdout is
 #   RECORDED <file> rc=<harness rc> admissible=<yes|NO>
+# Each lane's wall time also goes to the timing ledger (tools/timing_ledger.py lanes; report --kind lane).
 set -uo pipefail
 
 die() { echo "record_identity_column: $*" >&2; exit 2; }
@@ -416,6 +417,12 @@ adm=NO; case $line in *admissible=yes*) adm=yes;; esac
 if [ -f "$JSON" ]; then
     "${PY[@]}" tools/retain_run_summary.py identity "$JSON" || \
         echo "RETENTION FAILED: identity record remains at $JSON; collect it before teardown" >&2
+fi
+# The timing ledger: one line per lane of this record (kind lane, the record's own CellTimer sums;
+# tools/timing_ledger.py report --kind lane). Informational: it never changes rc or admission.
+if [ -f "$JSON" ]; then
+    _tlpy=python3; command -v python3 > /dev/null 2>&1 || _tlpy="${PY[*]}"
+    MOJOLEARN_TIMING_COMMIT=$COMMIT $_tlpy tools/timing_ledger.py lanes "$JSON" --column "$LABEL" 2>&1 | tail -1 || true
 fi
 echo "RECORDED $NAME rc=$rc admissible=$adm json=$JSON"
 [ "$adm" = yes ] || exit 1
