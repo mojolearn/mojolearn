@@ -249,6 +249,44 @@ def test_macos_build_moves_the_stale_artifacts_before_the_build_starts(tmp_path,
     assert pathlib.Path(moved[0]["receipt"]).parent.parent == r.rel / "stale-artifacts"
 
 
+def test_macos_build_seeds_from_the_one_mac_cache_and_copies_its_archives_back(tmp_path, monkeypatch):
+    # The one Mac cache (MOJOLEARN_BINCACHE_DIR here; ~/mojolearn-evidence/bincache-mac by default)
+    # holds what tools/development_build.py --layout release compiled: it is the first seed of the
+    # release-scoped cache, and the release's own archives are copied back into it after the build.
+    import bincache
+    shared = tmp_path / "bincache-mac"
+    shared.mkdir()
+    (shared / ("1" * 64 + ".tar.gz")).write_bytes(b"an earlier archive")
+    monkeypatch.setenv("MOJOLEARN_BINCACHE_DIR", str(shared))
+    src = fake_tree(tmp_path)
+    seen = {}
+
+    def runner(cmd, env, log, detach=False):
+        if "./packaging/macos/build_release_wheel.sh" in [str(c) for c in cmd]:
+            seen.update(env)
+            built = pathlib.Path(env["MOJOLEARN_BINCACHE_DIR"])
+            built.mkdir(parents=True, exist_ok=True)
+            (src / "built.so").write_bytes(b"compiled by the release")
+            fields = {"schema": bincache.SCHEMA, "script": "bindings/merged_build.sh", "args": ["gpu"]}
+            key = bincache.key_of(fields)
+            bincache.pack(built / (key + ".tar.gz"), key, fields, src, ["built.so"], {})
+            seen["key"] = key
+        return 0
+    r = release_on(tmp_path, src, monkeypatch, runner=runner)
+    monkeypatch.setattr(r, "plan", lambda: {"previous": None})
+    monkeypatch.setattr(release.release_reuse, "plan_rows", lambda plan, platform=None, decision=None: [])
+    monkeypatch.setattr(release.release_reuse, "parse_modes", lambda v: ("identical",))
+    r.release_modes = ("identical",)
+    with pytest.raises(release.StepFailed, match="expected one macOS wheel"):
+        r.step_macos_build()          # the fake build makes no wheel; the write-back ran before that check
+    assert seen["MOJOLEARN_BINCACHE_DIR"] == str(r.macos_bincache()), "the release keeps its own provenance cache"
+    assert seen["MOJOLEARN_BINCACHE_SEED_DIRS"].split(os.pathsep)[0] == str(shared)
+    assert (seen["MOJOLEARN_COMPILE_JOBS"], seen["MOJOLEARN_PACKAGE_BYTE_LM"]) == ("1", "1")
+    copied = shared / (seen["key"] + ".tar.gz")
+    assert copied.is_file() and copied.read_bytes() == (r.macos_bincache() / copied.name).read_bytes()
+    assert any("one Mac cache" in line and "1 archive(s) copied" in line for line in r.lines)
+
+
 def test_macos_smoke_runs_the_same_preflight_and_a_dry_run_moves_nothing(tmp_path, monkeypatch):
     src = fake_tree(tmp_path)
     r = release_on(tmp_path, src, monkeypatch, dry_run=True)
