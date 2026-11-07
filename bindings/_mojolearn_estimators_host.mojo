@@ -711,6 +711,9 @@ def linear_gram_fit_binding(
     var nf = _index(params[1])
     var alpha = Float32(Float64(py=params[2]))
     var center = _index(params[3]) != 0
+    # The null-address refusal read_f32 made before the in-place read.
+    _ = f32_ptr(x_address)
+    _ = f32_ptr(y_address)
     var status = 1
     with GILReleased(Python()):
         _positive(nr, "n_rows")
@@ -718,9 +721,8 @@ def linear_gram_fit_binding(
         if alpha > Float32(0.0) and nf == 1:
             status = 1
         else:
-            var x = read_f32(x_address, nr * nf)
-            var y = read_f32(y_address, nr)
-            status = host_linear_gram_fit(x, y, nr, nf, alpha, center, wp, mp, ymp)
+            # ne2-g-linear (N406): X and y read in place (no owned copies).
+            status = host_linear_gram_fit(x_address, y_address, nr, nf, alpha, center, wp, mp, ymp)
     return PythonObject(status)
 
 
