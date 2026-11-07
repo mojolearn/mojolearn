@@ -25,6 +25,7 @@ of the same words: the bits are the per-call path's.
 """
 from std.ffi import _Global
 from std.atomic import Atomic, Ordering
+from std.memory import memcpy
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
@@ -296,8 +297,7 @@ def holtwinters_query_resident(handle: Int, out_ptr: _F32P, seasonal: String, st
             var fc = List[Float32](length=h * bs, fill=Float32(0))
             var fc_ptr = rebind[_F32P](fc.unsafe_ptr())
             _ = holtwinters_forecast_ptr(host_ptr, fc_ptr, n, bs, f, seasonal, h)
-            for i in range(h * bs - skip):  # driver-loop: copy of the kept forecast tail (traced path only)
-                dst.store(i, fc_ptr.load(skip + i))
+            memcpy(dest=dst, src=fc_ptr + skip, count=h * bs - skip)
             _ = host^
             _ = fc^
         else:
