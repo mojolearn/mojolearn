@@ -5,8 +5,8 @@ replaced, kept here verbatim as the oracles, on raw bytes.
 
 Planted values exercise the scan's test (0.0, -0.0 a zero, NaN kept,
 subnormals, inf) and the selection's order (ties between equal distances go
-to the lower column, -0.0 equal to 0.0, duplicate COO entries, rows with
-exactly k candidates, and the two refusals in row order)."""
+to the lower column, -0.0 equal to 0.0, rows with exactly k candidates,
+and the refusals)."""
 import array
 import random
 
@@ -29,17 +29,6 @@ def _dense_oracle(m):
                 cols.append(j)
                 vals.append(v)
     return rows.tobytes(), cols.tobytes(), vals.tobytes()
-
-
-class _Coo:
-    def __init__(self, n, r, c, v):
-        self.shape = (n, n)
-        self.row = Array.from_list(r, "<i4")
-        self.col = Array.from_list(c, "<i4")
-        self.data = Array.from_list(v, "<f4")
-
-    def tocoo(self):
-        return self
 
 
 def _knn_oracle(k, X):
@@ -97,32 +86,24 @@ def test_dense_knn_affinity_matches_the_python_loops(seed):
     assert se._precomputed_knn_affinity(X).tobytes() == _knn_oracle(3 + seed, X)
 
 
-@pytest.mark.parametrize("seed", range(6))
-def test_sparse_knn_affinity_matches_the_python_loops(seed):
-    rnd = random.Random(200 + seed)
-    n, k = 19, 2 + seed % 3
-    r, c, v = [], [], []
-    for i in range(n):
-        for _ in range(k + rnd.randrange(4)):
-            r.append(i)
-            c.append(rnd.randrange(n))
-            v.append(rnd.choice([0.0, -0.0, 0.5, 0.5, 1.0, rnd.random()]))
-    rnd_order = list(range(len(r)))
-    rnd.shuffle(rnd_order)
-    X = _Coo(n, [r[q] for q in rnd_order], [c[q] for q in rnd_order], [v[q] for q in rnd_order])
-    se = SpectralEmbedding(affinity="precomputed_nearest_neighbors", n_neighbors=k)
-    se._validate_params()  # the fit-time parameter checks derive the private settings
-    assert se._precomputed_knn_affinity(X).tobytes() == _knn_oracle(k, X)
+# DELETED test_sparse_knn_affinity_matches_the_python_loops (lane ne1-k-fail-b,
+# 2026-11-07): SpectralEmbedding takes dense X only (the public door's refusal
+# below); the dense kNN affinity is test_dense_knn_affinity_matches_the_python_loops.
 
 
-def test_refusals_follow_the_row_order():
+def test_refusals():
+    """A sparse graph is refused by name; a negative or NaN distance in a
+    dense matrix is refused."""
+    sparse = pytest.importorskip("scipy.sparse")
+    import numpy as np
     n = 6
-    X = _Coo(n, [0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 5], [1, 2, 0, 1, 3, 0, 1, 2, 3, 0, 4],
-             [1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, float("nan"), 1.0, 1.0])
     se = SpectralEmbedding(affinity="precomputed_nearest_neighbors", n_neighbors=2)
     se._validate_params()  # the fit-time parameter checks derive the private settings
-    with pytest.raises(ValueError, match="row 1 of the precomputed graph has 1 stored"):
-        se._precomputed_knn_affinity(X)
-    X2 = _Coo(n, [0, 0, 1, 1, 2, 2], [1, 2, 0, 2, 0, -0 + 1], [1.0, -1.0, 1.0, 1.0, 1.0, 1.0])
-    with pytest.raises(ValueError, match="negative or NaN"):
-        se._precomputed_knn_affinity(X2)
+    graph = sparse.coo_matrix((np.ones(3, "<f4"), (np.arange(3), np.arange(1, 4))), shape=(n, n))
+    with pytest.raises(TypeError, match="SpectralEmbedding takes dense X only"):
+        se.fit(graph)
+    for bad in (-1.0, float("nan")):
+        D = np.ones((n, n), "<f4")
+        D[2, 4] = bad
+        with pytest.raises(ValueError, match="negative or NaN"):
+            se._precomputed_knn_affinity(D)
