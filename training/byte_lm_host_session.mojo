@@ -240,6 +240,38 @@ struct ByteHostSession(Movable, Writable):
         MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=a[2])[0] = UInt32(loss)
         return self.completed
 
+    def steps(mut self, a: List[Int], n_steps: Int, completed: Int) raises -> Int:
+        """The host column of device operation 12: `n_steps` training steps
+        from the shape, optimizer and flags this session admitted at open.
+        a = [in_ids_i32 (n_steps batches of batch * (length + 1), one after
+        the other), out_loss (n_steps), out_flags_i32 (n_tensors)]. Every
+        batch is admitted first; the steps run in order through `step`, so
+        the bits equal those of n_steps single steps. A failure in step k
+        leaves the k earlier steps committed. Returns completed + n_steps."""
+        self.require_open()
+        if len(a) != 3 or a[0] == 0 or a[1] == 0 or a[2] == 0:
+            raise Error("byte LM: the multi-step entry expects three non-null addresses")
+        if n_steps < 1:
+            raise Error("byte LM trainer: the multi-step entry requires n_steps >= 1")
+        if completed != self.completed:
+            raise Error("byte LM: resident completed-step mismatch")
+        if completed + n_steps > 999999:
+            raise Error("byte LM: completed step outside admitted bound")
+        if len(self.shape) != 10:
+            raise Error("byte LM: resident model shape mismatch")
+        var cfg = ByteConfig(self.shape[0], self.shape[1], self.shape[2], self.shape[3], self.shape[4],
+            self.shape[5], self.shape[6], self.shape[7], self.shape[8], self.shape[9] == 1)
+        var opt = self.optimizer.copy()
+        var n_ids = cfg.batch * (cfg.length + 1)
+        for k in range(n_steps):  # driver-loop: over the training steps of one call
+            host_tokens(a[0] + k * n_ids * 4, n_ids, cfg.vocab_size)
+        host_copy_i32(a[2], self.flags)
+        var step = completed
+        for k in range(n_steps):  # driver-loop: over the training steps of one call
+            var flags_in = Int(self.flags.unsafe_ptr())
+            step = self.step([a[0] + k * n_ids * 4, flags_in, a[1] + k * 4, a[2]], cfg, opt, step)
+        return step
+
     def evaluate(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
         if len(a) != 3 or a[2] == 0:
             raise Error("byte LM: byte_lm_session_eval expects three non-null addresses")
