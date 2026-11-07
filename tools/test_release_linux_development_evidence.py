@@ -47,7 +47,7 @@ def producer(tmp_path, monkeypatch):
                MOJOLEARN_GPU_ARCHS='sm_89', MOJOLEARN_TARGET_COLUMN='nvidia',
                MOJOLEARN_LINUX_CPU='x86-64-v3', MOJOLEARN_PACKAGE_BYTE_LM='1')
     scripts = {p: hashlib.sha256(b'echo build\n').hexdigest()
-               for p in ('bindings/merged_build.sh', 'bindings/build_defines.sh')}
+               for p in dev.BUILD_INPUTS}
     fields = dict(schema=common.DEV_KEY_SCHEMA, repo=str(repo), cache=str(cache), platform='linux',
                   stem=stem, mode='identical', members=['_mojolearn_training'], flags_class='default',
                   source=dict(scope='closure', unresolved=[], files={'a.mojo': tree.sha256('a.mojo')}),

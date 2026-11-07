@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # The FAST-tier tokenizer binding: BPE training and encode_batch on the Apple GPU
@@ -9,7 +10,7 @@
 #
 #   MOJOLEARN_NUMERIC_MODE=fast bash bindings/build_tokenizer_fast.sh
 #   MOJOLEARN_MOJO_BUILD_FLAGS="-D MOJOLEARN_BPE_TRAIN_DEVICE"   the experiment defines (docs/apple-fast/ab/bpe.md)
-#   MOJOLEARN_COMPILE_JOBS                                      compile jobs, default 1
+#   MOJOLEARN_COMPILE_JOBS                                      compile jobs; unset: bindings/compile_jobs.sh
 #   MOJOLEARN_SKIP_BUILD_GATE                                   accepted (there is no gate)
 # Every define is default off; a build with none compiles no kernel and the Python door keeps
 # every call on the host binding.
@@ -42,7 +43,7 @@ out=$tmpdir/_mojolearn_tokenizer_fast.so
 # compiles the entry bindings/entry/entry__mojolearn_tokenizer_fast.mojo, which imports the module body bindings/_mojolearn_tokenizer_fast.mojo.
 # The entry is named literally on the compile line (not "$entry_file"): tools/bincache.py script_plan reads this line
 # to key the binding cache and the stamps, and tools/lane_map_import_graph.py reads it to reach tokenizer/fast/.
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-1}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags -I . -I bindings \
     bindings/entry/entry__mojolearn_tokenizer_fast.mojo -o "$out"
 mv "$out" "$outdir/_mojolearn_tokenizer_fast.so"

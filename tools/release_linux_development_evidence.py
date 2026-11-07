@@ -74,7 +74,7 @@ def group_facts(row, result, result_path, receipt_path, tree):
     require(row.get("flags_class") == fields.get("flags_class") == flags_class,
             "unexpected optimization flags class")
     scripts = fields.get("builders", {}).get("scripts", {})
-    require(set(scripts) == {"bindings/merged_build.sh", "bindings/build_defines.sh"}, "builder scripts differ")
+    require(set(scripts) == set(dev.BUILD_INPUTS), "builder scripts differ")
     for path, digest in scripts.items():
         require(hashlib.sha256(dev.recipe_text(tree.text(path)).encode()).hexdigest() == digest,
                 "compiled builder recipe differs: " + path)

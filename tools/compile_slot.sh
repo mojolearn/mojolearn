@@ -11,6 +11,12 @@ fi
 # compile_slot.sh <command...>: run a compile holding one of N machine-wide slots (mkdir locks),
 # N = MOJOLEARN_COMPILE_SLOTS (default 2; Andrew 2026-10-28: protect the Mac). Every lane subagent
 # wraps its mojo builds in this so at most N compile at once.
+# The laptop's compile rule (CLAUDE.md: -j 1 and MOJOLEARN_COMPILE_JOBS=1) lives here and only here: on macOS an
+# unset MOJOLEARN_COMPILE_JOBS becomes 1. Elsewhere it is left unset, so bindings/compile_jobs.sh gives a rented
+# Linux build box every core it pays for (Andrew 2026-11-05, HARD RULE "use 100 percent of rented CPU").
+if [ "$(uname -s)" = Darwin ] && [ -z "${MOJOLEARN_COMPILE_JOBS:-}" ]; then
+  export MOJOLEARN_COMPILE_JOBS=1
+fi
 S=$HOME/mojolearn-evidence/compile-slots; mkdir -p $S
 N=${MOJOLEARN_COMPILE_SLOTS:-2}
 case $N in ""|*[!0-9]*|0) echo "compile_slot: MOJOLEARN_COMPILE_SLOTS must be a positive integer" >&2; exit 2 ;; esac

@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # Build the ExtraTrees CPython extension into
 # python/mojolearn/_mojolearn_trees.so. Run from anywhere; requires pixi.
 #
@@ -120,7 +121,7 @@ out="$tmpdir/_mojolearn_trees.so"
 # MOJOLEARN_EXTRA_DEFINES carries diagnostic score-policy overrides; empty by default.
 # shellcheck disable=SC2086  # flag strings are deliberately word-split
 # compiles the entry bindings/entry/entry__mojolearn_trees.mojo, which imports the module body bindings/_mojolearn_trees.mojo
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \

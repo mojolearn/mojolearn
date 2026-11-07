@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # Build the Mamba block CPython extension into
 # python/mojolearn/_mojolearn_mamba.so. Run from anywhere; requires pixi.
 #
@@ -154,7 +155,7 @@ out="$tmpdir/_mojolearn_mamba.so"
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 # compiles the entry bindings/entry/entry__mojolearn_mamba.mojo, which imports the module body bindings/_mojolearn_mamba.mojo
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_MAMBA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
