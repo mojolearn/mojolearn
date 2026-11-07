@@ -208,3 +208,57 @@ def test_numpy_step_overflow_refuses_before_seterrcall(tmp_path):
         if setter is not None:
             setter(prior)
     assert touched == []
+
+
+def _prepared(tmp_path):
+    path = tmp_path / "corpus.txt"
+    path.write_bytes(b"".join(b"line %d of a small corpus with repeated words\n" % (i % 37) for i in range(400)))
+    options = dict(cache_dir=tmp_path / "cache", vocab_size=300, vocab_sample_bytes=16384, document_bytes=4096)
+    return path, options
+
+
+def test_prepare_cache_hit_carries_the_token_verdict_to_batches(tmp_path):
+    # pass 3 (N174): a cache hit hashes the mapped token file once and
+    # batches() reuses that verified mapping; the rows are the rows of a
+    # freshly opened TokenBatches.
+    path, options = _prepared(tmp_path)
+    first = lm_corpus.prepare(path, **options)
+    assert first._tokens_verified is None             # a miss carries no verdict
+    again = lm_corpus.prepare(path, **options)
+    assert again.tokens_dir == first.tokens_dir
+    verified = again._tokens_verified
+    assert isinstance(verified, tuple) and len(verified) == 4
+    assert verified[2] == again.manifest["sha256"]
+    carried = again.batches(2, 8)
+    assert carried.ids_all is verified[3]
+    fresh = lm_corpus.TokenBatches(again.tokens_dir, 2, 8)
+    for step in (0, 1, 9):
+        assert list(memoryview(carried.ids(step)._store)) == list(memoryview(fresh.ids(step)._store))
+    assert carried.describe() == fresh.describe()
+    assert carried.data_schedule() == fresh.data_schedule()
+
+
+def test_carried_verdict_is_ignored_unless_it_matches_the_file(tmp_path):
+    path, options = _prepared(tmp_path)
+    lm_corpus.prepare(path, **options)
+    corpus = lm_corpus.prepare(path, **options)
+    token_file, size, sha, mapped = corpus._tokens_verified
+    # A forged or stale verdict for another size or hash is not trusted: the
+    # file is mapped and hashed again.
+    corpus._tokens_verified = (token_file, size + 4, sha, mapped)
+    assert corpus.batches(2, 8).ids_all is not mapped
+    corpus._tokens_verified = (token_file, size, "0" * 64, mapped)
+    assert corpus.batches(2, 8).ids_all is not mapped
+    corpus._tokens_verified = ["not", "a", "tuple", mapped]
+    assert corpus.batches(2, 8).ids_all is not mapped
+    # A changed cached token file is refused on the next prepare.
+    tokens = open(token_file, "r+b")
+    try:
+        first = tokens.read(4)
+        tokens.seek(0)
+        tokens.write(bytes([first[0] ^ 1]) + first[1:])
+    finally:
+        tokens.close()
+    del corpus, mapped
+    with pytest.raises(ValueError, match="cached token hash differs"):
+        lm_corpus.prepare(path, **options)
