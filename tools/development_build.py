@@ -1104,6 +1104,8 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
                         running[future] = (row, need, concurrent)
                     report["groups_concurrent_max"] = max(report["groups_concurrent_max"], len(running))
                 if not running:
+                    if queue:
+                        raise KeyboardInterrupt("development build cancelled before every group started")
                     break
                 done, _ = wait(list(running), timeout=SCHEDULER_POLL_SECONDS, return_when=FIRST_COMPLETED)
                 for future in done:  # driver-loop: over groups finished this tick
