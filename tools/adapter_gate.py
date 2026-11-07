@@ -33,8 +33,9 @@ FRAMEWORKS = "torch,max"
 PHASES = ("torch-compile", "torch-training", "max-training")
 #: the device string each vendor's framework build uses (torch-ROCm keeps the cuda device type)
 DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps",
-          # the CPU route (release.py --identity-on-wheels): torch and MAX on the CPU of a GitHub runner, the
-          # installed host bindings underneath; the device phases stay on the GPU boxes
+          # the CPU route (release.py --identity-on-wheels): the CPU-only install refuses the framework adapters
+          # by design (they run on a GPU; the CPU is for verification digests, CPU-only installs and inference),
+          # so the CPU checks job records that refusal as its expected outcome (cpu_refusal below)
           "cpu": "cpu"}
 RECEIPT = "adapter-smoke.json"
 
@@ -82,6 +83,20 @@ def judge(receipt):
     if missing:
         return status, False, "PASSED receipt without every phase passing: " + ", ".join(missing)
     return status, True, "PASSED (%s)" % ", ".join(PHASES)
+
+
+#: the product's refusal of the framework adapters on a CPU-only install (MOJOLEARN_VENDOR=cpu)
+CPU_REFUSAL = ("the framework adapters run on a GPU", "MOJOLEARN_VENDOR=cpu")
+
+
+def cpu_refusal(record):
+    """The CPU column's adapters outcome: a run() RECORD on vendor cpu that failed only because the installed
+    wheel refused the adapters on a CPU-only install becomes status "refused-by-design", ok True, the
+    refusal text kept in why. Every other record (a pass, any other failure) is returned as is."""
+    why = str(record.get("why") or "")
+    if record.get("vendor") == "cpu" and not record.get("ok") and all(m in why for m in CPU_REFUSAL):
+        return dict(record, status="refused-by-design", ok=True, refused_why=why)
+    return record
 
 
 def summary(record):
