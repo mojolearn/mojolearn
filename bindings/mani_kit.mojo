@@ -257,7 +257,7 @@ def mk_freeze_fitted(fields: PythonObject, names: List[String]) raises:
     """Freeze the fitted matrices a fit stored under `names` (absent names
     are skipped). Called once when the fit returns, so each matrix keeps the
     side the fit left it on."""
-    for i in range(len(names)):  # small-loop(fitted: the fixed fitted-matrix names of one estimator)
+    for i in range(len(names)):  # small-loop(fitted: the fitted-matrix names of one estimator): bounded by the estimator
         var value = py_get(fields, PythonObject(names[i]))
         if value is not None:
             matrix_freeze(value)
@@ -758,8 +758,8 @@ struct MKit(Movable):
             var ib = one_id if b is None else self.did(bm)
             var ic = one_id if c is None else self.did(cm)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_ew"), ia, ib, ic, device_identifier(matrix_device(out)),
-                            mk_ints([op, n, mk_c(a), mk_n(bm), bmode, mk_n(cm), cmode]), PythonObject(s))
+            _ = self.dcall(XD_DEV_EW, [Int(py=ia), Int(py=ib), Int(py=ic), Int(py=device_identifier(matrix_device(out))),
+                                       op, n, mk_c(a), mk_n(bm), bmode, mk_n(cm), cmode], s)
             return out
         var out = mk_zeros(mk_r(a), mk_c(a), self.ctx)
         if n > 0:
@@ -770,9 +770,10 @@ struct MKit(Movable):
             _ = cm  # keep the Python object alive through the native call above
             var po = mk_addr(out, self.ctx)
             _ = out  # keep the Python object alive through the native call above
-            var params = mk_ints([op, n, mk_c(a), mk_store_len(mk_store(bm, self.ctx)), bmode,
-                                  mk_store_len(mk_store(cm, self.ctx)), cmode])
-            _ = family_call(self.fn("x_decomp_ew"), pa, pb, pc, po, params, PythonObject(s))
+            var lb = mk_store_len(mk_store(bm, self.ctx))
+            var lc = mk_store_len(mk_store(cm, self.ctx))
+            _ = self.hcall(XD_EW, [Int(py=pa), Int(py=pb), Int(py=pc), Int(py=po)],
+                           [op, n, mk_c(a), lb, bmode, lc, cmode], s)
             _ = out  # keep the Python object alive through the native call above
             _ = cm  # keep the Python object alive through the native call above
             _ = bm  # keep the Python object alive through the native call above
@@ -805,7 +806,8 @@ struct MKit(Movable):
         var n = mk_r(b) if tb else mk_c(b)
         if k != k2:
             raise Error("x_decomp: gemm inner dimensions " + String(k) + " and " + String(k2) + " differ")
-        var params = mk_ints([m, k, n, 1 if ta else 0, 1 if tb else 0])
+        var words = [m, k, n, 1 if ta else 0, 1 if tb else 0]
+        var params = mk_ints(words)
         if not (self.lle_mm is None):
             var out = mk_zeros(m, n, self.ctx)
             var pa = mk_addr(a, self.ctx)
@@ -817,14 +819,18 @@ struct MKit(Movable):
             var out = self.dout(m, n)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_gemm"), ia, ib, device_identifier(matrix_device(out)), params)
+            _ = self.dcall(XD_DEV_GEMM, [Int(py=ia), Int(py=ib), Int(py=device_identifier(matrix_device(out))),
+                                         words[0], words[1], words[2], words[3], words[4]])
             return out
         var out = mk_zeros(m, n, self.ctx)
         if m * n > 0:
             var pa = mk_addr(a, self.ctx)
             var pb = mk_addr(b, self.ctx)
-            _ = family_call(self.fn("x_decomp_gemm"), pa, pb, mk_addr(out, self.ctx), params)
+            var po = mk_addr(out, self.ctx)
+            _ = self.hcall(XD_GEMM, [Int(py=pa), Int(py=pb), Int(py=po)], words)
             _ = out  # keep the Python object alive through the native call above
+            _ = a
+            _ = b
         return out
 
     def colsum(mut self, a: PythonObject) raises -> PythonObject:
@@ -833,12 +839,14 @@ struct MKit(Movable):
         if r * c > 0 and self.use1(a):
             var out = self.dout(1, c)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_colsum"), ia, device_identifier(matrix_device(out)), mk_ints([r, c]))
+            _ = self.dcall(XD_DEV_COLSUM, [Int(py=ia), Int(py=device_identifier(matrix_device(out))), r, c])
             return out
         var out = mk_zeros(1, c, self.ctx)
         var pa = mk_addr(a, self.ctx)
-        _ = family_call(self.fn("x_decomp_colsum"), pa, mk_addr(out, self.ctx), mk_ints([r, c]))
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_COLSUM, [Int(py=pa), Int(py=po)], [r, c])
         _ = out  # keep the Python object alive through the native call above
+        _ = a
         return out
 
     def rowsum(mut self, a: PythonObject) raises -> PythonObject:
@@ -847,12 +855,14 @@ struct MKit(Movable):
         if r * c > 0 and self.use1(a):
             var out = self.dout(r, 1)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_rowsum"), ia, device_identifier(matrix_device(out)), mk_ints([r, c]))
+            _ = self.dcall(XD_DEV_ROWSUM, [Int(py=ia), Int(py=device_identifier(matrix_device(out))), r, c])
             return out
         var out = mk_zeros(r, 1, self.ctx)
         var pa = mk_addr(a, self.ctx)
-        _ = family_call(self.fn("x_decomp_rowsum"), pa, mk_addr(out, self.ctx), mk_ints([r, c]))
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_ROWSUM, [Int(py=pa), Int(py=po)], [r, c])
         _ = out  # keep the Python object alive through the native call above
+        _ = a
         return out
 
     def total(mut self, a: PythonObject) raises -> PythonObject:
@@ -864,18 +874,22 @@ struct MKit(Movable):
         var ar = mk_r(a)
         var br = mk_r(b)
         var ac = mk_c(a)
-        var params = mk_ints([ar, br, ac])
+        # [na, nb, d]: the doors' defaults kind 0 (squared Euclidean), p 2
         if ar * br > 0 and ac > 0 and self.use2(a, b):
             var out = self.dout(ar, br)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, device_identifier(matrix_device(out)), params)
+            _ = self.dcall(XD_DEV_SQDIST, [Int(py=ia), Int(py=ib), Int(py=device_identifier(matrix_device(out))),
+                                           ar, br, ac, 0], 2.0)
             return out
         var out = mk_zeros(ar, br, self.ctx)
         var pa = mk_addr(a, self.ctx)
         var pb = mk_addr(b, self.ctx)
-        _ = family_call(self.fn("x_decomp_sqdist"), pa, pb, mk_addr(out, self.ctx), params)
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_SQDIST, [Int(py=pa), Int(py=pb), Int(py=po)], [ar, br, ac, 0], 2.0)
         _ = out  # keep the Python object alive through the native call above
+        _ = a
+        _ = b
         return out
 
     def pdist(mut self, a: PythonObject, b: PythonObject, kind: Int, pw: Float64) raises -> PythonObject:
@@ -884,19 +898,21 @@ struct MKit(Movable):
         var ar = mk_r(a)
         var br = mk_r(b)
         var ac = mk_c(a)
-        var params = mk_ints([ar, br, ac, kind])
-        mk_append(params, PythonObject(pw))
         if ar * br > 0 and ac > 0 and self.use2(a, b):
             var out = self.dout(ar, br)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, device_identifier(matrix_device(out)), params)
+            _ = self.dcall(XD_DEV_SQDIST, [Int(py=ia), Int(py=ib), Int(py=device_identifier(matrix_device(out))),
+                                           ar, br, ac, kind], pw)
             return out
         var out = mk_zeros(ar, br, self.ctx)
         var pa = mk_addr(a, self.ctx)
         var pb = mk_addr(b, self.ctx)
-        _ = family_call(self.fn("x_decomp_sqdist"), pa, pb, mk_addr(out, self.ctx), params)
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_SQDIST, [Int(py=pa), Int(py=pb), Int(py=po)], [ar, br, ac, kind], pw)
         _ = out  # keep the Python object alive through the native call above
+        _ = a
+        _ = b
         return out
 
     def rand(mut self, r: Int, c: Int, seed: PythonObject, stream: Int, kind: Int) raises -> PythonObject:
