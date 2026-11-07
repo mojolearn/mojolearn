@@ -134,11 +134,14 @@ def test_scorer_class_record_drops_on_class_change(monkeypatch):
 
 
 def test_scorer_field_keys_record_drops_on_dictionary_change():
-    from mojolearn import linear_model
+    from mojolearn import linear_model, metrics
     rng = np.random.default_rng(3)
     x = rng.normal(size=(30, 2)).astype("f4")
     y = (x[:, 0] > 0).astype("i8")
-    scorer = ms.get_scorer("accuracy")
+    # A private scorer: get_scorer("accuracy") returns the process-wide table
+    # entry, and the non-str key below would stay in it for every later test
+    # on this worker (each later scoring='accuracy' call then refuses).
+    scorer = ms.make_scorer(metrics.accuracy_score)
     ms.cross_val_score(linear_model.LogisticRegression(max_iter=20), x, y, cv=3, scoring=scorer)
     vars(scorer)[1] = "a non-str key"
     with pytest.raises(TypeError):
