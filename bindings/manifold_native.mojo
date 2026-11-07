@@ -28,6 +28,10 @@ def manifold_operation(model: PythonObject, operation: String, args: PythonObjec
     # Retained connection tables remain shared; only this exact native mapping
     # receives private scalar owners and operation-local helper cache entries.
     var context = py_call(native_loaded_module("builtins").dict, shared_context)
+    # The kit's cross-call constants (the host 1 x 1 zero, the device zero
+    # per binding) live in the long-lived shared context (row N290); only
+    # the scalar snapshots and helper entries below are operation-local.
+    py_setitem(context, "family_mani_shared", shared_context)
     py_setitem(context, "family_mani_scalar_cache", Python.dict())
     py_setitem(context, "module_type", py_type(native_loaded_module("sys")))
     var release = sequence_array_release(context) if py_get(context["modules"], "numpy") is not None else 0

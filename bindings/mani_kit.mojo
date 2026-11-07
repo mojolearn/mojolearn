@@ -211,12 +211,25 @@ def mk_fill(value: Float64, r: Int, c: Int, ctx: PythonObject) raises -> PythonO
     return mk_of(values, r, c, ctx)
 
 
+def mk_cache_home(ctx: PythonObject) raises -> PythonObject:
+    """Where the kit's cross-call constants live (row N290): the long-lived
+    shared connection context bindings/manifold_native.mojo hands down as
+    `family_mani_shared`, not the operation's private copy (whose entries
+    lasted one call, so the 'one per binding' device zero was allocated and
+    uploaded again on every call). A caller without it keeps its own."""
+    var home = py_get(ctx, "family_mani_shared")
+    return ctx if home is None else home
+
+
 def mk_one(ctx: PythonObject) raises -> PythonObject:
-    """`_M._one`, the shared host 1 x 1 zero."""
-    var one = py_get(ctx, "family_mani_native_one")
+    """`_M._one`, the shared host 1 x 1 zero (frozen: a read never moves it,
+    so every operation and thread sees the same host zero)."""
+    var home = mk_cache_home(ctx)
+    var one = py_get(home, "family_mani_native_one")
     if one is None:
         one = mk_zeros(1, 1, ctx)
-        py_setitem(ctx, "family_mani_native_one", one)
+        matrix_freeze(one)
+        py_setitem(home, "family_mani_native_one", one)
     return one
 
 
@@ -775,10 +788,11 @@ struct MKit(Movable):
         per binding (the Python kit's own cache), looked up once per kit."""
         if not (self.one_dev is None):
             return device_identifier(self.one_dev)
-        var cache = py_get(self.ctx, "family_mani_native_dev_one")
+        var home = mk_cache_home(self.ctx)
+        var cache = py_get(home, "family_mani_native_dev_one")
         if cache is None:
             cache = Python.dict()
-            py_setitem(self.ctx, "family_mani_native_dev_one", cache)
+            py_setitem(home, "family_mani_native_dev_one", cache)
         var key = py_call(native_loaded_module("builtins").id, self.raw)
         var d = py_get(cache, key, PythonObject(None))
         if d is None or not (device_binding(d) is self.raw):
