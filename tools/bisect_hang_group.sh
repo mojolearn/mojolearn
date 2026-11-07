@@ -5,6 +5,9 @@
 #        [--suspects <file>] [--parallel N] [--stall 420] [--deadline 3600] [--base-archive <tgz>]
 #        [--work <dir>] [--keep-trees] [--dry-run]
 #   bash tools/bisect_hang_group.sh --export-base <tgz> --base <commit> [--suspects <file>]   # git only, no compile
+#   bash tools/bisect_hang_group.sh --group <stem> --set <host|identical> --history <dir> --out <dir> [same options]
+#   bash tools/bisect_hang_group.sh --export-history <dir> --base <commit> [--head HEAD] [--overlay-after <commit>]
+#        [--history-paths '\.mojo$']                                                       # git only, no compile
 #
 # On a RunPod CPU pod (cwd = the unpacked repo, the default pixi env installed):
 #   bash tools/runpod_cpu_leg.sh --lane bisect-hang --worktree ~/mojolearn-wt/ne-bisect-hang \
@@ -37,6 +40,17 @@
 # --parallel default: every core, lowered to 0.8 * MemAvailable / BISECT_GIB_PER_COMPILE (default 3; one compile of
 # the group peaks near 2.5 GiB), at most the candidate count. The chosen count and its reason go to <out>/summary.txt.
 # <out>/load.tsv: one sample per minute (busy cores from /proc/stat, cores, MemAvailable, candidates running).
+#
+# HISTORY MODE (--history <dir>): one candidate per first-parent commit C from --base (index 0) to --head. The tree
+# is this checkout (it must be --head's tree) with every path of `git diff --name-only <base> <head>` that matches
+# --history-paths (default: the .mojo sources, the compiler's only inputs) set to C's content (absent at C: deleted),
+# then an OVERLAY: each such path changed after --overlay-after (default d5d7463b99, the compile-fix batches and the
+# hang fix) takes --head's content where it exists at C, so early commits are not masked by the parse errors the
+# fixes removed. The build driver (tools/, bindings/*.sh) stays --head's in every candidate. --export-history writes,
+# from git alone: <dir>/history.tsv (index, sha, subject), <dir>/manifest/hNN.tsv (path, blob sha or "-" for absent),
+# <dir>/blobs.tgz (every distinct blob once, named by its sha: one archive per candidate would be ~2.5 MB x 62) and
+# <dir>/meta.tsv. The run prints the table in first-parent order and the CULPRIT: the first commit whose verdict is HANG
+# while its predecessor's is COMPILED or ERROR. Exit 4 when the --head candidate does not HANG.
 #
 # Outputs: <out>/plan.tsv, <out>/cand/<id>.{log,json,verdict}, <out>/cand/<id>/ (the build evidence and the group
 # log), <out>/bisect.tsv (file, verdict, seconds, first_error, status, id; ERROR, then COMPILED, then HANG),
@@ -76,6 +90,7 @@ usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 R=$(cd "$(dirname "$0")/.." && pwd)
 GROUP="" SET="" BASE="" SUSPECTS_FILE="" OUT="" PARALLEL="" STALL=420 DEADLINE=3600
 BASE_ARCHIVE="" WORK="${BISECT_WORK:-$HOME/bisect-hang-work}" KEEP=0 DRY=0 EXPORT=""
+HIST="" EXPORT_HIST="" HEAD_REF=HEAD OVERLAY_AFTER=d5d7463b99 HPATHS='\.mojo$'
 while [ $# -gt 0 ]; do
     case "$1" in
         --group) shift; GROUP="${1:-}" ;;
@@ -91,13 +106,60 @@ while [ $# -gt 0 ]; do
         --keep-trees) KEEP=1 ;;
         --dry-run) DRY=1 ;;
         --export-base) shift; EXPORT="${1:-}" ;;
+        --history) shift; HIST="${1:-}" ;;
+        --export-history) shift; EXPORT_HIST="${1:-}" ;;
+        --head) shift; HEAD_REF="${1:-}" ;;
+        --overlay-after) shift; OVERLAY_AFTER="${1:-}" ;;
+        --history-paths) shift; HPATHS="${1:-}" ;;
         -h|--help) usage ;;
         *) die "unknown argument: $1 (see --help)" ;;
     esac
     shift
 done
 
-[ -n "$BASE" ] || die "--base <commit> is required"
+[ -n "$BASE" ] || [ -n "$HIST" ] || die "--base <commit> is required"
+
+# --export-history: per first-parent commit, the content of every changed source path (+ the overlay), from git alone
+if [ -n "$EXPORT_HIST" ]; then
+    full() { git -C "$R" rev-parse --verify --quiet "$1^{commit}" || die "this checkout has no commit $1"; }
+    B=$(full "$BASE") H=$(full "$HEAD_REF") OV=$(full "$OVERLAY_AFTER")
+    git -C "$R" merge-base --is-ancestor "$B" "$H" || die "$BASE is not an ancestor of $HEAD_REF"
+    git -C "$R" merge-base --is-ancestor "$OV" "$H" || die "$OVERLAY_AFTER is not an ancestor of $HEAD_REF"
+    st=$(mktemp -d "${TMPDIR:-/tmp}/bisect-history.XXXXXX") || die "mktemp failed"
+    D=$EXPORT_HIST
+    rm -rf "$D/manifest" "$D/blobs.tgz" "$D/history.tsv" "$D/meta.tsv"; mkdir -p "$D/manifest" "$st/b"
+    git -C "$R" diff --name-only "$B" "$H" | grep -E "$HPATHS" | sort > "$st/paths"
+    git -C "$R" diff --name-only "$OV" "$H" | grep -E "$HPATHS" | sort > "$st/overlay"
+    git -C "$R" ls-tree -r "$H" > "$st/head.tree"
+    { echo "$B"; git -C "$R" rev-list --first-parent --reverse "$B..$H"; } > "$st/commits"
+    printf 'index\tsha\tsubject\n' > "$D/history.tsv"
+    i=0
+    while IFS= read -r c; do  # driver-loop: over first-parent commits
+        id=$(printf 'h%02d' "$i")
+        git -C "$R" ls-tree -r "$c" > "$st/tree"
+        # ls-tree lines: "<mode> <type> <sha>\t<path>"
+        awk -F'\t' -v OFS='\t' '
+            FILENAME == ARGV[1] { want[$1] = 1; order[++n] = $1; next }
+            FILENAME == ARGV[2] { ov[$1] = 1; next }
+            FILENAME == ARGV[3] { split($1, a, " "); if (a[2] == "blob") hb[$2] = a[3]; next }
+            { split($1, a, " "); if (a[2] == "blob" && ($2 in want)) cb[$2] = a[3] }
+            END { for (k = 1; k <= n; k++) { p = order[k]; b = (p in cb) ? cb[p] : "-"
+                      if (b != "-" && (p in ov)) b = (p in hb) ? hb[p] : "-"
+                      print p, b } }' "$st/paths" "$st/overlay" "$st/head.tree" "$st/tree" > "$D/manifest/$id.tsv"
+        printf '%s\t%s\t%s\n' "$i" "$(git -C "$R" rev-parse --short=10 "$c")" \
+            "$(git -C "$R" log -1 --format=%s "$c" | tr '\t' ' ')" >> "$D/history.tsv"
+        i=$((i + 1))
+    done < "$st/commits"
+    cut -f2 "$D"/manifest/*.tsv | awk '$0 != "-"' | sort -u > "$st/blobs"
+    while IFS= read -r b; do git -C "$R" cat-file blob "$b" > "$st/b/$b" || die "git cat-file $b failed"; done < "$st/blobs"
+    COPYFILE_DISABLE=1 tar -C "$st/b" -czf "$D/blobs.tgz" . || die "tar failed"
+    printf 'base\t%s\nhead\t%s\noverlay_after\t%s\nhistory_paths\t%s\npaths\t%s\noverlay_paths\t%s\nblobs\t%s\n' \
+        "$B" "$H" "$OV" "$HPATHS" "$(wc -l < "$st/paths" | tr -d ' ')" "$(wc -l < "$st/overlay" | tr -d ' ')" \
+        "$(wc -l < "$st/blobs" | tr -d ' ')" > "$D/meta.tsv"
+    echo "exported $i candidates, $(wc -l < "$st/paths" | tr -d ' ') paths ($(wc -l < "$st/overlay" | tr -d ' ') overlaid from head), $(wc -l < "$st/blobs" | tr -d ' ') blobs -> $D"
+    rm -rf "$st"
+    exit 0
+fi
 if [ -n "$SUSPECTS_FILE" ]; then
     [ -f "$SUSPECTS_FILE" ] || die "--suspects $SUSPECTS_FILE does not exist"
     SUSPECTS=$(grep -v -E '^[[:space:]]*(#|$)' "$SUSPECTS_FILE")
@@ -143,14 +205,19 @@ OUT=$(mkdir -p "$OUT" && cd "$OUT" && pwd) || die "cannot create --out $OUT"
 case "$WORK" in /*) ;; *) WORK="$R/$WORK" ;; esac
 case "$WORK/" in "$OUT"/*) die "--work must not be inside --out (the trees would be fetched with the results)" ;; esac
 
-# candidates: id <TAB> label <TAB> revert set ("-" nothing, "ALL" every suspect, else one file)
+# candidates: id <TAB> label <TAB> revert set ("-" nothing, "ALL" every suspect, "H:<id>" a history manifest, else one file)
 PLAN="$OUT/plan.tsv"
-{
+if [ -n "$HIST" ]; then
+    HIST=$(cd "$HIST" 2> /dev/null && pwd) || die "--history directory does not exist"
+    { [ -f "$HIST/history.tsv" ] && [ -f "$HIST/blobs.tgz" ]; } || die "$HIST has no history.tsv or blobs.tgz (make it with --export-history)"
+    awk -F'\t' 'NR > 1 { printf "h%02d\t%s %s %s\tH:h%02d\n", $1, $1, $2, $3, $1 }' "$HIST/history.tsv" > "$PLAN"
+    while IFS=$'\t' read -r id _ _; do [ -f "$HIST/manifest/$id.tsv" ] || die "$HIST/manifest/$id.tsv is missing"; done < "$PLAN"
+else {
     printf 'control-head\t(none reverted)\t-\n'
     printf 'control-all\t(all suspects reverted)\tALL\n'
     i=0
     for f in "${FILES[@]}"; do printf 'c%02d\t%s\t%s\n' "$i" "$f" "$f"; i=$((i + 1)); done
-} > "$PLAN"
+} > "$PLAN"; fi
 NCAND=$(wc -l < "$PLAN" | tr -d ' ')
 
 CORES=$(nproc 2> /dev/null || sysctl -n hw.ncpu)
@@ -172,7 +239,9 @@ command_for() {  # $1 id, $2 tree
         "$2" "$PY" "$SET" "$GROUP" "$STALL" "$DEADLINE" "$WORK/cache/$1" "$OUT/cand/$1" "$OUT/cand/$1.json"
 }
 
-if git_has_base; then
+if [ -n "$HIST" ]; then
+    BASE_SRC="history $HIST ($(awk -F'\t' '$1 == "base" || $1 == "head" || $1 == "overlay_after" { printf "%s=%.10s ", $1, $2 }' "$HIST/meta.tsv" 2> /dev/null))"
+elif git_has_base; then
     BASE_SRC="git ($BASE in $R)"
 else
     [ -n "$BASE_ARCHIVE" ] || BASE_ARCHIVE="$R/tools/bisect_hang_base/$BASE.tgz"
@@ -206,9 +275,16 @@ export MOJOLEARN_NUMERIC_MODE=identical
 mkdir -p "$OUT/cand" "$WORK/wt" "$WORK/cache"
 note() { printf '%s\t%s\n' "$(date -u +%H:%M:%SZ)" "$*" | tee -a "$OUT/summary.txt"; }
 
-# base content, once
+# base content (or the history blobs), once
 BASED="$WORK/base"
-if [ ! -f "$BASED/.ready" ]; then
+BLOBS="$WORK/blobs"
+if [ -n "$HIST" ]; then
+    if [ ! -f "$BLOBS/.ready" ]; then
+        rm -rf "$BLOBS"; mkdir -p "$BLOBS"
+        tar -C "$BLOBS" -xzf "$HIST/blobs.tgz" || die "cannot unpack $HIST/blobs.tgz"
+        touch "$BLOBS/.ready"
+    fi
+elif [ ! -f "$BASED/.ready" ]; then
     rm -rf "$BASED"; mkdir -p "$BASED"; : > "$BASED/.bisect_absent"
     if git_has_base; then
         for f in "${FILES[@]}"; do
@@ -263,6 +339,12 @@ make_tree() {  # $1 id, $2 revert set
     ln -s "$R/.pixi" "$wt/.pixi" || return 1
     case "$2" in
         -) return 0 ;;
+        H:*) local p b
+             while IFS=$'\t' read -r p b; do
+                 if [ "$b" = - ]; then rm -f "$wt/$p"
+                 else mkdir -p "$wt/$(dirname "$p")" && cp "$BLOBS/$b" "$wt/$p" || return 1; fi
+             done < "$HIST/manifest/${2#H:}.tsv"
+             return 0 ;;
         ALL) set -- "${FILES[@]}" ;;
         *) set -- "$2" ;;
     esac
@@ -339,6 +421,30 @@ done < "$PLAN"
 while [ "$(running)" -gt 0 ]; do wait -n; done
 
 # results
+if [ -n "$HIST" ]; then
+    {
+        printf 'commit\tverdict\tseconds\tfirst_error\tstatus\tid\n'
+        while IFS=$'\t' read -r id label _; do
+            if [ -f "$OUT/cand/$id.verdict" ]; then cat "$OUT/cand/$id.verdict"; else printf '%s\tNO-VERDICT\t-\t-\t-\t%s\n' "$label" "$id"; fi
+        done < "$PLAN"
+    } > "$OUT/bisect.tsv"
+    column -t -s$'\t' "$OUT/bisect.tsv" 2> /dev/null || cat "$OUT/bisect.tsv"
+    busy=$(awk -F'\t' 'NR > 1 { s += $2; n++; if ($2 > m) m = $2 } END { if (n) printf "mean %.1f max %.1f of %d cores (%d samples)", s / n, m, $3, n; else print "no samples" }' \
+        "$OUT/load.tsv" 2> /dev/null)
+    note "done: seconds=$(( $(date +%s) - T0 )) busy ${busy:-no samples}"
+    EXIT=0
+    last_v=$(tail -n 1 "$OUT/bisect.tsv" | cut -f2)
+    [ "$last_v" = HANG ] || { note "the head candidate is $last_v, not HANG: this tree does not reproduce the hang"; EXIT=4; }
+    note "first candidate (base + overlay): $(sed -n 2p "$OUT/bisect.tsv" | cut -f2,4)"
+    culprit=$(awk -F'\t' 'NR > 1 { if ($2 == "HANG" && (prev == "COMPILED" || prev == "ERROR")) { print $1 " (after " prevc ": " prev ")"; exit } prev = $2; prevc = $1 }' "$OUT/bisect.tsv")
+    note "CULPRIT (first HANG whose predecessor is COMPILED or ERROR): ${culprit:-none found}"
+    missing=$(awk -F'\t' '$2 == "NO-VERDICT" { printf "%s ", $6 }' "$OUT/bisect.tsv")
+    if [ -n "$missing" ]; then
+        note "no verdict (see cand/<id>.attempt; re-run to retry): $missing"
+        [ "$EXIT" = 0 ] && EXIT=5
+    fi
+    exit "$EXIT"
+fi
 {
     printf 'file\tverdict\tseconds\tfirst_error\tstatus\tid\n'
     cat "$OUT"/cand/*.verdict 2> /dev/null | awk -F'\t' 'BEGIN { OFS = "\t" }

@@ -70,5 +70,33 @@ else
     echo "SKIP: export-base round trip (no git history for e49ac7df70 here)"
 fi
 
+# history mode: the committed export and its dry-run plan
+HD="$R/tools/bisect_hang_history"
+if [ -f "$HD/history.tsv" ]; then
+    NH=$(( $(wc -l < "$HD/history.tsv") - 1 ))
+    bash "$S" --group _mojolearn_dev_runtime_classical_host --set host --history "$HD" \
+        --out "$T/hout" --work "$T/hwork" --dry-run > "$T/hplan.txt" 2>&1
+    rc=$?
+    [ "$rc" = 0 ] && ok "history dry run exits 0" || bad "history dry run rc=$rc: $(head -n 3 "$T/hplan.txt")"
+    [ "$(grep -c '^PLAN h[0-9]' "$T/hplan.txt")" = "$NH" ] && ok "history plan has $NH commits" || bad "history plan size"
+    grep -q $'^PLAN h00\trevert=H:h00\t0 e49ac7df70 ' "$T/hplan.txt" && ok "h00 is the base" || bad "h00 line"
+    case "$(awk -F'\t' '$1 == "head" { print $2 }' "$HD/meta.tsv")" in f9e06ecacf*) ok "export head is f9e06ecacf" ;; *) bad "export head" ;; esac
+    mkdir -p "$T/hb" && tar -C "$T/hb" -xzf "$HD/blobs.tgz"
+    lost=$(cut -f2 "$HD"/manifest/*.tsv | awk '$0 != "-"' | sort -u | while IFS= read -r b; do [ -f "$T/hb/$b" ] || echo "$b"; done | wc -l | tr -d ' ')
+    [ "$lost" = 0 ] && ok "every manifest blob is in blobs.tgz" || bad "$lost manifest blobs missing from blobs.tgz"
+    np=$(awk -F'\t' '$1 == "paths" { print $2 }' "$HD/meta.tsv")
+    short=0; for m in "$HD"/manifest/*.tsv; do [ "$(wc -l < "$m" | tr -d ' ')" = "$np" ] || short=1; done
+    [ "$short" = 0 ] && ok "every manifest lists all $np paths" || bad "a manifest is short"
+    # where git has the commits: h00 is the base plus the overlay, the last is the head
+    if git -C "$R" rev-parse --verify --quiet 'f9e06ecacf^{commit}' > /dev/null 2>&1; then
+        git -C "$R" ls-tree -r f9e06ecacf | awk -F'\t' '{ split($1, a, " "); print $2 "\t" a[3] }' > "$T/head.tree"
+        last=$(printf 'h%02d' $((NH - 1)))
+        n=$(awk -F'\t' 'NR == FNR { h[$1] = $2; next } { x = ($1 in h) ? h[$1] : "-"; if (x != $2) n++ } END { print n + 0 }' "$T/head.tree" "$HD/manifest/$last.tsv")
+        [ "$n" = 0 ] && ok "$last is the head content" || bad "$last differs from the head in $n paths"
+    fi
+else
+    bad "no committed history export $HD"
+fi
+
 echo "FAILS=$FAILS"
 [ "$FAILS" = 0 ]
