@@ -28,21 +28,23 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 from checks.vendor import COMPILED_VENDOR
 from resample.checks.statistics import MC_DIMS, MC_F_CONST, MC_F_PRODUCT, MC_F_SUM
 from resample.estimator import (
     BootstrapResult,
     MonteCarloResult,
     PermutationResult,
-    bootstrap_host,
-    bootstrap_unpaired_host,
+    bootstrap_host_into,
+    bootstrap_unpaired_host_into,
     mc_closed_form_for,
     monte_carlo_integrate_host,
-    permutation_samples_host,
-    permutation_test_host,
+    permutation_samples_host_into,
+    permutation_test_host_into,
     resample_indices_host,
     resample_indices_replace_into,
+    resample_indices_permute_into,
     RESAMPLE_IDX_DIRECT,
     RESAMPLE_GPU_GATHER,
     resample_gather_gpu, resample_permutation_gather_gpu,
@@ -99,7 +101,7 @@ def _resample_entry_plan() raises -> DevicePlan:
 
 
 def _bootstrap_run(
-    x: List[Float32],
+    xp: MutPointer[Float32, MutUntrackedOrigin],
     n: Int,
     d: Int,
     statistic: Int,
@@ -114,21 +116,25 @@ def _bootstrap_run(
     sdp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
-    var r = bootstrap_host(
-        x,
+    # lane ne2-b-rounds (N078): the sample is uploaded from the caller's
+    # buffer and the distribution downloaded into `dp` (bootstrap_host_into); the
+    # sorted distribution is the List the interval read, copied once.
+    var r = bootstrap_host_into(
+        xp,
+        max(0, n * d),
         n,
         d,
         statistic,
         n_resamples,
         seed,
         method,
+        dp,
         confidence_level,
         alternative,
         q_or_prop,
         r_first,
         plan=Optional[DevicePlan](_resample_entry_plan()),
     )
-    copy_f32(r.distribution.unsafe_ptr(), dp, n_resamples)
     copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
     sp.unsafe_store(0, Float64(r.point_estimate))
     sp.unsafe_store(1, Float64(r.standard_error))
@@ -197,10 +203,9 @@ def bootstrap_binding(
     var alternative = Int(py=params[7])
     var q_or_prop = Float32(Float64(py=params[8]))
     var r_first = Int(py=params[9])
-    var x = read_f32(Int(xp), max(0, n * d))
     with GILReleased(Python()):
         _bootstrap_run(
-            x,
+            xp,
             n,
             d,
             statistic,
@@ -257,14 +262,15 @@ def bootstrap_unpaired_binding(
     var confidence_level = Float32(Float64(py=params[5]))
     var alternative = Int(py=params[6])
     var r_first = Int(py=params[7])
-    var x = read_f32(Int(_f32_ptr(Int(py=addrs[0]))), max(0, n_x))
-    var y = read_f32(Int(_f32_ptr(Int(py=addrs[1]))), max(0, n_y))
+    var xp = _f32_ptr(Int(py=addrs[0]))
+    var yp = _f32_ptr(Int(py=addrs[1]))
     with GILReleased(Python()):
-        var r = bootstrap_unpaired_host(
-            x, n_x, y, n_y, n_resamples, seed, method, confidence_level,
-            alternative, r_first,
+        # lane ne2-b-rounds (N078): both samples read in place, the
+        # distribution downloaded into `dp`
+        var r = bootstrap_unpaired_host_into(
+            xp, max(0, n_x), n_x, yp, max(0, n_y), n_y, n_resamples, seed,
+            method, dp, confidence_level, alternative, r_first,
         )
-        copy_f32(r.distribution.unsafe_ptr(), dp, n_resamples)
         copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
         sp.unsafe_store(0, Float64(r.point_estimate))
         sp.unsafe_store(1, Float64(r.standard_error))
@@ -276,8 +282,10 @@ def bootstrap_unpaired_binding(
 
 
 def _permutation_run(
-    x: List[Float32],
-    y: List[Float32],
+    xp: MutPointer[Float32, MutUntrackedOrigin],
+    n_x: Int,
+    yp: MutPointer[Float32, MutUntrackedOrigin],
+    n_y: Int,
     statistic: Int,
     n_resamples: Int,
     seed: UInt64,
@@ -286,11 +294,12 @@ def _permutation_run(
     np_: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
-    var r = permutation_test_host(
-        x, y, statistic, n_resamples, seed, alternative, r_first,
+    # lane ne2-b-rounds (N078): x and y read in place, the null downloaded
+    # into `np_`
+    var r = permutation_test_host_into(
+        xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, np_, r_first,
         plan=Optional[DevicePlan](_resample_entry_plan()),
     )
-    copy_f32(r.null_distribution.unsafe_ptr(), np_, n_resamples)
     sp.unsafe_store(0, Float64(r.observed))
     sp.unsafe_store(1, Float64(r.pvalue.p))
     sp.unsafe_store(2, Float64(r.pvalue.count_less))
@@ -341,13 +350,20 @@ def permutation_test_binding(
     var seed = UInt64(Int(py=params[4]))
     var alternative = Int(py=params[5])
     var r_first = Int(py=params[6])
-    var x = read_f32(Int(py=addrs[0]), max(0, n_x))
-    var y = read_f32(Int(py=addrs[1]), max(0, n_y))
+    if n_x <= 0 or n_y <= 0:
+        raise Error(
+            "permutation_test: both samples must be non-empty; got n_x="
+            + String(n_x)
+            + " n_y="
+            + String(n_y)
+        )
+    var xp = _f32_ptr(Int(py=addrs[0]))
+    var yp = _f32_ptr(Int(py=addrs[1]))
     var np_ = _f32_ptr(Int(py=addrs[2]))
     var sp = _f64_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
         _permutation_run(
-            x, y, statistic, n_resamples, seed, alternative, r_first, np_, sp
+            xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, r_first, np_, sp
         )
     return PythonObject(0)
 
@@ -381,19 +397,26 @@ def permutation_samples_binding(
     var alternative = Int(py=params[4])
     var r_first = Int(py=params[5])
     var xp = _f32_ptr(Int(py=addrs[0]))
-    var x = read_f32(Int(xp), max(0, n))
-    var y = List[Float32]()
-    if n_y > 0:
-        var yp = _f32_ptr(Int(py=addrs[1]))
-        y = read_f32(Int(yp), n_y)
+    # one sample (n_y == 0): y is unread and its address may be anything
+    var yp = _f32_ptr(Int(py=addrs[1])) if n_y > 0 else xp
     with GILReleased(Python()):
-        var r = permutation_samples_host(x, y, n_y > 0, n_resamples, seed, alternative, r_first)
-        copy_f32(r.null_distribution.unsafe_ptr(), np_, n_resamples)
+        # lane ne2-b-rounds (N078): the samples read in place, the null
+        # downloaded into `np_`
+        var r = permutation_samples_host_into(
+            xp, max(0, n), yp, max(0, n_y), n_y > 0, n_resamples, seed,
+            alternative, np_, r_first,
+        )
         sp.unsafe_store(0, Float64(r.observed))
         sp.unsafe_store(1, Float64(r.pvalue.p))
         sp.unsafe_store(2, Float64(r.pvalue.count_less))
         sp.unsafe_store(3, Float64(r.pvalue.count_greater))
     return PythonObject(0)
+
+
+#: Every tier writes the drawn indices into the caller's buffer, except the
+#: FAST + Apple build compiled with MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF
+#: (RESAMPLE_IDX_DIRECT's measured B arm keeps its List route).
+comptime _IDX_INTO = RESAMPLE_IDX_DIRECT or not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
 
 
 def resample_indices_binding(
@@ -409,11 +432,19 @@ def resample_indices_binding(
     var count = Int(py=params[1])
     var replace = Int(py=params[2]) != 0
     var seed = UInt64(Int(py=params[3]))
-    comptime if RESAMPLE_IDX_DIRECT:
-        if replace:
-            with GILReleased(Python()):
+    # lane ne2-b-rounds (N053): both arms write the caller's int32 buffer
+    # directly on every tier (`*_into`: one device-to-host copy for replace,
+    # the keys once into a host buffer and the order straight into `op` for
+    # replace=False). The same integers as the List route below, which stays
+    # only as the B arm of RESAMPLE_IDX_DIRECT on FAST + Apple
+    # (-D MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF).
+    comptime if _IDX_INTO:
+        with GILReleased(Python()):
+            if replace:
                 resample_indices_replace_into(n, count, seed, op)
-            return PythonObject(0)
+            else:
+                resample_indices_permute_into(n, count, seed, op)
+        return PythonObject(0)
     with GILReleased(Python()):
         var idx = resample_indices_host(n, count, replace, seed)
         resample_store_indices(op, idx, count)

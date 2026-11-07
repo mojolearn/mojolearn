@@ -13,7 +13,7 @@ from bindings.sequence_string_storage import sequence_storage_image, sequence_st
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.arena_materialize_native import _address
 from bindings.py_attr import py_attr
-from bindings.py_balanced import py_call, py_type, py_get, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_type
 from bindings.classical_attributes import classical_connect_numpy
@@ -24,6 +24,8 @@ from bindings.sequential_inputs import _promote
 from core.classical_pandas_impl import pd_raw_at, _pd_double
 from core.cast_in import cast_in_kind, cast_w64_bits, _top_bit
 from core.sequence_array_cast import sequence_store_word
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 
 comptime _RPScalarBox = def(MutPointer[UInt8, MutUntrackedOrigin], PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr
@@ -95,6 +97,18 @@ def _rp_dict(value: PythonObject) raises -> PythonObject:
     return result
 
 
+def _rp_cell_entries(kind: String, context: PythonObject) raises -> PythonObject:
+    """(NA, NaT, temporal boxing entry) of one array from the operation
+    context (lane ne2-b-rounds, N047): references `resample_pandas_array`
+    resolved once; None for an entry the context does not carry."""
+    var time_from = PythonObject(None)
+    if kind == "M":
+        time_from = py_get(context, "resample_pandas_timestamp_from")
+    elif kind == "m":
+        time_from = py_get(context, "resample_pandas_timedelta_from")
+    return Python.tuple(py_get(context, "resample_pandas_na"), py_get(context, "resample_pandas_nat"), time_from)
+
+
 struct _RPArray(Movable):
     var owner: PythonObject
     var dtype: PythonObject
@@ -111,6 +125,13 @@ struct _RPArray(Movable):
     var number: Int
     var api_owner: PythonObject
     var scalar_box: _RPScalarBox
+    # lane ne2-b-rounds (N047): the operation's pandas missing values and
+    # this array's temporal boxing entry, resolved once per operation
+    # (`resample_pandas_array`), never per cell; None when the operation
+    # context does not carry them (the cell then resolves them itself)
+    var na: PythonObject
+    var nat: PythonObject
+    var time_from: PythonObject
 
     def __init__(out self, value: PythonObject, context: PythonObject) raises:
         if py_type(value) is not context["ndarray"]:
@@ -135,6 +156,10 @@ struct _RPArray(Movable):
                 self.api_owner = snapshot[14]
                 var table = Int(py=self.api_owner[2])
                 self.scalar_box = MutPointer[_RPScalarBox, MutUntrackedOrigin](unsafe_from_address=table + 60 * size_of[Int]())[0]
+                var cell_entries = _rp_cell_entries(self.kind, context)
+                self.na = cell_entries[0]
+                self.nat = cell_entries[1]
+                self.time_from = cell_entries[2]
                 return
         # Exact ndarray C descriptor; no subtype/finalize callback. The view
         # pins the original storage and owns independent shape/stride metadata.
@@ -170,6 +195,10 @@ struct _RPArray(Movable):
         self.row_stride = Int(py=strides[self.rank - 1])
         self.col_stride = 0 if self.rank == 1 else Int(py=strides[0])
         self.address = Int(py=sequential_address(self.owner))
+        var cell_entries = _rp_cell_entries(self.kind, context)
+        self.na = cell_entries[0]
+        self.nat = cell_entries[1]
+        self.time_from = cell_entries[2]
         py_call(snapshots.append, Python.tuple(value, self.owner, self.dtype, self.code, self.kind, self.item, self.rank, self.rows, self.cols, self.row_stride, self.col_stride, self.address, self.native, self.number, self.api_owner))
 
     def at(self, row: Int, col: Int = 0) -> Int:
@@ -544,11 +573,21 @@ def _rp_timezone(tz: PythonObject) raises:
 def _rp_time_box(source: _RPArray, address: Int, tz: PythonObject) raises -> PythonObject:
     var value = bitcast[DType.int64](pd_raw_at(address, 0, 8, source.native))
     if value == Int64.MIN:
-        return _rp_item("pandas._libs.tslibs.nattype", "NaT")
+        var nat = source.nat
+        if nat is None:
+            nat = _rp_item("pandas._libs.tslibs.nattype", "NaT")
+        return nat
     var unit = _rp_time_unit(source.code)
+    # the boxing classmethod was bound once per operation (N047); the MRO
+    # walk below runs only for an array built outside the operation context
+    var boxer = source.time_from
     if source.kind == "M":
-        return py_call(_rp_native_method(_pd_class("pandas._libs.tslibs.timestamps", "Timestamp"), "_from_value_and_reso"), PythonObject(value), unit, tz)
-    return py_call(_rp_native_method(_pd_class("pandas._libs.tslibs.timedeltas", "Timedelta"), "_from_value_and_reso"), PythonObject(value), unit)
+        if boxer is None:
+            boxer = _rp_native_method(_pd_class("pandas._libs.tslibs.timestamps", "Timestamp"), "_from_value_and_reso")
+        return py_call(boxer, PythonObject(value), unit, tz)
+    if boxer is None:
+        boxer = _rp_native_method(_pd_class("pandas._libs.tslibs.timedeltas", "Timedelta"), "_from_value_and_reso")
+    return py_call(boxer, PythonObject(value), unit)
 
 
 def _rp_arrow(values: PythonObject, force_object: Bool, distinguish: Bool, context: PythonObject) raises -> PythonObject:
@@ -1447,7 +1486,15 @@ def _rp_interval_missing(source: _RPArray, row: Int) raises -> Bool:
         return missing
     if source.kind == "O":
         var value = _rp_box(source, address)
-        if value is _rp_na() or value is _rp_item("pandas._libs.tslibs.nattype", "NaT") or value is None:
+        if value is None:
+            return True
+        var na = source.na
+        if na is None:
+            na = _rp_na()
+        var nat = source.nat
+        if nat is None:
+            nat = _rp_item("pandas._libs.tslibs.nattype", "NaT")
+        if value is na or value is nat:
             return True
         if py_type(value) is py_type(PythonObject(0.0)):
             var number = Float64(py=value)
@@ -1460,11 +1507,26 @@ def _rp_interval_scalar(value: PythonObject, context: PythonObject) raises:
     var b = native_loaded_module("builtins")
     if cls is b.int or cls is b.float or cls is b.bool:
         return
-    if cls is _pd_class("pandas._libs.tslibs.timestamps", "Timestamp"):
+    # lane ne2-b-rounds (N047): the two pandas scalar classes and the 16
+    # numerical scalar types are resolved once (per operation / per NumPy
+    # identity, `resample_pandas_array`), not per endpoint
+    var timestamp = py_get(context, "resample_pandas_timestamp_class")
+    if timestamp is None:
+        timestamp = _pd_class("pandas._libs.tslibs.timestamps", "Timestamp")
+    if cls is timestamp:
         _rp_timezone(_rp_sparse_field(value, "tzinfo"))
         return
-    if cls is _pd_class("pandas._libs.tslibs.timedeltas", "Timedelta"):
+    var timedelta = py_get(context, "resample_pandas_timedelta_class")
+    if timedelta is None:
+        timedelta = _pd_class("pandas._libs.tslibs.timedeltas", "Timedelta")
+    if cls is timedelta:
         return
+    var types = py_get(context, "resample_pandas_interval_types")
+    if types is not None:
+        for i in range(len(types)):  # driver-loop: exact native numerical endpoints only, before Interval comparisons
+            if cls is types[i]:
+                return
+        raise Error("TypeError: pandas Interval endpoints cannot invoke Python scalar comparison hooks")
     var codes = Python.tuple("i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "l", "L", "f2", "f4", "f8", "g")
     for i in range(len(codes)):  # driver-loop: exact native numerical endpoints only, before Interval comparisons
         var dtype = py_call(context["resample_pandas_dtype_factory"], codes[i])
@@ -1608,10 +1670,14 @@ def _rp_storage(values: PythonObject, force_object: Bool, distinguish: Bool, con
         var entry = _rp_native_method(cls_period, "_from_ordinal")
         var result = _rp_new(source.owner.shape, PythonObject("O"), context)
         var target = _RPArray(result, context)
+        # N047: NaT resolved once for the block, not per missing cell
+        var nat = source.nat
+        if nat is None:
+            nat = _rp_item("pandas._libs.tslibs.nattype", "NaT")
         for col in range(source.cols):  # driver-loop: native period metadata boxing
             for row in range(source.rows):  # driver-loop: preserve stored ordinals and NaT
                 var ordinal = bitcast[DType.int64](pd_raw_at(source.at(row, col), 0, 8, source.native))
-                var boxed = _rp_item("pandas._libs.tslibs.nattype", "NaT") if ordinal == Int64.MIN else py_call(entry, PythonObject(ordinal), freq)
+                var boxed = nat if ordinal == Int64.MIN else py_call(entry, PythonObject(ordinal), freq)
                 _rp_object(target.at(row, col), boxed)
         _ = values
         return result
@@ -1799,29 +1865,186 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
     for k in range(len(owned)):  # driver-loop: scatter complete admitted block storage to its stable output columns
         ref source = owned[k]
         var positions = placements[k]
+        # lane ne2-b-rounds (N054): the dtype dispatch runs once per block
+        # column (`_rp_plan_column`), then the planned columns copy in one
+        # pass over the rows split across cores (`_rp_copy_block`); a column
+        # that needs object boxing or a refusing conversion keeps the serial
+        # `_rp_copy` loop below
+        var plan = List[Int]()
+        var serial = List[Int]()
         for col in range(source.cols):  # driver-loop: validate column placement before native cell copies
             var dest = Int(py=positions[col])
             if dest < 0 or dest >= cols or seen[dest]:
                 raise Error("ValueError: pandas block columns overlap or exceed output shape")
             seen[dest] = True
-            if target.kind != "O" and source.code == target.code:
-                # p3-cnn-sequence-tsa: same storage code: the dtype dispatch
-                # runs once per column, then a plain strided item copy
-                var item = source.item
-                var step = cols * target.item
-                var out = target.address + dest * target.item
-                for row in range(rows):  # driver-loop: native dtype-preserving storage copy, not model computation
-                    memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=out + row * step),
-                           src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.at(row, col)), count=item)
-                continue
+            if _rp_plan_column(source, target, dest, plan) == _RP_CELL_SERIAL:
+                serial.append(col)
+        _rp_copy_block(source, target, rows, cols, plan)
+        for s in range(len(serial)):  # driver-loop: over the block columns that keep the serial cell copy
+            var col = serial[s]
+            var dest = plan[col * _RP_PLAN_WORDS + 1]
             for row in range(rows):  # driver-loop: native dtype-preserving storage copy, not model computation
                 _rp_copy(source, source.at(row, col), target.address + (row * cols + dest) * target.item, target)
+        _ = plan^
+        _ = serial^
     _ = owned^
     _ = logical^
     _ = raw_owners^
     _ = blocks^
     _ = value
     return result
+
+
+# lane ne2-b-rounds (N054): `_rp_copy`'s branches resolved ONCE per output
+# column into an integer plan, then every cell of the block copied by a
+# typed, non-raising cell routine with the rows split across the host's
+# cores. The cell routines are `_rp_copy`'s own word operations in its order
+# (pd_raw_at, _pd_double, cast_w64_bits, sequence_store_word), so the stored
+# bytes are the same. A column whose branch can refuse or needs object
+# boxing keeps the serial `_rp_copy` loop (plan code 0).
+comptime _RP_PLAN_WORDS = 9
+comptime _RP_CELL_SERIAL = 0
+comptime _RP_CELL_MEMCPY = 1
+comptime _RP_CELL_TIME = 2
+comptime _RP_CELL_FLOAT = 3
+comptime _RP_CELL_INT = 4
+
+
+def _rp_cell_code(source: _RPArray, target: _RPArray, mut delta: Int) raises -> Int:
+    """The `_rp_copy` branch a (source, target) pair takes, as a cell code;
+    `delta` receives the temporal unit steps. Raises where `_rp_copy` raises
+    before touching a cell (the temporal resolution refusal)."""
+    delta = 0
+    if target.kind == "O":
+        return _RP_CELL_SERIAL
+    if source.code == target.code:
+        return _RP_CELL_MEMCPY
+    if (target.kind == "M" or target.kind == "m") and source.kind == target.kind:
+        delta = _rp_time_unit(target.code) - _rp_time_unit(source.code)
+        if delta < 0:
+            raise Error("ValueError: pandas common temporal dtype must retain the finest resolution")
+        return _RP_CELL_TIME
+    if target.kind == "f" or target.kind == "c":
+        var components = 2 if target.kind == "c" else 1
+        var size = target.item // components
+        var source_size = source.item // 2 if source.kind == "c" else source.item
+        var numeric = source.kind == "b" or source.kind == "i" or source.kind == "u" or source.kind == "f" or source.kind == "c"
+        if not numeric or source_size > 8 or (size != 8 and size != 4 and size != 2):
+            return _RP_CELL_SERIAL
+        return _RP_CELL_FLOAT
+    if (target.kind == "i" or target.kind == "u" or target.kind == "b") and (source.kind == "i" or source.kind == "u" or source.kind == "b"):
+        return _RP_CELL_INT
+    return _RP_CELL_SERIAL
+
+
+def _rp_cell(plan: MutPointer[Int, MutUntrackedOrigin], address: Int, destination: Int,
+             source_native: Bool, target_native: Bool):
+    """One cell by its column plan (`_rp_plan_column`'s words): the word
+    operations of the matching `_rp_copy` branch."""
+    var code = plan[0]
+    if code == _RP_CELL_MEMCPY:
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=plan[7])
+        return
+    if code == _RP_CELL_TIME:
+        var word = pd_raw_at(address, 0, 8, source_native)
+        if word != UInt64(1) << 63:
+            for _ in range(plan[2]):  # small-loop(delta: at most three unit steps, s to ns): storage unit scaling
+                word *= UInt64(1000)
+        sequence_store_word(destination, word, 8, target_native)
+        return
+    if code == _RP_CELL_FLOAT:
+        var components = plan[3]
+        var size = plan[4]
+        for component in range(components):  # small-loop(components: real and imaginary, at most two): one scalar per component
+            var value = Float64(0)
+            if plan[8] != 0 or component == 0:
+                # `_rp_number`: a complex source reads its component half;
+                # a real source has no imaginary part
+                var offset = plan[5] if (plan[8] != 0 and component == 1) else 0
+                value = _pd_double(pd_raw_at(address, offset, plan[5], source_native), plan[6], plan[5])
+            var word = UInt64(0)
+            if size == 8:
+                word = bitcast[DType.uint64](value)
+            elif size == 4:
+                word = UInt64(bitcast[DType.uint32](Float32(value)))
+            else:
+                word = UInt64(bitcast[DType.uint16](Float16(value)))
+            sequence_store_word(destination + component * size, word, size, target_native)
+        return
+    if code == _RP_CELL_INT:
+        var word = cast_w64_bits(pd_raw_at(address, 0, plan[7], source_native), plan[6], plan[7])
+        if plan[4] == 1:
+            word = UInt64(1) if word != 0 else UInt64(0)
+        sequence_store_word(destination, word, plan[3], target_native)
+
+
+def _rp_plan_column(source: _RPArray, target: _RPArray, dest: Int, mut plan: List[Int]) raises -> Int:
+    """Append one column's plan words: code, dest, delta, then per code
+    (float: components, size, component bytes, tag, item, complex source;
+    int: target item, target is bool, signed tag, source item). Returns the code."""
+    var delta = 0
+    var code = _rp_cell_code(source, target, delta)
+    plan.append(code)
+    plan.append(dest)
+    plan.append(delta)
+    if code == _RP_CELL_FLOAT:
+        var components = 2 if target.kind == "c" else 1
+        var complex_source = source.kind == "c"
+        var kind = "f" if complex_source else source.kind
+        plan.append(components)
+        plan.append(target.item // components)
+        plan.append(source.item // 2 if complex_source else source.item)
+        plan.append(2 if kind == "f" else (1 if kind == "i" else 0))
+        plan.append(source.item)
+        plan.append(1 if complex_source else 0)
+    elif code == _RP_CELL_INT:
+        plan.append(target.item)
+        plan.append(1 if target.kind == "b" else 0)
+        plan.append(0)
+        plan.append(1 if source.kind == "i" else 0)
+        plan.append(source.item)
+        plan.append(0)
+    else:
+        for _ in range(_RP_PLAN_WORDS - 3):  # small-loop(plan words: six fixed words): pad the column plan
+            plan.append(0)
+        plan[len(plan) - 2] = source.item
+    return code
+
+
+def _rp_copy_block(source: _RPArray, target: _RPArray, rows: Int, cols: Int, plan: List[Int]) raises:
+    """Every planned (non-serial) column of one block, the rows split across
+    the host's cores."""
+    var ncols = len(plan) // _RP_PLAN_WORDS
+    if rows <= 0 or ncols == 0:
+        return
+    var tasks = host_predict_task_count_work(rows, rows * ncols * max(target.item, 1))
+    var chunk = host_predict_chunk(rows, tasks)
+    var pp = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(plan.unsafe_ptr()))
+    var src_base = source.address
+    var row_stride = source.row_stride
+    var col_stride = source.col_stride
+    var dst_base = target.address
+    var item = target.item
+    var source_native = source.native
+    var target_native = target.native
+
+    def _rows_task(c: Int) {imm pp, imm ncols, imm rows, imm cols, imm chunk, imm src_base, imm row_stride,
+                            imm col_stride, imm dst_base, imm item, imm source_native, imm target_native}:
+        var lo = c * chunk
+        var hi = lo + chunk
+        if hi > rows:
+            hi = rows
+        for row in range(lo, hi):  # driver-loop: native dtype-preserving storage copy of one task's rows, not model computation
+            for k in range(ncols):  # driver-loop: over the block's planned output columns
+                var words = pp + k * _RP_PLAN_WORDS
+                if words[0] == _RP_CELL_SERIAL:
+                    continue
+                _rp_cell(words, src_base + row * row_stride + k * col_stride,
+                         dst_base + (row * cols + words[1]) * item, source_native, target_native)
+
+    host_parallelize(_rows_task, tasks)
+    _ = plan
 
 
 def resample_pandas_array(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1833,15 +2056,72 @@ def resample_pandas_array(value: PythonObject, context: PythonObject) raises -> 
     var view = py_get(_pd_type_fields(ndarray), "view")
     if py_type(view) is not py_type(native_loaded_module("builtins").list.__dict__["copy"]) or view.__objclass__ is not ndarray:
         raise Error("TypeError: pandas snapshots require the native ndarray.view descriptor")
+    var table = _rp_static(dtype, ndarray, view, context)
+    var local = Python.dict(ndarray=ndarray, modules=context["modules"],
+        resample_pandas_dtype_classes=table[3], resample_pandas_dtype_factory=dtype,
+        resample_pandas_scalar_classes=table[4], resample_pandas_scalar_api=table[5], resample_pandas_view=view,
+        resample_pandas_interval_types=table[6],
+        resample_pandas_array_snapshots=Python.list(), resample_pandas_category_records=Python.list(), resample_pandas_sparse_records=Python.list())
+    # lane ne2-b-rounds (N047): pandas' missing values, scalar classes and
+    # boxing classmethods once per operation (they were looked up per cell:
+    # a module dictionary walk, an MRO walk and a descriptor bind each)
+    _rp_operation_entries(local)
+    return _rp_materialize(value, local)
+
+
+def _rp_static(dtype: PythonObject, ndarray: PythonObject, view: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The operation-independent NumPy table of the pandas resample door:
+    (dtype factory, ndarray, view, dtype classes, scalar classes, scalar C
+    API record, the 16 numerical scalar types of Interval endpoints).
+    Built once per NumPy identity (the dtype factory, ndarray type and view
+    descriptor it was built from) and kept in the shared bridge context
+    beside the connected NumPy entries (lane ne2-b-rounds, N065: it was
+    rebuilt on every call: 26 dtype descriptors, a key walk of NumPy's
+    native module dictionary and a capsule check)."""
+    var cached = py_get(context, "resample_pandas_static")
+    if cached is not None and py_type(cached) is py_type(Python.tuple()) and len(cached) == 7:
+        if cached[0] is dtype and cached[1] is ndarray and cached[2] is view:
+            return cached
     var classes = Python.list()
     var scalars = Python.list()
     var codes = Python.tuple("?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "l", "L", "f2", "f4", "f8", "g", "c8", "c16", "G", "O", "S", "U", "V", "M8[ns]", "m8[ns]")
-    for i in range(len(codes)):  # driver-loop: operation-stable admission identities for builtin native dtype classes
+    for i in range(len(codes)):  # driver-loop: admission identities for builtin native dtype classes, once per NumPy identity
         var descriptor = py_call(dtype, codes[i])
         py_call(classes.append, py_type(descriptor))
         py_call(scalars.append, descriptor.type)
-    var local = Python.dict(ndarray=ndarray, modules=context["modules"],
-        resample_pandas_dtype_classes=classes, resample_pandas_dtype_factory=dtype,
-        resample_pandas_scalar_classes=scalars, resample_pandas_scalar_api=_rp_api(dtype), resample_pandas_view=view,
-        resample_pandas_array_snapshots=Python.list(), resample_pandas_category_records=Python.list(), resample_pandas_sparse_records=Python.list())
-    return _rp_materialize(value, local)
+    var interval_types = Python.list()
+    var numeric = Python.tuple("i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "l", "L", "f2", "f4", "f8", "g")
+    for i in range(len(numeric)):  # driver-loop: the numerical Interval endpoint types, once per NumPy identity
+        py_call(interval_types.append, py_call(dtype, numeric[i]).type)
+    var table = Python.tuple(dtype, ndarray, view, classes, scalars, _rp_api(dtype), py_call(native_loaded_module("builtins").tuple, interval_types))
+    py_setitem(context, "resample_pandas_static", table)
+    return table
+
+
+def _rp_operation_entries(local: PythonObject) raises:
+    """NA, NaT, the Timestamp / Timedelta classes and their bound
+    `_from_value_and_reso` boxing classmethods into the operation context.
+    An entry pandas has not loaded stays absent; the cell that needs it then
+    resolves it itself and raises its own refusal."""
+    try:
+        py_setitem(local, "resample_pandas_na", _rp_na())
+    except:
+        pass
+    try:
+        py_setitem(local, "resample_pandas_nat", _rp_item("pandas._libs.tslibs.nattype", "NaT"))
+    except:
+        pass
+    var timestamp = _pd_class("pandas._libs.tslibs.timestamps", "Timestamp")
+    if timestamp is not None:
+        py_setitem(local, "resample_pandas_timestamp_class", timestamp)
+        try:
+            py_setitem(local, "resample_pandas_timestamp_from", _rp_native_method(timestamp, "_from_value_and_reso"))
+        except:
+            pass
+    var timedelta = _pd_class("pandas._libs.tslibs.timedeltas", "Timedelta")
+    if timedelta is not None:
+        py_setitem(local, "resample_pandas_timedelta_class", timedelta)
+        try:
+            py_setitem(local, "resample_pandas_timedelta_from", _rp_native_method(timedelta, "_from_value_and_reso"))
+        except:
+            pass

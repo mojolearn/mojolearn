@@ -14,6 +14,9 @@ from bindings.linalg_ops_buffers import LinAdmission, LinBuf, lin_new, lin_tuple
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from core.borrowed_buffer import BorrowedBufferLayout
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from bindings.cpython_table import cpython_table
 
 
 def _row_dtype_admit(dtype: PythonObject, context: PythonObject) raises:
@@ -37,6 +40,42 @@ def _row_dtype_admit(dtype: PythonObject, context: PythonObject) raises:
         for i in range(len(pairs)):  # driver-loop: native dtype metadata cannot retain callback owners
             native_release_admit(pairs[i][0], context)
             native_release_admit(pairs[i][1], context)
+
+
+
+def _take_rows_contiguous(src: Int, row_stride: Int, row_bytes: Int, n: Int,
+                          rows: MutPointer[Int32, MutUntrackedOrigin], count: Int, dst: Int) raises:
+    """`count` rows of `row_bytes` contiguous bytes each, row `rows[i]` of the
+    source (at `src + rows[i] * row_stride`) to output row `i` (at
+    `dst + i * row_bytes`): one memcpy per row, the rows split across the
+    host's cores (lane ne2-b-rounds, N052). No dtype work: the bytes as they
+    are. A row index outside [0, n) is refused after the join."""
+    if count <= 0:
+        return
+    var tasks = host_predict_task_count_work(count, count * max(row_bytes, 1))
+    var chunk = host_predict_chunk(count, tasks)
+    var failed = List[Int](length=tasks, fill=0)
+    var fp = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(failed.unsafe_ptr()))
+
+    def _rows_task(c: Int) {imm src, imm row_stride, imm row_bytes, imm n, imm rows, imm count,
+                            imm dst, imm chunk, imm fp}:
+        var lo = c * chunk
+        var hi = lo + chunk
+        if hi > count:
+            hi = count
+        for i in range(lo, hi):  # driver-loop: native byte row gathering, one memcpy per row of one task
+            var row = Int(rows[i])
+            if row < 0 or row >= n:
+                fp[c] = 1
+                return
+            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + i * row_bytes),
+                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=src + row * row_stride), count=row_bytes)
+
+    host_parallelize(_rows_task, tasks)
+    for c in range(tasks):  # small-loop(tasks: the row tasks, at most one per core): the failure words of the join
+        if fp[c] != 0:
+            raise Error("IndexError: resample returned an invalid row")
+    _ = failed^
 
 
 struct ResampleRows(Movable):
@@ -125,6 +164,22 @@ struct ResampleRows(Movable):
         if len(self.layout.shape) == 2:
             self.gpu = self.gpu and self.layout.shape[1] > 0 and self.layout.shape[1] <= 2147483647
 
+    def _rows_contiguous(self) -> Bool:
+        """Whether each row (axes 1..rank-1) is one C-contiguous run of bytes
+        reached without an indirection: no suboffset on any axis and every
+        trailing axis at its C stride (a length-0 or length-1 axis is never
+        stepped)."""
+        var rank = len(self.layout.shape)
+        if rank == 0 or self.layout.suboffsets[0] >= 0:
+            return False
+        var stride = self.layout.itemsize
+        for reverse in range(rank - 1):  # small-loop(rank: the admitted array's axes): the trailing strides
+            var axis = rank - reverse - 1
+            if self.layout.suboffsets[axis] >= 0 or (self.layout.shape[axis] > 1 and self.layout.strides[axis] != stride):
+                return False
+            stride *= self.layout.shape[axis]
+        return True
+
     def width(self) -> Int:
         return self.layout.shape[1] if len(self.layout.shape) == 2 else 1
 
@@ -139,12 +194,23 @@ struct ResampleRows(Movable):
         var rows = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=indices.addr)
         var count = indices.dim(0)
         if not self.is_array:
-            var out = Python.list()
+            # lane ne2-b-rounds (N052): the list is built natively at its
+            # final length (PyList_New + PyList_SetItem of a new reference to
+            # each retained tuple member), not appended row by row through a
+            # bound-method call
+            ref cpy = Python().cpython()
+            var raw = cpython_table()[].PyList_New(count)
+            if not raw:
+                raise cpy.unsafe_get_error()
+            var out = PythonObject(from_owned=raw)
             for i in range(count):  # driver-loop: native sequence row references, without caller indexing hooks
                 var row = Int(rows[i])
                 if row < 0 or row >= self.n:
                     raise Error("IndexError: resample returned an invalid row")
-                py_call(out.append, self.sequence[row])
+                var item = self.sequence[row]
+                if cpython_table()[].PyList_SetItem(out._obj_ptr, i, cpy.Py_NewRef(item._obj_ptr)) != 0:
+                    raise cpy.unsafe_get_error()
+                _ = item
             _ = indices
             return out
         var out = self.output(count, context)
@@ -155,6 +221,15 @@ struct ResampleRows(Movable):
         var row_items = 1
         for axis in range(1, rank):  # driver-loop: captured trailing dimensions of one row
             row_items *= self.layout.shape[axis]
+        if not self.has_objects and not self.zero_width and self._rows_contiguous():
+            # lane ne2-b-rounds (N052): every row's items are contiguous in
+            # the source, so a row is one memcpy of row_items * itemsize
+            # bytes, the rows split across the host's cores
+            _take_rows_contiguous(self.layout.address, self.layout.strides[0],
+                                  row_items * self.layout.itemsize, self.n, rows, count, dst)
+            _ = indices
+            _ = self
+            return out
         var coordinates = List[Int](length=rank, fill=0)
         var out_coordinates = List[Int](length=rank, fill=0)
         for i in range(count):  # driver-loop: native byte/reference row gathering
