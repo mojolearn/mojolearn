@@ -15,7 +15,7 @@ dependence across rows beyond the running checks. The Python entries
 from std.memory import bitcast
 from std.builtin.sort import sort
 from sequence.exec_trait import Exec
-from sequence.ops import Args, OP_PROPHET_PREP
+from sequence.ops import Args, FP, OP_PROPHET_PREP
 
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -122,32 +122,28 @@ def prophet_days(addrs: List[Int], N: Int, kind: Int) raises -> Int:
     return status
 
 
-def prophet_features[E: Exec](mut ex: E, addrs: List[Int], N: Int, ns: Int, start_f: Float64,
-                              scale_f: Float64) raises -> Int:
-    """addrs = [days (N) float64, periods (ns) float64, t (N) float32 out,
-    frac (N, max(ns, 1)) float32 out]; start_f = start, scale_f = t_scale.
-    t = (days - start) / t_scale; frac[i, s] = fmod(days, P) / P, + 1 when
-    negative; one rounding to float32 each. ns == 0 writes frac zeros.
-    Lane cpu4-python: on the executor (`op_prophet_prep`, soft binary64 and
-    the exact integer fmod: the host float64 unit's IEEE results, the same
-    bits on every column), not a host loop over the rows. Returns 0."""
+def prophet_features_on[E: Exec](mut ex: E, days_addr: Int, periods_addr: Int, N: Int, ns: Int, start_f: Float64,
+                                 scale_f: Float64) raises -> Tuple[FP, FP]:
+    """`prophet_features`' executor half: the scaled times (N) and the
+    seasonal phases (N, max(ns, 1)) written into executor buffers and left
+    there (lane ne1-a-decomp-tsa, N032: ProphetForecaster's predict builds its
+    feature matrix from them where the predict kernel runs). The same checks,
+    uploads and launch; the caller syncs."""
     if N < 1 or ns < 0:
         raise Error("prophet_features: N >= 1, ns >= 0")
+    _ = _f64p(days_addr, "days")
     var start = bitcast[DType.uint64](start_f)
     var scale = bitcast[DType.uint64](scale_f)
-    var days = _f64p(addrs[0], "days")
-    var tsc = _f32p(addrs[2], "t")
-    var frac = _f32p(addrs[3], "frac")
     var cols = max(ns, 1)
     var dper = ex.alloc(2 * cols)
     if ns > 0:
-        var per = _f64p(addrs[1], "periods")
+        var per = _f64p(periods_addr, "periods")
         for s in range(ns):  # small-loop(ns: user seasonalities): checks each period once, no row data
             if not (per[s] > 0):
                 raise Error("prophet_features: periods must be positive")
-        ex.upload(dper, F32P(unsafe_from_address=addrs[1]), 2 * ns)
+        ex.upload(dper, F32P(unsafe_from_address=periods_addr), 2 * ns)
     var ddays = ex.alloc(2 * N)
-    ex.upload(ddays, F32P(unsafe_from_address=addrs[0]), 2 * N)
+    ex.upload(ddays, F32P(unsafe_from_address=days_addr), 2 * N)
     var dt = ex.alloc(N)
     var df = ex.alloc(N * cols)
     var a = Args()
@@ -166,9 +162,28 @@ def prophet_features[E: Exec](mut ex: E, addrs: List[Int], N: Int, ns: Int, star
     a.i8 = Int((scale >> 32) & UInt64(0xFFFF))
     a.i9 = Int((scale >> 48) & UInt64(0xFFFF))
     ex.launch[OP_PROPHET_PREP](a, N * (1 + cols))
+    return (dt, df)
+
+
+def prophet_features[E: Exec](mut ex: E, addrs: List[Int], N: Int, ns: Int, start_f: Float64,
+                              scale_f: Float64) raises -> Int:
+    """addrs = [days (N) float64, periods (ns) float64, t (N) float32 out,
+    frac (N, max(ns, 1)) float32 out]; start_f = start, scale_f = t_scale.
+    t = (days - start) / t_scale; frac[i, s] = fmod(days, P) / P, + 1 when
+    negative; one rounding to float32 each. ns == 0 writes frac zeros.
+    Lane cpu4-python: on the executor (`op_prophet_prep`, soft binary64 and
+    the exact integer fmod: the host float64 unit's IEEE results, the same
+    bits on every column), not a host loop over the rows. Returns 0."""
+    if N < 1 or ns < 0:
+        raise Error("prophet_features: N >= 1, ns >= 0")
+    _ = _f64p(addrs[0], "days")
+    var tsc = _f32p(addrs[2], "t")
+    var frac = _f32p(addrs[3], "frac")
+    var cols = max(ns, 1)
+    var on = prophet_features_on(ex, addrs[0], addrs[1], N, ns, start_f, scale_f)
     ex.sync()
-    ex.download(tsc, dt, N)
-    ex.download(frac, df, N * cols)
+    ex.download(tsc, on[0], N)
+    ex.download(frac, on[1], N * cols)
     return 0
 
 

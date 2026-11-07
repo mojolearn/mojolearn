@@ -31,7 +31,7 @@ from sequence.exec_device import DeviceExec
 from providers.python.sequence_fit_team_pyapi import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from providers.python.sequence_ets_team_pyapi import ets_team_applies, ets_team_py
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
+from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, theta_forecast_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, prophet_predict_days_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
 from providers.python.sequence_opt_public_pyapi import (
     seq_optimizer_init_py,
@@ -633,6 +633,14 @@ def theta_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raise
     return theta_py(ex, addrs, ip, fp)
 
 
+def theta_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """`theta`'s forecast from its own fitted info rows, no fit (lane
+    ne1-a-decomp-tsa, N031): addrs = [y, info, forecast out], ip = [B, n, h,
+    season_length]."""
+    var ex = DeviceExec()
+    return theta_forecast_py(ex, addrs, ip)
+
+
 def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return croston_py(ex, addrs, ip)
@@ -687,6 +695,13 @@ def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject)
 def prophet_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return prophet_predict_py(ex, addrs, ip)
+
+
+def prophet_predict_days_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """`prophet_features` then `prophet_predict` in one call, the features
+    kept on the executor (lane ne1-a-decomp-tsa, N032)."""
+    var ex = DeviceExec()
+    return prophet_predict_days_py(ex, addrs, ip, fp)
 
 
 def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -906,6 +921,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
             m.def_function[adafactor_resident_step_dev_binding]("adafactor_resident_step_dev")
         m.def_function[layer_norm_dev_binding]("layer_norm_dev")
         m.def_function[theta_binding]("theta")
+        m.def_function[theta_forecast_binding]("theta_forecast")
         m.def_function[croston_binding]("croston")
         m.def_function[croston_forecast_binding]("croston_forecast")
         m.def_function[ets_binding]("ets")
@@ -915,6 +931,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[prophet_changepoints_binding]("prophet_changepoints")
         m.def_function[prophet_fit_binding]("prophet_fit")
         m.def_function[prophet_predict_binding]("prophet_predict")
+        m.def_function[prophet_predict_days_binding]("prophet_predict_days")
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_backward_binding]("moe_backward")
         m.def_function[moe_weights_put_binding]("moe_weights_put")

@@ -53,6 +53,10 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr, holtwinters_predict_ptr
+from holtwinters.resident_state import (
+    holtwinters_resident_prepare, holtwinters_resident_release, holtwinters_resident_count,
+    holtwinters_query_resident,
+)
 from tsa.estimator import kpss_test_host, select_d_host
 
 
@@ -232,6 +236,67 @@ def holtwinters_predict_binding(
     return PythonObject(written)
 
 
+def holtwinters_resident_prepare_binding(comps_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Upload a fitted model's packed components once (lane ne1-a-decomp-tsa,
+    N030, holtwinters/resident_state.mojo); returns the handle
+    `holtwinters_query_resident` names. `comps_addr` is `holtwinters_forecast`'s;
+    `params` is, in this exact order:
+
+        0  n              the FIT's observations per series
+        1  batch_size
+        2  frequency      the FIT's seasonal_periods
+    """
+    if len(params) != 3:
+        raise Error(
+            "holtwinters_resident_prepare: params must contain 3 values (n,"
+            " batch_size, frequency), got " + String(len(params))
+        )
+    var cp = _f32_ptr(Int(py=comps_addr))
+    var n = Int(py=params[0])
+    var batch_size = Int(py=params[1])
+    var frequency = Int(py=params[2])
+    var handle = 0
+    with GILReleased(Python()):
+        handle = holtwinters_resident_prepare(cp, n, batch_size, frequency)
+    return PythonObject(handle)
+
+
+def holtwinters_resident_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop a resident component set; quiet for a handle already released."""
+    holtwinters_resident_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def holtwinters_resident_count_binding() raises -> PythonObject:
+    """Live resident component sets (the tools/ lifetime check reads it)."""
+    return PythonObject(holtwinters_resident_count())
+
+
+def holtwinters_query_resident_binding(
+    handle: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    seasonal: PythonObject,
+) raises -> PythonObject:
+    """The in-sample predictions and the forecast of `[start, end)` in one
+    call over a resident component set. `params` is `[start, end]`;
+    `out_addr` is written with `(end - start) * batch_size` float32,
+    TIME-MAJOR (the in-sample steps first, then the forecast steps), the
+    words `holtwinters_predict` and `holtwinters_forecast` write."""
+    if len(params) != 2:
+        raise Error("holtwinters_query_resident: params must contain 2 values (start, end), got "
+                    + String(len(params)))
+    var h = Int(py=handle)
+    var op = _f32_ptr(Int(py=out_addr))
+    var start = Int(py=params[0])
+    var end = Int(py=params[1])
+    var sname = String(py=seasonal)
+    var written = 0
+    with GILReleased(Python()):
+        written = holtwinters_query_resident(h, op, sname, start, end)
+    return PythonObject(written)
+
+
 def kpss_test_binding(
     y_addr: PythonObject,
     flags_addr: PythonObject,
@@ -355,6 +420,10 @@ def build__mojolearn_tsa() -> PythonObject:
         # The in-sample prediction runs on the device (one thread per cell);
         # the host bindings keep bindings/holtwinters_host_predict.mojo.
         m.def_function[holtwinters_predict_binding]("holtwinters_predict")
+        m.def_function[holtwinters_resident_prepare_binding]("holtwinters_resident_prepare")
+        m.def_function[holtwinters_resident_release_binding]("holtwinters_resident_release")
+        m.def_function[holtwinters_resident_count_binding]("holtwinters_resident_count")
+        m.def_function[holtwinters_query_resident_binding]("holtwinters_query_resident")
         m.def_function[kpss_test_binding]("kpss_test")
         m.def_function[select_d_binding]("select_d")
         return m.finalize()

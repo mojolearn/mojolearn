@@ -30,6 +30,10 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.classical_pandas import classical_admit_value
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import xseq_cast_nd, xseq_widen_f32_f64
+from bindings.native_prepared_owner import prepared_get
+from bindings.tsa_arima_resident import (
+    ARIMA_RESIDENT_SLOT, arima_resident_words, arima_resident_hit, arima_resident_mint, arima_resident_call,
+)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _A = "mojolearn ARIMA: "
@@ -423,6 +427,38 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
     if batch <= 0 or n_obs <= 0 or n_exog < 0 or k < 0 or k > 1:
         raise Error("ValueError: ARIMA fitted dimension metadata is invalid")
     var complexity = Int(py=PythonObject(order[0]) + order[2] + order[3] + order[5] + k + n_exog + 1)
+    var words = arima_resident_words(batch, n_obs, order, k, n_exog)
+    var mods = NativeModules()
+    var record = prepared_get(mods, ARIMA_RESIDENT_SLOT, model)
+    if record is not None:
+        # A resident record exists: the fitted arrays it names were admitted
+        # and checked against these words when it was minted and are frozen
+        # since, so a hit skips their admission and upload; only the future
+        # regressors are admitted (the same checks, the same words).
+        var hit_entries = _arima_entries(model, fields, context)
+        var hit = arima_resident_hit(record, fields, hit_entries, words)
+        if hit >= 0:
+            var fut = PythonObject(None)
+            var fut_addr = 0
+            var fut_owner = PythonObject(None)
+            if n_exog > 0 and end > n_obs:
+                var fe = _exog_array(exog, batch, end - n_obs, _integer(py_get(fields, "_y_ndim", PythonObject(2)), context), "exog", context)
+                if Int(py=fe[1]) != n_exog:
+                    raise Error("ValueError: " + _A + "dimensions mismatch, future exog has the wrong regressor count")
+                fut = fe[0]
+                var fb = arima_buffer(fut, "prepared future exog", context, True)
+                fut_addr = fb.address
+                fut_owner = Python.tuple(fb.keep, fb.owner)
+                _ = fb
+            var out = tsa_array("f", "<f4", Python.tuple(batch, width), Int(py=PythonObject(batch) * width), 4, context)
+            if fut_addr == 0:
+                # an unread future pointer must still be a live address
+                fut_addr = Int(py=classical_address(out))
+            arima_resident_call(hit_entries, hit, fut_addr, out, start, end, width, forecast)
+            _ = record  # the record (and its capsule) outlive the query
+            _ = fut_owner
+            _ = fut
+            return out
     var y = arima_buffer(fields["_y"], "y", context, True)
     var params = arima_buffer(fields["params_"], "params", context, True)
     if y.count != Int(py=PythonObject(batch) * n_obs) or params.count != Int(py=PythonObject(batch) * complexity):
@@ -447,6 +483,16 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             future_addr = future_owner.address
     var result = tsa_array("f", "<f4", Python.tuple(batch, width), Int(py=PythonObject(batch) * width), 4, context)
     var entries = _arima_entries(model, fields, context)
+    var minted = arima_resident_mint(model, fields, entries, words, y.address, ex_addr, params.address)
+    if minted is not None:
+        arima_resident_call(entries, Int(py=minted[5]), future_addr, result, start, end, width, forecast)
+        _ = minted  # the record (and its capsule) outlive the query
+        _ = y
+        _ = params
+        _ = ex_owner
+        _ = future_owner
+        _ = future
+        return result
     var plan = Python.list(batch, n_obs, width) if forecast else Python.list(batch, n_obs, start, end)
     for i in range(len(order)):  # driver-loop: seven admitted ARIMA order words
         _ = py_call(plan.append, order[i])

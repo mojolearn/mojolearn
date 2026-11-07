@@ -399,7 +399,7 @@ def _records_cleanup_function() raises -> PythonObject:
         module.def_py_c_function(_records_finalize_c, "release")
         var native_module = module.finalize()
         ref cpy = Python().cpython()
-        var fields = cpy.PyModule_GetDict(native_module._obj_ptr)
+        var fields = cpython_table()[].PyModule_GetDict(native_module._obj_ptr)
         var name = String("release")
         var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemString")(fields, name.as_c_string_slice().unsafe_ptr())
         if not raw:
@@ -459,7 +459,7 @@ def records_open(model: PythonObject) raises -> Int:
     var callback = PythonObject(from_owned=raw_callback)
     var raw_weak = table[].PyWeakref_NewRef(model._obj_ptr, callback._obj_ptr)
     if not raw_weak:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return 0
     var weak = PythonObject(from_owned=raw_weak)
     var type_address = Int(py_type(model)._obj_ptr)

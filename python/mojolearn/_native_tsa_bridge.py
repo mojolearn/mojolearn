@@ -45,7 +45,10 @@ def connect():
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["tsa_bindings"] = bindings
     hw = {}
-    names = ("holtwinters_fit", "holtwinters_forecast", "holtwinters_predict")
+    names = ("holtwinters_fit", "holtwinters_forecast", "holtwinters_predict",
+             # resident components (bindings/tsa_hw_native.mojo); absent on the host binding
+             "holtwinters_resident_prepare", "holtwinters_resident_release",  # glue: fixed compiled entry names
+             "holtwinters_resident_count", "holtwinters_query_resident")  # glue: fixed compiled entry names
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
             module = _backend.binding("_mojolearn_tsa", mode)
@@ -66,7 +69,11 @@ def connect():
     arima_names = ("arima_fit", "arima_predict", "arima_forecast", "arima_ic_from_loglike", "arima_numeric_mode",
                    "arima_fast_search_mode", "arima_order_caps", "arima_ndiffs_kpss",
                    "arima_order_batch_enabled", "arima_order_search_device", "arima_order_search",
-                   "arima_search_reuse_enabled", "arima_order_search_fit")
+                   "arima_search_reuse_enabled", "arima_order_search_fit",
+                   # resident fitted state (bindings/tsa_arima_resident.mojo); absent on the host binding
+                   "arima_resident_prepare", "arima_resident_release",  # glue: fixed compiled entry names
+                   "arima_resident_count", "arima_predict_resident",  # glue: fixed compiled entry names
+                   "arima_forecast_resident")  # glue: fixed compiled entry names
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
             module = _backend.binding("_mojolearn_arima", mode)

@@ -172,7 +172,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         if (flags & UInt64(1 << 8)) != 0:
             continue
         var fields = py_call(dict_get, row)
-        var raw_iterator = cpy.PyObject_GetIter(fields._obj_ptr)
+        var raw_iterator = cpython_table()[].PyObject_GetIter(fields._obj_ptr)
         if not raw_iterator:
             raise cpy.unsafe_get_error()
         var iterator = PythonObject(from_owned=raw_iterator)
@@ -183,7 +183,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         # key can collide with an earlier ordinary key, so interleaving the
         # two checks could invoke its __eq__ before reaching its own position.
         for field_index in range(field_count):  # small-loop(field_count: class fields): admit every namespace key first
-            var raw_key = cpy.PyIter_Next(iterator._obj_ptr)
+            var raw_key = cpython_table()[].PyIter_Next(iterator._obj_ptr)
             if not raw_key:
                 if cpy.PyErr_Occurred():
                     raise cpy.unsafe_get_error()

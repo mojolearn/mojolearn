@@ -98,6 +98,14 @@ from arima.estimator import (
 )
 
 
+from arima.resident_state import (
+    arima_resident_prepare,
+    arima_resident_release,
+    arima_resident_count,
+    arima_predict_resident,
+)
+
+
 from arima.impl.fast_order_search import (
     order_search_caps, order_search_device, order_search_loglike,
     order_search_fit, ARIMA_FAST_SEARCH_REUSE,
@@ -596,6 +604,116 @@ def arima_forecast_binding(
     return PythonObject(written)
 
 
+def arima_resident_prepare_binding(
+    y_addr: PythonObject,
+    exog_addr: PythonObject,
+    params_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Upload a fitted model's state once (lane ne1-a-decomp-tsa, N028/N029,
+    arima/resident_state.mojo); returns the handle `arima_predict_resident`
+    and `arima_forecast_resident` name. The addresses are `arima_predict`'s
+    `y_addr`, `exog_addr` and `params_addr`.
+
+    `params` is, in this exact order:
+
+         0  batch_size
+         1  n_obs
+         2  p
+         3  d
+         4  q
+         5  P
+         6  D
+         7  Q
+         8  s
+         9  k                fit_intercept, 0 or 1
+        10  n_exog           the exogenous regressor count
+    """
+    if len(params) != 11:
+        raise Error(
+            "arima_resident_prepare: params must contain 11 values (batch_size,"
+            " n_obs, p, d, q, P, D, Q, s, k, n_exog), got " + String(len(params))
+        )
+    var yp = _f32_ptr(Int(py=y_addr))
+    var exog_address = Int(py=exog_addr)
+    _ = _f32_ptr(exog_address)
+    var pp = _f32_ptr(Int(py=params_addr))
+    var w = List[Int]()
+    for i in range(11):  # driver-loop: over the eleven fixed plan words
+        w.append(Int(py=params[i]))
+    var handle = 0
+    with GILReleased(Python()):
+        handle = arima_resident_prepare(
+            yp, exog_address, pp, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10],
+        )
+    return PythonObject(handle)
+
+
+def arima_resident_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop a resident fitted state; quiet for a handle already released."""
+    arima_resident_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def arima_resident_count_binding() raises -> PythonObject:
+    """Live resident fitted states (the tools/ lifetime check reads it)."""
+    return PythonObject(arima_resident_count())
+
+
+def arima_predict_resident_binding(
+    handle: PythonObject,
+    exog_fut_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`arima_predict` over a resident fitted state: `params` is `[start,
+    end]` (end EXCLUDED, as `arima_predict`); `exog_fut_addr` and `out_addr`
+    are `arima_predict`'s. Returns `(end - start) * batch_size`."""
+    if len(params) != 2:
+        raise Error("arima_predict_resident: params must contain 2 values (start, end), got "
+                    + String(len(params)))
+    var h = Int(py=handle)
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = _f32_ptr(exog_fut_address)
+    var op = _f32_ptr(Int(py=out_addr))
+    var start = Int(py=params[0])
+    var end = Int(py=params[1])
+    var written = 0
+    with GILReleased(Python()):
+        written = arima_predict_resident(h, exog_fut_address, op, start, end, False, "arima_predict")
+    return PythonObject(written)
+
+
+def arima_forecast_resident_binding(
+    handle: PythonObject,
+    exog_fut_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`arima_forecast` over a resident fitted state: `params` is `[n_steps,
+    reserved]` (reserved MUST BE 0, as `arima_forecast`'s word 12). Returns
+    `n_steps * batch_size`."""
+    if len(params) != 2:
+        raise Error("arima_forecast_resident: params must contain 2 values (n_steps, reserved), got "
+                    + String(len(params)))
+    if Int(py=params[1]) != 0:
+        raise Error("arima_forecast_resident: params[1] is reserved and must be 0, got "
+                    + String(Int(py=params[1])))
+    var h = Int(py=handle)
+    var n_steps = Int(py=params[0])
+    if n_steps < 1:
+        raise Error("arima_forecast: n_steps must be >= 1 (n_steps=" + String(n_steps) + ")")
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = _f32_ptr(exog_fut_address)
+    var op = _f32_ptr(Int(py=out_addr))
+    var written = 0
+    with GILReleased(Python()):
+        # forecast is predict(n_obs, n_obs + n_steps): the resident words
+        # hold n_obs, so the bounds are resolved inside.
+        written = arima_predict_resident(h, exog_fut_address, op, 0, n_steps, True, "arima_forecast")
+    return PythonObject(written)
+
+
 def arima_product_df_count_binding(stage: PythonObject) raises -> PythonObject:
     return PythonObject(product_df_count(Int(py=stage)))
 
@@ -624,6 +742,11 @@ def build__mojolearn_arima() -> PythonObject:
         m.def_function[arima_ndiffs_kpss_binding]("arima_ndiffs_kpss")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
+        m.def_function[arima_resident_prepare_binding]("arima_resident_prepare")
+        m.def_function[arima_resident_release_binding]("arima_resident_release")
+        m.def_function[arima_resident_count_binding]("arima_resident_count")
+        m.def_function[arima_predict_resident_binding]("arima_predict_resident")
+        m.def_function[arima_forecast_resident_binding]("arima_forecast_resident")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_arima: ", e))

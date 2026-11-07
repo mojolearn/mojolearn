@@ -107,15 +107,21 @@ def _seasonal_rows(fields: PythonObject) raises -> PythonObject:
     return py_call(_b().list, py_call(fields["seasonalities"].values))
 
 
-def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_features(days)`: (t scaled float32 (N,), frac float32 (N, max(ns, 1)))."""
+def _periods(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The seasonal periods, float64 (max(ns, 1),) (a 1.0 when none)."""
     var rows = _seasonal_rows(fields)
     var periods = Python.list()
     for i in range(len(rows)):  # driver-loop: over the user seasonalities (one period each)
         _ = py_call(periods.append, rows[i]["period"])
     if len(periods) == 0:
         _ = py_call(periods.append, 1.0)
-    var periods_a = _contig(periods, context["float64"], context)
+    return _contig(periods, context["float64"], context)
+
+
+def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_features(days)`: (t scaled float32 (N,), frac float32 (N, max(ns, 1)))."""
+    var rows = _seasonal_rows(fields)
+    var periods_a = _periods(fields, context)
     var ns = len(rows)
     var n = len(days)
     var tsc = sequential_array(Python.tuple(n), context["float32"], context)
@@ -313,7 +319,20 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     var entries = xseq_entries(fields, context)
     var days = _days(args[0], entries, context)[0]
     var M = len(days)
-    var ft = _features(fields, days, entries, context)
+    # lane ne1-a-decomp-tsa (N032): with `prophet_predict_days` the scaled
+    # times and phases stay on the executor and the feature matrix is built
+    # where the predict kernel runs (one crossing less, no host copy of
+    # them). An empty `t` keeps the separate feature call, so its refusal
+    # comes first as before; a non-positive seasonal period (refused by the
+    # feature writer) is then met after the holiday and schema checks below
+    # instead of before them.
+    var fused = M > 0 and py_get(entries, "prophet_predict_days") is not None
+    var ft = Python.tuple(PythonObject(None), PythonObject(None))
+    var periods_a = PythonObject(None)
+    if fused:
+        periods_a = _periods(fields, context)
+    else:
+        ft = _features(fields, days, entries, context)
     var nh = Int(py=fields["_nh"])
     var H = PythonObject(None)
     if nh:
@@ -344,10 +363,19 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     var trend = sequential_array(Python.tuple(B, M), context["float32"], context)
     var cpts = fields["changepoints_t_"]
     var multiplicative = 1 if String(py=fields["seasonality_mode"]) == "multiplicative" else 0
-    _ = py_call_typed(entries["prophet_predict"],
-                      Python.list(xseq_addr(params), xseq_addr(fields["info_"]), xseq_addr(ft[0]), xseq_addr(ft[1]),
-                                  xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
-                      Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative))
+    if fused:
+        _ = py_call_typed(entries["prophet_predict_days"],
+                          Python.list(xseq_addr(days), xseq_addr(periods_a), xseq_addr(params), xseq_addr(fields["info_"]),
+                                      xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
+                          Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative),
+                          Python.list(py_call(b.float, fields["start_"]), py_call(b.float, fields["t_scale_"])))
+        _ = days  # keep the Python objects alive through the native call above
+        _ = periods_a
+    else:
+        _ = py_call_typed(entries["prophet_predict"],
+                          Python.list(xseq_addr(params), xseq_addr(fields["info_"]), xseq_addr(ft[0]), xseq_addr(ft[1]),
+                                      xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
+                          Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative))
     # Prediction has independently allocated feature and order owners too.
     _ = ft
     _ = od

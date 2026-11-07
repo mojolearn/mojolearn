@@ -34,9 +34,20 @@ from bindings.native_owner_lifetime import native_release_admit
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.forecast_owner_pyapi import forecast_commit
 from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32
+from bindings.native_loaded_module import NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
+from bindings.native_resident_capsule import resident_capsule
+from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _HW = "mojolearn ExponentialSmoothing: "
+# The resident fitted components of a fitted model (lane ne1-a-decomp-tsa,
+# plan section A, row N030): one prepared-owner record per model, outside
+# its __dict__ and dropped with it, `(_comps, prepare entry, n, ts_num,
+# seasonal_periods, handle, capsule)`. A refit stores a new `_comps`, so the
+# next query misses, mints again and the replaced record's capsule returns
+# the old device copy.
+comptime _HW_RESIDENT_SLOT = "tsa_hw_resident_v1"
 
 
 def _b() raises -> PythonObject:
@@ -238,8 +249,78 @@ def _check_index(index: PythonObject, b: Int) raises:
         raise Error("TypeError: " + _HW + "index must be int or None, got " + _type_text(index))
 
 
+def _hw_held(model: PythonObject, fields: PythonObject) raises -> PythonObject:
+    """The held resident record when it was minted from this very `_comps`
+    object (frozen read-only at the mint and held by the record, so its
+    words, shape and address cannot have changed: the `_packed` admission it
+    passed then passes now), else None. The caller still checks the binding
+    (`_hw_matches`)."""
+    var mods = NativeModules()
+    var held = prepared_get(mods, _HW_RESIDENT_SLOT, model)
+    if held is None or held[0] is not py_get(fields, "_comps"):
+        return PythonObject(None)
+    return held
+
+
+def _hw_matches(held: PythonObject, entries: PythonObject, n: Int, b: Int, period: Int) raises -> Bool:
+    """The held record was minted by this binding with these fitted words."""
+    if held is None or py_get(entries, "holtwinters_query_resident") is None:
+        return False
+    return (held[1] is py_get(entries, "holtwinters_resident_prepare") and Int(py=held[2]) == n
+            and Int(py=held[3]) == b and Int(py=held[4]) == period)
+
+
+def _hw_mint(model: PythonObject, fields: PythonObject, entries: PythonObject, n: Int, b: Int, period: Int,
+             comps_address: Int) raises -> PythonObject:
+    """Upload the admitted components (`comps_address`, the `_packed`
+    admission of `_comps`) once and record them; returns the record (word 5
+    the handle; the caller keeps it alive through its query, since a model
+    that cannot be weakly referenced keeps no record and the capsule would
+    release the copy at once). None (the per-call path) on a binding without
+    the resident entries (the host column) or components that cannot be
+    frozen (a caller-assigned ndarray: plan section A's read-only rule)."""
+    var prepare = py_get(entries, "holtwinters_resident_prepare")
+    var release = py_get(entries, "holtwinters_resident_release")
+    if prepare is None or release is None or py_get(entries, "holtwinters_query_resident") is None:
+        return PythonObject(None)
+    var comps_obj = py_get(fields, "_comps")
+    if not fitted_is_freezable_any(comps_obj):
+        return PythonObject(None)
+    _ = fitted_freeze_any(comps_obj)
+    var handle = Int(py=py_call_typed(prepare, PythonObject(comps_address), Python.list(n, b, period)))
+    # From here the capsule owns the device copy.
+    var capsule = resident_capsule(release, handle)
+    var record = Python.tuple(comps_obj, prepare, n, b, period, handle, capsule)
+    var mods = NativeModules()
+    prepared_put(mods, _HW_RESIDENT_SLOT, model, record)
+    return record
+
+
+def _hw_query(entries: PythonObject, record: PythonObject, fields: PythonObject, start: Int, end: Int, b: Int,
+              context: PythonObject) raises -> PythonObject:
+    """One `holtwinters_query_resident` call: `(end - start) * b` float32,
+    time-major, the in-sample steps then the forecast steps."""
+    var steps = end - start
+    var whole = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
+    _ = py_call_typed(_entry(entries, "holtwinters_query_resident"), record[5], classical_address(whole),
+                      Python.list(start, end), fields["seasonal"])
+    _ = record  # the record (and its capsule) outlive the query
+    return whole
+
+
+def _query_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_snapshot`'s checks over the admitted instance storage itself, with
+    no copy of the instance dict and no rewrite of `eps` (a query reads
+    neither the copy nor `eps`; lane ne1-a-decomp-tsa, N030): the same
+    refusals in the same order."""
+    var fields = tsa_hw_fields(model, context)
+    _settings(fields, context, False)
+    _fitted_checks(fields)
+    return fields
+
+
 def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _snapshot(model, context)
+    var fields = _query_fields(model, context)
     if not Bool(py=fields["fit_executed_flag"]):
         raise Error("ValueError: " + _HW + "fit() the model before predict()")
     var n = Int(py=fields["n"])
@@ -263,8 +344,19 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     var steps = end - start
     if steps > 9223372036854775807 // 4 // b or (end > n and end - n > 9223372036854775807 // 4 // b):
         raise Error("ValueError: Holt-Winters prediction extent exceeds native indexing bounds")
+    # One call over the device copy (the in-sample steps, then the forecast
+    # steps, time-major: the words of the two per-call entries) when the
+    # components are resident or can be made so.
+    var held = _hw_held(model, fields)
+    if _hw_matches(held, entries, n, b, period):
+        return _shaped(fields, _hw_query(entries, held, fields, start, end, b, context), 0, steps, index, context)
     var packed = _packed(fields["_comps"], 3 * (n - period) * b, context)
     var comps = packed.keep
+    var minted = _hw_mint(model, fields, entries, n, b, period, packed.source.addr)
+    if minted is not None:
+        var whole = _hw_query(entries, minted, fields, start, end, b, context)
+        _ = comps
+        return _shaped(fields, whole, 0, steps, index, context)
     if start >= n:
         var fc = tsa_array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps), classical_address(fc),
@@ -289,7 +381,7 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
 
 
 def hw_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _snapshot(model, context)
+    var fields = _query_fields(model, context)
     if not Bool(py=fields["fit_executed_flag"]):
         raise Error("ValueError: " + _HW + "fit() the model before score()")
     var index = tsa_component_index(args[0], context)
@@ -309,7 +401,7 @@ def hw_score(model: PythonObject, args: PythonObject, context: PythonObject) rai
     return PythonObject(Float64(value))
 
 
-def _settings(fields: PythonObject, context: PythonObject) raises:
+def _settings(fields: PythonObject, context: PythonObject, write_eps: Bool = True) raises:
     var b = _b()
     for name in ["ts_num", "seasonal_periods", "start_periods"]:  # small-loop(three integer constructor settings)
         if not _is_int(fields[name]):
@@ -322,7 +414,9 @@ def _settings(fields: PythonObject, context: PythonObject) raises:
     var method = fields["initialization_method"]
     if py_type(method) is not b.str or (String(method) != "estimated" and String(method) != "heuristic" and String(method) != "cuml"):
         raise Error("ValueError: " + _HW + "initialization_method must be estimated, heuristic or cuml")
-    py_setitem(fields, "eps", py_call(b.float, tsa_scalar(fields["eps"], context)))
+    var eps = py_call(b.float, tsa_scalar(fields["eps"], context))
+    if write_eps:
+        py_setitem(fields, "eps", eps)
 
 
 def _snapshot(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -335,6 +429,12 @@ def _snapshot_of(live: PythonObject, context: PythonObject) raises -> PythonObje
     the same `live` instead of admitting the class and keys a second time."""
     var fields = py_call(_b().dict, live)
     _settings(fields, context)
+    _fitted_checks(fields)
+    return fields
+
+
+def _fitted_checks(fields: PythonObject) raises:
+    """The fitted-flag and fitted-extent refusals of `_snapshot_of`."""
     if py_type(fields["fit_executed_flag"]) is not _b().bool:
         raise Error("TypeError: " + _HW + "fitted flag must be a native boolean")
     if Bool(py=fields["fit_executed_flag"]):
@@ -343,7 +443,6 @@ def _snapshot_of(live: PythonObject, context: PythonObject) raises -> PythonObje
         var batch = Int(py=fields["ts_num"])
         if Int(py=fields["n"]) - Int(py=fields["seasonal_periods"]) > 9223372036854775807 // 12 // batch:
             raise Error("ValueError: Holt-Winters fitted extent exceeds native indexing bounds")
-    return fields
 
 
 def _commit(fields: PythonObject, updates: PythonObject, context: PythonObject, clear_components: Bool = False) raises:
@@ -381,7 +480,7 @@ def _packed(value: PythonObject, count: Int, context: PythonObject) raises -> Ar
 
 
 def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _snapshot(model, context)
+    var fields = _query_fields(model, context)
     if not Bool(py=fields["fit_executed_flag"]):
         raise Error("ValueError: " + _HW + "fit() the model before forecast()")
     if not _is_int(args[0]):
@@ -396,11 +495,27 @@ def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("IndexError: " + _HW + "index outside series range")
     var n = Int(py=fields["n"])
     var period = Int(py=fields["seasonal_periods"])
+    var held = _hw_held(model, fields)
+    if held is not None:
+        # A held record names this very frozen `_comps`, so the `_packed`
+        # admission below would pass: resolving the binding first cannot
+        # change which refusal a call meets.
+        if h > 9223372036854775807 // 4 // b:
+            raise Error("ValueError: Holt-Winters forecast extent exceeds native indexing bounds")
+        var hit_entries = _hw_entries(model, fields, context)
+        if _hw_matches(held, hit_entries, n, b, period):
+            return _shaped(fields, _hw_query(hit_entries, held, fields, n, n + h, b, context), 0, h, index, context)
     var comps = _packed(fields["_comps"], 3 * (n - period) * b, context)
     if h > 9223372036854775807 // 4 // b:
         raise Error("ValueError: Holt-Winters forecast extent exceeds native indexing bounds")
     var out = tsa_array("f", "<f4", Python.tuple(h * b), h * b, 4, context)
-    _ = py_call_typed(_entry(_hw_entries(model, fields, context), "holtwinters_forecast"),
+    var entries = _hw_entries(model, fields, context)
+    var minted = _hw_mint(model, fields, entries, n, b, period, comps.source.addr)
+    if minted is not None:
+        var whole = _hw_query(entries, minted, fields, n, n + h, b, context)
+        _ = comps
+        return _shaped(fields, whole, 0, h, index, context)
+    _ = py_call_typed(_entry(entries, "holtwinters_forecast"),
         PythonObject(comps.source.addr), classical_address(out), Python.list(n, b, period, h), fields["seasonal"])
     _ = comps
     _ = out
