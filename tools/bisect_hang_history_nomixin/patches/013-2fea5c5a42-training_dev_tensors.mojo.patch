@@ -1,0 +1,13 @@
+diff --git a/training/dev_tensors.mojo b/training/dev_tensors.mojo
+index 5b3e053b5466c8037826ecfd8bb4e761e654b4fe..9a1c80f35b7702b0d59bb3f09a15620a8700238b 100644
+--- a/training/dev_tensors.mojo
++++ b/training/dev_tensors.mojo
+@@ -242,7 +242,7 @@ def train_linear_backward_dev(
+ def train_ce_loss_dev(
+     ctx: DeviceContext,
+     loss_ptr: _FP,
+-    row_ptr: _FP,
++    row_ptr: Optional[_FP],
+     dlogits_h: Int,
+     logits_h: Int,
+     targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
