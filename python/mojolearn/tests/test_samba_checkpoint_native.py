@@ -149,3 +149,19 @@ def test_checkpoint_missing_path_and_python_path_callback_refusals(tmp_path):
             pytest.fail("Python path callback executed")
 
     _assert_refusal(audit_native_call(SambaStack.from_checkpoint, CallbackPath()), TypeError)
+
+
+def test_streamed_checkpoint_spanning_several_write_chunks(tmp_path):
+    # Row N168: the native writer hashes each 1 MiB chunk as it writes it.
+    # A registry above one chunk (the parameters alone exceed 1 MiB here)
+    # must give the same file digest as hashlib and restore the same state.
+    config = SambaConfig(600, 256, ["attention"], n_heads=2, n_kv_heads=1,
+                         intermediate=64, tie_embeddings=False)
+    model = SambaStack(config, generator=training.Generator(7))
+    state = _reference_state(model)
+    assert state["parameters"].nbytes > 1 << 20
+    path = tmp_path / "large.bin"
+    digest = model.save_checkpoint(path)
+    assert digest == hashlib.sha256(path.read_bytes()).hexdigest()
+    _assert_state_equal(_reference_state(SambaStack.from_checkpoint(path)), state)
+    assert not list(tmp_path.glob("large.bin.tmp-*"))
