@@ -26,8 +26,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from core.hostptr import f32_ptr, read_f32, read_i32
-from core.mojolearn_embedding_host_impl import store_each_f32
+from core.hostptr import f32_ptr, read_i32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from embedding.checks.embedding_oracle import (
@@ -35,7 +34,7 @@ from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_refuse_ids,
     emb_refuse_shape,
-    refuse_nonfinite,
+    refuse_nonfinite_at,
 )
 from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_config
 from embedding.host.embedding_host import (
@@ -131,22 +130,21 @@ def embedding_backward_binding(
         )
     var cfg = embedding_host_config(vocab, width, padding_idx, acc_code == 1)
     emb_refuse_shape(cfg, n_positions)
-    var dy = read_f32(Int(py=addrs[0]), n_positions * width)
+    # Lane ne3-c-blocks-embedding (row N164): dY and the carried dW are read
+    # and folded through the caller's buffers (no list copies, no store-back
+    # walk); the refusals keep their words, their order and their first index
+    # (`refuse_nonfinite_at`), and nothing is written before they pass.
+    var dyp = f32_ptr(Int(py=addrs[0]))
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
-    refuse_nonfinite(String("dY"), dy)
+    refuse_nonfinite_at(String("dY"), dyp, n_positions * width)
     var dwp = f32_ptr(Int(py=addrs[2]))
-    var dw: List[Float32]
     if cfg.accumulate:
-        dw = read_f32(Int(py=addrs[2]), vocab * width)
-        refuse_nonfinite(String("the carried dW"), dw)
-    else:
-        dw = List[Float32](length=vocab * width, fill=Float32(0.0))
+        refuse_nonfinite_at(String("the carried dW"), dwp, vocab * width)
     var cells = vocab * width
     with GILReleased(Python()):
         if cells > 0:
-            host_embedding_backward(dw, dy, ids, n_positions, cfg, plan)
-            store_each_f32(dwp, dw, cells)
+            host_embedding_backward(dwp, dyp, ids, n_positions, cfg, plan)
     return PythonObject(vocab * width)
 
 

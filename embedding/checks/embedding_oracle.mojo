@@ -2,6 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host FP32 oracle of profile `mojolearn.identical.embedding.fp32.v1`. The contract is `embedding/IDENTICAL_EMBEDDING_CONTRACT.md` and this file is that contract in code -- the two must be read together and every function below cites its section."""
 
+from std.memory import bitcast
+
 from checks.numerics import ftz, identical_mul_add
 
 
@@ -65,6 +67,35 @@ def refuse_nonfinite(name: String, values: List[Float32]) raises:
     """IDENTITY_PATHS row 39: a NaN or an infinity in an input is REFUSED BY NAME before any recorded stage. All four must stay the same shape."""
     for i in range(len(values)):
         nonfinite_refusal(name, i, values[i])
+
+
+def refuse_nonfinite_at(
+    name: String, values: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises:
+    """`refuse_nonfinite` read through the caller's buffer, with no copy
+    (lane ne3-c-blocks-embedding, rows N160 / N164): the same wording and the
+    same first flat index. An OR of the exponent bits, eight cells at a time,
+    finds a clean buffer; only a buffer with a hit re-walks cell by cell, so
+    the refusal names the first bad index exactly as the list scan does. It
+    reads bits and computes nothing."""
+    if n <= 0:
+        return
+    var i = 0
+    var hit = False
+    var expm = SIMD[DType.uint32, 8](EMB_POS_INF_BITS)
+    while i + 8 <= n:
+        var e = bitcast[DType.uint32](values.unsafe_load[width=8](i)) & expm
+        if e.eq(expm).select(SIMD[DType.uint32, 8](1), SIMD[DType.uint32, 8](0)).reduce_or() != UInt32(0):
+            hit = True
+            break
+        i += 8
+    if not hit:
+        while i < n:
+            nonfinite_refusal(name, i, values.unsafe_load(i))
+            i += 1
+        return
+    for k in range(n):
+        nonfinite_refusal(name, k, values.unsafe_load(k))
 
 
 def emb_refuse_shape(cfg: EmbConfig, n_positions: Int) raises:

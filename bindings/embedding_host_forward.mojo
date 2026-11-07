@@ -18,13 +18,13 @@ through `embedding/checks/embedding_oracle.mojo`.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from core.hostptr import f32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, read_i32
 from embedding.checks.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,
     emb_refuse_ids,
     emb_refuse_shape,
-    refuse_nonfinite,
+    refuse_nonfinite_at,
 )
 from embedding.host.embedding_host import host_embedding_forward
 
@@ -66,11 +66,18 @@ def embedding_forward_binding(
     var n_positions = Int(py=params[2])
     var cfg = embedding_host_config(vocab, width, EMB_NO_PADDING_IDX, False)
     emb_refuse_shape(cfg, n_positions)
-    var weight = read_f32(Int(py=addrs[0]), vocab * width)
+    # Lane ne3-c-blocks-embedding (row N160): the table is read through the
+    # caller's buffer, never copied; the refusals keep their words, their
+    # order and their first index (`refuse_nonfinite_at`). The ids copy is
+    # T words, kept for the list refusal shared with the GPU binding.
+    var wp = f32_ptr(Int(py=addrs[0]))
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
-    refuse_nonfinite(String("W"), weight)
+    refuse_nonfinite_at(String("W"), wp, vocab * width)
     var yp = f32_ptr(Int(py=addrs[2]))
+    var ip = ids.unsafe_ptr()
+    var idsp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(ip))
     with GILReleased(Python()):
-        host_embedding_forward(weight, ids, n_positions, cfg, yp)
+        host_embedding_forward(wp, idsp, n_positions, cfg, yp)
+    _ = ids^
     return PythonObject(n_positions * width)

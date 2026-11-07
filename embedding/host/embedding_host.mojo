@@ -70,6 +70,8 @@ measurement.
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz
+from core.host_lanes import host_row_tasks
+from core.host_parallel import host_parallelize
 from embedding.checks.embedding_oracle import EmbConfig
 
 
@@ -85,28 +87,44 @@ comptime HOST_SORT_SENTINEL = UInt64(0xFFFFFFFFFFFFFFFF)
 
 
 def host_embedding_forward(
-    weight: List[Float32],
-    ids: List[Int32],
+    weight: MutPointer[Float32, MutUntrackedOrigin],
+    ids: MutPointer[Int32, MutUntrackedOrigin],
     n_positions: Int,
     cfg: EmbConfig,
     yp: MutPointer[Float32, MutUntrackedOrigin],
 ):
     """`emb_gather_kernel` over every cell (module docstring). The caller has
     refused the shape, the ids and a nonfinite `W`, as the GPU binding does
-    before its upload."""
+    before its upload.
+
+    The table and the ids are read through the caller's buffers (lane
+    ne3-c-blocks-embedding, row N160: the `V x d` table used to be copied into
+    a new list on every forward). Positions are independent cells, split over
+    the host threads by `host_row_tasks` (a gather: every cell is one load and
+    two flushes, so the split moves no bit)."""
     var width = cfg.width
     if width < 1 or n_positions < 1:
         return
-    for t in range(n_positions):
-        var v = Int(ids[t])
-        comptime if EMBEDDING_HOST_SABOTAGE:
-            # THE FORWARD SABOTAGE ARM (lane/inference-embedding-ivf-cholesky,
-            # 2026-09-15): gather the NEXT row, wrong on purpose, so a saved
-            # table's CPU lookup (the shipped embedding_infer binding) is
-            # seen to fail its recorded bytes.
-            v = (v + 1) % cfg.vocab
-        for j in range(width):
-            yp.unsafe_store(t * width + j, ftz(ftz(weight[v * width + j])))
+    var vocab = cfg.vocab
+    var tasks = host_row_tasks(n_positions, width)
+    var chunk = (n_positions + tasks - 1) // tasks
+
+    def _gather_rows(task: Int) {imm weight, imm ids, imm yp, imm n_positions, imm width, imm vocab, imm chunk}:
+        for t in range(task * chunk, min((task + 1) * chunk, n_positions)):
+            var v = Int(ids.unsafe_load(t))
+            comptime if EMBEDDING_HOST_SABOTAGE:
+                # THE FORWARD SABOTAGE ARM (lane/inference-embedding-ivf-cholesky,
+                # 2026-09-15): gather the NEXT row, wrong on purpose, so a saved
+                # table's CPU lookup (the shipped embedding_infer binding) is
+                # seen to fail its recorded bytes.
+                v = (v + 1) % vocab
+            for j in range(width):
+                yp.unsafe_store(t * width + j, ftz(ftz(weight.unsafe_load(v * width + j))))
+
+    if tasks <= 1:
+        _gather_rows(0)
+    else:
+        host_parallelize(_gather_rows, tasks)
 
 
 def _host_runs_scan(
@@ -209,30 +227,38 @@ def _host_runs_sort(
             perm[i] = Int32(Int(key & UInt64(0xFFFFFFFF)))
 
 
-def _host_pad_row(mut dw: List[Float32], cfg: EmbConfig):
+def _host_pad_row(dw: MutPointer[Float32, MutUntrackedOrigin], cfg: EmbConfig):
     """`emb_pad_row_kernel`: `+0.0` STORED over `padding_idx`'s row."""
     var base = cfg.padding_idx * cfg.width
     for j in range(cfg.width):
         comptime if EMBEDDING_HOST_SABOTAGE:
             # THE SABOTAGE ARM: `-0.0`, wrong on purpose; see
             # EMBEDDING_HOST_SABOTAGE.
-            dw[base + j] = Float32(-0.0)
+            dw.unsafe_store(base + j, Float32(-0.0))
         else:
-            dw[base + j] = Float32(0.0)
+            dw.unsafe_store(base + j, Float32(0.0))
 
 
 def host_embedding_backward(
-    mut dw: List[Float32],
-    dy: List[Float32],
+    dw: MutPointer[Float32, MutUntrackedOrigin],
+    dy: MutPointer[Float32, MutUntrackedOrigin],
     ids: List[Int32],
     n_positions: Int,
     cfg: EmbConfig,
     plan: Int,
 ) raises:
-    """`_emb_backward_launch` (module docstring). `dw` is the `V * d` buffer
-    the GPU binding uploads: the carried gradient when `cfg.accumulate`, any
-    contents otherwise (the seed stores `+0.0`). The caller has refused the
-    plan code, the shape, the ids and every nonfinite input."""
+    """`_emb_backward_launch` (module docstring), folded straight into the
+    caller's `V * d` buffer `dw`: the carried gradient when `cfg.accumulate`,
+    any contents otherwise (the seed stores `+0.0`). The caller has refused
+    the plan code, the shape, the ids and every nonfinite input, and `dw`
+    does not overlap `dy`.
+
+    Lane ne3-c-blocks-embedding (row N164): `dY` and the carried `dW` used to
+    be copied into lists, folded there and stored back cell by cell; now they
+    are read and written in place. The stores are the same: an untouched cell
+    keeps its bits, exactly as the store-back of an unchanged list cell did.
+    The fold is split over vocabulary rows (`host_row_tasks`): each cell's
+    run is walked ascending by one task, so the split moves no bit."""
     if plan != HOST_PLAN_SCAN and plan != HOST_PLAN_SORT:
         raise Error("embedding: unknown execution plan")
     var vocab = cfg.vocab
@@ -242,7 +268,7 @@ def host_embedding_backward(
     var cells = vocab * width
     if not cfg.accumulate:
         for i in range(cells):
-            dw[i] = Float32(0.0)
+            dw.unsafe_store(i, Float32(0.0))
     if n_positions < 1:
         if cfg.has_padding():
             _host_pad_row(dw, cfg)
@@ -254,17 +280,30 @@ def host_embedding_backward(
         _host_runs_sort(ids, n_positions, cfg, counts, run_begin, perm)
     else:
         _host_runs_scan(ids, n_positions, cfg, counts, run_begin, perm)
-    for cell in range(cells):
-        var v = cell // width
-        var j = cell - v * width
-        var lo = Int(run_begin[v])
-        var hi = Int(run_begin[v + 1])
-        if lo >= hi:
-            continue
-        var acc = dw[cell]
-        for r in range(lo, hi):
-            var t = Int(perm[r])
-            acc = ftz(ftz(acc) + ftz(dy[t * width + j]))
-        dw[cell] = ftz(acc)
+    var tasks = host_row_tasks(vocab, width)
+    var chunk = (vocab + tasks - 1) // tasks
+    var bp = run_begin.unsafe_ptr()
+    var pp = perm.unsafe_ptr()
+
+    def _fold_rows(task: Int) {imm dw, imm dy, imm bp, imm pp, imm vocab, imm width, imm chunk}:
+        for v in range(task * chunk, min((task + 1) * chunk, vocab)):
+            var lo = Int(bp[v])
+            var hi = Int(bp[v + 1])
+            if lo >= hi:
+                continue
+            for j in range(width):
+                var cell = v * width + j
+                var acc = dw.unsafe_load(cell)
+                for r in range(lo, hi):
+                    var t = Int(pp[r])
+                    acc = ftz(ftz(acc) + ftz(dy.unsafe_load(t * width + j)))
+                dw.unsafe_store(cell, ftz(acc))
+
+    if tasks <= 1:
+        _fold_rows(0)
+    else:
+        host_parallelize(_fold_rows, tasks)
+    _ = run_begin^
+    _ = perm^
     if cfg.has_padding():
         _host_pad_row(dw, cfg)
