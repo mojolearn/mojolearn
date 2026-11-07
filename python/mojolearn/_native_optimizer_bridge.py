@@ -225,11 +225,13 @@ def connect_embedding(training, embedding_cls, archive_context):
     from types import BuiltinFunctionType, MethodType
     from . import _backend
     from .tokenizer import _binding
-    try:
-        from . import _x_sequence_device  # glue: connect the resident owner before public operations when its optional dependency exists
-    except ModuleNotFoundError as error:
-        if error.name != "numpy":
-            raise
+    # glue: connect the resident owner at import only when NumPy is already
+    # loaded; importing it otherwise loaded NumPy for every `import mojolearn`.
+    # Without it, device=True asks for `mojolearn._x_sequence_device` (or
+    # `to_device`) by name (bindings/embedding_layer_native.mojo).
+    import sys
+    if "numpy" in sys.modules:
+        from . import _x_sequence_device  # noqa: F401
     context = training._OPT_CONTEXT
     bindings = {}
     names = ("embedding_forward", "embedding_backward", "embedding_numeric_mode", "embedding_table_release", "seq_tensor_alloc",
