@@ -180,6 +180,23 @@ def test_ordered_sum_gradients_and_fold_pair_refuse_bad_parts():
     assert "Python buffer hooks are not accepted" in native_failure(cv.fold_pair, ValueError, "ab", b"\0" * 4)
 
 
+def test_ordered_sum_of_many_shards_is_the_ascending_pair_fold():
+    # Row N093: the shards are stacked once and folded in place; the result
+    # must be the same bits as folding them two at a time in ascending order.
+    rng = np.random.default_rng(11)
+    shards = [[rng.standard_normal((3, 5)).astype(np.float32), rng.standard_normal(7).astype(np.float32)]
+              for _ in range(4)]
+    whole = audit_native_call(ordered_sum_gradients, shards).assert_native()
+    running = shards[0]
+    for shard in shards[1:]:
+        running = ordered_sum_gradients([running, shard])
+    assert len(whole) == len(running) == 2
+    for got, want in zip(whole, running):
+        assert np.asarray(got).tobytes() == np.asarray(want).tobytes()
+    # the caller's shard arrays are not written
+    assert shards[0][0].tobytes() == shards[0][0].copy().tobytes()
+
+
 def test_coordinator_drain_events_is_empty_before_any_step():
     owner = object.__new__(cv.Coordinator)
     audit_native_call(owner.__init__, port=0, workers=1, logical_shards=1, steps=0).assert_native()
