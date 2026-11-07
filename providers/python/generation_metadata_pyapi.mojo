@@ -172,6 +172,13 @@ struct GenerationWeightSnapshot(Copyable, Movable):
             if self.failures[k] != "":
                 raise Error(self.failures[k])
             ref layout = self.layouts[k]
+            if _generation_weight_in_place(layout):
+                # Row N201 (legacy route): the retained private memoryview in
+                # self.owners pins the exporter; read it in place instead of a
+                # fresh packed Array per use.
+                result[offset + index] = layout.address
+                keep.append(self.owners[index])
+                continue
             var packed = generation_array([layout.count], self.formats[k])
             var address = Int(py=packed._addr)
             layout.copy_to(address)
@@ -327,6 +334,15 @@ from core.generation_metadata import generation_transformer_addresses
 from transformer.native_generation_engine import NativeGenerationLayer, NativeGenerationModel
 
 
+def _generation_weight_in_place(layout: BorrowedBufferLayout) -> Bool:
+    # A captured foreign weight is read where it lives when it is C-contiguous
+    # and its address is aligned for its item width (bytes need no alignment);
+    # anything else keeps the packed copy.
+    if layout.address == 0 or not layout.contiguous():
+        return False
+    return layout.itemsize == 1 or layout.address % layout.itemsize == 0
+
+
 def _generation_engine_weights(snapshot: GenerationWeightSnapshot,
     mut pins: List[AdmittedBorrowedBuffer], mut storage: List[List[Float32]],
     mut layouts: List[BorrowedBufferLayout], mut destinations: List[Int]) raises -> List[Int]:
@@ -338,6 +354,14 @@ def _generation_engine_weights(snapshot: GenerationWeightSnapshot,
         if snapshot.failures[k] != "":
             raise Error(snapshot.failures[k])
         var layout = snapshot.layouts[k].copy()
+        if _generation_weight_in_place(layout):
+            # Row N201: the snapshot's private memoryview pins this C-contiguous
+            # exporter for the whole operation, so the kernels read the
+            # exporter's bytes at their address (formerly copied into a
+            # zero-filled List before every forward). Weights are read-only
+            # to every kernel; the bytes read are the same bytes.
+            addresses[index] = layout.address
+            continue
         var bytes = layout.count * layout.itemsize
         storage.append(List[Float32](length=(bytes + 3) // 4, fill=0))
         var address = Int(storage[len(storage) - 1].unsafe_ptr())
