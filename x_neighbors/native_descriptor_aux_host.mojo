@@ -8,16 +8,18 @@ from x_neighbors.items import IP
 from x_neighbors.iter_host import op_ocsvm_labels
 # Capability bit 4: this binary carries the ocsvm_labels auxiliary operation.
 comptime XN_AUX_OCSVM_LABELS = True
-from x_neighbors.host_ops import op_nc_labels, op_nc_proba, XN_NC_SOFTMAX64
+from x_neighbors.host_ops import op_nc_labels, op_nc_proba, XN_NC_SOFTMAX64, op_lp_dense_proba
 from x_neighbors.proba64_nc import NC_PROBA64
 # Capability bit 5: this binary carries nc_labels and nc_proba.
 comptime XN_AUX_NC_FUSED = True
+# Capability bit 6: this binary carries lp_dense_proba.
+comptime XN_AUX_LP_DENSE = True
 
 
 def xn_aux_capabilities() -> Int:
     return (0 | (Int(XN_OCSVM_DEV_INIT) << 1) | (Int(XN_UNIT_DEV) << 2)
             | (Int(XN_IDN_SKETCH_CTR) << 3) | (Int(XN_AUX_OCSVM_LABELS) << 4)
-            | (Int(XN_AUX_NC_FUSED) << 5))
+            | (Int(XN_AUX_NC_FUSED) << 5) | (Int(XN_AUX_LP_DENSE) << 6))
 
 
 def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -103,5 +105,19 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
             comptime if not NC_PROBA64:
                 raise Error("AttributeError: xn_softmax64 is not exported by this binding")
         op_nc_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3])
+        return 0
+    if op == 8:
+        # lp_dense_proba (lane ne3-g-svc-gp-neighbors, N324): addresses
+        # (q, X_, label_distributions_, proba out, int32 codes out), ints
+        # (nq, n, d, classes, kind, want_codes), floats (gamma, coef0). With
+        # want_codes only the codes are written, else only the proba.
+        for k in range(5):  # small-loop(five admitted address words)
+            if a[k] == 0:
+                raise Error("x_neighbors: null buffer address")
+        for k in range(6):  # small-loop(six admitted dimension words)
+            if p[k] < 0:
+                raise Error("x_neighbors: a negative size was passed")
+        op_lp_dense_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]),
+                          p[5])
         return 0
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

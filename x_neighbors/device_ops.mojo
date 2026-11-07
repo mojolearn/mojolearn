@@ -2144,3 +2144,55 @@ def op_nc_proba(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: In
     _ = d_mat^
     _ = d_res^
     _ = ctx^
+
+
+# ------------------------------------------- label propagation dense queries
+def op_lp_dense_proba(q: Int, xfit: Int, dist: Int, res: Int, codes: Int, nq: Int, n: Int, d: Int, c: Int,
+                      kind: Int, gamma: Float32, coef0: Float32, want_codes: Int) raises:
+    """LabelPropagation / LabelSpreading predict_proba (and predict) with
+    kernel='rbf' in one device session (row N324 of the native entry-point
+    plan, lane ne3-g-svc-gp-neighbors): `kernel_kernel` (q against X_), the
+    `matmul_kernel` product with label_distributions_, `row_normalize_kernel`,
+    then with `want_codes` the `row_argmax_kernel` codes of the normalized
+    rows. The kernels and words of the ops the caller ran one by one (kernel,
+    matmul, row_normalize, row_argmax); the nq x n kernel matrix and the
+    product stay on the device, so the result is the same bits."""
+    var ctx = xn_ctx()
+    var d_q = _buf(ctx, q, nq * d, True)
+    var d_x = _buf(ctx, xfit, n * d, True)
+    var d_dist = _buf(ctx, dist, n * c, True)
+    var d_k = _buf(ctx, 0, nq * n, False)
+    var d_p = _buf(ctx, 0, nq * c, False)
+    var d_res = _buf(ctx, 0, nq * c, False)
+    var d_codes = _buf_i(ctx, 0, nq if want_codes != 0 else 0, False)
+    ctx.enqueue_function[kernel_kernel](
+        d_q.unsafe_ptr(), d_x.unsafe_ptr(), d_k.unsafe_ptr(), Int64(nq), Int64(n), Int64(d), Int64(kind), gamma, coef0,
+        Int64(0),
+        grid_dim=_grid(nq * n), block_dim=(BLOCK if nq * n > 1 else 1),
+    )
+    ctx.enqueue_function[matmul_kernel](
+        d_k.unsafe_ptr(), d_dist.unsafe_ptr(), d_p.unsafe_ptr(), Int64(nq), Int64(n), Int64(c),
+        grid_dim=_grid(nq * c), block_dim=(BLOCK if nq * c > 1 else 1),
+    )
+    ctx.enqueue_function[row_normalize_kernel](
+        d_p.unsafe_ptr(), d_res.unsafe_ptr(), Int64(nq), Int64(c),
+        grid_dim=_grid(nq), block_dim=(BLOCK if nq > 1 else 1),
+    )
+    if want_codes != 0:
+        if nq > 0:
+            ctx.enqueue_function[row_argmax_kernel](
+                d_res.unsafe_ptr(), d_codes.unsafe_ptr(), Int64(nq), Int64(c),
+                grid_dim=_grid(nq), block_dim=(BLOCK if nq > 1 else 1),
+            )
+            _down_i(ctx, d_codes, codes, nq)
+    else:
+        _down(ctx, d_res, res, nq * c)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_x^
+    _ = d_dist^
+    _ = d_k^
+    _ = d_p^
+    _ = d_res^
+    _ = d_codes^
+    _ = ctx^

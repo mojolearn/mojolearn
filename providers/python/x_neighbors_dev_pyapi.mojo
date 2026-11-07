@@ -223,3 +223,12 @@ def nc_proba_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raise
     2 float64 softmax)."""
     _aux_call(7, a_, i_, f_, 5, 4, 0)
     return PythonObject(None)
+
+
+def lp_dense_proba_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_lp_dense_proba: LabelPropagation / LabelSpreading
+    predict_proba or predict with kernel='rbf' in one native session.
+    Addresses (q, X_, label_distributions_, proba out, int32 codes out),
+    ints (nq, n, d, classes, kernel kind, want_codes), floats (gamma, coef0)."""
+    _aux_call(8, a_, i_, f_, 5, 6, 2)
+    return PythonObject(None)
