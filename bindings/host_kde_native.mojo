@@ -15,6 +15,7 @@ from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_kde_bandwidth_native import kde_bandwidth_code, kde_native_bandwidth
 from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
 from bindings.host_svc_native import _svc_input
+from bindings.host_iforest_native import host_iforest_alias_types
 
 
 def _kde_option_value(value: PythonObject, context: PythonObject, numeric: Bool = False) raises -> PythonObject:
@@ -32,9 +33,13 @@ def _kde_option_value(value: PythonObject, context: PythonObject, numeric: Bool 
     var numpy_str = PythonObject(None)
     var numpy_bytes = PythonObject(None)
     if py_get(context, "ndarray") is not None:
-        var constructor = native_numpy_dtype(context)
-        numpy_str = py_call(constructor, "U").type
-        numpy_bytes = py_call(constructor, "S").type
+        # N392 (lane ne3-g-svc-gp-neighbors): the U and S scalar classes from
+        # the one per-constructor record (`host_iforest_alias_types`: the
+        # constructor, then the types of 'q', 'Q', 'g', 'U', 'S'), not two
+        # np.dtype() constructions per option on every call.
+        var types = host_iforest_alias_types(context)
+        numpy_str = types[4]
+        numpy_bytes = types[5]
     var text = cls is native_str or cls is numpy_str
     if not text and py_type(cls) is py_type(native_str):
         var mro = py_call(py_type(native_str).__dict__["__mro__"].__get__, cls)
