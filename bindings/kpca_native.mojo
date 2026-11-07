@@ -13,6 +13,7 @@ from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_host_f32
 from bindings.decomp_inputs import decomp_input
+from bindings.entries_verified import entries_verified, entries_mark_verified
 from bindings.decomp_owner_common import (
     F32P, decomp_attr, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_repr,
 )
@@ -48,10 +49,15 @@ def _near(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var entries = context["decomp_neighbors"][mode]
     if py_type(entries) is native_loaded_module("builtins").str:
         raise Error(String(entries))
+    # Checked once per connected table and selected vendor (N313,
+    # bindings/entries_verified.mojo): the binding's words cannot change.
+    if entries_verified(context, "kpca_near_verified", mode, entries):
+        return entries
     if String(entries["x_neighbors_vendor"]()) != String(context["vendor"]):
         raise Error("RuntimeError: KernelPCA native vendor differs from selected execution")
     if Int(py=entries["x_neighbors_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: KernelPCA native mode differs from selected execution")
+    entries_mark_verified(context, "kpca_near_verified", mode, entries)
     return entries
 
 

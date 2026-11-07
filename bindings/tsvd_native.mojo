@@ -27,6 +27,7 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.decomp_inputs import decomp_input, decomp_copied
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.entries_verified import entries_verified, entries_mark_verified
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes
 comptime _TS_MAX_N = 512
@@ -114,13 +115,19 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
 def _entries(mode: String, context: PythonObject) raises -> PythonObject:
     # The connected _mojolearn_estimators entries of `mode`, checked against
     # the selected vendor and mode.
-    var entries = context["tsvd_bindings"][PythonObject(mode)]
+    var key = PythonObject(mode)
+    var entries = context["tsvd_bindings"][key]
     if py_type(entries) is native_loaded_module("builtins").str:
         raise Error(String(entries))
+    # Checked once per connected table and selected vendor (N317,
+    # bindings/entries_verified.mojo): the binding's words cannot change.
+    if entries_verified(context, "tsvd_entries_verified", key, entries):
+        return entries
     if String(entries["estimators_vendor"]()) != String(context["vendor"]):
         raise Error("RuntimeError: TruncatedSVD native vendor differs from selected execution")
     if Int(py=entries["estimators_numeric_mode"]()) != (1 if mode == "identical" else 0):
         raise Error("RuntimeError: TruncatedSVD native mode differs from selected execution")
+    entries_mark_verified(context, "tsvd_entries_verified", key, entries)
     return entries
 
 
