@@ -30,7 +30,10 @@ def test_native_session_owner_preserves_cpu_copies_gpu_provider_and_cleanup():
     assert 'finally:\n            transformer_decode_release(session, context)' in source
     assert 'keys.publish()' in source and 'vals.publish()' in source
     assert 'if load:\n        _transformer_decode_profile(fields, slots)' in source
-    assert 'transformer_decode_native_c, "transformer_decode_native_call"' in (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
+    # Registered by the public neural host binding since the 2026-11-07 host
+    # split; the tokenizer host keeps a native refusal under the name.
+    assert 'transformer_decode_native_c, "transformer_decode_native_call"' in (ROOT/'bindings/_mojolearn_runtime_neural_host.mojo').read_text()
+    assert 'runtime_classical_unavailable_c, "transformer_decode_native_call"' in (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
     assert '"transformer_session_class": TransformerDecodeSession' in (ROOT/'python/mojolearn/models/causal_lm.py').read_text()
 
 
