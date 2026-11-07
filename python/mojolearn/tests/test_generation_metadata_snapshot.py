@@ -92,7 +92,7 @@ def test_failed_snapshot_admission_cleans_busy_and_marks_stream_unusable(tmp_pat
     # Exact Array metadata refusal occurs while constructing the lazy snapshot.
     # Never forge a pointer: only invalidate its documented contiguous order.
     model._head.order = 'F'
-    with pytest.raises(Exception, match='contiguous|order|C-order'):
+    with pytest.raises(Exception, match='strides differ from its declared layout'):
         stream.read(2)
     assert stream.info()['usable'] is False
     with pytest.raises(Exception, match='lost after a failed call'):
