@@ -2,8 +2,32 @@
 # Read canonical import-time module/export connections without import callbacks.
 from std.ffi import _Global
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.ffi import c_int
+from std.python._cpython import ExternalFunction, PyObjectPtr
 from bindings.cpython_table import cpython_table
+
+
+# int Py_IsFinalizing(void): public from CPython 3.13; _Py_IsFinalizing is
+# the same query, exported from 3.7 through 3.12.
+comptime _Py_IsFinalizing = ExternalFunction["Py_IsFinalizing", def() thin abi("C") -> c_int]
+comptime _Py_IsFinalizing_old = ExternalFunction["_Py_IsFinalizing", def() thin abi("C") -> c_int]
+
+
+def native_interpreter_finalizing() raises -> Bool:
+    """True once the interpreter has begun finalization. A native finalizer
+    (a `__del__` descriptor) collected while the interpreter tears down
+    `__main__` and the other modules must return before any loaded-module
+    read: PyImport_GetModuleDict, which native_loaded_module reads, is a
+    fatal error once the interpreter's modules are cleared ("get_modules_dict:
+    interpreter has no modules dictionary"), not a NULL return. Resolved per
+    call; only finalizers ask, never a public hot path."""
+    ref cpy = Python().cpython()
+    var lib = cpy.lib.borrow()
+    if lib.check_symbol("Py_IsFinalizing"):
+        return _Py_IsFinalizing.load(lib)() != 0
+    if lib.check_symbol("_Py_IsFinalizing"):
+        return _Py_IsFinalizing_old.load(lib)() != 0
+    return False
 
 
 def _loaded_type(value: PythonObject) raises -> PythonObject:
