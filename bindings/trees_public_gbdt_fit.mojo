@@ -849,8 +849,10 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n_rows) + " rows")
     var multi_output = _in(loss, t["multi_output_losses"])
     if not trees_all_finite(ya.addr, ya.rows * ya.cols, False, context):
-        raise Error("mojolearn: " + ("y (the class labels)" if multi_output else "y")
-                    + " must be finite (no NaN or infinity)")
+        # scikit-learn's wording, as the former fit and the other families
+        # raise it (bindings/classical_validate.mojo).
+        raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi_output else "")
+                    + " (GradientBoosting).")
     if _eq(_field(fields, model, "nan_mode"), "Forbidden") and not trees_all_finite(x.addr, n_rows * n_features, False, context):
         if _has_nan(x, context):
             raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
