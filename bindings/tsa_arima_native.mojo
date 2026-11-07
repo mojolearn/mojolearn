@@ -30,20 +30,14 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.classical_pandas import classical_admit_value
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import xseq_cast_nd, xseq_widen_f32_f64
-from bindings.native_prepared_owner import prepared_get, prepared_put
-from bindings.native_resident_capsule import resident_capsule
-from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
+from bindings.native_prepared_owner import prepared_get
+from bindings.tsa_arima_resident import (
+    ARIMA_RESIDENT_SLOT, arima_resident_words, arima_resident_hit, arima_resident_mint, arima_resident_call,
+)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _A = "mojolearn ARIMA: "
 comptime _HOST_ONLY_SLOT = "tsa_arima_host_only_v1"
-# The resident fitted state of a fitted model (lane ne1-a-decomp-tsa, plan
-# section A, rows N028/N029): one prepared-owner record per model, outside
-# its __dict__ and dropped with it, `(y_, params_, exog_ or None, prepare
-# entry, the eleven plan words, handle, capsule)`. The capsule returns the
-# device copy to the minting binding when the record is replaced (a refit
-# stores new arrays: the next query misses and mints again) or dropped.
-comptime _RESIDENT_SLOT = "tsa_arima_resident_v1"
 
 
 def _b() raises -> PythonObject:
@@ -409,75 +403,6 @@ def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, conte
     return model
 
 
-def _resident_words(batch: Int, n_obs: Int, order: List[Int], k: Int, n_exog: Int) -> List[Int]:
-    """`arima_resident_prepare`'s eleven plan words, in its order."""
-    return [batch, n_obs, order[0], order[1], order[2], order[3], order[4], order[5], order[6], k, n_exog]
-
-
-def _resident_hit(record: PythonObject, fields: PythonObject, entries: PythonObject, words: List[Int]) raises -> Int:
-    """The handle of this model's resident fitted state when its record was
-    minted from these very `_y`, `params_` and `_exog` objects (frozen
-    read-only when minted, held by the record so their addresses cannot be
-    recycled) by this binding with these plan words; -1 on any miss."""
-    if record[0] is not py_get(fields, "_y") or record[1] is not py_get(fields, "params_"):
-        return -1
-    if record[2] is not py_get(fields, "_exog", PythonObject(None)):
-        return -1
-    if record[3] is not py_get(entries, "arima_resident_prepare"):
-        return -1
-    var held = record[4]
-    if len(held) != len(words):
-        return -1
-    for i in range(len(words)):  # driver-loop: eleven fixed plan words
-        if Int(py=held[i]) != words[i]:
-            return -1
-    return Int(py=record[5])
-
-
-def _resident_mint(model: PythonObject, fields: PythonObject, entries: PythonObject, words: List[Int],
-                   y_address: Int, ex_address: Int, params_address: Int) raises -> Int:
-    """Upload the admitted fitted state once and record it; -1 (the per-call
-    path) on a binding without the resident entries (the host column) or
-    fitted arrays that cannot be frozen (a caller-assigned ndarray: its
-    words could change under a device copy, plan section A's read-only
-    rule)."""
-    var prepare = py_get(entries, "arima_resident_prepare")
-    var release = py_get(entries, "arima_resident_release")
-    if prepare is None or release is None or not py_contains(entries, "arima_predict_resident"):
-        return -1
-    var y_obj = py_get(fields, "_y")
-    var params_obj = py_get(fields, "params_")
-    var ex_obj = py_get(fields, "_exog", PythonObject(None))
-    if not fitted_is_freezable_any(y_obj) or not fitted_is_freezable_any(params_obj):
-        return -1
-    if words[10] > 0 and not fitted_is_freezable_any(ex_obj):
-        return -1
-    _ = fitted_freeze_any(y_obj)
-    _ = fitted_freeze_any(params_obj)
-    if words[10] > 0:
-        _ = fitted_freeze_any(ex_obj)
-    var plan = Python.list()
-    for i in range(len(words)):  # driver-loop: eleven fixed plan words
-        _ = py_call(plan.append, words[i])
-    var handle = Int(py=py_call_typed(prepare, y_address, ex_address, params_address, plan))
-    # From here the capsule owns the device copy.
-    var capsule = resident_capsule(release, handle)
-    var mods = NativeModules()
-    prepared_put(mods, _RESIDENT_SLOT, model, Python.tuple(y_obj, params_obj, ex_obj, prepare,
-                                                            py_call(_b().tuple, plan), handle, capsule))
-    return handle
-
-
-def _resident_call(entries: PythonObject, handle: Int, future_addr: Int, result: PythonObject, start: Int, end: Int,
-                   width: Int, forecast: Bool) raises:
-    if forecast:
-        _ = py_call_typed(_entry(entries, "arima_forecast_resident"), handle, future_addr, classical_address(result),
-                          Python.list(width, 0))
-    else:
-        _ = py_call_typed(_entry(entries, "arima_predict_resident"), handle, future_addr, classical_address(result),
-                          Python.list(start, end))
-
-
 def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject, forecast: Bool = False) raises -> PythonObject:
     var fields = _fields(model)
     if not py_contains(fields, "params_"):
@@ -502,16 +427,16 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
     if batch <= 0 or n_obs <= 0 or n_exog < 0 or k < 0 or k > 1:
         raise Error("ValueError: ARIMA fitted dimension metadata is invalid")
     var complexity = Int(py=PythonObject(order[0]) + order[2] + order[3] + order[5] + k + n_exog + 1)
-    var words = _resident_words(batch, n_obs, order, k, n_exog)
+    var words = arima_resident_words(batch, n_obs, order, k, n_exog)
     var mods = NativeModules()
-    var record = prepared_get(mods, _RESIDENT_SLOT, model)
+    var record = prepared_get(mods, ARIMA_RESIDENT_SLOT, model)
     if record is not None:
         # A resident record exists: the fitted arrays it names were admitted
         # and checked against these words when it was minted and are frozen
         # since, so a hit skips their admission and upload; only the future
         # regressors are admitted (the same checks, the same words).
         var hit_entries = _arima_entries(model, fields, context)
-        var hit = _resident_hit(record, fields, hit_entries, words)
+        var hit = arima_resident_hit(record, fields, hit_entries, words)
         if hit >= 0:
             var fut = PythonObject(None)
             var fut_addr = 0
@@ -529,7 +454,8 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             if fut_addr == 0:
                 # an unread future pointer must still be a live address
                 fut_addr = Int(py=classical_address(out))
-            _resident_call(hit_entries, hit, fut_addr, out, start, end, width, forecast)
+            arima_resident_call(hit_entries, hit, fut_addr, out, start, end, width, forecast)
+            _ = record  # the record (and its capsule) outlive the query
             _ = fut_owner
             _ = fut
             return out
@@ -557,9 +483,10 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
             future_addr = future_owner.address
     var result = tsa_array("f", "<f4", Python.tuple(batch, width), Int(py=PythonObject(batch) * width), 4, context)
     var entries = _arima_entries(model, fields, context)
-    var minted = _resident_mint(model, fields, entries, words, y.address, ex_addr, params.address)
-    if minted >= 0:
-        _resident_call(entries, minted, future_addr, result, start, end, width, forecast)
+    var minted = arima_resident_mint(model, fields, entries, words, y.address, ex_addr, params.address)
+    if minted is not None:
+        arima_resident_call(entries, Int(py=minted[5]), future_addr, result, start, end, width, forecast)
+        _ = minted  # the record (and its capsule) outlive the query
         _ = y
         _ = params
         _ = ex_owner
