@@ -315,17 +315,22 @@ def arima_predict_resident(
     handle: Int,
     exog_fut_address: Int,
     out_ptr: _F32P,
-    start: Int,
-    end: Int,
+    start_in: Int,
+    end_in: Int,
+    forecast: Bool,
     who: String,
 ) raises -> Int:
     """`_predict_into` over the handle's resident fitted state: the same
     refusals, only the future regressors uploaded, the same device half
-    (`arima_predict_device`). Returns `(end - start) * batch_size`."""
+    (`arima_predict_device`). Returns `(end - start) * batch_size`. With
+    `forecast`, `end_in` is the step count and the bounds are `n_obs` and
+    `n_obs + steps` (`arima_forecast_ptr_host`'s)."""
     var view = _arima_view_on_device(handle)
     var w = view.words.copy()
     var batch_size = w[0]
     var n_obs = w[1]
+    var start = n_obs if forecast else start_in
+    var end = n_obs + end_in if forecast else end_in
     _refuse_shape(batch_size, n_obs, who)
     if start < 0 or end <= start:
         raise Error(
