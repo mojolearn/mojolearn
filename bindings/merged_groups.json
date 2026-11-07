@@ -14,6 +14,11 @@
   "2026-11-04 (docs/build/HOT_GROUPS.md): the two compiler-limited host groups split along their closure clusters;",
   "_mojolearn_runtime_classical_host (442 of 702 files, 391 its own) and _mojolearn_tokenizer_host (655 of 741, 626",
   "its own) each compile alone, their small neighbours in _mojolearn_native_host and _mojolearn_native_series_host.",
+  "2026-11-07 (docs/build/HOT_GROUPS.md section 6): those two members split along their family lines into twelve",
+  "host bindings in eleven groups (the classical door, its tree and family doors, preprocessing+linear, decomposition;",
+  "the tokenizer, catalog, sequence expansion, byte LM trainers, multi-device drivers, public neural doors), and",
+  "_mojolearn_native_x_host (2540 s on the 0.8.66 Mac) gave its byte LM, model-selection and manifold members to",
+  "_mojolearn_native_orchestration_host.",
   "dirs.<dir>.optional: member -> {group, platforms}: it joins that group on those platforms when MOJOLEARN_PACKAGE_BYTE_LM=1.",
   "darwin_metal1: members whose per-binding script passes --target-accelerator metal:1 on macOS;",
   "on macOS they compile into <stem>_m1 so every member keeps its own compile flags.",
@@ -142,8 +147,36 @@
     "_mojolearn_native_classical_host": [
      "_mojolearn_runtime_classical_host"
     ],
+    "_mojolearn_native_classical_trees_host": [
+     "_mojolearn_runtime_trees_host"
+    ],
+    "_mojolearn_native_classical_family_host": [
+     "_mojolearn_runtime_family_host"
+    ],
+    "_mojolearn_native_classical_prep_host": [
+     "_mojolearn_runtime_prep_host",
+     "_mojolearn_runtime_linear_host"
+    ],
+    "_mojolearn_native_classical_decomp_host": [
+     "_mojolearn_runtime_decomp_host"
+    ],
     "_mojolearn_native_tokenizer_host": [
      "_mojolearn_tokenizer_host"
+    ],
+    "_mojolearn_native_catalog_host": [
+     "_mojolearn_runtime_catalog_host"
+    ],
+    "_mojolearn_native_xseq_host": [
+     "_mojolearn_runtime_xseq_host"
+    ],
+    "_mojolearn_native_byte_trainer_host": [
+     "_mojolearn_runtime_byte_trainer_host"
+    ],
+    "_mojolearn_native_parallel_host": [
+     "_mojolearn_runtime_parallel_host"
+    ],
+    "_mojolearn_native_neural_doors_host": [
+     "_mojolearn_runtime_neural_host"
     ],
     "_mojolearn_native_series_host": [
      "_mojolearn_tsa_host",
@@ -180,10 +213,12 @@
      "_mojolearn_ivf_host",
      "_mojolearn_ivf_search_host"
     ],
-    "_mojolearn_native_x_host": [
+    "_mojolearn_native_orchestration_host": [
      "_mojolearn_byte_lm_host",
      "_mojolearn_runtime_model_selection_host",
-     "_mojolearn_runtime_manifold_host",
+     "_mojolearn_runtime_manifold_host"
+    ],
+    "_mojolearn_native_x_host": [
      "_mojolearn_x_linear_host",
      "_mojolearn_x_cluster_host",
      "_mojolearn_x_neighbors_host",
