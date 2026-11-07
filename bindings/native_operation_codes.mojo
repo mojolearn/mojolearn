@@ -151,7 +151,16 @@ def family_route(operation: String) -> Int:
 
 def _operation_names(mut names: List[String]):
     """Every operation a shell passes by code, sorted; the code is the
-    index. Straight-line appends (no branch per name)."""
+    index. Four straight-line groups in sorted order (lane ne-fix-hang3:
+    no single function holds all the name literals)."""
+    _operation_names_metrics(names)
+    _operation_names_neighbors(names)
+    _operation_names_host_tree(names)
+    _operation_names_trees(names)
+
+
+def _operation_names_metrics(mut names: List[String]):
+    """Names of the metric owners (`family_mcls_*`, `family_metric_*`, `family_mexp_*`), sorted."""
     names.append("family_mcls_accuracy")
     names.append("family_mcls_accuracy_fraction")
     names.append("family_mcls_adjusted_rand")
@@ -222,6 +231,10 @@ def _operation_names(mut names: List[String]):
     names.append("family_mexp_rank_loss")
     names.append("family_mexp_rank_lrap")
     names.append("family_mexp_rank_ndcg")
+
+
+def _operation_names_neighbors(mut names: List[String]):
+    """Names of the neighbor owners (`family_svc_ocsvm_*`, `family_xn_*`), sorted."""
     names.append("family_svc_ocsvm_decision")
     names.append("family_svc_ocsvm_fit")
     names.append("family_svc_ocsvm_fit_predict")
@@ -270,6 +283,10 @@ def _operation_names(mut names: List[String]):
     names.append("family_xn_semi_schi2_fit")
     names.append("family_xn_semi_schi2_fit_transform")
     names.append("family_xn_semi_schi2_transform")
+
+
+def _operation_names_host_tree(mut names: List[String]):
+    """Names of the host tree owner (`host_tree_*`), sorted."""
     names.append("host_tree_count")
     names.append("host_tree_ctr_dim")
     names.append("host_tree_ctr_predict")
@@ -285,6 +302,10 @@ def _operation_names(mut names: List[String]):
     names.append("host_tree_proba")
     names.append("host_tree_setstate")
     names.append("host_tree_vote")
+
+
+def _operation_names_trees(mut names: List[String]):
+    """Names of the public tree ensembles (`trees_*`), sorted."""
     names.append("trees_agnostic_kernel_init")
     names.append("trees_agnostic_kernel_values")
     names.append("trees_agnostic_permutation_init")
