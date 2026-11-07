@@ -18,7 +18,10 @@ from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_get, prepared_put
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
+from bindings.native_resident_capsule import resident_capsule
+from bindings.native_model_records import records_open, model_generation
+from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
 from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
@@ -447,11 +450,12 @@ struct DecompKit(Movable):
         stayed on the device after its first upload: uploaded at the first
         query after a fit and reused while the model's stored `source` is the
         same object (the record holds it, so the address cannot be recycled),
-        with the same shape, on the binding that minted it. -1 when this kit
-        keeps nothing resident (a host binding, no query model, an empty
-        operand): the caller adds the operand as before. The values are the
-        ones uploaded, so no route or bit changes; the matrix starts as a host
-        matrix (`on_device` False) exactly as `input_snapshot` adds it."""
+        with the same shape, on the binding that minted it, at the model's
+        generation word. -1 when this kit keeps nothing resident (a host
+        binding, no query model, an empty operand): the caller adds the
+        operand as before. The values are the ones uploaded, so no route or
+        bit changes; the matrix starts as a host matrix (`on_device` False)
+        exactly as `input_snapshot` adds it."""
         var n = rows * cols
         if self.owner is None or not self.resident or n < 1:
             return -1
@@ -466,39 +470,32 @@ struct DecompKit(Movable):
         # the per-call upload: correct first.
         if not self._freeze(source):
             return -1
-        var mods = NativeModules()
-        var record = prepared_get(mods, _DK_RESIDENT_SLOT, self.owner)
-        if record is None:
-            record = Python.dict()
-            prepared_put(mods, _DK_RESIDENT_SLOT, self.owner, record)
         var alloc = self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc")
         var upload = self._entry(_DK_DEV_UPLOAD, "x_decomp_dev_upload")
         var free = self._entry(_DK_DEV_FREE, "x_decomp_dev_free")
-        var key = PythonObject(name)
-        var held = py_get(record, key)
-        var handle = -1
-        if (held is not None and held[0] is source and held[1] is alloc and held[2] is free
-                and Int(py=held[3]) == rows and Int(py=held[4]) == cols):
-            handle = Int(py=held[5])
-        else:
-            handle = Int(py=py_call(alloc, n))
-            # The capsule owns the device buffer from here on: replacing or
-            # dropping the record (refit, a new array, the model's death)
-            # returns it to the minting binding's pool.
-            var capsule = _resident_capsule(free, handle)
-            _ = py_call(upload, handle, PythonObject(address), n)
+        var held = decomp_resident_find(self.owner, alloc, free, source, name, False)
+        if held is not None and (Int(py=held[3]) != rows or Int(py=held[4]) != cols):
+            held = PythonObject(None)
+        if held is None:
+            var handle = Int(py=py_call(alloc, n))
+            try:
+                _ = py_call(upload, handle, PythonObject(address), n)
+            except error:
+                _ = py_call(free, handle)
+                raise error^
             _ = keep  # keep the host owner alive through the upload above
-            # Word 7: the uploaded words are the frozen source's own (no cast
+            # From here the record's capsule owns the device buffer:
+            # replacing or dropping the record (refit, a new array, the
+            # model's death) returns it to the minting binding's pool. Word
+            # 7: the uploaded words are the frozen source's own (no cast
             # copy), so `resident_hit` may serve it without re-admission.
-            held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle), capsule,
-                                PythonObject(host is source))
-            py_setitem(record, key, held)
+            held = decomp_resident_hold(self.owner, alloc, free, source, name, rows, cols, handle, host is source)
         # The kit holds the entry (and its capsule) until it is dropped, so
         # the buffer outlives this operation even when the model cannot be
         # weakly referenced (no record kept) or a nested call replaces it.
         self.input_owners.append(held)
         self.input_owners.append(keep)
-        var index = self.add(host, rows, cols, handle, address)
+        var index = self.add(host, rows, cols, Int(py=held[5]), address)
         self.matrices[index].on_device = False
         return index
 
@@ -511,22 +508,60 @@ struct DecompKit(Movable):
         `resident_input` as before."""
         if self.owner is None or not self.resident:
             return -1
-        var mods = NativeModules()
-        var record = prepared_get(mods, _DK_RESIDENT_SLOT, self.owner)
-        if record is None:
-            return -1
-        var held = py_get(record, PythonObject(name))
-        if held is None or held[0] is not source or not Bool(py=held[7]):
-            return -1
-        if (held[1] is not self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc")
-                or held[2] is not self._entry(_DK_DEV_FREE, "x_decomp_dev_free")):
-            return -1
-        if not Bool(py=source._readonly) or not Bool(py=source._mv.readonly):
+        var held = decomp_resident_find(self.owner, self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc"),
+                                        self._entry(_DK_DEV_FREE, "x_decomp_dev_free"), source, name, True)
+        if held is None:
             return -1
         self.input_owners.append(held)
         var index = self.add(source, Int(py=held[3]), Int(py=held[4]), Int(py=held[5]), Int(py=source._addr))
         self.matrices[index].on_device = False
         return index
+
+    def resident_derived(mut self, source: PythonObject, name: String) raises -> Int:
+        """A device matrix an earlier query computed from the fitted operand
+        `source` and kept with `resident_keep` (lane ne1-a-decomp-resident:
+        ALS's unit-normalised item factors): served while `source` is the
+        same frozen Array at the same generation, so the words are the ones
+        this call would compute again. It is added as the computing call
+        left it (a device matrix, `on_device` True), so every later route is
+        the one that call took. -1 on any miss: the caller computes it."""
+        if self.owner is None or not self.resident:
+            return -1
+        var held = decomp_resident_find(self.owner, self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc"),
+                                        self._entry(_DK_DEV_FREE, "x_decomp_dev_free"), source, name, False)
+        if held is None or Bool(py=held[7]):
+            return -1
+        self.input_owners.append(held)
+        return self.add(PythonObject(None), Int(py=held[3]), Int(py=held[4]), Int(py=held[5]))
+
+    def resident_keep(mut self, source: PythonObject, name: String, a: Int) raises -> Bool:
+        """Keep matrix `a`, computed by this call from the frozen fitted
+        operand `source` and left on the device, for later queries of the
+        model (`resident_derived`): its pool buffer leaves this kit's
+        allocation ledger for a record capsule. False (nothing kept) for a
+        host binding, no query model, an unfrozen source, a matrix not on
+        the device, or a buffer this kit does not own (a view's or a
+        resident input's)."""
+        if self.owner is None or not self.resident:
+            return False
+        if not decomp_resident_frozen(source):
+            return False
+        if not self.matrices[a].on_device or self.matrices[a].device < 0:
+            return False
+        var handle = self.matrices[a].device
+        var found = -1
+        for i in range(len(self.allocations)):  # driver-loop: over this kit's device allocation handles
+            if self.allocations[i] == handle:
+                found = i
+                break
+        if found < 0:
+            return False
+        _ = self.allocations.pop(found)
+        var held = decomp_resident_hold(self.owner, self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc"),
+                                        self._entry(_DK_DEV_FREE, "x_decomp_dev_free"), source, name,
+                                        self.matrices[a].rows, self.matrices[a].cols, handle, False)
+        self.input_owners.append(held)
+        return True
 
     def _freeze(self, source: PythonObject) raises -> Bool:
         # A mojolearn Array (the class of the kit's own zero matrix) that owns
@@ -1523,3 +1558,110 @@ struct DecompKit(Movable):
             var ones = self.const(1.0, 1, n - r)
             sg = self.hstack([sg, ones])
         return (self.ew(XD_MUL, qc, sg), s, vt)
+
+
+# ---------------------------------------------------------------------------
+# Device-resident fitted operands of the decomposition owners (lane
+# perf2-pca-decomp; shared with IncrementalPCA, AlternatingLeastSquares and
+# the random projections by lane ne1-a-decomp-resident, workstream A of
+# docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md). One prepared-registry
+# record per model (`_DK_RESIDENT_SLOT`, outside its __dict__, dropped with
+# the model by the native_prepared_owner weakref): a dict, operand name ->
+#   (source, alloc entry, free entry, rows, cols, pool id, capsule,
+#    own words, generation)
+# `source` is the fitted Array the copy was taken from (kept alive, so its
+# address is never recycled under the entry), `alloc` / `free` the minting
+# binding's entries, the capsule (bindings/native_resident_capsule.mojo)
+# returns the pool buffer when the entry is replaced or dropped, `own words`
+# is True when the buffer holds the source's own words (False: words a
+# query derived from them), and `generation` the model's generation word
+# (bindings/native_model_records.mojo) when the entry was taken. The key is
+# so (model identity, generation, source identity): no content hash. The
+# read-only rule (bindings/p3nc_fitted_freeze.mojo) makes the source
+# read-only before an entry is taken. No byte cap here: an entry is one
+# copy of a fitted array the model holds anyway.
+# ---------------------------------------------------------------------------
+
+
+def decomp_resident_generation(owner: PythonObject) raises -> Int:
+    """`owner`'s generation word, its record entry opened first (a first
+    entry taken at word 0 would otherwise miss once when another door
+    opens the entry)."""
+    _ = records_open(owner)
+    return model_generation(owner)
+
+
+def decomp_resident_frozen(source: PythonObject) raises -> Bool:
+    """An exact mojolearn Array that is read-only at the buffer level (its
+    flag and its memoryview)."""
+    if not fitted_is_freezable_any(source):
+        return False
+    return Bool(py=source._readonly) and Bool(py=source._mv.readonly)
+
+
+def decomp_resident_freeze(source: PythonObject) raises -> Bool:
+    """The read-only rule: an exact mojolearn Array owning its words
+    (`_base` None; a view's base could still be written) is made read-only
+    (fitted_freeze_any's flag plus decomp_freeze_array's read-only
+    memoryview) and True is returned; any other storage is left alone and
+    keeps the per-call upload (False)."""
+    if not fitted_is_freezable_any(source):
+        return False
+    if source._base is not None:
+        return False
+    _ = fitted_freeze_any(source)
+    decomp_freeze_array(source)
+    return True
+
+
+def decomp_resident_find(owner: PythonObject, alloc: PythonObject, free: PythonObject, source: PythonObject,
+                         name: String, own_words: Bool) raises -> PythonObject:
+    """`owner`'s entry `name` when it was taken from exactly this `source`
+    object, still read-only, on the binding whose `alloc` / `free` entries
+    minted it, at `owner`'s current generation (and, with `own_words`,
+    holding the source's own words); else None."""
+    if owner is None:
+        return PythonObject(None)
+    var mods = NativeModules()
+    var record = prepared_get(mods, _DK_RESIDENT_SLOT, owner)
+    if record is None:
+        return PythonObject(None)
+    var held = py_get(record, PythonObject(name))
+    if held is None or held[0] is not source or held[1] is not alloc or held[2] is not free:
+        return PythonObject(None)
+    if own_words and not Bool(py=held[7]):
+        return PythonObject(None)
+    if not decomp_resident_frozen(source):
+        return PythonObject(None)
+    if Int(py=held[8]) != decomp_resident_generation(owner):
+        return PythonObject(None)
+    return held
+
+
+def decomp_resident_hold(owner: PythonObject, alloc: PythonObject, free: PythonObject, source: PythonObject,
+                         name: String, rows: Int, cols: Int, handle: Int, own_words: Bool) raises -> PythonObject:
+    """Give the pool buffer `handle` (rows x cols words, already written) to
+    `owner`'s record under `name` and return the entry; the previous entry
+    of that name (and so its buffer) goes. The caller keeps the entry alive
+    through its call: where `owner` takes no weak reference no record is
+    kept and the entry's capsule frees the buffer when the caller drops it.
+    On a failure the buffer is returned at once."""
+    var capsule = resident_capsule(free, handle)
+    var generation = decomp_resident_generation(owner)
+    var held = Python.tuple(source, alloc, free, PythonObject(rows), PythonObject(cols), PythonObject(handle),
+                            capsule, PythonObject(own_words), PythonObject(generation))
+    var mods = NativeModules()
+    var record = prepared_get(mods, _DK_RESIDENT_SLOT, owner)
+    if record is None:
+        record = Python.dict()
+        prepared_put(mods, _DK_RESIDENT_SLOT, owner, record)
+    py_setitem(record, PythonObject(name), held)
+    return held
+
+
+def decomp_resident_drop(owner: PythonObject) raises:
+    """Drop every resident entry of `owner` (a fit is about to publish new
+    fitted arrays): the device buffers go back to their bindings now
+    rather than at the next query."""
+    var mods = NativeModules()
+    prepared_drop(mods, _DK_RESIDENT_SLOT, owner)
