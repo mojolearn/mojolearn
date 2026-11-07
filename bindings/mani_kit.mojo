@@ -555,7 +555,7 @@ struct MKit(Movable):
     def dmove(mut self, src: Int, idx: Int, dst: Int, words: List[Int]) raises:
         """`x_decomp_dev_move` on pool ids; words = [op, count, a1, a2, a3,
         ist, ioff, nsrc, ndst, nidx]."""
-        var ints = [src, idx, dst]
+        var ints: List[Int] = [src, idx, dst]
         for i in range(len(words)):  # small-loop(params: the ten move words): 10
             ints.append(words[i])
         _ = self.dcall(XD_DEV_MOVE, ints)
@@ -890,7 +890,7 @@ struct MKit(Movable):
         var n = mk_r(b) if tb else mk_c(b)
         if k != k2:
             raise Error("x_decomp: gemm inner dimensions " + String(k) + " and " + String(k2) + " differ")
-        var words = [m, k, n, 1 if ta else 0, 1 if tb else 0]
+        var words: List[Int] = [m, k, n, 1 if ta else 0, 1 if tb else 0]
         var params = mk_ints(words)
         if not (self.lle_mm is None):
             var out = mk_zeros(m, n, self.ctx)
@@ -1172,7 +1172,7 @@ struct MKit(Movable):
         ioff]) + radd of A for t < m."""
         var c = mk_c(a)
         var count = m * c
-        var words = [MV_TAKE_ROWS, count, c, radd, 0, ist, ioff, mk_n(a), count, mk_n(idx)]
+        var words: List[Int] = [MV_TAKE_ROWS, count, c, radd, 0, ist, ioff, mk_n(a), count, mk_n(idx)]
         if count > 0 and self.use2(a, idx):
             var out = self.dout(m, c)
             var ia = self.dix(a)
@@ -1199,7 +1199,7 @@ struct MKit(Movable):
             return
         mk_writable(a)
         var n = mk_n(a)
-        var words = [MV_FILL0, count, start, stride, 0, 0, 0, n, n, 1]
+        var words: List[Int] = [MV_FILL0, count, start, stride, 0, 0, 0, n, n, 1]
         if self.use1(a):
             var ia = self.dix(a)
             var one = Int(py=self.dev_one())
@@ -1234,7 +1234,7 @@ struct MKit(Movable):
         var stride = off + 1 if count == 1 else stride_in
         var idx = mk_of([Float64(off)], 1, 1, self.ctx)
         var n = mk_n(a)
-        var words = [MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1]
+        var words: List[Int] = [MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1]
         if count > 0 and self.use1(a):
             var out = self.dout(1, count)
             var ia = self.dix(a)
@@ -1264,7 +1264,7 @@ struct MKit(Movable):
         if cnt == 0:
             return
         mk_writable(d)
-        var words = [MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, mk_n(d), 1]
+        var words: List[Int] = [MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, mk_n(d), 1]
         if self.use2(d, v):
             var iv = self.dix(v)
             var one = Int(py=self.dev_one())
