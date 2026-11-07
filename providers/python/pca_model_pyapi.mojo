@@ -55,13 +55,18 @@ def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation
     # Preserve the PCA owner's existing admission of all declared settings
     # and fitted fields, including fields this particular query will not use.
     var names = context["pca_parameters"] + context["pca_state"]
+    # Row N262: one module view for the field admissions of this query, not
+    # one NativeModules per value; a scalar admission (NumPy's scalar
+    # protocol) is followed by released(), so the next value re-checks.
+    var mods = NativeModules()
     for index in range(len(names)):  # driver-loop: connected field inventory, private snapshot only
         if py_contains(fields, names[index]):
             var name = String(names[index])
             if index < len(context["pca_parameters"]) or name == "_mojolearn_fitted" or name == "_mojolearn_fitting":
                 pca_fit_scalar_admit(fields[names[index]], context)
+                mods.released()
             else:
-                sequential_admit_value(fields[names[index]], context)
+                sequential_admit_value(mods, fields[names[index]], context)
     for name in ["_mojolearn_fitted", "_mojolearn_fitting"]:  # small-loop(fitted lifecycle flags)
         if py_contains(fields, name):
             _ = py_call(scalar_owners.append, fields[name])

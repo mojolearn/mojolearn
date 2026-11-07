@@ -6,7 +6,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.sequential_admission import sequential_admit_value
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
 from providers.python.pca_model_pyapi import _entry_dictionary
 
@@ -15,12 +15,17 @@ def pca_fit_fields(state: PythonObject, operation: String, context: PythonObject
     var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
     var owners = Python.list()
     var names = context["pca_parameters"] + context["pca_state"]
+    # Row N262: one module view for the field admissions of this call, not
+    # one NativeModules per value; a scalar admission (NumPy's scalar
+    # protocol) is followed by released(), so the next value re-checks.
+    var mods = NativeModules()
     for index in range(len(names)):  # driver-loop: admitted references retained before settings are replaced
         if py_contains(fields, names[index]):
             if index < len(context["pca_parameters"]):
                 pca_fit_scalar_admit(fields[names[index]], context)
+                mods.released()
             else:
-                sequential_admit_value(fields[names[index]], context)
+                sequential_admit_value(mods, fields[names[index]], context)
             _ = py_call(owners.append, fields[names[index]])
     var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
