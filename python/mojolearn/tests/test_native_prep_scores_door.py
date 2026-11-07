@@ -166,8 +166,10 @@ def test_chi2_negative_refusal(P):
 def test_target_encoder_splitters(P):
     np, _, Xb, y3, yr = _fixtures()
     import mojolearn as ml
-    pairs = list(ml.KFold(4).split(Xb, yr))
-    a = ml.TargetEncoder(cv=ml.KFold(4)).fit_transform(Xb, yr)
+    # KFold is public in mojolearn.model_selection, not at the package root.
+    KFold = ml.model_selection.KFold
+    pairs = list(KFold(4).split(Xb, yr))
+    a = ml.TargetEncoder(cv=KFold(4)).fit_transform(Xb, yr)
     b = ml.TargetEncoder(cv=pairs).fit_transform(Xb, yr)
     c = ml.TargetEncoder(cv=tuple((list(tr), list(te)) for tr, te in pairs)).fit_transform(Xb, yr)
     assert _bytes(a) == _bytes(b) == _bytes(c)
