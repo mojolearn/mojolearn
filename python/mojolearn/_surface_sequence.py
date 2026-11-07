@@ -107,6 +107,8 @@ FAMILIES = (
             "onnx_import", "onnx_import_file", "ops_imported_run", "ops_import_model", "ops_torch_program_run",
             # model verification reports (autograd/model_verify.mojo; python -m mojolearn verify-model)
             "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "onnx_native_api_v1", "ops_graph_record",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(
