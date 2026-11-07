@@ -212,8 +212,11 @@ def test_ordered_fit_resolves_ordered():
 
 def test_ordered_fit_takes_an_eval_set():
     # their test cursor is restated (dynamic_boosting.h:423-430): the eval
-    # arrays cross with the Ordered tail, as a Plain fit's do
-    m = GradientBoosting(loss='Logloss', n_estimators=500, max_depth=2)
+    # arrays cross with the Ordered tail, as a Plain fit's do. Ordered is asked
+    # for by name at 20 iterations: the default resolution to Ordered at 500 is
+    # test_boosting_type_default_is_catboost_gpu's, and 500 Ordered iterations
+    # cost 45 s for the same crossing.
+    m = GradientBoosting(loss='Logloss', n_estimators=20, max_depth=2, boosting_type='Ordered')
     _fit_real(m, eval_set=(np.ones((4, 3), np.float32), np.array([0, 1, 0, 1], np.float32)))
     assert m.boosting_type_ == 'Ordered'
     assert m.loss_curve_ is not None

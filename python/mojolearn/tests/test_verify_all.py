@@ -1445,6 +1445,7 @@ def _run_cli(argv, env_extra=None, timeout=180):
                           env=env, cwd=str(PKG.parent), timeout=timeout)
 
 
+@pytest.mark.slow  # one real CLI process per exit code (12 s)
 def test_cli_compare_exit_codes_are_what_a_stranger_scripts_against(tmp_path):
     """THE EXIT CODE IS THE INTERFACE. Two parties compare in a script, and
     what that script branches on is `$?`. Held end to end through the real
@@ -1493,6 +1494,7 @@ def test_cli_compare_exit_codes_are_what_a_stranger_scripts_against(tmp_path):
                 assert "RESULT: AGREE" not in r.stdout, (x, y, tier, r.stdout[-800:])
 
 
+@pytest.mark.slow  # two real verify CLI runs over the gemm-pinned fixtures (17 s)
 def test_cli_corrupted_table_exits_1():
     build = _identical_build()
     if not build:
@@ -1514,6 +1516,7 @@ def test_cli_corrupted_table_exits_1():
     assert report["counts"]["DIVERGENT"] == 1 and report["verdict"] == "MISMATCH"
 
 
+@pytest.mark.slow  # three real `verify --all` CLI runs over the ols fixtures (26 s)
 def test_all_checks_batch_reference_without_opt_in(tmp_path):
     if not _identical_build():
         pytest.skip("no importable identical build")
@@ -1545,6 +1548,7 @@ def test_all_checks_batch_reference_without_opt_in(tmp_path):
     assert report['properties']['batchscale'][vref.IDENTICAL] == 0
 
 
+@pytest.mark.slow  # a real verify CLI run over the ols fixtures
 def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     """THE SKIPPED COUNT RIDES WITH THE VERDICT, seen on the real RESULT line.
 
@@ -1565,15 +1569,18 @@ def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     # The CLI bounds each cell itself (120 s worker limit, _verify_worker.py)
     # and reports a timeout as its own verdict. The outer guard only catches
     # a hung CLI, so it exceeds the two cells' own limits plus startup.
-    ok = _run_cli(["verify", "--lanes", "ols,ridge", "--fixtures", "base", "--no-models"],
-                  timeout=2 * 120 + 60)
+    # One lane carries the clause as well as two did (the count is the
+    # lane_accounting unit tests' to check); the second lane cost ~5 s.
+    ok = _run_cli(["verify", "--lanes", "ols", "--fixtures", "base", "--no-models"],
+                  timeout=120 + 60)
     assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
     result = [l for l in ok.stdout.splitlines() if l.startswith("RESULT:")][-1]
     assert "VERIFIED" in result, result
-    assert "2 verified" in result and "of 2 lanes" in result, (
+    assert "1 verified" in result and "of 1 lanes" in result, (
         "a pass that does not say its own scope overstates itself: " + result)
 
 
+@pytest.mark.slow  # the real identity harness and the verifier, each over the ols fixtures (22 s)
 @pytest.mark.skipif(ROOT is None, reason="needs tools/identity_break.py beside the package")
 def test_shipped_verifier_hashes_like_the_harness():
     """Same machine, same lanes: the column tools/identity_break.py writes and
