@@ -12,6 +12,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
+from bindings.native_transport import transport_initialize
 from bindings.parallel_shard_native import parallel_shard_c
 from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
 from bindings.parallel_forecast_native import parallel_forecast_c
@@ -69,6 +70,9 @@ def build__mojolearn_runtime_parallel_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_parallel_host")
+        # The transport boundary these entries reach, set up as the tokenizer host does
+        # (the same values; the tokenizer host initializes it first in one process).
+        transport_initialize()
         module.def_py_c_function(parallel_shard_c, "parallel_shard_call")
         module.def_py_c_function(neighbor_query_c, "neighbor_query_call")
         module.def_py_c_function(neighbor_query_attribute_c, "neighbor_query_attribute_call")
