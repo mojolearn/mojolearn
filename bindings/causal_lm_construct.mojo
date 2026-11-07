@@ -869,9 +869,16 @@ def _causal_model_prepare_snapshot(mut mods: NativeModules, model: PythonObject,
 
 def causal_model_init_binding(mut mods: NativeModules, model: PythonObject, input_plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
     causal_public_connect(context)
+    var plan = model_plan_snapshot(mods, input_plan)
+    return _causal_model_init(mods, model, input_plan, plan, input_weights, input_options, context)
+
+
+def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan: PythonObject, plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `plan` is model_plan_snapshot(input_plan), taken once by the caller
+    # (row N203: CausalLM.load passes the snapshot it already holds).
+    causal_public_connect(context)
     var live = _causal_model_fields(mods, model)
     var captured = Python.dict()
-    var plan = model_plan_snapshot(mods, input_plan)
     var options = _model_options_snapshot(mods, input_options, context)
     var weights = _model_weights_snapshot(mods, input_weights, context)
     var bindings = _causal_model_prepare_snapshot(mods, model, input_plan, plan, weights, options, context, live, captured)
@@ -921,17 +928,26 @@ def causal_model_init_binding(mut mods: NativeModules, model: PythonObject, inpu
 
 
 def causal_model_read_weights_binding(mut mods: NativeModules, checkpoint: PythonObject, input_plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = mods.module("builtins")
     causal_public_connect(context)
     var plan = model_plan_snapshot(mods, input_plan)
+    return _causal_model_read_weights(mods, checkpoint, plan, format, route, context)
+
+
+def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject, plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `plan` is the caller's model_plan_snapshot (row N203).
+    var bi = mods.module("builtins")
+    causal_public_connect(context)
     if py_type(format) is not bi.str:
         raise Error("TypeError: CausalLM weight format requires an ordinary string")
     var ck = context["checkpoint_context"]
     var infos = checkpoint_index_binding(mods, checkpoint, ck)
     var captured_infos = Python.dict()
-    var info_names = py_call(bi.list, infos.keys())
-    for i in range(len(info_names)):  # driver-loop: retain checkpoint shape/dtype metadata before execution
-        py_setitem(captured_infos, info_names[i], _info_snapshot(mods, infos[info_names[i]]))
+    # Row N203: the captured shape/dtype metadata is read only by the
+    # bfloat16 packed-projection test below; other formats skip the capture.
+    if String(format) == "bfloat16":
+        var info_names = py_call(bi.list, infos.keys())
+        for i in range(len(info_names)):  # driver-loop: retain checkpoint shape/dtype metadata before execution
+            py_setitem(captured_infos, info_names[i], _info_snapshot(mods, infos[info_names[i]]))
     var need = model_checkpoint_names_snapshot(mods, plan)
     for i in range(len(need)):  # driver-loop: over checkpoint tensor names
         if not py_contains(infos, need[i]):
@@ -1014,14 +1030,16 @@ def causal_model_load_binding(mut mods: NativeModules, cls: PythonObject, path_v
     var checkpoint = checkpoint_open_binding(mods, ck["checkpoint_class"], path, ck)
     var weights = PythonObject(None)
     try:
-        weights = causal_model_read_weights_binding(mods, checkpoint, plan, options[0], route, context)
+        # Row N203: the one plan snapshot of this load serves the weight
+        # read and the init (formerly rebuilt in each).
+        weights = _causal_model_read_weights(mods, checkpoint, plan_fields, options[0], route, context)
     except error:
         mods.released()
         _ = checkpoint_close_binding(mods, checkpoint)
         raise error
     _ = checkpoint_close_binding(mods, checkpoint)
     var model = py_call(bi.object.__new__, cls)
-    _ = causal_model_init_binding(mods, model, plan, weights, options, context)
+    _ = _causal_model_init(mods, model, plan, plan_fields, weights, options, context)
     return model
 
 
