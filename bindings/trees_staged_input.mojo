@@ -18,49 +18,80 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.trees_public_inputs import trees_table, trees_entry
-from bindings.trees_public_forest import forest_effective_mode, _engine, _ordered_export
+from bindings.trees_public_forest import forest_effective_mode, forest_kind, _engine, _ordered_export
+from bindings.native_model_records import (
+    records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_TREES,
+)
+
+comptime _TABLE_STAMP = "trees_staged_member_table_v1"
 
 
 def _member_table(member: PythonObject, cols: Int, context: PythonObject) raises -> PythonObject:
     """The forest binary table `member` predicts through on its resident
     snapshot for `cols`-wide rows, or None (not a fitted connected forest,
-    another route, another width, a refusal its own predict reports)."""
+    another route, another width, a refusal its own predict reports).
+
+    Kept per member (lane ne2-b-members, N073): every Voting, Stacking, OvR,
+    Calibrated, Bagging and AdaBoost predict walked each member's class
+    ancestry (one table probe per ancestor) and re-resolved its mode, engine
+    and binary exports, only to count members per binary. The answer is
+    stamped with the member's generation word (bindings/native_model_records.mojo,
+    lane ne1-e-records): its class and every field the answer reads
+    (`_offsets`, `n_features_in_`, `numeric_mode`, `_fit_numeric_mode`,
+    `inference_engine`) live in its instance dictionary, so a refit, a
+    `set_params` or any assignment misses. The width, the process default
+    mode object and the connected class table are compared too. A
+    random-splitter tree (its inner forest decides) and any refusal are not
+    stamped: they walk every call, as before."""
+    var defaults = context["backend_fields"]["_DEFAULT_MODE"]
+    var classes = context["trees_classes"]
+    var held = records_stamped_get(RECORDS_TREES, member, _TABLE_STAMP)
+    if held is not None and Int(py=held[1]) == cols and held[2] is defaults and held[3] is classes:
+        return held[0]
+    var found = _member_table_walk(member, cols, context)
+    if Bool(py=found[1]) and records_stampable(member):
+        _ = records_stamped_put(RECORDS_TREES, member, _TABLE_STAMP, ContentRecord(),
+                                Python.tuple(found[0], PythonObject(cols), defaults, classes))
+    return found[0]
+
+
+def _member_table_walk(member: PythonObject, cols: Int, context: PythonObject) raises -> PythonObject:
+    """`(table or None, stampable)` for `_member_table`."""
     var b = native_loaded_module("builtins")
     var cls = py_type(member)
     if py_type(cls) is not b.type:
-        return PythonObject(None)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var table = context["trees_classes"]
+        return Python.tuple(PythonObject(None), PythonObject(False))
     var kind = String("")
-    for i in range(len(mro)):  # driver-loop: over the class ancestry metadata
-        var found = py_get(table, mro[i])
-        if found is not None:
-            kind = String(found)
-            break
-    if kind.byte_length() == 0:
-        return PythonObject(None)
+    try:
+        # Once per class (the forest door's own record of the ancestry walk).
+        kind = forest_kind(member, context)
+    except:
+        # Not a connected forest: no table, and the answer holds while the
+        # class does (a class reassignment changes the generation).
+        return Python.tuple(PythonObject(None), PythonObject(True))
     var fields = py_fields(member)
     if kind.startswith("dt_"):
         var inner = py_get(fields, "_random_inner")
         if inner is not None:
-            return _member_table(inner, cols, context)
+            return Python.tuple(_member_table(inner, cols, context), PythonObject(False))
     if not py_contains(fields, "_offsets"):
-        return PythonObject(None)
+        return Python.tuple(PythonObject(None), PythonObject(True))
     var width = py_get(fields, "n_features_in_")
     if width is None:
-        return PythonObject(None)
+        return Python.tuple(PythonObject(None), PythonObject(True))
     try:
         if Int(py=py_call(b.int, width)) != cols:
-            return PythonObject(None)
+            return Python.tuple(PythonObject(None), PythonObject(True))
         var mode = forest_effective_mode(fields, context)
         var native = trees_table(context, mode, "_mojolearn_trees" if kind.startswith("et_") else "_mojolearn_rf")
         var engine = _engine(fields, mode)
         if engine == "parallel_groves" or (engine == "sequential" and _ordered_export(native)):
-            return native
+            return Python.tuple(native, PythonObject(True))
+        return Python.tuple(PythonObject(None), PythonObject(True))
     except:
         # The member's own predict reports the refusal, in its own words.
         pass
-    return PythonObject(None)
+    return Python.tuple(PythonObject(None), PythonObject(False))
 
 
 def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int,
