@@ -31,7 +31,7 @@ def test_both_columns_expose_operation_12_from_the_admitted_session():
     # The same per-step path as train_step, from the session's own config.
     assert 'byte_session_step_run(' in steps
     assert '.config.copy()' in steps and '.optimizer.copy()' in steps
-    assert steps.index('byte_validate_tokens(') < steps.index('byte_session_step_run(')
+    assert steps.index('byte_validate_tokens(ids') < steps.index('step = byte_session_step_run(')
     assert 'byte_owner_recover(s[], completed + k)' in steps
     session = _read('training/byte_lm_host_session.mojo')
     host_steps = session.split('    def steps(')[1].split('    def evaluate(')[0]
@@ -81,6 +81,6 @@ def test_ragged_next_bytes_picks_on_the_device_and_natively_on_the_host():
 def test_pool_and_offload_exports_write_into_the_caller():
     binding = _read('bindings/_mojolearn_byte_lm.mojo')
     assert 'export_values(' not in binding
-    assert binding.count('.export_into([0, 1, 2],') == 3
+    assert binding.count('.export_into([0, 1, 2],') == 4
     for name in ('training/byte_lm_model_pool.mojo', 'training/byte_lm_offload.mojo'):
         assert 'def export_into(' in _read(name)
