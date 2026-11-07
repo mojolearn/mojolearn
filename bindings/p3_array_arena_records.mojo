@@ -15,9 +15,9 @@ rebuild on every call:
    `PyType_Modified` runs on every class attribute assignment or deletion and
    on `__bases__` assignment). Where type watchers are unavailable
    (Python 3.10 / 3.11, or a refused watch), nothing is admitted and every
-   call runs the full check, exactly as before. Each admitted class and
-   `extra` object is retained (one reference, never released) so a recycled
-   address can never match a record.
+   call runs the full check, exactly as before. Records live on the class's
+   entry of the one record table (weak on the class, `extra` held), so a
+   recycled address can never match a record.
 
 2. NUMPY CLASS IDENTITIES. The NumPy scalar types and dtype classes the
    materializer compares against were rebuilt per call by constructing 14 to
@@ -33,6 +33,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready
 from bindings.native_loaded_module import shared_dict_watcher, shared_dict_epoch
+from bindings.native_model_records import records_live, records_open, records_slot_array_arena
 
 
 # Admission kinds: one per distinct check, so one class can carry several.
@@ -49,32 +50,25 @@ comptime P3_ROWS_EXACT_LAYOUT = 10    # x_prep_native_inputs._rows_fields (exact
 comptime P3_SETATTR_LAYOUT = 11       # arena_cache_upload._counter_next setter hooks
 
 
-struct P3LayoutRecords(Defaultable, Movable):
-    # Quads: kind, class address, extra address, class epoch at admission.
-    var words: List[Int]
-
-    def __init__(out self):
-        self.words = List[Int]()
-
-
-comptime P3_LAYOUT_RECORDS = _Global[
-    StorageType=P3LayoutRecords, name="MojolearnP3ArrayArenaLayoutsV1",
-    init_fn=P3LayoutRecords.__init__,
-]
+# Storage (lane ne1-e-records, 2026-11-06): the layout admissions live in
+# the ARRAY_ARENA slot of the class's entry in bindings/native_model_records.mojo
+# (one weak entry per class; the `extra` objects held by that entry), so a
+# lookup scans only the class's own few records and nothing is retained for
+# the life of the process.
 
 
 def p3_layout_admitted(kind: Int, cls: PythonObject, extra: PythonObject) raises -> Bool:
     """True when the `kind` check already passed for this exact class and
     `extra` and the class has not been modified since."""
-    var g = P3_LAYOUT_RECORDS.get_or_create_ptr()
-    var n = len(g[].words) // 4
-    if n == 0:
+    if not records_live(cls):
         return False
-    var address = Int(cls._obj_ptr)
     var other = Int(extra._obj_ptr)
-    for i in range(n):  # driver-loop: over the few admitted (kind, class) records
-        if g[].words[4 * i] == kind and g[].words[4 * i + 1] == address and g[].words[4 * i + 2] == other:
-            return g[].words[4 * i + 3] == _class_epoch(cls)
+    var epoch = _class_epoch(cls)
+    var slot = records_slot_array_arena(Int(cls._obj_ptr))
+    var n = len(slot[].words) // 3
+    for i in range(n):  # driver-loop: over the class's few admitted (kind, extra) records
+        if slot[].words[3 * i] == kind and Int(slot[].extras[slot[].words[3 * i + 1]]._obj_ptr) == other:
+            return slot[].words[3 * i + 2] == epoch
     return False
 
 
@@ -86,22 +80,20 @@ def p3_layout_admit(kind: Int, cls: PythonObject, extra: PythonObject) raises:
     if not _class_arm(cls):
         return
     var epoch = _class_epoch(cls)
-    var address = Int(cls._obj_ptr)
+    var key = records_open(cls)
+    if key == 0:
+        return
     var other = Int(extra._obj_ptr)
-    var g = P3_LAYOUT_RECORDS.get_or_create_ptr()
-    var n = len(g[].words) // 4
-    for i in range(n):  # driver-loop: over the few admitted (kind, class) records
-        if g[].words[4 * i] == kind and g[].words[4 * i + 1] == address and g[].words[4 * i + 2] == other:
-            g[].words[4 * i + 3] = epoch
+    var slot = records_slot_array_arena(key)
+    var n = len(slot[].words) // 3
+    for i in range(n):  # driver-loop: over the class's few admitted (kind, extra) records
+        if slot[].words[3 * i] == kind and Int(slot[].extras[slot[].words[3 * i + 1]]._obj_ptr) == other:
+            slot[].words[3 * i + 2] = epoch
             return
-    # Retain both owners for the process so their addresses never recycle.
-    ref cpy = Python().cpython()
-    cpy.Py_IncRef(cls._obj_ptr)
-    cpy.Py_IncRef(extra._obj_ptr)
-    g[].words.append(kind)
-    g[].words.append(address)
-    g[].words.append(other)
-    g[].words.append(epoch)
+    slot[].extras.append(extra)
+    slot[].words.append(kind)
+    slot[].words.append(len(slot[].extras) - 1)
+    slot[].words.append(epoch)
 
 
 struct P3NumpyClasses(Defaultable, Movable):
