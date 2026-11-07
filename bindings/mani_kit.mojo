@@ -1323,12 +1323,11 @@ struct MKit(Movable):
             var one = self.dev_one()
             var cnt = r * c
             if cnt > 0:
-                var ix = self.did(x)
-                _ = family_call(self.fn("x_decomp_dev_move"), ix, one, device_identifier(matrix_device(out)),
-                                mk_ints([MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1]))
-            var oid = device_identifier(matrix_device(out))
-            _ = family_call(self.fn("x_decomp_dev_move"), oid, one, oid,
-                            mk_ints([MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1]))
+                var ix = self.dix(x)
+                self.dmove(ix, Int(py=one), Int(py=device_identifier(matrix_device(out))),
+                           [MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1])
+            var oid = Int(py=device_identifier(matrix_device(out)))
+            self.dmove(oid, Int(py=one), oid, [MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1])
             return out
         # X's words, then one zero row (the holder starts zeroed)
         var src = mk_store(x, self.ctx)
