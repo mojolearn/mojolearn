@@ -7,6 +7,7 @@
 # predict), drives the chunk loops and returns the shaped float64 values.
 # A Python callable model is refused: native code never calls back into it.
 from std.memory import memcpy
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields
@@ -50,14 +51,37 @@ def _name(permutation: Bool) -> String:
     return "PermutationExplainer" if permutation else "KernelExplainer"
 
 
+struct _SwitchFacts(Movable):
+    """`x_trees_fast_switches()` of each loaded x_trees binary, keyed on the
+    compiled entry's address (its connected table holds it for the life of
+    the process). The bits are compile-time constants; every shap_values
+    call (twice on the permutation path) called the entry again (N252,
+    ne1-a-trees, 2026-11-06)."""
+    var answers: Dict[Int, Int]
+
+    def __init__(out self):
+        self.answers = Dict[Int, Int]()
+
+
+comptime _SWITCH_FACTS = _Global[
+    StorageType=_SwitchFacts, name="MojoTreesAgnosticSwitchFactsV1", init_fn=_SwitchFacts.__init__,
+]
+
+
 def _switches(table: PythonObject) raises -> Int:
     var query = _entry(table, "x_trees_fast_switches", False)
     if query is None:
         return 0
+    var key = Int(query._obj_ptr)
+    var facts = _SWITCH_FACTS.get_or_create_ptr()
+    if key in facts[].answers:
+        return facts[].answers[key]
     var bits = py_call(query)
     if py_type(bits) is not _b().int:
         raise Error("TypeError: x_trees_fast_switches must return an exact integer")
-    return Int(py=bits)
+    var answer = Int(py=bits)
+    facts[].answers[key] = answer
+    return answer
 
 
 def _call(table: PythonObject, name: String, args: PythonObject) raises -> PythonObject:
