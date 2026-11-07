@@ -21,135 +21,22 @@
 #   UTF-8 form: the helper answers P3_TEXT_FALLBACK and the caller runs its
 #   former code-point path unchanged.
 #
-# The C entries are resolved once per process into the table below (the
-# pattern of bindings/cpython_table.mojo; that file belongs to another lane,
-# so this lane keeps its own table under its own global name).
-from std.ffi import _Global, c_int
+# The C entries come from the one CPython table, bindings/cpython_table.mojo
+# (this module's own table moved there, lane ne1-e-table, 2026-11-06).
 from std.python import Python, PythonObject
-from std.python._cpython import ExternalFunction, PyObjectPtr
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
+from bindings.cpython_table import cpython_table
 
 # Py_TPFLAGS_UNICODE_SUBCLASS
 comptime P3_UNICODE_FLAG = 1 << 28
-
-# PyObject *PyObject_CallObject(PyObject *callable, PyObject *args)  (new)
-comptime _P3CallObject = ExternalFunction[
-    "PyObject_CallObject", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
-# PyObject *PyList_GetItem(PyObject *list, Py_ssize_t index)  (borrowed)
-comptime _P3ListGetItem = ExternalFunction[
-    "PyList_GetItem", def(PyObjectPtr, Int) thin abi("C") -> PyObjectPtr]
-# PyObject *PyTuple_GetItem(PyObject *tuple, Py_ssize_t index)  (borrowed)
-comptime _P3TupleGetItem = ExternalFunction[
-    "PyTuple_GetItem", def(PyObjectPtr, Int) thin abi("C") -> PyObjectPtr]
-# PyObject *PyList_New(Py_ssize_t len)  (new)
-comptime _P3ListNew = ExternalFunction[
-    "PyList_New", def(Int) thin abi("C") -> PyObjectPtr]
-# int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item)  (steals item)
-comptime _P3ListSetItem = ExternalFunction[
-    "PyList_SetItem", def(PyObjectPtr, Int, PyObjectPtr) thin abi("C") -> c_int]
-# int PyList_Append(PyObject *list, PyObject *item)  (does not steal)
-comptime _P3ListAppend = ExternalFunction[
-    "PyList_Append", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
-# const char *PyUnicode_AsUTF8AndSize(PyObject *unicode, Py_ssize_t *size)
-# (the address is typed as a word; NULL on error)
-comptime _P3AsUTF8AndSize = ExternalFunction[
-    "PyUnicode_AsUTF8AndSize", def(PyObjectPtr, UnsafePointer[Int, MutUntrackedOrigin]) thin abi("C") -> Int]
-# unsigned long PyType_GetFlags(PyTypeObject *type)
-comptime _P3TypeGetFlags = ExternalFunction[
-    "PyType_GetFlags", def(PyObjectPtr) thin abi("C") -> UInt64]
-# void PyErr_Clear(void)
-comptime _P3ErrClear = ExternalFunction[
-    "PyErr_Clear", def() thin abi("C") -> NoneType]
-# PyObject *PyLong_FromLongLong(long long v)  (new)
-comptime _P3LongFromLongLong = ExternalFunction[
-    "PyLong_FromLongLong", def(Int64) thin abi("C") -> PyObjectPtr]
-# PyObject *PyFloat_FromDouble(double v)  (new)
-comptime _P3FloatFromDouble = ExternalFunction[
-    "PyFloat_FromDouble", def(Float64) thin abi("C") -> PyObjectPtr]
-# PyObject *PyNumber_Index(PyObject *o)  (new exact int, NULL on error)
-comptime _P3NumberIndex = ExternalFunction[
-    "PyNumber_Index", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
-# int PyObject_IsTrue(PyObject *o)
-comptime _P3IsTrue = ExternalFunction[
-    "PyObject_IsTrue", def(PyObjectPtr) thin abi("C") -> c_int]
-# long long PyLong_AsLongLong(PyObject *o)  (-1 with an error set on overflow)
-comptime _P3LongAsLongLong = ExternalFunction[
-    "PyLong_AsLongLong", def(PyObjectPtr) thin abi("C") -> Int64]
-# PyObject *PyDict_GetItemWithError(PyObject *p, PyObject *key)  (borrowed; NULL: missing or error)
-comptime _P3DictGetItemWithError = ExternalFunction[
-    "PyDict_GetItemWithError", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
-# PyObject *PyErr_Occurred(void)  (borrowed)
-comptime _P3ErrOccurred = ExternalFunction[
-    "PyErr_Occurred", def() thin abi("C") -> PyObjectPtr]
-# double PyFloat_AsDouble(PyObject *o)  (-1.0 with an error set on failure)
-comptime _P3FloatAsDouble = ExternalFunction[
-    "PyFloat_AsDouble", def(PyObjectPtr) thin abi("C") -> Float64]
-# PyObject *PyDict_Copy(PyObject *p)  (new)
-comptime _P3DictCopy = ExternalFunction[
-    "PyDict_Copy", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
-
-
-struct P3Table(Movable):
-    var call_object: _P3CallObject.type
-    var list_get: _P3ListGetItem.type
-    var tuple_get: _P3TupleGetItem.type
-    var list_new: _P3ListNew.type
-    var list_set: _P3ListSetItem.type
-    var list_append: _P3ListAppend.type
-    var as_utf8: _P3AsUTF8AndSize.type
-    var type_flags: _P3TypeGetFlags.type
-    var err_clear: _P3ErrClear.type
-    var long_from: _P3LongFromLongLong.type
-    var float_from: _P3FloatFromDouble.type
-    var number_index: _P3NumberIndex.type
-    var is_true: _P3IsTrue.type
-    var long_as: _P3LongAsLongLong.type
-    var dict_get: _P3DictGetItemWithError.type
-    var err_occurred: _P3ErrOccurred.type
-    var dict_copy: _P3DictCopy.type
-    var float_as: _P3FloatAsDouble.type
-
-    def __init__(out self):
-        ref cpy = Python().cpython()
-        var lib = cpy.lib.borrow()
-        self.call_object = _P3CallObject.load(lib)
-        self.list_get = _P3ListGetItem.load(lib)
-        self.tuple_get = _P3TupleGetItem.load(lib)
-        self.list_new = _P3ListNew.load(lib)
-        self.list_set = _P3ListSetItem.load(lib)
-        self.list_append = _P3ListAppend.load(lib)
-        self.as_utf8 = _P3AsUTF8AndSize.load(lib)
-        self.type_flags = _P3TypeGetFlags.load(lib)
-        self.err_clear = _P3ErrClear.load(lib)
-        self.long_from = _P3LongFromLongLong.load(lib)
-        self.float_from = _P3FloatFromDouble.load(lib)
-        self.number_index = _P3NumberIndex.load(lib)
-        self.is_true = _P3IsTrue.load(lib)
-        self.long_as = _P3LongAsLongLong.load(lib)
-        self.dict_get = _P3DictGetItemWithError.load(lib)
-        self.err_occurred = _P3ErrOccurred.load(lib)
-        self.dict_copy = _P3DictCopy.load(lib)
-        self.float_as = _P3FloatAsDouble.load(lib)
-
-
-# Shared by every Mojo extension in the process; bump the version on any
-# field change.
-comptime P3_TABLE = _Global[
-    StorageType=P3Table, name="MojolearnP3LabelsTableV1",
-    init_fn=P3Table.__init__,
-]
-
-
-def p3_table() raises -> UnsafePointer[P3Table, MutAnyOrigin]:
-    """The process-wide table, filled at first use."""
-    return P3_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 def p3_call_object(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     """`entry(*args)` for an exact tuple `args`; NULL raises the pending
     Python error. The symbol is resolved once per process."""
     ref cpy = Python().cpython()
-    var result = p3_table()[].call_object(entry._obj_ptr, args._obj_ptr)
+    var result = cpython_table()[].PyObject_CallObject(entry._obj_ptr, args._obj_ptr)
     if not result:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=result)
@@ -170,7 +57,7 @@ def p3_item(container: PythonObject, index: Int, is_tuple: Bool) raises -> PyObj
     """A borrowed item of an exact list or tuple (the caller holds the
     container and runs no Python code while it uses the item)."""
     ref cpy = Python().cpython()
-    var raw = p3_table()[].tuple_get(container._obj_ptr, index) if is_tuple else p3_table()[].list_get(container._obj_ptr, index)
+    var raw = cpython_table()[].PyTuple_GetItem(container._obj_ptr, index) if is_tuple else cpython_table()[].PyList_GetItem(container._obj_ptr, index)
     if not raw:
         raise cpy.unsafe_get_error()
     return raw
@@ -197,8 +84,8 @@ def p3_decode_list(classes: PythonObject, codes_addr: Int, width: Int, n: Int) r
         if code < -k or code >= k:
             return PythonObject(None)
     ref cpy = Python().cpython()
-    var t = p3_table()
-    var out = t[].list_new(n)
+    var t = cpython_table()
+    var out = t[].PyList_New(n)
     if not out:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=out)
@@ -207,7 +94,7 @@ def p3_decode_list(classes: PythonObject, codes_addr: Int, width: Int, n: Int) r
         if code < 0:
             code += k
         var item = p3_item(classes, code, is_tuple)
-        _ = t[].list_set(result._obj_ptr, i, cpy.Py_NewRef(item))
+        _ = t[].PyList_SetItem(result._obj_ptr, i, cpy.Py_NewRef(item))
     _ = classes  # keep the class container alive through the borrowed reads above
     return result
 
@@ -270,7 +157,7 @@ def p3_utf8_read(labels: PythonObject, n: Int, mut text: P3Utf8, any_str: Bool) 
     the code-point reader takes it; else exactly str); P3_TEXT_FALLBACK when
     a str has no UTF-8 form (a lone surrogate; the pending error is
     cleared). The views stay valid while the list holds the labels."""
-    var t = p3_table()
+    var t = cpython_table()
     var str_word = Int(native_loaded_module("builtins").str._obj_ptr)
     var size = List[Int](length=1, fill=0)
     var size_ptr = size.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
@@ -280,13 +167,13 @@ def p3_utf8_read(labels: PythonObject, n: Int, mut text: P3Utf8, any_str: Bool) 
         var cls = cpy.PyObject_Type(raw)
         var ok = Int(cls) == str_word
         if not ok and any_str:
-            ok = (t[].type_flags(cls) & UInt64(P3_UNICODE_FLAG)) != 0
+            ok = (t[].PyType_GetFlags(cls) & UInt64(P3_UNICODE_FLAG)) != 0
         cpy.Py_DecRef(cls)
         if not ok:
             return P3_TEXT_NOT_STR
-        var address = t[].as_utf8(raw, size_ptr)
+        var address = t[].PyUnicode_AsUTF8AndSize(raw, Int(size_ptr))
         if address == 0:
-            t[].err_clear()
+            t[].PyErr_Clear()
             return P3_TEXT_FALLBACK
         text.addr.append(address)
         text.size.append(size[0])
@@ -412,14 +299,14 @@ def p3_text_codes(labels: PythonObject, any_str: Bool = True) raises -> P3TextCo
 def p3_text_classes(labels: PythonObject, first: List[Int]) raises -> PythonObject:
     """The class list: `labels[first[c]]` for each class, built presized."""
     ref cpy = Python().cpython()
-    var t = p3_table()
+    var t = cpython_table()
     var k = len(first)
-    var out = t[].list_new(k)
+    var out = t[].PyList_New(k)
     if not out:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=out)
     for c in range(k):  # driver-loop: over the k classes
-        _ = t[].list_set(result._obj_ptr, c, cpy.Py_NewRef(p3_item(labels, first[c], False)))
+        _ = t[].PyList_SetItem(result._obj_ptr, c, cpy.Py_NewRef(p3_item(labels, first[c], False)))
     _ = labels
     return result
 
@@ -445,7 +332,7 @@ def p3_text_lookup(classes: PythonObject, values: PythonObject, address: Int, as
             answer.append(c)
         else:
             answer[d] = c  # a duplicated class keeps its last index
-    var t = p3_table()
+    var t = cpython_table()
     ref cpy = Python().cpython()
     var str_word = Int(native_loaded_module("builtins").str._obj_ptr)
     var size = List[Int](length=1, fill=0)
@@ -458,15 +345,15 @@ def p3_text_lookup(classes: PythonObject, values: PythonObject, address: Int, as
     for i in range(n):  # driver-loop: one borrowed read and one hash probe per value, no Python call
         var raw = p3_item(values, i, False)
         var cls = cpy.PyObject_Type(raw)
-        var is_str = Int(cls) == str_word or (t[].type_flags(cls) & UInt64(P3_UNICODE_FLAG)) != 0
+        var is_str = Int(cls) == str_word or (t[].PyType_GetFlags(cls) & UInt64(P3_UNICODE_FLAG)) != 0
         cpy.Py_DecRef(cls)
         var found = -1
         if is_str:
-            var a = t[].as_utf8(raw, size_ptr)
+            var a = t[].PyUnicode_AsUTF8AndSize(raw, Int(size_ptr))
             if a == 0:
                 # No UTF-8 form (a lone surrogate): it equals no class here,
                 # since every class has one.
-                t[].err_clear()
+                t[].PyErr_Clear()
             else:
                 one.addr[0] = a
                 one.size[0] = size[0]
@@ -476,7 +363,7 @@ def p3_text_lookup(classes: PythonObject, values: PythonObject, address: Int, as
         if found < 0:
             count += 1
             if len(missing) < 5:
-                _ = t[].list_append(missing._obj_ptr, raw)
+                _ = t[].PyList_Append(missing._obj_ptr, raw)
         if as_float:
             MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Float32(found)
         else:
@@ -518,19 +405,19 @@ def p3_dict_codes(index: PythonObject, values: PythonObject, address: Int, missi
     var b = native_loaded_module("builtins")
     var is_tuple = p3_type_word(values._obj_ptr) == Int(b.tuple._obj_ptr)
     ref cpy = Python().cpython()
-    var t = p3_table()
+    var t = cpython_table()
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
     for i in range(len(values)):  # driver-loop: one borrowed read and one C dict probe per label
         var raw = p3_item(values, i, is_tuple)
-        var hit = t[].dict_get(index._obj_ptr, raw)
+        var hit = t[].PyDict_GetItemWithError(index._obj_ptr, raw)
         if not hit:
-            if t[].err_occurred():
+            if t[].PyErr_Occurred():
                 raise cpy.unsafe_get_error()
             out[i] = Int32(missing)
         else:
-            var code = t[].long_as(hit)
+            var code = t[].PyLong_AsLongLong(hit)
             if code == -1:
-                if t[].err_occurred():
+                if t[].PyErr_Occurred():
                     raise cpy.unsafe_get_error()
             out[i] = Int32(code)
     _ = index
@@ -557,8 +444,8 @@ def p3_integral_list(labels: PythonObject, bool_types: PythonObject) raises -> P
         for j in range(len(bool_types)):  # driver-loop: over the connected bool classes
             bools.append(Int(bool_types[j]._obj_ptr))
     ref cpy = Python().cpython()
-    var t = p3_table()
-    var out = t[].list_new(n)
+    var t = cpython_table()
+    var out = t[].PyList_New(n)
     if not out:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=out)
@@ -573,15 +460,15 @@ def p3_integral_list(labels: PythonObject, bool_types: PythonObject) raises -> P
             for j in range(len(bools)):  # driver-loop: over the connected bool classes
                 is_bool = is_bool or cls == bools[j]
             if is_bool:
-                var truth = Int(t[].is_true(raw))
+                var truth = Int(t[].PyObject_IsTrue(raw))
                 if truth < 0:
                     raise cpy.unsafe_get_error()
-                value = t[].long_from(Int64(truth))
+                value = t[].PyLong_FromLongLong(Int64(truth))
             else:
-                value = t[].number_index(raw)
+                value = t[].PyNumber_Index(raw)
             if not value:
                 raise cpy.unsafe_get_error()
-        _ = t[].list_set(result._obj_ptr, i, value)
+        _ = t[].PyList_SetItem(result._obj_ptr, i, value)
     _ = labels
     return result
 
@@ -604,8 +491,8 @@ def p3_array_numbers(data: Int, sizes: List[Int], steps: List[Int], count: Int, 
     if not integer and kind != "f":
         return PythonObject(None)
     ref cpy = Python().cpython()
-    var t = p3_table()
-    var out = t[].list_new(count)
+    var t = cpython_table()
+    var out = t[].PyList_New(count)
     if not out:
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=out)
@@ -621,7 +508,7 @@ def p3_array_numbers(data: Int, sizes: List[Int], steps: List[Int], count: Int, 
         var value: PyObjectPtr
         if kind == "f":
             var x = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=at)[0]) if width == 4 else MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at)[0]
-            value = t[].float_from(x)
+            value = t[].PyFloat_FromDouble(x)
         else:
             var v: Int64
             if width == 1:
@@ -632,8 +519,8 @@ def p3_array_numbers(data: Int, sizes: List[Int], steps: List[Int], count: Int, 
                 v = Int64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=at)[0]) if kind == "i" else Int64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)[0])
             else:
                 v = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=at)[0]
-            value = t[].long_from(v)
+            value = t[].PyLong_FromLongLong(v)
         if not value:
             raise cpy.unsafe_get_error()
-        _ = t[].list_set(result._obj_ptr, index, value)
+        _ = t[].PyList_SetItem(result._obj_ptr, index, value)
     return result
