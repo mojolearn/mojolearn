@@ -80,7 +80,8 @@ MANIFEST = "bindings/development_groups.json"
 # editing them leaves every key unchanged (2026-10-24: a tool-only commit
 # rebuilt 79 of 79 groups on the L4, the M4 and the AMD box).
 RECIPE_SCHEMA = "mojolearn.development-recipe.v1"
-BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh")
+# bindings/compile_jobs.sh is sourced by merged_build.sh and decides its `-j` when MOJOLEARN_COMPILE_JOBS is unset.
+BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindings/compile_jobs.sh")
 # Non-group runtime artifacts. python/mojolearn/_portable_math.py loads the
 # repository-owned host math library from a fixed path in every set; release
 # packaging builds it with packaging/portable_math/stage.py. It is a C build

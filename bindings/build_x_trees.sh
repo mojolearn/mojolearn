@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # Compile the trees expansion lane's binding (algorithm expansion lane 7).
 set -eu
 MACOS_FLOOR="11.0"
@@ -46,7 +47,7 @@ out=$tmpdir/_mojolearn_x_trees.so
 # MOJOLEARN_EXTRA_DEFINES: diagnostic defines passed through verbatim (the
 # tools/aft_ab.sh arms); empty by default, and it does not move the outdir.
 # compiles the entry bindings/entry/entry__mojolearn_x_trees.mojo, which imports the module body bindings/_mojolearn_x_trees.mojo
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags ${MOJOLEARN_EXTRA_DEFINES:-} -I . -I bindings \
     bindings/entry/entry__mojolearn_x_trees.mojo -o "$out"
 mkdir -p "$outdir"

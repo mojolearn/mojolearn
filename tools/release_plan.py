@@ -52,7 +52,7 @@ KINDS = (
                   "python/mojolearn/_version.py", "docs/release/*-waiver.json", ".github/ISSUE_TEMPLATE/*")),
     # pixi.toml/pixi.lock pin the compiler; the build scripts and the group manifest decide every group's
     # recipe (a comment-only script edit is caught per group by `inputs_changed`, the closure-v2 rule).
-    ("toolchain", ("pixi.toml", "pixi.lock", "bindings/build_defines.sh", "bindings/merged_build.sh",
+    ("toolchain", ("pixi.toml", "pixi.lock", "bindings/build_defines.sh", "bindings/compile_jobs.sh", "bindings/merged_build.sh",
                    "bindings/merged_groups.json")),
     ("loader", ("python/mojolearn/_merged.py", "python/mojolearn/_backend.py", "python/mojolearn/gpu_plugins.py",
                 "python/mojolearn/_native*.py", "python/mojolearn/__init__.py")),

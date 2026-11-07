@@ -127,6 +127,10 @@ def gpu_free_gib(vendor):
         return None
 
 
+# What the identity harness itself needs in the venv beyond the release wheels (python/pyproject.toml `verify` extra).
+HARNESS_REQUIREMENTS = ("numpy>=1.26.4",)
+
+
 class Run:
     def __init__(self, args, popen=subprocess.Popen, run=subprocess.run):
         self.a, self.popen, self.run = args, popen, run
@@ -153,6 +157,11 @@ class Run:
         self.run([self.a.python, "-m", "venv", str(venv)], check=True)
         py = venv / "bin" / "python"
         self.run([str(py), "-m", "pip", "install", "-q", "--no-cache-dir", *[str(w) for w in self.a.wheel]], check=True)
+        # The wheels carry no NumPy (python/pyproject.toml: dependencies = []), but the harness the recorder runs in this
+        # venv (tools/identity_break.py) imports numpy at module level, so a wheels-only venv fails every lane at import.
+        # Install the harness requirement after the wheels, as tools/ops/release_gate_job.sh does for its shard venv;
+        # the spec is the wheel's own `verify` extra, so the recorded bytes stay the release's.
+        self.run([str(py), "-m", "pip", "install", "-q", "--no-cache-dir", *HARNESS_REQUIREMENTS], check=True)
         listed = self.out / "installed-wheels.txt"
         listed.write_text("\n".join(lines) + "\n")
         return py, listed

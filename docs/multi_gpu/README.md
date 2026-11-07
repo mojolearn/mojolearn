@@ -323,7 +323,7 @@ and a RunPod environment marker and should only be invoked on the pod:
   weighted inputs, classification/regression and failed-fit publication.
 - `tools/parallel_arima_check.py`: independent-series fits, forecasts and rollback.
 - `tools/parallel_preprocessing_check.py`: column fits, transforms, inverse and refusal.
-- `tools/parallel_gram_check.py`: OLS/Ridge/covariance PCA/SVD fitted state and outputs.
+- `tools/parallel_gram_check.py`: OLS/Ridge/covariance PCA/SVD fitted state and outputs, and that each two-device fit spread its work over both devices.
 - `training/checks/gram_parallel_check.mojo`: every original Gram partial and final result.
 - `tools/parallel_logistic_check.py`: binary/multiclass QN and failed-fit publication.
 - `tools/parallel_holtwinters_check.py`: additive/multiplicative fits and forecasts.

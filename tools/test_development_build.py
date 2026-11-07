@@ -731,7 +731,8 @@ def test_host_target_normalization_and_refusals(repo, tmp_path):
 def test_development_shell_executes_the_fingerprinted_compiler(repo, tmp_path):
     # Capture the actual shell command with inert tool shims. This exercises
     # group/root/index assembly without invoking any native compiler.
-    for relative in ("bindings/merged_build.sh", "bindings/build_defines.sh", "tools/merged_bindings.py"):
+    for relative in ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindings/compile_jobs.sh",
+                     "tools/merged_bindings.py"):
         # 095db6a93 dropped tools/*.py from dev.BUILD_INPUTS, so the synthetic repo has no tools/ directory
         (repo / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE_REPO / relative, repo / relative)
