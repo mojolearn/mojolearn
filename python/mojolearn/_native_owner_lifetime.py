@@ -4,7 +4,7 @@
 
 def connect_owner_context(context):
     # glue: retain supported native slot/weak-reference identities at import
-    from types import BuiltinFunctionType, MemberDescriptorType, MethodType
+    from types import BuiltinFunctionType, MemberDescriptorType, MethodType, ModuleType
     import mmap
     import sys
     import weakref
@@ -27,6 +27,10 @@ def connect_owner_context(context):
                    # is a bound compiled entry; ClassLabels is read from the
                    # loaded mojolearn._labels (no import at release time)
                    owner_builtin_function_class=BuiltinFunctionType, owner_sys_modules=sys.modules,
+                   # a resident entry records its compiled binding module; it is
+                   # admitted while sys.modules still holds it (read through the
+                   # ModuleType __dict__ slot, never a module __getattr__)
+                   owner_module_class=ModuleType, owner_module_dict=vars(ModuleType)["__dict__"],
                    owner_native_types=dict(type=type, object=object, list=list, tuple=tuple,
                                            dict=dict, str=str, bytes=bytes, bytearray=bytearray,
                                            bool=bool, int=int, float=float, complex=complex,

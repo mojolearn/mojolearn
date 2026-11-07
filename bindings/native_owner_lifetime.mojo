@@ -134,6 +134,67 @@ def _is_class_labels(cls: PythonObject, b: PythonObject, context: PythonObject) 
     return slots is not None and py_type(slots) is b["tuple"] and len(slots) == 0
 
 
+comptime _PY_TPFLAGS_HAVE_GC = 1 << 14
+
+# Compiled owner types whose instances a fitted model stores in its own state
+# (the kernel-methods provider `_native_kernel_method_provider` and the
+# resident entry in `_resident_holder`; providers/python/neural_descriptor_pyapi).
+# They are registered by `add_type` in the compiled bindings; their fields are
+# a module, a capsule, the compiled factory and native words, and their
+# deallocation runs only native destructors (the resource's native close).
+
+
+def _native_owner_type(cls: PythonObject, b: PythonObject) raises -> Bool:
+    """`cls` is one of the compiled owner types above: one of the two names, a
+    direct subclass of object, created by a compiled binding (no `__module__`
+    in its class mapping, which every class statement writes), with no
+    instance dictionary, no weak-reference slot, no garbage-collector
+    support (every Python-defined class has it) and no finalizer. Each
+    binding registers its own copy of the type, so it is recognized by
+    these properties, not by one identity. All reads are C slots of the
+    exact built-in `type`."""
+    if py_type(cls) is not b["type"]:
+        return False
+    var type_fields = b["type"].__dict__
+    var name = py_call(type_fields["__name__"].__get__, cls)
+    if py_type(name) is not b["str"]:
+        return False
+    var wanted = String(py=name)
+    if wanted != "_NeuralDescriptorProvider" and wanted != "_NativeDescriptorResource":
+        return False
+    var ancestry = py_call(type_fields["__mro__"].__get__, cls)
+    if len(ancestry) != 2 or ancestry[1] is not b["object"]:
+        return False
+    var mapping = py_call(type_fields["__dict__"].__get__, cls)
+    if (py_get(mapping, "__module__") is not None or py_get(mapping, "__del__") is not None
+            or py_get(mapping, "__getattribute__") is not None):
+        return False
+    if Int(py=py_call(type_fields["__dictoffset__"].__get__, cls)) != 0:
+        return False
+    if Int(py=py_call(type_fields["__weakrefoffset__"].__get__, cls)) != 0:
+        return False
+    return (Int(py=py_call(type_fields["__flags__"].__get__, cls)) & _PY_TPFLAGS_HAVE_GC) == 0
+
+
+def _retained_module(value: PythonObject, cls: PythonObject, b: PythonObject, context: PythonObject) raises -> Bool:
+    """`value` is an exact module that `sys.modules` still holds under its own
+    `__name__` (the compiled binding a resident entry or provider records).
+    Dropping the model's reference cannot finalize it. The name is read
+    from the module's own dictionary (the ModuleType `__dict__` slot), never
+    through a module `__getattr__`."""
+    var module_class = py_get(context, "owner_module_class")
+    var modules = py_get(context, "owner_sys_modules")
+    if module_class is None or modules is None or cls is not module_class:
+        return False
+    var namespace = py_call(context["owner_module_dict"].__get__, value)
+    if py_type(namespace) is not b["dict"]:
+        return False
+    var name = py_get(namespace, "__name__")
+    if name is None or py_type(name) is not b["str"]:
+        return False
+    return py_get(modules, name) is value
+
+
 def native_release_admit(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     # Reinitialization decrements the previous fields' references. Admit the
     # complete owners that could be destroyed before replacing any field.
@@ -239,4 +300,11 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
         for i in range(len(scalars)):  # driver-loop: over exact primitive NumPy scalar identities owning no application objects
             if cls is scalars[i]:
                 return
+    # A fitted model's own compiled owners (its kernel-methods provider, the
+    # resident entry's resource) and the binding module they record: set_params
+    # and every other reset drop them without running Python code.
+    if _native_owner_type(cls, b):
+        return
+    if _retained_module(value, cls, b, context):
+        return
     raise Error("TypeError: native owner reinitialization cannot release Python-owned metadata; retain the same owner or release it in application code first")
