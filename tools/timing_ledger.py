@@ -382,7 +382,8 @@ def summarize(rows, kind=None, since=None, top=50, by="name"):
                 kinds=kinds, top=items, by=by)
 
 
-def print_report(rep, out=sys.stdout):
+def print_report(rep, out=None):
+    out = sys.stdout if out is None else out
     print(f"timing ledger: {rep['records']} record(s), {rep['sum_s']:.1f} s summed, "
           f"{rep['wall_s']:.1f} s wall (parallel units counted once)", file=out)
     print(f"{'kind':<10} {'count':>7} {'sum_s':>11} {'wall_s':>10} {'wall share':>10}", file=out)
