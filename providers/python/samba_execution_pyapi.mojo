@@ -550,17 +550,17 @@ def _samba_layer_name(name: String) -> Tuple[Int, String]:
     var bytes = name.as_bytes()
     var at = 7
     var index = 0
-    while at < n and bytes[at] >= 48 and bytes[at] <= 57:  # small-loop(the decimal layer index digits)
+    while at < n and Int(bytes[at]) >= 48 and Int(bytes[at]) <= 57:  # small-loop(the decimal layer index digits)
         if index > 100000000:
             return (-1, String(""))
-        index = index * 10 + Int(bytes[at] - 48)
+        index = index * 10 + Int(bytes[at]) - 48
         at += 1
     var digits = at - 7
-    if digits == 0 or at >= n or bytes[at] != 46:
+    if digits == 0 or at >= n or Int(bytes[at]) != 46:
         return (-1, String(""))
-    if digits > 1 and bytes[7] == 48:
+    if digits > 1 and Int(bytes[7]) == 48:
         return (-1, String(""))
-    return (index, String(name[byte=at + 1:]))
+    return (index, String(name[byte=at + 1:n]))
 
 
 def samba_provider_accumulated_gradients(fields: PythonObject, config: PythonObject, entries: PythonObject,
