@@ -1966,12 +1966,26 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def macos_bincache(self):
         return self.rel / "macos-bincache"
 
+    def mac_cache(self):
+        """The one Mac cache (tools/bincache.py mac_cache_dir: MOJOLEARN_BINCACHE_DIR in this
+        process's environment, else ~/mojolearn-evidence/bincache-mac). tools/development_build.py
+        (--layout release, the macOS default) compiles every merged macOS group of a commit into it;
+        step_macos_build seeds from it first and copies what it built back into it."""
+        sys.path.insert(0, str(ROOT / "tools"))
+        import bincache
+        return bincache.mac_cache_dir(os.environ)
+
     def macos_bincache_seeds(self):
-        """Every earlier release's macOS cache, newest first (read only; archives are copied)."""
+        """The one Mac cache, then every earlier release's macOS cache, newest first (read only;
+        archives are copied)."""
         mine = self.macos_bincache().resolve()
         found = [d for d in self.base.parent.glob("*/*/macos-bincache")
                  if d.is_dir() and d.resolve() != mine and any(d.glob("*.tar.gz"))]
-        return sorted(found, key=lambda d: d.stat().st_mtime, reverse=True)
+        found = sorted(found, key=lambda d: d.stat().st_mtime, reverse=True)
+        shared = self.mac_cache()
+        if shared.is_dir() and shared.resolve() != mine and any(shared.glob("*.tar.gz")):
+            found = [shared] + [d for d in found if d.resolve() != shared.resolve()]
+        return found
 
     def macos_cache_plan(self, env):
         """One line per merged macOS group, before anything compiles: `hit (<cache>)`
@@ -1984,21 +1998,17 @@ class Release(release_identity_wheels.IdentityOnWheels):
         base = dict(os.environ, **env)
         out = []
         modes = [m for m in self.release_modes] + (["host"] if env.get("MOJOLEARN_PACKAGE_BYTE_LM") == "1" else [])
+        sys.path.insert(0, str(ROOT / "tools"))
+        import bincache
         for mode in modes:
             plan = subprocess.run([PY, str(src / "tools" / "merged_bindings.py"), "plan", "--dir", mode,
                                    "--platform", "darwin", "--byte-lm", env.get("MOJOLEARN_PACKAGE_BYTE_LM", "1")],
                                   cwd=src, capture_output=True, text=True)
             for row in plan.stdout.splitlines():
                 stem = row.split()[0]
-                if mode == "host":
-                    output, kind = f"python/mojolearn/host/{stem}.so", "host"
-                    genv = dict(base, MOJOLEARN_NUMERIC_MODE="identical", MOJOLEARN_TARGET_COLUMN="cpu")
-                    genv.pop("MOJOLEARN_GPU_ARCHS", None)
-                    genv.pop("MOJOLEARN_HOST_OUTDIR", None)
-                else:
-                    output = f"python/mojolearn/{stem}.so" if mode == "fast" else f"python/mojolearn/{mode}/{stem}.so"
-                    kind, genv = "gpu", dict(base, MOJOLEARN_NUMERIC_MODE=mode)
-                genv.update(MOJOLEARN_BINCACHE_OUTPUTS=output, MOJOLEARN_BINCACHE_SHELL="sh")
+                # The per-group environment of build_release_wheel.sh, shared with
+                # tools/development_build.py --layout release so both key alike.
+                kind, output, genv = bincache.macos_merged_group(base, mode, stem)
                 r = subprocess.run([PY, str(tool), "explain", "./bindings/merged_build.sh", kind, "--group", stem],
                                    cwd=src, env=genv, capture_output=True, text=True)
                 line = (r.stdout.strip().splitlines() or [r.stderr.strip()[-200:]])[-1]
@@ -3210,14 +3220,18 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # flags, toolchain -> compiled bytes): keep it release-scoped so the
         # compile-apple rows are admitted from it (macos-release-build) and a
         # shared cache's pruning can never remove it.
-        env = dict(MOJOLEARN_BINCACHE_DIR=str(self.macos_bincache()),
-                   MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
-                   MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
+        import bincache
+        env = dict(MOJOLEARN_BINCACHE_DIR=str(self.macos_bincache()), **bincache.MACOS_RELEASE_COMPILE_ENV,
+                   MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
         # CROSS-RELEASE HITS (2026-11-04). The cache stays release-scoped, but
         # an archive whose closure-v2 key an earlier release already built is
         # copied in from that release's cache (verified, tools/bincache.py
         # seed_archive) instead of compiled: a group compiles only when its
         # import closure, flags or toolchain changed since some earlier release.
+        # THE ONE MAC CACHE IS THE FIRST SEED (2026-11-07): the development
+        # build of the frozen commit (tools/development_build.py, --layout
+        # release on macOS) compiled these same groups there with these keys,
+        # when it ran in this source checkout (repo_path is a key field).
         seeds = self.macos_bincache_seeds()
         if seeds:
             env["MOJOLEARN_BINCACHE_SEED_DIRS"] = os.pathsep.join(str(d) for d in seeds)
@@ -3250,6 +3264,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
                   env=env, log=self.rel / "macos-build.log", what="build_release_wheel.sh", cwd=src)
         if self.dry:
             return "would copy python/dist/*.whl to " + str(self.rel / "macos")
+        # WRITE BACK: what this build compiled joins the one Mac cache, so the
+        # next development build or release of an unchanged group places it.
+        copied = bincache.copy_archives(self.macos_bincache(), self.mac_cache())
+        self.say(f"  one Mac cache {self.mac_cache()}: {copied['copied']} archive(s) copied, "
+                 f"{copied['present']} present, {len(copied['conflicts'])} conflict(s), "
+                 f"{len(copied['rejected'])} rejected")
         built = sorted((src / "python" / "dist").glob(f"mojolearn-{self.version}-*-macosx_*.whl"))
         if len(built) != 1 or wheel_commit(built[0]) != self.commit:
             raise StepFailed(f"expected one macOS wheel of {self.commit} in {src}/python/dist, found {built}")
