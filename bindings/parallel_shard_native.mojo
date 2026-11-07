@@ -49,7 +49,8 @@ from bindings.native_prepared_owner import prepared_key_fields, prepared_key_sam
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
     shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
-    shard_dtype,
+    shard_dtype, shard_run_stored, shard_stored_ref, shard_store_token, shard_store_put, shard_store_drop,
+    shard_resolve_stored,
 )
 from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
@@ -371,12 +372,22 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
     var max_iter = work["_max_iter_predict"]
-    _ = shard_devices(args[3])
+    var n_devices = shard_devices(args[3])
+    # N452 (lane ne2-i-j): with more class columns than workers, X and the
+    # codes go to each worker once (`shard_run_stored`), not once per column
+    var stored = len(columns) > n_devices
+    var token = shard_store_token() if stored else String("")
     var requests = b.list()
     for i in range(len(columns)):  # driver-loop: one worker request per class column
-        _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
-                                                  Python.tuple(x, codes, columns[i])))
-    var parts = shard_run(requests, args[3], _CHILD)
+        if stored:
+            _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
+                                                      Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
+                                                                   columns[i])))
+        else:
+            _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
+                                                      Python.tuple(x, codes, columns[i])))
+    var parts = (shard_run_stored(Python.tuple(x, codes), token, requests, args[3], _CHILD) if stored
+                 else shard_run(requests, args[3], _CHILD))
     var fits = b.list()
     for i in range(len(parts)):  # driver-loop: one binary fit per class column
         var f = parts[i]
@@ -422,13 +433,23 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
     var fits = fields["estimators_"]
-    _ = shard_devices(args[2])
+    var n_devices = shard_devices(args[2])
+    # N452 (lane ne2-i-j): with more fitted classes than workers, X_train_
+    # and the query rows go to each worker once (`shard_run_stored`)
+    var stored = len(fits) > n_devices
+    var token = shard_store_token() if stored else String("")
     var requests = b.list()
     for i in range(len(fits)):  # driver-loop: one worker request per fitted class
         var fit_state = shard_state(py_fields(fits[i]), b.frozenset(), context)
-        _ = py_call(requests.append, Python.tuple("gpc_class_predict", Python.tuple(carried, fields["X_train_"], fit_state),
-                                                  Python.tuple(q, want_proba, out_kind)))
-    var columns = shard_run(requests, args[2], _CHILD)
+        if stored:
+            _ = py_call(requests.append, Python.tuple("gpc_class_predict",
+                                                      Python.tuple(carried, shard_stored_ref(token, 0), fit_state),
+                                                      Python.tuple(shard_stored_ref(token, 1), want_proba, out_kind)))
+        else:
+            _ = py_call(requests.append, Python.tuple("gpc_class_predict", Python.tuple(carried, fields["X_train_"], fit_state),
+                                                      Python.tuple(q, want_proba, out_kind)))
+    var columns = (shard_run_stored(Python.tuple(fields["X_train_"], q), token, requests, args[2], _CHILD) if stored
+                   else shard_run(requests, args[2], _CHILD))
     var n_star = Int(py=q.shape[0])
     for i in range(len(columns)):  # driver-loop: checks one result column per class
         if Int(py=columns[i].shape[0]) != n_star:
@@ -519,6 +540,10 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
         raise Error("ValueError: n_estimators must be positive")
     var ranges = shard_ranges(count, tps, "trees_per_shard", "")
     var n_devices = shard_devices(args[3])
+    # N452 (lane ne2-i-j): with more tree ranges than workers, X and y go to
+    # each worker once (`shard_run_stored`), not once per tree range
+    var stored = len(ranges) // 2 > n_devices
+    var token = shard_store_token() if stored else String("")
     var requests = b.list()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per tree range
         var lo = ranges[2 * r]
@@ -526,9 +551,15 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
         var shard_params = py_call(b.dict, params)
         py_setitem(shard_params, "n_estimators", hi - lo)
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
-                                                  Python.tuple(x, y, lo - shift)))
-    var parts = shard_run(requests, args[3], _CHILD)
+        if stored:
+            _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
+                                                      Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
+                                                                   lo - shift)))
+        else:
+            _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
+                                                      Python.tuple(x, y, lo - shift)))
+    var parts = (shard_run_stored(Python.tuple(x, y), token, requests, args[3], _CHILD) if stored
+                 else shard_run(requests, args[3], _CHILD))
     var merged = b.dict()
     # node offsets: one rebased table over every shard's trees
     var offsets = b.list()
@@ -1285,8 +1316,13 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     if len(request) != 3:
         raise Error("parallel shards: invalid worker request envelope")
     var operation = String(request[0])
-    var state = request[1]
-    var args = request[2]
+    # N452 (lane ne2-i-j): a call's shared operands, stored once per worker
+    if operation == "shard_store":
+        return shard_store_put(request[1], request[2])
+    if operation == "shard_release":
+        return shard_store_drop(request[1])
+    var state = shard_resolve_stored(request[1])
+    var args = shard_resolve_stored(request[2])
     if operation == "rbf_rows":
         var model = shard_model(_t("rbf_class"), state)
         var rows_meta = family_f32_snapshot(args[0], 2, "X", context, True)

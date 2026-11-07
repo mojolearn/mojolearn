@@ -108,9 +108,74 @@ comptime SHARD_TRACE = _Global[StorageType=ShardTrace, name="MojoParallelShardTr
 struct ShardIdle(Defaultable, Movable):
     #: {(child module, devices tuple): [pool, parent environment snapshot, owner pid]}
     var pools: PythonObject
+    #: `shard_run_stored` calls made by this process (its store tokens)
+    var stored_calls: Int
+    #: a WORKER's stored call operands, {token: payload tuple} (`shard_store`)
+    var stored: PythonObject
 
     def __init__(out self):
         self.pools = PythonObject(None)
+        self.stored_calls = 0
+        self.stored = PythonObject(None)
+
+
+def shard_store_put(token: PythonObject, payload: PythonObject) raises -> PythonObject:
+    """A worker's `shard_store`: keep `payload` under `token` for the call."""
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    if idle[].stored is None:
+        idle[].stored = shard_b().dict()
+    if py_type(payload) is not shard_b().tuple:
+        raise Error("parallel shards: a stored payload is a tuple")
+    py_setitem(idle[].stored, token, payload)
+    return PythonObject(True)
+
+
+def shard_store_drop(token: PythonObject) raises -> PythonObject:
+    """A worker's `shard_release`: drop the call's stored operands."""
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    if idle[].stored is not None:
+        _ = py_call(idle[].stored.pop, token, PythonObject(None))
+    return PythonObject(True)
+
+
+def shard_resolve_stored(value: PythonObject) raises -> PythonObject:
+    """A request's state or argument tuple with every top-level
+    `shard_stored_ref` replaced by the stored operand it names; any other
+    value is returned as is."""
+    var b = shard_b()
+    if py_type(value) is not b.tuple:
+        return value
+    var any_ref = False
+    for i in range(len(value)):  # small-loop(a request tuple's few operands)
+        if _is_stored_ref(value[i]):
+            any_ref = True
+    if not any_ref:
+        return value
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    var out = b.list()
+    for i in range(len(value)):  # small-loop(a request tuple's few operands)
+        var item = value[i]
+        if _is_stored_ref(item):
+            var payload = PythonObject(None)
+            if idle[].stored is not None:
+                payload = py_get(idle[].stored, item[1], PythonObject(None))
+            if payload is None:
+                raise Error("parallel shards: no stored operands for this call on this worker")
+            var k = Int(py=item[2])
+            if k < 0 or k >= len(payload):
+                raise Error("parallel shards: a stored operand index is out of range")
+            _ = py_call(out.append, payload[k])
+        else:
+            _ = py_call(out.append, item)
+    return py_call(b.tuple, out)
+
+
+def _is_stored_ref(item: PythonObject) raises -> Bool:
+    var b = shard_b()
+    if py_type(item) is not b.tuple or len(item) != 3:
+        return False
+    var mark = item[0]
+    return py_type(mark) is b.str and String(mark) == SHARD_STORED_MARK
 
 
 #: Lane perf-trees-misc (2026-11-05): the started one-shot shard pools kept
@@ -244,11 +309,10 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
     return results
 
 
-def shard_run(requests: PythonObject, devices: PythonObject, child: String) raises -> PythonObject:
-    """The workers' results in request order (waves of len(devices), wave
-    position j on worker j). A pool whose call succeeded is kept idle for the
-    next call with the same child, devices and environment (`SHARD_IDLE`);
-    a failed call closes it."""
+def _shard_acquire(devices: PythonObject, child: String) raises -> PythonObject:
+    """`shard_run`'s pool: the idle pool kept for this child, devices and
+    environment, re-admitted, or a fresh one. Returns [pool, key, environ,
+    pid] for `_shard_keep`."""
     var b = shard_b()
     var idle = SHARD_IDLE.get_or_create_ptr()
     if idle[].pools is None:
@@ -280,6 +344,31 @@ def shard_run(requests: PythonObject, devices: PythonObject, child: String) rais
     if reused is None:
         var pool = shard_open(devices, child)
         reused = pool
+    return Python.list(reused, key, environ, PythonObject(pid))
+
+
+def _shard_keep(acquired: PythonObject) raises:
+    """Keep a pool whose call succeeded idle for the next call (`SHARD_IDLE`)."""
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    var key = acquired[1]
+    var pid = Int(py=acquired[3])
+    var other = py_call(idle[].pools.pop, key, PythonObject(None))
+    if other is not None and Int(py=other[2]) == pid:  # another thread kept a pool under this key meanwhile
+        try:
+            process_pool_close(other[0])
+        except:
+            pass
+    # [pool, parent environment snapshot, owning process id]
+    py_setitem(idle[].pools, key, Python.list(acquired[0], acquired[2], PythonObject(pid)))
+
+
+def shard_run(requests: PythonObject, devices: PythonObject, child: String) raises -> PythonObject:
+    """The workers' results in request order (waves of len(devices), wave
+    position j on worker j). A pool whose call succeeded is kept idle for the
+    next call with the same child, devices and environment (`SHARD_IDLE`);
+    a failed call closes it."""
+    var acquired = _shard_acquire(devices, child)
+    var reused = acquired[0]
     var results = PythonObject(None)
     try:
         results = shard_map(reused, requests)
@@ -289,14 +378,62 @@ def shard_run(requests: PythonObject, devices: PythonObject, child: String) rais
     if len(results) != len(requests):
         process_pool_close(reused)
         raise Error("ValueError: shard workers returned an incomplete batch")
-    var other = py_call(idle[].pools.pop, key, PythonObject(None))
-    if other is not None and Int(py=other[2]) == pid:  # another thread kept a pool under this key meanwhile
-        try:
-            process_pool_close(other[0])
-        except:
-            pass
-    # [pool, parent environment snapshot, owning process id]
-    py_setitem(idle[].pools, key, Python.list(reused, environ, PythonObject(pid)))
+    _shard_keep(acquired)
+    return results
+
+
+#: The marker of a stored operand in a shard request (`shard_stored_ref`).
+comptime SHARD_STORED_MARK = "mojolearn.shard-stored.v1"
+
+
+def shard_stored_ref(token: String, index: Int) raises -> PythonObject:
+    """The placeholder a request carries for operand `index` of the payload
+    `shard_run_stored` stored under `token` on every worker."""
+    return Python.tuple(PythonObject(SHARD_STORED_MARK), PythonObject(token), PythonObject(index))
+
+
+def shard_store_token() raises -> String:
+    """A token unique to this process and call (pid plus a counter)."""
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    idle[].stored_calls += 1
+    return String("ss-") + String(Int(external_call["getpid", Int32]())) + "-" + String(idle[].stored_calls)
+
+
+def shard_run_stored(payload: PythonObject, token: String, requests: PythonObject, devices: PythonObject,
+                     child: String) raises -> PythonObject:
+    """`shard_run` with the call's shared operands sent ONCE per worker
+    (lane ne2-i-j, 2026-11-07, plan row N452). `payload` (a tuple: X, labels,
+    ...) is stored under `token` on every worker of the one pool this call
+    holds (one `shard_store` request per worker, wave position j on worker
+    j); each request names its operands by `shard_stored_ref(token, i)`,
+    which the worker resolves from its store (`shard_resolve_stored`); one
+    `shard_release` per worker drops the store before the pool goes idle.
+    The shards, their order and their workers are `shard_run`'s, so the
+    results are the same words; only the bytes on the sockets change (X once
+    per worker, not once per shard). A failed call closes the pool, which
+    ends its workers and their stores."""
+    var b = shard_b()
+    var acquired = _shard_acquire(devices, child)
+    var pool = acquired[0]
+    var workers = len(pool["workers"])
+    var results = PythonObject(None)
+    try:
+        var stores = b.list()
+        var releases = b.list()
+        for i in range(workers):  # driver-loop: one store and one release per worker
+            _ = py_call(stores.append, Python.tuple("shard_store", PythonObject(token), payload))
+            _ = py_call(releases.append, Python.tuple("shard_release", PythonObject(token), PythonObject(None)))
+        var stored = process_pool_map(pool, stores)
+        if len(stored) != workers:
+            raise Error("ValueError: shard workers did not store the call's operands")
+        results = shard_map(pool, requests)
+        if len(results) != len(requests):
+            raise Error("ValueError: shard workers returned an incomplete batch")
+        _ = process_pool_map(pool, releases)
+    except error:
+        process_pool_close(pool)
+        raise error^
+    _shard_keep(acquired)
     return results
 
 
