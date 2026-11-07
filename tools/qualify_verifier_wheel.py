@@ -331,8 +331,12 @@ def qualify_installed(parser, args):
             manifest["installed_from"].update(located)
             wrong = {n: v for n, v in located["distributions"].items() if v is not None and v != args.expected_version}
             installed_names = {n for n, v in located["distributions"].items() if v is not None}
-            required = {"mojolearn-core"} if installed_names.intersection(
-                {"mojolearn-nvidia", "mojolearn-amd"}) else {"mojolearn"}
+            # The core wheel is the install for a vendor plugin and, alone, the CPU-only install (the CPU
+            # checks job installs mojolearn-core by itself); "mojolearn" is required only for the
+            # single-wheel installs (the macOS wheel, the Linux meta package).
+            core_install = bool(installed_names & {"mojolearn-nvidia", "mojolearn-amd"}) or (
+                installed_names & {"mojolearn", "mojolearn-core"} == {"mojolearn-core"})
+            required = {"mojolearn-core"} if core_install else {"mojolearn"}
             wrong.update({name: None for name in required - installed_names})
             if wrong:
                 raise RuntimeError(f"installed distributions not at {args.expected_version}: {wrong}")
