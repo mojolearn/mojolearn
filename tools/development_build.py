@@ -951,9 +951,18 @@ def live_need(source, need, measured, floor, ceiling):
     return need, source
 
 
+RSS_GUARD_MARGIN = 1.5
+RSS_GUARD_MIN_BYTES = 4 * 2 ** 30
+
+
 def guard_rss(need, source, floor):
-    """The rss limit of a group: its need, never below the floor for a live estimate."""
-    return max(int(need), int(floor)) if source == "set-max-live" else int(need)
+    """The rss kill limit of a group: 1.5x its packing need (a recorded peak is a
+    past run's figure; a group that grows a little past it must not be killed:
+    mac-n7 2026-11-07 killed four passing groups at limit == peak), never below
+    4 GiB, and never below the floor for a live estimate. Packing still uses
+    the need itself; this limit is only the runaway guard."""
+    limit = max(int(int(need) * RSS_GUARD_MARGIN), RSS_GUARD_MIN_BYTES)
+    return max(limit, int(floor)) if source == "set-max-live" else limit
 
 
 def pressure_floor(available_at_start, baseline_bytes, available_now, need):
