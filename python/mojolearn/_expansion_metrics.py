@@ -366,19 +366,20 @@ def _refuse_multilabel(y, name, caller):
 
 def _pair(y_true, y_pred, sample_weight, caller):
     """(true, pred, kind, present, w): single-label targets of one kind."""
-    from ._metrics_impl import _classification_encoded, _label_set
-    _refuse_multilabel(y_true, "y_true", caller)
-    _refuse_multilabel(y_pred, "y_pred", caller)
-    true, kind = _classification_encoded(y_true, "y_true")
-    pred, pred_kind = _classification_encoded(y_pred, "y_pred")
-    if len(true) != len(pred):
-        raise ValueError(f"mojolearn {caller}: y_true and y_pred lengths differ")
-    if kind != pred_kind:
-        raise TypeError(f"mojolearn {caller}: y_true and y_pred must use the same label type")
-    if len(true) > 2147483647:
-        raise ValueError(f"mojolearn {caller}: at most INT32_MAX rows")
+    # Lane ne1-h-labels (N414, N438): the multilabel refusals, both sides'
+    # reads and encodes, the length / kind / INT32 checks and the sorted
+    # union in ONE native call (bindings/classical_labels.mojo
+    # `labels_union_encode`); each side comes back as its sorted classes and
+    # int32 codes, so `_codes` maps the k classes and gathers.
+    from ._metrics_impl import _EncodedLabels
+    from ._native_labels_bridge import labels_entry, LABELS_OP_UNION_ENCODE
+    entry, context = labels_entry()
+    true_classes, true_codes, pred_classes, pred_codes, kind, present = entry(
+        LABELS_OP_UNION_ENCODE, (y_true, y_pred, caller), context)
+    true = _EncodedLabels(true_classes, true_codes)
+    pred = _EncodedLabels(pred_classes, pred_codes)
     w = _weights(sample_weight, len(true), caller)
-    return true, pred, kind, sorted(_label_set(true) | _label_set(pred)), w  # glue: sorts the distinct class labels
+    return true, pred, kind, present, w
 
 
 def _codes(labels_seq, order):

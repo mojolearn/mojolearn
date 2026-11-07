@@ -320,20 +320,17 @@ def prepare_targets(labels, weights, n, *, allow_negative=False, allow_all_zero=
 
 def encode_labels(y):
     """`(classes, codes)` under the ORDER RULE, `codes` an int32 `Array`
-    with one dense code per label. One native call for numeric labels;
-    `sorted_classes` (the label input step) for str and object labels."""
-    fast = _encode_labels_native(y)
-    if fast is not None:
-        return fast
-    flat = flatten_labels(y)
-    fast = _encode_label_list_native(flat)
-    if fast is not None:
-        return fast
-    native = str_labels("encode", flat) if type(flat) is list else None
-    if native is not None:
-        return native
-    classes, codes = sorted_classes(flat)  # cpu-route: mixed or non-str object labels, the explicit label input step
-    return classes, Array.from_list(codes, "<i4")
+    with one dense code per label."""
+    # Lane ne1-h-labels (plan NATIVE_ENTRY_POINTS_AFTER_0866 H, N413): ONE
+    # native call reads y (buffer, Array, list, tuple, Series, str ndarray,
+    # or any nested label sequence) and encodes it
+    # (bindings/classical_labels.mojo `labels_encode_labels`, the same
+    # classes, codes and refusals as the former shell steps here:
+    # `_encode_labels_native`, `flatten_labels`, the list and str encoders,
+    # then `sorted_classes`). The shell no longer walks or copies y.
+    from ._native_labels_bridge import labels_entry, LABELS_OP_ENCODE, LABELS_KIND_ORDER_RULE
+    entry, context = labels_entry()
+    return entry(LABELS_OP_ENCODE, (y, LABELS_KIND_ORDER_RULE), context)
 
 
 def _encode_label_list_native(y):
@@ -420,6 +417,14 @@ def decode_labels(classes, codes):
     `Array`, real classes a float64 `Array`; str or bool classes give a
     Python list of the label objects, since no `Array` dtype holds them
     (DEVIATION 2340: an ndarray of labels used to come back)."""
+    if isinstance(codes, Array) and codes.ndim == 1 and codes.dtype in ("<i4", "<i8"):
+        # Lane ne1-h-labels (N437): the class kind, the packed class table,
+        # the int32 widening and the gather in ONE native call
+        # (bindings/classical_labels.mojo `labels_decode_labels`); the shell
+        # no longer re-derives the kind or packs the table per call.
+        from ._native_labels_bridge import labels_entry, LABELS_OP_DECODE
+        entry, context = labels_entry()
+        return entry(LABELS_OP_DECODE, (classes, codes), context)
     kind = label_kind(classes)
     fast = _decode_labels_native(classes, codes, kind)
     if fast is not None:
