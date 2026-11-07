@@ -1002,7 +1002,7 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
             var v = row[j]
             var word = table[].PyLong_AsLongLong(v._obj_ptr)
             if word == -1 and cpy.PyErr_Occurred():
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return None
             dest[at] = word
             _ = words  # keep the Python object alive through the native call above

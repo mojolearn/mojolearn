@@ -247,7 +247,7 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
         var raw = cpy.lib.get_function[Optional[_ResidentBytes]]("PyCapsule_GetPointer")(
             capsule, names[].capsule_name.as_c_string_slice().unsafe_ptr())
         if not raw:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
+            cpython_table()[].PyErr_Clear()  # the one CPython table
             return None
         var words = _ResidentWords(unsafe_from_address=Int(raw.value()))
         var free = words[0]
@@ -263,7 +263,7 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
                 if result:
                     cpy.lib.get_function[NoneType]("Py_DecRef")(result)
                 cpy.lib.get_function[NoneType]("Py_DecRef")(argument)
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()  # main's form (pass 2, C4)
+            cpython_table()[].PyErr_Clear()  # the one CPython table
             cpy.lib.get_function[NoneType]("Py_DecRef")(free)
             cpy.PyErr_Restore(pending[0], pending[1], pending[2])
         external_call["free", NoneType](raw.value())

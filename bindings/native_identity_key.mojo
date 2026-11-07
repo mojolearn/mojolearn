@@ -276,13 +276,13 @@ struct NativeIdentityKey(Movable, Writable):
             var iter_table = cpython_table()
             var iterator_raw = iter_table[].PyObject_GetIter(row._obj_ptr)
             if not iterator_raw:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return False
             var iterator = PythonObject(from_owned=iterator_raw)
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over live namespace key identities before lookup
                 var key_raw = iter_table[].PyIter_Next(iterator._obj_ptr)
                 if not key_raw:
-                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                    cpython_table()[].PyErr_Clear()
                     return False
                 var key = PythonObject(from_owned=key_raw)
                 if py_type(key) is not self.str_type or key is not self.array_row_keys[i][j]:
@@ -290,7 +290,7 @@ struct NativeIdentityKey(Movable, Writable):
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over retained native namespace keys
                 var raw = cpython_table()[].PyObject_GetItem(row._obj_ptr, self.array_row_keys[i][j]._obj_ptr)
                 if not raw:
-                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                    cpython_table()[].PyErr_Clear()
                     return False
                 var current = PythonObject(from_owned=raw)
                 if current is not self.array_row_values[i][j]:

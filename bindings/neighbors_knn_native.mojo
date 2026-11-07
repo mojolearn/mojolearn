@@ -429,7 +429,7 @@ def _refuse_inert_p(cls_name: String, metric: PythonObject, p: PythonObject) rai
             is_default = Float64(py=PythonObject(from_owned=result)) == 2.0
         elif (cpython_table()[].PyErr_ExceptionMatches(type_error._obj_ptr) != 0
                 or cpython_table()[].PyErr_ExceptionMatches(value_error._obj_ptr) != 0):
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
         else:
             var failure = stash_python_error()
             raise failure^

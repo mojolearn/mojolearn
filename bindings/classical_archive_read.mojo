@@ -133,7 +133,7 @@ def _archive_repr_file_name(value: PythonObject, context: PythonObject, kind: In
     ref cpy = Python().cpython()
     var attribute_error = context["archive_attribute_error"]
     var matches = cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")
-    var clear = cpy.lib.get_function[NoneType]("PyErr_Clear")
+    var clear = cpython_table()[].PyErr_Clear
     var key = String("name")
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GetAttrString")(value._obj_ptr, key.as_c_string_slice().unsafe_ptr())
     if not pointer:

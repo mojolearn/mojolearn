@@ -25,7 +25,7 @@ def _connected_builtin(name: String) raises -> PythonObject:
         return PythonObject(None)
     var fields = cpython_table()[].PyModule_GetDict(registry)
     if not fields:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return PythonObject(None)
     var raw = _loaded_lookup(fields, "CONNECTIONS")
     if not raw:

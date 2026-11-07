@@ -32,6 +32,7 @@ from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _ca
 from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
 from bindings.x_prep_native_owner import xprep_drop_resident
 from bindings.native_loaded_module import native_namespace_string_keys
+from bindings.cpython_table import cpython_table
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime INT32_MAX = 2147483647
@@ -70,7 +71,7 @@ def _drop_pending(error: Error):
     _ = optimizer_python_error(error)
     try:
         ref cpy = Python().cpython()
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
     except ignored:
         _ = ignored^
 

@@ -358,7 +358,7 @@ def _sparse_scalar_word_k(value: PythonObject, kind: Int, width: Int, mut kinds:
             # Outside int64: the old exact path (uint64 high-bit values, or
             # the overflow refusal).
             ref cpy = Python().cpython()
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
             if Bool(py=value < 0):
                 source_kind = 1
                 word = bitcast[DType.uint64](Int64(py=value))

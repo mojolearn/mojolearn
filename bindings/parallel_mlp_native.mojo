@@ -235,7 +235,7 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
             _ = buffer^  # the Py_buffer words stay alive through the release above
         else:
             ref cpy = Python().cpython()
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
     if not done:
         _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
         mlp_targets_into(Int(py=packed.buffer_info()[0]), item, signed, rows, ids)

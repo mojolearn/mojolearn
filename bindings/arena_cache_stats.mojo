@@ -96,7 +96,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         _ = key^
         if not pointer:
             if not required and cpython_table()[].PyErr_ExceptionMatches(context["cache_attribute_error"]._obj_ptr) != 0:
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 return default
             var failure = stash_python_error()
             raise failure^
@@ -113,7 +113,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         if py_contains(fields,name):
             return fields[name]
     elif cpython_table()[].PyErr_ExceptionMatches(context["cache_attribute_error"]._obj_ptr) != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
     else:
         var failure = stash_python_error()
         raise failure^

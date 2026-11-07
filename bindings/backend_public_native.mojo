@@ -5,6 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error
+from bindings.cpython_table import cpython_table
 
 
 def _text(value: PythonObject, name: String, optional: Bool = False) raises -> PythonObject:
@@ -42,7 +43,7 @@ def _read(entry: PythonObject, context: PythonObject, vendor: Bool = False) rais
     if not raw:
         if vendor and (cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["readback_skip_errors"][0]._obj_ptr) != 0
                 or cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["readback_skip_errors"][1]._obj_ptr) != 0):
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
             return PythonObject(None)
         var failure = stash_python_error()
         raise failure^

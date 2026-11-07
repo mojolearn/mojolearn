@@ -33,6 +33,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready
 from bindings.native_loaded_module import shared_dict_watcher, shared_dict_epoch
+from bindings.cpython_table import cpython_table
 
 
 # Admission kinds: one per distinct check, so one class can carry several.
@@ -226,7 +227,7 @@ def p3_dict_admit(kind: Int, fields: PythonObject) raises:
     ref cpy = Python().cpython()
     if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields._obj_ptr) < 0:
         # Watch refused: record nothing; the full walk stays per call.
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return
     var address = Int(fields._obj_ptr)
     var g = P3_DICT_RECORDS.get_or_create_ptr()

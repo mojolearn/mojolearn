@@ -190,7 +190,7 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
             _ = buffer^  # the Py_buffer words stay alive through the release above
         else:
             ref cpy = Python().cpython()
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
     if not done:
         _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
         samba_ids_into(Int(py=packed.buffer_info()[0]), item, signed, rows, columns, column_major, dst)
@@ -229,7 +229,7 @@ def _digest_array_bytes(mut h: Sha256, view: PythonObject) raises:
         _ = view  # the exporter stays alive through the hash above
         return
     ref cpy = Python().cpython()
-    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    cpython_table()[].PyErr_Clear()
     sha256_update(h, py_call(view.tobytes, "C"))
 
 

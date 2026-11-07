@@ -72,7 +72,7 @@ def _density_get_slot(model: PythonObject, name: PythonObject, context: PythonOb
     if result:
         return Python.tuple(PythonObject(from_owned=result), True)
     if cpython_table()[].PyErr_ExceptionMatches(attribute_error._obj_ptr) != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return Python.tuple(PythonObject(None), False)
     raise cpy.unsafe_get_error()
 

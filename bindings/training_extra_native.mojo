@@ -16,6 +16,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import TensorView, tensor_view, contiguous_addr, base_format, new_array, py_ints, shape_text
 from bindings.optimizer_device_native import shape_count
 from bindings.training_embedding_native import embedding_indices
+from bindings.cpython_table import cpython_table
 
 
 def _entry(entries: PythonObject, name: String, missing: String) raises -> PythonObject:
@@ -57,7 +58,7 @@ def _rd_uint(value: PythonObject, name: String, bits: Int, b: PythonObject,
     var word = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLong")(index._obj_ptr)
     if word == UInt64(0xFFFFFFFFFFFFFFFF) and cpy.PyErr_Occurred():
         # Negative or wider than 64 bits.
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         raise Error("ValueError: " + name + " is outside its unsigned integer range")
     if bits < 64 and word >= (UInt64(1) << UInt64(bits)):
         raise Error("ValueError: " + name + " is outside its unsigned integer range")

@@ -980,7 +980,7 @@ def _rp_sparse_fill_array(value: PythonObject, context: PythonObject) raises -> 
         elif overflow > 0:
             var unsigned = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLong")(value._obj_ptr)
             if cpython_table()[].PyErr_Occurred():
-                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                cpython_table()[].PyErr_Clear()
                 dtype = "f8"
                 real = bitcast[DType.uint64](Float64(py=value))
             else:

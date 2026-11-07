@@ -256,7 +256,7 @@ def _buffer_number(state: ManifoldScalarSnapshot, integer: Bool) raises -> Pytho
     if state.char == "memoryview":
         var b = native_loaded_module("builtins")
         if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(b.ValueError._obj_ptr) != 0:
-            cpy.PyErr_Clear()
+            cpython_table()[].PyErr_Clear()
             var message = String("could not convert string to float: ") + String(state.item)
             cpy.PyErr_SetString(b.ValueError._obj_ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
     var error = stash_python_error()

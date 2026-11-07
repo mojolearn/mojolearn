@@ -80,7 +80,7 @@ def _class_watcher() raises -> Int:
     if identifier < 0:
         # All interpreter watcher slots are taken: keep the full per-call
         # admission instead of failing the operation.
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         g[].watcher = -1
         return -1
     g[].watcher = Int(identifier)
@@ -113,7 +113,7 @@ def _class_arm(cls: PythonObject) raises -> Bool:
         # Watch refused (e.g. a sub-interpreter that does not know this
         # watcher ID): admit no record, so the caller keeps the full per-call
         # admission instead of failing the user's call.
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         return False
     return cpy.lib.get_function[Int32]("PyUnstable_Type_AssignVersionTag")(cls._obj_ptr) != 0
 

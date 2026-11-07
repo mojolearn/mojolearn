@@ -20,6 +20,7 @@ from bindings.native_posix_transport import (
     posix_close, posix_transfer, posix_spawn, posix_wait, posix_terminate,
     posix_errno, posix_failure,
 )
+from bindings.cpython_table import cpython_table
 
 
 struct TransportBoundary(Defaultable, Movable):
@@ -63,7 +64,7 @@ def transport_initialize() raises:
     ref cpy = Python().cpython()
     var owner = cpy.lib.get_function[PyObjectPtr]("PyType_GetModule")(array_type._obj_ptr)
     if not owner:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        cpython_table()[].PyErr_Clear()
         raise Error("transport: array buffers require their native type")
     if owner != array_module._obj_ptr:
         raise Error("transport: array buffer type has a different extension owner")
@@ -86,7 +87,7 @@ def _transport_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
             posix_close(state[0])
             external_call["free", NoneType](raw.value())
         else:
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+            cpython_table()[].PyErr_Clear()
     except:
         pass
     return None

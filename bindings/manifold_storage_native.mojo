@@ -59,7 +59,7 @@ struct ManifoldDevice(Movable, Writable):
             else:
                 # The previous _DevBuf finalizer silently ignored pool-release
                 # failures, including interpreter/device shutdown.
-                cpy.PyErr_Clear()
+                cpython_table()[].PyErr_Clear()
             cpy.PyErr_Restore(pending[0], pending[1], pending[2])
         except:
             pass
