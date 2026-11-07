@@ -118,15 +118,19 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     # `ensemble.tree_identical_ideas` and `ensemble.tree_moments` (bd4c36dbe)
     # are the T14 switch and its shared moment arithmetic, default OFF; with
     # the switch off the oracle's split arithmetic is unchanged.
+    # `ensemble.rf_notices` (8c177ab3b4) is the fit's user-notice bit mask
+    # (cuML's three RandomForest warnings) shared with the device fit; it
+    # imports only `std.sys.stderr`, no device or host-thread code, and a
+    # notice never moves a bit of the fit.
     # A future import needs its own sentence here before it is added.
     assert sorted(set(imports)) == [
         "checks.fixed_point", "checks.numerics", "checks.soft_f64", "core.abs_sum_blocked_host",
         "core.host_parallel", "core.host_predict_threads", "ensemble.host_layout",
-        "ensemble.nan_refusal", "ensemble.tree_identical_ideas", "ensemble.tree_moments",
+        "ensemble.nan_refusal", "ensemble.rf_notices", "ensemble.tree_identical_ideas", "ensemble.tree_moments",
         "std.builtin.sort", "std.math", "std.memory",
         "std.sys.compile",
     ], imports
-    for rel in ("ensemble/nan_refusal.mojo", "core/abs_sum_blocked_host.mojo", "checks/soft_f64.mojo",
+    for rel in ("ensemble/nan_refusal.mojo", "ensemble/rf_notices.mojo", "core/abs_sum_blocked_host.mojo", "checks/soft_f64.mojo",
                 "ensemble/tree_identical_ideas.mojo", "ensemble/tree_moments.mojo"):
         assert not GPU_IMPORTS.search(_read(rel)), f"{rel} imports a GPU module"
 
