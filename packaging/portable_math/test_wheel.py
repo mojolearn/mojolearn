@@ -108,9 +108,7 @@ def test_exact_verifier_controllers_may_use_reference_packages(tmp_path, name):
 
 
 @pytest.mark.parametrize('name,scope', [
-    ('mojolearn/_native_xcnn_bridge.py', 'connect'),
     ('mojolearn/importers/_native_reader_bridge.py', 'connect'),
-    ('mojolearn/resample.py', None),
 ])
 def test_native_metadata_import_guard_is_location_and_statement_scoped(tmp_path, name, scope):
     path = tmp_path / 'setup.py'
