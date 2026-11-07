@@ -154,6 +154,12 @@ from gaussian_process.classifier import (
 # lane fam2-kernel-gp (2026-10-04): every class in one device session.
 from gaussian_process.gpc_ovr import GPC_IDN_OVR, gpc_fit_all_device, gpc_predict_all_device
 from gaussian_process.gpr_resident import GPR_IDN_PTR, gpr_fit_ptr_device, gpr_predict_ptr_device
+from gaussian_process.gp_resident_state import (
+    GpResidentLease,
+    gp_resident_lease_open,
+    gp_resident_stats_words,
+    gpr_predict_resident_device,
+)
 # The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
 # linked into this binary because the GP factors through it; exposing the
 # one-shot host entries here adds no kernel and no second build.
@@ -924,8 +930,10 @@ def gpc_ovr_combine_binding(
 def gp_idn_caps_binding() raises -> PythonObject:
     """Bit 0: `gpc_fit_all` / `gpc_predict_all` are the route
     (`GPC_IDN_OVR`, IDENTICAL builds, on by default). Bit 1: `gpr_fit_ptr` /
-    `gpr_predict_ptr` are (`GPR_IDN_PTR`, the same)."""
-    return PythonObject((1 if GPC_IDN_OVR else 0) | (2 if GPR_IDN_PTR else 0))
+    `gpr_predict_ptr` are (`GPR_IDN_PTR`, the same). Bit 2:
+    `gp_resident_lease` / `gpr_predict_resident` exist (every device build,
+    both tiers; the host bindings register neither)."""
+    return PythonObject((1 if GPC_IDN_OVR else 0) | (2 if GPR_IDN_PTR else 0) | 4)
 
 
 def gpr_fit_ptr_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1176,6 +1184,91 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
 
 
 # ===========================================================================
+# DEVICE-RESIDENT FITTED STATE (lane ne1-a-gp-svm, 2026-11-06;
+# gaussian_process/gp_resident_state.mojo, core/fitted_resident_store.mojo).
+# The public door takes a lease once per fitted state and names it on every
+# predict; the model's fitted arrays then cross to the device once.
+# ===========================================================================
+
+
+def gp_resident_lease_binding() raises -> PythonObject:
+    """A new lease: `(owner, lease)`. `owner` is the native object whose
+    destruction frees every device copy the lease holds; the caller keeps it
+    as long as the copies may be used (bindings/fitted_resident_door.mojo)."""
+    var lease = gp_resident_lease_open()
+    var owner = PythonObject(alloc=GpResidentLease(lease))
+    return Python.tuple(owner, PythonObject(lease))
+
+
+def gp_resident_stats_binding() raises -> PythonObject:
+    """`(live leases, kept entries, kept bytes, uploads, cap bytes)` of this
+    binding's store: a test-only readout."""
+    var words = gp_resident_stats_words()
+    return Python.tuple(PythonObject(words[0]), PythonObject(words[1]), PythonObject(words[2]),
+                        PythonObject(words[3]), PythonObject(words[4]))
+
+
+def gpr_predict_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`gpr_predict_ptr` with the same `addrs` (12) in the same order and
+    `params` = gpr_predict_ptr's (7, or 10 with normalize_y, y_std, y_mean)
+    followed by ONE more word, the lease (`gp_resident_lease`); 0 names no
+    lease and uploads the model for this call only. The same outputs; the
+    model's X_train, factor and dual are read from the lease's device copies.
+    Returns `n_clamped`."""
+    if len(addrs) != 12:
+        raise Error(
+            "gpr_predict_resident: addrs must contain 12 addresses (xtrain, l,"
+            " dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
+            " std_out, clamped_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 8 and len(params) != 11:
+        raise Error(
+            "gpr_predict_resident: params must contain 8 values (n_train,"
+            " n_features, n_star, n_nodes, n_ls, return_std, info, lease), or 11"
+            " (n_train .. info, normalize_y, y_std, y_mean, lease), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var return_std = Int(py=params[5]) != 0
+    var info = Int(py=params[6])
+    var tail = len(params) == 11
+    var unnorm = tail and Int(py=params[7]) != 0
+    var y_std = Float32(Float64(py=params[8])) if tail else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[9])) if tail else Float32(0.0)
+    var lease = Int(py=params[len(params) - 1])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        n_nodes,
+        n_ls,
+        String("gpr_predict_resident"),
+    )
+    var xt_addr = Int(py=addrs[0])
+    var l_addr = Int(py=addrs[1])
+    var dual_addr = Int(py=addrs[2])
+    var xs_addr = Int(py=addrs[3])
+    var mean_addr = Int(py=addrs[8])
+    var var_addr = Int(py=addrs[9])
+    var std_addr = Int(py=addrs[10])
+    var clamped_addr = Int(py=addrs[11])
+    var n_clamped = 0
+    with GILReleased(Python()):
+        n_clamped = gpr_predict_resident_device(
+            lease, xt_addr, l_addr, dual_addr, xs_addr, n_train, n_features, n_star, spec,
+            return_std, info, unnorm, y_std, y_mean,
+            mean_addr, var_addr, std_addr, clamped_addr,
+        )
+    return PythonObject(n_clamped)
+
+
+# ===========================================================================
 # KERNEL HYPERPARAMETER OPTIMIZATION (lane/gp-optimizer, 2026-09-15;
 # on the device since cgr4-device-optim-gp, 2026-10-03). `gpr_optimize` runs
 # DEVIATION 2881's whole optimizer, every start, in one call
@@ -1348,6 +1441,11 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpc_predict_all_binding]("gpc_predict_all")
         m.def_function[gpr_fit_ptr_binding]("gpr_fit_ptr")
         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
+        # Device-resident fitted state (lane ne1-a-gp-svm).
+        _ = m.add_type[GpResidentLease]("_GpResidentLease")
+        m.def_function[gp_resident_lease_binding]("gp_resident_lease")
+        m.def_function[gp_resident_stats_binding]("gp_resident_stats")
+        m.def_function[gpr_predict_resident_binding]("gpr_predict_resident")
         # The Cholesky door (workstream D, 2026-09-14).
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch

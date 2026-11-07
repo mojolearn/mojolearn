@@ -285,7 +285,6 @@ def gpr_predict_ptr_device(
     gp_validate_kernel(kernel, n_features)
     var kss = gp_kernel_diag(kernel)
 
-    var trace = IdentityTrace()
     var ctx = _family_ctx()
     var dxs = _gpc_upload_checked(ctx, xs_addr, n_star, n_features, String("X_star"))
     var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
@@ -295,6 +294,46 @@ def gpr_predict_ptr_device(
     var dl = ctx.enqueue_create_buffer[DType.float32](n_train * n_train if return_std else 1)
     if return_std:
         ctx.enqueue_copy(dst_buf=dl, src_ptr=_GP(unsafe_from_address=l_addr))
+    var n_clamped = gpr_predict_dev(
+        ctx, dx, ddual, dl, dxs, n_train, n_features, n_star, kernel, kss,
+        return_std, unnorm, y_std, y_mean, mean_addr, var_addr, std_addr, clamped_addr,
+    )
+    _ = dx^
+    _ = dxs^
+    _ = ddual^
+    _ = dl^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
+    return n_clamped
+
+
+def gpr_predict_dev(
+    ctx: DeviceContext,
+    dx: DeviceBuffer[DType.float32],
+    mut ddual: DeviceBuffer[DType.float32],
+    mut dl: DeviceBuffer[DType.float32],
+    dxs: DeviceBuffer[DType.float32],
+    n_train: Int,
+    n_features: Int,
+    n_star: Int,
+    kernel: GPKernelSpec,
+    kss: Float32,
+    return_std: Bool,
+    unnorm: Bool,
+    y_std: Float32,
+    y_mean: Float32,
+    mean_addr: Int,
+    var_addr: Int,
+    std_addr: Int,
+    clamped_addr: Int,
+) raises -> Int:
+    """The predict launches over device copies of X_train (`dx`), the dual
+    (`ddual`), the factor (`dl`, read only with `return_std`) and the
+    checked query (`dxs`): the body `gpr_predict_ptr_device` runs after its
+    own uploads and `gpr_predict_resident_device`
+    (gaussian_process/gp_resident_state.mojo) runs over the kept copies of
+    the same bytes, so both give the same bits. Returns the clamp count."""
+    var trace = IdentityTrace()
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dkcross = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n_train, n_star))
@@ -340,11 +379,7 @@ def gpr_predict_ptr_device(
     else:
         ctx.synchronize()
 
-    _ = dx^
-    _ = dxs^
     _ = dls^
-    _ = ddual^
-    _ = dl^
     _ = dkcross^
     _ = dstack^
     _ = dmean^
@@ -354,6 +389,4 @@ def gpr_predict_ptr_device(
     _ = dclamp^
     _ = dcnt^
     _ = hcnt^
-    # DEVIATION 1946: the context dies LAST.
-    _ = ctx^
     return n_clamped
