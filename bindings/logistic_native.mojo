@@ -544,6 +544,8 @@ def logistic_proba(model: PythonObject, fields: PythonObject, mut entries: Pytho
 def logistic_log_proba(model: PythonObject, fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict_log_proba`: `_log_or_inf` of every probability in the
     estimators binding (py2mojo_rows ROWS_LOG)."""
+    if not py_contains(fields, "_w"):
+        raise Error("mojolearn LogisticRegression: call fit first")
     var entries = _entries(model, fields, context)
     var flags = py_get(entries, "py2mojo_linear_flags")
     var bits = Int(py=py_call_typed(flags)) if flags is not None else 0
