@@ -36,7 +36,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.parallel_public_result import parallel_public_result
-from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit
+from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common import family_call, family_as_f32, family_view, family_f32_snapshot
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
@@ -1089,8 +1089,13 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         raise error^
     var outputs = b.list()
     var diagnostics = b.list()
+    var radius = String(method) == "radius_neighbors"
     for r in range(len(results)):  # driver-loop: one result and diagnostic per query row block
-        _ = py_call(outputs.append, results[r][0])
+        if radius:
+            # N451: the worker sent its CSR triple; the ragged rows are built here once
+            _ = py_call(outputs.append, neighbor_radius_rows(results[r][0], context))
+        else:
+            _ = py_call(outputs.append, results[r][0])
         var record = b.dict()
         py_setitem(record, "start", ranges[2 * r])
         py_setitem(record, "end", ranges[2 * r + 1])

@@ -132,6 +132,11 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
 
 def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
             binding: PythonObject, tables: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The worker's radius query as its CSR triple (lane ne2-i-j, plan row
+    N451): `(row offsets int32 [nq + 1], ids int64 [nnz], distances float32
+    [nnz], return_distance)`. The ragged per-row Arrays are built once in the
+    parent (`neighbor_radius_rows`), so the reply carries three buffers, not
+    one or two Python Arrays per query row."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
@@ -185,6 +190,24 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
         ids = sorted_ids
         dist = sorted_dist
     var wide = _wide(ids, Python.tuple(nnz), context)
+    return Python.tuple(ptr, wide, dist, distances)
+
+
+def neighbor_radius_rows(triple: PythonObject, context: PythonObject) raises -> PythonObject:
+    """One query shard's radius result from its CSR triple (`_radius`): the
+    ragged rows the worker used to return, `(distance rows, id rows)` with
+    `return_distance`, else the id rows. The same copies of the same words:
+    one output Array per query row (the ragged radius contract)."""
+    var b = native_loaded_module("builtins")
+    if py_type(triple) is not b.tuple or len(triple) != 4:
+        raise Error("RuntimeError: radius worker returned an invalid result")
+    var ptr = triple[0]
+    var wide = triple[1]
+    var dist = triple[2]
+    var distances = Bool(py=triple[3])
+    var nq = Int(py=ptr.shape[0]) - 1
+    if nq < 0:
+        raise Error("RuntimeError: radius worker returned no row offsets")
     var rows = _ragged_rows(wide, ptr, nq, context)
     var drows = _ragged_rows(dist, ptr, nq, context) if distances else Python.list()
     _ = ptr
