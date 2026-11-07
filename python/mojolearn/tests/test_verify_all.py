@@ -1276,12 +1276,15 @@ def test_gpu_sweep_skips_structurally_inapplicable_execution(vendor, depth, incl
         assert "no-ref" in lanes, "lack of reference must not hide an applicable lane"
 
 
-def test_gpu_parallel_diagnostics_remain_explicitly_selectable():
+def test_retired_gpu_parallel_lanes_are_selectable_and_read_not_applicable():
+    # Multi-GPU verification was retired (2026-10-31): a par-* lane asked for
+    # by name is still selected, and reads not applicable with the retirement
+    # as its reason.
     lanes, _ = va.select_lanes(_FakeHarness, _fake_table(), "apple", "full", ["par-forest"])
     assert lanes == ["par-forest"]
     exposure = va.host_surface().lane_exposure(lanes, "apple")
     assert exposure["par-forest"]["status"] == va.LANE_NOT_APPLICABLE
-    assert "physical multi-device identity" in exposure["par-forest"]["reason"]
+    assert "multi-GPU verification is retired" in exposure["par-forest"]["reason"]
 
 
 @pytest.mark.parametrize("argv", [["verify", "--par"], ["verify", "--par", "quick"],
