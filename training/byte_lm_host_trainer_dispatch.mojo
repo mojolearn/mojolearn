@@ -99,6 +99,12 @@ def host_trainer_run(a: List[Int], cfg: ByteConfig, opt: List[Float64], complete
         loss = host_loss_bits(byte_host_train_native([Int(p.unsafe_ptr()), Int(m.unsafe_ptr()), Int(v.unsafe_ptr()),
             a[4], Int(grad.unsafe_ptr()), Int(out_p.unsafe_ptr()), Int(out_m.unsafe_ptr()), Int(out_v.unsafe_ptr())],
             cfg, opt, completed))
+        # p, m and v are read through their addresses only: without these
+        # their last use is `unsafe_ptr()` above and ASAP destruction may
+        # free them before the step reads them (a NaN step from freed memory).
+        _ = p^
+        _ = m^
+        _ = v^
         host_state_validate(out_p, out_m, out_v, flags, completed + 1)
         host_state_finite(grad, "returned gradient")
         host_copy_f32(a[8], grad)
