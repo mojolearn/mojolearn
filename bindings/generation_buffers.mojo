@@ -212,12 +212,44 @@ def generation_address(value: PythonObject, mut keep: List[PythonObject]) raises
     var format = String(view.format)
     if format != "f" and format != "i" and format != "b":
         raise Error("generation: unsupported native model buffer format " + format)
+    return _generation_pack_foreign(view, format, keep)
+
+
+def _generation_pack_foreign(view: PythonObject, format: String, mut keep: List[PythonObject]) raises -> Int:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var packed = native_array_zeros(format, Int(py=view.nbytes) // Int(py=view.itemsize))
     var destination = py_call(py_call(g[].bi.memoryview, packed).cast, "B")
     py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.cast, "B"))
     keep.append(view)
     keep.append(packed)
     return Int(py=packed.buffer_info()[0])
+
+
+def generation_weight_address(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
+    # Row N200 (foreign weights): the address of a model weight that every
+    # kernel only reads. A C-contiguous foreign buffer (ndarray, array.array,
+    # memoryview) aligned for its item width is read in place through the
+    # private memoryview kept in `keep` (formerly copied whole into a new
+    # native store on every call). Never use this for an output or a state
+    # buffer: a kernel write would then reach the caller's buffer, where the
+    # copy used to absorb it. Array weights take the snapshot path as before.
+    if value is None:
+        return 0
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if py_type(value) is g[].array_cls:
+        return generation_address(value, keep)
+    var view = generation_buffer_view(value)
+    if not Bool(py=view.c_contiguous):
+        raise Error("generation: internal model and state buffers must be C-contiguous")
+    var format = String(view.format)
+    if format != "f" and format != "i" and format != "b":
+        raise Error("generation: unsupported native model buffer format " + format)
+    var itemsize = Int(py=view.itemsize)
+    var address = native_buffer_address(view)
+    if address != 0 and (itemsize == 1 or address % itemsize == 0):
+        keep.append(view)
+        return address
+    return _generation_pack_foreign(view, format, keep)
 
 
 def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -> PythonObject:

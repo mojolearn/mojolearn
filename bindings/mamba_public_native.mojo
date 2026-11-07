@@ -27,7 +27,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.generation_buffers import (
-    GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, py_ints,
+    GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints,
 )
 from bindings.causal_lm_public import _native_function, _native_entry_fields, _native_has_entry, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block
@@ -393,7 +393,7 @@ def mamba3_install_owned(mut mods: NativeModules, block: PythonObject, context: 
     var keep = List[PythonObject]()
     var addresses = py_ints([])
     for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
-        _ = py_call(addresses.append, generation_address(weights[i], keep))
+        _ = py_call(addresses.append, generation_weight_address(weights[i], keep))
     var generation = PythonObject(None)
     var native = py_get(fields, "_native_mamba_block_provider_cache")
     if neural_descriptor_matches(native, canonical):
@@ -755,7 +755,7 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
         # The weights, then the state pieces, as the retired session opened them.
         var addresses = py_ints([])
         for i in range(len(weights)):  # driver-loop: over block weight slots
-            _ = py_call(addresses.append, generation_address(weights[i], keep))
+            _ = py_call(addresses.append, generation_weight_address(weights[i], keep))
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
             _ = py_call(addresses.append, pieces[i])
         var params = py_ints([handle.plan.b, handle.plan.d_model])
@@ -802,7 +802,7 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             mods.released()
         # The host arm owns typed copies, the device arm's upload on the host.
         for i in range(len(weights)):  # driver-loop: over block weight slots
-            handle.plan.weights.append(mamba_host_copy(generation_address(weights[i], keep), Int(py=weights[i].size)))
+            handle.plan.weights.append(mamba_host_copy(generation_weight_address(weights[i], keep), Int(py=weights[i].size)))
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
             handle.plan.parts.append(mamba_host_copy(pieces[i], _count(handle.plan.dims[i])))
     handle.plan.open = True

@@ -35,7 +35,7 @@ from providers.python.generation_metadata_pyapi import (
 )
 from std.memory import memcpy, memset_zero
 from bindings.generation_buffers import (
-    GENERATION_BOUNDARY, generation_array, generation_address, generation_copy, generation_mutable,
+    GENERATION_BOUNDARY, generation_array, generation_address, generation_weight_address, generation_copy, generation_mutable,
     generation_ids, generation_initialize_binding, generation_array_context, generation_array_snapshot, generation_buffer_view, py_ints,
 )
 from bindings.native_array_snapshot import native_array_slots, NativeArrayAdmission
@@ -650,6 +650,12 @@ def _addr(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
     return generation_address(value, keep)
 
 
+def _weight_addr(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
+    # Model weights only (read by every kernel, never written): a foreign
+    # buffer is read in place instead of copied per call (row N200).
+    return generation_weight_address(value, keep)
+
+
 def _mutable(
     value: PythonObject, expected: List[Int], mut keep: List[PythonObject], mut copies: List[PythonObject],
     name: String = "",
@@ -674,19 +680,19 @@ def _transformer_arg_words(
     addresses.append(_addr(x, keep))
     var weights = blk["_w"]
     for j in range(len(weights)):  # driver-loop: over block weight slots
-        addresses.append(0 if planes and j >= 2 else _addr(weights[j], keep))
+        addresses.append(0 if planes and j >= 2 else _weight_addr(weights[j], keep))
     addresses.append(_addr(st.k_cache, keep))
     addresses.append(_addr(st.v_cache, keep))
     addresses.append(_addr(y, keep))
     var optional = blk["_wopt"]
     for j in range(len(optional)):  # driver-loop: over optional block weight slots
-        addresses.append(_addr(optional[j], keep))
+        addresses.append(_weight_addr(optional[j], keep))
     if planes:
         var packed = blk["_int15"]
         for j in range(len(packed)):  # driver-loop: over packed block weight slots
             var trip = packed[j]
             for k in range(3):  # small-loop(int15 plane triple)
-                addresses.append(0 if trip is None else _addr(trip[k], keep))
+                addresses.append(0 if trip is None else _weight_addr(trip[k], keep))
     return addresses^
 
 
@@ -1902,12 +1908,12 @@ def _resident_open_all(mut mods: NativeModules,
                 mods.released()
         # A model without a final norm passes 0 (admitted only under
         # MOJOLEARN_IDN_LM_RESIDENT_GENERATE; see `_resident_norm_ok`).
-        var top = py_ints([_addr(model._embed, keep), 0 if model._norm is None else _addr(model._norm, keep)])
+        var top = py_ints([_weight_addr(model._embed, keep), 0 if model._norm is None else _weight_addr(model._norm, keep)])
         if int15:
             for i in range(3):  # small-loop(int15 head plane triple)
-                _ = py_call(top.append, _addr(model._head_int15[i], keep))
+                _ = py_call(top.append, _weight_addr(model._head_int15[i], keep))
         else:
-            _ = py_call(top.append, 0 if model._head is model._embed else _addr(model._head, keep))
+            _ = py_call(top.append, 0 if model._head is model._embed else _weight_addr(model._head, keep))
         var tp = py_ints([b, Int(py=model.vocab_size), Int(py=model.d_model)])
         _ = py_call(tp.append, model.norm_eps)
         var provider = py_get(e, "native_block_operations")
