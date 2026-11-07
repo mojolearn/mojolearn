@@ -9,6 +9,7 @@ import math  # exact integer exports only; see the connect_module('math', ...) c
 import numbers
 import operator
 import os
+import posix
 import sys
 import types
 import warnings
@@ -95,6 +96,10 @@ connect_module('operator', operator, tuple(name for name in vars(operator)  # gl
 connect_module('math', math, ('floor', 'ceil', 'comb'))
 connect_module('itertools', itertools, tuple(name for name in vars(itertools) if not name.startswith('_')))  # glue: fixed native iterator types
 connect_module('os', os, ('stat', 'urandom', 'getcwd'))
+# The Samba checkpoint file calls (bindings/samba_checkpoint_native.mojo): one
+# exclusive create, fsync, close and rename per save, fstat per load.
+connect_module('posix', posix, ('open', 'close', 'fsync', 'rename', 'unlink', 'urandom', 'fstat',
+                                'O_WRONLY', 'O_CREAT', 'O_EXCL'))
 connect_module('types', types, ('ModuleType', 'SimpleNamespace', 'MemberDescriptorType', 'MethodDescriptorType',
                                 'MethodType', 'BuiltinFunctionType'))
 connect_module('warnings', warnings, ())  # warning filters are mutable native configuration, validated by their owner

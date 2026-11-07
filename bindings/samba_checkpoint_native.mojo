@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native, bounded streaming for the existing Samba v2 checkpoint format."""
+from std.ffi import external_call
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path, native_path_exists, native_json_parse
@@ -9,7 +10,8 @@ from bindings.causal_checkpoint import checkpoint_array
 from bindings.samba_state_native import samba_snapshot, samba_from_state, _samba_registry
 from bindings.samba_config_native import samba_config_from_dict
 from bindings.sha256_door import sha256_update, sha256_digest
-from core.sha256 import Sha256
+from core.sha256 import Sha256, sha256_hex_addr
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 
 
@@ -59,6 +61,25 @@ def _checkpoint_digest(raw: PythonObject) raises -> PythonObject:
     return PythonObject(hash.hexdigest())
 
 
+def _checkpoint_write(fd: Int, address: Int, count: Int, mut written: Sha256, mut whole: Sha256) raises:
+    """Write `count` bytes at `address` to `fd` in bounded chunks with the
+    libc `write` (non-variadic), hashing each chunk into `written` and
+    `whole` from the same bytes as it is written (row N168: formerly a slice
+    object, a Python `stream.write` and two `array('B')` copies per MiB)."""
+    var start = 0
+    while start < count:  # driver-loop: over bounded file write chunks
+        var size = min(SAMBA_TRANSFER_CHUNK, count - start)
+        var done = 0
+        while done < size:  # driver-loop: over partial writes of one chunk
+            var put = external_call["write", Int](Int32(fd), address + start + done, size - done)
+            if put <= 0:
+                raise Error("OSError: Samba checkpoint short write")
+            done += put
+        written.update(address + start, size)
+        whole.update(address + start, size)
+        start += size
+
+
 def _checkpoint_validate(metadata: PythonObject, descriptors: PythonObject, context: PythonObject) raises:
     var bi = native_loaded_module("builtins")
     if py_type(metadata) is not bi.dict or String(py_get(metadata, "schema")) != "mojolearn.samba-stack-state.v1" or String(py_get(metadata, "profile")) != "mojolearn.samba-stack.fp32.v1":
@@ -98,7 +119,7 @@ def _checkpoint_validate(metadata: PythonObject, descriptors: PythonObject, cont
 def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: PythonObject) raises -> PythonObject:
     var state = samba_snapshot(model, False, context)
     var bi = native_loaded_module("builtins")
-    var os = Python.import_module("posix")
+    var os = native_loaded_module("posix")
     var path = _checkpoint_path(value)
     var names = _checkpoint_names()
     var metadata = py_call(bi.dict, state)
@@ -113,7 +134,9 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
         py_setitem(entry, "dtype", "<i4" if i == 3 else "<f4")
         py_setitem(entry, "shape", py_call(bi.list, state[name].shape))
         py_setitem(entry, "nbytes", len(raw))
-        py_setitem(entry, "sha256", _checkpoint_digest(raw))
+        var pin = AdmittedBorrowedBuffer(raw)
+        py_setitem(entry, "sha256", PythonObject(sha256_hex_addr(pin.layout.value().address, len(raw))))
+        pin.release()
         _ = py_call(views.append, raw)
         _ = py_call(descriptors.append, entry)
     _checkpoint_validate(metadata, descriptors, context)
@@ -128,40 +151,35 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
     sha256_update(header_hash, header)
     var prefix = _checkpoint_magic() + py_call(PythonObject(len(header)).to_bytes, 8, "little") + header + sha256_digest(header_hash)
     var temporary = path + PythonObject(".tmp-") + py_call(os.urandom, 12).hex()
-    var stream = PythonObject(None)
+    var fd = -1
     var created = False
     var whole = _checkpoint_hash()
     try:
-        var fd = py_call(os.open, temporary, Int(py=os.O_WRONLY) | Int(py=os.O_CREAT) | Int(py=os.O_EXCL), 384)
+        # The exclusive create, fsync, close and rename stay one posix call
+        # each per save; every byte goes through the native write below.
+        fd = Int(py=py_call(os.open, temporary, Int(py=os.O_WRONLY) | Int(py=os.O_CREAT) | Int(py=os.O_EXCL), 384))
         created = True
-        try:
-            stream = py_call(bi.open, fd, "wb")
-        except error:
-            _ = py_call(os.close, fd)
-            raise error
-        if Int(py=py_call(stream.write, prefix)) != len(prefix):
-            raise Error("OSError: Samba checkpoint short header write")
-        sha256_update(whole, prefix)
+        var header_written = _checkpoint_hash()
+        var prefix_pin = AdmittedBorrowedBuffer(prefix)
+        _checkpoint_write(fd, prefix_pin.layout.value().address, len(prefix), header_written, whole)
+        prefix_pin.release()
         for i in range(4):  # driver-loop: over stored training-state arrays
             var raw = views[i]
             var written = _checkpoint_hash()
-            for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file write chunks
-                var chunk = raw[py_call(bi.slice, start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))]
-                if Int(py=py_call(stream.write, chunk)) != len(chunk):
-                    raise Error("OSError: Samba checkpoint short write")
-                sha256_update(written, chunk)
-                sha256_update(whole, chunk)
+            var pin = AdmittedBorrowedBuffer(raw)
+            _checkpoint_write(fd, pin.layout.value().address, len(raw), written, whole)
+            pin.release()
             if Bool(py=PythonObject(written.hexdigest()) != descriptors[i]["sha256"]):
                 raise Error("Samba checkpoint state changed during save")
-        stream.flush()
-        _ = py_call(os.fsync, stream.fileno())
-        stream.close()
-        stream = PythonObject(None)
+        _ = py_call(os.fsync, fd)
+        var closing = fd
+        fd = -1
+        _ = py_call(os.close, closing)
         _ = py_call(os.rename, temporary, path)
         created = False
     except error:
-        if stream is not None:
-            stream.close()
+        if fd >= 0:
+            _ = py_call(os.close, fd)
         if created:
             _ = py_call(os.unlink, temporary)
         raise error
@@ -194,7 +212,7 @@ def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises 
     var expected = len(_checkpoint_magic()) + 8 + length + 32
     for i in range(4):  # driver-loop: over stored array spans
         expected += Int(py=descriptors[i]["nbytes"])
-    if Int(py=py_call(Python.import_module("posix").fstat, stream.fileno()).st_size) != expected:
+    if Int(py=py_call(native_loaded_module("posix").fstat, stream.fileno()).st_size) != expected:
         raise Error("Samba checkpoint truncated or trailing array data")
     for i in range(4):  # driver-loop: over admitted complete training-state arrays
         var entry = descriptors[i]
