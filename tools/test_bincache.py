@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -707,6 +708,34 @@ class LocalCacheTests(unittest.TestCase):
         self.assertTrue(self.rows()[-1][2].startswith("rejected:sha256 mismatch"), self.rows()[-1][2])
         self.assertTrue((c / "ran.txt").exists(), "a corrupt archive must fall back to a real build")
         self.assertEqual((c / self.OUT).read_bytes(), built)
+
+    def test_an_archive_names_its_commit_and_a_hit_records_that_compile(self):
+        # tools/release_requirements_macos_build.py admits a placed group from
+        # these records: the archive's source_commit/built/build_seconds/builder
+        # and the hit's placements.jsonl line naming the same compile.
+        a = self.tree()
+        git = ["git", "-C", str(a), "-c", "user.email=fixture@example.invalid", "-c", "user.name=Fixture"]
+        subprocess.run(git + ["init", "-q"], check=True)
+        subprocess.run(git + ["add", "."], check=True)
+        subprocess.run(git + ["commit", "-qm", "fixture"], check=True)
+        head = subprocess.check_output(git + ["rev-parse", "HEAD"], text=True).strip()
+        self.assertEqual(bc.head_commit(a), head)
+        self.assertEqual(bc.head_commit(self.base), "", "not a checkout: no commit")
+        self.assertEqual(self.build(a), 0)
+        self.assertEqual(self.rows()[-1][2], "miss+built-cached")
+        key = self.rows()[-1][3]
+        with tarfile.open(self.cache / (key + ".tar.gz"), "r:gz") as tf:
+            manifest = json.loads(tf.extractfile("manifest.json").read())
+        self.assertEqual(manifest["source_commit"], head)
+        b = self.tree()
+        self.assertEqual(self.build(b), 0)
+        self.assertEqual(self.rows()[-1][2], "hit")
+        lines = [json.loads(l) for l in (self.cache / "provenance" / "placements.jsonl").read_text().splitlines()]
+        self.assertEqual(len(lines), 1)
+        self.assertEqual((lines[0]["key"], lines[0]["outcome"], lines[0]["archive_source_commit"],
+                          lines[0]["archive_built"], lines[0]["archive_build_seconds"], lines[0]["archive_builder"]),
+                         (key, "hit", head, manifest["built"], manifest["build_seconds"], manifest["builder"]))
+        self.assertEqual(lines[0]["files"], [dict(path=self.OUT, sha256=bc.sha256_file(b / self.OUT))])
 
     def test_only_the_declared_output_is_archived(self):
         # The release script runs builds side by side in ONE tree, so a .so
