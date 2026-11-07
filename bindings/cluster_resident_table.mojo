@@ -22,19 +22,19 @@ Rules (plan section 2A):
 - Bounded: at most `CRES_HELD_MAX` entries and `CRES_HELD_BYTES` bytes; the
   least recently used entry is released first, and an evicted model uploads
   again at its next call.
-- Model death: `cres_forget_key(model_key)` drops every family's entry
-  (to be called by the records module's release, OWED-SHARED to
-  ne1-e-records); until that hook is wired a dead model's entry is released
-  by the bound above. Its held objects keep their addresses taken, so a new
-  model at the same address can never be served the old copy.
+- Model death: `cres_forget_key(model_key)` drops every family's entry. It
+  is registered once with the records module
+  (`records_register_release_hook`, bindings/native_model_records.mojo) the
+  first time this table is reached, and the records module's
+  `records_release` calls it with the dead model's key. Held objects keep
+  their addresses taken, so a new model at the same address can never be
+  served the old copy.
 - Nothing here computes on data: the device copy is the same bytes."""
 from std.ffi import _Global
 from std.python import Python, PythonObject
-from bindings.family_common import family_call
-from bindings.py_balanced import py_type
-from bindings.native_loaded_module import native_loaded_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
-from bindings.native_model_records import model_identity_key, model_generation
+# Imports: std and the records module's contract only (the records module
+# reaches this table through its release hook, never by import).
+from bindings.native_model_records import model_identity_key, model_generation, records_register_release_hook
 
 comptime CRES_X_CLUSTER = 1
 """Family code: x_cluster `cluster_centers_` (MiniBatchKMeans, BisectingKMeans,
@@ -80,34 +80,33 @@ struct CresTable(Defaultable, Movable):
     var entries: Dict[Int, CresHeld]
     var tick: Int
     var bytes: Int
+    # The once-flag of the release-hook registration.
+    var hooked: Bool
 
     def __init__(out self):
         self.entries = Dict[Int, CresHeld]()
         self.tick = 0
         self.bytes = 0
+        self.hooked = False
 
 
-comptime _CRES = _Global[StorageType=CresTable, name="MojolearnClusterResidentHeldV1", init_fn=CresTable.__init__]
-
-
-def cres_optional_entry(binding: PythonObject, name: String) raises -> PythonObject:
-    """The compiled resident door `name` of `binding`, or None: a binding
-    that is not an exact compiled module (a host binding proxy) or that
-    does not export the door keeps the per-call route."""
-    if py_type(binding) is not py_type(native_loaded_module("builtins")):
-        return PythonObject(None)
-    return neural_descriptor_entry(binding, name, False)
+comptime _CRES = _Global[StorageType=CresTable, name="MojolearnClusterResidentHeldV2", init_fn=CresTable.__init__]
 
 
 def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:
-    return _CRES.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var t = _CRES.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if not t[].hooked:
+        # Set first: registering may run a release that reaches this table.
+        t[].hooked = True
+        records_register_release_hook(cres_forget_key)
+    return t
 
 
 def _release_quiet(var held: CresHeld):
     """The minting binding's release entry on the handle; quiet for a
     binding that cannot be reached any more."""
     try:
-        _ = family_call(held.release, PythonObject(held.handle))
+        _ = held.release(PythonObject(held.handle))
     except:
         pass
     _ = held^
