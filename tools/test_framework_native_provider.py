@@ -192,7 +192,7 @@ def test_cpu_byte_lm_owner_uses_same_native_transport_without_python_proxy():
             assert forbidden not in source
     table = (ROOT / 'training/byte_lm_host_trainer_dispatch.mojo').read_text()
     assert '"mojolearn.training.byte_lm.v1"' in table
-    assert 'BYTE_HOST_TRAINER_COUNT = 12' in table
+    assert 'BYTE_HOST_TRAINER_COUNT = 13' in table
     assert 'host_trainer_recover(owner, completed)' in table
     bridge = (ROOT / 'python/mojolearn/_byte_lm_trainer_host.py').read_text()
     assert 'class _HostTrainerBinding' not in bridge and 'class _Session' not in bridge

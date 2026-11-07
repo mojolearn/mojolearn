@@ -107,3 +107,5 @@ GenerationStream.info	native generation stream metadata; current cross-vendor qu
 GenerationStream.state_dict	native generation stream checkpoint; current cross-vendor qualification pending
 mojolearn.ops.Session.rms_norm
 mojolearn.ops.Session.rotary
+SmallByteLanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
+LanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet

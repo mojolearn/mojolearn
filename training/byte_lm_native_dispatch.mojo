@@ -8,7 +8,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_binding_impl import ByteLMSession
 from training.byte_lm_native_status import byte_lm_status
-from training.byte_lm_session_ops import byte_owner_step, byte_owner_logits, byte_owner_export_state, byte_owner_export_gradients, byte_scatter_named
+from training.byte_lm_session_ops import byte_owner_step, byte_owner_steps, byte_owner_logits, byte_owner_export_state, byte_owner_export_gradients, byte_scatter_named
 from training.byte_lm_binding_impl import _validate_slot_table
 from training.byte_lm_stateless_run import byte_lm_run_native, byte_lm_run_finalize
 from training.byte_lm_config import ByteConfig
@@ -20,7 +20,11 @@ from training.byte_lm import byte_validate_optimizer
 from training.byte_lm_logits import BYTE_LOGITS_MAX_BATCH, BYTE_LOGITS_MAX_CELLS
 
 comptime BYTE_LM_NATIVE_ABI_NAME = "mojolearn.training.byte_lm.v1"
-comptime BYTE_LM_NATIVE_OPERATION_COUNT = 12
+# Operation 12 (2026-11-07, plan section 2C): `n_steps` training steps on an
+# open session from its admitted configuration; a = [session, ids, losses,
+# flags], p = [n_steps, completed], no scalars.
+comptime BYTE_LM_OPERATION_STEPS = 12
+comptime BYTE_LM_NATIVE_OPERATION_COUNT = 13
 
 
 def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -58,6 +62,13 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
         out[2] = Int(owner[].usable)
         out[3] = Int(Bool(owner[].trainer))
         return 4
+    if op == BYTE_LM_OPERATION_STEPS:
+        if len(a) != 4 or len(p) != 2 or len(f) != 0:
+            raise Error("byte LM native ABI: invalid multi-step descriptor")
+        if p[1] < 0 or p[1] >= 1000000:
+            raise Error("byte LM: completed step outside admitted bound")
+        var step_addresses: List[Int] = [a[1], a[2], a[3]]
+        return byte_owner_steps(owner[], step_addresses, p[0], p[1])
     if len(p) != 17 or len(f) != 8:
         raise Error("byte LM native ABI: invalid configuration descriptor")
     if p[9] != 0 and p[9] != 1:

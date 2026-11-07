@@ -12,7 +12,10 @@ from training.byte_lm_host_session import ByteHostSession, host_optimizer, host_
 from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native
 
 comptime BYTE_HOST_TRAINER_ABI = "mojolearn.training.byte_lm.v1"
-comptime BYTE_HOST_TRAINER_COUNT = 12
+# Operation 12: the multi-step entry (the host column of the device table's
+# operation 12; a = [session, ids, losses, flags], p = [n_steps, completed]).
+comptime BYTE_HOST_TRAINER_STEPS = 12
+comptime BYTE_HOST_TRAINER_COUNT = 13
 
 
 def host_trainer_recover(mut owner: ByteHostSession, completed: Int):
@@ -138,6 +141,17 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
         for i in range(4, count):  # driver-loop: over CPU attention-stage metadata (no device stash)
             out[i] = 0
         return count
+    if op == BYTE_HOST_TRAINER_STEPS:
+        if len(a) != 4 or len(p) != 2 or len(f) != 0 or p[1] < 0 or p[1] >= 1000000:
+            raise Error("byte LM native ABI: invalid multi-step descriptor")
+        try:
+            return owner[].steps([a[1], a[2], a[3]], p[0], p[1])
+        except error:
+            # `step` replaces the state only on success: the session stands
+            # at the last committed step, which recovery keeps.
+            var standing = owner[].completed
+            host_trainer_recover(owner[], standing)
+            raise error
     if len(p) != 17 or len(f) != 8 or (p[9] != 0 and p[9] != 1):
         raise Error("byte LM native ABI: invalid configuration descriptor")
     var cfg = ByteConfig(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9] == 1)
@@ -200,7 +214,8 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
             owner[].close()
         return step
     if op == 2 or op == 6:
-        if len(addresses) != 6:
+        # A seventh address (next bytes only): the ragged row lengths.
+        if len(addresses) != 6 and not (op == 6 and len(addresses) == 7):
             raise Error("byte LM trainer: expected 6 addresses")
         host_tokens(addresses[0], p[14] * p[15], cfg.vocab_size)
         if not owner[].opened:
@@ -208,6 +223,8 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
                 raise Error("byte LM: session is not open")
             _ = owner[].open([addresses[3], addresses[4], addresses[5], addresses[2]], cfg, opt, p[11])
         try:
+            if len(addresses) == 7:
+                return owner[].next_rows([addresses[0], addresses[1]], addresses[6], p[14], p[15], cfg, p[11])
             return owner[].logits([addresses[0], addresses[1]], p[14], p[15], cfg, p[11], op == 6)
         except error:
             if owner[].opened and (not owner[].usable or owner[].completed != p[11]):

@@ -8,6 +8,7 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_io import all_finite_f32_scan
 from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native, byte_host_next_native
 from core.training_state_validation import training_admit_moments_and_flags
+from core.host_helpers_impl import argmax_rows_f32
 
 
 def host_state_finite(values: List[Float32], name: String) raises:
@@ -240,6 +241,38 @@ struct ByteHostSession(Movable, Writable):
         MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=a[2])[0] = UInt32(loss)
         return self.completed
 
+    def steps(mut self, a: List[Int], n_steps: Int, completed: Int) raises -> Int:
+        """The host column of device operation 12: `n_steps` training steps
+        from the shape, optimizer and flags this session admitted at open.
+        a = [in_ids_i32 (n_steps batches of batch * (length + 1), one after
+        the other), out_loss (n_steps), out_flags_i32 (n_tensors)]. Every
+        batch is admitted first; the steps run in order through `step`, so
+        the bits equal those of n_steps single steps. A failure in step k
+        leaves the k earlier steps committed. Returns completed + n_steps."""
+        self.require_open()
+        if len(a) != 3 or a[0] == 0 or a[1] == 0 or a[2] == 0:
+            raise Error("byte LM: the multi-step entry expects three non-null addresses")
+        if n_steps < 1:
+            raise Error("byte LM trainer: the multi-step entry requires n_steps >= 1")
+        if completed != self.completed:
+            raise Error("byte LM: resident completed-step mismatch")
+        if completed + n_steps > 999999:
+            raise Error("byte LM: completed step outside admitted bound")
+        if len(self.shape) != 10:
+            raise Error("byte LM: resident model shape mismatch")
+        var cfg = ByteConfig(self.shape[0], self.shape[1], self.shape[2], self.shape[3], self.shape[4],
+            self.shape[5], self.shape[6], self.shape[7], self.shape[8], self.shape[9] == 1)
+        var opt = self.optimizer.copy()
+        var n_ids = cfg.batch * (cfg.length + 1)
+        for k in range(n_steps):  # driver-loop: over the training steps of one call
+            host_tokens(a[0] + k * n_ids * 4, n_ids, cfg.vocab_size)
+        host_copy_i32(a[2], self.flags)
+        var step = completed
+        for k in range(n_steps):  # driver-loop: over the training steps of one call
+            var flags_in = Int(self.flags.unsafe_ptr())
+            step = self.step([a[0] + k * n_ids * 4, flags_in, a[1] + k * 4, a[2]], cfg, opt, step)
+        return step
+
     def evaluate(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
         if len(a) != 3 or a[2] == 0:
             raise Error("byte LM: byte_lm_session_eval expects three non-null addresses")
@@ -284,6 +317,40 @@ struct ByteHostSession(Movable, Writable):
         host_state_finite(self.grad, "returned gradient")
         host_copy_f32(address, self.grad)
         return self.grad_step
+
+    def next_rows(self, a: List[Int], lengths_addr: Int, batch: Int, length: Int, cfg: ByteConfig,
+                  completed: Int) raises -> Int:
+        """The host column of the ragged device greedy pick (plan rows N091,
+        N092): the full logits through `byte_host_logits_native` (the same
+        arithmetic as `logits`), then each row's first-max argmax at its last
+        real position lengths[b] - 1 (`argmax_rows_f32`, the rule the
+        binding applied on the host before). a = [ids, out int32 (batch)];
+        `lengths_addr` holds batch int32 lengths in [1, length]."""
+        self.require_shape(cfg, completed)
+        if len(a) != 2 or a[1] == 0 or lengths_addr == 0:
+            raise Error("byte LM: next bytes expects non-null ids, output and lengths")
+        host_tokens(a[0], batch * length, cfg.vocab_size)
+        var lengths = read_i32(lengths_addr, batch)
+        for row in range(batch):  # driver-loop: over the admitted row lengths
+            if lengths[row] < 1 or Int(lengths[row]) > length:
+                raise Error("byte LM next bytes: row length outside [1, length]")
+        var vocab = cfg.vocab_size
+        var count = batch * length * vocab
+        var full = List[Float32](length=count, fill=Float32(0))
+        var descriptors: List[Int] = [Int(self.p.unsafe_ptr()), a[0], Int(full.unsafe_ptr())]
+        if byte_host_logits_native(descriptors, [batch, length], cfg, 0, 1) != count:
+            raise Error("byte LM logits: wrong logits length")
+        if not all_finite_f32_scan(f32_ptr(Int(full.unsafe_ptr())), count):
+            raise Error("byte LM logits: nonfinite logit")
+        var picked = List[Int64](length=batch, fill=0)
+        var out = i32_ptr(a[1])
+        for row in range(batch):  # driver-loop: over the batch rows (one argmax row each)
+            var base = (row * length + Int(lengths[row]) - 1) * vocab
+            argmax_rows_f32(f32_ptr(Int(full.unsafe_ptr()) + base * 4), 1, vocab,
+                            MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(picked.unsafe_ptr()) + row * 8))
+            out[row] = Int32(picked[row])
+        _ = full^
+        return batch
 
     def logits(self, a: List[Int], batch: Int, length: Int, cfg: ByteConfig,
                completed: Int, next_bytes: Bool) raises -> Int:

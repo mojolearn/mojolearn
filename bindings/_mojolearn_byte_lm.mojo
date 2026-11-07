@@ -42,6 +42,7 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from training.byte_lm_binding_impl import (
     ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
     _span_cells, _validate_addresses, _read_f32, _require_inputs_unchanged, _write_f32,
@@ -225,7 +226,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     var completed = _params_completed(params)
     var cfg = _params_optimizer(params)
     var addr = _read_addresses(addresses, 11)
-    var locked_teardown = String(getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")) == "1"
+    var locked_teardown = byte_lm_teardown_with_gil()
     var result = 0
     with GILReleased(Python()):
         result = byte_lm_run_native(addr, action, completed, cfg, shape, session, retain, locked_teardown)
@@ -1092,17 +1093,12 @@ def byte_lm_model_pool_export_binding(session: PythonObject, addresses: PythonOb
     for i in range(count):  # small-loop(count: one or four exported arrays): per array slot sizes, no data
         cells.append(owner[].config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr,cells,0)
+    # N156: each array goes straight into the caller's memory (export_into);
+    # every chunk is validated before the first copy.
     if gradients:
-        var g = owner[].export_values(3)
-        copy_f32(g.unsafe_ptr(),f32_ptr(addr[0]),n)
+        owner[].export_into([3], [addr[0]])
     else:
-        # Complete and validate all readbacks before publishing any output.
-        var p = owner[].export_values(0)
-        var m = owner[].export_values(1)
-        var v = owner[].export_values(2)
-        copy_f32(p.unsafe_ptr(),f32_ptr(addr[0]),n)
-        copy_f32(m.unsafe_ptr(),f32_ptr(addr[1]),n)
-        copy_f32(v.unsafe_ptr(),f32_ptr(addr[2]),n)
+        owner[].export_into([0, 1, 2], [addr[0], addr[1], addr[2]])
         _write_flags(addr[3],owner[].flags)
     return PythonObject(owner[].completed)
 
@@ -1210,17 +1206,12 @@ def byte_lm_offload_export_binding(session: PythonObject, addresses: PythonObjec
     for i in range(count):  # small-loop(count: one or four exported arrays): per array slot sizes, no data
         cells.append(owner[].config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr,cells,0)
+    # N156: each array goes straight into the caller's memory (export_into);
+    # every chunk is validated before the first copy.
     if gradients:
-        var g = owner[].export_values(3)
-        copy_f32(g.unsafe_ptr(),f32_ptr(addr[0]),n)
+        owner[].export_into([3], [addr[0]])
     else:
-        # Complete and validate all readbacks before publishing any output.
-        var p = owner[].export_values(0)
-        var m = owner[].export_values(1)
-        var v = owner[].export_values(2)
-        copy_f32(p.unsafe_ptr(),f32_ptr(addr[0]),n)
-        copy_f32(m.unsafe_ptr(),f32_ptr(addr[1]),n)
-        copy_f32(v.unsafe_ptr(),f32_ptr(addr[2]),n)
+        owner[].export_into([0, 1, 2], [addr[0], addr[1], addr[2]])
         _write_flags(addr[3],owner[].flags)
     return PythonObject(owner[].completed)
 
@@ -1413,30 +1404,18 @@ def _byte_schedule_export_canonical(mut session: ByteScheduleSession, a: List[In
         addr.append(a[1 + i])
         cells.append(config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr, cells, 0)
+    # N156: each array goes straight into the caller's memory (export_into).
     if session.kind == BYTE_SCHEDULE_MODEL_POOL:
         if gradients:
-            var g = session.pool.export_values(3)
-            copy_f32(g.unsafe_ptr(), f32_ptr(addr[0]), n)
+            session.pool.export_into([3], [addr[0]])
         else:
-            # Complete and validate all readbacks before publishing any output.
-            var params = session.pool.export_values(0)
-            var m = session.pool.export_values(1)
-            var v = session.pool.export_values(2)
-            copy_f32(params.unsafe_ptr(), f32_ptr(addr[0]), n)
-            copy_f32(m.unsafe_ptr(), f32_ptr(addr[1]), n)
-            copy_f32(v.unsafe_ptr(), f32_ptr(addr[2]), n)
+            session.pool.export_into([0, 1, 2], [addr[0], addr[1], addr[2]])
             _write_flags(addr[3], session.pool.flags)
         return session.pool.completed
     if gradients:
-        var g = session.offload.export_values(3)
-        copy_f32(g.unsafe_ptr(), f32_ptr(addr[0]), n)
+        session.offload.export_into([3], [addr[0]])
     else:
-        var params = session.offload.export_values(0)
-        var m = session.offload.export_values(1)
-        var v = session.offload.export_values(2)
-        copy_f32(params.unsafe_ptr(), f32_ptr(addr[0]), n)
-        copy_f32(m.unsafe_ptr(), f32_ptr(addr[1]), n)
-        copy_f32(v.unsafe_ptr(), f32_ptr(addr[2]), n)
+        session.offload.export_into([0, 1, 2], [addr[0], addr[1], addr[2]])
         _write_flags(addr[3], session.offload.flags)
     return session.offload.completed
 

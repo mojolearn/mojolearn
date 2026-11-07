@@ -345,6 +345,14 @@ def byte_session_rollback(mut session: ByteLMSession) raises -> Int:
 def byte_session_logits_run(mut session: ByteLMSession, ids: List[Int32], batch: Int,
                             length: Int, out_addr: Int, claimed: Int,
                             cfg_shape: ByteConfig, next_bytes: Bool) raises -> Int:
+    return byte_session_logits_rows_run(session, ids, batch, length, out_addr, claimed, cfg_shape,
+                                        next_bytes, List[Int32]())
+
+
+def byte_session_logits_rows_run(mut session: ByteLMSession, ids: List[Int32], batch: Int,
+                                 length: Int, out_addr: Int, claimed: Int,
+                                 cfg_shape: ByteConfig, next_bytes: Bool,
+                                 last_rows: List[Int32]) raises -> Int:
     """Forward-only logits (or, with `next_bytes`, the greedy next byte of
     every row, argmax on the device) on an open session, after the ids were
     read and admitted. `claimed` is the caller's committed step, which must
@@ -362,7 +370,7 @@ def byte_session_logits_run(mut session: ByteLMSession, ids: List[Int32], batch:
         ref ctx = owner[].ctx.value()
         if next_bytes:
             byte_next_bytes_resident_into(ctx, owner[].trainer.value(), ids, batch, length,
-                                          owner[].logits_scratch, i32_ptr(out_addr))
+                                          owner[].logits_scratch, i32_ptr(out_addr), last_rows)
             if owner[].trainer.value().completed_steps != step_before:
                 raise Error("byte LM next bytes changed the completed step")
         else:
@@ -526,6 +534,64 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
     return step
 
 
+def byte_owner_steps(mut session: ByteLMSession, addr: List[Int], n_steps: Int,
+                     completed: Int) raises -> Int:
+    """`n_steps` training steps in one call on an OPEN session, from the
+    model shape, optimizer and momentum flags the session admitted when it
+    opened: no shape or optimizer words cross per step (plan section 2C,
+    rows N107 and N109).
+
+    addr = [in_ids_i32 (n_steps * batch * (length + 1): the step batches
+    one after the other, each row-major [batch, length + 1]),
+    out_loss_f32 (n_steps: one loss per step), out_flags_i32 (n_tensors:
+    the flags after the last committed step)]. Every batch is admitted
+    before any device work. The steps run in order through the same
+    per-step path as `byte_owner_step` (`byte_session_step_run`), so step k
+    here produces the bits of the k-th of k single steps; no fold order
+    changes. A failure in step k rolls the device back to `completed + k`
+    (`byte_owner_recover`) and propagates; the k earlier steps stay
+    committed with their losses and flags written, and the session's
+    status (operation 5) reports `completed + k`. Returns
+    `completed + n_steps`."""
+    var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
+    if len(addr) != 3:
+        raise Error("byte LM trainer: the multi-step entry expects 3 addresses")
+    if n_steps < 1:
+        raise Error("byte LM trainer: the multi-step entry requires n_steps >= 1")
+    _require_open(s[])
+    var cfg_shape = s[].trainer.value().config.copy()
+    var cfg = s[].trainer.value().optimizer.copy()
+    if s[].trainer.value().completed_steps != completed:
+        raise Error("byte LM: resident completed-step mismatch")
+    if completed + n_steps > 999999:
+        raise Error("byte LM: completed step outside admitted bound")
+    var n_tensors = cfg_shape.n_tensors()
+    var n_ids = cfg_shape.batch * (cfg_shape.length + 1)
+    var slots: List[Int] = [addr[0], addr[1], addr[2]]
+    var cells: List[Int] = [n_steps * n_ids, n_steps, n_tensors]
+    _validate_slot_table(slots, cells, 1)
+    # Admit every batch before the first device step (the per-step entry's
+    # order: ids first, then device work).
+    var batches = List[List[Int32]]()
+    for k in range(n_steps):  # driver-loop: over the training steps of one call
+        var ids = _read_ids(addr[0] + k * n_ids * 4, n_ids)
+        byte_validate_tokens(ids, cfg_shape)
+        batches.append(ids^)
+    var flags = s[].trainer.value().buffers.buf_initialized.copy()
+    # The flags output starts as the committed flags, so a failure in the
+    # first step leaves the committed answer there.
+    _write_flags(addr[2], flags)
+    var step = completed
+    for k in range(n_steps):  # driver-loop: over the training steps of one call
+        try:
+            step = byte_session_step_run(s[], batches[k], flags, addr[1] + k * 4, addr[2], step, cfg, cfg_shape)
+        except error:
+            byte_owner_recover(s[], completed + k)
+            raise error
+        flags = s[].trainer.value().buffers.buf_initialized.copy()
+    return step
+
+
 def byte_owner_export_state(mut session: ByteLMSession, addr: List[Int], completed: Int,
                             cfg_shape: ByteConfig, release: Bool) raises -> Int:
     """The trainer's state export: addr[5] = [in_flags_i32 (the committed
@@ -603,7 +669,10 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
     var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
     var n = cfg_shape.n_total()
     var n_tensors = cfg_shape.n_tensors()
-    if len(addr) != 6:
+    # A seventh address (next bytes only, plan row N091): the int32 length of
+    # every row of a ragged batch, each in [1, length]; the greedy pick then
+    # reads each row's last real position on the device.
+    if len(addr) != 6 and not (next_bytes and len(addr) == 7):
         raise Error("byte LM trainer: expected 6 addresses")
     var m = batch * length
     var admit = addr[3] != 0 or addr[4] != 0 or addr[5] != 0
@@ -613,12 +682,23 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
         for i in range(3, 6):  # small-loop(state: three host state address slots)
             slots.append(addr[i])
             cells.append(n)
+    var ragged = len(addr) == 7
+    if ragged:
+        slots.append(addr[6])
+        cells.append(batch)
     var n_inputs = len(slots)
     slots.append(addr[1])
     cells.append(batch if next_bytes else m * cfg_shape.vocab_size)
     _validate_slot_table(slots, cells, n_inputs)
     var ids = _read_ids(addr[0], m)
     byte_logits_validate(ids, batch, length, cfg_shape)
+    var last_rows = List[Int32]()
+    if ragged:
+        var lengths = _read_ids(addr[6], batch)
+        for row in range(batch):  # small-loop(batch: one admitted length per row): checks the lengths, no data
+            if lengths[row] < 1 or Int(lengths[row]) > length:
+                raise Error("byte LM next bytes: row length outside [1, length]")
+            last_rows.append(lengths[row] - 1)
     if not s[].trainer:
         if not admit:
             raise Error("byte LM: session is not open")
@@ -626,8 +706,8 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
         _ = byte_session_open(s[], state, completed, cfg, cfg_shape)
     var written = 0
     try:
-        written = byte_session_logits_run(s[], ids, batch, length, addr[1], completed,
-                                          cfg_shape, next_bytes)
+        written = byte_session_logits_rows_run(s[], ids, batch, length, addr[1], completed,
+                                               cfg_shape, next_bytes, last_rows)
     except error:
         byte_owner_mark(s[], completed)
         raise error
