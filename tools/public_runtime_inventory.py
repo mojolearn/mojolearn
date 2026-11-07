@@ -97,7 +97,8 @@ GETTER_NAMES = frozenset({"binding", "_bind", "load_host_module", "load_door_hos
 # public-output conversion every plain method's `_public_output` wrapper applies after the native call,
 # to a pooled driver's joined result (2026-10-24, par-kernel-ridge dtype flip). The wrapper is not on
 # any walked path; the driver's explicit call must not count as runtime Python either.
-SHELL_FUNCTIONS = frozenset({("_parallel_pool", "public_method_result")})
+# `_parallel_pool` moved to python/mojolearn/tests/ (2026-11-06): no package module holds such a function now.
+SHELL_FUNCTIONS = frozenset()
 NUMPY_NAMES = frozenset({"np", "numpy", "_np"})
 NUMPY_CONVERSION = frozenset({
     "asarray", "ascontiguousarray", "asfortranarray", "asanyarray", "array", "require", "dtype",

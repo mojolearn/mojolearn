@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from mojolearn import SambaConfig, SambaStack
-from mojolearn import _samba_checkpoint as reference_format
+from mojolearn.tests import _samba_checkpoint as reference_format
 from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_causal_model_native_loading import _poison

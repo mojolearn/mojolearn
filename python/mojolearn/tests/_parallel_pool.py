@@ -47,7 +47,7 @@ def public_method_result(estimator, method, result, frame):
     identity harness, float64 for a user). Only the names that wrapper
     covers (`_mode._OUTPUTS`) convert; any other method's result is the
     plain method's own."""
-    from . import _mode
+    from mojolearn import _mode
     if method in _mode._OUTPUTS and _mode._caller_outside(frame):
         return _mode._public_result(estimator, method, result)
     return result

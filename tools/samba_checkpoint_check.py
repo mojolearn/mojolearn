@@ -22,7 +22,12 @@ def main():
     from mojolearn._samba_impl import SambaConfig, SambaStack, _CHECKPOINT_SCHEMA
     from mojolearn._training_impl import Generator, WarmupCosineLR
     from mojolearn import _buffer as buffers, _bufcheck as checks
-    from mojolearn import _samba_checkpoint as storage
+    # The Python storage reference is test code (python/mojolearn/tests/_samba_checkpoint.py), not in the wheel.
+    import importlib.util
+    ref = Path(__file__).resolve().parents[1] / 'python' / 'mojolearn' / 'tests' / '_samba_checkpoint.py'
+    spec = importlib.util.spec_from_file_location('_samba_checkpoint_reference', ref)
+    storage = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(storage)
 
     def file_hash(path):
         h = hashlib.sha256()

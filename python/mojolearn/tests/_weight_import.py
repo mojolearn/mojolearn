@@ -10,7 +10,7 @@
 # never imported: a torch tensor is described by its own attributes.
 import os
 
-from ._optional_numpy import require_numpy
+from mojolearn._optional_numpy import require_numpy
 np = require_numpy('_weight_import')
 
 # autograd/weight_import.mojo WI_*
@@ -50,7 +50,7 @@ class WeightSource:
             if not _is_path(obj):
                 raise TypeError(f"{what}: source='safetensors' takes the path of a .safetensors file "
                                 "or of a checkpoint directory")
-            from .models.safetensors import Checkpoint
+            from mojolearn.models.safetensors import Checkpoint
             self._ckpt = Checkpoint.open(os.fsdecode(obj))
             self._names = self._ckpt.names()
             self._map = None

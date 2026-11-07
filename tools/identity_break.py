@@ -10804,21 +10804,16 @@ def _run_reference(args):
     if batch_sabotage:
         print(f"# {BATCH_SABOTAGE_ENV} is ON: every whole-batch evaluation is perturbed by one "
               "low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.")
-    # THE NON-COOPERATIVE DRIVERS' ARM, READ BACK FROM THE SHIPPED MODULE
-    # rather than from this process's environment (lane/par-sabotage-defines,
-    # 2026-09-20). `_parallel_pool.par_driver_sabotage()` is what the drivers
-    # themselves call, and it needs BOTH `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` and
-    # `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`; asking the module means the column
-    # cannot say "clean" while the code says otherwise. It is NOT a harness
-    # switch: nothing in this file is perturbed. What moves is the SHIPPED
-    # partition of `parallel_ensemble`, `parallel_preprocessing`,
-    # `parallel_classical` and `parallel_neighbors`, which is product code and
-    # is exactly what a `par-*` lane exists to check.
-    try:
-        from mojolearn._parallel_pool import par_driver_sabotage as _pds
-        par_driver_sabotage = bool(_pds())
-    except Exception:
-        par_driver_sabotage = False
+    # THE NON-COOPERATIVE DRIVERS' ARM (lane/par-sabotage-defines, 2026-09-20): the same two
+    # variables the native drivers read at call time (bindings/parallel_shard_common.mojo
+    # `shard_read_shift`), BOTH `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` and
+    # `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`, so the column cannot say "clean" while the drivers
+    # shift. It is NOT a harness switch: nothing in this file is perturbed. What moves is the
+    # SHIPPED partition of `parallel_ensemble`, `parallel_preprocessing`, `parallel_classical`
+    # and `parallel_neighbors`, which is product code and is exactly what a `par-*` lane checks.
+    # (The Python helper that read them moved to python/mojolearn/tests/ on 2026-11-06.)
+    par_driver_sabotage = (os.environ.get("MOJOLEARN_PAR_DRIVER_SABOTAGE") == "1"
+                           and os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1")
     if par_driver_sabotage:
         print("# MOJOLEARN_PAR_DRIVER_SABOTAGE is ON: every non-cooperative driver shard after "
               "the first reads one position early while the merge still writes at the true "

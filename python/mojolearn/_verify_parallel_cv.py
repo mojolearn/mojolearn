@@ -20,9 +20,9 @@ from ._parallel_cv_witness import array_digest, retain_completed, read_records, 
 from ._verify_distributed import verify_distribution_records
 
 __all__ = ['main', 'source_identity', 'validate_receipt', 'compare']
-PROTOCOL = 'parallel-cv-v3'
+PROTOCOL = 'parallel-cv-v4'
 PROFILE_FILES = frozenset(('__init__.py', '_verify_parallel_cv.py', '_parallel_cv_witness.py',
-                           'model_selection.py', 'parallel_model_selection.py', '_parallel_pool.py',
+                           'model_selection.py', 'parallel_model_selection.py',
                            '_gpu_witness.py', '_verify_distributed.py',
                            '_native_parallel_cv.py', '_native_parallel_cv_worker.py',
                            '_native_msel_dispatch.py', '_native_msel_more.py'))

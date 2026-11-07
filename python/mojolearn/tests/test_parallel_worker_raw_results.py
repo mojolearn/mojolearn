@@ -10,7 +10,7 @@ while the identity harness's plain `predict` (an internal caller) is the
 native float32 Array: "apply_kernel_method predict and plain predict differ:
 3963 bytes of 4096" on all nine fixtures. The drivers are native now (no
 worker): the native owner returns the native result and the driver applies
-the public conversion for its own caller (`_parallel_pool.public_method_result`).
+the public conversion for its own caller (`tests/_parallel_pool.public_method_result`).
 """
 import sys
 
@@ -91,7 +91,7 @@ def test_apply_kernel_method_is_raw_for_an_internal_caller(monkeypatch):
 
 
 def test_public_method_result_converts_only_public_output_names():
-    from mojolearn._parallel_pool import public_method_result
+    from mojolearn.tests._parallel_pool import public_method_result
     frame = _frame_in(_user_globals())
     assert type(public_method_result(_Regressor, "solve", _raw(2), frame)) is Array
     out = public_method_result(_Regressor, "predict", _raw(2), frame)

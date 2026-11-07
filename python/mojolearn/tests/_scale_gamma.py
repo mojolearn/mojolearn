@@ -39,7 +39,7 @@ def scale_gamma_x(binding, x, n_features):
             "mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
             "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it"
         )
-    from ._buffer import addr, addr_ro, empty
+    from mojolearn._buffer import addr, addr_ro, empty
 
     n = int(x.size)
     if n == 0:

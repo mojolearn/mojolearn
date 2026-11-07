@@ -7,7 +7,7 @@ from math import isfinite
 
 
 def scale_gamma(values, n_features):
-    """The reference definition (`mojolearn._scale_gamma.scale_gamma_x` is
+    """The reference definition (`mojolearn.tests._scale_gamma.scale_gamma_x` is
     the binding's, with the same rational). scikit-learn's `gamma='scale'`, `1 / (n_features * X.var())` (1.0 when
     the variance is 0), CORRECTLY ROUNDED from the exact variance of `values`
     (the cells of X, each a finite float32 or float64).

@@ -69,7 +69,7 @@ _BINARY = {
     "Or": "logical_or",
 }
 
-# autograd/weight_import.mojo WI_* (python/mojolearn/_weight_import.py): the record of one source tensor
+# autograd/weight_import.mojo WI_* (python/mojolearn/tests/_weight_import.py): the record of one source tensor
 _WI_MAX_RANK = 4
 # NumPy views of an initializer's raw little-endian bytes (no copy, no conversion)
 _NP_VIEW = {"f32": "<f4", "f16": "<f2", "f64": "<f8", "i64": "<i8", "i32": "<i4", "bool": "?"}

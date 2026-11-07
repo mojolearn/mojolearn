@@ -108,7 +108,7 @@ def test_python_sharded_drivers_are_native_pools():
     assert 'var pool = process_pool_create(devices, False, "mojolearn._native_parallel_cv_worker")' in cv_owner
     assert "native_require_worker_inventory(identities, " in cv_owner
     assert not (ROOT / "python/mojolearn/_parallel_worker.py").exists()
-    assert "class DevicePool" not in _read("python/mojolearn/_parallel_pool.py")
+    assert "class DevicePool" not in _read("python/mojolearn/tests/_parallel_pool.py")
 
 
 def _cpu_only_with(*basenames):

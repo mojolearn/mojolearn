@@ -8,14 +8,14 @@ and transfer chunk, in addition to the arrays being restored.
 """
 import hashlib
 import json
-from . import _portable_math as math
+from mojolearn import _portable_math as math
 import os
 from pathlib import Path
 import struct
 import sys
 import tempfile
 
-from . import _buffer as buffers, _bufcheck as checks
+from mojolearn import _buffer as buffers, _bufcheck as checks
 
 MAGIC = b'MOJOLEARN-SAMBA\x02\n'
 SCHEMA = 'mojolearn.samba-stream.v2'
@@ -51,7 +51,7 @@ def _digest(raw):
 def _validate(metadata, entries):
     # Derive lengths from the admitted model registry, never from an unchecked
     # array descriptor. Config construction does not load a native extension.
-    from ._samba_impl import SambaConfig, PROFILE, _STATE_SCHEMA
+    from mojolearn._samba_impl import SambaConfig, PROFILE, _STATE_SCHEMA
     if (not isinstance(metadata, dict)
             or metadata.get('schema') != _STATE_SCHEMA
             or metadata.get('profile') != PROFILE):
