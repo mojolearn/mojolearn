@@ -288,8 +288,12 @@ def xseq_readonly_view(value: PythonObject) raises -> PythonObject:
 def _xseq_array_frozen(value: PythonObject, freeze: Bool) raises -> Bool:
     """Whether `value` is an exact ndarray that is read-only (after marking
     it so when `freeze`); False for anything else."""
-    var ndarray = native_loaded_module("numpy").ndarray
-    if py_type(value) is not ndarray:
+    # NumPy is optional and has no import-time native module connection
+    # (native_loaded_module("numpy") always refused): read it from the loaded
+    # registry, as cluster_side_records does. Without NumPy loaded no value
+    # can be an ndarray.
+    var numpy = py_get(native_loaded_module("sys").modules, "numpy")
+    if numpy is None or py_type(value) is not numpy.ndarray:
         return False
     var flags = value.flags
     if freeze and Bool(py=flags.writeable):
