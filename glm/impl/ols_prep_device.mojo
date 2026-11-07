@@ -46,6 +46,8 @@ def ols_prep_device(
     if rows <= 0 or cols <= 0:
         raise Error("ols_prep: rows and cols must be positive")
     var weighted = w != 0
+    if not intercept and not weighted:
+        raise Error("ols_prep: nothing to prepare (no intercept, no sample weights)")
     if means_mode == OLS_PREP_WEIGHTED and not weighted:
         raise Error("ols_prep: weighted means need sample weights")
     # Host scratch: the binary64 sums (as words), one row-scaled copy for the
