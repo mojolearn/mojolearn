@@ -68,6 +68,7 @@ _NAMES = (
     "x_cnn_pad2d_forward",
     "x_cnn_pad2d_m",
     "x_cnn_perm_gather",
+    "x_cnn_predict_r",
     "x_cnn_pool_shape",
     "x_cnn_relu_backward",
     "x_cnn_relu_forward",

@@ -1046,6 +1046,29 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
         var planned_m = -1
         var words = PythonObject(None)
         var s = 0
+        if _has(entries, "x_cnn_predict_r") and n > 0:
+            # N090 (ne3-c-cnn, 2026-11-07): every chunk in one native call:
+            # the same launches with the same words in the same order as the
+            # loop below (`x_cnn_predict_r`), the plan words built twice per
+            # call at most (full chunks, the last chunk).
+            var last = n - ((n + cap - 1) // cap - 1) * cap
+            var full_words = _plan_words(_plan(fields, entries, cap))
+            var last_words = full_words if last == cap else _plan_words(_plan(fields, entries, last))
+            var blocks = b.list()
+            for j in range(len(hws)):  # driver-loop: over the conv blocks (model structure)
+                _ = py_call(blocks.append, Python.list(hws[j][0], hws[j][1], a["out"][j], a["idx"][j], a["saved"][j]))
+            var spec = b.dict()
+            py_setitem(spec, "blocks", blocks)
+            py_setitem(spec, "head", Python.list(head_hw[0], head_hw[1]))
+            py_setitem(spec, "a", Python.list(a["x"], a["y"], a["logits"], a["glog"], a["proba"]))
+            py_setitem(spec, "dims", Python.list(flat, k))
+            py_setitem(spec, "plans", Python.list(full_words, last_words))
+            var dst = xcnn_addr(lab) if codes else xcnn_addr(proba)
+            _ = py_call(_e(entries, "x_cnn_predict_r"), spec, base, dst, Python.list(n, cap, row, 1 if codes else 0))
+            _ = x  # keep the Python objects alive through the native call above
+            _ = lab
+            _ = proba
+            s = n
         while s < n:  # driver-loop: over the device prediction batches (cap-sized)
             var m = min(cap, n - s)
             _ = py_call(_e(entries, "x_cnn_res_upload"), a["x"], base + 4 * s * row, m * row)
