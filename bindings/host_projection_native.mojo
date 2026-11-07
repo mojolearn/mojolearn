@@ -8,7 +8,7 @@ from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.host_array_native import host_archive_typed
-from bindings.host_tree_native import host_tree_input
+from bindings.host_tree_native import host_tree_input, host_tree_cast
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
@@ -71,8 +71,12 @@ def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bo
                 host_inference_raw_finite(Int(py=classical_address(raw)), Int(py=raw.strides[0]), Int(py=raw.strides[1]),
                     Int(py=raw.shape[0]), Int(py=raw.shape[1]), width,
                     classical_is_array(raw, context) or Bool(py=raw.dtype.isnative))
+            # Row N279: X was admitted and viewed above; cast that view
+            # instead of admitting and viewing it again in host_tree_input.
+            x = host_tree_cast(raw, context)
             _ = raw^
-        x = host_tree_input(prepared, context)
+        if x is None:
+            x = host_tree_input(prepared, context)
         _ = prepared^
     var rows = Int(py=x.shape[0])
     var features = Int(py=fields["n_features_in_"])

@@ -39,6 +39,16 @@ def host_tree_input(source: PythonObject, context: PythonObject) raises -> Pytho
     elif _ordinary_torch(py_type(source), context):
         prepared = native_torch_numpy(source)
     var value = classical_input(prepared, context, "X")
+    var cast = host_tree_cast(value, context)
+    _ = prepared^
+    return cast
+
+
+def host_tree_cast(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The 2-D checks and C-order float32 cast of host_tree_input for an input
+    the caller already admitted and viewed (classical_input), so a door that
+    inspected the view does not admit X a second time (row N279). `value`
+    must outlive the result only through the caller's own references."""
     if Int(py=value.ndim) != 2:
         raise Error("X must be 2-D")
     var rows = Int(py=value.shape[0])
@@ -56,8 +66,6 @@ def host_tree_input(source: PythonObject, context: PythonObject) raises -> Pytho
     scaler_cast(Int(py=classical_address(value)), Int(py=value.strides[0]), Int(py=value.strides[1]),
         rows, cols, item, kind, native,
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(output))))
-    _ = value^
-    _ = prepared^
     return output
 
 
