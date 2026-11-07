@@ -128,7 +128,7 @@ class HostForest:
     def __init__(self, *, estimator, offsets, colid, quesval, left_child, leaves,
                  n_features, n_trees, num_outputs, classes=None, device=None,
                  inference_engine='sequential'):
-        return _native_host_archive(self, "host_tree_init_forest",
+        return _native_host_archive(self, _OP.host_tree_init_forest,
             (estimator, offsets, colid, quesval, left_child, leaves,
              n_features, n_trees, num_outputs, classes, device, inference_engine), _ARCHIVE_CONTEXT)
 
@@ -157,37 +157,37 @@ class HostForest:
     @property
     def n_trees(self):
         """Number of trees in the model."""
-        return _native_host_archive(self, "host_tree_count", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_count, (), _ARCHIVE_CONTEXT)
 
     @property
     def inference_engine(self):
         """The inference engine the file named: 'sequential' or
         'parallel_groves'. Read-only."""
-        return _native_host_archive(self, "host_tree_engine", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_engine, (), _ARCHIVE_CONTEXT)
 
     def _groves_handle(self):
         """The host grove snapshot of this model (validated once, released
         with the model), prepared on the first groves prediction."""
-        return _native_host_archive(self, "host_tree_groves", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_groves, (), _ARCHIVE_CONTEXT)
 
     def __getstate__(self):
-        return _native_host_archive(self, "host_tree_getstate", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_getstate, (), _ARCHIVE_CONTEXT)
 
     def __setstate__(self, state):
-        return _native_host_archive(self, "host_tree_setstate", (state,), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_setstate, (state,), _ARCHIVE_CONTEXT)
 
     def model_sha256(self):
         """SHA-256 hex digest of the model arrays' bytes, in save order.
 
         Identifies the exact model used for a prediction.
         """
-        return _native_host_archive(self, "host_tree_hash", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_hash, (), _ARCHIVE_CONTEXT)
 
     def _vote(self, X):
         """The divided vote, `(n_rows, num_outputs)` float32, what the GPU
         bindings' sequential entries return before the Python layer's argmax
         or widening."""
-        return _native_host_archive(self, "host_tree_vote", (X,), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_vote, (X,), _ARCHIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, for classifier models only.
@@ -196,7 +196,7 @@ class HostForest:
         float32 for a random forest, float64 for extra trees, shape
         (n_samples, n_classes). A regressor model raises `AttributeError`.
         """
-        return _native_host_archive(self, "host_tree_proba", (X,), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_proba, (X,), _ARCHIVE_CONTEXT)
 
     def _predict_with_proba(self, X):
         """The two classifier views from one host traversal.
@@ -204,7 +204,7 @@ class HostForest:
         Kept in lockstep with the RF/ET estimator helper used by the identity
         harness, including Extra Trees' exact float32-to-float64 widening.
         """
-        return _native_host_archive(self, "host_tree_predict_pair", (X,), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_predict_pair, (X,), _ARCHIVE_CONTEXT)
 
     def predict(self, X):
         """Predict with the saved model.
@@ -214,7 +214,7 @@ class HostForest:
         of the trees' predictions: float32 for a random forest, float64 for
         extra trees.
         """
-        return _native_host_archive(self, "host_tree_predict", (X,), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_predict, (X,), _ARCHIVE_CONTEXT)
 
 
 # Maintainer note (moved from the docstring): HostGBDT lives in
@@ -289,6 +289,10 @@ def host_predict_proba(path, X):
 
 # Fixed public archive owner connected at import, after host classes exist.
 from .linear_model import _native_classical as _native_host_archive, _CLASSICAL as _ARCHIVE_CONTEXT
+# Lane ne1-h-labels: operations pass as integer codes from the one native
+# table (bindings/native_operation_codes.mojo), read once at import.
+from ._native_ops import codes as _operation_codes  # noqa: E402
+_OP = _operation_codes()
 from . import _classical_host as _archive_registry
 
 # TreeExplainer's native owner (bindings/trees_explainer_native.mojo) reads a

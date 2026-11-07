@@ -68,3 +68,37 @@ def label_context():
             labels_namespace=types.SimpleNamespace,
         )
     return dict(_LABEL_CONTEXT)
+
+
+#: `bindings/labels_native_entry.mojo` operation codes (lane ne1-h-labels).
+LABELS_OP_ENCODE = 0
+LABELS_OP_UNION_ENCODE = 1
+LABELS_OP_SCORE_FROM_CODES = 2
+LABELS_OP_DECODE = 3
+LABELS_OP_CLASS_WEIGHT_ROWS = 4
+#: `labels_encode` kind: the ORDER RULE classes of `_labels` and int32 codes.
+LABELS_KIND_ORDER_RULE = 0
+
+_LABELS_ENTRY = []
+
+
+def labels_entry():
+    """`(entry, context)`: the compiled label entry `labels_native_call`
+    (bindings/labels_native_entry.mojo) and the context it reads: the
+    classical shared admission context, the label context above and the
+    `classes_` list class. Connected once, at the first label call (the
+    label module is imported before the binding and its classes exist)."""
+    if not _LABELS_ENTRY:
+        from types import BuiltinFunctionType
+        from .tokenizer import _binding
+        from ._native_classical_bridge import _state_context
+        from ._labels import ClassLabels
+        entry = _binding()._module.labels_native_call
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError("the label shells require the compiled labels_native_call entry")
+        context = _state_context()
+        context.update(label_context())
+        context.update(classifier_labels_class=ClassLabels,
+                       classifier_labels_namespace=dict(vars(ClassLabels)))
+        _LABELS_ENTRY.append((entry, context))
+    return _LABELS_ENTRY[0]

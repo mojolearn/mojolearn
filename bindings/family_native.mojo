@@ -31,6 +31,12 @@ from providers.python.lowbit_weight_pyapi import lowbit_weight_operation
 from bindings.parallel_public_native import parallel_public_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter_all, plan_exit_all
 from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits
+from bindings.native_operation_codes import (
+    family_route, family_route_owner, family_route_pre, family_route_cluster,
+    FR_PRE_ESTIMATORS, FR_PRE_SVM, FR_PRE_BASE, FR_PRE_X_NEIGHBORS,
+    FR_DENSITY, FR_PAR_PUBLIC, FR_PAR_RUN, FR_KMEANS, FR_KM, FR_SVM, FR_XC, FR_METRIC, FR_XN, FR_CHOL,
+    FR_MSEL, FR_SVC, FR_GP, FR_MCLS, FR_MEXP, FR_HDBSCAN_PUBLIC, FR_CFA, FR_CFB, FR_MIX, FR_MANI, FR_LOW,
+    FR_LINALG_OPS)
 
 
 def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -75,44 +81,54 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
 
 def family_operation(model: PythonObject, operation: String, var args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    """A `family_*` operation by name (string callers: the parallel driver's
+    owner, the door's str path)."""
+    return family_operation_routed(model, family_route(operation), operation, args^, context)
+
+
+def family_operation_routed(model: PythonObject, route: Int, operation: String, var args: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    """A `family_*` operation by its packed route word
+    (bindings/native_operation_codes.mojo `family_route`, precomputed per
+    name for coded calls): one integer switch instead of the former prefix
+    chain, same steps in the same order."""
     # These public frontdoors share one import-connected binding provider.
     # Deeper algorithm dispatch is migrated separately; do not equate this
     # boundary repair with completion of every transitive runtime path.
-    if operation.startswith("family_svc_linear_") or operation.startswith("family_svm_linear_"):
+    var pre = family_route_pre(route)
+    if pre == FR_PRE_ESTIMATORS:
         args = estimator_arguments(model, "_mojolearn_estimators", args, context)
-    elif operation.startswith("family_svc_svc_") or operation.startswith("family_svc_svr_"):
+    elif pre == FR_PRE_SVM:
         args = estimator_arguments(model, "_mojolearn_svm", args, context)
-    elif operation.startswith("family_kmeans_"):
+    elif pre == FR_PRE_BASE:
         args = estimator_arguments(model, "_mojolearn", args, context)
-    if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
-            or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
+    elif pre == FR_PRE_X_NEIGHBORS:
         args = estimator_arguments(model, "_mojolearn_x_neighbors", args, context)
-    if ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
-            or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
-                and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_")):
+    if family_route_cluster(route):
         if len(args) > 0 and args[0] is None:
             return cluster_public_operation(model, operation, args, context)
-    if operation.startswith("family_density_"):
+    var owner = family_route_owner(route)
+    if owner == FR_DENSITY:
         return density_public_operation(model, operation, args, context)
-    if operation == "family_par_public":
+    if owner == FR_PAR_PUBLIC:
         return parallel_public_operation(model, args, context)
-    if operation == "family_par_run":
+    if owner == FR_PAR_RUN:
         return _family_par_run(model, args, context)
-    if operation.startswith("family_kmeans_"):
+    if owner == FR_KMEANS:
         return kmeans_operation(model, operation, args, context)
-    if operation.startswith("family_km_"):
+    if owner == FR_KM:
         return kernel_methods_operation(model, operation, args, context)
-    if operation.startswith("family_svm_"):
+    if owner == FR_SVM:
         return svm_mixture_operation(model, operation, args, context)
-    if operation.startswith("family_xc_"):
+    if owner == FR_XC:
         return cluster_operation(model, operation, args, context)
-    if operation.startswith("family_metric_"):
+    if owner == FR_METRIC:
         return metrics_reg_operation(operation, args, context)
-    if operation.startswith("family_xn_"):
+    if owner == FR_XN:
         return neighbors_operation(model, operation, args, context)
-    if operation.startswith("family_chol_"):
+    if owner == FR_CHOL:
         return linalg_operation(model, operation, args, context)
-    if operation.startswith("family_msel_"):
+    if owner == FR_MSEL:
         # Preserve the existing generic entry ABI without importing the
         # independently compiled model-selection owner. Import setup retains
         # its verified native entry; Python never chooses an operation route.
@@ -122,23 +138,23 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
         if py_type(entry) is not context["family_builtin_type"]:
             raise Error("TypeError: model selection requires its compiled native entry")
         return family_call(entry, model, PythonObject(operation), args, context)
-    if operation.startswith("family_svc_"):
+    if owner == FR_SVC:
         return svc_operation(model, operation, args, context)
-    if operation.startswith("family_gp_"):
+    if owner == FR_GP:
         return gp_operation(model, operation, args, context)
-    if operation.startswith("family_mcls_"):
+    if owner == FR_MCLS:
         return metrics_cls_operation(model, operation, args, context)
-    if operation.startswith("family_mexp_"):
+    if owner == FR_MEXP:
         return metrics_exp_operation(model, operation, args, context)
-    if operation.startswith("family_hdbscan_public_"):
+    if owner == FR_HDBSCAN_PUBLIC:
         return hdbscan_public_operation(model, operation, args, context)
-    if operation.startswith("family_cfa_"):
+    if owner == FR_CFA:
         return cluster_fit_a_operation(model, operation, args, context)
-    if operation.startswith("family_cfb_"):
+    if owner == FR_CFB:
         return cluster_fit_b_operation(model, operation, args, context)
-    if operation.startswith("family_mix_"):
+    if owner == FR_MIX:
         return mixture_operation(model, operation, args, context)
-    if operation.startswith("family_mani_"):
+    if owner == FR_MANI:
         # The shared import-time context retains the independently compiled
         # owner. Forward through its verified C entry without a source import
         # of the manifold implementation or a Python operation router.
@@ -148,12 +164,8 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
         if py_type(entry) is not context["family_builtin_type"]:
             raise Error("TypeError: manifold requires its compiled native entry")
         return family_call(entry, model, PythonObject(operation), args, context)
-    if operation.startswith("family_low_"):
+    if owner == FR_LOW:
         return lowbit_weight_operation(model, operation, args, context)
-    if operation.startswith("family_lin_"):
-        return linalg_ops_operation(model, operation, args, context)
-    if operation.startswith("family_rs_"):
-        return linalg_ops_operation(model, operation, args, context)
-    if operation.startswith("family_pg_"):
+    if owner == FR_LINALG_OPS:
         return linalg_ops_operation(model, operation, args, context)
     raise Error("RuntimeError: unknown family operation " + operation)

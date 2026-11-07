@@ -17,7 +17,8 @@ from bindings.host_archive_predict_native import host_archive_predict
 from bindings.host_knn_predict_native import host_knn_predict
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
-from bindings.family_native import family_operation
+from bindings.family_native import family_operation, family_operation_routed
+from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE
 from bindings.host_tree_native import host_tree_operation
 from bindings.trees_public_native import trees_public_operation
 from bindings.host_inference_native import host_inference_operation
@@ -112,6 +113,34 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
     return entries
 
 
+def operation_code_names() raises -> PythonObject:
+    """The operation names of the code table, in code order, as a tuple of
+    str (the Python shells map each name to its index once, at import)."""
+    var table = operation_table()
+    var names = Python.list()
+    for i in range(len(table[].names)):  # driver-loop: over the fixed operation names, once per process
+        _ = py_call(names.append, PythonObject(table[].names[i]))
+    return py_call(native_loaded_module("builtins").tuple, names)
+
+
+def classical_coded_operation(model: PythonObject, code: Int, args: PythonObject,
+                              context: PythonObject) raises -> PythonObject:
+    """One `family_*`, `trees_*` or `host_tree_*` operation by its integer
+    code: the route and the name come from the table, and the owner is
+    called as the str path calls it."""
+    var table = operation_table()
+    if code < 0 or code >= len(table[].names):
+        raise Error("TypeError: unknown native operation code")
+    var route = table[].routes[code]
+    var name = table[].names[code].copy()
+    if route == OP_ROUTE_TREES:
+        return trees_public_operation(model, name, args, context)
+    if route == OP_ROUTE_HOST_TREE:
+        return host_tree_operation(model, name, args, context["host_tree_context"])
+    _ = classical_family_admit(model)
+    return family_operation_routed(model, table[].family_routes[code], name, args, context)
+
+
 def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var request = PythonObject(from_borrowed=args_ptr)
@@ -122,12 +151,22 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         # here and passed by reference to the helpers below.
         var call = AdmittedCall()
         var b = call.builtins()
+        if py_type(request[1]) is b.int and py_type(request[3]) is b.dict:
+            # Lane ne1-h-labels: an integer operation code from the one table
+            # (bindings/native_operation_codes.mojo): no String copy of the
+            # operation and no match chain before the owner.
+            var coded = classical_coded_operation(request[0], Int(py=request[1]), request[2], request[3])
+            return coded.steal_data()
         if py_type(request[1]) is not b.str or py_type(request[3]) is not b.dict:
             raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
         var model = request[0]
         var operation = String(request[1])
         var args = request[2]
         var context = request[3]
+        if operation == "operation_codes":
+            # Read once at import by python/mojolearn/_native_ops.py.
+            var names = operation_code_names()
+            return names.steal_data()
         if operation == "restore_not_fitted":
             var error = classical_error_restore(args, context)
             return error.steal_data()

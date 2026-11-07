@@ -1317,6 +1317,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "prep_encode_native_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "x_linear_native_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "str_labels_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "labels_native_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "robust_scaler_native_call")
         module.def_py_c_function(arena_rows_c, "arena_rows_native_call")
         module.def_py_c_function(arena_prog_c, "arena_prog_native_call")

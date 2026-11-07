@@ -49,6 +49,10 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # `predict_proba` are one native call each (bindings/trees_public_forest.mojo;
 # splitter='random' grows one extra-trees tree there).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
+# Lane ne1-h-labels: operations pass as integer codes from the one native
+# table (bindings/native_operation_codes.mojo), read once at import.
+from ._native_ops import codes as _operation_codes  # noqa: E402
+_OP = _operation_codes()
 import sys as _native_module_sys
 from ._native_loaded_modules import connect_module as _connect_native_module
 # Bagging member publication uses this owner after the module's lazy import;
@@ -237,15 +241,15 @@ class DecisionTreeClassifier(RandomForestClassifier):
         -------
         self
         """
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_fit, (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
-        return _TREES(self, "trees_public_forest_depth", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_depth, (), _TREES_CONTEXT)
 
     def get_n_leaves(self):
         """Return the number of leaves of the fitted tree."""
-        return _TREES(self, "trees_public_forest_n_leaves", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_n_leaves, (), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities: the class distribution of each row's leaf.
@@ -253,11 +257,11 @@ class DecisionTreeClassifier(RandomForestClassifier):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class label of each row of ``X``."""
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_predict, (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -398,19 +402,19 @@ class DecisionTreeRegressor(RandomForestRegressor):
         -------
         self
         """
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_fit, (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
-        return _TREES(self, "trees_public_forest_depth", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_depth, (), _TREES_CONTEXT)
 
     def get_n_leaves(self):
         """Return the number of leaves of the fitted tree."""
-        return _TREES(self, "trees_public_forest_n_leaves", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_n_leaves, (), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the target of each row of ``X``."""
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_predict, (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -634,15 +638,15 @@ class _BaggingBase(_TreesEnsembleBase):
     @property
     def estimators_(self):
         """The fitted members, as a list of estimators."""
-        return _TREES(self, "trees_bagging_members", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_bagging_members, (), _TREES_CONTEXT)
 
     @estimators_.setter
     def estimators_(self, value):
-        return _TREES(self, "trees_bagging_members_set", (value,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_bagging_members_set, (value,), _TREES_CONTEXT)
 
     def _slice_members(self):
         """The batched forest's trees as fitted member estimators."""
-        return _TREES(self, "trees_bagging_members_slice", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_bagging_members_slice, (), _TREES_CONTEXT)
 
 class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     """A bagging ensemble of classifiers.
@@ -750,7 +754,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Mean of the members' class probabilities, float64.
@@ -758,11 +762,11 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        return _TREES(self, "trees_public_boost_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest mean probability."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
@@ -782,7 +786,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     """A bagging ensemble of regressors.
@@ -884,11 +888,11 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Mean of the members' predictions, float64."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -907,7 +911,7 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
         float
             R^2; 1.0 is a perfect fit.
         """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------------------- AdaBoost
 # Reference: scikit-learn `sklearn/ensemble/_weight_boosting.py`
@@ -1017,7 +1021,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         ValueError
             If the first member is worse than random guessing.
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Weighted member votes, float64.
@@ -1025,7 +1029,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         Returns shape (n_samples,) for two classes (positive favors
         ``classes_[1]``) and (n_samples, n_classes) otherwise.
         """
-        return _TREES(self, "trees_public_boost_decision_function", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_decision_function, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities from the decision function (softmax), float64.
@@ -1033,11 +1037,11 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        return _TREES(self, "trees_public_boost_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest weighted vote."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
@@ -1057,7 +1061,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
@@ -1141,11 +1145,11 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Weighted median of the members' predictions."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -1164,7 +1168,7 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
         float
             R^2; 1.0 is a perfect fit.
         """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 # --------------------------------------------------------------------- DART
 # Reference: LightGBM `src/boosting/dart.hpp` (DART::DroppingTrees,
@@ -1302,7 +1306,7 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
                  feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
         # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
-        _TREES(self, "trees_dart_construct", (
+        _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
@@ -1315,11 +1319,11 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, None), _TREES_CONTEXT)
 
     def predict(self, X):
         """Raw boosted score of each row, float64."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -1338,7 +1342,7 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
         float
             R^2; 1.0 is a perfect fit.
         """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, classification.
@@ -1440,7 +1444,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
                  feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
         # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
-        _TREES(self, "trees_dart_construct", (
+        _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
@@ -1455,7 +1459,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, None), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Raw boosted scores, float64.
@@ -1463,7 +1467,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         Shape (n_samples,) for two classes (the log-odds of ``classes_[1]``),
         (n_samples, n_classes) otherwise.
         """
-        return _TREES(self, "trees_public_boost_decision_function", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_decision_function, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, float64, shape (n_samples, n_classes).
@@ -1471,11 +1475,11 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         For two classes the columns are ``[1 - p, p]`` with ``p`` the sigmoid
         of the raw score; for more, the softmax of the per-class raw scores.
         """
-        return _TREES(self, "trees_public_boost_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest score."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
@@ -1495,7 +1499,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------- RandomTreesEmbedding
 # Reference: scikit-learn `sklearn/ensemble/_forest.py` RandomTreesEmbedding
@@ -1602,7 +1606,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y), _TREES_CONTEXT)
 
     def apply(self, X):
         """Leaf reached by each row in each tree.
@@ -1610,7 +1614,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Returns an int32 array of shape (n_samples, n_trees) of node ids,
         numbered within each tree.
         """
-        return _TREES(self, "trees_public_boost_apply", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_apply, (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """One-hot encode the leaves of ``X``.
@@ -1618,11 +1622,11 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Returns a dense float64 array of shape
         (n_samples, ``n_output_features_``).
         """
-        return _TREES(self, "trees_public_boost_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_transform, (X,), _TREES_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit on ``X``, then return ``transform(X)``."""
-        return _TREES(self, "trees_public_boost_fit_transform", (X, y), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit_transform, (X, y), _TREES_CONTEXT)
 
 # The bagged and boosted ensembles' native owner (bindings/trees_public_boost.mojo):
 # each class's schema, the member classes it assembles and their fixed tables.
@@ -1707,7 +1711,7 @@ class _FitTransformMixin:
         array of shape (n_samples, n_output_features), float64
             The transformed training data.
         """
-        return _TREES(self, "trees_public_meta_fit_transform", (X, y, fit_params), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit_transform, (X, y, fit_params), _TREES_CONTEXT)
 
 
 class _MetaClassifierScore:
@@ -1732,7 +1736,7 @@ class _MetaClassifierScore:
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
 class _MetaRegressorScore:
@@ -1756,7 +1760,7 @@ class _MetaRegressorScore:
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
 class _TreesWrapperBase(_TreesEnsembleBase):
@@ -1856,7 +1860,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     @available_if(lambda self: self.voting != "hard")
     def predict_proba(self, X):
@@ -1869,7 +1873,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels by weighted vote (hard) or averaged probabilities (soft).
@@ -1879,7 +1883,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """The members' outputs side by side.
@@ -1891,7 +1895,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
             (n_samples, n_estimators * n_classes); with ``voting="hard"``, every
             member's predicted class code, shape (n_samples, n_estimators).
         """
-        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
 class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase):
@@ -1964,7 +1968,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Weighted average of the members' predictions.
@@ -1973,7 +1977,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         array of shape (n_samples,), float64
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """Every member's prediction side by side.
@@ -1982,7 +1986,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         array of shape (n_samples, n_estimators), float64
         """
-        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
 # ---------------------------------------------------------------- Stacking
@@ -2019,7 +2023,7 @@ class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
         -------
         array of shape (n_samples, n_meta_features), float64
         """
-        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
 class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBase):
@@ -2116,7 +2120,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
             When a member's output width differs between folds (a class missing
             from a fold's training rows).
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels with the final estimator on the stacked outputs.
@@ -2126,7 +2130,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """The final estimator's class probabilities on the stacked outputs.
@@ -2135,7 +2139,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
 
 class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase):
@@ -2218,7 +2222,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict with the final estimator on the stacked member predictions.
@@ -2227,7 +2231,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         -------
         array of shape (n_samples,)
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- MultiOutput
@@ -2298,7 +2302,7 @@ class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapp
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Every target's prediction, one column per output.
@@ -2307,7 +2311,7 @@ class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapp
         -------
         array of shape (n_samples, n_outputs)
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
 
 class MultiOutputClassifier(_TreesWrapperBase):
@@ -2372,7 +2376,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict every output's labels.
@@ -2383,7 +2387,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             For numeric labels, int64 when every output's labels are integers,
             else float64.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Every output's class probabilities.
@@ -2394,7 +2398,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             One float64 array of shape (n_samples, n_classes_j) per output, its
             columns in the order of ``classes_[j]``.
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Subset accuracy: the fraction of rows whose every output is
@@ -2415,7 +2419,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             Fraction of rows with all outputs correct (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
 # --------------------------------------------------------------- OneVsRest
@@ -2490,7 +2494,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, None), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class whose binary classifier scores highest.
@@ -2500,7 +2504,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities.
@@ -2513,7 +2517,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- Calibration
@@ -2623,7 +2627,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         ValueError
             When ``cv`` asks for more folds than some class has members.
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, None), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Calibrated class probabilities.
@@ -2635,7 +2639,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         -------
         array of shape (n_samples, n_classes)
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest calibrated probability.
@@ -2645,7 +2649,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
 
 # The meta-estimators' native owner (bindings/trees_public_meta.mojo): each
@@ -2745,7 +2749,7 @@ class TreeExplainer(_TreesEnsembleBase):
 
     def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent",
                  model_output="raw", numeric_mode=None):
-        return _TREES(self, "trees_explainer_init",
+        return _TREES(self, _OP.trees_explainer_init,
                       (model, data, feature_perturbation, model_output, numeric_mode), _TREES_CONTEXT)
 
     def close(self):
@@ -2753,7 +2757,7 @@ class TreeExplainer(_TreesEnsembleBase):
 
         After ``close``, ``shap_values`` raises ``RuntimeError``.
         """
-        return _TREES(self, "trees_explainer_close", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_explainer_close, (), _TREES_CONTEXT)
 
     def shap_values(self, X):
         """SHAP values of the rows of ``X``.
@@ -2770,7 +2774,7 @@ class TreeExplainer(_TreesEnsembleBase):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        return _TREES(self, "trees_explainer_values", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_explainer_values, (X,), _TREES_CONTEXT)
 
 
 # KernelExplainer / PermutationExplainer: every operation is one call into the
@@ -2835,7 +2839,7 @@ class KernelExplainer(_TreesEnsembleBase):
     _mojolearn_native_public = True
 
     def __init__(self, model, data, *, link="identity", random_state=None, numeric_mode=None):
-        return _TREES(self, "trees_agnostic_kernel_init",
+        return _TREES(self, _OP.trees_agnostic_kernel_init,
                       (model, data, random_state, link, numeric_mode), _TREES_CONTEXT)
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
@@ -2859,7 +2863,7 @@ class KernelExplainer(_TreesEnsembleBase):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        return _TREES(self, "trees_agnostic_kernel_values", (X, nsamples, l1_reg), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_agnostic_kernel_values, (X, nsamples, l1_reg), _TREES_CONTEXT)
 
 
 class PermutationExplainer(_TreesEnsembleBase):
@@ -2913,7 +2917,7 @@ class PermutationExplainer(_TreesEnsembleBase):
     _mojolearn_native_public = True
 
     def __init__(self, model, data, *, random_state=None, numeric_mode=None):
-        return _TREES(self, "trees_agnostic_permutation_init",
+        return _TREES(self, _OP.trees_agnostic_permutation_init,
                       (model, data, random_state, None, numeric_mode), _TREES_CONTEXT)
 
     def shap_values(self, X, npermutations=10):
@@ -2934,7 +2938,7 @@ class PermutationExplainer(_TreesEnsembleBase):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        return _TREES(self, "trees_agnostic_permutation_values", (X, npermutations), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_agnostic_permutation_values, (X, npermutations), _TREES_CONTEXT)
 
 
 def _connect_explainers():
