@@ -78,3 +78,15 @@ def test_public_tickets_keep_provider_and_handle_without_old_numerical_python_do
     close = PUBLIC.split("def transformer_tape_close", 1)[1].split("def transformer_public_call", 1)[0]
     assert "transformer_session_tape_discard(owner[].provider, owner[].session, owner[].handle," in close
     assert "neural_descriptor_handle(" not in close
+
+
+def test_tape_provider_is_connected_once_per_factory():
+    # N188: the 41-operation tape provider comes from the shared process
+    # record keyed by the retained factory, not a fresh connection per step.
+    provider = PUBLIC.split("def _transformer_tape_provider(", 1)[1].split("def _transformer_tape_handle(", 1)[0]
+    assert "neural_descriptor_connect_factory_once(" in provider
+    assert "neural_descriptor_connect(" not in provider
+    common = (ROOT / "providers/python/neural_descriptor_pyapi.mojo").read_text()
+    once = common.split("def neural_descriptor_connect_factory_once(", 1)[1].split("def _neural_descriptor_connect_new(", 1)[0]
+    assert "g[].factories[i] is factory and g[].modules[i]._obj_ptr == owner" in once
+    assert once.index("return g[].providers[i]") < once.index("neural_descriptor_connect(factory, name, operation_count)")

@@ -15,7 +15,7 @@ from bindings.neural_block_public import neural_block_fields, neural_block_snaps
 from bindings.neural_block_admission import neural_native_scalar, neural_array_slots, neural_record_fields, neural_string_keys
 from bindings.causal_lm_construct import _model_shape
 from providers.python.operation_lock_pyapi import OperationLockLease
-from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_construct, neural_descriptor_handle
+from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_connect_factory_once, neural_descriptor_construct, neural_descriptor_handle
 from providers.python.transformer_session_tape_pyapi import transformer_session_tape_forward, transformer_session_tape_backward, transformer_session_tape_discard
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from std.ffi import _Global
@@ -488,7 +488,10 @@ def _transformer_tape_provider(mut mods: NativeModules, entry_fields: PythonObje
     # The ticket retains this provider through backward/discard. Keep it out
     # of model state: ordinary getstate/setstate remains unchanged, and the
     # existing 36-operation block caches need not be resized or invalidated.
-    var windowed_result19 = neural_descriptor_connect(_transformer_native_entry_in(mods, entry_fields, "transformer_block_api_v1"),
+    # N188: connected once per compiled factory and reused (the shared
+    # process record), not a fresh capsule and provider on every forward and
+    # tape construction; a replaced factory connects again.
+    var windowed_result19 = neural_descriptor_connect_factory_once(_transformer_native_entry_in(mods, entry_fields, "transformer_block_api_v1"),
         String(TRANSFORMER_BLOCK_ABI_NAME), 41)
     mods.released()
     return windowed_result19^
