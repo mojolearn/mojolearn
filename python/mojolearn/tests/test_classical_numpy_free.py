@@ -44,6 +44,11 @@ from mojolearn._verify_native_runtime import audit_native_call
 payload = json.load(sys.stdin)
 X, y, w, tmp = payload["x"], payload["y"], payload["w"], payload["tmp"]
 n, d = len(X), len(X[0])
+# Warm-up iterations before the steady-state windows (was two windows, 200).
+# The windows stay at 100 iterations: sys.getallocatedblocks reads 30 to 60
+# blocks of noise per window whatever its length (windows of 25 read 33, 56,
+# 42), so a shorter window could not hold the one-block-per-iteration bound.
+WARM = 100
 
 
 def clean(operation, *args, error=None, **kwargs):
@@ -171,18 +176,17 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
     gc.collect()
     assert [ref for ref in references if ref() is not None] == []
 
-    calls = 25  # iterations per window; each runs three public operations
+    calls = 100  # iterations per window; each runs three public operations
 
-    def cycle():
-        for _ in range(calls):  # repeated whole public operations
+    def cycle(count=calls):
+        for _ in range(count):  # repeated whole public operations
             model.fit(X, y).predict(X)
             model.score(X, y)
-    cycle()
-    cycle()
+    cycle(WARM)
     # A leak grows every window of 3 * calls operations; a one-time lazy
     # allocation (seen once in the third cycle on the Apple route, then flat)
     # does not. So the gauge reads three windows and holds the smallest
-    # growth, under one block per iteration (the original 100 over 100).
+    # growth, under one block per iteration.
     growth = []
     for _ in range(3):
         gc.collect()
