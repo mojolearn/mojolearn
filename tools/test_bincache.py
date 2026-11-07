@@ -1236,3 +1236,99 @@ def _test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones(self):
 
 LocalCacheTests.test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones = \
     _test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones
+
+
+# ---------------------------------------------------------------------------
+# the one Mac cache (2026-11-07, lane/post-one-mac-cache)
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+class OneMacCacheTests(unittest.TestCase):
+    OUT = "python/mojolearn/identical/_mojolearn_fake.so"
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.repo = make_repo(Path(self.td.name) / "repo").resolve()
+        (self.repo / self.OUT).parent.mkdir(parents=True)
+        (self.repo / self.OUT).write_bytes(b"one-mac-cache-bytes")
+        self.fields = fields(self.repo)
+        self.key = bc.key_of(self.fields)
+
+    def archive(self, directory, data=None):
+        directory.mkdir(parents=True, exist_ok=True)
+        if data is not None:
+            (self.repo / self.OUT).write_bytes(data)
+        arc = directory / (self.key + ".tar.gz")
+        bc.pack(arc, self.key, self.fields, self.repo, [self.OUT], {})
+        return arc
+
+    def test_the_mac_cache_defaults_to_the_evidence_directory_and_follows_the_override(self):
+        self.assertEqual(bc.mac_cache_dir({}), Path.home() / "mojolearn-evidence" / "bincache-mac")
+        self.assertEqual(bc.mac_cache_dir({"MOJOLEARN_BINCACHE_DIR": "/x/y"}), Path("/x/y"))
+
+    def test_the_release_compile_settings_are_the_mac_slot_and_byte_lm_ones(self):
+        self.assertEqual(bc.MACOS_RELEASE_COMPILE_ENV,
+                         {"MOJOLEARN_PACKAGE_BYTE_LM": "1", "MOJOLEARN_COMPILE_JOBS": "1"})
+        slot = (REPO_ROOT / "tools" / "mac_slot.py").read_text()
+        self.assertIn('MOJOLEARN_COMPILE_JOBS="1"', slot, "tools/mac_slot.py run pins one compiler worker")
+
+    def test_group_environment_matches_build_release_wheel_sh(self):
+        base = {"MOJOLEARN_GPU_ARCHS": "metal:3", "MOJOLEARN_HOST_OUTDIR": "/elsewhere", "KEEP": "1"}
+        kind, output, env = bc.macos_merged_group(base, "host", "_mojolearn_native_host")
+        self.assertEqual((kind, output), ("host", "python/mojolearn/host/_mojolearn_native_host.so"))
+        self.assertNotIn("MOJOLEARN_GPU_ARCHS", env)
+        self.assertNotIn("MOJOLEARN_HOST_OUTDIR", env)
+        self.assertEqual((env["MOJOLEARN_NUMERIC_MODE"], env["MOJOLEARN_TARGET_COLUMN"], env["KEEP"]),
+                         ("identical", "cpu", "1"))
+        self.assertEqual((env["MOJOLEARN_BINCACHE_OUTPUTS"], env["MOJOLEARN_BINCACHE_SHELL"]), (output, "sh"))
+        kind, output, env = bc.macos_merged_group(base, "identical", "_mojolearn_native")
+        self.assertEqual((kind, output), ("gpu", "python/mojolearn/identical/_mojolearn_native.so"))
+        self.assertEqual((env["MOJOLEARN_NUMERIC_MODE"], env["MOJOLEARN_GPU_ARCHS"]), ("identical", "metal:3"))
+        self.assertNotIn("MOJOLEARN_TARGET_COLUMN", env)
+        self.assertEqual(bc.macos_merged_group({}, "fast", "_mojolearn_native")[1],
+                         "python/mojolearn/_mojolearn_native.so")
+        self.assertEqual(base["MOJOLEARN_HOST_OUTDIR"], "/elsewhere", "the caller's environment is not changed")
+        # The shell builder spells the same rules; a change there must change the helper.
+        wheel = (REPO_ROOT / "packaging" / "macos" / "build_release_wheel.sh").read_text()
+        for line in ('host) output="python/mojolearn/host/$stem.so"; kind=host ;;',
+                     'fast) output="python/mojolearn/$stem.so"; kind=gpu ;;',
+                     '*) output="python/mojolearn/$mode/$stem.so"; kind=gpu ;;',
+                     "set -- env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR MOJOLEARN_NUMERIC_MODE=identical "
+                     "MOJOLEARN_TARGET_COLUMN=cpu",
+                     'set -- env MOJOLEARN_NUMERIC_MODE="$mode"',
+                     'export MOJOLEARN_BINCACHE_OUTPUTS="$output" MOJOLEARN_BINCACHE_SHELL=sh',
+                     '"$@" $runner ./bindings/merged_build.sh "$kind" --group "$stem"'):
+            self.assertIn(line, wheel)
+
+    def test_copy_archives_copies_verified_archives_once_and_never_over_a_conflict(self):
+        src, dst = Path(self.td.name) / "release", Path(self.td.name) / "mac"
+        self.archive(src)
+        (src / ("0" * 64 + ".tar.gz")).write_bytes(b"not an archive")
+        got = bc.copy_archives(src, dst)
+        self.assertEqual((got["copied"], got["present"], got["conflicts"], got["rejected"]),
+                         (1, 0, [], ["0" * 64]))
+        bc.verify_archive(str(dst / (self.key + ".tar.gz")), self.key, self.fields)
+        self.assertFalse((dst / ("0" * 64 + ".tar.gz")).exists())
+        again = bc.copy_archives(src, dst)
+        self.assertEqual((again["copied"], again["present"]), (0, 1))
+        # Same key, other bytes in the destination: reported, never replaced.
+        other = Path(self.td.name) / "other"
+        self.archive(other, data=b"different-bytes")
+        shutil.copyfile(other / (self.key + ".tar.gz"), dst / (self.key + ".tar.gz"))
+        before = (dst / (self.key + ".tar.gz")).read_bytes()
+        conflict = bc.copy_archives(src, dst)
+        self.assertEqual(conflict["conflicts"], [self.key])
+        self.assertEqual((dst / (self.key + ".tar.gz")).read_bytes(), before)
+        self.assertEqual(bc.copy_archives(src, src)["copied"], 0, "a directory is never copied onto itself")
+        self.assertEqual(bc.copy_archives(Path(self.td.name) / "absent", dst)["copied"], 0)
+
+    def test_a_seeded_mac_cache_archive_is_placed_instead_of_compiled(self):
+        mac, release_dir = Path(self.td.name) / "mac", Path(self.td.name) / "release"
+        self.archive(mac)
+        release_dir.mkdir()
+        self.assertEqual(bc.seed_archive(release_dir, self.key, self.fields,
+                                         {"MOJOLEARN_BINCACHE_SEED_DIRS": str(mac)}), str(mac))
+        bc.verify_archive(str(release_dir / (self.key + ".tar.gz")), self.key, self.fields)
