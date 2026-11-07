@@ -58,8 +58,10 @@ def test_decode_captures_fields_and_uses_retained_native_entry_dictionary():
     assert 'py_fields(' not in source
     assert '_native_function(' not in source
     assert 'py_call(bi.hasattr' not in source
-    assert 'PyModule_GetDict' in source
-    assert 'neural_string_keys(fields)' in source
+    # N192: the module namespace is admitted once per module identity by the
+    # shared neural_descriptor helper (no whole-dictionary copy per open).
+    assert 'return neural_descriptor_module_fields(module)' in source
+    assert 'py_call(bi.dict, fields)' not in source.split('def _transformer_decode_module(')[1].split('def _transformer_decode_entry(')[0]
     assert 'self.block = block' in source and 'self.state = state' in source
     assert 'owner fields were replaced' in source
     assert 'configuration/cache dimensions changed' in source
@@ -67,5 +69,25 @@ def test_decode_captures_fields_and_uses_retained_native_entry_dictionary():
     assert cache.index('admit_native_buffer_exporter(value)') < cache.index('AdmittedBorrowedBuffer(value, True)')
     assert 'layout.copy_to(self.address)' in cache
     assert 'layout.value().copy_from(self.address)' in cache
-    assert '_transformer_decode_entry(h[].binding' in source
+    # N181: step, state and close entries are resolved once at open and kept.
+    assert '_transformer_decode_entry(h[].binding' not in source
+    assert '_transformer_decode_keep_entries(handle)' in source
+    assert '_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD)' in source
     assert 'len(args) != 3 or py_type(args[0]) is not bi.str' in source
+
+
+def test_decode_session_keeps_native_handle_and_binding_words():
+    # N186: the provider handle is resolved once at open and kept in the
+    # owner; N192: vendor and mode words are read once per compiled entry pair.
+    source=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
+    assert 'var native_handle: Int' in source
+    assert 'handle.native_handle = transformer_resident_decode_handle(handle.provider, handle.device)' in source
+    run=source.split('def transformer_decode_run(')[1].split('def transformer_decode_state(')[0]
+    assert 'h[].native_handle' in run
+    assert 'transformer_resident_decode_call(' not in source
+    words=source.split('def _transformer_decode_words(')[1].split('comptime _TRANSFORMER_DECODE_STEP')[0]
+    assert 'g[].vendor_entries[i] is vendor_entry and g[].mode_entries[i] is mode_entry' in words
+    provider=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    cached=provider.split('def neural_descriptor_value_handle(')[1].split('def neural_descriptor_matches(')[0]
+    assert cached.index('_neural_descriptor_admit_entry(provider, factory)') < cached.index('py_call(factory, value)')
+    assert "g[].types.get(address, 0) == cls and g[].factories.get(address, 0) == entry" in cached

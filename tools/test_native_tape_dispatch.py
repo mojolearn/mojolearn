@@ -52,7 +52,7 @@ def test_transformer_resident_table_preserves_packed_and_plain_native_owners():
     assert 'owner[].usable = False' in native
     assert 'owner[].release()' in native
     provider=(ROOT/'providers/python/transformer_resident_pyapi.mojo').read_text()
-    assert 'neural_descriptor_handle(provider,' in provider
+    assert 'neural_descriptor_value_handle(provider,' in provider
     assert 'neural_descriptor_reserved_execute(provider, session, handle,' in provider
     public=(ROOT/'bindings/causal_lm_public.mojo').read_text()
     for operation in (22,23,24):
