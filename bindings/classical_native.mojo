@@ -102,7 +102,7 @@ def operation_code_names() raises -> PythonObject:
 def classical_door_call(context: PythonObject, key: String, args_ptr: PyObjectPtr) raises -> PyObjectPtr:
     """The compiled door `context[key]` called with this call's argument
     tuple: its result, or NULL with the exception it set."""
-    var door = py_get(context, key)
+    var door = py_get(context, PythonObject(key))
     if door is None:
         raise Error("ImportError: the compiled " + key + " is not connected; build the complete host layout and start a fresh process")
     ref cpy = Python().cpython()
