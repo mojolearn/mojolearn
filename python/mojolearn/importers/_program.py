@@ -32,7 +32,10 @@ class ImportedProgram(Program):
     def __init__(self, session, info, inputs, outputs):
         _IMPORT_NATIVE(self, session, info, inputs, outputs, _IMPORT_CONTEXT)
 
-    def run(self, *arrays, **named):
+    # `self` is positional-only: CPython then never compares a keyword name
+    # with a parameter name, so a str subclass key's Python __eq__ cannot run
+    # before the native door refuses it.
+    def run(self, /, *arrays, **named):
         """Run the model on new input arrays.
 
         Pass one array per input, in the order of :attr:`inputs`, or by
