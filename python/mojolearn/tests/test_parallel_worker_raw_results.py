@@ -15,6 +15,7 @@ the public conversion for its own caller (`tests/_parallel_pool.public_method_re
 import sys
 
 import numpy as np
+import pytest
 
 from mojolearn import _mode
 from mojolearn import parallel_classical
@@ -61,33 +62,24 @@ def _fake_native(model, operation, args, context):
     return _raw(4)
 
 
-def _patch_kernel_driver(monkeypatch):
-    from mojolearn import kernel_methods
-    from mojolearn.kernel_methods import KernelRidge
-    monkeypatch.setattr(kernel_methods, "_NATIVE", _fake_native)
-    monkeypatch.setattr(KernelRidge, "predict",
-                        _mode._public_output(lambda self, X: _raw(4), "predict"))
-    return KernelRidge()
-
-
-def test_apply_kernel_method_matches_plain_predict_for_a_user(monkeypatch):
-    est = _patch_kernel_driver(monkeypatch)
-    X = np.zeros((4, 2), np.float32)
+# The driver is one native call (family_km_par_apply); the native owner
+# refuses a patched estimator class ("descriptor changed after connection"),
+# so the driver runs on a real fitted KernelRidge. The internal caller's raw
+# result is tested by test_parallel_pool_numpy_parity.py::
+# test_native_kernel_ridge_driver_predict_is_the_plain_native_result.
+def test_apply_kernel_method_matches_plain_predict_for_a_user():
+    from mojolearn import _backend
+    if _backend.vendor() in (None, "cpu"):
+        pytest.skip("the multi-GPU kernel-methods driver needs a GPU device")
+    import mojolearn as ml
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((64, 3)).astype(np.float32)
+    est = ml.KernelRidge(alpha=1.0, kernel="rbf").fit(X, rng.standard_normal(64).astype(np.float32))
     got = _call_in(_user_globals(), parallel_classical.apply_kernel_method, est, X)
     want = _call_in(_user_globals(), est.predict, X)
     assert type(got) is type(want) is np.ndarray
     assert got.dtype == want.dtype == np.float64
-
-
-def test_apply_kernel_method_is_raw_for_an_internal_caller(monkeypatch):
-    # The identity harness marks itself `__mojolearn_internal__`.
-    est = _patch_kernel_driver(monkeypatch)
-    X = np.zeros((4, 2), np.float32)
-    harness = {"__name__": "__main__", "__mojolearn_internal__": True}
-    got = _call_in(harness, parallel_classical.apply_kernel_method, est, X)
-    want = _call_in(harness, est.predict, X)
-    assert type(got) is type(want) is Array
-    assert got.dtype == want.dtype == "<f4"
+    assert got.tobytes() == want.tobytes()
 
 
 def test_public_method_result_converts_only_public_output_names():
