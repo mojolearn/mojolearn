@@ -1359,7 +1359,10 @@ comptime IDN_CE_PIPE_UP = (
 def identical_ce_loss_host(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    # None under SUM/MEAN when the caller has no row buffer (row N118, as in
+    # `identical_ce_loss_dev` and `ce_loss_host_into`): the rows are then not
+    # written; `identical_ce_loss_resident` takes the Optional as it is.
+    row_ptr: Optional[MutPointer[Float32, MutUntrackedOrigin]],
     dlogits_ptr: MutPointer[Float32, MutUntrackedOrigin],
     logits_ptr: MutPointer[Float32, MutUntrackedOrigin],
     targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
@@ -1380,9 +1383,10 @@ def identical_ce_loss_host(
                        `+0.0` under `REDUCTION_NONE`, where the certified
                        forward returns before seam L13 and there is no
                        scalar to write.
-        `row_ptr`      N float32, WRITTEN on every call: the per-row loss
-                       before any reduction. This is the only output under
-                       `REDUCTION_NONE`.
+        `row_ptr`      N float32, WRITTEN on every call when present: the
+                       per-row loss before any reduction. This is the only
+                       output under `REDUCTION_NONE`; None (SUM or MEAN only)
+                       skips the rows.
         `dlogits_ptr`  N * V float32, WRITTEN only when `want_grad != 0`.
                        May be any one-element buffer otherwise.
         `logits_ptr`   N * V float32, READ, row-major
