@@ -73,6 +73,61 @@ def family_route_cluster(route: Int) -> Bool:
     return route >= FR_CLUSTER_FLAG
 
 
+def _owner_row(mut prefixes: List[String], mut owners: List[Int], mut exact: List[Bool],
+               prefix: String, owner: Int, is_exact: Bool):
+    prefixes.append(prefix)
+    owners.append(owner)
+    exact.append(is_exact)
+
+
+def _family_owner_rows(mut prefixes: List[String], mut owners: List[Int], mut exact: List[Bool]):
+    """The family owner prefixes (or exact names), in the priority order of
+    the former prefix chain of bindings/family_native.mojo: the first row
+    that matches names the owner. Straight-line appends, no branch."""
+    _owner_row(prefixes, owners, exact, "family_density_", FR_DENSITY, False)
+    _owner_row(prefixes, owners, exact, "family_par_public", FR_PAR_PUBLIC, True)
+    _owner_row(prefixes, owners, exact, "family_par_run", FR_PAR_RUN, True)
+    _owner_row(prefixes, owners, exact, "family_kmeans_", FR_KMEANS, False)
+    _owner_row(prefixes, owners, exact, "family_km_", FR_KM, False)
+    _owner_row(prefixes, owners, exact, "family_svm_", FR_SVM, False)
+    _owner_row(prefixes, owners, exact, "family_xc_", FR_XC, False)
+    _owner_row(prefixes, owners, exact, "family_metric_", FR_METRIC, False)
+    _owner_row(prefixes, owners, exact, "family_xn_", FR_XN, False)
+    _owner_row(prefixes, owners, exact, "family_chol_", FR_CHOL, False)
+    _owner_row(prefixes, owners, exact, "family_msel_", FR_MSEL, False)
+    _owner_row(prefixes, owners, exact, "family_svc_", FR_SVC, False)
+    _owner_row(prefixes, owners, exact, "family_gp_", FR_GP, False)
+    _owner_row(prefixes, owners, exact, "family_mcls_", FR_MCLS, False)
+    _owner_row(prefixes, owners, exact, "family_mexp_", FR_MEXP, False)
+    _owner_row(prefixes, owners, exact, "family_hdbscan_public_", FR_HDBSCAN_PUBLIC, False)
+    _owner_row(prefixes, owners, exact, "family_cfa_", FR_CFA, False)
+    _owner_row(prefixes, owners, exact, "family_cfb_", FR_CFB, False)
+    _owner_row(prefixes, owners, exact, "family_mix_", FR_MIX, False)
+    _owner_row(prefixes, owners, exact, "family_mani_", FR_MANI, False)
+    _owner_row(prefixes, owners, exact, "family_low_", FR_LOW, False)
+    _owner_row(prefixes, owners, exact, "family_lin_", FR_LINALG_OPS, False)
+    _owner_row(prefixes, owners, exact, "family_rs_", FR_LINALG_OPS, False)
+    _owner_row(prefixes, owners, exact, "family_pg_", FR_LINALG_OPS, False)
+
+
+def _family_owner_of(operation: String) -> Int:
+    """The owner of one `family_*` name: the first matching row of
+    `_family_owner_rows` (lane ne-fix-hang3, lesson 12: a loop over a
+    runtime row list instead of a 25-branch prefix chain in one function;
+    same tests in the same order)."""
+    var prefixes = List[String]()
+    var owners = List[Int]()
+    var exact = List[Bool]()
+    _family_owner_rows(prefixes, owners, exact)
+    for i in range(len(prefixes)):  # driver-loop: over the fixed owner rows of one name
+        if exact[i]:
+            if operation == prefixes[i]:
+                return owners[i]
+        elif operation.startswith(prefixes[i]):
+            return owners[i]
+    return FR_UNKNOWN
+
+
 def family_route(operation: String) -> Int:
     """The packed route word of one `family_*` operation name: the same
     tests, in the same order, the family dispatcher ran on every call (now
@@ -90,58 +145,22 @@ def family_route(operation: String) -> Int:
     var cluster = ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
                    or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
                        and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_"))
-    var owner = FR_UNKNOWN
-    if operation.startswith("family_density_"):
-        owner = FR_DENSITY
-    elif operation == "family_par_public":
-        owner = FR_PAR_PUBLIC
-    elif operation == "family_par_run":
-        owner = FR_PAR_RUN
-    elif operation.startswith("family_kmeans_"):
-        owner = FR_KMEANS
-    elif operation.startswith("family_km_"):
-        owner = FR_KM
-    elif operation.startswith("family_svm_"):
-        owner = FR_SVM
-    elif operation.startswith("family_xc_"):
-        owner = FR_XC
-    elif operation.startswith("family_metric_"):
-        owner = FR_METRIC
-    elif operation.startswith("family_xn_"):
-        owner = FR_XN
-    elif operation.startswith("family_chol_"):
-        owner = FR_CHOL
-    elif operation.startswith("family_msel_"):
-        owner = FR_MSEL
-    elif operation.startswith("family_svc_"):
-        owner = FR_SVC
-    elif operation.startswith("family_gp_"):
-        owner = FR_GP
-    elif operation.startswith("family_mcls_"):
-        owner = FR_MCLS
-    elif operation.startswith("family_mexp_"):
-        owner = FR_MEXP
-    elif operation.startswith("family_hdbscan_public_"):
-        owner = FR_HDBSCAN_PUBLIC
-    elif operation.startswith("family_cfa_"):
-        owner = FR_CFA
-    elif operation.startswith("family_cfb_"):
-        owner = FR_CFB
-    elif operation.startswith("family_mix_"):
-        owner = FR_MIX
-    elif operation.startswith("family_mani_"):
-        owner = FR_MANI
-    elif operation.startswith("family_low_"):
-        owner = FR_LOW
-    elif (operation.startswith("family_lin_") or operation.startswith("family_rs_")
-            or operation.startswith("family_pg_")):
-        owner = FR_LINALG_OPS
+    var owner = _family_owner_of(operation)
     return owner + FR_PRE_SCALE * pre + (FR_CLUSTER_FLAG if cluster else 0)
 
 
 def _operation_names(mut names: List[String]):
     """Every operation a shell passes by code, sorted; the code is the
-    index. Straight-line appends (no branch per name)."""
+    index. Four straight-line groups in sorted order (lane ne-fix-hang3:
+    no single function holds all the name literals)."""
+    _operation_names_metrics(names)
+    _operation_names_neighbors(names)
+    _operation_names_host_tree(names)
+    _operation_names_trees(names)
+
+
+def _operation_names_metrics(mut names: List[String]):
+    """Names of the metric owners (`family_mcls_*`, `family_metric_*`, `family_mexp_*`), sorted."""
     names.append("family_mcls_accuracy")
     names.append("family_mcls_accuracy_fraction")
     names.append("family_mcls_adjusted_rand")
@@ -212,6 +231,10 @@ def _operation_names(mut names: List[String]):
     names.append("family_mexp_rank_loss")
     names.append("family_mexp_rank_lrap")
     names.append("family_mexp_rank_ndcg")
+
+
+def _operation_names_neighbors(mut names: List[String]):
+    """Names of the neighbor owners (`family_svc_ocsvm_*`, `family_xn_*`), sorted."""
     names.append("family_svc_ocsvm_decision")
     names.append("family_svc_ocsvm_fit")
     names.append("family_svc_ocsvm_fit_predict")
@@ -260,6 +283,10 @@ def _operation_names(mut names: List[String]):
     names.append("family_xn_semi_schi2_fit")
     names.append("family_xn_semi_schi2_fit_transform")
     names.append("family_xn_semi_schi2_transform")
+
+
+def _operation_names_host_tree(mut names: List[String]):
+    """Names of the host tree owner (`host_tree_*`), sorted."""
     names.append("host_tree_count")
     names.append("host_tree_ctr_dim")
     names.append("host_tree_ctr_predict")
@@ -275,6 +302,10 @@ def _operation_names(mut names: List[String]):
     names.append("host_tree_proba")
     names.append("host_tree_setstate")
     names.append("host_tree_vote")
+
+
+def _operation_names_trees(mut names: List[String]):
+    """Names of the public tree ensembles (`trees_*`), sorted."""
     names.append("trees_agnostic_kernel_init")
     names.append("trees_agnostic_kernel_values")
     names.append("trees_agnostic_permutation_init")
@@ -314,9 +345,15 @@ struct OperationTable(Movable):
     var family_routes: List[Int]
 
     def __init__(out self):
+        # Empty: the global's init_fn does no work (lane ne-fix-hang3: the
+        # names and the route words are filled by `fill` at first use in
+        # `operation_table`, outside the `_Global` initializer).
         self.names = List[String]()
         self.routes = List[Int]()
         self.family_routes = List[Int]()
+
+    def fill(mut self):
+        """The names, routes and family route words (once per process)."""
         _operation_names(self.names)
         for i in range(len(self.names)):  # driver-loop: over the fixed operation names, once per process
             if self.names[i].startswith("trees_"):
@@ -333,11 +370,15 @@ struct OperationTable(Movable):
 # Shared by every Mojo extension in the process; bump the version whenever a
 # name is added, removed or reordered (the codes are indices).
 comptime OPERATION_TABLE = _Global[
-    StorageType=OperationTable, name="MojolearnOperationCodesV1",
+    StorageType=OperationTable, name="MojolearnOperationCodesV2",
     init_fn=OperationTable.__init__,
 ]
 
 
 def operation_table() raises -> UnsafePointer[OperationTable, MutAnyOrigin]:
-    """The process-wide table, filled at first use."""
-    return OPERATION_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    """The process-wide table, filled at first use. Every caller is a
+    CPython entry and holds the GIL, so the fill runs once."""
+    var table = OPERATION_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if len(table[].names) == 0:
+        table[].fill()
+    return table
