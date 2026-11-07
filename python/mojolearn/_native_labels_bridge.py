@@ -99,6 +99,7 @@ def labels_entry():
         context = _state_context()
         context.update(label_context())
         context.update(classifier_labels_class=ClassLabels,
-                       classifier_labels_namespace=dict(vars(ClassLabels)))
+                       classifier_labels_namespace=dict(vars(ClassLabels)),
+                       classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
         _LABELS_ENTRY.append((entry, context))
     return _LABELS_ENTRY[0]
