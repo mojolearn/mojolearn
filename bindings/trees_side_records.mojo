@@ -28,7 +28,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
 from bindings.native_model_records import (
     records_get, records_put, records_drop, records_key_append, records_key_same_exact,
-    records_stamped_get, records_stamped_put, ContentRecord, content_value, RECORDS_TREES,
+    records_stamped_get, records_stamped_put, records_stampable, ContentRecord, content_value, RECORDS_TREES,
 )
 from bindings.py_balanced import py_call, py_type, py_contains, py_fields
 from bindings.classical_pandas import classical_admit_value
@@ -222,7 +222,7 @@ def _trees_params_stamp(model: PythonObject, fields: PythonObject, names: Python
     recycled. Content words cover exact lists and dicts item by item and
     every other non-scalar's class, as trees_key_value does; a set, a
     non-str/int dict key or a nested object makes the record unusable."""
-    if not (py_fields(model) is fields):
+    if not (py_fields(model) is fields) or not records_stampable(model):
         return
     var content = ContentRecord()
     for i in range(len(names)):  # driver-loop: stored constructor arguments (content words, once per record)

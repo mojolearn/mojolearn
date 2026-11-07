@@ -21,6 +21,7 @@ Accessor list (the ne1 contract; other lanes code against exactly these):
   Generation word
     model_generation(model) raises -> Int          0 = no proof (never stamped, or no
                                                    dictionary watcher); else >= 1
+    records_stampable(owner) raises -> Bool        opens the entry; generation != 0
     bump_model_generation(model) raises -> Int     the new word (0 = no proof)
   Named payload records (PythonObject payloads, per family)
     records_get(family, owner, name) raises -> PythonObject      None when absent
@@ -471,6 +472,15 @@ def bump_model_generation(model: PythonObject) raises -> Int:
     if not g[].entries[key].watched:
         return 0
     return g[].entries[key].generation
+
+
+def records_stampable(owner: PythonObject) raises -> Bool:
+    """True when a generation can be kept for `owner` (its entry exists or
+    was just made, and its generation word is nonzero). Callers test it
+    before building a content record, so Python 3.10 / 3.11 never pay for one."""
+    if records_open(owner) == 0:
+        return False
+    return model_generation(owner) != 0
 
 
 # ------------------------------------------------------------------ slots
