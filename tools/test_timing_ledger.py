@@ -186,3 +186,16 @@ tl_end job box-tag 0 why=exit=0
     (got,) = tl.load([ledger])
     assert got["busy"] == {"mean": 6.0, "max": 8.0, "samples": 2}
     assert got["rc"] == 0 and got["extra"] == {"why": "exit=0"}
+
+
+def test_ingest_release_state_once(ledger, tmp_path):
+    state = tmp_path / "0.8.66" / "state.json"
+    state.parent.mkdir()
+    state.write_text(json.dumps({"commit": "f" * 40, "steps": {
+        "cross-compile": {"done": True, "at": "2026-11-07T04:58:11Z", "seconds": 2111.2, "result": "PASS"},
+        "freeze-commit": {"done": True, "at": "2026-11-07T04:00:00Z"}}}))
+    assert tl.ingest_release(state.parent) == 1
+    assert tl.ingest_release(state) == 0
+    (got,) = lines(ledger)
+    assert got["kind"] == "step" and got["name"] == "cross-compile" and got["seconds"] == 2111.2
+    assert got["commit"] == "f" * 40 and got["extra"]["from_state"] is True

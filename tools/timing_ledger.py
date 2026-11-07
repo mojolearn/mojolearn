@@ -10,6 +10,7 @@
     python3 tools/timing_ledger.py lanes RECORD.json... [--column LABEL]   identity record cells -> kind lane
     python3 tools/timing_ledger.py workflow RUN_ID [--repo O/R] [--json FILE]   gh run jobs -> kind workflow
     python3 tools/timing_ledger.py merge PATH...                append fetched ledgers (box results), deduped by id
+    python3 tools/timing_ledger.py ingest-release STATE.json|DIR  a release's finished steps (older release.py)
     python3 tools/timing_ledger.py record KIND NAME START END [--rc N] [--extra k=v]...
 
 Shell wrappers use tools/timing_ledger.sh (start|end|sample), which writes the same line format.
@@ -279,6 +280,33 @@ def fetch_workflow(run_id, repo=None):
     return json.loads(subprocess.run(argv, capture_output=True, text=True, check=True).stdout)
 
 
+def ingest_release(path, ledger=None):
+    """One step record per finished step of a release state.json (tools/release.py mark(): `at` = end,
+    `seconds` = the step's own clock), for a release whose release.py predates the step runner's ledger line.
+    Ids are stable (state path, step, at), so a second ingest adds nothing. Returns steps recorded."""
+    import hashlib
+    path = Path(path)
+    state = path / "state.json" if path.is_dir() else path
+    data = json.loads(state.read_text(encoding="utf-8"))
+    target = Path(ledger) if ledger else ledger_path()
+    if target is None:
+        return 0
+    have = {r["id"] for r in load([target])} if target.exists() else set()
+    rows = []
+    for step, rec in sorted((data.get("steps") or {}).items()):
+        if not isinstance(rec, dict) or rec.get("seconds") is None or not rec.get("at"):
+            continue
+        end = _iso(rec["at"])
+        row = _line("step", step, end - float(rec["seconds"]), end, commit=rec.get("commit") or data.get("commit"),
+                    rc=0, extra=dict(outcome="done", release=str(state.parent), result=str(rec.get("result", ""))[:300],
+                                     start_derived=True, from_state=True))
+        row["id"] = hashlib.sha256(f"{state.resolve()}|{step}|{rec['at']}".encode()).hexdigest()[:32]
+        if row["id"] not in have:
+            rows.append(row)
+    _append(rows, target)
+    return len(rows)
+
+
 def merge(paths, ledger=None):
     """Append other ledgers' lines (a fetched box results dir, a file) whose id this ledger lacks."""
     target = Path(ledger) if ledger else ledger_path()
@@ -428,6 +456,8 @@ def main(argv=None):
     w.add_argument("run_id")
     w.add_argument("--repo")
     w.add_argument("--json", dest="json_file", help="a saved `gh run view --json databaseId,workflowName,headSha,jobs`")
+    ir = sub.add_parser("ingest-release")
+    ir.add_argument("state", help="a release state.json or the release version dir holding it")
     m = sub.add_parser("merge")
     m.add_argument("paths", nargs="+")
     rc = sub.add_parser("record")
@@ -463,6 +493,9 @@ def main(argv=None):
             print(f"timing_ledger: {ingest_workflow(run)} workflow job(s) -> {ledger_path()}")
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             print(f"timing_ledger: run {a.run_id} not recorded ({type(exc).__name__}: {exc})")
+        return 0
+    if a.cmd == "ingest-release":
+        print(f"timing_ledger: {ingest_release(a.state)} step(s) -> {ledger_path()}")
         return 0
     if a.cmd == "merge":
         print(f"timing_ledger: {merge(a.paths)} record(s) merged -> {ledger_path()}")
