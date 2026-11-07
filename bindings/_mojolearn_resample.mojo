@@ -28,7 +28,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 from checks.vendor import COMPILED_VENDOR
 from resample.checks.statistics import MC_DIMS, MC_F_CONST, MC_F_PRODUCT, MC_F_SUM
 from resample.estimator import (
@@ -43,6 +44,7 @@ from resample.estimator import (
     permutation_test_host,
     resample_indices_host,
     resample_indices_replace_into,
+    resample_indices_permute_into,
     RESAMPLE_IDX_DIRECT,
     RESAMPLE_GPU_GATHER,
     resample_gather_gpu, resample_permutation_gather_gpu,
@@ -396,6 +398,12 @@ def permutation_samples_binding(
     return PythonObject(0)
 
 
+#: Every tier writes the drawn indices into the caller's buffer, except the
+#: FAST + Apple build compiled with MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF
+#: (RESAMPLE_IDX_DIRECT's measured B arm keeps its List route).
+comptime _IDX_INTO = RESAMPLE_IDX_DIRECT or not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+
+
 def resample_indices_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -409,11 +417,19 @@ def resample_indices_binding(
     var count = Int(py=params[1])
     var replace = Int(py=params[2]) != 0
     var seed = UInt64(Int(py=params[3]))
-    comptime if RESAMPLE_IDX_DIRECT:
-        if replace:
-            with GILReleased(Python()):
+    # lane ne2-b-rounds (N053): both arms write the caller's int32 buffer
+    # directly on every tier (`*_into`: one device-to-host copy for replace,
+    # the keys once into a host buffer and the order straight into `op` for
+    # replace=False). The same integers as the List route below, which stays
+    # only as the B arm of RESAMPLE_IDX_DIRECT on FAST + Apple
+    # (-D MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF).
+    comptime if _IDX_INTO:
+        with GILReleased(Python()):
+            if replace:
                 resample_indices_replace_into(n, count, seed, op)
-            return PythonObject(0)
+            else:
+                resample_indices_permute_into(n, count, seed, op)
+        return PythonObject(0)
     with GILReleased(Python()):
         var idx = resample_indices_host(n, count, replace, seed)
         resample_store_indices(op, idx, count)

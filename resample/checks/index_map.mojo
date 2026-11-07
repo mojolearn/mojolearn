@@ -581,12 +581,17 @@ def permutation_ranks_host(key: UInt64, r: Int, n_pooled: Int) -> List[Int32]:
     return out^
 
 
-def utils_first_by_key(keys: List[UInt64], n: Int, count: Int) -> List[Int32]:
-    """`rng.permutation(n)[:count]`'s positional spelling (sklearn.utils.resample
-    replace=False): the positions `0..n-1` ordered by the TOTAL order
-    `permutation_key_lt` (key, then position), the first `count` kept. A
-    bottom-up merge sort over positions, host only, integer compares only,
-    so it is the same order on every host."""
+def utils_first_by_key_into(
+    keys: MutPointer[UInt64, MutUntrackedOrigin],
+    n: Int,
+    count: Int,
+    dst: MutPointer[Int32, MutUntrackedOrigin],
+):
+    """`utils_first_by_key` reading the `n` keys at `keys` and writing the
+    first `count` positions into `dst` (count int32 slots): the caller's
+    buffer, so no List holds the keys or the result (lane ne2-b-rounds,
+    N053). The same bottom-up merge sort over positions, integer compares
+    only, so it is the same order on every host."""
     var a = List[Int](capacity=n)
     for j in range(n):
         a.append(j)
@@ -621,9 +626,25 @@ def utils_first_by_key(keys: List[UInt64], n: Int, count: Int) -> List[Int32]:
         a = b^
         b = t^
         width *= 2
-    var out = List[Int32](capacity=count)
     for q in range(count):
-        out.append(Int32(a[q]))
+        dst[q] = Int32(a[q])
+
+
+def utils_first_by_key(keys: List[UInt64], n: Int, count: Int) -> List[Int32]:
+    """`rng.permutation(n)[:count]`'s positional spelling (sklearn.utils.resample
+    replace=False): the positions `0..n-1` ordered by the TOTAL order
+    `permutation_key_lt` (key, then position), the first `count` kept. A
+    bottom-up merge sort over positions, host only, integer compares only,
+    so it is the same order on every host. One implementation:
+    `utils_first_by_key_into` over the List's storage."""
+    var out = List[Int32](length=max(count, 0), fill=0)
+    if n > 0 and count > 0:
+        utils_first_by_key_into(
+            MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(keys.unsafe_ptr())),
+            n,
+            count,
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(out.unsafe_ptr())),
+        )
     return out^
 
 

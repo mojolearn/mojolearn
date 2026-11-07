@@ -89,6 +89,7 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_UTILS_PERMUTE,
     RESAMPLE_KIND_UTILS_REPLACE,
     utils_first_by_key,
+    utils_first_by_key_into,
     utils_validate,
     RESAMPLE_KIND_PERMUTATION,
     bootstrap_index_kernel,
@@ -2042,6 +2043,42 @@ def resample_indices_replace_into(
         )
         ctx.enqueue_copy(dst_ptr=dst, src_buf=rows.create_sub_buffer[DType.int32](0, count))
     ctx.synchronize()
+    _ = rows^
+    _ = keys^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
+
+
+def resample_indices_permute_into(
+    n: Int, count: Int, seed: UInt64, dst: MutPointer[Int32, MutUntrackedOrigin], tpb: Int = 256
+) raises:
+    """`resample_indices_host(n, count, False, seed)` written into `dst`
+    (count int32 slots): the device draws every position's 64-bit key
+    (kind 7), the keys come home once into a host buffer and
+    `utils_first_by_key_into` writes the first `count` positions of the
+    total order straight into the caller's buffer (lane ne2-b-rounds, N053:
+    no List of keys, no List of indices, no copy after). The same integers
+    as `resample_indices_host`."""
+    utils_validate(n, count, False)
+    var key = resample_key(seed, RESAMPLE_KIND_UTILS_PERMUTE)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var rows = ctx.enqueue_create_buffer[DType.int32](1)
+    var keys = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_function[utils_draw_kernel](
+        rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+        Int32(n), Int32(n), Int32(0),
+        grid_dim=(ceildiv(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    var host = ctx.enqueue_create_host_buffer[DType.uint64](n)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=keys)
+    ctx.synchronize()
+    utils_first_by_key_into(
+        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(host.unsafe_ptr())),
+        n,
+        count,
+        dst,
+    )
+    _ = host^
     _ = rows^
     _ = keys^
     # DEVIATION 1946: the context dies LAST.
