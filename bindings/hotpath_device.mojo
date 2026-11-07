@@ -22,7 +22,7 @@ five off):
   IDN_HPDEV_LABELS  -D MOJOLEARN_IDN_HPDEV_LABELS_OFF  encode_labels_<dtype>
                     (`hpdev_try_encode_labels`, called by the base binding)
   IDN_HPDEV_FOLDS   -D MOJOLEARN_IDN_HPDEV_FOLDS_OFF   fold_ids,
-                    select_fold_i64, select_mask_u8_i64,
+                    select_fold_i64, select_folds_i64, select_mask_u8_i64,
                     mask_from_indices_u8, arange_i64, leave_range_i64,
                     check_indices_i64, indices_overlap_i64, first_seen_i32,
                     strat_fold_assign_i32
@@ -85,6 +85,7 @@ from bindings.hotpath_helpers import (
     normal_init_f32_binding as host_normal_init_f32_binding,
     mask_from_indices_u8_binding as host_mask_from_indices_u8_binding,
     select_fold_i64_binding as host_select_fold_i64_binding,
+    select_folds_i64_binding as host_select_folds_i64_binding,
     select_mask_u8_i64_binding as host_select_mask_u8_i64_binding,
     strat_fold_assign_i32_binding as host_strat_fold_assign_i32_binding,
     reduce_stat_binding as host_reduce_stat_binding,
@@ -121,6 +122,7 @@ from core.hotpath_device import (
     device_normal_init_f32,
     device_reduce_arg,
     device_select_fold_i64,
+    device_select_folds_i64,
     device_select_mask_u8_i64,
     device_strat_fold_assign_i32,
     device_stratified_fold_ids,
@@ -454,6 +456,34 @@ def select_fold_i64_binding(
                 n_test = device_select_fold_i64(ctx, fa, rows, want, ta, ra)
             return PythonObject(n_test)
     return host_select_fold_i64_binding(fold_addr, n, fold, test_addr, train_addr)
+
+
+def select_folds_i64_binding(
+    fold_addr: PythonObject, n: PythonObject, k: PythonObject, sizes_addr: PythonObject,
+    test_addrs_addr: PythonObject, train_addrs_addr: PythonObject,
+) raises -> PythonObject:
+    """`select_folds_i64`, on the device: one split plan per CV call (lane
+    ne1-b-door, N051): the fold ids go up once and every fold's train and
+    test rows come back behind one synchronize. A count that disagrees with
+    `sizes` reruns the host helper, which reports the fold."""
+    comptime if IDN_HPDEV_FOLDS:
+        var rows = Int(py=n)
+        var splits = Int(py=k)
+        var fa = Int(py=fold_addr)
+        var sa = Int(py=sizes_addr)
+        var ta = Int(py=test_addrs_addr)
+        var ra = Int(py=train_addrs_addr)
+        if (
+            rows >= 1 and rows <= HPD_MAX_N and splits >= 1 and splits <= 2147483647
+            and fa != 0 and sa != 0 and ta != 0 and ra != 0
+        ):
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            var bad = -1
+            with GILReleased(Python()):
+                bad = device_select_folds_i64(ctx, fa, rows, splits, sa, ta, ra)
+            if bad < 0:
+                return PythonObject(-1)
+    return host_select_folds_i64_binding(fold_addr, n, k, sizes_addr, test_addrs_addr, train_addrs_addr)
 
 
 def select_mask_u8_i64_binding(

@@ -60,6 +60,14 @@ def msel_entry(name: String, context: PythonObject) raises -> PythonObject:
     return msel_native(name, context)
 
 
+def msel_entry_ready(name: String, context: PythonObject) raises -> Bool:
+    """Whether the compiled helper `name` was connected at import (an older
+    core binding without it keeps its refusal there): the caller then takes
+    the helper it replaces."""
+    var entry = py_get(context["family_msel_entries"], PythonObject(name))
+    return entry is not None and py_type(entry) is context["family_builtin_type"]
+
+
 def msel_try(callable: PythonObject, args: PythonObject, classes: PythonObject,
              context: PythonObject) raises -> PythonObject:
     """`callable(*args)`; an exception of `classes` returns the miss
