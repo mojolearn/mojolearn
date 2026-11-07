@@ -35,6 +35,8 @@ FAMILIES = (
         exports=(
             "x_cluster_host_numeric_mode", "x_cluster_host_vendor", "x_cluster_host_column",
             "x_cluster_host_sabotage", "x_cluster_call", "x_cluster_numeric_mode", "x_cluster_vendor",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "hierarchy_cluster_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the cluster expansion lane's CPU route (x_cluster/, lane/algos-cluster).",
