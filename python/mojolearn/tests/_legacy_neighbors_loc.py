@@ -10,7 +10,10 @@ from mojolearn import _portable_math as math
 from mojolearn._array import Array
 from mojolearn._buffer import addr, addr_ro, empty, zeros
 from mojolearn._lazy_out import _empty_out
-from mojolearn._mode import available_if
+# No available_if: the native attribute owner of the product base class
+# serves only its own connected descriptors, so a subclass descriptor is
+# refused ("Python attribute descriptor requires a native owner"); the
+# oracle methods guard novelty in their bodies instead.
 from mojolearn._expansion_neighbors import (
     LocalOutlierFactor, NearestCentroid, KNNImputer, _f32, _i32, _f32_scalar, _p2m_sort_rows,
     _class_array, _argmax_labels, _accuracy, _U_IDENTITY, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
@@ -83,7 +86,7 @@ class LegacyLocalOutlierFactor(LocalOutlierFactor):
         diff = b - a
         return b - diff * (1.0 - t) if t >= 0.5 else a + diff * t
 
-    @available_if(lambda self: not self.novelty)
+    # Plain method: the body refuses novelty=True itself (see the check below).
     def fit_predict(self, X, y=None):
         """Fit the model and label the training samples.
 
@@ -116,7 +119,7 @@ class LegacyLocalOutlierFactor(LocalOutlierFactor):
         if not self.novelty:
             raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
 
-    @available_if(lambda self: self.novelty)
+    # Plain method: self._novelty refuses novelty=False itself.
     def score_samples(self, X):
         """Negative local outlier factor of new samples.
 
@@ -143,7 +146,7 @@ class LegacyLocalOutlierFactor(LocalOutlierFactor):
         self._op("lof_score", [(idx, 0), (self._lrd, 0), (lrd, 0), (score, 1)], (k, nq, nf))
         return score
 
-    @available_if(lambda self: self.novelty)
+    # Plain method: self._novelty refuses novelty=False itself.
     def decision_function(self, X):
         """Shifted outlier score of new samples: ``score_samples(X) - offset_``.
 
@@ -161,7 +164,7 @@ class LegacyLocalOutlierFactor(LocalOutlierFactor):
         self._novelty("decision_function")
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
-    @available_if(lambda self: self.novelty)
+    # Plain method: self._novelty refuses novelty=False itself.
     def predict(self, X):
         """Label new samples as inliers or outliers.
 

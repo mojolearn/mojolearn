@@ -96,7 +96,10 @@ def _labels(n, kind, seed=1):
     if kind == "int":
         return codes.astype(np.int64) * 5 - 3
     if kind == "float":
-        return codes.astype(np.float64) / 2.0
+        # Integral float labels are classes; non-integral floats are a
+        # continuous target, which scikit-learn's NearestCentroid refuses
+        # (test_nearest_centroid_refuses_a_continuous_target).
+        return codes.astype(np.float64) * 2.0 - 1.0
     if kind == "str":
         return [("a", "bb", "c")[c] for c in codes]
     return [bool(c % 2) for c in codes]
@@ -114,8 +117,16 @@ def test_nearest_centroid_matches_former_path(metric, priors, shrink, kind):
     assert audit_native_call(new.fit, X, y).assert_native() is new
     old.fit(X, y)
     assert _attrs(new, _NC_ATTRS) == _attrs(old, _NC_ATTRS)
-    _same(audit_native_call(new.predict, Q).assert_native(), old.predict(Q))
     yq = _labels(30, kind, seed=5)
+    if metric == "manhattan" and not old._uniform():
+        # As scikit-learn: with non-uniform priors predict is the argmax of
+        # decision_function, which exists for metric='euclidean' only.
+        with pytest.raises(AttributeError, match="metric='euclidean' only"):
+            new.predict(Q)
+        with pytest.raises(AttributeError, match="metric='euclidean' only"):
+            new.score(Q, yq)
+        return
+    _same(audit_native_call(new.predict, Q).assert_native(), old.predict(Q))
     assert audit_native_call(new.score, Q, yq).assert_native() == old.score(Q, yq)
     if metric == "euclidean":
         _same(audit_native_call(new.decision_function, Q).assert_native(), old.decision_function(Q))
@@ -150,6 +161,12 @@ def test_nearest_centroid_refusals_keep_their_wording(kwargs, y, text):
     with pytest.raises(ValueError) as old:
         legacy.LegacyNearestCentroid(**kwargs).fit(X, labels)
     assert text in str(err.value) and str(err.value) == str(old.value)
+
+
+def test_nearest_centroid_refuses_a_continuous_target():
+    y = np.random.default_rng(1).integers(0, 3, 60).astype(np.float64) / 2.0
+    with pytest.raises(ValueError, match="Unknown label type: continuous"):
+        mojolearn.NearestCentroid().fit(_data(), y)
 
 
 def test_nearest_centroid_zero_variance_refusal():
@@ -197,7 +214,7 @@ def test_knn_imputer_refusals_keep_their_wording(kwargs, kind, text):
 
 def test_knn_imputer_width_and_k_refusals():
     m = mojolearn.KNNImputer().fit(_holes())
-    with pytest.raises(ValueError, match="different number of features"):
+    with pytest.raises(ValueError, match="X has 4 features, but KNNImputer is expecting 6 features"):
         m.transform(_holes(d=4))
     with pytest.raises(ValueError, match="n_neighbors must be >= 1"):
         mojolearn.KNNImputer(n_neighbors=0).fit(_holes()).transform(_holes())
