@@ -12,6 +12,7 @@ from x_neighbors.kapprox_host import kpca_resident
 from x_neighbors.kfeat_rng import op_kfeat_pcs_draw_idn_host, op_kfeat_schi2_fit_idn_host
 from x_neighbors.ocsvm_host import op_ocsvm_alpha_init, op_unit_ff
 from x_neighbors.ocsvm_init import oci_nu_hi, oci_nu_lo
+from x_neighbors.native_descriptor_aux_host import xn_aux_execute
 
 
 def kpca_resident_binding() raises -> PythonObject:
@@ -20,7 +21,7 @@ def kpca_resident_binding() raises -> PythonObject:
 
 
 def lp_fast_resident_binding() raises -> PythonObject:
-    """0: the host column never takes the resident kNN-graph loop."""
+    """1: the host column takes the resident kNN-graph loop (op_lp_iterate_knn)."""
     return PythonObject(lp_fast_resident())
 
 
@@ -86,4 +87,56 @@ def unit_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     if info == 0 or (n > 0 and (v == 0 or res == 0)):
         raise Error("x_neighbors: null buffer address")
     op_unit_ff(v, res, info, n)
+    return PythonObject(None)
+
+
+def _aux_call(op: Int, a_: PythonObject, i_: PythonObject, f_: PythonObject, na: Int, ni: Int,
+              nf: Int) raises:
+    """One auxiliary descriptor operation (x_neighbors/native_descriptor_aux_*)
+    from the Python door: the fixed address, dimension and scalar words of
+    the named operation, then its typed admission and owner."""
+    var a = List[Int]()
+    var p = List[Int]()
+    var f = List[Float64]()
+    for k in range(na):  # small-loop(the fixed address words of the named operation)
+        a.append(Int(py=a_[k]))
+    for k in range(ni):  # small-loop(the fixed dimension words of the named operation)
+        p.append(Int(py=i_[k]))
+    for k in range(nf):  # small-loop(the fixed scalar words of the named operation)
+        f.append(Float64(py=f_[k]))
+    _ = xn_aux_execute(op, a, p, f)
+
+
+def ocsvm_labels_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_ocsvm_labels (host column): OneClassSVM.predict's kernel_matmul,
+    unary and sign-label ops in one native session. Addresses (q, support
+    rows, dual column, int32 labels), ints (n, m, d, kind, degree, sign
+    mode), floats (gamma, coef0, scale, shift, threshold)."""
+    _aux_call(5, a_, i_, f_, 4, 6, 5)
+    return PythonObject(None)
+
+
+def nc_labels_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_nc_labels (host column): NearestCentroid.predict's codes in one
+    native session. Addresses (q, centroids, std, prior, int32 codes), ints
+    (n, d, classes, mode: 0 sqdist, 1 l1dist, 2 decision)."""
+    _aux_call(6, a_, i_, f_, 5, 4, 0)
+    return PythonObject(None)
+
+
+def nc_proba_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_nc_proba (host column): NearestCentroid.predict_proba /
+    predict_log_proba in one native session. Addresses (q, centroids, std,
+    prior, out), ints (n, d, classes, mode: 0 softmax, 1 log-softmax,
+    2 float64 softmax)."""
+    _aux_call(7, a_, i_, f_, 5, 4, 0)
+    return PythonObject(None)
+
+
+def lp_dense_proba_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_lp_dense_proba (host column): LabelPropagation / LabelSpreading
+    predict_proba or predict with kernel='rbf' in one native session.
+    Addresses (q, X_, label_distributions_, proba out, int32 codes out),
+    ints (nq, n, d, classes, kernel kind, want_codes), floats (gamma, coef0)."""
+    _aux_call(8, a_, i_, f_, 5, 6, 2)
     return PythonObject(None)

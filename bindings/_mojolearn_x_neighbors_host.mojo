@@ -22,6 +22,7 @@ from x_neighbors.ocsvm_host import op_ocsvm
 from providers.python.x_neighbors_host_pyapi import ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from providers.python.x_neighbors_host_pyapi import unit_ff_binding
+from providers.python.x_neighbors_host_pyapi import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
 from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
 from providers.python.x_neighbors_host_pyapi import kpca_resident_binding
 from providers.python.x_neighbors_host_pyapi import lp_fast_resident_binding
@@ -1202,6 +1203,13 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
         # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
         comptime if XN_UNIT_DEV:
             m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
+        # lane ne3-g-svc-gp-neighbors (N369): OneClassSVM.predict in one session
+        m.def_function[ocsvm_labels_binding]("x_neighbors_ocsvm_labels")
+        # lane ne3-g-svc-gp-neighbors (N327): NearestCentroid predict / proba in one session
+        m.def_function[nc_labels_binding]("x_neighbors_nc_labels")
+        m.def_function[nc_proba_binding]("x_neighbors_nc_proba")
+        # lane ne3-g-svc-gp-neighbors (N324): LabelPropagation rbf predict / proba in one session
+        m.def_function[lp_dense_proba_binding]("x_neighbors_lp_dense_proba")
         # lane fix-k1-neighbors: the host column of the samplers' counter-based draws
         comptime if XN_IDN_SKETCH_CTR:
             m.def_function[kfeat_schi2_fit_idn_host_binding]("x_neighbors_kfeat_schi2_fit_idn")

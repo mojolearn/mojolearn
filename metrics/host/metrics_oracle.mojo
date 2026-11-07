@@ -121,6 +121,7 @@ same define also perturbs a VALUE each metric reads:
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the metrics lane is the measurement.
 """
+from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from std.math import fma
 from std.math import sqrt
 from std.memory import bitcast
@@ -903,11 +904,7 @@ def host_v_measure(
     """`v_measure`, `v_measure.mojo:29`."""
     var h = host_homogeneity_score(truth, pred, size, lower, upper)
     var c = host_homogeneity_score(pred, truth, size, lower, upper)
-    if c + h == 0.0:
-        return 0.0
-    var num = (1.0 + beta) * h * c
-    var den = beta * h + c
-    return num / den
+    return v_measure_from(h, c, beta)
 
 
 # ===========================================================================

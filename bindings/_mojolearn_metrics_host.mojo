@@ -93,6 +93,7 @@ from umap.host.umap_oracle import (
     host_umap_transform,
 )
 from umap.params import UMAPParams
+from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from metrics.host.metrics_oracle import (
     DISTANCE_L2_SQRT_UNEXPANDED,
     METRICS_ORACLE_HOST_SABOTAGE,
@@ -445,6 +446,35 @@ def v_measure_score_binding(
         _check_range(lower, upper)
         out = host_v_measure(yt, yp, n, lower, upper, beta)
     return PythonObject(out)
+
+
+def homogeneity_completeness_v_measure_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`(homogeneity, completeness, v_measure)` on the host in one call: the
+    two homogeneity folds the single entries ran (completeness = the
+    swapped pair), the V-measure composed from them as `host_v_measure`
+    composes it. `params`: `0 n, 1 lower_class_range, 2
+    upper_class_range, 3 beta (float)`."""
+    _want(String("homogeneity_completeness_v_measure"), params, 4)
+    var n = _index(params[0])
+    var lower = Int32(_index(params[1]))
+    var upper = Int32(_index(params[2]))
+    var beta = Float64(py=params[3])
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var h = Float64(0.0)
+    var c = Float64(0.0)
+    var v = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        _check_range(lower, upper)
+        h = host_homogeneity_score(yt, yp, n, lower, upper)
+        c = host_homogeneity_score(yp, yt, n, lower, upper)
+        v = v_measure_from(h, c, beta)
+    return Python.tuple(PythonObject(h), PythonObject(c), PythonObject(v))
 
 
 # ===========================================================================
@@ -1331,6 +1361,7 @@ def build__mojolearn_metrics_host() -> PythonObject:
         module.def_function[homogeneity_score_binding]("homogeneity_score")
         module.def_function[completeness_score_binding]("completeness_score")
         module.def_function[v_measure_score_binding]("v_measure_score")
+        module.def_function[homogeneity_completeness_v_measure_binding]("homogeneity_completeness_v_measure")
         module.def_function[r2_score_binding]("r2_score")
         module.def_function[silhouette_binding]("silhouette")
         module.def_function[rand_score_binding]("rand_score")

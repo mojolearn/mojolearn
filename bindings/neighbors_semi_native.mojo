@@ -17,6 +17,7 @@
 # context, where the module put them at its import.
 from core.p3nc_scan import p3nc_dense_nnz_f32, p3nc_dense_to_csr_f32
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.x_neighbors_admission_pyapi import xn_capabilities
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from std.memory import bitcast
 from std.ffi import _Global
@@ -809,15 +810,62 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     _lp_finish(fields, binding, x, classes, ld, n_iter, context)
 
 
+def _lp_dense_available(binding: PythonObject) raises -> Bool:
+    """The binding carries `lp_dense_proba` (export on a loaded module,
+    capability bit 6 on the native descriptor route)."""
+    if xn_is_module(binding):
+        return family_call(_semi_b().getattr, xn_module(binding), PythonObject("x_neighbors_lp_dense_proba"),
+                           PythonObject(None)) is not None
+    return (xn_capabilities(binding) & 64) != 0
+
+
+def _lp_dense_fused(model: PythonObject, binding: PythonObject, source: PythonObject, want_codes: Bool,
+                    context: PythonObject) raises -> PythonObject:
+    """kernel='rbf' predict_proba (float32 (nq, C)) or predict codes (int32
+    (nq,)) through `lp_dense_proba` (lane ne3-g-svc-gp-neighbors, N324): the
+    kernel matrix, the product and the normalization stay on the device;
+    the same kind, gamma and coef0 words `_semi_rbf` passes."""
+    var fields = py_fields(model)
+    var q = _semi_x(source, context)
+    var xfit = family_field(fields, "X_")
+    var dist = family_field(fields, "label_distributions_")
+    var nq = Int(py=q.shape[0])
+    var n = Int(py=xfit.shape[0])
+    var c = Int(py=dist.shape[1])
+    if nq == 0 or n == 0 or c == 0:
+        return PythonObject(None)  # an empty side: the caller takes the op chain
+    # The unused output is a one-word placeholder (the descriptor refuses a
+    # null address).
+    var proba = _semi_out(Python.tuple(1 if want_codes else nq, 1 if want_codes else c), "<f4", context)
+    var codes = _semi_out(Python.tuple(nq if want_codes else 1), "<i4", context)
+    var kind = context["family_svc_xn_kernels"]["rbf"]
+    var g = _semi_f32_scalar(_semi_float(family_field(fields, "gamma")))
+    _semi_op(binding, "lp_dense_proba",
+             Python.list(_semi_addr(q), _semi_addr(xfit), _semi_addr(dist), _semi_addr(proba), _semi_addr(codes)),
+             Python.list(PythonObject(nq), PythonObject(n), PythonObject(Int(py=q.shape[1])), PythonObject(c),
+                         PythonObject(_semi_int(kind)), PythonObject(1 if want_codes else 0)),
+             Python.list(PythonObject(g), PythonObject(_semi_f32_scalar(0.0))), context)
+    _ = q  # keep the Python object alive through the native call above
+    _ = xfit  # keep the Python object alive through the native call above
+    _ = dist  # keep the Python object alive through the native call above
+    _ = codes  # keep the Python object alive through the native call above
+    return codes if want_codes else proba
+
+
 def _lp_proba(model: PythonObject, binding: PythonObject, source: PythonObject,
               context: PythonObject) raises -> PythonObject:
     """`_LabelPropagationBase.predict_proba(X)`."""
     var fields = py_fields(model)
+    var knn = _semi_eq(family_field(fields, "kernel"), PythonObject("knn"))
+    if not knn and _lp_dense_available(binding):
+        var fused = _lp_dense_fused(model, binding, source, False, context)
+        if fused is not None:
+            return fused
     var q = _semi_x(source, context)
     var xfit = family_field(fields, "X_")
     var n = Int(py=xfit.shape[0])
     var p: PythonObject
-    if _semi_eq(family_field(fields, "kernel"), PythonObject("knn")):
+    if knn:
         var k = min(_semi_int(family_field(fields, "n_neighbors")), n)
         var idx = _semi_knn_idx(binding, q, xfit, k, context)
         var graph = _lp_compact(binding, idx, n, 2, context)
@@ -831,6 +879,12 @@ def _lp_proba(model: PythonObject, binding: PythonObject, source: PythonObject,
 def _lp_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                 context: PythonObject) raises -> PythonObject:
     """`_LabelPropagationBase.predict(X)`."""
+    var fields = py_fields(model)
+    if not _semi_eq(family_field(fields, "kernel"), PythonObject("knn")) and _lp_dense_available(binding):
+        # Only the nq codes come back (N324); the decode is `_argmax_labels`'.
+        var codes = _lp_dense_fused(model, binding, source, True, context)
+        if codes is not None:
+            return _semi_class_array(family_field(fields, "classes_"), codes, context)
     var proba = _lp_proba(model, binding, source, context)
     return _semi_argmax_labels(binding, family_field(py_fields(model), "classes_"), proba, context)
 

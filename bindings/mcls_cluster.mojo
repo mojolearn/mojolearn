@@ -17,6 +17,7 @@ from bindings.family_common import (
 )
 from bindings.metrics_reg_native import _mean_error, _r2_options
 from bindings.metrics_native_inputs import metric_shape
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.mcls_common import (
     mc_b, mc_len, mc_float, mc_int, mc_is_str, mc_entry, mc_shape_of, mc_rank, mc_dim,
     mc_i32_1d, mc_f32_1d, mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store,
@@ -381,6 +382,20 @@ def mcls_cluster_operation(operation: String, args: PythonObject, context: Pytho
         # checked and remapped once; the three entries are the three calls
         # homogeneity_score, completeness_score and v_measure_score made
         var prepared = _cluster_codes(args[1], args[2], context)
+        # N356 (lane ne3-g-svc-gp-neighbors): one entry, one upload, the same
+        # three values (bindings/_mojolearn_metrics(_host).mojo
+        # homogeneity_completeness_v_measure); a binding without it takes
+        # the three entries below.
+        var fused = neural_descriptor_entry(args[0], "homogeneity_completeness_v_measure", False)
+        if fused is not None:
+            var codes = prepared[0]
+            var n = Int(py=prepared[1])
+            var base = Int(py=classical_address(codes))
+            var params = _params(n, 0, Int(py=prepared[2]))
+            _ = py_call(params.append, family_call(b.float, args[3]))
+            var triple = family_call(fused, PythonObject(base), PythonObject(base + 4 * n), params)
+            _ = codes  # keep the Python object alive through the native call above
+            return Python.tuple(_as_float(triple[0]), _as_float(triple[1]), _as_float(triple[2]))
         var h = _cluster_call(args[0], "homogeneity_score", prepared, Python.list())
         var c = _cluster_call(args[0], "completeness_score", prepared, Python.list())
         var v = _cluster_call(args[0], "v_measure_score", prepared, Python.list(family_call(b.float, args[3])))

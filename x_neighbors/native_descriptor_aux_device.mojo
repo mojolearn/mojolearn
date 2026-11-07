@@ -5,11 +5,21 @@ from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV, oci_nu_hi, oc
 from x_neighbors.ocsvm_dev import op_ocsvm_alpha_init, op_unit_ff, op_ocsvm_x, OCSVM_IDN_RES
 from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
 from x_neighbors.kfeat_dev import kfeat_pcs_draw_idn
+from x_neighbors.iter_device import op_ocsvm_labels
+# Capability bit 4: this binary carries the ocsvm_labels auxiliary operation.
+comptime XN_AUX_OCSVM_LABELS = True
+from x_neighbors.device_ops import op_nc_labels, op_nc_proba, XN_NC_SOFTMAX64, op_lp_dense_proba
+from x_neighbors.proba64_nc import NC_PROBA64
+# Capability bit 5: this binary carries nc_labels and nc_proba.
+comptime XN_AUX_NC_FUSED = True
+# Capability bit 6: this binary carries lp_dense_proba.
+comptime XN_AUX_LP_DENSE = True
 
 
 def xn_aux_capabilities() -> Int:
     return (Int(OCSVM_IDN_RES) | (Int(XN_OCSVM_DEV_INIT) << 1) | (Int(XN_UNIT_DEV) << 2)
-            | (Int(XN_IDN_SKETCH_CTR) << 3))
+            | (Int(XN_IDN_SKETCH_CTR) << 3) | (Int(XN_AUX_OCSVM_LABELS) << 4)
+            | (Int(XN_AUX_NC_FUSED) << 5) | (Int(XN_AUX_LP_DENSE) << 6))
 
 
 def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -62,5 +72,55 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
         var coef0 = Float32(f[1])
         var eps = Float32(f[2])
         op_ocsvm_x(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], gamma, coef0, p[3], eps, p[4])
+        return 0
+    if op == 5:
+        # ocsvm_labels (lane ne3-g-svc-gp-neighbors, N369): addresses
+        # (q, support rows, dual column, int32 labels), ints (n, m, d, kind,
+        # degree, sign mode), floats (gamma, coef0, scale, shift, threshold).
+        for k in range(4):  # small-loop(four admitted address words)
+            if a[k] == 0:
+                raise Error("x_neighbors: null buffer address")
+        for k in range(6):  # small-loop(six admitted dimension words)
+            if p[k] < 0:
+                raise Error("x_neighbors: a negative size was passed")
+        op_ocsvm_labels(a[0], a[1], a[2], a[3], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]),
+                        Float32(f[2]), Float32(f[3]), p[5], Float32(f[4]))
+        return 0
+    if op == 6 or op == 7:
+        # nc_labels (6) / nc_proba (7) (lane ne3-g-svc-gp-neighbors, N327):
+        # addresses (q, centroids, std, prior, out), ints (n, d, classes,
+        # mode). std and prior are read by the decision modes only; the
+        # caller passes a live address for each.
+        for k in range(5):  # small-loop(five admitted address words)
+            if a[k] == 0:
+                raise Error("x_neighbors: null buffer address")
+        for k in range(4):  # small-loop(four admitted dimension words)
+            if p[k] < 0:
+                raise Error("x_neighbors: a negative size was passed")
+        if op == 6:
+            if p[3] > 2:
+                raise Error("x_neighbors nc_labels: unknown mode")
+            op_nc_labels(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3])
+            return 0
+        if p[3] > XN_NC_SOFTMAX64:
+            raise Error("x_neighbors nc_proba: unknown mode")
+        if p[3] == XN_NC_SOFTMAX64:
+            comptime if not NC_PROBA64:
+                raise Error("AttributeError: xn_softmax64 is not exported by this binding")
+        op_nc_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3])
+        return 0
+    if op == 8:
+        # lp_dense_proba (lane ne3-g-svc-gp-neighbors, N324): addresses
+        # (q, X_, label_distributions_, proba out, int32 codes out), ints
+        # (nq, n, d, classes, kind, want_codes), floats (gamma, coef0). With
+        # want_codes only the codes are written, else only the proba.
+        for k in range(5):  # small-loop(five admitted address words)
+            if a[k] == 0:
+                raise Error("x_neighbors: null buffer address")
+        for k in range(6):  # small-loop(six admitted dimension words)
+            if p[k] < 0:
+                raise Error("x_neighbors: a negative size was passed")
+        op_lp_dense_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]),
+                          p[5])
         return 0
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

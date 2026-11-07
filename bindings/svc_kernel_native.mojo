@@ -49,7 +49,7 @@ from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64,
     svc_read_f32, svc_read_i32, svc_f32, svc_snapshot, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_encode_1d, svc_decode,
-    svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
+    svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
 )
 
 # `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo), `_svm_impl._EPI_*` and `_GLUE_*`.
@@ -1214,8 +1214,17 @@ def _svc_decision(model: PythonObject, fields: PythonObject, binding: PythonObje
 
 def _svc_predict(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
                  context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC.predict`: the binary epilogue's codes, or the one-vs-one vote
-    (the 'ovr' argmax with break_ties)."""
+    """`SVC.predict`: the predicted codes decoded to the fitted classes."""
+    return svc_decode(model, svc_field(fields, "classes_"),
+                      _svc_predict_codes(model, fields, binding, source, context, native), context)
+
+
+def _svc_predict_codes(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
+                       context: PythonObject, native: PythonObject) raises -> PythonObject:
+    """`SVC.predict` as int64 codes into `classes_`: the binary epilogue's
+    codes, or the one-vs-one vote (the 'ovr' argmax with break_ties). The
+    same epilogues as before; only the decode moved to `_svc_predict`, so
+    `score` compares these codes with y encoded against `classes_`."""
     var pairs = py_get(fields, PythonObject("_pairs"), PythonObject(None))
     if pairs is None:
         var raw = _run(model, fields, binding, source, True, context, native)
@@ -1223,7 +1232,7 @@ def _svc_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
         var codes = _epilogue(fields, binding, _EPI_BINARY, raw, 1, n_rows, _binary_codes(context),
                               Python.tuple(PythonObject(n_rows)), "<i8", PythonObject(None),
                               svc_float(svc_field(fields, "_label1")), context, native)
-        return svc_decode(model, svc_field(fields, "classes_"), codes, context)
+        return codes
     var dec = _pair_decisions(model, fields, binding, source, context, native)
     var n_pairs = Int(py=dec.shape[0])
     var n_rows = Int(py=dec.shape[1])
@@ -1233,11 +1242,9 @@ def _svc_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     if svc_truthy(svc_field(fields, "_hp_break_ties")):
         var scores = _epilogue(fields, binding, _EPI_OVR, dec, n_pairs, n_rows, pc,
                                Python.tuple(PythonObject(n_rows), PythonObject(k)), "<f8", PythonObject(None), 0.0, context, native)
-        return svc_decode(model, classes, svc_argmax_rows(scores, context), context)
-    # The class table is built once per class list of this model.
-    return svc_decode(model, classes, _epilogue(fields, binding, _EPI_VOTES, dec, n_pairs, n_rows, pc,
-                                         Python.tuple(PythonObject(n_rows)), "<i8", PythonObject(None), 0.0, context, native),
-                      context)
+        return svc_argmax_rows(scores, context)
+    return _epilogue(fields, binding, _EPI_VOTES, dec, n_pairs, n_rows, pc,
+                     Python.tuple(PythonObject(n_rows)), "<i8", PythonObject(None), 0.0, context, native)
 
 
 def _svc_proba(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject, mode: Int,
@@ -1627,8 +1634,14 @@ def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonOb
     if operation == "family_svc_svc_log_proba":
         return _svc_proba(model, fields, args[0], args[1], _EPI_LOG_PROBA, context, native)
     if operation == "family_svc_svc_score":
-        var pred = _svc_predict(model, fields, args[0], args[1], context, native)
-        return PythonObject(svc_accuracy(args[2], pred, _pred_count(pred), context))
+        # N382: accuracy on codes. y is encoded once against classes_ and
+        # compared with the predicted codes in the x_metrics COUNT program
+        # (classical_score_from_codes, bindings/classical_labels.mojo); the
+        # prediction is never decoded to label objects and re-encoded. The
+        # same matched count over the same row count: no bit change.
+        var codes = _svc_predict_codes(model, fields, args[0], args[1], context, native)
+        return PythonObject(svc_accuracy_codes(args[2], svc_field(fields, "classes_"), codes,
+                                               Int(py=codes.shape[0]), context))
     if operation == "family_svc_svr_fit":
         _svr_fit(model, args, context, native)
         return model

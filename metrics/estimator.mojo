@@ -70,6 +70,7 @@ from metrics.impl.silhouette_score_batched_float import (
 )
 from metrics.impl.trustworthiness import trustworthiness_score
 from metrics.impl.v_measure import v_measure
+from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from metrics.impl.stats.detail.batched.silhouette_score import (
     DISTANCE_L2_SQRT_UNEXPANDED,
 )
@@ -354,6 +355,40 @@ def v_measure_score_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return out
+
+
+def homogeneity_completeness_v_measure_host(
+    y_true: List[Int32],
+    y_pred: List[Int32],
+    n: Int,
+    lower: Int32,
+    upper: Int32,
+    beta: Float64,
+    mut homogeneity: Float64,
+    mut completeness: Float64,
+    mut v: Float64,
+) raises:
+    """scikit-learn `homogeneity_completeness_v_measure` in one device
+    session (row N356 of the native entry-point plan, lane
+    ne3-g-svc-gp-neighbors): the labels are uploaded once; homogeneity and
+    completeness are the two `homogeneity_score` folds the three single
+    entries ran (completeness = the swapped pair), and the V-measure is
+    composed from those two values by `v_measure_from`, the expression
+    `v_measure` applies to the same two folds. Same bits as the three
+    entries, one upload instead of three and two contingency builds
+    instead of four."""
+    _check_pair(y_true, y_pred, n)
+    _check_range(lower, upper)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dt = upload_i32(ctx, y_true)
+    var dp = upload_i32(ctx, y_pred)
+    homogeneity = homogeneity_score(ctx, dt, dp, n, lower, upper)
+    completeness = completeness_score(ctx, dt, dp, n, lower, upper)
+    v = v_measure_from(homogeneity, completeness, beta)
+    _ = dt^
+    _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
 
 
 # ===========================================================================

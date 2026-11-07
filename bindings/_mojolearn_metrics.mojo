@@ -90,6 +90,7 @@ from metrics.estimator import (
     silhouette_host,
     trustworthiness_host,
     v_measure_score_host,
+    homogeneity_completeness_v_measure_host,
 )
 from spectral.estimator import (
     spectral_embedding_dataset_host,
@@ -433,6 +434,30 @@ def v_measure_score_binding(
     with GILReleased(Python()):
         out = v_measure_score_host(yt, yp, n, lower, upper, beta)
     return PythonObject(out)
+
+
+def homogeneity_completeness_v_measure_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`(homogeneity, completeness, v_measure)` of one remapped label pair in
+    one call: the labels uploaded once, the same values the three single
+    entries return. `params` as `v_measure_score`: `0 n, 1
+    lower_class_range, 2 upper_class_range, 3 beta (float)`."""
+    _want(String("homogeneity_completeness_v_measure"), params, 4)
+    var n = Int(py=params[0])
+    var lower = Int32(Int(py=params[1]))
+    var upper = Int32(Int(py=params[2]))
+    var beta = Float64(py=params[3])
+    var yt = _load_i32(Int(py=y_true_addr), n)
+    var yp = _load_i32(Int(py=y_pred_addr), n)
+    var h = Float64(0.0)
+    var c = Float64(0.0)
+    var v = Float64(0.0)
+    with GILReleased(Python()):
+        homogeneity_completeness_v_measure_host(yt, yp, n, lower, upper, beta, h, c, v)
+    return Python.tuple(PythonObject(h), PythonObject(c), PythonObject(v))
 
 
 # ===========================================================================
@@ -1509,6 +1534,7 @@ def build__mojolearn_metrics() -> PythonObject:
         m.def_function[homogeneity_score_binding]("homogeneity_score")
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
+        m.def_function[homogeneity_completeness_v_measure_binding]("homogeneity_completeness_v_measure")
         m.def_function[r2_score_binding]("r2_score")
         m.def_function[roc_auc_score_binding]("roc_auc_score")
         m.def_function[precision_recall_curve_binding]("precision_recall_curve")

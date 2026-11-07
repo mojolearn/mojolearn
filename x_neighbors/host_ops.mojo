@@ -827,3 +827,70 @@ def op_p2m_row_sort(indptr: Int, cols: Int, dists: Int, out_cols: Int, out_d: In
             _f(out_d).unsafe_store(0, _f(out_d).unsafe_load(0) + Float32(1e-3))
     _ = s_perm^
     _ = s_rowid^
+
+
+# ---------------------------------------------- NearestCentroid fused queries
+# Lane ne3-g-svc-gp-neighbors (N327): the host column of the device
+# op_nc_labels / op_nc_proba. Each runs the host ops the caller ran one by
+# one, in the same order and with the same words (sabotage hooks included),
+# over a scratch matrix: the same bits.
+comptime XN_NC_SQDIST = 0
+comptime XN_NC_L1DIST = 1
+comptime XN_NC_DECISION = 2
+comptime XN_NC_SOFTMAX = 0
+comptime XN_NC_LOG_SOFTMAX = 1
+comptime XN_NC_SOFTMAX64 = 2
+
+
+def op_nc_labels(q: Int, cent: Int, std: Int, prior: Int, codes: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+    var mat = List[Float32](length=max(n * c, 1), fill=Float32(0))
+    var mp = Int(mat.unsafe_ptr())
+    if mode == XN_NC_DECISION:
+        op_nc_decision(q, cent, std, prior, mp, n, d, c)
+        if n > 0:
+            op_row_argmax(mp, codes, n, c)
+    else:
+        if mode == XN_NC_SQDIST:
+            op_sqdist(q, cent, mp, n, c, d)
+        else:
+            op_l1dist(q, cent, mp, n, c, d)
+        var dist = List[Float32](length=max(n, 1), fill=Float32(0))
+        op_knn_select(mp, Int(dist.unsafe_ptr()), codes, n, c, 1, 0)
+        _ = dist^
+    _ = mat^
+
+
+def op_nc_proba(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+    var mat = List[Float32](length=max(n * c, 1), fill=Float32(0))
+    var mp = Int(mat.unsafe_ptr())
+    op_nc_decision(q, cent, std, prior, mp, n, d, c)
+    if mode == XN_NC_SOFTMAX:
+        op_softmax(mp, res, n, c)
+    elif mode == XN_NC_LOG_SOFTMAX:
+        op_log_softmax(mp, res, n, c)
+    else:
+        op_softmax64(mp, res, n, c)
+    _ = mat^
+
+
+# ------------------------------------------- label propagation dense queries
+def op_lp_dense_proba(q: Int, xfit: Int, dist: Int, res: Int, codes: Int, nq: Int, n: Int, d: Int, c: Int,
+                      kind: Int, gamma: Float32, coef0: Float32, want_codes: Int) raises:
+    """The host column of the device op (lane ne3-g-svc-gp-neighbors, N324):
+    op_kernel, op_matmul, op_row_normalize (and op_row_argmax with
+    `want_codes`) in that order over scratch buffers, the ops the caller ran
+    one by one (sabotage hooks included): the same bits."""
+    var kb = List[Float32](length=max(nq * n, 1), fill=Float32(0))
+    var pb = List[Float32](length=max(nq * c, 1), fill=Float32(0))
+    var rb = List[Float32](length=max(nq * c, 1), fill=Float32(0))
+    var ka = Int(kb.unsafe_ptr())
+    var pa = Int(pb.unsafe_ptr())
+    var out = Int(rb.unsafe_ptr()) if want_codes != 0 else res
+    op_kernel(q, xfit, ka, nq, n, d, kind, gamma, coef0, 0)
+    op_matmul(ka, dist, pa, nq, n, c)
+    op_row_normalize(pa, out, nq, c)
+    if want_codes != 0 and nq > 0:
+        op_row_argmax(out, codes, nq, c)
+    _ = kb^
+    _ = pb^
+    _ = rb^

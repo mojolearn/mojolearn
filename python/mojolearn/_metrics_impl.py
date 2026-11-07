@@ -662,9 +662,9 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
     """Homogeneity, completeness and V-measure in one call.
 
     Returns ``(homogeneity_score, completeness_score, v_measure_score)``, as
-    scikit-learn's function of the same name. Each value is computed by its
-    own call, so this costs about three separate metric calls; call the one
-    you need if speed matters.
+    scikit-learn's function of the same name. The three values are computed
+    together from one pass over the labels and equal the values of the three
+    separate functions.
 
     Parameters
     ----------

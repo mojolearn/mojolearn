@@ -4,6 +4,8 @@
 # numeric protocol, or sequence protocol executes in this traversal.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from std.ffi import c_int
+from bindings.cpython_table import cpython_table
 from std.memory import bitcast
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_contains
@@ -276,6 +278,9 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
     var pointer = exported.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var acquired = False
     ref cpy = Python().cpython()
+    # N393 (lane ne3-g-svc-gp-neighbors): the buffer protocol through the one
+    # CPython table (bindings/cpython_table.mojo), not a dlsym per input.
+    var cpt = cpython_table()
     if classical_is_array(value, context):
         shape = array_slot_once(value, "shape", context)
         strides = array_slot_once(value, "strides", context)
@@ -313,7 +318,7 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
             # Read owned scalar references through native indexing; conversion
             # and flattening stay here, without ndarray.tolist/astype callbacks.
             return _kernel_boxed_array(value, shape, context, depth + 1)
-        if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(view._obj_ptr, pointer, Int32(0x118)) != 0:
+        if cpt[].PyObject_GetBuffer(view._obj_ptr, pointer, c_int(0x118)) != 0:
             raise cpy.unsafe_get_error()
         acquired = True
         address = exported[0]
@@ -347,7 +352,7 @@ def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) ra
             result.values.append(bitcast[DType.float64](native_scalar_real(data, offset, code, width, little).float64_bits()))
     finally:
         if acquired:
-            cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+            cpt[].PyBuffer_Release(pointer)
         # Keep the Py_buffer storage alive past the release on every path
         # (ASAP destruction could free it before PyBuffer_Release reads it).
         _ = len(exported)
@@ -588,6 +593,7 @@ def _kernel_boxed_array(value: PythonObject, shape: PythonObject, context: Pytho
         result.shape.append(size)
         count *= size
     ref cpy = Python().cpython()
+    var cpt = cpython_table()  # once per input, outside the element loop (N393)
     for index in range(count):  # driver-loop: scalar storage references, never NumPy numeric conversion
         var residual = index
         var coordinates = List[Int](length=len(result.shape), fill=0)
@@ -599,7 +605,7 @@ def _kernel_boxed_array(value: PythonObject, shape: PythonObject, context: Pytho
         for axis in range(len(coordinates)):  # driver-loop: native scalar index tuple
             _ = py_call(words.append, PythonObject(coordinates[axis]))
         var key = py_call(py_type(Python.tuple()), words)
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(value._obj_ptr, key._obj_ptr)
+        var raw = cpt[].PyObject_GetItem(value._obj_ptr, key._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         var item = PythonObject(from_owned=raw)
