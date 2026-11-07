@@ -96,16 +96,20 @@ struct FittedResidentEntry(Movable):
 struct FittedResidentView(Movable):
     """A call's own copies of one slot's context and buffer HANDLES (shared
     memory, reference counted). `kept` is False for per-call buffers that
-    die with the view."""
+    die with the view; `fresh` is True when this call uploaded them (a
+    caller that checks uploaded values checks them then)."""
 
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
     var kept: Bool
+    var fresh: Bool
 
-    def __init__(out self, var ctx: DeviceContext, var bufs: List[DeviceBuffer[DType.float32]], kept: Bool):
+    def __init__(out self, var ctx: DeviceContext, var bufs: List[DeviceBuffer[DType.float32]], kept: Bool,
+                 fresh: Bool):
         self.ctx = ctx^
         self.bufs = bufs^
         self.kept = kept
+        self.fresh = fresh
 
     def __deinit__(deinit self):
         _ = self.bufs^
@@ -265,7 +269,7 @@ def fitted_resident_view(store: _StorePtr, ctx: DeviceContext, lease: Int, slot:
             try:
                 ref entry = store[].entries[key]
                 entry.used = store[].tick
-                var view = FittedResidentView(entry.ctx.copy(), entry.bufs.copy(), True)
+                var view = FittedResidentView(entry.ctx.copy(), entry.bufs.copy(), True, False)
                 _store_unlock(store)
                 return view^
             except:
@@ -284,7 +288,7 @@ def fitted_resident_view(store: _StorePtr, ctx: DeviceContext, lease: Int, slot:
     # The upload runs outside the lock.
     var bufs = _upload_all(ctx, srcs, counts)
     if not keyed:
-        return FittedResidentView(ctx.copy(), bufs^, False)
+        return FittedResidentView(ctx.copy(), bufs^, False, True)
     if store[].cap == 0:
         var mem = ctx.get_memory_info()
         var cap = Int(mem[1]) // FITTED_CAP_DIVISOR
@@ -315,7 +319,7 @@ def fitted_resident_view(store: _StorePtr, ctx: DeviceContext, lease: Int, slot:
             kept = True
     _store_unlock(store)
     _ = evicted^
-    return FittedResidentView(ctx.copy(), bufs^, kept)
+    return FittedResidentView(ctx.copy(), bufs^, kept, True)
 
 
 def fitted_resident_stats(store: _StorePtr) -> List[Int]:

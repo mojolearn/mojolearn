@@ -25,11 +25,8 @@ its own uploads, over copies of the same bytes: the same launches in the
 same order, so the bits are the same, in both numeric tiers (the host-list
 route `gpr_predict_host` runs the same launches too).
 """
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.fitted_resident_store import (
-    FittedResidentStore,
     fitted_lease_open,
     fitted_lease_close,
     fitted_resident_view,
@@ -39,21 +36,7 @@ from gaussian_process.checks.kernels import GPKernelSpec, gp_kernel_diag, gp_val
 from gaussian_process.estimator import _family_ctx
 from gaussian_process.gpc_ovr import _gpc_upload_checked
 from gaussian_process.gpr_resident import gpr_predict_dev
-
-
-# One store per numeric tier, next to that tier's GP context.
-comptime GP_RESIDENT_STORE = _Global[
-    StorageType=FittedResidentStore,
-    name=(
-        "MojoGpResidentFittedIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        else "MojoGpResidentFittedFast"
-    ),
-    init_fn=FittedResidentStore.__init__,
-]
-
-
-def gp_resident_store() raises -> UnsafePointer[FittedResidentStore, MutAnyOrigin]:
-    return GP_RESIDENT_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+from gaussian_process.gp_resident_store import gp_resident_store
 
 
 struct GpResidentLease(Movable, Writable):
