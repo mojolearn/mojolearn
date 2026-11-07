@@ -1110,6 +1110,22 @@ def host_cores():
     return smoke.box_cores()
 
 
+def free_memory_bytes():
+    """Memory one more unit can take: macOS the kernel's free-memory level, Linux MemAvailable
+    (tools/mac_slot.py available_bytes), lowered to the cgroup memory.max headroom when one is set (a RunPod
+    container reads the host's /proc/meminfo; tools/build_sizing.py). None when unreadable."""
+    import mac_slot
+    free = mac_slot.available_bytes()
+    try:
+        import build_sizing
+        headroom = build_sizing.cgroup_memory_headroom()
+    except Exception:  # noqa: BLE001 - no cgroup v2 file: MemAvailable alone
+        headroom = None
+    if headroom is not None and (free is None or headroom < free):
+        return int(headroom)
+    return free
+
+
 def unit_workers(count, *, jobs=None, env=None, cores=None, free=None, per_unit=UNIT_MEMORY_BYTES):
     """(workers, why): how many of COUNT units run at once. JOBS (--jobs), else MOJOLEARN_QUALIFY_JOBS,
     else CORES capped by FREE bytes // PER_UNIT; never more than COUNT, never under 1."""
@@ -1173,9 +1189,7 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
     [{unit, status, seconds, reason}] in SELECTED order."""
     import runtime_qualifier_units as units
     bounded = bounded or run_bounded
-    if available is None:
-        import mac_slot
-        available = mac_slot.available_bytes
+    available = available or free_memory_bytes
     plan = json.loads(Path(args.unit_plan).read_text())
     require(plan.get("schema") == units.PLAN_SCHEMA, "not a runtime unit plan")
     planned = {row["unit"]: row for row in plan["units"] if row.get("decision") == "run"}
