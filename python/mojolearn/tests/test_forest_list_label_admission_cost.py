@@ -10,6 +10,7 @@ each shard on the L4 (`tools/repro_par_forest.py --direct --inputs pool`:
 import time
 
 import numpy as np
+import pytest
 
 import mojolearn as ml
 from mojolearn._buffer import as_f32_c
@@ -23,6 +24,8 @@ def _fit_seconds(X, y):
     return time.perf_counter() - started, model
 
 
+# serial: wall-clock bound; other test workers' load must not count against it (tools/run_python_tests.py)
+@pytest.mark.serial
 def test_list_labels_fit_within_twice_the_numpy_fit():
     rng = np.random.default_rng(0)
     X = rng.standard_normal((20000, 16)).astype(np.float32)

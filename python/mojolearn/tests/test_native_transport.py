@@ -365,6 +365,8 @@ with open(sys.argv[2], 'w') as output:
         native('close', (server,))
 
 
+# serial: wall-clock bound; other test workers' load must not count against it (tools/run_python_tests.py)
+@pytest.mark.serial
 @pytest.mark.parametrize('operation', ['accept', 'receive', 'wait', 'sleep'])
 @pytest.mark.parametrize('handler_raises', [False, True])
 def test_interrupted_syscalls_return_without_swallowing_signal_handlers(operation, handler_raises):

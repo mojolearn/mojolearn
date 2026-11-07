@@ -253,6 +253,8 @@ def test_worker_setup_metadata_cannot_override_route_or_run_conversion(override)
         call('environment', ((0,), (0,), override))
 
 
+# serial: wall-clock bound; other test workers' load must not count against it (tools/run_python_tests.py)
+@pytest.mark.serial
 def test_interrupted_wave_does_not_drain_hung_peers_and_reaps_children(tmp_path):
     import subprocess
     import textwrap
