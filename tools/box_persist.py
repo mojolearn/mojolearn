@@ -19,7 +19,8 @@ on any exit. The URLs expire (at most 7 days, the SigV4 limit).
   box_persist.py fetch --tag TAG [--date YYYY-MM-DD] [--dest DIR] [--all|--list] [--extract]
         reads the job's manifest.json from R2 and every sha256 sidecar, prints what landed (LANDED name sha
         bytes), downloads final.tgz (else the newest slot; --all: every object) and verifies each against its
-        sidecar (VERIFIED / VERIFY-FAILED, exit 1 on any failure). --list downloads nothing.
+        sidecar (VERIFIED / VERIFY-FAILED, exit 1 on any failure). --list downloads nothing. --extract also merges the job's
+        timing-ledger.jsonl into the Mac's timing ledger (tools/timing_ledger.py).
   box_persist.py opt-out --tool NAME --detail TEXT
         the explicit --no-persist path of the box entry points: always logged to
         ~/mojolearn-evidence/box-persist/unpersisted.log; exit 0 only with MOJOLEARN_ALLOW_UNPERSISTED=1.
@@ -392,10 +393,24 @@ def fetch(a):
                 x = os.path.join(dest, n[:-4])
                 skipped = extract_tolerant(p, x)
                 print("EXTRACTED %s -> %s (%d skipped)" % (n, x, len(skipped)))
+                merge_timing(x)
         else:
             bad += 1
             print("VERIFY-FAILED %s http=%s sha256=%s want=%s" % (n, code, got, sha))
     return 1 if bad else 0
+
+
+def merge_timing(extracted):
+    """Fold the job's timing-ledger.jsonl (box_persist_run.sh) into the Mac's timing ledger, deduped by id,
+    so `tools/timing_ledger.py report` ranks box jobs with everything else. Never fails the fetch."""
+    try:
+        sys.path.insert(0, HERE)
+        import timing_ledger
+        found = [str(q) for q in __import__("pathlib").Path(extracted).rglob("timing-ledger.jsonl")]
+        if found:
+            print("TIMING merged %d record(s) into %s" % (timing_ledger.merge(found), timing_ledger.ledger_path()))
+    except Exception as exc:   # noqa: BLE001 - timing is informational
+        print("TIMING not merged (%s: %s)" % (type(exc).__name__, exc))
 
 
 # ---------------------------------------------------------------- opt-out
