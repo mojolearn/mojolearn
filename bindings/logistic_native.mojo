@@ -480,7 +480,7 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
 
 
 def _logistic_proba_fused(model: PythonObject, fields: PythonObject, mut entries: PythonObject,
-                          source: PythonObject, context: PythonObject) raises -> PythonObject:
+                          source: PythonObject, context: PythonObject, log_out: Bool = False) raises -> PythonObject:
     """`predict_proba` through the binding's one-call `qn_proba` (decision
     and link in one crossing, no Python scores array between them), with
     `logistic_decision`'s checks in its order. None when the connected table
@@ -500,8 +500,13 @@ def _logistic_proba_fused(model: PythonObject, fields: PythonObject, mut entries
         return PythonObject(None)
     var intercept = 1 if Bool(py=fields["fit_intercept"]) else 0
     var out = labels_empty(Python.tuple(rows, 2 if n_targets == 1 else n_targets), "<f8", context)
+    var params = Python.list(rows, cols, intercept, n_targets)
+    if log_out:
+        # ne2-g-linear (N361): the 5th word asks the entry for log(p) in the
+        # same device session (py2mojo_rows ROWS_LOG's words).
+        _ = py_call(params.append, PythonObject(1))
     _ = py_call_typed(fused, classical_address(x), classical_address(fields["_w"]), PythonObject(labels_address(out)),
-                      Python.list(rows, cols, intercept, n_targets))
+                      params)
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = x^
@@ -539,13 +544,18 @@ def logistic_proba(model: PythonObject, fields: PythonObject, mut entries: Pytho
 def logistic_log_proba(model: PythonObject, fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict_log_proba`: `_log_or_inf` of every probability in the
     estimators binding (py2mojo_rows ROWS_LOG)."""
-    var entries = PythonObject(None)
-    var proba = logistic_proba(model, fields, entries, source, context)
+    var entries = _entries(model, fields, context)
     var flags = py_get(entries, "py2mojo_linear_flags")
     var bits = Int(py=py_call_typed(flags)) if flags is not None else 0
     if (bits & PY2MOJO_ROWS) == 0:
         raise Error("RuntimeError: mojolearn: this estimators binding predates py2mojo_rows; "
                     + "rebuild it (pixi run build)")
+    # ne2-g-linear (N361): one crossing (decision, link and log on the device)
+    # when the binding has the fused entry; else the proba then ROWS_LOG.
+    var fused = _logistic_proba_fused(model, fields, entries, source, context, True)
+    if fused is not None:
+        return fused
+    var proba = logistic_proba(model, fields, entries, source, context)
     var shape = proba.shape
     var size = 1
     for dimension in range(len(shape)):  # driver-loop: native Array shape slots
