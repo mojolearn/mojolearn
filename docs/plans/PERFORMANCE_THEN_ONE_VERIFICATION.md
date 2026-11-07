@@ -13,14 +13,14 @@ Nothing is verified after a release. Narrow re-verification ("only what changed"
 
 ## Timing ledger
 
-Every unit of work writes one line to the timing ledger (`~/mojolearn-evidence/timing/ledger.jsonl`; on a box, the
-job's results dir, merged on `tools/box_persist.py fetch --extract`), with its commit, host, cores and, for box
-jobs, busy cores of total (Andrew, 2026-11-07: measure everything in time, every test, so each round starts from
-measured numbers). The units: each pytest test, each development-build group, each `tools/release.py` step, each
-identity lane per column, each identity chunk and run, each box job, each RunPod CPU leg phase, each GitHub workflow
-job, each compile under `tools/compile_slot.sh`. The two commands: `python3 tools/timing_ledger.py report --since
-24h --top 50` (totals, the top items and each kind's share of wall time; `--kind`, `--by file`) and
-`bash tools/timing_ledger.sh start|end <kind> <name>` for a bash wrapper that is not wired yet.
+The report reads the evidence each tool already writes (Andrew, 2026-11-07: measure everything in time, every
+test, so each round starts from measured numbers). It writes nothing, and no tool gained a hook for it. The
+sources are: the pytest `durations-*.json`, the development-build group results (seconds and peak RSS), the release
+`state.json` step seconds, the identity records' lane times, box-job `persist.log` START/EXIT lines and saved
+GitHub `run.json` job timestamps. The RunPod CPU leg also prints busy cores of total for its command. The two
+commands: `python3 tools/timing_ledger.py report --since 24h --top 50` (totals, the top items and each kind's
+share of wall time), and `python3 tools/timing_ledger.py report --kind test --by file` for the suite's heavy
+files. `--tests`, `--builds`, `--release`, `--identity`, `--jobs` and `--workflow` point it at other evidence.
 
 ## Decisions taken on 2026-11-05 (Andrew)
 
