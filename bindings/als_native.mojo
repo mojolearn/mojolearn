@@ -20,15 +20,39 @@ from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
-    decomp_input, XD_SCALE, XD_SQ, XD_SQRT, XD_DIV,
+    decomp_input, decomp_resident_drop, XD_SCALE, XD_SQ, XD_SQRT, XD_DIV,
 )
 from core.decomp_native_impl import decomp_f32_to_i32
 from bindings.py_lists import py_list_f64
 
 
+#: The resident record name of the unit-normalised item factors (N325).
+comptime _ALS_UNIT = "item_factors.unit"
+
+
 def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     var array = decomp_input(source, name, context)
     return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
+
+
+def _fitted(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+    # A fitted factor matrix (lane ne1-a-decomp-resident, row N325): on a
+    # query its device copy is kept across calls (DecompKit.resident_input,
+    # the PCA/PLS scheme), so recommend / similar_items no longer upload the
+    # whole user_factors / item_factors per call; a frozen hit skips the
+    # re-admission. Same words, same routes (the matrix is added as a host
+    # matrix, as `_matrix` adds it), so no bit change. Any other storage
+    # (a caller-assigned ndarray) is admitted and uploaded per call, as before.
+    var hit = kit.resident_hit(source, name)
+    if hit >= 0:
+        return hit
+    var array = decomp_input(source, name, context)
+    var rows = Int(py=array.shape[0])
+    var cols = Int(py=array.shape[1])
+    var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, rows, cols)
+    if held >= 0:
+        return held
+    return kit.input(array, rows, cols)
 
 
 def _typed(n: Int, typestr: String, code: String, item: Int, context: PythonObject) raises -> PythonObject:
@@ -39,6 +63,8 @@ def _typed(n: Int, typestr: String, code: String, item: Int, context: PythonObje
 
 def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
+    # New factors replace the old: their device copies go now (N325).
+    decomp_resident_drop(model)
     var mode = decomp_mode(fields["numeric_mode"], context)
     py_setitem(fields, "numeric_mode_", mode)
     var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
@@ -165,11 +191,13 @@ def als_query(model: PythonObject, operation: String, args: PythonObject, contex
     if not py_contains(fields, "user_factors"):
         raise Error("RuntimeError: AlternatingLeastSquares is not fitted; call fit first")
     var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    # The fitted model of this query: its factors stay on the device (N325).
+    kit.owner = model
     try:
         if operation == "recommend":
             # args: (userid, user_items, N, filter_already_liked_items)
-            var users = _matrix(kit, fields["user_factors"], "user_factors", context)
-            var items = _matrix(kit, fields["item_factors"], "item_factors", context)
+            var users = _fitted(kit, fields["user_factors"], "user_factors", context)
+            var items = _fitted(kit, fields["item_factors"], "item_factors", context)
             var userid = decomp_int(args[0])
             var u = _one_row(kit, users, userid)
             var s = kit.mm(u, items, tb=True)
@@ -188,11 +216,19 @@ def als_query(model: PythonObject, operation: String, args: PythonObject, contex
             return _topn(kit, s, count, skip, context)
         if operation == "similar_items":
             # args: (itemid, N)
-            var y = _matrix(kit, fields["item_factors"], "item_factors", context)
-            var squares = kit.ew(XD_SQ, y)
-            var sums = kit.rowsum(squares)
-            var norms = kit.ew(XD_SQRT, sums)
-            var unit = kit.ew(XD_DIV, y, norms)
+            var source = fields["item_factors"]
+            # The unit-normalised item factors depend on item_factors alone:
+            # computed by the first similar_items of a fitted state and kept on
+            # the device for the next (DecompKit.resident_keep), the same words
+            # the same steps would compute again (N325).
+            var unit = kit.resident_derived(source, _ALS_UNIT)
+            if unit < 0:
+                var y = _fitted(kit, source, "item_factors", context)
+                var squares = kit.ew(XD_SQ, y)
+                var sums = kit.rowsum(squares)
+                var norms = kit.ew(XD_SQRT, sums)
+                unit = kit.ew(XD_DIV, y, norms)
+                _ = kit.resident_keep(source, _ALS_UNIT, unit)
             var row = _one_row(kit, unit, decomp_int(args[0]))
             var s = kit.mm(row, unit, tb=True)
             var count = decomp_int(args[1])
