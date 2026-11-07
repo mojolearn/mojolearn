@@ -778,10 +778,28 @@ def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, cont
     var entries = _xl_entries(fields, context)
     var x = _xl_matrix(source, context)
     _xl_width(x, fields, model)
-    var scores = _xl_decision(model, x, fields["coef_"], fields["intercept_"],
-                              LINK_IDENTITY if lrcv else LINK_SIGMOID, lrcv, entries, context)
     var k = len(fields["intercept_"])
     var n = x.rows
+    var link = LINK_IDENTITY if lrcv else LINK_SIGMOID
+    var rows_mode = _ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA
+    # ne2-g-linear (N362): decision and row link in one crossing when the
+    # binding has `x_linear_decision_rows` (the same two kernels' words).
+    var fused = py_get(entries, "x_linear_decision_rows")
+    if fused is not None:
+        var block = _xl_block(fields["coef_"], fields["intercept_"], context)
+        var wb = block[0]
+        var kb = block[1]
+        var res = labels_empty(Python.tuple(n, 2 if kb == 1 else kb), "<f4", context)
+        _ = py_call_typed(fused, PythonObject(x.addr), PythonObject(labels_address(wb)),
+                          Python.list(PythonObject(n), PythonObject(x.cols), PythonObject(kb), PythonObject(link),
+                                      PythonObject(rows_mode)),
+                          PythonObject(labels_address(res)))
+        _ = wb  # keep the Python object alive through the native call above
+        _ = res  # keep the Python object alive through the native call above
+        _ = wb^
+        _ = x^
+        return res
+    var scores = _xl_decision(model, x, fields["coef_"], fields["intercept_"], link, lrcv, entries, context)
     var out = labels_empty(Python.tuple(n, 2 if k == 1 else k), "<f4", context)
     if n > 0:
         _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA),
@@ -937,11 +955,32 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     py_setitem(fields, "n_features_in_", PythonObject(d))
     # `self.predict(a)`: the fitted model on the float32 X this call holds
     var link = _int(_attr(model, "_link", PythonObject(LINK_IDENTITY)))
-    var pred = _xl_decision(model, x, fields["coef_"], fields["intercept_"], link, True, entries, context)
-    var thr = _float(py_call(_op().mul, scale, epsilon))
-    # |y - pred| > thr in the binding (core/py2mojo_rows.mojo ROWS_HUBER_OUT)
+    # ne2-g-linear (N302): `float(scale_ * epsilon)` as one binary64 product
+    # in Mojo (Python's float multiply on the same two doubles).
+    var thr = _float(scale) * _float(epsilon)
     var flags = labels_vector(n, "<u1", context)
     var flag_address = labels_address(flags)
+    var fused = py_get(entries, "x_linear_decision_huber_out")
+    if fused is not None:
+        # The prediction and |y - pred| > thr in one device session.
+        var block = _xl_block(fields["coef_"], fields["intercept_"], context)
+        var wb = block[0]
+        _ = py_call_typed(fused, PythonObject(x.addr), PythonObject(labels_address(wb)),
+                          Python.list(PythonObject(n), PythonObject(d), PythonObject(link), PythonObject(y.addr),
+                                      PythonObject(thr)),
+                          PythonObject(flag_address))
+        _ = wb  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _ = flags  # keep the Python object alive through the native call above
+        py_setitem(fields, "outliers_", _xl_huber_mask(flags, flag_address, n))
+        _ = wb^
+        _ = flags^
+        _ = x^
+        _ = y^
+        _ = yy^
+        return model
+    var pred = _xl_decision(model, x, fields["coef_"], fields["intercept_"], link, True, entries, context)
+    # |y - pred| > thr in the binding (core/py2mojo_rows.mojo ROWS_HUBER_OUT)
     _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_HUBER_OUT), PythonObject(y.addr),
                       PythonObject(flag_address),
                       Python.list(PythonObject(n), PythonObject(1), PythonObject(labels_address(pred)), PythonObject(thr)))

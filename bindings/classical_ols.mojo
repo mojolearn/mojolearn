@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_array, classical_word, classical_address
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
-from bindings.classical_ridge import classical_means, classical_center
+from bindings.classical_ridge import classical_means, classical_center, classical_ols_prepare
 from bindings.classical_tsqr import classical_tsqr_solve
 from bindings.sequential_description import sequential_fields
 from bindings.classical_metadata import classical_fit_replacements_admit
@@ -117,7 +117,24 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
     if not done:
         var work_x = x
         var work_y = y
-        if intercept:
+        var prep = py_get(entries, "lm_ols_prep")
+        if prep is not None and (intercept or weights is not None):
+            # ne2-g-linear (N403): the means, centering, weight roots and row
+            # scaling below in one native call (the same typed steps, the
+            # same words); the solve and the intercept follow as before.
+            var mode = 0
+            if weights is not None:
+                mode = 2
+            elif py_get(entries, "lm_classical_stats") is not None and py_get(entries, "lm_col_sums_pair") is not None:
+                if Bool(py=entries["lm_classical_stats"]()):
+                    mode = 1
+            var prepared = classical_ols_prepare(x, y, weights, rows, cols, intercept, mode, prep, context)
+            work_x = prepared[0]
+            work_y = prepared[1]
+            if intercept:
+                mean = prepared[2]
+                ymean = classical_word(prepared[3])
+        elif intercept:
             var xm = PythonObject(None)
             var ym = PythonObject(None)
             if weights is not None:
@@ -135,7 +152,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
             ymean = classical_word(ym[0])
             work_x = classical_center(x, mean, rows, cols, entries, context)
             work_y = classical_center(y, ym[1], rows, 1, entries, context)
-        if weights is not None:
+        if weights is not None and prep is None:
             var root = classical_array(rows, 0, context)
             _ = py_call_typed(entries["py2mojo_rows"], PythonObject(5), classical_address(weights), classical_address(root), Python.list(rows, 1))
             work_x = classical_scale_rows(work_x, root, rows, cols, entries, context)

@@ -112,6 +112,7 @@ from glm.estimator import (
     ols_fit_host,
     ols_fit_resident_host,
     ols_predict_host,
+    qn_decision_function_device,
     qn_decision_function_host,
     qn_fit_host,
     qn_predict_binary_host,
@@ -126,14 +127,15 @@ from glm.impl.gram_solve import linear_gram_fit_host
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
+from glm.impl.ols_prep_device import ols_prep_device
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 from core.estimators_impl import (
     pca_whiten_overlap_check,
+    qn_link_from_device,
     qn_sigmoid_device,
     qn_softmax_device,
-    ridge_multi_icpt_device,
 )
 
 
@@ -881,6 +883,33 @@ def pca_fit_randomized_binding(
     return PythonObject(noise)
 
 
+def lm_ols_prep_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
+    """LinearRegression / Ridge general-route preparation in one call:
+    addresses = [x, y, w (0: none), work_x, work_y, xmean64, xmean32,
+    ymean64, ymean32]; params = [rows, cols, intercept, means_mode (0
+    separate, 1 paired, 2 weighted)]. work_x / work_y receive X and y
+    centered by their means (with intercept) and row-scaled by sqrt(w)
+    (with weights); the means are written with intercept. Returns 0."""
+    # ne2-g-linear (N403): one crossing for what was up to fourteen.
+    if len(addresses) != 9 or len(params) != 4:
+        raise Error("lm_ols_prep: 9 addresses (x, y, w, work_x, work_y, xm64, xm32, ym64, ym32) and "
+                    "params rows, cols, intercept, means_mode required")
+    var a = List[Int](capacity=9)
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        a.append(Int(py=addresses[i]))
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    var intercept = Int(py=params[2]) != 0
+    var mode = Int(py=params[3])
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        if a[i] == 0 and i != 2 and (intercept or i < 5):
+            raise Error("lm_ols_prep: null buffer address")
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ols_prep_device(ctx, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], rows, cols, intercept, mode)
+    return PythonObject(0)
+
+
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     """Lane hr-small-passes: out = x - mu per column in float32 on the
     device, subnormals flushed. params: rows, cols. Returns 0."""
@@ -1105,12 +1134,10 @@ def ridge_fit_multi_binding(
     var ic = _f32_ptr(Int(py=params[6])) if want_icpt else wp
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
+        # ne2-g-linear (N408): the intercepts in the same device session
+        # (`ridge_multi_icpt_kernel` on the device coef and ymean).
+        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center, want_icpt, xm, ic)
         ctx.synchronize()
-        if want_icpt:
-            # cpu2-l6-bindings: the intercepts on the device
-            # (`ridge_multi_icpt_kernel`), one thread per target
-            ridge_multi_icpt_device(ctx, xm, wp, mp, ic, nf, nt)
         _ = ctx^
     return PythonObject(0)
 
@@ -1282,11 +1309,16 @@ def qn_proba_binding(
     """`predict_proba` in one call: `qn_decision_function` then the sigmoid
     (n_classes < 3: out float64 (n_rows, 2)) or softmax (out float64
     (n_rows, n_classes)) link, the same kernels and words as the two entries
-    called in turn, with the scores held in native scratch instead of a
-    Python array between two binding crossings. params: n_rows, n_features,
-    fit_intercept, n_classes. Returns 0."""
-    if len(params) != 4:
-        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    called in turn, with the scores kept on the device between them.
+    params: n_rows, n_features, fit_intercept, n_classes and an optional
+    5th, log (0/1): 1 writes `log(p)` (`py2mojo_rows` ROWS_LOG's words,
+    `predict_log_proba`) instead of `p`. Returns 0."""
+    # ne2-g-linear (N357, N361): the scores stay in a device buffer from the
+    # decision to the link (was: download into a host List, upload again),
+    # and the log of predict_log_proba runs in the same session. One upload
+    # of X and coef_, one download of the output.
+    if len(params) != 4 and len(params) != 5:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes and an optional log flag")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     var op = _f64_ptr(Int(py=out_addr))
@@ -1294,20 +1326,15 @@ def qn_proba_binding(
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3])
+    var log_out = len(params) == 5 and Int(py=params[4]) != 0
     var nt = nc if nc > 2 else 1
-    var scores = List[Float32](length=max(nr * nt, 1), fill=0)
-    var sp = _f32_ptr(Int(scores.unsafe_ptr()))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_decision_function_host(ctx, xp, cp, sp, nr, nf, fi, nt)
-        ctx.synchronize()
-        if nr > 0:
-            if nt == 1:
-                qn_sigmoid_device(ctx, sp, op, nr)
-            else:
-                qn_softmax_device(ctx, sp, op, nr, nt)
+        var d_scores = ctx.enqueue_create_buffer[DType.float32](max(nr * nt, 1))
+        qn_decision_function_device(ctx, xp, cp, d_scores, nr, nf, fi, nt)
+        qn_link_from_device(ctx, d_scores, op, nr, nt, log_out)
+        _ = d_scores^
         _ = ctx^
-    _ = scores^
     return PythonObject(0)
 
 
@@ -1679,6 +1706,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
+        m.def_function[lm_ols_prep_binding]("lm_ols_prep")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[qn_proba_binding]("qn_proba")
         m.def_function[ols_predict_wide_binding]("ols_predict_wide")

@@ -879,10 +879,38 @@ def qn_decision_function_host(
     column-major `z[c + C*i]`, `glm_base.mojo::linear_fwd`); `predict` is
     the row argmax and `predict_proba` the softmax (`qn_softmax_host`)."""
     var n_targets = n_classes if n_classes > 2 else 1
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
+    qn_decision_function_device(ctx, x_ptr, coef_ptr, scores, n_rows, n_features, fit_intercept, n_classes)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
+    ctx.synchronize()
+    for i in range(n_rows * n_targets):
+        out_ptr.unsafe_store(i, hs.unsafe_ptr().unsafe_load(i))
+    _ = hs^
+    _ = scores^
+
+
+def qn_decision_function_device(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut scores: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_features: Int,
+    fit_intercept: Bool,
+    n_classes: Int,
+) raises:
+    """`qn_decision_function_host` with the scores left in the caller's
+    device buffer (`n_rows * n_targets` floats, the same layout): the same
+    uploads, the same `qn_decision_function` launch, no download. The fused
+    `qn_proba` entry applies the link to this buffer on the device."""
+    # ne2-g-linear (N357): split out of qn_decision_function_host so the
+    # scores of predict_proba stay on the device; the host entry above is
+    # this call plus its download, statement for statement as before.
+    var n_targets = n_classes if n_classes > 2 else 1
     var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
     ctx.synchronize()
@@ -890,12 +918,9 @@ def qn_decision_function_host(
     pams.loss = QN_LOSS_SOFTMAX if n_targets > 1 else QN_LOSS_LOGISTIC
     pams.fit_intercept = fit_intercept
     qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores, n_targets)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
     ctx.synchronize()
-    for i in range(n_rows * n_targets):
-        out_ptr.unsafe_store(i, hs.unsafe_ptr().unsafe_load(i))
-    _ = hs^
+    _ = x^
+    _ = w^
 
 
 def _positive_code_kernel(

@@ -31,7 +31,9 @@ Python line did, in its order, so the outputs keep their bits:
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
+
+from core.rows_log_word import log_or_inf
 
 from checks.numerics import portable_sqrtf
 from checks.soft_f64 import (
@@ -120,15 +122,6 @@ struct NSum(Copyable, Movable, TrivialRegisterPassable):
         if not _is_zero(self.c) and _finite(self.c):
             return sf64_add(self.total, self.c)
         return self.total
-
-
-@always_inline
-def log_or_inf(p: UInt64) -> UInt64:
-    if sf64_gt(p, SF64_ZERO) and not sf64_is_nan(p):
-        return sf64_log(p)
-    if _is_zero(p):
-        return _NEG_INF
-    return SF64_NAN
 
 
 @always_inline
@@ -292,3 +285,31 @@ def rows_host(call: RowsCall):
     var d8 = _U8P(unsafe_from_address=call.dst)
     for i in range(call.n):
         rows_one(call.mode, s32, s64, call.k, i, d32, d64, s2, call.scal, d8)
+
+
+def rows_log_device_buffers(
+    ctx: DeviceContext, mut src: DeviceBuffer[DType.uint64], mut dst: DeviceBuffer[DType.uint64], n: Int,
+) raises:
+    """ROWS_LOG over n binary64 words already on the device: the same
+    `rows_kernel` launch as `rows_device`, without its upload and download.
+    The fused `qn_proba` entry (log_proba) chains it after the link."""
+    # ne2-g-linear (N361): predict_log_proba was qn_proba (download) then
+    # py2mojo_rows ROWS_LOG (upload, launch, download); the words are the
+    # same kernel's on the same inputs.
+    if n <= 0:
+        return
+    var d_s32 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_d32 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_s2 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_d8 = ctx.enqueue_create_buffer[DType.uint8](1)
+    var blocks = max(1, min(ROWS_MAX_BLOCKS, (n + ROWS_TPB - 1) // ROWS_TPB))
+    ctx.enqueue_function[rows_kernel](
+        Int32(ROWS_LOG), d_s32.unsafe_ptr(), src.unsafe_ptr(), Int32(1), Int64(n),
+        d_d32.unsafe_ptr(), dst.unsafe_ptr(), d_s2.unsafe_ptr(), UInt64(0), d_d8.unsafe_ptr(),
+        grid_dim=blocks, block_dim=ROWS_TPB,
+    )
+    ctx.synchronize()
+    _ = d_s32^
+    _ = d_d32^
+    _ = d_s2^
+    _ = d_d8^

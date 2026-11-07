@@ -87,6 +87,7 @@ from core.classical_host_predict import (
     host_qn_decision_into,
     host_qn_decision_multi_into,
     host_qn_predict_binary_into,
+    host_rows_log_inplace,
     host_qn_sigmoid_into,
     host_qn_softmax_into,
     host_tsvd_transform_into,
@@ -114,6 +115,7 @@ from decomposition.host.pca_full_oracle import (
 )
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
+from glm.host.ols_prep_host import ols_prep_host
 from glm.host.gram_solve_host import host_linear_gram_fit
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
@@ -605,6 +607,32 @@ def pca_fit_randomized_binding(
     return PythonObject(noise)
 
 
+def lm_ols_prep_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
+    """LinearRegression / Ridge general-route preparation in one call:
+    addresses = [x, y, w (0: none), work_x, work_y, xmean64, xmean32,
+    ymean64, ymean32]; params = [rows, cols, intercept, means_mode (0
+    separate, 1 paired, 2 weighted)]. work_x / work_y receive X and y
+    centered by their means (with intercept) and row-scaled by sqrt(w)
+    (with weights); the means are written with intercept. Returns 0."""
+    # ne2-g-linear (N403): one crossing for what was up to fourteen.
+    if len(addresses) != 9 or len(params) != 4:
+        raise Error("lm_ols_prep: 9 addresses (x, y, w, work_x, work_y, xm64, xm32, ym64, ym32) and "
+                    "params rows, cols, intercept, means_mode required")
+    var a = List[Int](capacity=9)
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        a.append(Int(py=addresses[i]))
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    var intercept = Int(py=params[2]) != 0
+    var mode = Int(py=params[3])
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        if a[i] == 0 and i != 2 and (intercept or i < 5):
+            raise Error("lm_ols_prep: null buffer address")
+    with GILReleased(Python()):
+        ols_prep_host(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], rows, cols, intercept, mode)
+    return PythonObject(0)
+
+
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     """Lane hr-small-passes: out = x - mu per column in float32 on the
     CPU column, subnormals flushed. params: rows, cols. Returns 0."""
@@ -710,6 +738,9 @@ def linear_gram_fit_binding(
     var nf = _index(params[1])
     var alpha = Float32(Float64(py=params[2]))
     var center = _index(params[3]) != 0
+    # The null-address refusal read_f32 made before the in-place read.
+    _ = f32_ptr(x_address)
+    _ = f32_ptr(y_address)
     var status = 1
     with GILReleased(Python()):
         _positive(nr, "n_rows")
@@ -717,9 +748,8 @@ def linear_gram_fit_binding(
         if alpha > Float32(0.0) and nf == 1:
             status = 1
         else:
-            var x = read_f32(x_address, nr * nf)
-            var y = read_f32(y_address, nr)
-            status = host_linear_gram_fit(x, y, nr, nf, alpha, center, wp, mp, ymp)
+            # ne2-g-linear (N406): X and y read in place (no owned copies).
+            status = host_linear_gram_fit(x_address, y_address, nr, nf, alpha, center, wp, mp, ymp)
     return PythonObject(status)
 
 
@@ -1166,10 +1196,14 @@ def qn_proba_binding(
     """`predict_proba` in one call on the host: `qn_decision_function` then
     the sigmoid (n_classes < 3: out float64 (n_rows, 2)) or softmax link,
     the same restatements as the two entries called in turn, the scores in
-    native scratch. params: n_rows, n_features, fit_intercept, n_classes.
-    Returns 0."""
-    if len(params) != 4:
-        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    native scratch. params: n_rows, n_features, fit_intercept, n_classes and
+    an optional 5th, log (0/1): 1 writes `log(p)` (`py2mojo_rows` ROWS_LOG's
+    words, `predict_log_proba`) instead of `p`. Returns 0."""
+    # ne2-g-linear (N361): the GPU binding's contract; log_proba in the same
+    # call (was qn_proba then a py2mojo_rows crossing over the output).
+    if len(params) != 4 and len(params) != 5:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes and an optional log flag")
+    var log_out = len(params) == 5 and _index(params[4]) != 0
     var x_address = _index(x_addr)
     var w_address = _index(coef_addr)
     var op = f64_ptr(_index(out_addr))
@@ -1195,6 +1229,9 @@ def qn_proba_binding(
                 host_predict_task_count(nr),
             )
             host_qn_sigmoid_into(sp, op, nr, host_predict_task_count(nr))
+        if log_out:
+            var n_out = nr * (nt if nt > 2 else 2)
+            host_rows_log_inplace(op, n_out, host_predict_task_count(n_out))
     _ = scores^
     return PythonObject(0)
 
@@ -1544,6 +1581,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         module.def_function[lm_center_binding]("lm_center")
         module.def_function[lm_scale_rows_binding]("lm_scale_rows")
+        module.def_function[lm_ols_prep_binding]("lm_ols_prep")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[linear_gram_fit_binding]("linear_gram_fit")
         module.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")

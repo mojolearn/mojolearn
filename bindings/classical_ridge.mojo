@@ -30,6 +30,30 @@ def classical_center(x: PythonObject, mean: PythonObject, rows: Int, cols: Int,
     return out
 
 
+def classical_ols_prepare(x: PythonObject, y: PythonObject, weights: PythonObject, rows: Int, cols: Int,
+                          intercept: Bool, mode: Int, prep: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`lm_ols_prep`: (work_x, work_y, xmean32, ymean64) of the general
+    route in one native call. mode 0 separate means, 1 paired, 2 weighted."""
+    var work_x = classical_array(rows, cols, context)
+    var work_y = classical_array(rows, 0, context)
+    var xm64 = classical_array(cols, 0, context, True)
+    var xm32 = classical_array(cols, 0, context)
+    var ym64 = classical_array(1, 0, context, True)
+    var ym32 = classical_array(1, 0, context)
+    var w_address = PythonObject(0) if weights is None else classical_address(weights)
+    _ = py_call_typed(prep, Python.list(classical_address(x), classical_address(y), w_address,
+                                        classical_address(work_x), classical_address(work_y),
+                                        classical_address(xm64), classical_address(xm32),
+                                        classical_address(ym64), classical_address(ym32)),
+                      Python.list(rows, cols, 1 if intercept else 0, mode))
+    _ = x  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = xm64^
+    _ = ym32^
+    return Python.tuple(work_x, work_y, xm32, ym64)
+
+
 def classical_ridge_parameters(fields: PythonObject) raises:
     # Checked when fit runs, after the inputs, as the constructor stores them.
     var b = native_loaded_module("builtins")
@@ -123,7 +147,20 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
         else:
             var work_x = x
             var work_y = y
-            if intercept:
+            var prep = py_get(entries, "lm_ols_prep")
+            if prep is not None and intercept:
+                # ne2-g-linear (N403): the means and centering below in one
+                # native call (the same typed steps, the same words).
+                var mode = 0
+                if py_get(entries, "lm_classical_stats") is not None and py_get(entries, "lm_col_sums_pair") is not None:
+                    if Bool(py=entries["lm_classical_stats"]()):
+                        mode = 1
+                var prepared = classical_ols_prepare(x, y, PythonObject(None), rows, cols, True, mode, prep, context)
+                work_x = prepared[0]
+                work_y = prepared[1]
+                mean = prepared[2]
+                ymean = classical_word(prepared[3])
+            elif intercept:
                 var xm = PythonObject(None)
                 var ym = PythonObject(None)
                 if py_get(entries, "lm_classical_stats") is not None and py_get(entries, "lm_col_sums_pair") is not None:

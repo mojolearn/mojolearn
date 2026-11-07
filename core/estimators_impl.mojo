@@ -8,7 +8,8 @@ function here and returns. The kernels, their launches and the whitening
 overlap refusal live here with no Python import, word for word as they were
 in the binding (lane thin-core, 2026-10-21: a pure move, no bit change).
 """
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.py2mojo_rows import rows_log_device_buffers
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import (
     SF64_ONE, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_gt, sf64_neg,
@@ -70,31 +71,6 @@ def ridge_multi_icpt_kernel(
     icpt.unsafe_store(
         j, sf64_to_f32(sf64_sub(sf64_from_f32(ymean.unsafe_load(j)), dot))
     )
-
-
-def ridge_multi_icpt_device(
-    ctx: DeviceContext, xm: _F32P, wp: _F32P, mp: _F32P, ic: _F32P, nf: Int, nt: Int,
-) raises:
-    """`ridge_fit_multi`'s intercepts on the device
-    (`ridge_multi_icpt_kernel`), one thread per target."""
-    var d_xm = ctx.enqueue_create_buffer[DType.float32](nf)
-    var d_w = ctx.enqueue_create_buffer[DType.float32](nt * nf)
-    var d_m = ctx.enqueue_create_buffer[DType.float32](nt)
-    var d_ic = ctx.enqueue_create_buffer[DType.float32](nt)
-    ctx.enqueue_copy(dst_buf=d_xm, src_ptr=xm)
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=wp)
-    ctx.enqueue_copy(dst_buf=d_m, src_ptr=mp)
-    ctx.enqueue_function[ridge_multi_icpt_kernel](
-        d_xm.unsafe_ptr(), d_w.unsafe_ptr(), d_m.unsafe_ptr(),
-        d_ic.unsafe_ptr(), Int64(nf), Int64(nt),
-        grid_dim=(nt + 255) // 256, block_dim=256,
-    )
-    ctx.enqueue_copy(dst_ptr=ic, src_buf=d_ic)
-    ctx.synchronize()
-    _ = d_xm^
-    _ = d_w^
-    _ = d_m^
-    _ = d_ic^
 
 
 comptime QN_SOFTMAX_TPB = 128
@@ -178,6 +154,46 @@ def qn_softmax_kernel(
         i += stride
 
 
+
+
+def qn_link_from_device(
+    ctx: DeviceContext, mut d_scores: DeviceBuffer[DType.float32], op: _F64P, nr: Int, nt: Int, log_out: Bool,
+) raises:
+    """The `qn_proba` link on scores already on the device (`n_rows *
+    n_targets` float32, `qn_decision_function_device`'s layout): the
+    sigmoid (`nt == 1`, out (nr, 2)) or softmax (out (nr, nt)) kernel of
+    `qn_sigmoid_device` / `qn_softmax_device` on the same words, then, with
+    `log_out`, ROWS_LOG on the probabilities (`py2mojo_rows`' kernel), and
+    one download of the binary64 words into `op`."""
+    # ne2-g-linear (N357, N361): the scores no longer go to the host and back
+    # between the decision and the link, and log_proba no longer re-uploads
+    # the probabilities; every kernel and its inputs are unchanged, so the
+    # output words are the two- and three-crossing paths' words.
+    if nr <= 0:
+        return
+    var n = nr * (2 if nt == 1 else nt)
+    var d_out = ctx.enqueue_create_buffer[DType.uint64](n)
+    var blocks = min((nr + QN_SOFTMAX_TPB - 1) // QN_SOFTMAX_TPB, QN_SOFTMAX_MAX_BLOCKS)
+    if nt == 1:
+        ctx.enqueue_function[qn_sigmoid_kernel](
+            d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr),
+            grid_dim=blocks, block_dim=QN_SOFTMAX_TPB,
+        )
+    else:
+        ctx.enqueue_function[qn_softmax_kernel](
+            d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr), Int64(nt),
+            grid_dim=blocks, block_dim=QN_SOFTMAX_TPB,
+        )
+    if log_out:
+        var d_log = ctx.enqueue_create_buffer[DType.uint64](n)
+        rows_log_device_buffers(ctx, d_out, d_log, n)
+        ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_log)
+        ctx.synchronize()
+        _ = d_log^
+    else:
+        ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+        ctx.synchronize()
+    _ = d_out^
 
 
 def qn_softmax_device(ctx: DeviceContext, sp: _F32P, op: _F64P, nr: Int, nc: Int) raises:
