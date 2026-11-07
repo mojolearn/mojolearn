@@ -1479,7 +1479,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
             self.reference_env()
         if self.hopper_required():
             # a held Hopper box (or the rented route): its column gates publish-nvidia as before
-            self.NEEDS = dict(NEEDS, **{"publish-nvidia": NEEDS["publish-nvidia"] + ["gpu-column-nvidia-hopper"]})
+            # from self.NEEDS, not the module table: keep what --identity-on-wheels added above (gate-boxes needs
+            # identity-cpu)
+            self.NEEDS = dict(self.NEEDS, **{"publish-nvidia": self.NEEDS["publish-nvidia"] + ["gpu-column-nvidia-hopper"]})
         # the rehearsal follows the per-run graph: it waits for whatever a publish needs or waits for
         needs, after = wire_rehearsal(self.NEEDS, self.AFTER)
         self.NEEDS = self.NEEDS if needs == self.NEEDS else needs   # unchanged graph: the module's own tables
