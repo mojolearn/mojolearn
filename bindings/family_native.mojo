@@ -129,7 +129,19 @@ def _family_owner_call(model: PythonObject, route: Int, operation: String, var a
     if family_route_cluster(route):
         if len(args) > 0 and args[0] is None:
             return cluster_public_operation(model, operation, args, context)
+    # Two-level switch (lane ne-fix-hang3, lesson 12): the owner word picks
+    # one of two halves of about ten owners each, instead of one chain of
+    # twenty-one calls to distinct owners in this function. Same owners,
+    # same order (the halves split the former chain at FR_MSEL).
     var owner = family_route_owner(route)
+    if owner < FR_MSEL:
+        return _family_owner_first(model, owner, operation, args, context)
+    return _family_owner_second(model, owner, operation, args, context)
+
+
+def _family_owner_first(model: PythonObject, owner: Int, operation: String, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """Owners FR_DENSITY .. FR_CHOL (and FR_UNKNOWN, refused)."""
     if owner == FR_DENSITY:
         return density_public_operation(model, operation, args, context)
     if owner == FR_PAR_PUBLIC:
@@ -148,6 +160,12 @@ def _family_owner_call(model: PythonObject, route: Int, operation: String, var a
         return neighbors_operation(model, operation, args, context)
     if owner == FR_CHOL:
         return linalg_operation(model, operation, args, context)
+    raise Error("RuntimeError: unknown family operation " + operation)
+
+
+def _family_owner_second(model: PythonObject, owner: Int, operation: String, args: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    """Owners FR_MSEL .. FR_LINALG_OPS."""
     if owner == FR_MSEL:
         # Preserve the existing generic entry ABI without importing the
         # independently compiled model-selection owner. Import setup retains
