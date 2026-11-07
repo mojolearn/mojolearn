@@ -75,7 +75,7 @@ FAMILIES = (
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
-            "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "layer_norm", "theta", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "moe_forward",
+            "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "layer_norm", "theta", "theta_forecast", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "prophet_predict_days", "moe_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "prophet_days", "prophet_features",
             "prophet_changepoints",
