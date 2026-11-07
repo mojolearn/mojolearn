@@ -52,7 +52,8 @@ comptime CRES_HELD_BYTES = 1 << 30
 measured (profile item 14)."""
 
 
-struct CresHeld(Movable):
+struct CresHeld(Copyable, Movable):
+    # Copyable (all fields are): Dict iteration (keys() included) requires Copyable key and value types.
     var generation: Int
     var objects: PythonObject
     var dims: List[Int]
