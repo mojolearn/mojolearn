@@ -180,3 +180,22 @@ def test_start_preserves_exit_status_and_timeout(tmp_path):
     assert smoke.start([sys.executable, "-c", "raise SystemExit(3)"], tmp_path / "failed.log", 5)[:2] == ("failed", 3)
     assert smoke.start([sys.executable, "-c", "import time; time.sleep(10)"],
                        tmp_path / "timeout.log", 0.05)[:2] == ("STARTED", None)
+
+
+@pytest.mark.parametrize("vendor,require,rc,marker", [
+    ("cpu", None, 0, "SKIPPED no torch"), ("cpu", "1", 1, "SMOKE_FAIL real-model"), ("cuda", None, 1, "SMOKE_FAIL real-model")])
+def test_real_model_without_torch_is_skipped_only_on_the_cpu_column(monkeypatch, capsys, vendor, require, rc, marker):
+    package = types.ModuleType("mojolearn")
+    package.vendor = lambda: vendor
+    importers = types.ModuleType("mojolearn.importers")
+    importers.UnsupportedModel = type("UnsupportedModel", (Exception,), {})
+    package.importers = importers
+    monkeypatch.setitem(sys.modules, "mojolearn", package)
+    monkeypatch.setitem(sys.modules, "mojolearn.importers", importers)
+    monkeypatch.setitem(sys.modules, "torch", None)          # import torch raises ImportError
+    if require is None:
+        monkeypatch.delenv("MOJOLEARN_REQUIRE_TORCH", raising=False)
+    else:
+        monkeypatch.setenv("MOJOLEARN_REQUIRE_TORCH", require)
+    assert smoke.probe_real_model() == rc
+    assert marker in capsys.readouterr().out
