@@ -195,6 +195,12 @@ def embedding_int_list(value: PythonObject) raises -> PythonObject:
     var out = new_array([count], "<i4")
     memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)),
            src=codes.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), count=count)
+    # The untracked-origin source pointer does not extend `codes`' lifetime:
+    # without this keep-alive the list's buffer can be freed (ASAP
+    # destruction after its last tracked use) before the copy reads it, and
+    # forward([1, 2]) read allocator words as ids (test_cluster_input_refusals::
+    # test_embedding_refuses_float_ids: "id 341002080 at position 0").
+    _ = codes^
     return Python.tuple(out, out._addr, count, py_ints(shape))
 
 
