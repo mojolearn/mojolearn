@@ -136,7 +136,7 @@ struct AdmittedCall(Movable):
         self.fields_admitted = False
         self._fitted = List[PythonObject]()
         self._fitted_filled = List[Bool]()
-        for _ in range(ADMITTED_FITTED_SLOTS):  # small-loop(fixed fitted slot count)
+        for _ in range(ADMITTED_FITTED_SLOTS):  # driver-loop: over the fixed fitted-field slots
             self._fitted.append(PythonObject(None))
             self._fitted_filled.append(False)
         self.inputs = List[AdmittedInput]()
@@ -166,8 +166,7 @@ struct AdmittedCall(Movable):
 
     # --- binding -----------------------------------------------------------
     def find_binding(self, name: String, mode: String, checked: Bool) -> Int:
-        # small-loop: one or two provider resolutions per public call.
-        for i in range(len(self._binding_names)):
+        for i in range(len(self._binding_names)):  # driver-loop: over this call's provider resolutions (one or two)
             if (self._binding_names[i] == name and self._binding_modes[i] == mode
                     and (self._binding_checked[i] or not checked)):
                 return i
@@ -208,7 +207,7 @@ struct AdmittedCall(Movable):
     def add_input(mut self, var admitted: AdmittedInput) -> Int:
         # Replaces an earlier admission of the same position (a door that
         # re-admits after a GIL window keeps one row per argument).
-        for i in range(len(self.inputs)):  # small-loop(admitted public arguments)
+        for i in range(len(self.inputs)):  # driver-loop: over the call's admitted public arguments
             if self.inputs[i].position == admitted.position:
                 self.inputs[i] = admitted^
                 return i
@@ -216,14 +215,14 @@ struct AdmittedCall(Movable):
         return len(self.inputs) - 1
 
     def find_input(self, position: Int) -> Int:
-        for i in range(len(self.inputs)):  # small-loop(admitted public arguments)
+        for i in range(len(self.inputs)):  # driver-loop: over the call's admitted public arguments
             if self.inputs[i].position == position:
                 return i
         return -1
 
     def find_source(self, source: PythonObject) -> Int:
         # The admitted row whose caller object or admitted owner IS `source`.
-        for i in range(len(self.inputs)):  # small-loop(admitted public arguments)
+        for i in range(len(self.inputs)):  # driver-loop: over the call's admitted public arguments
             if self.inputs[i].source is source or self.inputs[i].owner is source:
                 return i
         return -1
@@ -250,7 +249,7 @@ def admitted_input_shape(position: Int, source: PythonObject, owner: PythonObjec
     """An admitted row from a native shape tuple (exact ints, already checked
     by the admitting helper)."""
     var admitted = AdmittedInput(position, source, owner)
-    for i in range(len(shape)):  # small-loop(rank of one admitted shape)
+    for i in range(len(shape)):  # driver-loop: over the axes of one admitted shape
         admitted.shape.append(Int(py=shape[i]))
     admitted.sparse_code = sparse_code
     return admitted^
