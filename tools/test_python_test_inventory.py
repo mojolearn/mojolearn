@@ -27,3 +27,24 @@ def test_entrypoint_preserves_pytest_failure(tmp_path):
     assert run.returncode == 1
     assert '1 failed' in run.stdout
     assert 'INTERNALERROR' not in run.stdout
+
+
+def test_worker_count_and_serial_files(tmp_path):
+    sys.path.insert(0, str(Path(__file__).parent))
+    import run_python_tests as runner
+    assert runner.worker_count({'MOJOLEARN_TEST_WORKERS': '1'}) == 1
+    assert runner.worker_count({}) >= 1
+    assert runner.user_chose_workers(['-n', '4']) and runner.user_chose_workers(['-p', 'no:xdist'])
+    assert not runner.user_chose_workers(['--continue-on-collection-errors'])
+    (tmp_path / 'test_a.py').write_text('def test_a(): pass\n')
+    (tmp_path / 'test_b.py').write_text('import pytest\n@pytest.mark.serial\ndef test_b(): pass\n')
+    assert [p.name for p in runner.serial_files(sorted(tmp_path.glob('test_*.py')))] == ['test_b.py']
+
+
+def test_entrypoint_serial_override_preserves_failure(tmp_path):
+    (tmp_path / 'test_failure.py').write_text('def test_failure(): assert False\n')
+    run = subprocess.run([sys.executable, str(Path(__file__).with_name('run_python_tests.py')),
+                          '--tests-root', str(tmp_path)], capture_output=True, text=True,
+                         env=dict(__import__('os').environ, MOJOLEARN_TEST_WORKERS='1'))
+    assert run.returncode == 1
+    assert '1 failed' in run.stdout
