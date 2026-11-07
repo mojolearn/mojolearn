@@ -169,6 +169,40 @@ def test_decode_session_state_roundtrip_and_original_route_bits():
     np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
 
 
+def test_decode_session_kept_steps_match_single_forwards():
+    # Eight tokens through one kept session (words admitted once, the step
+    # reads only cached_tokens) against eight single-token forwards on a
+    # fresh state: the same bits and the same cache position after each.
+    block = _block()
+    rng = np.random.default_rng(31)
+    tokens = rng.normal(0, .1, (8, 1, 1, 16)).astype(np.float32)
+    reference = block.allocate_state(1, 8)
+    expected = [np.asarray(block.forward(t, reference)).copy() for t in tokens]
+    state = block.allocate_state(1, 8)
+    with block.decode_session(state) as session:
+        for i, t in enumerate(tokens):
+            actual = session.forward(t)
+            assert np.asarray(actual).tobytes() == expected[i].tobytes()
+            assert state.cached_tokens == i + 1
+    np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
+
+
+def test_decode_session_sees_a_foreign_cached_tokens_write():
+    # A write to the state between steps re-admits it: rewinding to 0 and
+    # stepping the same token again gives the first step's bits.
+    block = _block()
+    x = np.full((1, 1, 16), .02, dtype=np.float32)
+    state = block.allocate_state(1, 6)
+    with block.decode_session(state) as session:
+        first = np.asarray(session.step(x)).copy()
+        session.step(x)
+        assert state.cached_tokens == 2
+        state.cached_tokens = 0
+        again = np.asarray(session.step(x)).copy()
+        assert state.cached_tokens == 1
+    assert again.tobytes() == first.tobytes()
+
+
 def test_decode_rejects_mutable_state_hooks_without_invocation():
     block = _block()
     state = block.allocate_state(1, 6)
