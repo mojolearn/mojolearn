@@ -93,3 +93,39 @@ def test_device_rows_door_recognizes_only_the_exact_class():
     assert context["door_rows_class"] is _arena_io.DeviceRows
     assert context["door_rows_call"] is _arena_io._ROWS_CALL
     assert context["door_rows_context"] is _arena_io._ROWS_CONTEXT
+
+
+@pytest.mark.parametrize("n,k", [(1, 1), (7, 2), (41, 5), (1000, 7)])
+def test_split_plan_matches_per_fold_select(n, k):
+    # N051: select_folds_i64 (one split plan) gives every fold the arrays k
+    # select_fold_i64 calls give, word for word, empty folds included.
+    from mojolearn._buffer import _native
+    plan, single = _native("select_folds_i64"), _native("select_fold_i64")
+    rng = np.random.default_rng(n * 31 + k)
+    fold = rng.integers(0, k + 1, size=n).astype("i4")  # fold id k is never selected: an empty-test case
+    sizes = np.array([(fold == f).sum() for f in range(k)], dtype="i8")
+    scratch = np.zeros(n, dtype="i8")
+    tests = [np.zeros(max(int(s), 1), dtype="i8") for s in sizes]
+    trains = [np.zeros(max(n - int(s), 1), dtype="i8") for s in sizes]
+    test_addrs = np.array([t.ctypes.data if s else scratch.ctypes.data for t, s in zip(tests, sizes)], dtype="i8")
+    train_addrs = np.array([t.ctypes.data if n - s else scratch.ctypes.data for t, s in zip(trains, sizes)], dtype="i8")
+    assert plan(fold.ctypes.data, n, k, sizes.ctypes.data, test_addrs.ctypes.data, train_addrs.ctypes.data) == -1
+    for f in range(k):
+        size = int(sizes[f])
+        want_test = np.zeros(max(size, 1), dtype="i8")
+        want_train = np.zeros(max(n - size, 1), dtype="i8")
+        got = single(fold.ctypes.data, n, f, want_test.ctypes.data if size else scratch.ctypes.data,
+                     want_train.ctypes.data if n - size else scratch.ctypes.data)
+        assert got == size
+        assert tests[f][:size].tobytes() == want_test[:size].tobytes()
+        assert trains[f][:n - size].tobytes() == want_train[:n - size].tobytes()
+
+
+def test_split_plan_reports_a_count_that_disagrees():
+    from mojolearn._buffer import _native
+    plan = _native("select_folds_i64")
+    fold = np.array([0, 1, 0, 1, 0], dtype="i4")
+    sizes = np.array([2, 2], dtype="i8")  # fold 0 has three rows
+    buf = np.zeros(5, dtype="i8")
+    addrs = np.array([buf.ctypes.data, buf.ctypes.data], dtype="i8")
+    assert plan(fold.ctypes.data, 5, 2, sizes.ctypes.data, addrs.ctypes.data, addrs.ctypes.data) == 0
