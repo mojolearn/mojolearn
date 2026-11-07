@@ -188,19 +188,22 @@ def test_decode_session_kept_steps_match_single_forwards():
 
 
 def test_decode_session_sees_a_foreign_cached_tokens_write():
-    # A write to the state between steps re-admits it: rewinding to 0 and
-    # stepping the same token again gives the first step's bits.
+    # A write to the state between steps is seen by the kept (row N177) step
+    # path: the session refuses a cached_tokens that differs from the
+    # resident cache, and steps on once the caller's word matches again.
     block = _block()
     x = np.full((1, 1, 16), .02, dtype=np.float32)
     state = block.allocate_state(1, 6)
     with block.decode_session(state) as session:
-        first = np.asarray(session.step(x)).copy()
+        session.step(x)
         session.step(x)
         assert state.cached_tokens == 2
         state.cached_tokens = 0
-        again = np.asarray(session.step(x)).copy()
-        assert state.cached_tokens == 1
-    assert again.tobytes() == first.tobytes()
+        with pytest.raises(ValueError, match="cached_tokens = 0"):
+            session.step(x)
+        state.cached_tokens = 2
+        session.step(x)
+        assert state.cached_tokens == 3
 
 
 def test_decode_rejects_mutable_state_hooks_without_invocation():
