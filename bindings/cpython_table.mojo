@@ -258,6 +258,21 @@ comptime _PyNumber_Float = ExternalFunction[
 comptime _PyUnicode_FromKindAndData = ExternalFunction[
     "PyUnicode_FromKindAndData", def(c_int, Int, Int) thin abi("C") -> PyObjectPtr]
 
+# Added at integration (integ/ne-20261107) for ne3-c-samba (N170) and
+# ne1-a-trees (N002). PyList_GET_ITEM and PyFloat_AS_DOUBLE, also asked by
+# ne1-a-trees, are C macros / static inline functions with no exported
+# symbol, so they cannot be table entries: callers use PyList_GetItem and
+# PyFloat_AsDouble.
+# PyObject *PyByteArray_FromStringAndSize(const char *string, Py_ssize_t len)  (new; NULL string = uninitialized)
+comptime _PyByteArray_FromStringAndSize = ExternalFunction[
+    "PyByteArray_FromStringAndSize", def(Int, Int) thin abi("C") -> PyObjectPtr]
+# char *PyByteArray_AsString(PyObject *bytearray)  (address word)
+comptime _PyByteArray_AsString = ExternalFunction[
+    "PyByteArray_AsString", def(PyObjectPtr) thin abi("C") -> Int]
+# long long PyLong_AsLongLongAndOverflow(PyObject *obj, int *overflow)  (overflow as an address word)
+comptime _PyLong_AsLongLongAndOverflow = ExternalFunction[
+    "PyLong_AsLongLongAndOverflow", def(PyObjectPtr, Int) thin abi("C") -> Int64]
+
 
 struct CPythonTable(Movable):
     var PyImport_GetModuleDict: _PyImport_GetModuleDict.type
@@ -325,6 +340,9 @@ struct CPythonTable(Movable):
     var PyNumber_Long: _PyNumber_Long.type
     var PyNumber_Float: _PyNumber_Float.type
     var PyUnicode_FromKindAndData: _PyUnicode_FromKindAndData.type
+    var PyByteArray_FromStringAndSize: _PyByteArray_FromStringAndSize.type
+    var PyByteArray_AsString: _PyByteArray_AsString.type
+    var PyLong_AsLongLongAndOverflow: _PyLong_AsLongLongAndOverflow.type
 
     def __init__(out self):
         ref cpy = Python().cpython()
@@ -394,13 +412,16 @@ struct CPythonTable(Movable):
         self.PyNumber_Long = _PyNumber_Long.load(lib)
         self.PyNumber_Float = _PyNumber_Float.load(lib)
         self.PyUnicode_FromKindAndData = _PyUnicode_FromKindAndData.load(lib)
+        self.PyByteArray_FromStringAndSize = _PyByteArray_FromStringAndSize.load(lib)
+        self.PyByteArray_AsString = _PyByteArray_AsString.load(lib)
+        self.PyLong_AsLongLongAndOverflow = _PyLong_AsLongLongAndOverflow.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
 # them load the same interpreter library). Bump the name's version whenever a
 # field is added, removed or reordered.
 comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name="MojolearnCPythonTableV5",
+    StorageType=CPythonTable, name="MojolearnCPythonTableV6",
     init_fn=CPythonTable.__init__,
 ]
 
