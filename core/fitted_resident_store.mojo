@@ -66,8 +66,14 @@ comptime FITTED_SLOTS_PER_LEASE = 1 << 20
 comptime FITTED_CAP_DIVISOR = 8
 
 
-struct FittedResidentEntry(Movable):
+struct FittedResidentEntry(Copyable, Movable):
     """One slot's fitted arrays on the device."""
+
+    # Copyable because the stdlib Dict iterates (`items()`) only Copyable
+    # values (the lease close and the LRU eviction walk `entries`). A copy
+    # holds new HANDLES to the same context and buffers (reference counted,
+    # the device memory is shared), exactly what `fitted_resident_view`
+    # already hands out; no entry is copied on the store's paths.
 
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
@@ -86,6 +92,15 @@ struct FittedResidentEntry(Movable):
         self.device = device
         self.bytes = bytes
         self.used = used
+
+    def __init__(out self, *, copy: Self):
+        self.ctx = copy.ctx.copy()
+        self.bufs = copy.bufs.copy()
+        self.srcs = copy.srcs.copy()
+        self.counts = copy.counts.copy()
+        self.device = copy.device
+        self.bytes = copy.bytes
+        self.used = copy.used
 
     def __deinit__(deinit self):
         # The buffers before the context they were created on (DEVIATION 1946).
