@@ -24,21 +24,7 @@ from bindings.host_density_archive_native import host_density_save
 from bindings.host_density_hash_native import host_density_hash
 from bindings.py_balanced import py_type, py_get
 from bindings.admitted_call import AdmittedCall
-
-
-def classical_trees_operation(operation: String) -> Bool:
-    """Whether `classical_native_call` forwards the string operation to this
-    door: the same names its branches matched before the split."""
-    return (operation == "host_kde_fit" or operation == "host_iforest_fit"
-            or operation == "host_density_save" or operation == "host_density_hash"
-            or operation == "host_density_initialize"
-            or operation.startswith("host_infer_")
-            or operation == "archive_infer_predict" or operation == "archive_infer_predict_proba"
-            or operation == "archive_knn_classifier" or operation == "archive_knn_regressor"
-            or operation.startswith("trees_") or operation.startswith("host_tree_")
-            or operation == "host_archive_predict" or operation == "host_archive_predict_proba"
-            or operation == "host_archive_model" or operation == "host_archive_load"
-            or operation == "host_archive_classical_model")
+from bindings.classical_door_routes import classical_trees_operation
 
 
 def _trees_coded(model: PythonObject, code: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -111,7 +97,10 @@ def classical_trees_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             return coded.steal_data()
         if py_type(request[1]) is not b.str or py_type(request[3]) is not b.dict:
             raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
-        var result = _trees_named(request[0], String(request[1]), request[2], request[3])
+        var operation = String(request[1])
+        if not classical_trees_operation(operation):
+            raise Error("RuntimeError: unknown native tree operation " + operation)
+        var result = _trees_named(request[0], operation, request[2], request[3])
         return result.steal_data()
     except error:
         return classical_python_error(error^, args_ptr)

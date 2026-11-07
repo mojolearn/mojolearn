@@ -14,6 +14,7 @@ from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_
 from bindings.py_balanced import py_type
 from bindings.admitted_call import AdmittedCall
 from providers.python.classical_family_admission_pyapi import classical_family_admit
+from bindings.classical_door_routes import classical_family_operation
 
 
 def _family_coded(model: PythonObject, code: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -46,7 +47,7 @@ def classical_family_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
         var model = request[0]
         var operation = String(request[1])
-        if not operation.startswith("family_"):
+        if not classical_family_operation(operation):
             raise Error("RuntimeError: unknown family operation " + operation)
         _ = classical_family_admit(model)
         var family = family_operation(model, operation, request[2], request[3])
