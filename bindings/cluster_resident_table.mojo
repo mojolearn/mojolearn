@@ -177,10 +177,12 @@ def _evict_one(t: UnsafePointer[CresTable, MutAnyOrigin]) raises -> Bool:
     """Release the least recently used entry; False when none was released."""
     var oldest_slot = 0
     var oldest_tick = -1
-    for item in t[].entries.items():  # driver-loop: over at most CRES_HELD_MAX held entries
-        if oldest_tick < 0 or item.value.tick < oldest_tick:
-            oldest_tick = item.value.tick
-            oldest_slot = item.key
+    # Keys only: CresHeld is Movable, not Copyable, and Dict.items() requires Copyable values.
+    for key in t[].entries.keys():  # driver-loop: over at most CRES_HELD_MAX held entries
+        var tick = t[].entries[key].tick
+        if oldest_tick < 0 or tick < oldest_tick:
+            oldest_tick = tick
+            oldest_slot = key
     if oldest_tick < 0:
         return False
     var before = len(t[].entries)
