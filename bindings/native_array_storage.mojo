@@ -30,7 +30,7 @@ def _storage_type(metadata: PythonObject) raises -> PythonObject:
         raise Error("TypeError: native array storage requires its extension type")
     var module = native_loaded_module("array")
     ref cpy = Python().cpython()
-    var owner = cpy.lib.get_function[PyObjectPtr]("PyType_GetModule")(cls._obj_ptr)
+    var owner = cpython_table()[].PyType_GetModule(cls._obj_ptr)
     if not owner:
         cpython_table()[].PyErr_Clear()
         raise Error("TypeError: native array storage requires its extension type")
@@ -60,7 +60,7 @@ def native_array_zeros(code: String, count: Int) raises -> PythonObject:
         if bytes[i] != 0:
             raise Error("TypeError: native array storage seed changed")
     ref cpy = Python().cpython()
-    var result = cpy.lib.get_function[PyObjectPtr]("PySequence_Repeat")(seed._obj_ptr, count)
+    var result = cpython_table()[].PySequence_Repeat(seed._obj_ptr, count)
     _ = seed  # retain the original owner through the native repeat operation
     if not result:
         raise cpy.unsafe_get_error()
