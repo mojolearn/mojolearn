@@ -15,8 +15,9 @@ CPU host binding, a build that lacks them) `to_device` returns the float32
 array it was given, so the caller's code runs unchanged on host arrays.
 
 Glue only: argument checks, handles and shapes; no arithmetic on data."""
-from ._optional_numpy import require_numpy
-np = require_numpy('_x_sequence_device')
+# No NumPy here: the module only holds handles and calls its native owner,
+# and the package connects it at import (_native_optimizer_bridge
+# connect_embedding), which must not load NumPy (NUMPY_FREE_CONTRACT.md).
 
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 

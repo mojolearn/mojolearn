@@ -30,6 +30,7 @@ from bindings.family_common import (
     family_as_f32_dense,
 )
 from bindings.cfb_spectral import _as_i32
+from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.neighbors_ann_native import ann_keep_array
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
@@ -203,11 +204,34 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
     (`as_f32_c(M.data, ndim=1, name="data")`), with the same refusals in the
     same order."""
     var b = _b()
-    var indptr: PythonObject
-    var indices: PythonObject
+    var indptr = PythonObject(None)
+    var indices = PythonObject(None)
     var vals = PythonObject(None)
-    var n: Int
-    if family_isinstance(source, b.tuple) and Int(py=family_call(b.len, source)) == 3:
+    var n = 0
+    # An exact SciPy CSR container is read from its own stored buffers
+    # (the instance dictionary, bindings/host_sparse_native.mojo
+    # _sparse_fields): its `tocsr()` returns itself and `shape` is the
+    # stored `_shape`, so the same arrays reach the kernels without running
+    # SciPy's Python methods inside the native call. Any other container, or
+    # a CSR whose storage is not the expected shape, keeps `tocsr()`.
+    var stored_csr = False
+    if host_sparse_format(source) == "csr":
+        var fields = _sparse_fields(source)
+        var stored_shape = py_get(fields, "_shape")
+        if (stored_shape is not None and py_type(stored_shape) is b.tuple and len(stored_shape) == 2
+                and py_contains(fields, PythonObject("indptr")) and py_contains(fields, PythonObject("indices"))
+                and py_contains(fields, PythonObject("data"))):
+            if _ne(stored_shape[0], stored_shape[1]):
+                raise Error("the adjacency matrix must be square")
+            stored_csr = True
+            indptr = fields["indptr"]
+            indices = fields["indices"]
+            n = Int(py=_int(stored_shape[0]))
+            if graph:
+                vals = family_as_f32(fields["data"], 1, "data", context)
+    if stored_csr:
+        pass
+    elif family_isinstance(source, b.tuple) and Int(py=family_call(b.len, source)) == 3:
         indptr = source[0]
         indices = source[1]
         n = Int(py=_int(source[2]))
@@ -509,6 +533,11 @@ def _svgp_gamma(model: PythonObject) raises -> Float64:
     var ls = _float(_attr(model, "lengthscale"))
     var den = 2.0 * (ls * ls)
     if den == 0.0:
+        # The interpreter's own wording for a float division by zero, which
+        # the former `1.0 / (2 * ls * ls)` raised: CPython 3.14 says
+        # "division by zero", earlier versions "float division by zero".
+        if Int(py=native_loaded_module("sys").version_info[1]) >= 14:
+            raise Error("ZeroDivisionError: division by zero")
         raise Error("ZeroDivisionError: float division by zero")
     return 1.0 / den
 

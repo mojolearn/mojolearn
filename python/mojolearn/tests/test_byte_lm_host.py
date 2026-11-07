@@ -79,34 +79,54 @@ def fake_host(monkeypatch, tmp_path):
     _backend._DOOR_HOST_MODULES.pop(host_mod._EXTENSION, None)
 
 
-def test_loss_bits_round_trip(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
-    assert model.loss_bits(np.zeros((2, 33), np.int32)) == 0x3F800000
-    assert model.loss(np.zeros((2, 33), np.int32)) == 1.0
+# The inference owner (bindings/byte_lm_host_trainer_native.mojo) calls the
+# host binding through its compiled descriptor (`byte_lm_host_api_v1`), which
+# a Python stand-in cannot provide, and it connects the binding ONCE, when
+# `_byte_lm_host` is imported (`_connect_host_trainer` -> `_load()`). So the
+# wiring tests below run on the connected compiled host binding (skipped where
+# it is not built), and the load-time refusals are tested at `_load()`, which
+# the import-time connection runs.
+@pytest.fixture
+def real_host():
+    binding = host_mod._HOST_TRAIN_CONTEXT.get('byte_lm_host_binding')
+    if binding is None or isinstance(binding, str):
+        pytest.skip(f"compiled host binding unavailable: {binding}")
+    return binding
 
 
-def test_threaded_flag_reaches_the_binding_as_an_int(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32), threaded=True)
-    model.loss_bits(np.zeros((2, 33), np.int32))
-    model.loss_bits(np.zeros((2, 33), np.int32), threaded=False)
-    model.logits(np.zeros((1, 4), np.int32))
-    assert fake_host.calls == [('loss', 1, 0), ('loss', 0, 0), ('logits', [1, 4], 1, 0)]
+def _zeros():
+    return np.zeros(34944, np.float32)
+
+
+def test_loss_bits_round_trip(real_host):
+    model = host_mod.LanguageModelInference(_zeros())
+    batch = np.zeros((2, 33), np.int32)
+    bits = model.loss_bits(batch)
+    assert isinstance(bits, int) and 0 <= bits < (1 << 32)
+    assert struct.unpack('<f', struct.pack('<I', bits))[0] == model.loss(batch)
+
+
+def test_threaded_flag_is_a_bool_and_both_paths_agree(real_host):
+    model = host_mod.LanguageModelInference(_zeros(), threaded=True)
+    batch = (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
+    assert model.loss_bits(batch) == model.loss_bits(batch, threaded=False)
+    ids = batch[:1, :4]
+    threaded = np.asarray(model.logits(ids))
+    assert threaded.tobytes() == np.asarray(model.logits(ids, threaded=False)).tobytes()
     with pytest.raises(TypeError):
         model.logits(np.zeros((1, 4), np.int32), threaded=1)
     with pytest.raises(TypeError):
-        host_mod.LanguageModelInference(np.zeros(34944, np.float32), threaded='yes')
+        host_mod.LanguageModelInference(_zeros(), threaded='yes')
 
 
-def test_default_is_the_threaded_path_on_every_core(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
-    model.loss_bits(np.zeros((2, 33), np.int32))
-    model.logits(np.zeros((1, 4), np.int32))
-    model.logits(np.zeros((1, 4), np.int32), threaded=False)
-    assert fake_host.calls == [('loss', 1, 0), ('logits', [1, 4], 1, 0), ('logits', [1, 4], 0, 0)]
+def test_default_is_the_threaded_path_on_every_core(real_host):
+    model = host_mod.LanguageModelInference(_zeros())
+    assert vars(model)['_threaded'] is True
+    assert vars(model)['_threads'] is None
 
 
-def test_out_of_range_ids_raise_value_error_before_the_binding(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+def test_out_of_range_ids_raise_value_error_before_the_binding(real_host):
+    model = host_mod.LanguageModelInference(_zeros())
     for bad in (-1, 256, -100, 1 << 30):
         ids = np.zeros((1, 4), np.int32)
         ids[0, 2] = bad
@@ -123,47 +143,47 @@ def test_out_of_range_ids_raise_value_error_before_the_binding(fake_host):
         batch[0, 32] = bad
         with pytest.raises(ValueError, match='byte values'):
             model.loss_bits(batch)
-    assert fake_host.calls == []
     # -100 in the target-only last column is the loss oracle's ignore_index.
     batch = np.zeros((2, 33), np.int32)
     batch[1, 32] = -100
-    assert model.loss_bits(batch) == 0x3F800000
-    assert fake_host.calls == [('loss', 1, 0)]
+    bits = model.loss_bits(batch)
+    assert isinstance(bits, int)
 
 
-def test_thread_count_reaches_the_binding_and_is_refused_out_of_range(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32), threaded=True, threads=3)
-    model.loss_bits(np.zeros((2, 33), np.int32))
-    model.logits(np.zeros((1, 4), np.int32), threads=2)
-    assert fake_host.calls == [('loss', 1, 3), ('logits', [1, 4], 1, 2)]
+def test_thread_count_is_kept_and_refused_out_of_range(real_host):
+    model = host_mod.LanguageModelInference(_zeros(), threaded=True, threads=3)
+    assert vars(model)['_threads'] == 3
+    batch = (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
+    assert model.loss_bits(batch) == host_mod.LanguageModelInference(_zeros()).loss_bits(batch)
+    assert tuple(model.logits(np.zeros((1, 4), np.int32), threads=2).shape) == (1, 4, 256)
     for bad, error in ((0, ValueError), (1025, ValueError), (True, TypeError), ('3', TypeError)):
         with pytest.raises(error):
-            host_mod.LanguageModelInference(np.zeros(34944, np.float32), threads=bad)
+            host_mod.LanguageModelInference(_zeros(), threads=bad)
         with pytest.raises(error):
             model.logits(np.zeros((1, 4), np.int32), threads=bad)
 
 
-def test_logits_shape_and_greedy_ties_go_low(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+def test_logits_shape_and_greedy_ties_go_low(real_host):
+    # Zero parameters give equal logits everywhere: every tie goes to id 0.
+    model = host_mod.LanguageModelInference(_zeros())
     out = model.logits(np.zeros((2, 5), np.int32))
     assert tuple(out.shape) == (2, 5, 256)
-    assert model.next_bytes(np.zeros((2, 5), np.int32)) == [3, 3]
-    assert fake_host.calls[-1] == ('next', [2, 5], 0)
+    assert model.next_bytes(np.zeros((2, 5), np.int32)) == [0, 0]
 
 
-def test_unthreaded_next_bytes_uses_full_logits_fallback(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
-    assert model.next_bytes(np.zeros((2, 5), np.int32), threaded=False) == [3, 3]
-    assert fake_host.calls == [('logits', [2, 5], 0, 0)]
+def test_unthreaded_next_bytes_uses_full_logits_fallback(real_host):
+    model = host_mod.LanguageModelInference(_zeros())
+    ids = (np.arange(10, dtype=np.int32) * 7 % 256).reshape(2, 5)
+    assert model.next_bytes(ids, threaded=False) == model.next_bytes(ids)
 
 
-def test_refusals(fake_host):
-    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+def test_refusals(real_host):
+    model = host_mod.LanguageModelInference(_zeros())
     with pytest.raises(ValueError):
         model.loss_bits(np.zeros((2, 32), np.int32))
     with pytest.raises(ValueError):
         model.logits(np.zeros((1, 33), np.int32))
-    bad = np.zeros(34944, np.float32)
+    bad = _zeros()
     bad[5] = np.nan
     with pytest.raises(ValueError):
         host_mod.LanguageModelInference(bad)
@@ -174,21 +194,30 @@ def test_refusals(fake_host):
 def test_sabotage_build_refused_outside_the_gate(fake_host, monkeypatch):
     fake_host.byte_lm_host_sabotage = lambda: True
     with pytest.raises(RuntimeError, match='SABOTAGE'):
-        host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+        host_mod._load()
     monkeypatch.setenv('MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE', '1')
     monkeypatch.delitem(_backend._DOOR_HOST_MODULES, host_mod._EXTENSION, raising=False)
-    host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+    assert host_mod._load() is fake_host
 
 
 def test_wrong_mode_or_vendor_refused(fake_host, monkeypatch):
     fake_host.byte_lm_host_vendor = lambda: 'metal'
     with pytest.raises(RuntimeError):
-        host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+        host_mod._load()
     fake_host.byte_lm_host_vendor = lambda: 'cpu'
     fake_host.byte_lm_host_numeric_mode = lambda: 0
     monkeypatch.delitem(_backend._DOOR_HOST_MODULES, host_mod._EXTENSION, raising=False)
     with pytest.raises(RuntimeError):
-        host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+        host_mod._load()
+
+
+def test_connected_load_refusal_is_raised_by_construction(monkeypatch):
+    # A binding refused at import-time connection is kept as its refusal's
+    # text, and construction raises it with its class.
+    monkeypatch.setitem(host_mod._HOST_TRAIN_CONTEXT, 'byte_lm_host_binding',
+                        'RuntimeError: byte LM host binding is a SABOTAGE build')
+    with pytest.raises(RuntimeError, match='SABOTAGE'):
+        host_mod.LanguageModelInference(_zeros())
 
 
 def test_native_helpers_fall_back_to_the_cpu_binding_only_for_the_three(fake_host, monkeypatch):

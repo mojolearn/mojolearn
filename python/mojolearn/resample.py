@@ -448,12 +448,9 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
                    sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
-# Optional ndarray result storage is connected during package import.
-# Product operations never import NumPy or invoke an array conversion hook.
-try:
-    import numpy as _native_numpy_storage
-except ImportError:
-    _native_numpy_storage = None
+# Importing the package never loads NumPy (NUMPY_FREE_CONTRACT.md): the
+# native owner connects ndarray result storage only when NumPy is already
+# loaded by the caller; product operations never import it.
 
 
 # The compiled owner of this module's public functions

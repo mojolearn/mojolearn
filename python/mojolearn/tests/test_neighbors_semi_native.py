@@ -106,7 +106,9 @@ def test_label_propagation_kernel_refusal():
 
 def test_label_propagation_row_mismatch_refusal():
     X, y = _data()
-    with pytest.raises(ValueError, match="X and y have different numbers of rows"):
+    # The public fit's shared lifecycle checks y's length first, with
+    # scikit-learn's wording (providers/python/family_public_lifecycle_pyapi.mojo).
+    with pytest.raises(ValueError, match=r"inconsistent numbers of samples: \[40, 39\]"):
         mojolearn.LabelPropagation().fit(X, y[:-1])
 
 
@@ -117,7 +119,9 @@ def test_additive_chi2_methods_match_former_path(steps, interval):
     old = mojolearn.AdditiveChi2Sampler(sample_steps=steps, sample_interval=interval)
     assert native.fit(X) is native
     legacy.achi2_fit(old, X)
-    assert vars(native) == vars(old)
+    # The public fit's lifecycle epilogue marks the model fitted
+    # (estimator_fit_complete); the frozen helper is the inner fit only.
+    assert vars(native) == dict(vars(old), _mojolearn_fitted=True)
     assert _bits(native.transform(X)) == _bits(legacy.achi2_transform(old, X))
     assert _bits(mojolearn.AdditiveChi2Sampler(sample_steps=steps, sample_interval=interval).fit_transform(X)) == \
         _bits(legacy.achi2_fit_transform(mojolearn.AdditiveChi2Sampler(sample_steps=steps, sample_interval=interval), X))

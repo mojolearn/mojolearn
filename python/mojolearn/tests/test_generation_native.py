@@ -201,6 +201,10 @@ def test_tokenizer_native_unicode_specials_and_text_generation(tmp_path, monkeyp
         patch.setattr(tokenizer, "encode", forbidden)
         with pytest.raises(TypeError, match="state field was replaced by a descriptor"):
             model.generate_text("!", 3, tokenizer=tokenizer, eos_token_id=0)
+    # monkeypatch restores an instance attribute by setting the bound method
+    # back into the instance dictionary, which the owner keeps refusing; the
+    # class-level proof below takes a fresh tokenizer.
+    tokenizer = Tokenizer([bytes([i]) for i in range(256)], [], pattern="gpt2", normalizer="NFC")
     with monkeypatch.context() as patch:
         patch.setattr(Tokenizer, "encode", forbidden)
         patch.setattr(Tokenizer, "decode", forbidden)

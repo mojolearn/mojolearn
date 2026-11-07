@@ -188,13 +188,19 @@ def _ivf_metric(fields: PythonObject, context: PythonObject) raises -> PythonObj
             raise Error("mojolearn IVFIndex: metric must be one of " + family_repr(py_call(b.sorted, table))
                         + ", got " + family_repr(metric))
         return table[metric]
+    # A bool is refused as a value, with the former path's wording
+    # (`IVFIndex._metric_code`: `isinstance(metric, bool)` -> ValueError).
+    if py_type(metric) is b.bool:
+        raise Error("mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 (L2SqrtExpanded), got "
+                    + family_repr(metric))
     # Exact words before conversion or equality: arbitrary numeric protocols
     # must never execute while admitting mutable estimator parameters.
     if py_type(metric) is not b.int and py_type(metric) is not b.float:
         raise Error("TypeError: mojolearn IVFIndex: metric must be an exact native name or code")
     var code = Float64(py=metric)
     if code != 0.0 and code != 1.0:
-        raise Error("mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 (L2SqrtExpanded)")
+        raise Error("mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 (L2SqrtExpanded), got "
+                    + family_repr(metric))
     return PythonObject(Int(code))
 
 
@@ -678,11 +684,11 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var k0 = shape[1]
     var c = array_metadata_once(candidate, shape^, "candidates", context, True)
     if c.source.kind != CAST_KIND_SIGNED and c.source.kind != CAST_KIND_UNSIGNED:
-        raise Error("mojolearn refine: candidates must be an integer array")
+        raise Error("mojolearn refine: candidates must be an integer array of shape (" + String(m) + ", k0)")
     # Without NumPy the native sequence owner represents a bool sequence as
     # int8. Retain asarray's boolean refusal while accepting real int8 buffers.
     if (py_type(args[3]) is b.list or py_type(args[3]) is b.tuple) and _ann_bool_sequence(args[3]):
-        raise Error("mojolearn refine: candidates must be an integer array")
+        raise Error("mojolearn refine: candidates must be an integer array of shape (" + String(m) + ", k0)")
     var k_o = _ann_int("refine", "k", args[4])
     var k = Int(py=k_o)
     var native = estimator_binding_mode(args[6], "_mojolearn_x_ann", context) if args[0] is None else args[0]

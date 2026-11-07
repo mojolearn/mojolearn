@@ -76,8 +76,9 @@ def linear_regressor_score(model: PythonObject, args: PythonObject, context: Pyt
     if compute_score is not None and Bool(py=compute_score):
         raise Error("mojolearn " + name + ": compute_score is not implemented")
     if not py_contains(fields, "coef_"):
-        # scikit-learn's fitted-state error (NotFittedError, a ValueError and
-        # AttributeError), the class predict raises before fit too.
+        # An unfitted score raises mojolearn's NotFittedError (also a
+        # scikit-learn NotFittedError), as every other estimator's score does;
+        # the classical door maps the prefix to the connected bridge class.
         _ = classical_not_fitted_class(context)
         raise Error("NotFittedError: This " + name + " instance is not fitted yet. Call 'fit' with "
                     + "appropriate arguments before using score.")

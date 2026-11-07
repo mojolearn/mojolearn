@@ -2049,8 +2049,8 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled stratified folds (``>= 2``); None
-        means 5. A splitter object's ``split(X, y)`` or an iterable of index
-        pairs is used as given, but its test sets must cover every row exactly
+        means 5. A splitter from ``mojolearn.model_selection`` or a list of
+        (train, test) index pairs is used as given, but its test sets must cover every row exactly
         once, else ``ValueError``.
     stack_method : {"auto", "predict_proba", "decision_function", "predict"}, default "auto"
         The member method whose output is stacked. ``"auto"`` takes the first
@@ -2164,8 +2164,8 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled ``KFold`` folds (``>= 2``); None
-        means 5. A splitter object's ``split(X, y)`` or an iterable of index
-        pairs is used as given, but its test sets must cover every row exactly
+        means 5. A splitter from ``mojolearn.model_selection`` or a list of
+        (train, test) index pairs is used as given, but its test sets must cover every row exactly
         once, else ``ValueError``.
     n_jobs : None
         Only None is accepted; any other value raises ``NotImplementedError``.
@@ -2565,8 +2565,8 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         ``ValueError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled stratified folds (``>= 2``); None
-        means 5. A splitter object's ``split(X, y)`` or an iterable of index
-        pairs is used as given; with ``ensemble=False`` their test sets must
+        means 5. A splitter from ``mojolearn.model_selection`` or a list of
+        (train, test) index pairs is used as given; with ``ensemble=False`` their test sets must
         cover every row exactly once, else ``ValueError``.
     n_jobs : None
         Only None is accepted; any other value raises ``NotImplementedError``.

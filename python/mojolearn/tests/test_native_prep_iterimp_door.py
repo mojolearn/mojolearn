@@ -58,6 +58,12 @@ def _splitmix64(state):
 
 
 
+def _is_nan_value(v):
+    # The former route's module helper (_expansion_prep._is_nan_value before
+    # the native door), kept with the oracle.
+    return isinstance(v, float) and v != v
+
+
 def _mark_missing(pr, xo, count, missing_values):
     """Stages that turn a numeric `missing_values` into NaN; returns the offset
     to read (the input itself when missing_values is NaN)."""
@@ -104,7 +110,7 @@ def _clone(est):
 
 
 def _as_list(v):
-    from . import _user_objects
+    from mojolearn import _user_objects
     return _user_objects.call("floats", v.tolist() if hasattr(v, "tolist") else v).tolist()
 
 
@@ -114,7 +120,7 @@ def _pred_f64(v):
     """A user estimator's predictions as a float64 Array holding the values
     `_as_list` reads (`float(x)` per element): a float32 or float64 vector
     widened natively (exact), anything else through `_as_list`."""
-    from ._buffer import _materialize, _has_buffer, as_f64_c
+    from mojolearn._buffer import _materialize, _has_buffer, as_f64_c
     if isinstance(v, Array) or (not isinstance(v, (list, tuple)) and _has_buffer(v)):
         a, _ = _materialize(v, "predict")
         if a.ndim == 1 and a.dtype in ("<f4", "<f8") and a.size:
@@ -402,8 +408,10 @@ class _Former(ml.IterativeImputer if ml is not None else object):
         rows = pr.get_i32(rm, (m,)) if m else None
         return Xo, yo, Xm, rows, m
 
-    @staticmethod
-    def _ii_block(pr, xo, yo, m, nc):
+    # A plain method, not a staticmethod: a mojolearn estimator's native
+    # attribute owner binds subclass functions and refuses other Python
+    # descriptors (bindings/public_attributes_native.mojo _lookup_impl).
+    def _ii_block(self, pr, xo, yo, m, nc):
         """(X block (m, nc), y (m,)) as float32 Arrays; a 0-row block is
         `from_list([])`, a 0-column one its m empty rows, as before."""
         if m == 0:
@@ -471,8 +479,8 @@ class _Former(ml.IterativeImputer if ml is not None else object):
         at a 53-bit splitmix64 uniform on the pinned normal cdf / inverse cdf
         (DEVIATION 6902), the instance's stream advanced by the entries that
         draw. The reference's zip stops at the shorter of the two outputs."""
-        from ._buffer import _native
-        from . import _user_objects
+        from mojolearn._buffer import _native
+        from mojolearn import _user_objects
         # the user estimator's predictions read once natively (user_objects floats)
         mu = _user_objects.call("floats", _user_objects.call("flatten", mus))
         sd = _user_objects.call("floats", _user_objects.call("flatten", sig))
@@ -624,7 +632,7 @@ def test_refusals():
         ml.IterativeImputer(imputation_order="sideways").fit(X)
     with pytest.raises(ValueError, match="n_nearest_features"):
         ml.IterativeImputer(n_nearest_features=0).fit(X)
-    with pytest.raises(RuntimeError, match="not fitted"):
+    with pytest.raises(ml.exceptions.NotFittedError, match="not fitted"):
         ml.IterativeImputer().transform(X)
     with pytest.raises(ValueError, match="features"):
         ml.IterativeImputer(max_iter=1).fit(X).transform(X[:, :2])

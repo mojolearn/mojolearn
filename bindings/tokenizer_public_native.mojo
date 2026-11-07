@@ -1878,6 +1878,10 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
     if operation == "vocab_pretokenize":
         return _vocab_pretokenize(args[0], args[1], context)
     if operation == "vocab_pattern":
+        # `pattern_name` is total: anything but an exact str is simply not a
+        # known pattern spelling (its documented None), never a refusal.
+        if py_type(args[0]) is not native_loaded_module("builtins").str:
+            return PythonObject(None)
         var name = _str(args[0], "regex")
         _dictionary(context[2])
         _plain(context[2])

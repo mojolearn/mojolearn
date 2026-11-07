@@ -75,6 +75,11 @@ def test_host_binding_registers_every_gpu_entry():
     # binding does register.
     resident |= {f"mamba{v}_session_" + name for v in (2, 3) for name in
                  ("create", "open", "step", "export_state", "load_state", "close")}
+    # Their native descriptor handles (the shared provider's resident decode
+    # session lifecycle, 35735229d5) belong to the same GPU sessions, and the
+    # Mamba-2 live-refresh workspace (0fdba90777) is device storage.
+    resident |= {f"mamba{v}_decode_native_handle_v1" for v in (1, 2, 3)}
+    resident.add("mamba2_workspace_api_v1")
     assert resident <= gpu and not resident & host
     # Device-retained Mamba-3 entries with a declared host absence: the tape
     # (NI48, `mamba3_forward_tape_enabled` reads False on the host binding, so
@@ -83,7 +88,10 @@ def test_host_binding_registers_every_gpu_entry():
     # None fallback and takes the plain entries; the host registers the owned
     # session arm instead).
     device_only = {"mamba3_forward_tape", "mamba3_backward_tape", "mamba3_close_tape",
-                   "mamba3_prefill_session_forward", "mamba3_prefill_session_backward"}
+                   "mamba3_prefill_session_forward", "mamba3_prefill_session_backward",
+                   # the tape's native provider handles (e1741fb6a1); the
+                   # training bridge connects them only where present
+                   "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1"}
     assert device_only <= gpu and not device_only & host
     assert "mamba3_forward_tape_enabled" in host
     resident |= device_only

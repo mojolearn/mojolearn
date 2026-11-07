@@ -534,8 +534,12 @@ def mamba3_getstate(mut mods: NativeModules, block: PythonObject, context: Pytho
     py_setitem(result, "_owned_generation", PythonObject(None))
     _ = py_call(result.pop, "_prefill_session", PythonObject(None))
     _ = py_call(result.pop, "_prefill_binding", PythonObject(None))
+    # `_native_mamba_state_binding` is the binding module the construction
+    # cache keyed the state provider on (neural_descriptor_cached): a module
+    # is not picklable, and setstate reconnects the provider anyway.
     var transient_names = [String("_owned_native_provider"), String("_native_mamba_block_provider_cache"),
-                           String("_native_mamba_state"), String("_native_forward_owner")]
+                           String("_native_mamba_state"), String("_native_mamba_state_binding"),
+                           String("_native_forward_owner")]
     for name in transient_names:  # driver-loop: over ephemeral native owners excluded from serialized model state
         _ = py_call(result.pop, name, PythonObject(None))
     return result

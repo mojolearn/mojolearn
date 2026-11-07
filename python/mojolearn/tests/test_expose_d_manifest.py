@@ -106,7 +106,9 @@ def test_binding_exports_match_python_calls():
             assert "device_plan_enter" in exported and "device_plan_exit" in exported, (binding, "no plan entries")
     gp = _exports("bindings/_mojolearn_gp.mojo")
     chol = _calls("python/mojolearn/_cholesky_impl.py", r"_extension\(\)\.(\w+)\(")
-    assert chol and chol <= gp, sorted(chol - gp)
+    # Cholesky migrated to its one-native-call door too: what Python still
+    # calls (nothing, today) must be exported.
+    assert chol <= gp, sorted(chol - gp)
 
 
 def test_build_scripts_exist_and_name_their_binding():

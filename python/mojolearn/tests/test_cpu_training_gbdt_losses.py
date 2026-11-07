@@ -142,7 +142,8 @@ def test_multiclass_oracle_spells_the_bit_carrying_constructs():
 def test_binding_dispatches_and_refuses_by_name():
     src = _read(host_surface.binding_source("gbdt"))
     # the call carries the group and pairs tails since lane/gbdt-learning-to-rank
-    assert "gbdt_losses_host_fit(\n                x, y, n_rows, n_features, p, pw_loss, host_group_sizes," in src
+    # (indentation-independent: the call moved one block deeper)
+    assert re.search(r"gbdt_losses_host_fit\(\s*x, y, n_rows, n_features, p, pw_loss, host_group_sizes,", src)
     assert "gbdt_multi_host_fit(" in src and "gbdt_multi_host_model_text(multi_model)" in src
     assert '("gbdt_predict_multi")' in src
     assert "var lg_boot = ns_stochastic and (" in src

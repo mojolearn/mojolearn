@@ -65,10 +65,15 @@ def test_fit_state_equals_former_path(which, data):
     native = make().fit(x)
     former = make()
     old(former, x)
-    assert _state(native) == _state(former)
+    # The public fit's shared lifecycle epilogue marks the model fitted
+    # (providers/python/estimator_lifecycle_pyapi.mojo estimator_fit_complete);
+    # the frozen former helpers are the inner fit only, so the marker is
+    # checked on its own and the rest of the state must be equal.
+    assert vars(native).get("_mojolearn_fitted") is True
+    assert _state(native) == dict(_state(former), _mojolearn_fitted=True)
     # a refit drops the previous handle and builds the same state again
     native.fit(x)
-    assert _state(native) == _state(former)
+    assert _state(native) == dict(_state(former), _mojolearn_fitted=True)
     # and the fitted index answers the same queries identically
     got, want = native.search(Q), former.search(Q)
     for g, w in zip(got, want):
@@ -124,7 +129,14 @@ def test_input_refusals_keep_class_and_wording(bad_x):
     _built(lambda: ml.IVFSQIndex(n_lists=2, n_probes=1))
     got = _outcome(ml.IVFSQIndex(n_lists=2, n_probes=1).fit, bad_x)
     want = _outcome(legacy.sq_fit, ml.IVFSQIndex(n_lists=2, n_probes=1), bad_x)
-    assert got is not None and got[1] == want[1]
+    assert got is not None and want is not None and got[0] == want[0]
+    if isinstance(bad_x, list):
+        # A ragged nested list is refused by the one shared native input
+        # snapshot (bindings/sequential_inputs.mojo), whose wording is the
+        # contract for every native door; the former path used another helper.
+        assert got == ("ValueError", "input sequences must be rectangular")
+    else:
+        assert got[1] == want[1]
 
 
 _CAND = ((np.arange(9 * 20, dtype=np.int64).reshape(9, 20) * 7919 + 13) % 300) - 20   # ids outside [0, 257) too
@@ -138,9 +150,18 @@ def test_refine_equals_former_path(metric, cands, k):
          "list": _CAND.tolist(), "big_endian": _CAND.astype(">i8"), "strided": np.repeat(_CAND, 2, axis=1)[:, ::2],
          "empty": np.zeros((9, 0), np.int64)}[cands]
     try:
-        got = ml.refine(X, Q, c, k, metric=metric)
+        ml.refine(X, Q, _CAND, 1)
     except (ImportError, ModuleNotFoundError) as error:  # noqa: BLE001
         pytest.skip(f"compiled binding unavailable: {error}")
+    if c is not None and np.shape(c)[1] < k:
+        # The refine kernel admits 1 <= k <= n_candidates only
+        # (bindings/_mojolearn_x_ann.mojo refine_binding); both paths refuse
+        # alike, with the same class and wording.
+        got = _outcome(ml.refine, X, Q, c, k, None, metric)
+        want = _outcome(legacy.refine, X, Q, c, k, None, metric)
+        assert got is not None and got == want
+        return
+    got = ml.refine(X, Q, c, k, metric=metric)
     want = legacy.refine(X, Q, c, k, metric=metric)
     assert len(got) == len(want) == 2
     for g, w in zip(got, want):

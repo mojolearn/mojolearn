@@ -67,11 +67,13 @@ def test_random_state_needs_probability():
 def test_predict_proba_needs_probability():
     x, y = _data(n=60, k=2)
     m = _fit_or_skip(x, y, kernel="rbf", gamma=0.1)
-    # scikit-learn's wording: "This 'SVC' has no attribute 'predict_proba'",
-    # raised from "predict_proba is not available when probability=False"
-    with pytest.raises(AttributeError, match="predict_proba") as info:
+    # scikit-learn's wording: "This 'SVC' has no attribute 'predict_proba'".
+    # The native attribute owner (bindings/public_attributes_native.mojo,
+    # availability rule svm_probability) raises it directly; the chained
+    # Python cause of scikit-learn's available_if is not reproduced natively.
+    with pytest.raises(AttributeError, match=r"^This 'SVC' has no attribute 'predict_proba'$"):
         m.predict_proba(x)
-    assert "probability=False" in str(info.value.__cause__)
+    assert not hasattr(m, "predict_proba")
 
 
 @pytest.mark.parametrize("k", [2, 3])
