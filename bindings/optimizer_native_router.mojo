@@ -284,7 +284,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return sequence_device_operation(operation, owner, values, mode, context)
     if operation == "residual_dropout" or operation == "residual_dropout_backward":
         # the explicit residual layer runs in identical mode only
-        return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context))
+        return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context), context)
     if operation.startswith("emblayer_"):
         # mojolearn.Embedding's forward and load (bindings/embedding_layer_native.mojo)
         return emblayer_operation(operation, owner, values, context)
