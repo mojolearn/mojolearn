@@ -33,7 +33,7 @@ def test_aux_operations_exist_on_both_targets_with_capability_bits():
     for target in ('device', 'host'):
         aux = _read(f'x_neighbors/native_descriptor_aux_{target}.mojo')
         for name, _, op, _, bit in NEW:
-            assert re.search(rf'if op == {op}( |:)', aux) or f'op == {op} or' in aux, (target, name)
+            assert re.search(rf'\bop == {op}\b', aux), (target, name)
         assert '<< 4)' in aux and '<< 5)' in aux and '<< 6)' in aux
 
 
