@@ -421,14 +421,15 @@ def linear_backward_dev_binding(handles: PythonObject, params: PythonObject) rai
     return PythonObject(count)
 
 
-def _ce_row_ptr(row_addr: PythonObject, reduction: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+def _ce_row_ptr(row_addr: PythonObject, reduction: Int) raises -> Optional[MutPointer[Float32, MutUntrackedOrigin]]:
     """The per-row loss buffer. Address 0 is accepted when `reduction` is
     SUM or MEAN (lane ne3-c-blocks-embedding, row N118): the caller has no
-    use for the rows, so the drivers skip their download; under NONE the
-    rows are the result and a null address is refused as before."""
+    use for the rows, so the drivers skip their download (None: a `Pointer`
+    is never null); under NONE the rows are the result and a null address is
+    refused as before."""
     var address = Int(py=row_addr)
     if address == 0 and reduction != 0:
-        return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+        return None
     return _f32_ptr(address)
 
 

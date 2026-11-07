@@ -190,9 +190,12 @@ def spectral_predict_run(
     n_clusters: Int,
     n_neighbors: Int,
     affinity: Int,
-    d_diag: DeviceBuffer[DType.float32],
-    d_vecs: DeviceBuffer[DType.float32],
-    d_mu: DeviceBuffer[DType.float32],
+    # `mut` (never written): `nystrom_kernel` declares mutable pointers, and
+    # `unsafe_ptr()` of a read-only argument is an immutable one, which
+    # `enqueue_function` refuses. Both callers pass their own handle copies.
+    mut d_diag: DeviceBuffer[DType.float32],
+    mut d_vecs: DeviceBuffer[DType.float32],
+    mut d_mu: DeviceBuffer[DType.float32],
     mut d_cent: DeviceBuffer[DType.float32],
 ) raises -> SpectralPrediction:
     """Steps 1 to 4 (module docstring) over the fitted state already on the
