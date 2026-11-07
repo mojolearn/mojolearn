@@ -122,6 +122,10 @@ comptime OP_APPROX_MODE = 81
 #: take_rows64_unit; lane ne2-b-search-workers)
 comptime OP_GROUP_TAKE = 85
 comptime OP_TAKE_ROWS64 = 86
+#: one StratifiedShuffleSplit split as one program (x_metrics/split.mojo permute_drawn_unit,
+#: strat_take_unit; lane ne2-b-search-workers)
+comptime OP_PERMUTE_DRAWN = 87
+comptime OP_STRAT_TAKE = 88
 
 
 @always_inline
@@ -131,7 +135,7 @@ def is_user_op(op: Int) -> Bool:
     return ((op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
             or op == OP_CURVE_FOLD or op == OP_ONEHOT or op == OP_REP_ROWS or op == OP_PAIR_COLS
             or (op >= OP_CLS_EPI and op <= OP_LAST_TAIL) or op == OP_CURVE_OUT or op == OP_AUC_XY or op == OP_CONT_STATS or op == OP_APPROX_MODE
-            or op == OP_GROUP_TAKE or op == OP_TAKE_ROWS64)
+            or op == OP_GROUP_TAKE or op == OP_TAKE_ROWS64 or op == OP_PERMUTE_DRAWN or op == OP_STRAT_TAKE)
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256

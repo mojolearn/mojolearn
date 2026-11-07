@@ -67,7 +67,10 @@ _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wperc
             approx_mode=81,
             # lane ne2-b-search-workers: permutation_test_score's within-group
             # permutation as one program (x_metrics/split.mojo group_take_unit, take_rows64_unit)
-            group_take=85, take_rows64=86)
+            group_take=85, take_rows64=86,
+            # lane ne2-b-search-workers: one StratifiedShuffleSplit split as one
+            # program (x_metrics/split.mojo permute_drawn_unit, strat_take_unit)
+            permute_drawn=87, strat_take=88)
 _PARAMS = 14
 _NONE = -1
 

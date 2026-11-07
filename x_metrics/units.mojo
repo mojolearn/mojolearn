@@ -9,6 +9,7 @@ from x_metrics.cluster import row_centroid_dist_unit
 from x_metrics.onehot import onehot_unit, rep_rows_unit, pair_cols_unit
 from x_metrics.split import (
     permute_unit, fold_rows_unit, rows64_unit, strat_codes_unit, approx_mode_unit, group_take_unit, take_rows64_unit,
+    permute_drawn_unit, strat_take_unit,
 )
 from x_metrics.regression import reg_pair_unit, reg_term_unit, col_sort_unit, wpercentile_unit, col_max_unit, wpct_select
 from x_metrics.par import (
@@ -53,7 +54,9 @@ from x_metrics.contingency import (
 #: per-class draw counts with the counter-RNG tie draw.
 #: 85 (group_take) and 86 (take_rows64) (x_metrics/split.mojo; lane ne2-b-search-workers) are
 #: the caller's: permutation_test_score's within-group permutation as one program.
-comptime N_OPS = 87
+#: 87 (permute_drawn) and 88 (strat_take) (x_metrics/split.mojo; lane ne2-b-search-workers) are
+#: the caller's: one StratifiedShuffleSplit split as one program.
+comptime N_OPS = 89
 
 
 @always_inline
@@ -230,3 +233,7 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         group_take_unit(t, f, q)
     comptime if OP == 86:
         take_rows64_unit(t, f, q)
+    comptime if OP == 87:
+        permute_drawn_unit(t, f, q)
+    comptime if OP == 88:
+        strat_take_unit(t, f, q)
