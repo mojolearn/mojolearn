@@ -50,15 +50,23 @@ def test_kernel_ridge_pilot_full_reset_preserves_dictionary_and_borrowed_paramet
     assert_fields(model, expected)
 
 
+# UMAP validates its parameters natively at construction and in set_params
+# (bindings/umap_parameters_native.mojo): its probes use valid values.
+def _values(cls):
+    parameters = inspect.signature(cls).parameters
+    if cls.__name__ == 'UMAP':
+        return {name: p.default for name, p in parameters.items()}, ('n_neighbors', 7)
+    values = {name: object() for name in parameters}
+    return values, (next(iter(values)), object())
+
+
 @pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
 def test_every_public_full_reset_matches_original_constructor_order_and_reference_identity(cls):
     # The public constructor (itself native since the full-reset constructor
     # lane; its own oracle tests are test_native_field_constructors.py)
     # is outside the native operation audit; set_params never calls it.
-    values = {name: object() for name in inspect.signature(cls).parameters}
+    values, (key, replacement) = _values(cls)
     model = cls(**values)
-    key = next(iter(values))
-    replacement = object()
     expected = cls(**(values | {key: replacement}))
     fields = vars(model)
     fields.update(fitted_=array.array('f', [1.0]), caller_note=object())
@@ -80,7 +88,7 @@ def test_empty_update_is_noop_even_before_initialization(cls):
 
 @pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
 def test_invalid_root_preserves_exact_error_and_all_state(cls):
-    values = {name: object() for name in inspect.signature(cls).parameters}
+    values, _ = _values(cls)
     model = cls(**values)
     before = dict(vars(model))
     error = clean(model.set_params, unknown=1, error=ValueError)
@@ -312,8 +320,20 @@ def test_old19_linear_setter_keeps_its_distinct_user_state_contract():
     assert vars(model)['caller_note'] is marker
 
 
-def test_deferred_host_setters_are_explicitly_outside_this_runtime_claim():
-    assert len(_CONTEXT['deferred_host_classes']) == 24
+def test_deferred_host_setters_are_connected_by_the_reconstruction_owner():
+    """The host subclasses the full-reset install leaves on the generic
+    setter (`deferred_host_classes`) are connected afterwards by the native
+    mode reconstruction owner (_native_mode_reconstruction.py): each ends with
+    the native setter and its own constructor plan."""
+    # Named, so a class joining or leaving the deferred set is a visible
+    # edit. HostUMAP joined when UMAP became a full-reset owner.
+    assert sorted(cls.__name__ for cls in _CONTEXT['deferred_host_classes']) == [
+        'HostAgglomerativeClustering', 'HostDBSCAN', 'HostElasticNet', 'HostGaussianMixture',
+        'HostGaussianProcessClassifier', 'HostGaussianProcessRegressor', 'HostHDBSCAN', 'HostIVFIndex',
+        'HostIsolationForest', 'HostKMeans', 'HostKNeighborsClassifier', 'HostKNeighborsRegressor',
+        'HostKernelDensity', 'HostKernelRidge', 'HostLasso', 'HostNearestNeighbors', 'HostNystroem',
+        'HostPCA', 'HostRBFSampler', 'HostRadiusNeighbors', 'HostSVC', 'HostSVR', 'HostSpectralClustering',
+        'HostTruncatedSVD', 'HostUMAP']
     for cls in _CONTEXT['deferred_host_classes']:
-        assert cls not in _CONTEXT['plans']
-        assert cls.set_params is not NativeFullResetParams.set_params
+        assert _CONTEXT['plans'][cls]['mro'][0] is cls
+        assert vars(cls)['set_params'] is NativeFullResetParams.set_params
