@@ -13,6 +13,89 @@ from providers.python.neural_descriptor_pyapi import (
 from providers.python.operation_lock_pyapi import OperationLockLease
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
+from std.ffi import _Global
+
+
+struct _PrefillVerdicts(Defaultable, Movable):
+    # Row N187: the capability answers of one connected entries object
+    # (hasattr probes and the compiled `*_forward_tape_enabled` /
+    # `*_reports_optional` words, fixed for a binding), resolved once per
+    # entries object instead of on every training step. -1 = not resolved.
+    var entries: PythonObject
+    var tape_transformer: Int
+    var tape_mamba3: Int
+    var session_mamba3: Int
+    var optional_mamba3: Int
+
+    def __init__(out self):
+        self.entries = PythonObject(None)
+        self.tape_transformer = -1
+        self.tape_mamba3 = -1
+        self.session_mamba3 = -1
+        self.optional_mamba3 = -1
+
+
+comptime _PREFILL_VERDICTS = _Global[
+    StorageType=_PrefillVerdicts, name="MojolearnNeuralPrefillVerdictsV1",
+    init_fn=_PrefillVerdicts.__init__,
+]
+
+
+def _prefill_hold(entries: PythonObject) raises:
+    # A different entries object (another binding, mode or vendor) drops
+    # every held answer. The slot keeps that object alive for its identity.
+    var v = _PREFILL_VERDICTS.get_or_create_ptr()
+    if v[].entries is None or v[].entries is not entries:
+        v[].entries = entries
+        v[].tape_transformer = -1
+        v[].tape_mamba3 = -1
+        v[].session_mamba3 = -1
+        v[].optional_mamba3 = -1
+
+
+def _prefill_tape_enabled(entries: PythonObject, kind: String) raises -> Bool:
+    _prefill_hold(entries)
+    var v = _PREFILL_VERDICTS.get_or_create_ptr()
+    var known = v[].tape_transformer if kind == "transformer" else v[].tape_mamba3
+    if known >= 0:
+        return known == 1
+    var bi = native_loaded_module("builtins")
+    var enabled = Bool(py=py_call(bi.hasattr, entries, kind + "_forward_tape_enabled"))
+    if enabled:
+        enabled = Bool(py=_native_function(entries, kind + "_forward_tape_enabled")())
+    _prefill_hold(entries)
+    v = _PREFILL_VERDICTS.get_or_create_ptr()
+    if kind == "transformer":
+        v[].tape_transformer = 1 if enabled else 0
+    else:
+        v[].tape_mamba3 = 1 if enabled else 0
+    return enabled
+
+
+def _prefill_mamba3_session_entry(entries: PythonObject) raises -> Bool:
+    _prefill_hold(entries)
+    var v = _PREFILL_VERDICTS.get_or_create_ptr()
+    if v[].session_mamba3 >= 0:
+        return v[].session_mamba3 == 1
+    var found = Bool(py=py_call(native_loaded_module("builtins").hasattr, entries, "mamba3_prefill_session_forward"))
+    _prefill_hold(entries)
+    v = _PREFILL_VERDICTS.get_or_create_ptr()
+    v[].session_mamba3 = 1 if found else 0
+    return found
+
+
+def _prefill_mamba3_reports_optional(entries: PythonObject) raises -> Bool:
+    _prefill_hold(entries)
+    var v = _PREFILL_VERDICTS.get_or_create_ptr()
+    if v[].optional_mamba3 >= 0:
+        return v[].optional_mamba3 == 1
+    var optional = Bool(py=py_call(native_loaded_module("builtins").hasattr, entries, "mamba3_prefill_session_reports_optional"))
+    if optional:
+        optional = Bool(py=_native_function(entries, "mamba3_prefill_session_reports_optional")())
+    _prefill_hold(entries)
+    v = _PREFILL_VERDICTS.get_or_create_ptr()
+    v[].optional_mamba3 = 1 if optional else 0
+    return optional
 
 
 def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject,
@@ -30,10 +113,10 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     var weights = fields["_w"]
     neural_mamba3_restore(fields, entries, weights)
     var owned = py_get(fields, "_owned_generation")
-    var session = (Bool(py=py_call(bi.hasattr, entries, "mamba3_prefill_session_forward")) or owned is not None) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+    var session = (_prefill_mamba3_session_entry(entries) or owned is not None) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
     var skip = False
-    if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))) and Bool(py=py_call(bi.hasattr, entries, "mamba3_prefill_session_reports_optional")):
-        skip = Bool(py=_native_function(entries, "mamba3_prefill_session_reports_optional")())
+    if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))):
+        skip = _prefill_mamba3_reports_optional(entries)
     var reports = bi.list()
     var report_addresses = bi.list()
     # Native report shapes; the former Python tuples were built only to be
@@ -100,9 +183,7 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
         raise Error("neural prefill tape requires TransformerBlock or Mamba3Block")
     var entries = neural_training_entries(fields, context)
     var x = _neural_input(input, Int(py=fields["d_model"]), False, context)
-    var enabled = Bool(py=py_call(bi.hasattr, entries, kind + "_forward_tape_enabled"))
-    if enabled:
-        enabled = Bool(py=_native_function(entries, kind + "_forward_tape_enabled")())
+    var enabled = _prefill_tape_enabled(entries, kind)
     if kind == "transformer":
         enabled = enabled and fields["_int15"] is None and not Bool(py=fields["_extended"])
     if not enabled:

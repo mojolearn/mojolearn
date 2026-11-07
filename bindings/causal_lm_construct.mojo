@@ -19,7 +19,7 @@ from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initiali
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard
 from bindings.causal_operation_owner import _causal_namespace, causal_snapshot_fields
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_checkpoint_names_snapshot, _model_layer_weights, model_plain, model_record_fields
-from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
+from bindings.causal_checkpoint import checkpoint_array, checkpoint_zeros, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
 from bindings.native_json import native_path, native_path_exists
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.neural_block_admission import neural_block_f32, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
@@ -74,8 +74,7 @@ def _model_native_buffer(mut mods: NativeModules, value: PythonObject, code: Str
         raise Error("TypeError: CausalLM packed storage has the wrong item size")
     _ = neural_array_slots(context)
     var bi = mods.module("builtins")
-    var result = checkpoint_array(mods, py_call(bi.bytes, layout.count * size),
-        py_ints(layout.shape), code, context["array_class"])
+    var result = checkpoint_zeros(mods, layout.count, py_ints(layout.shape), code, context["array_class"])
     layout.copy_to(Int(py=result._addr))
     _ = pin^
     return result
@@ -126,7 +125,7 @@ def _model_pack(mut mods: NativeModules, value: PythonObject, format: String, li
     var fields = model_record_fields(mods, packed, cls, Python.tuple("shape", "bits", "codes", "exponents"))
     py_setitem(fields, "shape", value.shape)
     if format == "bfloat16":
-        var bits = checkpoint_array(mods, py_call(bi.bytes, rows * cols * 2), value.shape, "H", context["array_class"])
+        var bits = checkpoint_zeros(mods, rows * cols, value.shape, "H", context["array_class"])
         _ = py_call(_native_function(mods, linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
         mods.released()
         _ = bits  # keep the Python object alive through the native call above
@@ -870,9 +869,16 @@ def _causal_model_prepare_snapshot(mut mods: NativeModules, model: PythonObject,
 
 def causal_model_init_binding(mut mods: NativeModules, model: PythonObject, input_plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
     causal_public_connect(context)
+    var plan = model_plan_snapshot(mods, input_plan)
+    return _causal_model_init(mods, model, input_plan, plan, input_weights, input_options, context)
+
+
+def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan: PythonObject, plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `plan` is model_plan_snapshot(input_plan), taken once by the caller
+    # (row N203: CausalLM.load passes the snapshot it already holds).
+    causal_public_connect(context)
     var live = _causal_model_fields(mods, model)
     var captured = Python.dict()
-    var plan = model_plan_snapshot(mods, input_plan)
     var options = _model_options_snapshot(mods, input_options, context)
     var weights = _model_weights_snapshot(mods, input_weights, context)
     var bindings = _causal_model_prepare_snapshot(mods, model, input_plan, plan, weights, options, context, live, captured)
@@ -922,17 +928,26 @@ def causal_model_init_binding(mut mods: NativeModules, model: PythonObject, inpu
 
 
 def causal_model_read_weights_binding(mut mods: NativeModules, checkpoint: PythonObject, input_plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = mods.module("builtins")
     causal_public_connect(context)
     var plan = model_plan_snapshot(mods, input_plan)
+    return _causal_model_read_weights(mods, checkpoint, plan, format, route, context)
+
+
+def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject, plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `plan` is the caller's model_plan_snapshot (row N203).
+    var bi = mods.module("builtins")
+    causal_public_connect(context)
     if py_type(format) is not bi.str:
         raise Error("TypeError: CausalLM weight format requires an ordinary string")
     var ck = context["checkpoint_context"]
     var infos = checkpoint_index_binding(mods, checkpoint, ck)
     var captured_infos = Python.dict()
-    var info_names = py_call(bi.list, infos.keys())
-    for i in range(len(info_names)):  # driver-loop: retain checkpoint shape/dtype metadata before execution
-        py_setitem(captured_infos, info_names[i], _info_snapshot(mods, infos[info_names[i]]))
+    # Row N203: the captured shape/dtype metadata is read only by the
+    # bfloat16 packed-projection test below; other formats skip the capture.
+    if String(format) == "bfloat16":
+        var info_names = py_call(bi.list, infos.keys())
+        for i in range(len(info_names)):  # driver-loop: retain checkpoint shape/dtype metadata before execution
+            py_setitem(captured_infos, info_names[i], _info_snapshot(mods, infos[info_names[i]]))
     var need = model_checkpoint_names_snapshot(mods, plan)
     for i in range(len(need)):  # driver-loop: over checkpoint tensor names
         if not py_contains(infos, need[i]):
@@ -1015,14 +1030,16 @@ def causal_model_load_binding(mut mods: NativeModules, cls: PythonObject, path_v
     var checkpoint = checkpoint_open_binding(mods, ck["checkpoint_class"], path, ck)
     var weights = PythonObject(None)
     try:
-        weights = causal_model_read_weights_binding(mods, checkpoint, plan, options[0], route, context)
+        # Row N203: the one plan snapshot of this load serves the weight
+        # read and the init (formerly rebuilt in each).
+        weights = _causal_model_read_weights(mods, checkpoint, plan_fields, options[0], route, context)
     except error:
         mods.released()
         _ = checkpoint_close_binding(mods, checkpoint)
         raise error
     _ = checkpoint_close_binding(mods, checkpoint)
     var model = py_call(bi.object.__new__, cls)
-    _ = causal_model_init_binding(mods, model, plan, weights, options, context)
+    _ = _causal_model_init(mods, model, plan, plan_fields, weights, options, context)
     return model
 
 

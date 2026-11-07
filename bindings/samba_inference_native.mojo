@@ -12,7 +12,7 @@ from providers.python.samba_execution_pyapi import samba_provider_forward
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import memcpy
-from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, py_ints
+from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries
 from bindings.samba_training_native import samba_ids
 from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
@@ -134,7 +134,7 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
         if on_session:
             addresses.append(0)
         else:
-            addresses.append(generation_address(weights[i], keep))
+            addresses.append(generation_weight_address(weights[i], keep))
     for i in range(len(names)):  # driver-loop: over mutable continuation buffers
         addresses.append(_mutable(slots[names[i]], shapes[i], keep, copies, names[i]))
     var output = generation_array([b, l, d])

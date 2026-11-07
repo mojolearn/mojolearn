@@ -17,6 +17,7 @@ from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_co
 from bindings.native_array_snapshot import native_array_slots, native_array_snapshot
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
+from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
@@ -212,12 +213,47 @@ def generation_address(value: PythonObject, mut keep: List[PythonObject]) raises
     var format = String(view.format)
     if format != "f" and format != "i" and format != "b":
         raise Error("generation: unsupported native model buffer format " + format)
+    return _generation_pack_foreign(view, format, keep)
+
+
+def _generation_pack_foreign(view: PythonObject, format: String, mut keep: List[PythonObject]) raises -> Int:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var packed = native_array_zeros(format, Int(py=view.nbytes) // Int(py=view.itemsize))
     var destination = py_call(py_call(g[].bi.memoryview, packed).cast, "B")
     py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.cast, "B"))
     keep.append(view)
     keep.append(packed)
     return Int(py=packed.buffer_info()[0])
+
+
+def generation_weight_address(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
+    # Row N200 (foreign weights): the address of a model weight that every
+    # kernel only reads. A C-contiguous foreign buffer (ndarray, array.array,
+    # memoryview) aligned for its item width is read in place through the
+    # private memoryview kept in `keep` (formerly copied whole into a new
+    # native store on every call) once the read-only rule holds for it
+    # (lesson 10): `fitted_freeze_foreign` clears an exact ndarray's
+    # writeable flag; a buffer that cannot be frozen keeps the per-call
+    # copy. Never use this for an output or a state
+    # buffer: a kernel write would then reach the caller's buffer, where the
+    # copy used to absorb it. Array weights take the snapshot path as before.
+    if value is None:
+        return 0
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if py_type(value) is g[].array_cls:
+        return generation_address(value, keep)
+    var view = generation_buffer_view(value)
+    if not Bool(py=view.c_contiguous):
+        raise Error("generation: internal model and state buffers must be C-contiguous")
+    var format = String(view.format)
+    if format != "f" and format != "i" and format != "b":
+        raise Error("generation: unsupported native model buffer format " + format)
+    var itemsize = Int(py=view.itemsize)
+    var address = native_buffer_address(view)
+    if address != 0 and (itemsize == 1 or address % itemsize == 0) and fitted_freeze_foreign(value):
+        keep.append(view)
+        return address
+    return _generation_pack_foreign(view, format, keep)
 
 
 def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -> PythonObject:

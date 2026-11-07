@@ -10,6 +10,7 @@ from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_array_snapshot, generation_buffer_view
+from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.native_instance_item import native_instance_item
@@ -95,6 +96,10 @@ struct GenerationWeightSnapshot(Copyable, Movable):
     var layouts: List[BorrowedBufferLayout]
     var formats: List[String]
     var failures: List[String]
+    # Per refresh entry: the exporter was frozen read-only at capture
+    # (fitted_freeze_foreign), so the kernels may read it in place (row
+    # N201, lesson 10). False keeps the per-use copy.
+    var frozen: List[Bool]
 
     def __init__(out self, values: PythonObject, zero_from: Int = -1) raises:
         self.owners = List[PythonObject]()
@@ -103,6 +108,7 @@ struct GenerationWeightSnapshot(Copyable, Movable):
         self.layouts = List[BorrowedBufferLayout]()
         self.formats = List[String]()
         self.failures = List[String]()
+        self.frozen = List[Bool]()
         model_sequence(values)
         var cls = GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls
         for j in range(len(values)):  # driver-loop: admit each stable weight slot once
@@ -133,8 +139,11 @@ struct GenerationWeightSnapshot(Copyable, Movable):
                         var width = 1 if format == "b" else 4
                         if layout.itemsize != width:
                             raise Error("generation: native model buffer format has an inconsistent byte width")
+                        # Freeze only what will be read in place.
+                        var frozen = _generation_weight_in_place(layout) and fitted_freeze_foreign(value)
                         self.layouts.append(layout^)
                         self.formats.append(format)
+                        self.frozen.append(frozen)
                     except error:
                         pin.release()
                         raise error
@@ -146,6 +155,7 @@ struct GenerationWeightSnapshot(Copyable, Movable):
                     # hooks, then raise there so earlier layer progress stays.
                     self.layouts.append(BorrowedBufferLayout(0, 1, True, [0], [1], [-1]))
                     self.formats.append(String(""))
+                    self.frozen.append(False)
                     self.failures.append(String(error))
                 # The private memoryview retains its exporter while its native
                 # descriptor is captured once. Only bytes refresh per use.
@@ -172,6 +182,13 @@ struct GenerationWeightSnapshot(Copyable, Movable):
             if self.failures[k] != "":
                 raise Error(self.failures[k])
             ref layout = self.layouts[k]
+            if self.frozen[k]:
+                # Row N201 (legacy route): the retained private memoryview in
+                # self.owners pins the exporter; read it in place instead of a
+                # fresh packed Array per use.
+                result[offset + index] = layout.address
+                keep.append(self.owners[index])
+                continue
             var packed = generation_array([layout.count], self.formats[k])
             var address = Int(py=packed._addr)
             layout.copy_to(address)
@@ -327,6 +344,16 @@ from core.generation_metadata import generation_transformer_addresses
 from transformer.native_generation_engine import NativeGenerationLayer, NativeGenerationModel
 
 
+def _generation_weight_in_place(layout: BorrowedBufferLayout) -> Bool:
+    # A captured foreign weight may be read where it lives when it is
+    # C-contiguous and its address is aligned for its item width (bytes need
+    # no alignment) and, at capture, fitted_freeze_foreign made its exporter
+    # read-only; anything else keeps the packed copy.
+    if layout.address == 0 or not layout.contiguous():
+        return False
+    return layout.itemsize == 1 or layout.address % layout.itemsize == 0
+
+
 def _generation_engine_weights(snapshot: GenerationWeightSnapshot,
     mut pins: List[AdmittedBorrowedBuffer], mut storage: List[List[Float32]],
     mut layouts: List[BorrowedBufferLayout], mut destinations: List[Int]) raises -> List[Int]:
@@ -338,6 +365,14 @@ def _generation_engine_weights(snapshot: GenerationWeightSnapshot,
         if snapshot.failures[k] != "":
             raise Error(snapshot.failures[k])
         var layout = snapshot.layouts[k].copy()
+        if snapshot.frozen[k]:
+            # Row N201: the snapshot's private memoryview pins this C-contiguous
+            # exporter for the whole operation, so the kernels read the
+            # exporter's bytes at their address (formerly copied into a
+            # zero-filled List before every forward). Weights are read-only
+            # to every kernel; the bytes read are the same bytes.
+            addresses[index] = layout.address
+            continue
         var bytes = layout.count * layout.itemsize
         storage.append(List[Float32](length=(bytes + 3) // 4, fill=0))
         var address = Int(storage[len(storage) - 1].unsafe_ptr())

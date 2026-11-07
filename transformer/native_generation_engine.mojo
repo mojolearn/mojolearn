@@ -140,6 +140,22 @@ struct NativeGenerationModel(Movable):
         return logits^
 
     def forward_into(mut self, ids: Int, length: Int, mut logits: List[Float32]) raises:
+        self._forward(ids, length, logits, 0)
+
+    def forward_to(mut self, ids: Int, length: Int, address: Int, count: Int) raises:
+        # Row N199: the head projection writes straight into the caller's
+        # result storage (an Array allocated before the forward), so the
+        # B*L*V logits are neither held in a List nor copied again. The same
+        # primitive calls run in the same order on the same inputs; only the
+        # destination address of the last one changes (no numeric change).
+        if address == 0:
+            raise Error("CausalLM: native generation engine output address is missing")
+        if length >= 0 and count != self.batch * length * self.vocab:
+            raise Error("CausalLM: native generation engine output extent differs from batch * length * vocab")
+        var unused = List[Float32]()
+        self._forward(ids, length, unused, address)
+
+    def _forward(mut self, ids: Int, length: Int, mut logits: List[Float32], address: Int) raises:
         # These checks precede execution/failure invalidation, matching _state.
         if length < 0 or self.position < 0:
             raise Error("CausalLM: negative sequence position")
@@ -210,7 +226,13 @@ struct NativeGenerationModel(Movable):
                 self.primitive_call(2, [normalized, hidden, self.norm],
                                     [rows, self.width], [self.norm_eps])
                 hidden = normalized
-            var output = _generation_zero_workspace(logits, rows * self.vocab)
+            var output: Int
+            if address != 0:
+                # Same zero-fill as the workspace path before the head writes.
+                memset_zero(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), rows * self.vocab)
+                output = address
+            else:
+                output = _generation_zero_workspace(logits, rows * self.vocab)
             self.primitive_call(4, [output, hidden, self.head],
                                 [rows, self.vocab, self.width], [])
             self.position += length
