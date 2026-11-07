@@ -62,10 +62,10 @@ def test_dbscan_refuses_non_finite():
     x = _x()
     xn = x.copy()
     xn[3, 2] = np.nan
-    _raises(ValueError, "X contains a NaN or an infinity", DBSCAN(eps=1.0).fit, xn)
+    _raises(ValueError, "Input X contains NaN or infinity (DBSCAN).", DBSCAN(eps=1.0).fit, xn)
     xi = x.copy()
     xi[3, 2] = -np.inf
-    _raises(ValueError, "X contains a NaN or an infinity", DBSCAN(eps=1.0).fit, xi)
+    _raises(ValueError, "Input X contains NaN or infinity (DBSCAN).", DBSCAN(eps=1.0).fit, xi)
     assert np.asarray(DBSCAN(eps=1.0).fit(x).labels_).shape == (64,)
 
 
