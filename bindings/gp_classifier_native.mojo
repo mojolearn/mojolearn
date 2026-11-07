@@ -22,7 +22,7 @@ from bindings.family_common import (
     family_owned, family_field, FAMILY_F64P,
 )
 from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32, HP_I64
-from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32
+from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32, gp_fit_owned
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
@@ -255,7 +255,7 @@ def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var fields = py_fields(model)
     var source = family_as_f32(args[2], 2, "X", context)
     py_setitem(fields, "input_copied_", PythonObject(not (source is args[2])))
-    var x = family_owned(source, context)
+    var x = gp_fit_owned(source, args[2], context)
     _ = source^
     var n_rows = Int(py=x.shape[0])
     var encoded = gp_encode_labels(args[3], args[1], context)

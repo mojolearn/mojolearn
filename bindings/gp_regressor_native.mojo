@@ -32,6 +32,7 @@ from bindings.archive_schema_native import _schema_label_store
 from bindings.scaler_native import scaler_fit
 from bindings.scaler_lifecycle_native import scaler_initialize, scaler_transform
 from bindings.metrics_reg_native import _reg_new, _reg_run, _arena_double, _RE_DIV
+from bindings.gp_common_native import gp_fit_owned
 from bindings.gp_common_native import (
     gp_extension, gp_caps, gp_entry, gp_numeric_mode_used, gp_model_kernel, gp_kernel_arrays,
     gp_free, gp_n_dims, gp_with_free_values, gp_f32,
@@ -305,7 +306,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var fields = py_fields(model)
     var source = family_as_f32(args[1], 2, "X", context)
     py_setitem(fields, "input_copied_", PythonObject(not (source is args[1])))
-    var x = family_owned(source, context)
+    var x = gp_fit_owned(source, args[1], context)
     _ = source^
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
