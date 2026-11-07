@@ -104,6 +104,7 @@ from glm.estimator import (
     ols_fit_host,
     ols_fit_resident_host,
     ols_predict_host,
+    qn_decision_function_device,
     qn_decision_function_host,
     qn_fit_host,
     qn_predict_binary_host,
@@ -123,6 +124,7 @@ from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 from core.estimators_impl import (
     pca_whiten_overlap_check,
+    qn_link_from_device,
     qn_sigmoid_device,
     qn_softmax_device,
     ridge_multi_icpt_device,
@@ -1206,11 +1208,16 @@ def qn_proba_binding(
     """`predict_proba` in one call: `qn_decision_function` then the sigmoid
     (n_classes < 3: out float64 (n_rows, 2)) or softmax (out float64
     (n_rows, n_classes)) link, the same kernels and words as the two entries
-    called in turn, with the scores held in native scratch instead of a
-    Python array between two binding crossings. params: n_rows, n_features,
-    fit_intercept, n_classes. Returns 0."""
-    if len(params) != 4:
-        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    called in turn, with the scores kept on the device between them.
+    params: n_rows, n_features, fit_intercept, n_classes and an optional
+    5th, log (0/1): 1 writes `log(p)` (`py2mojo_rows` ROWS_LOG's words,
+    `predict_log_proba`) instead of `p`. Returns 0."""
+    # ne2-g-linear (N357, N361): the scores stay in a device buffer from the
+    # decision to the link (was: download into a host List, upload again),
+    # and the log of predict_log_proba runs in the same session. One upload
+    # of X and coef_, one download of the output.
+    if len(params) != 4 and len(params) != 5:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes and an optional log flag")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     var op = _f64_ptr(Int(py=out_addr))
@@ -1218,20 +1225,15 @@ def qn_proba_binding(
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3])
+    var log_out = len(params) == 5 and Int(py=params[4]) != 0
     var nt = nc if nc > 2 else 1
-    var scores = List[Float32](length=max(nr * nt, 1), fill=0)
-    var sp = _f32_ptr(Int(scores.unsafe_ptr()))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_decision_function_host(ctx, xp, cp, sp, nr, nf, fi, nt)
-        ctx.synchronize()
-        if nr > 0:
-            if nt == 1:
-                qn_sigmoid_device(ctx, sp, op, nr)
-            else:
-                qn_softmax_device(ctx, sp, op, nr, nt)
+        var d_scores = ctx.enqueue_create_buffer[DType.float32](max(nr * nt, 1))
+        qn_decision_function_device(ctx, xp, cp, d_scores, nr, nf, fi, nt)
+        qn_link_from_device(ctx, d_scores, op, nr, nt, log_out)
+        _ = d_scores^
         _ = ctx^
-    _ = scores^
     return PythonObject(0)
 
 
