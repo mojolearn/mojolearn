@@ -196,14 +196,14 @@ def svc_predict_resident_host(
         var dl = List[Float32]()
         if n_support > 0:
             dl = read_f32(dual_addr, n_support)
-        var out = svc_predict_host(
+        var decided = svc_predict_host(
             xl, n_rows, n_cols, List[Float32](), dl, n_support, b, label0, label1,
             kernel, gamma, predict_class, buffer_size_mib, degree, coef0,
         )
         memcpy(
             dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr),
-            src=out.unsafe_ptr(),
-            count=len(out),
+            src=decided.unsafe_ptr(),
+            count=len(decided),
         )
         return
     _svm_predict_checks(String("svc_predict_host"), n_rows, n_cols, n_support, kernel, buffer_size_mib,
@@ -257,14 +257,14 @@ def svr_predict_resident_host(
         var dl = List[Float32]()
         if n_support > 0:
             dl = read_f32(dual_addr, n_support)
-        var out = svr_predict_host(
+        var decided = svr_predict_host(
             xl, n_rows, n_cols, List[Float32](), dl, n_support, b, kernel, gamma,
             buffer_size_mib, degree, coef0,
         )
         memcpy(
             dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr),
-            src=out.unsafe_ptr(),
-            count=len(out),
+            src=decided.unsafe_ptr(),
+            count=len(decided),
         )
         return
     _svm_predict_checks(String("svr_predict_host"), n_rows, n_cols, n_support, kernel, buffer_size_mib,

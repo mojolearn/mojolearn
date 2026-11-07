@@ -556,7 +556,7 @@ def svc_predict_resident_binding(
             + String(len(params))
         )
     var x = Int(py=x_addr)
-    var out = Int(py=out_addr)
+    var out_word = Int(py=out_addr)
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
     var n_support = Int(py=params[2])
@@ -580,7 +580,7 @@ def svc_predict_resident_binding(
     with GILReleased(Python()):
         svc_predict_resident_host(
             lease, slot, x, n_rows, n_cols, support, dual, n_support, b, label0, label1,
-            kernel, gamma, predict_class, buffer_mib, degree, coef0, out,
+            kernel, gamma, predict_class, buffer_mib, degree, coef0, out_word,
         )
     return PythonObject(n_rows)
 
@@ -601,7 +601,7 @@ def svr_predict_resident_binding(
             + String(len(params))
         )
     var x = Int(py=x_addr)
-    var out = Int(py=out_addr)
+    var out_word = Int(py=out_addr)
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
     var n_support = Int(py=params[2])
@@ -622,7 +622,7 @@ def svr_predict_resident_binding(
     with GILReleased(Python()):
         svr_predict_resident_host(
             lease, slot, x, n_rows, n_cols, support, dual, n_support, b, kernel, gamma,
-            buffer_mib, degree, coef0, out,
+            buffer_mib, degree, coef0, out_word,
         )
     return PythonObject(n_rows)
 
