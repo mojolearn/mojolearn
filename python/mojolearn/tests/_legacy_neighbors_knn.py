@@ -7,7 +7,7 @@ independent test oracle for their one-call native doors
 from mojolearn._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from mojolearn._labels import decode_labels, encode_labels
 from mojolearn.linear_model import _dtype_name, _is_integer_labels, _shape_of
-from mojolearn.neighbors import _XN, _check_metric_input, _resolve_metric
+from mojolearn.neighbors import _WEIGHTS_UNIFORM, _XN, _check_metric_input, _resolve_metric, _resolve_weights
 
 
 
@@ -41,6 +41,17 @@ def _resident_index_handle(self, binding, idx):
     handle = int(prepare(key[0], [int(idx.shape[0]), int(idx.shape[1])]))
     _holder(self)["index"] = (key, handle, binding)
     return handle
+
+def _dist_params(self):
+    # The former `self._dist_params()`, `[metric, metric_arg, weights]`. Its
+    # `_weights_value` property is a Python data descriptor that the native
+    # attribute guard refuses (bindings/classical_attributes.mojo), so the
+    # oracle resolves the same three values from the public parameters.
+    value, arg = _resolve_metric(type(self).__name__, self.metric, self.p)
+    has_weights = type(self)._HAS_WEIGHTS if hasattr(type(self), "_HAS_WEIGHTS") else False
+    weights = _resolve_weights(type(self).__name__, self.weights) if has_weights else _WEIGHTS_UNIFORM
+    return [value, arg, weights]
+
 
 def nn_fit(self, X):
     self._check_refusals()
@@ -97,7 +108,7 @@ def _clf_predict(self, X, want_proba):
     if self._index is None or self._y_cols is None:
         raise ValueError("mojolearn: call fit before predict")
     q, _ = as_f32_dense_c(X, ndim=2, name="X")
-    _check_metric_input(type(self).__name__, self._dist_params()[0], q)
+    _check_metric_input(type(self).__name__, _dist_params(self)[0], q)
     if q.shape[1] != self.n_features_in_:
         raise ValueError(f"mojolearn: X has {q.shape[1]} features, index has {self.n_features_in_}")
     k = self.n_neighbors
@@ -119,12 +130,12 @@ def _clf_predict(self, X, want_proba):
         _holder(self)["used_query_tile_"] = resident(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(labels, name="labels"), addr(proba, name="proba"), addr(uniq, name="uniq"),
-            [handle] + params, self._dist_params())
+            [handle] + params, _dist_params(self))
     else:
         _holder(self)["used_query_tile_"] = binding.knn_classify(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(labels, name="labels"), addr(proba, name="proba"), addr(uniq, name="uniq"),
-            params, self._dist_params())
+            params, _dist_params(self))
     flat = uniq.tolist()
     off = 0
     for i, (count, b) in enumerate(zip(n_classes, self._classes_list)):
@@ -191,7 +202,7 @@ def reg_predict(self, X):
     if self._index is None or self._y_cols is None:
         raise ValueError("mojolearn: call fit before predict")
     q, _ = as_f32_dense_c(X, ndim=2, name="X")
-    _check_metric_input(type(self).__name__, self._dist_params()[0], q)
+    _check_metric_input(type(self).__name__, _dist_params(self)[0], q)
     if q.shape[1] != self.n_features_in_:
         raise ValueError(f"mojolearn: X has {q.shape[1]} features, index has {self.n_features_in_}")
     k = self.n_neighbors
@@ -209,11 +220,11 @@ def reg_predict(self, X):
     if handle is not None:
         _holder(self)["used_query_tile_"] = resident(
             handle, addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
-            addr(out, name="out"), params, self._dist_params())
+            addr(out, name="out"), params, _dist_params(self))
     else:
         _holder(self)["used_query_tile_"] = binding.knn_regress(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
-            addr(out, name="out"), params, self._dist_params())
+            addr(out, name="out"), params, _dist_params(self))
     if self.outputs_2d_:
         return out
     return out.reshape((nq,))
