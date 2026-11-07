@@ -113,6 +113,23 @@ def inventory(argv):
     # above: they count only when that importer is reached.
     dynamic["host_surface"] = [s for s in present if s.startswith("_surface_")]
     dynamic["_identity_break"] = [s for s in present if s.startswith("_identity_lane_")]
+    # A CPU family served by a Python adapter (host_surface.ADAPTED_MODULES,
+    # `{"_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host")}`)
+    # is loaded by `_backend` with `import_module(f"{pkg}.{adapted['module']}")`.
+    # The `module=` value names the adapter, so host_surface reaches it.
+    if "host_surface" in present:
+        for node in ast.parse(present["host_surface"].read_text(encoding="utf-8")).body:
+            if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                    and any(isinstance(t, ast.Name) and t.id == "ADAPTED_MODULES" for t in node.targets)):
+                for v in node.value.values:
+                    if isinstance(v, ast.Call):
+                        dynamic["host_surface"] += [k.value.value for k in v.keywords
+                                                    if k.arg == "module" and isinstance(k.value, ast.Constant)
+                                                    and isinstance(k.value.value, str)]
+                    elif isinstance(v, ast.Dict):
+                        dynamic["host_surface"] += [b.value for a, b in zip(v.keys, v.values)
+                                                    if isinstance(a, ast.Constant) and a.value == "module"
+                                                    and isinstance(b, ast.Constant) and isinstance(b.value, str)]
     # A submodule the user documentation tells people to import by its own
     # path is public, not abandoned: the multi-GPU drivers are reached as
     # `from mojolearn.parallel_ensemble import fit_forest`
@@ -169,6 +186,32 @@ def inventory(argv):
                     if (isinstance(v, ast.Tuple) and v.elts and isinstance(v.elts[0], ast.Constant)
                             and isinstance(v.elts[0].value, str)):
                         out.append(v.elts[0].value.lstrip("."))
+        out.extend(first_touch_targets(path))
+        return out
+    # THE PACKAGE ROOT'S FIRST-TOUCH TABLE is the same import in another spelling:
+    # `_CPU_INFERENCE = {"HostForest": "._forest_host", "language_model": None, ...}` in __init__.py,
+    # read by a module `__getattr__` that runs `import_module(where, __name__)` for a "."-relative string
+    # value and `import_module("." + name, __name__)` for a None value (the key is then the submodule).
+    # Counted only in a module whose own `__getattr__` calls `import_module`, so a dict of strings that
+    # nothing imports from stays inert.
+    def first_touch_targets(path):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        loads = any(isinstance(f, ast.FunctionDef) and f.name == "__getattr__"
+                    and any(isinstance(c, ast.Call) and (getattr(c.func, "attr", None) == "import_module"
+                                                         or getattr(c.func, "id", None) == "import_module")
+                            for c in ast.walk(f))
+                    for f in tree.body)
+        out = []
+        if not loads:
+            return out
+        for node in tree.body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Dict):
+                for k, v in zip(node.value.keys, node.value.values):
+                    if isinstance(v, ast.Constant) and isinstance(v.value, str) and v.value.startswith("."):
+                        out.append(v.value[1:].split(".")[0])
+                    elif (isinstance(v, ast.Constant) and v.value is None
+                          and isinstance(k, ast.Constant) and isinstance(k.value, str)):
+                        out.append(k.value)
         return out
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
