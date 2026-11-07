@@ -16,7 +16,8 @@ Shell wrappers use tools/timing_ledger.sh (start|end|sample), which writes the s
 
 Where the ledger is: $MOJOLEARN_TIMING_LEDGER; else, inside a box job (tools/box_persist_run.sh sets
 MOJOLEARN_BOX_PERSIST=1 and MOJOLEARN_RESULTS_DIR), <results dir>/timing-ledger.jsonl so it reaches R2 with the
-job; else ~/mojolearn-evidence/timing/ledger.jsonl. `merge` folds a fetched box ledger into the Mac's.
+job; else ~/mojolearn-evidence/timing/ledger.jsonl. Inside a pytest test (PYTEST_CURRENT_TEST) with no
+MOJOLEARN_TIMING_LEDGER nothing is written, so tools' own unit tests never touch the real ledger. `merge` folds a fetched box ledger into the Mac's.
 
 One line (schema mojolearn.timing.v1):
     {"schema", "id", "kind", "name", "start", "end", "seconds", "host", "cores", "busy", "commit", "rc", "extra"}
@@ -54,6 +55,8 @@ def ledger_path(env=None):
     explicit = env.get("MOJOLEARN_TIMING_LEDGER", "").strip()
     if explicit:
         return Path(explicit).expanduser()
+    if env.get("PYTEST_CURRENT_TEST"):
+        return None   # a tool's own unit test never writes the real ledger (set MOJOLEARN_TIMING_LEDGER to test it)
     if env.get("MOJOLEARN_BOX_PERSIST") == "1" and env.get("MOJOLEARN_RESULTS_DIR"):
         return Path(env["MOJOLEARN_RESULTS_DIR"]) / "timing-ledger.jsonl"
     return DEFAULT_LEDGER
@@ -161,6 +164,8 @@ def _line(kind, name, start, end, host=None, cores=None, busy=None, extra=None, 
 
 def _append(rows, ledger=None):
     path = Path(ledger) if ledger else ledger_path()
+    if path is None:
+        return None
     path.parent.mkdir(parents=True, exist_ok=True)
     data = "".join(json.dumps(r, sort_keys=True) + "\n" for r in rows)
     if not data:
@@ -215,8 +220,7 @@ def ingest_tests(directory, ledger=None, force=False):
                         extra=dict(outcome=entry.get("outcome"), file=nodeid.split("::", 1)[0],
                                    source=str(path), start_derived=True))
             rows.append(row)
-    if rows:
-        _append(rows, ledger)
+    if rows and _append(rows, ledger) is not None:
         mark.write_text(f"{len(rows)} tests ledgered at {time.time():.0f}\n")
     return len(rows)
 
@@ -272,6 +276,8 @@ def fetch_workflow(run_id, repo=None):
 def merge(paths, ledger=None):
     """Append other ledgers' lines (a fetched box results dir, a file) whose id this ledger lacks."""
     target = Path(ledger) if ledger else ledger_path()
+    if target is None:
+        return 0
     have = {r["id"] for r in load([target])} if target.exists() else set()
     new = [r for r in load(paths) if r["id"] not in have]
     _append(new, target)
@@ -429,7 +435,7 @@ def main(argv=None):
         if a.tests_dir and Path(a.tests_dir).is_dir():
             for d in sorted(p for p in Path(a.tests_dir).iterdir() if p.is_dir()):
                 safe(ingest_tests, d)
-        paths = a.ledger or [ledger_path()]
+        paths = a.ledger or [p for p in [ledger_path()] if p]
         rep = summarize(load(paths), kind=a.kind, since=parse_since(a.since) if a.since else None,
                         top=a.top, by=a.by)
         if a.json:

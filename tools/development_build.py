@@ -40,6 +40,8 @@ serial reservation its RSS budget is 80% of current available allocation. The
 remaining 20% stays available to the system. --group-seconds, --stall-seconds
 and --lock-seconds bound active work and lock waits; defaults live in
 tools/release_limits.sh. These controller settings never reach the compiler.
+
+Every group and support artifact also lands in the timing ledger (kind group: tools/timing_ledger.py report).
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -65,6 +67,7 @@ import bincache
 import build_process
 import merged_bindings as merged
 import release_limits
+import timing_ledger
 
 REPO = Path(__file__).resolve().parent.parent
 SCHEMA = "mojolearn.development-build.v1"
@@ -620,6 +623,15 @@ def run_logged(argv, repo, env, path):
     return result["exit_code"]
 
 
+def ledger_group(name, result):
+    """The group's own clock (result["seconds"]) and peak RSS into the timing ledger; never fails the build."""
+    end = time.time()
+    timing_ledger.safe(timing_ledger.record, "group", name, end - result["seconds"], end,
+                       rc=result.get("exit_code"), commit=timing_ledger.git_commit(REPO),
+                       extra=dict(state=result.get("state"), key=result.get("key"),
+                                  peak_rss_bytes=result.get("peak_rss_bytes"), reason=result.get("reason")))
+
+
 def compile_group(row, repo, cache, env, evidence):
     started = time.monotonic()
     result = {"mode": row["mode"], "stem": row["stem"], "key": row["key"],
@@ -682,6 +694,7 @@ def compile_group(row, repo, cache, env, evidence):
         result.update(state="failed", exit_code=1, reason=str(error))
     result["seconds"] = time.monotonic() - started
     atomic_json(evidence / (row["mode"] + "-" + row["stem"] + ".json"), result)
+    ledger_group(row["mode"] + "-" + row["stem"], result)
     return result
 
 
@@ -737,6 +750,7 @@ def build_support(row, repo, cache, env, evidence):
         result.update(state="failed", exit_code=1, reason=str(error))
     result["seconds"] = time.monotonic() - started
     atomic_json(evidence / ("support-" + row["name"] + ".json"), result)
+    ledger_group("support-" + row["name"], result)
     return result
 
 
