@@ -64,7 +64,10 @@ _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wperc
             cont_stats=70,
             # lane py-runtime-b: StratifiedShuffleSplit's per-class draw counts
             # (x_metrics/split.mojo approx_mode_unit)
-            approx_mode=81)
+            approx_mode=81,
+            # lane ne2-b-search-workers: permutation_test_score's within-group
+            # permutation as one program (x_metrics/split.mojo group_take_unit, take_rows64_unit)
+            group_take=85, take_rows64=86)
 _PARAMS = 14
 _NONE = -1
 

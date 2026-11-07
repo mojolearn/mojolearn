@@ -253,3 +253,27 @@ def approx_mode_unit(t: Int, f: FP, q: IP):
             if pos == 0:
                 sti(f, p(q, 6), 1)
     sti(f, p(q, 4) + t, (ct * n_draws) // total + plus)
+
+
+def group_take_unit(t: Int, f: FP, q: IP):
+    """q = [KEY, ORD, OFF, P, OUT]; t = position j in group order (lane
+    ne2-b-search-workers, N056). ORD lists the rows group by group (a
+    stable group_sort of KEY, group g at ORD[OFF[g] ..)), and P holds each
+    group's permutation at its own offset (P[OFF[g] + i], the `permute`
+    stages of the draws in group order). OUT[j] = ORD[OFF[g] + P[j]] for the
+    group g of position j: each group's rows permuted by its own draw, the
+    word `gather_i64(ORD + OFF[g], size_g, P + OFF[g])` gave. One unit per
+    position, no unit reads another's output: the same words on every
+    column."""
+    var ORD = p(q, 1)
+    var g = ldi(f, p(q, 0) + ldi(f, ORD + t))
+    var start = ldi(f, p(q, 2) + g)
+    sti(f, p(q, 4) + t, ldi(f, ORD + start + ldi(f, p(q, 3) + t)))
+
+
+def take_rows64_unit(t: Int, f: FP, q: IP):
+    """q = [TAB, IDX, OUT]; t = i (lane ne2-b-search-workers, N056):
+    TAB[IDX[i]] as the Int64 words OUT[2i], OUT[2i + 1] (`st_row64`), the
+    word `gather_i64(TAB, n, IDX)` gave, read back as an int64 row Array.
+    One unit per row; nothing to plan."""
+    st_row64(f, p(q, 2) + 2 * t, ldi(f, p(q, 0) + ldi(f, p(q, 1) + t)))
