@@ -19,6 +19,9 @@ from core.p3nc_scan import p3nc_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
+from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
+from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_lookup, cres_store
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
     family_shape_repr,
@@ -27,6 +30,11 @@ from bindings.family_common import (
 comptime _E_NEAREST = 0
 comptime _E_DISTANCES = 1
 comptime _E_BISECT_PREDICT = 4
+# The query kinds of the GPU binding's `x_cluster_resident_query`
+# (x_cluster/resident.mojo XC_RES_*).
+comptime _XC_RES_PREDICT = 0
+comptime _XC_RES_SCORE = 1
+comptime _XC_RES_TRANSFORM = 2
 
 
 def _xc_fitted(mut mods: NativeModules, model: PythonObject, attr: String) raises -> PythonObject:
@@ -116,11 +124,72 @@ def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: St
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
-def _xc_nearest(model: PythonObject, binding: PythonObject, x: PythonObject, centers_field: PythonObject,
-                context: PythonObject) raises -> PythonObject:
-    var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
+def _xc_optional_entry(binding: PythonObject, name: String) raises -> PythonObject:
+    """The compiled resident door `name` of `binding`, or None: a binding
+    that is not an exact compiled module (a host binding proxy) or that
+    does not export the door keeps the per-call route."""
+    if py_type(binding) is not py_type(native_loaded_module("builtins")):
+        return PythonObject(None)
+    return neural_descriptor_entry(binding, name, False)
+
+
+def _xc_resident(model: PythonObject, binding: PythonObject, centers_field: PythonObject, d: Int,
+                 context: PythonObject) raises -> PythonObject:
+    """`(query_entry, handle)` of the device copy of `cluster_centers_`
+    (lane ne1-a-cluster-spectral, N024): uploaded once at the first query
+    after a fit and reused while the model's generation, the centers object,
+    the binding and the shape are the same (bindings/cluster_resident_table.mojo).
+    None where the per-call upload stays: a binding without the resident
+    doors (the CPU host binding), or storage that cannot be made read-only
+    (anything but an exact float32 C-order 2-D mojolearn Array of d columns)."""
+    if not fitted_is_freezable(centers_field, context):
+        return PythonObject(None)
+    if not _xc_f32_ready(centers_field, context) or Int(py=centers_field.shape[1]) != d:
+        return PythonObject(None)
+    var k = Int(py=centers_field.shape[0])
+    var objects = Python.tuple(centers_field)
+    var dims: List[Int] = [k, d]
+    var held = cres_lookup(model, CRES_X_CLUSTER, binding, objects, dims)
+    if held is not None:
+        return held
+    var query = _xc_optional_entry(binding, "x_cluster_resident_query")
+    if query is None:
+        return PythonObject(None)
+    var prepare = family_entry(binding, "x_cluster_centers_prepare", context)
+    var release = family_entry(binding, "x_cluster_centers_release", context)
+    # Read-only before the upload: an in-place write now raises NumPy's
+    # read-only error instead of diverging from the device copy.
+    _ = fitted_freeze(centers_field, context)
+    var handle = family_call(prepare, classical_address(centers_field), PythonObject(k), PythonObject(d))
+    _ = centers_field  # keep the Python object alive through the native upload above
+    cres_store(model, CRES_X_CLUSTER, binding, objects, dims^, release, query, Int(py=handle), k * d * 4)
+    return Python.tuple(query, handle)
+
+
+def _xc_resident_run(held: PythonObject, kind: Int, x: PythonObject, k: Int, dest: PythonObject) raises -> PythonObject:
+    """One `x_cluster_resident_query`: X from its own storage, the result
+    into `dest` (None for the score, whose fold is returned)."""
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
+    var out_address = PythonObject(0) if dest is None else classical_address(dest)
+    var total = family_call(held[0], held[1], PythonObject(kind), classical_address(x), PythonObject(n),
+                            PythonObject(k), PythonObject(d), out_address)
+    _ = x  # keep the Python objects alive through the native call above
+    _ = dest
+    return total
+
+
+def _xc_nearest(model: PythonObject, binding: PythonObject, x: PythonObject, centers_field: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var held = _xc_resident(model, binding, centers_field, d, context)
+    if held is not None:
+        var k_res = Int(py=centers_field.shape[0])
+        var labels = family_array(Python.tuple(n), "<i4", context)
+        _ = _xc_resident_run(held, _XC_RES_PREDICT, x, k_res, labels)
+        return labels
+    var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
     var result = _xc_call(binding, _E_NEAREST, x, centers,
                           Python.list(PythonObject(n), PythonObject(Int(py=centers.shape[0])), PythonObject(d)), context)
     _ = centers^
@@ -264,9 +333,15 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
     if operation == "family_xc_transform":
         var centers_field = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context)
-        var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
+        var held = _xc_resident(model, binding, centers_field, d, context)
+        if held is not None:
+            var k_res = Int(py=centers_field.shape[0])
+            var dist = family_array(Python.tuple(n, k_res), "<f4", context)
+            _ = _xc_resident_run(held, _XC_RES_TRANSFORM, x, k_res, dist)
+            return dist
+        var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
         var k = Int(py=centers.shape[0])
         var result = _xc_call(binding, _E_DISTANCES, x, centers,
                               Python.list(PythonObject(n), PythonObject(k), PythonObject(d)), context)
@@ -275,9 +350,13 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
     if operation == "family_xc_score":
         var centers_field = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context)
-        var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
+        var held = _xc_resident(model, binding, centers_field, d, context)
+        if held is not None:
+            var total = _xc_resident_run(held, _XC_RES_SCORE, x, Int(py=centers_field.shape[0]), PythonObject(None))
+            return family_call(native_loaded_module("operator").neg, total)
+        var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
         # the float-float fold of the distances, in the binding
         var result = _xc_call(binding, _E_NEAREST, x, centers,
                               Python.list(PythonObject(n), PythonObject(Int(py=centers.shape[0])), PythonObject(d),

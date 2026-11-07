@@ -27,6 +27,7 @@ from x_cluster.minibatch_ptr import minibatch_entry_ptr_idn
 from x_cluster.out import ClusterOut
 from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
 from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
+from x_cluster.resident import xc_centers_prepare, xc_centers_release, xc_centers_count, xc_resident_query
 
 
 def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
@@ -116,6 +117,54 @@ def call_binding(
     return cluster_out_to_py(res)
 
 
+def centers_prepare_binding(addr: PythonObject, k: PythonObject, d: PythonObject) raises -> PythonObject:
+    """`x_cluster_centers_prepare(centers_addr, k, d)`: upload the k x d
+    float32 `cluster_centers_` once (x_cluster/resident.mojo); the handle
+    every later `x_cluster_resident_query` names (owed rows N024, N021)."""
+    var cp = f32_ptr(Int(py=addr))
+    var kk = Int(py=k)
+    var dd = Int(py=d)
+    var handle = 0
+    with GILReleased(Python()):
+        handle = xc_centers_prepare(cp, kk, dd)
+    return PythonObject(handle)
+
+
+def centers_release_binding(handle: PythonObject) raises -> PythonObject:
+    """`x_cluster_centers_release(handle)`: drop the device copy (quiet for a
+    released handle); the provider's side table and its eviction call it."""
+    xc_centers_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def centers_count_binding() raises -> PythonObject:
+    """The number of live resident center handles (tests only)."""
+    return PythonObject(xc_centers_count())
+
+
+def resident_query_binding(
+    handle: PythonObject, kind: PythonObject, x_addr: PythonObject, n: PythonObject, k: PythonObject,
+    d: PythonObject, out_addr: PythonObject,
+) raises -> PythonObject:
+    """`x_cluster_resident_query(handle, kind, x_addr, n, k, d, out_addr)`:
+    predict (kind 0, n int32 labels into `out_addr`), score (kind 1, the
+    returned float) or transform (kind 2, n x k float32 into `out_addr`) on
+    the handle's centers. X is uploaded from the caller's array and the
+    result downloaded into the caller's array, with the GIL released; the
+    caller keeps both alive across the call."""
+    var hh = Int(py=handle)
+    var kd = Int(py=kind)
+    var xp = f32_ptr(Int(py=x_addr))
+    var nn = Int(py=n)
+    var kk = Int(py=k)
+    var dd = Int(py=d)
+    var oa = Int(py=out_addr)
+    var total = Float64(0)
+    with GILReleased(Python()):
+        total = xc_resident_query(hh, kd, xp, nn, kk, dd, oa)
+    return PythonObject(total)
+
+
 def mbk_devscan_binding() raises -> PythonObject:
     """1 when MiniBatchKMeans' NaN/inf scan runs in this binding
     (FAST + Apple default, rollback -D MOJOLEARN_MBK_FAST_DEVSCAN_OFF, x_cluster/minibatch_ptr.mojo), else 0."""
@@ -159,6 +208,10 @@ def build__mojolearn_x_cluster() -> PythonObject:
         m.def_function[mbk_devscan_binding]("x_cluster_mbk_devscan")
         m.def_function[mbk_policy_binding]("x_cluster_mbk_policy")
         m.def_function[vendor_binding]("x_cluster_vendor")
+        m.def_function[centers_prepare_binding]("x_cluster_centers_prepare")
+        m.def_function[centers_release_binding]("x_cluster_centers_release")
+        m.def_function[centers_count_binding]("x_cluster_centers_count")
+        m.def_function[resident_query_binding]("x_cluster_resident_query")
         # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
         return m.finalize()

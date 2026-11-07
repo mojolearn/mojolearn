@@ -14,6 +14,8 @@ host executor ignores the three words. Host-only code: no GPU import here,
 so the CPU dispatch and the bindings can import it.
 """
 from std.ffi import _Global
+from std.atomic import Atomic, Ordering
+from bindings.native_model_records import records_register_release_hook
 
 #: the marker left by the device dispatch: params is already this
 #: executor's device memory, read-only; no allocation, no upload.
@@ -32,9 +34,25 @@ comptime _SEQ_RESIDENT_TOKENS = _Global[
 ]
 
 
+def _hook_once() raises:
+    """Register `seq_resident_owner_died` with the records module's release
+    hooks once per process (bindings/native_model_records.mojo
+    `records_register_release_hook`), so a model's death posts its key here.
+    Called only with the GIL held (the registration's rule): from
+    `seq_resident_token`, the provider's record write. The flag is set before
+    the call, so a release run during registration cannot register twice; a
+    full registry (False) leaves dead blocks to the store's LRU eviction."""
+    var dead = _dead()
+    if dead[].hooked:
+        return
+    dead[].hooked = True
+    _ = records_register_release_hook(seq_resident_owner_died)
+
+
 def seq_resident_token() raises -> Int:
     """A new process-unique, nonzero token for one admitted fitted block.
     Called with the GIL held (the binding's record write)."""
+    _hook_once()
     var tokens = _SEQ_RESIDENT_TOKENS.get_or_create_ptr()
     var token = tokens[].next
     tokens[].next += 1
@@ -52,3 +70,81 @@ def seq_resident_words(addresses: List[Int], base: Int, operation: String) raise
     if n == base + 1 and addresses[base] == SEQ_RESIDENT_ON_EXEC:
         return True
     raise Error(operation + ": invalid address descriptor")
+
+
+# Free at model death (lane ne1-a-cluster-spectral, owed row N172). The
+# device store lives in the GPU sequence binding and the record that names a
+# block in the provider; neither sees the model die. The records module's
+# release (bindings/native_model_records.mojo) calls the hook registered by
+# `_hook_once`, which posts the model's identity word here, and the
+# device store frees that model's block at its next call, before any lookup
+# (`sequence/perf3_seq_resident.mojo` `_drain_dead`): a new model at the
+# reused address never sees the old block. Host-only: the provider and the
+# records module can import it.
+comptime SEQ_DEAD_OWNERS_MAX = 4096
+"""Posted deaths kept before the oldest are dropped (a bound on host memory;
+a dropped post leaves that block to the store's least-recently-used
+eviction, which is where it went before)."""
+
+
+struct _SeqDeadOwners(Defaultable, Movable):
+    var owners: List[Int]
+    # One lock word: the post runs with the GIL held, the take from a device
+    # entry that may run with it released.
+    var lock: List[Int64]
+    # The once-flag of the release-hook registration (`_hook_once`).
+    var hooked: Bool
+
+    def __init__(out self):
+        self.owners = List[Int]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.hooked = False
+
+
+comptime _SEQ_DEAD_OWNERS = _Global[
+    StorageType=_SeqDeadOwners, name="MojoXSequenceResidentDeadOwnersV2", init_fn=_SeqDeadOwners.__init__
+]
+
+
+def _dead_lock(dead: UnsafePointer[_SeqDeadOwners, MutAnyOrigin]):
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](dead[].lock.unsafe_ptr())
+    while True:  # driver-loop: spin on the queue's lock word (held for one list step only)
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, Int64(1)):
+            return
+
+
+def _dead_unlock(dead: UnsafePointer[_SeqDeadOwners, MutAnyOrigin]):
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](dead[].lock.unsafe_ptr())
+    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
+
+
+def _dead() raises -> UnsafePointer[_SeqDeadOwners, MutAnyOrigin]:
+    return _SEQ_DEAD_OWNERS.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def seq_resident_owner_died(owner: Int):
+    """Post the death of the model whose identity word is `owner` (called
+    from the death callback). Non-raising."""
+    try:
+        var dead = _dead()
+        _dead_lock(dead)
+        if len(dead[].owners) >= SEQ_DEAD_OWNERS_MAX:
+            _ = dead[].owners.pop(0)
+        dead[].owners.append(owner)
+        _dead_unlock(dead)
+    except:
+        pass
+
+
+def seq_resident_take_dead() raises -> List[Int]:
+    """Every posted death since the last take (the device store's drain)."""
+    var dead = _dead()
+    _dead_lock(dead)
+    var taken = dead[].owners.copy()
+    dead[].owners.clear()
+    _dead_unlock(dead)
+    return taken^

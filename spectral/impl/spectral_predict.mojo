@@ -153,12 +153,52 @@ def spectral_predict_device(
     affinity: Int,
     state: SpectralPredictionState,
 ) raises -> SpectralPrediction:
-    """`host_spectral_predict` on the device (module docstring)."""
+    """`host_spectral_predict` on the device (module docstring): the fitted
+    state uploaded for this call, then `spectral_predict_run`."""
     spectral_predict_validate(
         n_train, n_queries, n_features, n_components, n_clusters, n_neighbors, affinity
     )
     spectral_predict_check_state(state, n_train, n_components, n_clusters)
     var mu = spectral_predict_mu(state.eigenvalues)
+    # Lane ne1-a-cluster-spectral (N326): the four fitted uploads moved ahead
+    # of the slot step so a resident copy (spectral/impl/spectral_predict_resident.mojo)
+    # runs the same `spectral_predict_run`; only the enqueue order of copies
+    # changed, every kernel reads the same bytes.
+    var d_diag = upload_f32(ctx, state.diag)
+    var d_vecs = upload_f32(ctx, state.eigenvectors)
+    var d_mu = upload_f32(ctx, mu)
+    var d_cent = upload_f32(ctx, state.centroids)
+    var out = spectral_predict_run(
+        ctx, input, train_x, n_train, n_queries, n_features, n_components, n_clusters, n_neighbors, affinity,
+        d_diag, d_vecs, d_mu, d_cent,
+    )
+    _ = d_diag^
+    _ = d_vecs^
+    _ = d_mu^
+    _ = d_cent^
+    return out^
+
+
+def spectral_predict_run(
+    ctx: DeviceContext,
+    input: List[Float32],
+    train_x: List[Float32],
+    n_train: Int,
+    n_queries: Int,
+    n_features: Int,
+    n_components: Int,
+    n_clusters: Int,
+    n_neighbors: Int,
+    affinity: Int,
+    d_diag: DeviceBuffer[DType.float32],
+    d_vecs: DeviceBuffer[DType.float32],
+    d_mu: DeviceBuffer[DType.float32],
+    mut d_cent: DeviceBuffer[DType.float32],
+) raises -> SpectralPrediction:
+    """Steps 1 to 4 (module docstring) over the fitted state already on the
+    device: `d_diag` (n_train), `d_vecs` (n_train x k), `d_mu` (k, from
+    `spectral_predict_mu`) and `d_cent` (n_clusters x k). The caller has
+    validated the shapes and the state."""
     var k = n_components
     comptime tpb = SPECTRAL_PREDICT_TPB
     var qgrid = (n_queries + tpb - 1) // tpb
@@ -224,10 +264,6 @@ def spectral_predict_device(
             grid_dim=((cells + tpb - 1) // tpb, 1, 1),
             block_dim=(tpb, 1, 1),
         )
-    var d_diag = upload_f32(ctx, state.diag)
-    var d_vecs = upload_f32(ctx, state.eigenvectors)
-    var d_mu = upload_f32(ctx, mu)
-    var d_cent = upload_f32(ctx, state.centroids)
     var d_out = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
     var d_labels = ctx.enqueue_create_buffer[DType.uint32](n_queries)
     ctx.enqueue_function[nystrom_kernel](
@@ -265,10 +301,6 @@ def spectral_predict_device(
     _ = h_idx^
     _ = d_cols^
     _ = d_vals^
-    _ = d_diag^
-    _ = d_vecs^
-    _ = d_mu^
-    _ = d_cent^
     _ = d_out^
     _ = d_labels^
     comptime if not IDN_SPECTRAL_LABELS_DEVICE:
