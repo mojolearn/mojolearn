@@ -35,15 +35,20 @@ Groups compile in parallel by default (--parallel auto). Each group's need is
 its RECORDED peak RSS from the last compile (cache/peaks/, with headroom); a
 group without a record takes --memory-per-job-gib when given, else the largest
 recorded need of its set (identical or host), else the platform group floor.
-The scheduler starts the biggest groups first and packs the others beside them
-into 80% of the memory available at start, at most one group per core, and
-re-reads available memory before every launch. A group bigger than that budget
+The scheduler is a sliding window: it starts the longest groups first (their
+recorded compiler seconds, else their source closure size) and starts the next
+group whenever one finishes and its memory need fits 80% of the memory
+available at start and a core is free, at most one group per core, re-reading
+available memory before every launch. Groups without a record of their own
+pack by the largest need measured so far in this run for their set (their rss
+limit stays at least the floor). A group bigger than that budget
 runs alone when it fits 80% of total memory, and is refused up front otherwise.
 MOJOLEARN_BUILD_GROUP_WORKERS (or --parallel N) caps concurrent groups;
 --parallel 1 is the serial run (one compiler, 80% of available memory or the
 group floor, as before). Unless the caller sets MOJOLEARN_COMPILE_JOBS, each
-group's compiler gets max(1, cores // groups running at its launch) threads;
-that value is keyed like any compile job count, and the cache remembers which
+group's compiler gets the free cores at its launch shared among the groups
+starting then (at least one), so the running groups' threads sum to the core
+count; that value is keyed like any compile job count, and the cache remembers which
 value built each group so the next plan reuses it. AMD identical groups keep
 their fixed worker count (MOJOLEARN_AMD_COMPILE_JOBS, default 8). Each group's
 RSS limit is its need; the run stops a compiler when available memory falls
@@ -69,6 +74,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 
@@ -449,6 +455,90 @@ def selected_group(mode, stem, selection):
     return bool({stem, logical, f"{mode}:{stem}", f"{mode}:{logical}"} & set(selection))
 
 
+def build_input_scripts(repo):
+    """Executable-line hashes of the group build scripts (key field builders.scripts)."""
+    return {p: hashlib.sha256(recipe_text((Path(repo) / p).read_text(errors="replace")).encode()).hexdigest()
+            for p in BUILD_INPUTS}
+
+
+def group_fields(repo, cache, mode, plat, stem, flags_class, members, graph, scripts, facts, effective):
+    """The key fields of one group; make_plan and the in-flight input check share them."""
+    return {"schema": KEY_SCHEMA, "repo": str(repo), "cache": str(cache),
+            "mode": mode, "platform": plat, "stem": stem, "flags_class": flags_class,
+            "members": members, "source": graph.closure(members),
+            "builders": compile_recipe(scripts, mode, stem, flags_class),
+            "root_sha256": hashlib.sha256(merged.root_text(stem, members).encode()).hexdigest(),
+            "toolchain": facts, "environment": bincache.build_env(effective),
+            "link_environment": {k: effective[k] for k in
+                ("CC", "CXX", "LD", "SDKROOT", "DEVELOPER_DIR", "LIBRARY_PATH",
+                 "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "PIXI_ENVIRONMENT_NAME") if k in effective}}
+
+
+def current_group_fields(row, repo, cache, env, facts):
+    """One group's key fields as its inputs stand now, or None if the group is gone.
+
+    The in-flight input check after a compile. It used to rebuild the whole
+    plan of the group's set: every group's closure, every cached artifact's
+    sha256 and the support rows, in a pool thread. On the 32-vCPU RunPod box
+    (2026-11-07, leg_out/dev.json) the 64 built groups compiled for 45-169 s
+    but held their slot and memory reservation for 290-670 s, the compilers
+    totalling 2942 s against 30616 s of group time: those whole-set re-plans,
+    15 at once in one Python process, kept the box at 1.4 busy cores of 32.
+    This rebuilds the same fields for this one group only (make_plan uses the
+    same group_fields), so the key comparison is unchanged."""
+    repo, cache = Path(repo).resolve(), Path(cache).resolve()
+    plat = row["fields"]["platform"]
+    effective = build_environment(row["mode"], env, plat)
+    byte_lm = effective["MOJOLEARN_PACKAGE_BYTE_LM"] == "1"
+    for stem, flags_class, members in merged.plan(row["mode"], plat, byte_lm, "development"):
+        if stem == row["stem"]:
+            return group_fields(repo, cache, row["mode"], plat, stem, flags_class, members,
+                                SourceGraph(repo), build_input_scripts(repo), facts, effective)
+    return None
+
+
+class ToolchainProbe:
+    """Toolchain facts read after a given moment, shared by groups that finish together.
+
+    Each finished group must compare its key against toolchain facts read
+    after its compiler exited. Reading them hashes the compiler and its
+    packages and runs `mojo --version` and `pixi --version`; one read in
+    flight serves every group whose compiler exited before that read began,
+    so groups finishing together wait for one read, not one each."""
+
+    def __init__(self, repo):
+        self.repo = repo
+        self.condition = threading.Condition()
+        self.busy = False
+        self.last = None  # (read start, facts, error)
+
+    def facts_after(self, moment):
+        with self.condition:
+            while True:
+                if self.last is not None and self.last[0] >= moment:
+                    _, facts, error = self.last
+                    if error is not None:
+                        raise error
+                    return facts
+                if not self.busy:
+                    self.busy, start = True, time.monotonic()
+                    break
+                if build_process.cancelled():
+                    raise KeyboardInterrupt("development build cancelled while reading toolchain facts")
+                self.condition.wait(1.0)
+        facts, error = None, None
+        try:
+            facts = toolchain_facts(self.repo)
+        except BaseException as caught:  # handed to every waiter of this read, then raised
+            error = caught
+        with self.condition:
+            self.busy, self.last = False, (start, facts, error)
+            self.condition.notify_all()
+        if error is not None:
+            raise error
+        return facts
+
+
 def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_facts=None):
     repo, cache = Path(repo).resolve(), Path(cache).resolve()
     if cache.is_relative_to(repo):
@@ -460,8 +550,7 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
     if plat not in ("linux", "darwin"):
         raise BuildError("development builds require Linux or macOS")
     graph, rows = SourceGraph(repo), []
-    scripts = {p: hashlib.sha256(recipe_text((repo / p).read_text(errors="replace")).encode()).hexdigest()
-               for p in BUILD_INPUTS}
+    scripts = build_input_scripts(repo)
     for mode in modes:
         if mode not in ("identical", "host"):
             raise BuildError("development builds support identical and host only")
@@ -473,15 +562,8 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
             raise BuildError("supply one Linux accelerator target, not a list or an Apple override")
         byte_lm = effective["MOJOLEARN_PACKAGE_BYTE_LM"] == "1"
         for stem, flags_class, members in merged.plan(mode, plat, byte_lm, "development"):
-            fields = {"schema": KEY_SCHEMA, "repo": str(repo), "cache": str(cache),
-                      "mode": mode, "platform": plat, "stem": stem, "flags_class": flags_class,
-                      "members": members, "source": graph.closure(members),
-                      "builders": compile_recipe(scripts, mode, stem, flags_class),
-                      "root_sha256": hashlib.sha256(merged.root_text(stem, members).encode()).hexdigest(),
-                      "toolchain": facts, "environment": bincache.build_env(effective),
-                      "link_environment": {k: effective[k] for k in
-                          ("CC", "CXX", "LD", "SDKROOT", "DEVELOPER_DIR", "LIBRARY_PATH",
-                           "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "PIXI_ENVIRONMENT_NAME") if k in effective}}
+            fields = group_fields(repo, cache, mode, plat, stem, flags_class, members,
+                                  graph, scripts, facts, effective)
             row = {"mode": mode, "stem": stem, "members": members, "flags_class": flags_class,
                    "key": digest(fields), "fields": fields,
                    "selected": selected_group(mode, stem, selection)}
@@ -498,6 +580,7 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
                         row = dict(alternative, action="reuse")
             # Sizing only; never a key field. It survives key changes.
             row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
+            row["recorded_seconds"] = recorded_seconds(cache, mode, stem)
             rows.append(row)
     for group in selection:
         if not any(selected_group(r["mode"], r["stem"], [group]) for r in rows):
@@ -568,6 +651,16 @@ def recorded_need(cache, mode, stem):
         return 0
 
 
+def recorded_seconds(cache, mode, stem):
+    """Compiler seconds of this group's last passed recorded compile, or 0.0."""
+    try:
+        saved = json.loads(peak_path(cache, mode, stem).read_text())
+        seconds = float(saved["elapsed_seconds"]) if saved["status"] == "passed" else 0.0
+        return seconds if math.isfinite(seconds) and seconds > 0 else 0.0
+    except (OSError, KeyError, ValueError, TypeError):
+        return 0.0
+
+
 def compile_jobs_path(cache, mode, stem):
     return Path(cache) / "compile-jobs" / f"{mode}-{stem}.json"
 
@@ -609,6 +702,9 @@ def record_peak(cache, row, execution, compile_jobs=None):
               "key": row["key"], "recorded_utc": datetime.now(timezone.utc).isoformat()}
     if compile_jobs is not None:
         record["compile_jobs"] = int(compile_jobs)
+    if status == "passed" and execution.get("elapsed_seconds"):
+        # Ordering only (packing_order): the longest groups start first.
+        record["elapsed_seconds"] = float(execution["elapsed_seconds"])
     atomic_json(path, record)
 
 
@@ -733,9 +829,43 @@ def group_needs(all_rows, wanted, per_job_gib=None, floor_bytes=0):
     return out
 
 
+def source_bytes(row):
+    """Bytes of a group's source closure (missing files count zero)."""
+    repo = row["fields"].get("repo")
+    total = 0
+    for name in row["fields"]["source"]["files"] if repo else ():  # driver-loop: over closure files, stat only
+        try:
+            total += (Path(repo) / name).stat().st_size
+        except OSError:
+            pass
+    return total
+
+
+def estimated_seconds(rows):
+    """Compile-seconds estimate per row, for ordering only.
+
+    A group's recorded compiler seconds when it has them; otherwise its source
+    closure bytes, scaled by the recorded seconds per byte of the groups that
+    have both. The first run (no records) orders by source bytes alone."""
+    sizes = [source_bytes(row) for row in rows]
+    timed = [(float(row.get("recorded_seconds") or 0), size) for row, size in zip(rows, sizes)
+             if float(row.get("recorded_seconds") or 0) > 0 and size > 0]
+    rate = sum(t for t, _ in timed) / sum(b for _, b in timed) if timed else None
+    out = []
+    for row, size in zip(rows, sizes):  # driver-loop: over development groups
+        seconds = float(row.get("recorded_seconds") or 0)
+        out.append(seconds if seconds > 0 else size * rate if rate else float(size))
+    return out
+
+
 def packing_order(rows, needs):
-    """Biggest recorded need first; larger source closures break ties."""
-    order = sorted(range(len(rows)), key=lambda i: (-needs[i], -len(rows[i]["fields"]["source"]["files"]),
+    """Longest estimated compile first, then biggest need, then larger closures.
+
+    Longest first keeps the end of the run from waiting on one long group
+    started late, with the cores the earlier groups freed sitting idle."""
+    seconds = estimated_seconds(rows)
+    order = sorted(range(len(rows)), key=lambda i: (-seconds[i], -needs[i],
+                                                    -len(rows[i]["fields"]["source"]["files"]),
                                                     rows[i]["mode"], rows[i]["stem"]))
     return [rows[i] for i in order], [needs[i] for i in order]
 
@@ -776,9 +906,54 @@ def current_budget(baseline_bytes, available_now, running_needs):
     return min(int(baseline_bytes), int(MEMORY_FRACTION * available_now) + int(sum(running_needs)))
 
 
-def threads_per_group(cores, concurrent):
-    """Compiler threads for a group started while `concurrent` groups run."""
-    return max(1, int(cores) // max(1, int(concurrent)))
+def launch_threads(cores, running_threads, picks_jobs):
+    """Compiler threads of the groups started now, in start order.
+
+    picks_jobs holds, per candidate in start order, its fixed compiler thread
+    count (the caller's MOJOLEARN_COMPILE_JOBS, AMD's) or None when the
+    scheduler chooses. Each candidate takes its fixed count or one thread
+    while free cores remain; the first candidate that does not fit and every
+    one after it wait for a later launch (a lone group starts even when it
+    alone exceeds the cores). The free cores left over go to the
+    scheduler-chosen groups, one more each from the first (longest) on, so the
+    threads of running groups sum to the core count after every launch. The
+    result may be shorter than picks_jobs."""
+    free = int(cores) - sum(int(t) for t in running_threads)
+    threads = []
+    for jobs in picks_jobs:  # driver-loop: over groups started this tick
+        want = int(jobs) if jobs is not None else 1
+        if want > free and (threads or running_threads):
+            break
+        threads.append(want)
+        free -= want
+    chosen = [i for i, jobs in enumerate(picks_jobs[:len(threads)]) if jobs is None]
+    if chosen and free > 0:
+        share, extra = divmod(free, len(chosen))
+        for rank, i in enumerate(chosen):  # driver-loop: over groups started this tick
+            threads[i] += share + (1 if rank < extra else 0)
+    return threads
+
+
+def live_need(source, need, measured, floor, ceiling):
+    """A queued group's packing need after groups of its set passed in this run.
+
+    Groups with no record of their own (platform floor or set maximum) take
+    the largest need measured so far in this run for their set, the same
+    set-maximum rule group_needs applies to older records: a floor estimate
+    drops to it, a set maximum only rises. Recorded and --memory-per-job-gib
+    needs are kept. Its rss limit stays at least the floor (guard_rss)."""
+    if not measured:
+        return need, source
+    if source in ("group-floor", "set-max-live"):
+        return min(int(measured), int(ceiling)), "set-max-live"
+    if source == "set-max" and measured > need:
+        return min(int(measured), int(ceiling)), "set-max"
+    return need, source
+
+
+def guard_rss(need, source, floor):
+    """The rss limit of a group: its need, never below the floor for a live estimate."""
+    return max(int(need), int(floor)) if source == "set-max-live" else int(need)
 
 
 def pressure_floor(available_at_start, baseline_bytes, available_now, need):
@@ -806,10 +981,20 @@ def run_logged(argv, repo, env, path):
     return result["exit_code"]
 
 
-def compile_group(row, repo, cache, env, evidence):
+def compile_group(row, repo, cache, env, evidence, toolchain=None, launch=None):
+    """Build one group into the cache (or find it there).
+
+    toolchain: a ToolchainProbe shared by the scheduler's workers (default: a
+    private read). launch: the scheduler's view at submission, recorded in the
+    group receipt (groups_running_at_launch, threads_running_at_launch,
+    cores, submitted = time.monotonic() at submission)."""
     started = time.monotonic()
     result = {"mode": row["mode"], "stem": row["stem"], "key": row["key"],
               "state": "failed", "exit_code": 1}
+    if launch:
+        result.update({k: v for k, v in launch.items() if k != "submitted"})
+        if launch.get("submitted") is not None:
+            result["queue_wait_seconds"] = max(0.0, started - launch["submitted"])
     limits = json.loads(env.get(GUARD_ENV, "{}"))
     try:
         with lock(cache / "locks" / (row["key"] + ".lock"), limits.get("lock_seconds")):
@@ -834,8 +1019,10 @@ def compile_group(row, repo, cache, env, evidence):
                 result["workers_at_launch"] = int(effective["MOJOLEARN_COMPILE_JOBS"])
                 command = group_command(row["mode"], row["stem"], output, work / "roots")
                 result.update(log=str(log), command=command, execution_receipt=str(execution))
+                compile_started = time.monotonic()
                 code = run_logged(command, repo, effective, log)
-                result["exit_code"] = code
+                compiled = time.monotonic()
+                result.update(exit_code=code, compile_seconds=compiled - compile_started)
                 if execution.is_file():
                     result["execution"] = json.loads(execution.read_text())
                     record_peak(cache, row, result["execution"], result["workers_at_launch"])
@@ -845,13 +1032,12 @@ def compile_group(row, repo, cache, env, evidence):
                 if build_process.cancelled():
                     raise KeyboardInterrupt("development build cancelled before cache publication")
                 if code == 0:
-                    after = make_plan(repo, cache, [row["mode"]], env,
-                                      facts=toolchain_facts(repo), plat=row["fields"]["platform"])
-                    current = next((r for r in after["groups"] if r["stem"] == row["stem"]), None)
-                    if current is None or current["key"] != row["key"]:
+                    # This group's own fields only; see current_group_fields.
+                    facts = toolchain.facts_after(compiled) if toolchain else toolchain_facts(repo)
+                    current = current_group_fields(row, repo, cache, env, facts)
+                    if current is None or digest(current) != row["key"]:
                         result.update(exit_code=1, reason=input_change_reason(
-                            "build inputs changed during compilation", row["fields"],
-                            current["fields"] if current else {}))
+                            "build inputs changed during compilation", row["fields"], current or {}))
                     elif not artifact.is_file() or artifact.stat().st_size == 0:
                         result.update(exit_code=1, reason="compiler returned success without nonempty declared output")
                     else:
@@ -1038,17 +1224,22 @@ def serial_build(plan, wanted, args, env, cache, evidence, limits, report):
     report.update(resource_budget=budget, jobs=budget["jobs"], groups_concurrent_max=1,
                   scheduler={"parallel": 1, "slots": 1})
     atomic_json(evidence / "result.json", report)
+    toolchain = ToolchainProbe(REPO)
     for row in wanted:  # driver-loop: over development groups, one compiler at a time
-        result = compile_group(row, REPO, cache, env, evidence)
-        result["groups_running_at_launch"] = 1
+        launch = {"groups_running_at_launch": 1, "threads_running_at_launch": row["compile_jobs"],
+                  "cores": budget["cores"], "submitted": time.monotonic()}
+        result = compile_group(row, REPO, cache, env, evidence, toolchain, launch)
         collect(report, result, evidence)
 
 
 def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap, futures):
-    """Pack groups by recorded need; biggest first; one group per core at most.
+    """A sliding window over the groups: start one whenever memory and a core are free.
 
-    Every launched future is appended to `futures` so the caller keeps the
-    verdicts of started workers when the run stops."""
+    Longest estimated compile first. Each start re-plans compiler threads so
+    the running groups' threads sum to the core count (launch_threads); a
+    group that finishes returns its memory and cores to the next start at
+    once. Every launched future is appended to `futures` so the caller keeps
+    the verdicts of started workers when the run stops."""
     cores, available_at_start = host_facts(report)
     total = report["host_memory_bytes"]
     baseline = int(MEMORY_FRACTION * available_at_start)
@@ -1064,18 +1255,20 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
                 f"{baseline / gib:.1f} GiB is available now; free memory or use a larger machine. If you "
                 f"measured a smaller peak for these groups, pass --memory-per-job-gib <GiB>.")
     # Fixed compiler thread counts (caller's MOJOLEARN_COMPILE_JOBS, AMD's)
-    # take their cores; scheduler-chosen counts start at one per group.
+    # take their cores through launch_threads; at most one group per core.
     fixed = max((r["compile_jobs"] for r in wanted if not r.get("auto_compile_jobs")), default=1)
-    slots = max(1, cores // fixed)
-    if cap is not None:
-        slots = min(slots, cap)
+    slots = cores if cap is None else max(1, min(cores, cap))
     queue, queue_needs = packing_order(wanted, [need for need, _ in needs])
     sources = {(r["mode"], r["stem"]): source for r, (_, source) in zip(wanted, needs)}
+    measured = {}  # mode -> largest need measured in this run (passed peak plus headroom)
     scheduler = {"parallel": "auto" if cap is None else cap, "slots": slots, "budget_bytes": baseline,
                  "ceiling_bytes": ceiling, "fixed_compiler_workers": fixed,
-                 "memory_fraction": MEMORY_FRACTION}
-    report.update(scheduler=scheduler, resource_budget=scheduler, jobs=slots, groups_concurrent_max=0)
+                 "memory_fraction": MEMORY_FRACTION, "order": "longest-first",
+                 "threads": "sum-to-cores"}
+    report.update(scheduler=scheduler, resource_budget=scheduler, jobs=slots, groups_concurrent_max=0,
+                  threads_running_max=0)
     atomic_json(evidence / "result.json", report)
+    toolchain = ToolchainProbe(REPO)
     running = {}
     with ThreadPoolExecutor(max_workers=slots) as pool:
         try:
@@ -1083,38 +1276,63 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
                 if queue and not build_process.cancelled():
                     available_now = available_resources()[1]
                     reserved = [need for _, need, _ in running.values()]
+                    threads_now = [r["compile_jobs"] for r, _, _ in running.values()]
                     budget = current_budget(baseline, available_now, reserved)
-                    picks = next_launches(queue_needs, reserved, budget, slots, ceiling)
-                    concurrent = len(running) + len(picks)
-                    for index in sorted(picks, reverse=True):  # driver-loop: over groups started this tick
-                        row, need = queue.pop(index), queue_needs.pop(index)
+                    free = cores - sum(threads_now)
+                    window = min(slots, len(running) + max(0, free)) if running else slots
+                    picks = next_launches(queue_needs, reserved, budget, window, ceiling)
+                    threads = launch_threads(cores, threads_now, [
+                        None if queue[i].get("auto_compile_jobs") else queue[i]["compile_jobs"] for i in picks])
+                    starts = list(zip(picks, threads))
+                    taken = [(queue[i], queue_needs[i], jobs) for i, jobs in starts]
+                    for index, _ in sorted(starts, reverse=True):  # driver-loop: over groups started this tick
+                        queue.pop(index)
+                        queue_needs.pop(index)
+                    for row, need, jobs in taken:  # driver-loop: over groups started this tick
                         if row.get("auto_compile_jobs"):
-                            jobs = threads_per_group(cores, concurrent)
                             # Keyed: the plan row takes the key of the compiler it runs.
                             row.update(with_compile_jobs(row, env, jobs, plan["platform"]))
+                        source = sources[(row["mode"], row["stem"])]
+                        rss = guard_rss(need, source, floor)
                         group_limits = dict(limits, jobs=slots, cores=cores, available_bytes=available_now,
-                                            compiler_workers=row["compile_jobs"], rss_bytes=need,
+                                            compiler_workers=row["compile_jobs"], rss_bytes=rss,
                                             min_available_bytes=pressure_floor(
-                                                available_at_start, baseline, available_now, need),
-                                            reservation_source=sources[(row["mode"], row["stem"])])
+                                                available_at_start, baseline, available_now, rss),
+                                            reservation_source=source)
                         group_env = dict(env, **{GUARD_ENV: json.dumps(group_limits)})
                         if row.get("auto_compile_jobs"):
                             group_env["MOJOLEARN_COMPILE_JOBS"] = str(row["compile_jobs"])
-                        future = pool.submit(compile_group, row, REPO, cache, group_env, evidence)
+                        threads_now.append(row["compile_jobs"])
+                        launch = {"groups_running_at_launch": len(running) + 1,
+                                  "threads_running_at_launch": sum(threads_now), "cores": cores,
+                                  "submitted": time.monotonic()}
+                        future = pool.submit(compile_group, row, REPO, cache, group_env, evidence,
+                                             toolchain, launch)
                         futures.append(future)
-                        running[future] = (row, need, concurrent)
+                        running[future] = (row, need, launch)
                     report["groups_concurrent_max"] = max(report["groups_concurrent_max"], len(running))
+                    report["threads_running_max"] = max(report["threads_running_max"], sum(threads_now))
                 if not running:
                     if queue:
                         raise KeyboardInterrupt("development build cancelled before every group started")
                     break
                 done, _ = wait(list(running), timeout=SCHEDULER_POLL_SECONDS, return_when=FIRST_COMPLETED)
                 for future in done:  # driver-loop: over groups finished this tick
-                    row, need, concurrent = running.pop(future)
+                    row, need, launch = running.pop(future)
                     result = future.result()
-                    result.update(groups_running_at_launch=concurrent, need_bytes=need,
-                                  need_source=sources[(row["mode"], row["stem"])])
+                    result.update(groups_running_at_launch=launch["groups_running_at_launch"],
+                                  threads_running_at_launch=launch["threads_running_at_launch"],
+                                  need_bytes=need, need_source=sources[(row["mode"], row["stem"])])
+                    execution = result.get("execution") or {}
+                    if execution.get("status") == "passed" and int(execution.get("peak_rss_bytes") or 0) > 0:
+                        measured[row["mode"]] = max(measured.get(row["mode"], 0), int(
+                            int(execution["peak_rss_bytes"]) * PEAK_HEADROOM["passed"]))
                     collect(report, result, evidence)
+                # Groups without a record of their own pack by what this run measured.
+                for index, queued in enumerate(queue):  # driver-loop: over queued development groups
+                    key = (queued["mode"], queued["stem"])
+                    queue_needs[index], sources[key] = live_need(
+                        sources[key], queue_needs[index], measured.get(queued["mode"], 0), floor, ceiling)
         except BaseException:
             # Cancel before ThreadPoolExecutor.__exit__ waits. Its
             # workers' guarded process groups must stop together.
