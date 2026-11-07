@@ -416,34 +416,45 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
         return total
     if len(first) == 0 or count == 0:
         raise Error("ordered reduction needs nonempty gradient tensors")
-    var stacked = generation_array([2, count])
-    var output = generation_array([count])
-    for shard in range(1, len(shards)):  # driver-loop: over fixed ascending logical gradient shard order
+    # Row N093: every shard is copied ONCE into one [S, count] buffer (slot
+    # k = shard k), then the same pair fold as before runs in the same
+    # ascending order IN PLACE: step k reads slots k-1 (the running total)
+    # and k (shard k) as one [2, count] block and writes the pair's sum over
+    # slot k. The `accumulate` entry uploads its parts before it writes its
+    # output, so the overlap is safe, and the operands of every pair add are
+    # the same values as the former copy-in / copy-out walk: same bits. Host
+    # copies per step drop from 3 * (S - 1) * count words to (S + 1) * count.
+    var n_shards = len(shards)
+    var stacked = generation_array([n_shards, count])
+    var stack = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=stacked._addr))
+    var offset = 0
+    for j in range(len(total)):  # driver-loop: over the first shard's gradient tensors
+        memcpy(dest=stack + offset, src=Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr)), count=counts[j])
+        offset += counts[j]
+    for shard in range(1, n_shards):  # driver-loop: over logical gradient shards (one copy each)
         var current = py_call(b[].bi.list, shards[shard])
         if len(current) != len(total):
             raise Error("ordered reduction gradient tensor count mismatch")
-        var offset = 0
-        var stack = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=stacked._addr))
-        for j in range(len(total)):  # driver-loop: over paired gradient tensor buffers
+        offset = 0
+        for j in range(len(total)):  # driver-loop: over this shard's gradient tensors
             var value = _parallel_array(current[j], dims[j], False, False)
-            var left = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr))
-            var right = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
-            memcpy(dest=stack + offset, src=left, count=counts[j])
-            memcpy(dest=stack + count + offset, src=right, count=counts[j])
+            memcpy(dest=stack + shard * count + offset, src=Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=counts[j])
             offset += counts[j]
             _ = value^
+    var base = Int(py=stacked._addr)
+    for shard in range(1, n_shards):  # driver-loop: over fixed ascending logical gradient shard order
         var addresses = b[].bi.list()
-        _ = py_call(addresses.append, output._addr)
-        _ = py_call(addresses.append, stacked._addr)
+        _ = py_call(addresses.append, PythonObject(base + 4 * shard * count))
+        _ = py_call(addresses.append, PythonObject(base + 4 * (shard - 1) * count))
         _ = py_call(b[].entries["accumulate"], addresses, py_ints([count, 2, -1]))
-        var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-        offset = 0
-        for j in range(len(total)):  # driver-loop: over owned folded gradient output tensors
-            var destination = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr))
-            memcpy(dest=destination, src=source + offset, count=counts[j])
-            offset += counts[j]
+        _ = stacked  # keep the Python object alive through the native call above
+    var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=base) + (n_shards - 1) * count
+    offset = 0
+    for j in range(len(total)):  # driver-loop: over owned folded gradient output tensors
+        var destination = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr))
+        memcpy(dest=destination, src=source + offset, count=counts[j])
+        offset += counts[j]
     _ = stacked^
-    _ = output^
     return total
 
 
