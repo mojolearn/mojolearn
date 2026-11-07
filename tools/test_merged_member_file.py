@@ -16,6 +16,11 @@ def test_manifest_lookup_after_the_host_split():
     assert mb.member_file("host", "_mojolearn_runtime_classical_host") == "_mojolearn_native_classical_host.so"
     assert mb.member_file("host", "_mojolearn_core_host") == "_mojolearn_native_host.so"
     assert mb.member_file("host", "_mojolearn_x_metrics_host") == "_mojolearn_native_series_host.so"
+    # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6)
+    assert mb.member_file("host", "_mojolearn_runtime_trees_host") == "_mojolearn_native_classical_trees_host.so"
+    assert mb.member_file("host", "_mojolearn_runtime_linear_host") == "_mojolearn_native_classical_prep_host.so"
+    assert mb.member_file("host", "_mojolearn_runtime_neural_host") == "_mojolearn_native_neural_doors_host.so"
+    assert mb.member_file("host", "_mojolearn_runtime_manifold_host") == "_mojolearn_native_orchestration_host.so"
 
 
 def test_index_lookup_and_ambiguity():
@@ -31,6 +36,18 @@ def test_host_groups_split_along_their_clusters():
     groups = mb.manifest()["dirs"]["host"]["groups"]
     assert groups["_mojolearn_native_classical_host"] == ["_mojolearn_runtime_classical_host"]
     assert groups["_mojolearn_native_tokenizer_host"] == ["_mojolearn_tokenizer_host"]
+    split = {"_mojolearn_native_classical_trees_host": ["_mojolearn_runtime_trees_host"],
+             "_mojolearn_native_classical_family_host": ["_mojolearn_runtime_family_host"],
+             "_mojolearn_native_classical_prep_host": ["_mojolearn_runtime_prep_host", "_mojolearn_runtime_linear_host"],
+             "_mojolearn_native_classical_decomp_host": ["_mojolearn_runtime_decomp_host"],
+             "_mojolearn_native_catalog_host": ["_mojolearn_runtime_catalog_host"],
+             "_mojolearn_native_xseq_host": ["_mojolearn_runtime_xseq_host"],
+             "_mojolearn_native_byte_trainer_host": ["_mojolearn_runtime_byte_trainer_host"],
+             "_mojolearn_native_parallel_host": ["_mojolearn_runtime_parallel_host"],
+             "_mojolearn_native_neural_doors_host": ["_mojolearn_runtime_neural_host"],
+             "_mojolearn_native_orchestration_host": ["_mojolearn_byte_lm_host", "_mojolearn_runtime_model_selection_host",
+                                                      "_mojolearn_runtime_manifold_host"]}
+    assert {stem: groups[stem] for stem in split} == split
     every = [m for names in groups.values() for m in names]
     assert len(every) == len(set(every)) and all(stem.endswith("_host") and stem not in every for stem in groups)
 
