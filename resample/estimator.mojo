@@ -1562,58 +1562,6 @@ def bootstrap_into(
     )
 
 
-def _unpaired_validate(
-    x: List[Float32], n_x: Int, y: List[Float32], n_y: Int, n_resamples: Int,
-    method: Int, confidence_level: Float32, r_first: Int,
-) raises:
-    """`bootstrap_unpaired_host`'s refusals, shared word for word with the
-    host twin (`resample/host/resample_host.mojo`): `_unpaired_validate_ptr`
-    over the Lists' storage."""
-    _unpaired_validate_ptr(
-        _list_f32_ptr(x), len(x), n_x, _list_f32_ptr(y), len(y), n_y,
-        n_resamples, method, confidence_level, r_first,
-    )
-
-
-def _unpaired_validate_ptr(
-    xp: ResampleF32Ptr, x_words: Int, n_x: Int, yp: ResampleF32Ptr, y_words: Int,
-    n_y: Int, n_resamples: Int, method: Int, confidence_level: Float32, r_first: Int,
-) raises:
-    """The refusals of `_unpaired_validate`, in its order, over the samples
-    read in place (`x_words` / `y_words` words at `xp` / `yp`)."""
-    validate_positions(n_resamples, n_x)
-    validate_positions(n_resamples, n_y)
-    if r_first < 0:
-        raise Error(
-            "bootstrap: r_first must be non-negative; got " + String(r_first)
-        )
-    validate_positions(r_first + n_resamples, n_x)
-    validate_positions(r_first + n_resamples, n_y)
-    if x_words < n_x or y_words < n_y:
-        raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
-    for k in range(2):
-        var m = n_x if k == 0 else n_y
-        for i in range(m):
-            var v = xp[i] if k == 0 else yp[i]
-            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
-                raise Error(
-                    "bootstrap: sample " + String(k) + " contains NaN or"
-                    " infinity at position " + String(i) + " (refused before"
-                    " any launch, IDENTITY_PATHS row 39 FACT 2)"
-                )
-    if confidence_level <= Float32(0.0) or confidence_level >= Float32(1.0):
-        raise Error(
-            "bootstrap: confidence_level must be in (0, 1); got "
-            + String(confidence_level)
-        )
-    if method == METHOD_BCA and (n_x < 2 or n_y < 2):
-        raise Error(
-            "bootstrap: method='BCa' needs at least 2 observations in each"
-            " sample (each leave-one-out sample must itself have a mean); got"
-            " n_x=" + String(n_x) + ", n_y=" + String(n_y)
-        )
-
-
 def bootstrap_unpaired_host(
     x: List[Float32],
     n_x: Int,
@@ -1668,10 +1616,39 @@ def bootstrap_unpaired_into(
     and uploaded straight from `xp` / `yp`; the distribution is downloaded
     into `dist_out` (n_resamples slots), so the returned `distribution` is
     EMPTY. The same words reach the same kernels."""
-    _unpaired_validate_ptr(
-        xp, x_words, n_x, yp, y_words, n_y, n_resamples, method,
-        confidence_level, r_first,
-    )
+    # the refusals (the host twin keeps the same words,
+    # resample/host/resample_host.mojo `_host_unpaired_validate`)
+    validate_positions(n_resamples, n_x)
+    validate_positions(n_resamples, n_y)
+    if r_first < 0:
+        raise Error(
+            "bootstrap: r_first must be non-negative; got " + String(r_first)
+        )
+    validate_positions(r_first + n_resamples, n_x)
+    validate_positions(r_first + n_resamples, n_y)
+    if x_words < n_x or y_words < n_y:
+        raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
+    for k in range(2):
+        var m = n_x if k == 0 else n_y
+        for i in range(m):
+            var v = xp[i] if k == 0 else yp[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "bootstrap: sample " + String(k) + " contains NaN or"
+                    " infinity at position " + String(i) + " (refused before"
+                    " any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
+    if confidence_level <= Float32(0.0) or confidence_level >= Float32(1.0):
+        raise Error(
+            "bootstrap: confidence_level must be in (0, 1); got "
+            + String(confidence_level)
+        )
+    if method == METHOD_BCA and (n_x < 2 or n_y < 2):
+        raise Error(
+            "bootstrap: method='BCa' needs at least 2 observations in each"
+            " sample (each leave-one-out sample must itself have a mean); got"
+            " n_x=" + String(n_x) + ", n_y=" + String(n_y)
+        )
     var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
     var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
     var ctx = process_ctx[_DEVCTX_SLOT]()
@@ -1911,45 +1888,6 @@ def permutation_test_into(
     return PermutationResult(observed, List[Float32](), pv)
 
 
-def perm_samples_validate(
-    x: List[Float32], y: List[Float32], two: Bool, n_resamples: Int, r_first: Int
-) raises:
-    """`permutation_samples_host`'s refusals (shared word for word by the
-    host twin): `perm_samples_validate_ptr` over the Lists' storage."""
-    perm_samples_validate_ptr(
-        _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), two, n_resamples, r_first
-    )
-
-
-def perm_samples_validate_ptr(
-    xp: ResampleF32Ptr, n: Int, yp: ResampleF32Ptr, n_y: Int, two: Bool,
-    n_resamples: Int, r_first: Int,
-) raises:
-    """The refusals of `perm_samples_validate`, in its order, over the
-    samples read in place (`n` words at `xp`, `n_y` at `yp`)."""
-    if n <= 0:
-        raise Error("permutation_test(permutation_type='samples'): the sample is empty")
-    if two and n_y != n:
-        raise Error(
-            "permutation_test(permutation_type='samples'): the two samples"
-            " must be PAIRED, the same length; got n_x=" + String(n)
-            + ", n_y=" + String(n_y)
-        )
-    validate_positions(n_resamples, n)
-    if r_first < 0:
-        raise Error("permutation_test: r_first must be non-negative; got " + String(r_first))
-    validate_positions(r_first + n_resamples, n)
-    for k in range(2 if two else 1):
-        for i in range(n):
-            var v = xp[i] if k == 0 else yp[i]
-            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
-                raise Error(
-                    "permutation_test: sample " + String(k) + " contains NaN"
-                    " or infinity at position " + String(i) + " (refused"
-                    " before any launch, IDENTITY_PATHS row 39 FACT 2)"
-                )
-
-
 def permutation_samples_host(
     x: List[Float32],
     y: List[Float32],
@@ -1996,7 +1934,29 @@ def permutation_samples_into(
     `two`, `y` (n_y words at `yp`) are read in place and uploaded straight
     from the caller's buffers; the null comes back into `null_out`
     (n_resamples slots), so the returned `null_distribution` is EMPTY."""
-    perm_samples_validate_ptr(xp, n, yp, n_y, two, n_resamples, r_first)
+    # the refusals (the host twin keeps the same words,
+    # resample/host/resample_host.mojo `_host_perm_samples_validate`)
+    if n <= 0:
+        raise Error("permutation_test(permutation_type='samples'): the sample is empty")
+    if two and n_y != n:
+        raise Error(
+            "permutation_test(permutation_type='samples'): the two samples"
+            " must be PAIRED, the same length; got n_x=" + String(n)
+            + ", n_y=" + String(n_y)
+        )
+    validate_positions(n_resamples, n)
+    if r_first < 0:
+        raise Error("permutation_test: r_first must be non-negative; got " + String(r_first))
+    validate_positions(r_first + n_resamples, n)
+    for k in range(2 if two else 1):
+        for i in range(n):
+            var v = xp[i] if k == 0 else yp[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "permutation_test: sample " + String(k) + " contains NaN"
+                    " or infinity at position " + String(i) + " (refused"
+                    " before any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
     var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = _upload_from(ctx, xp, n)
