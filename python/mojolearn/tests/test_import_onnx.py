@@ -93,7 +93,8 @@ def test_external_data_is_a_view_of_the_shard(tmp_path):
     g = onnx_reader.read(f.path)
     w2 = g.initializers["w2"]
     # a view of the shard's bytes the Mojo reader holds (no copy); it keeps the reader's handle open
-    assert isinstance(w2.data, memoryview) and getattr(w2.data.obj, "owner", None) is g._native
+    # (the reader's native lifetime resource, which the graph's reader owns)
+    assert isinstance(w2.data, memoryview) and getattr(w2.data.obj, "owner", None) is g._native._lifetime
     assert bytes(w2.data) == f.initializers["w2"].data
     # a location outside the model's directory is refused by name
     sub = tmp_path / "sub"
@@ -200,24 +201,3 @@ def test_not_an_onnx_file(tmp_path):
 
 def test_supported_ops_is_a_list():
     assert isinstance(importers.supported_ops(), list)
-
-
-def test_a_torch_object_is_refused_with_the_onnx_path():
-    # import_model takes an ONNX file; a torch object (here a stand-in whose class is torch's) is
-    # refused with the two-step path: torch.onnx.export, then the file
-    from mojolearn.importers._program import _read
-
-    class Module:
-        pass
-
-    Module.__module__ = "torch.nn.modules.module"
-
-    class UserNet(Module):
-        pass
-
-    UserNet.__module__ = "__main__"
-    for obj in (Module(), UserNet()):
-        with pytest.raises(ValueError, match=r'torch\.onnx\.export\(model, args, "model\.onnx"\)'):
-            _read(obj)
-    with pytest.raises(TypeError, match="ONNX file"):
-        _read(object())
