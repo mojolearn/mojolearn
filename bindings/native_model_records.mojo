@@ -85,6 +85,11 @@ from bindings.cpython_table import cpython_table
 from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import native_loaded_module, shared_dict_watch, shared_dict_epoch
 from bindings.py_balanced import py_call, py_type, py_fields, _is_exact_dict
+# Sibling lanes' release hooks (lane/ne1-a-cluster-spectral at the
+# integration merge): `cres_forget_key(model_key: Int)` and
+# `seq_resident_owner_died(owner: Int)`, both non-raising.
+from bindings.cluster_resident_table import cres_forget_key
+from sequence.perf3_seq_resident_words import seq_resident_owner_died
 
 
 # Family codes of the named payload records.
@@ -286,7 +291,13 @@ def records_release(model_key: Int):
             _ = g[].owners.pop(released.token)
         _ = released^
     except:
-        pass
+        return
+    # The families' resident device stores keyed by this model (workstream A;
+    # both non-raising): the cluster/spectral resident table drops its
+    # entries now; the sequence store gets the death posted and drains it on
+    # its next call (device releases never run inside a weakref callback).
+    cres_forget_key(model_key)
+    seq_resident_owner_died(model_key)
 
 
 def _records_release_token(token: Int) raises:
