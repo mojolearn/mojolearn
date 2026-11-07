@@ -758,7 +758,8 @@ def content_value(mut rec: ContentRecord, value: PythonObject, depth: Int, limit
             if kind is not b.str and kind is not b.int:
                 rec.ok = False
                 return
-            rec.ops.append(_hold(rec, name))
+            var held_key = _hold(rec, name)
+            rec.ops.append(held_key)
             rec.ops.append(Int(items[i][1]._obj_ptr))
         for i in range(len(items)):  # driver-loop: over a stored mapping's values (nested words, once per record)
             content_value(rec, items[i][1], depth + 1, limit, sets_fail)
