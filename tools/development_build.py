@@ -1012,6 +1012,115 @@ def summary(plan):
     print("counts " + json.dumps(plan["counts"], sort_keys=True))
 
 
+def collect(report, result, evidence):
+    report["results"].append(result)
+    report["compile_attempts"] += int("command" in result)
+    atomic_json(evidence / "result.json", report)
+    print(f"{result['mode']} {result['stem']} {result['state']} rc={result['exit_code']}")
+
+
+def host_facts(report, resources=None):
+    """Cores and memory of this host, recorded in the summary for the next packing."""
+    cores, available = resources or available_resources()
+    report.update(host_cores=cores, host_memory_bytes=physical_memory(), host_available_bytes_at_start=available)
+    return cores, available
+
+
+def serial_build(plan, wanted, args, env, cache, evidence, limits, report):
+    """--parallel 1: one compiler at a time under the serial budget."""
+    workers = planned_compiler_workers(plan)
+    recorded = max(r["recorded_need_bytes"] for r in wanted)
+    floor = GROUP_FLOOR_BYTES.get(plan["platform"], 0)
+    budget = resource_budget(1, workers, args.memory_per_job_gib, floor_bytes=floor, recorded_bytes=recorded)
+    host_facts(report, (budget["cores"], budget["available_bytes"]))
+    env[GUARD_ENV] = json.dumps(dict(budget, **limits))
+    report.update(resource_budget=budget, jobs=budget["jobs"], groups_concurrent_max=1,
+                  scheduler={"parallel": 1, "slots": 1})
+    atomic_json(evidence / "result.json", report)
+    for row in wanted:  # driver-loop: over development groups, one compiler at a time
+        result = compile_group(row, REPO, cache, env, evidence)
+        result["groups_running_at_launch"] = 1
+        collect(report, result, evidence)
+
+
+def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap, futures):
+    """Pack groups by recorded need; biggest first; one group per core at most.
+
+    Every launched future is appended to `futures` so the caller keeps the
+    verdicts of started workers when the run stops."""
+    cores, available_at_start = host_facts(report)
+    total = report["host_memory_bytes"]
+    baseline = int(MEMORY_FRACTION * available_at_start)
+    ceiling = max(baseline, int(MEMORY_FRACTION * total))
+    floor = GROUP_FLOOR_BYTES.get(plan["platform"], 0)
+    needs = group_needs(plan["groups"], wanted, args.memory_per_job_gib, floor)
+    gib = 2 ** 30
+    for row, (need, source) in zip(wanted, needs):
+        if need > ceiling:
+            raise BuildError(
+                f"group {row['mode']}:{row['stem']} needs {need / gib:.1f} GiB ({source}) and cannot fit: this "
+                f"machine allows {ceiling / gib:.1f} GiB (80% of {total / gib:.1f} GiB) and "
+                f"{baseline / gib:.1f} GiB is available now; free memory or use a larger machine. If you "
+                f"measured a smaller peak for these groups, pass --memory-per-job-gib <GiB>.")
+    # Fixed compiler thread counts (caller's MOJOLEARN_COMPILE_JOBS, AMD's)
+    # take their cores; scheduler-chosen counts start at one per group.
+    fixed = max((r["compile_jobs"] for r in wanted if not r.get("auto_compile_jobs")), default=1)
+    slots = max(1, cores // fixed)
+    if cap is not None:
+        slots = min(slots, cap)
+    queue, queue_needs = packing_order(wanted, [need for need, _ in needs])
+    sources = {(r["mode"], r["stem"]): source for r, (_, source) in zip(wanted, needs)}
+    scheduler = {"parallel": "auto" if cap is None else cap, "slots": slots, "budget_bytes": baseline,
+                 "ceiling_bytes": ceiling, "fixed_compiler_workers": fixed,
+                 "memory_fraction": MEMORY_FRACTION}
+    report.update(scheduler=scheduler, resource_budget=scheduler, jobs=slots, groups_concurrent_max=0)
+    atomic_json(evidence / "result.json", report)
+    running = {}
+    with ThreadPoolExecutor(max_workers=slots) as pool:
+        try:
+            while queue or running:  # driver-loop: over scheduler ticks of development groups
+                if queue and not build_process.cancelled():
+                    available_now = available_resources()[1]
+                    reserved = [need for _, need, _ in running.values()]
+                    budget = current_budget(baseline, available_now, reserved)
+                    picks = next_launches(queue_needs, reserved, budget, slots, ceiling)
+                    concurrent = len(running) + len(picks)
+                    for index in sorted(picks, reverse=True):  # driver-loop: over groups started this tick
+                        row, need = queue.pop(index), queue_needs.pop(index)
+                        if row.get("auto_compile_jobs"):
+                            jobs = threads_per_group(cores, concurrent)
+                            # Keyed: the plan row takes the key of the compiler it runs.
+                            row.update(with_compile_jobs(row, env, jobs, plan["platform"]))
+                        group_limits = dict(limits, jobs=slots, cores=cores, available_bytes=available_now,
+                                            compiler_workers=row["compile_jobs"], rss_bytes=need,
+                                            min_available_bytes=pressure_floor(
+                                                available_at_start, baseline, available_now, need),
+                                            reservation_source=sources[(row["mode"], row["stem"])])
+                        group_env = dict(env, **{GUARD_ENV: json.dumps(group_limits)})
+                        if row.get("auto_compile_jobs"):
+                            group_env["MOJOLEARN_COMPILE_JOBS"] = str(row["compile_jobs"])
+                        future = pool.submit(compile_group, row, REPO, cache, group_env, evidence)
+                        futures.append(future)
+                        running[future] = (row, need, concurrent)
+                    report["groups_concurrent_max"] = max(report["groups_concurrent_max"], len(running))
+                if not running:
+                    break
+                done, _ = wait(list(running), timeout=SCHEDULER_POLL_SECONDS, return_when=FIRST_COMPLETED)
+                for future in done:  # driver-loop: over groups finished this tick
+                    row, need, concurrent = running.pop(future)
+                    result = future.result()
+                    result.update(groups_running_at_launch=concurrent, need_bytes=need,
+                                  need_source=sources[(row["mode"], row["stem"])])
+                    collect(report, result, evidence)
+        except BaseException:
+            # Cancel before ThreadPoolExecutor.__exit__ waits. Its
+            # workers' guarded process groups must stop together.
+            build_process.cancel_active()
+            for future in futures:
+                future.cancel()
+            raise
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("plan", "build"))
@@ -1020,8 +1129,11 @@ def main(argv=None):
     parser.add_argument("--cache", type=Path, default=Path.home() / ".cache/mojolearn-development")
     parser.add_argument("--json", type=Path, help="write complete plan/provenance")
     parser.add_argument("--evidence", type=Path)
-    parser.add_argument("--jobs", type=int, default=1)
-    parser.add_argument("--memory-per-job-gib", type=float)
+    parser.add_argument("--parallel", default="auto",
+                        help="'auto' (default): pack groups by recorded peak memory; N: at most N groups; 1: serial")
+    parser.add_argument("--jobs", type=int, help="older spelling of --parallel N")
+    parser.add_argument("--memory-per-job-gib", type=float,
+                        help="need of a group with no recorded peak (GiB)")
     parser.add_argument("--group-seconds", type=float,
                         default=release_limits.get("DEVELOPMENT_BUILD_SECONDS"))
     parser.add_argument("--stall-seconds", type=float,
@@ -1032,6 +1144,7 @@ def main(argv=None):
     modes = list(dict.fromkeys(args.sets.split(",")))
     env, cache = dict(os.environ), args.cache.resolve()
     env.pop(GUARD_ENV, None)  # Private settings are made here, never inherited.
+    group_workers_env = env.pop(GROUP_WORKERS_ENV, None)  # scheduling only
     evidence = args.evidence or (Path.home() / "mojolearn-evidence/development-builds" /
         (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + str(os.getpid())))
     report = {"schema": SCHEMA, "state": "planning", "results": [], "release_qualified": False,
@@ -1048,8 +1161,7 @@ def main(argv=None):
         limits = dict(seconds=positive_seconds(args.group_seconds, "--group-seconds"),
                       stall_seconds=positive_seconds(args.stall_seconds, "--stall-seconds"),
                       lock_seconds=positive_seconds(args.lock_seconds, "--lock-seconds"))
-        if args.jobs < 1:
-            raise BuildError("--jobs must be positive")
+        cap = group_cap(parse_parallel(args.parallel), args.jobs, group_workers_env)
         if args.memory_per_job_gib is not None:
             positive_seconds(args.memory_per_job_gib, "--memory-per-job-gib")
         report["limits"] = limits
@@ -1070,40 +1182,16 @@ def main(argv=None):
             summary(plan)
             if not plan["toolchain_available"]:
                 raise BuildError("install the pinned default pixi environment before building")
-            workers = planned_compiler_workers(plan)
             wanted = build_submission_order(
                 r for r in plan["groups"] if r["selected"] and r["action"] == "build")
             # A warm cache has no compiler to reserve or start. The generator
             # above still runs under a guard before keys are computed.
-            jobs = 0
-            if wanted:
-                recorded = max(r["recorded_need_bytes"] for r in wanted)
-                floor = GROUP_FLOOR_BYTES.get(plan["platform"], 0)
-                budget = resource_budget(args.jobs, workers, args.memory_per_job_gib,
-                                         floor_bytes=floor, recorded_bytes=recorded)
-                jobs = budget["jobs"]
-                env[GUARD_ENV] = json.dumps(dict(budget, **limits))
-                report["resource_budget"] = budget
-            report.update(plan=plan, jobs=jobs, state="building", compile_attempts=0)
-            atomic_json(evidence / "result.json", report)
-            if wanted:
-                with ThreadPoolExecutor(max_workers=jobs) as pool:
-                    futures = []
-                    try:
-                        futures = [pool.submit(compile_group, row, REPO, cache, env, evidence) for row in wanted]
-                        for future in as_completed(futures):
-                            result = future.result()
-                            report["results"].append(result)
-                            report["compile_attempts"] += int("command" in result)
-                            atomic_json(evidence / "result.json", report)
-                            print(f"{result['mode']} {result['stem']} {result['state']} rc={result['exit_code']}")
-                    except BaseException:
-                        # Cancel before ThreadPoolExecutor.__exit__ waits. Its
-                        # workers' guarded process groups must stop together.
-                        build_process.cancel_active()
-                        for future in futures:
-                            future.cancel()
-                        raise
+            report.update(plan=plan, jobs=0, state="building", compile_attempts=0)
+            if wanted and cap == 1:
+                serial_build(plan, wanted, args, env, cache, evidence, limits, report)
+            elif wanted:
+                parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap, futures)
+            atomic_json(evidence / "plan.json", plan)  # keys as built (scheduler thread counts)
             if any(r["exit_code"] for r in report["results"]):
                 raise BuildError("one or more group builds failed; existing loader indexes were preserved")
             # Support artifacts (portable math) are small serial C builds,

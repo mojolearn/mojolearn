@@ -942,3 +942,184 @@ def test_standard_development_optimization_flags_preserved():
     assert dev.build_environment("identical", dict(ENV, MOJOLEARN_MOJO_BUILD_FLAGS=""), "linux")["MOJOLEARN_MOJO_BUILD_FLAGS"] == ""
     assert "MOJOLEARN_MOJO_BUILD_FLAGS" not in dev.build_environment("identical", ENV, "linux")
     assert dev.build_environment("identical", dict(ENV, MOJOLEARN_MOJO_BUILD_FLAGS="-O2"), "linux")["MOJOLEARN_MOJO_BUILD_FLAGS"] == "-O2"
+
+
+# Parallel group scheduler (--parallel auto). Pure functions and a main run
+# with a fake compiler; nothing here compiles.
+
+def test_packing_respects_the_memory_budget_and_the_slot_count():
+    # Biggest first: 9 + 4 + 2 + 1 fit 16; the second 4 would make 20.
+    assert dev.next_launches([9 * GIB, 4 * GIB, 4 * GIB, 2 * GIB, 1 * GIB], [], 16 * GIB, 8, 32 * GIB) == [0, 1, 3, 4]
+    # At most one group per slot (core or cap).
+    assert dev.next_launches([GIB] * 10, [], 100 * GIB, 3, 100 * GIB) == [0, 1, 2]
+    # Running groups keep their reservation and their slots.
+    assert dev.next_launches([3 * GIB, 2 * GIB], [12 * GIB], 16 * GIB, 8, 32 * GIB) == [0]
+    assert dev.next_launches([GIB, GIB], [GIB, GIB], 100 * GIB, 3, 100 * GIB) == [0]
+    assert dev.next_launches([], [GIB], 100 * GIB, 3, 100 * GIB) == []
+
+
+def test_a_group_larger_than_the_budget_runs_alone_or_is_refused():
+    # The 16 GiB Mac: tokenizer host needs ~14 GiB, 80% of available is 10.
+    assert dev.next_launches([14 * GIB, GIB], [], 10 * GIB, 8, int(12.8 * GIB)) == [0]
+    # While it runs nothing fits beside it.
+    assert dev.next_launches([GIB], [14 * GIB], 10 * GIB, 8, int(12.8 * GIB)) == []
+    with pytest.raises(dev.BuildError, match="cannot fit.*--memory-per-job-gib"):
+        dev.next_launches([20 * GIB], [], 10 * GIB, 8, int(12.8 * GIB))
+
+
+def test_biggest_recorded_need_starts_first():
+    rows = [{"mode": "host", "stem": name, "fields": {"source": {"files": ["f"] * files}}}
+            for name, files in (("small", 50), ("big", 1), ("mid", 10), ("tie", 99))]
+    ordered, needs = dev.packing_order(rows, [GIB, 12 * GIB, 4 * GIB, GIB])
+    assert [r["stem"] for r in ordered] == ["big", "mid", "tie", "small"]
+    assert needs == [12 * GIB, 4 * GIB, GIB, GIB]
+
+
+def test_missing_records_take_the_flag_then_the_set_maximum_then_the_floor():
+    rows = [{"mode": "host", "stem": "a", "recorded_need_bytes": 3 * GIB},
+            {"mode": "host", "stem": "b", "recorded_need_bytes": 0},
+            {"mode": "host", "stem": "c", "recorded_need_bytes": 7 * GIB},
+            {"mode": "identical", "stem": "d", "recorded_need_bytes": 0}]
+    assert dev.group_needs(rows, rows, None, 12 * GIB) == [
+        (3 * GIB, "recorded"), (7 * GIB, "set-max"), (7 * GIB, "recorded"), (12 * GIB, "group-floor")]
+    assert dev.group_needs(rows, rows, 2, 12 * GIB) == [
+        (3 * GIB, "recorded"), (2 * GIB, "memory-per-job-gib"), (7 * GIB, "recorded"),
+        (2 * GIB, "memory-per-job-gib")]
+
+
+def test_group_cap_variable_parallel_and_jobs():
+    assert dev.group_cap(None, None, None) is None
+    assert dev.group_cap(dev.parse_parallel("auto"), None, "6") == 6
+    assert dev.group_cap(dev.parse_parallel("4"), None, "6") == 4
+    assert dev.group_cap(None, 2, "") == 2
+    assert dev.group_cap(dev.parse_parallel("1"), None, None) == 1
+    for bad in ("0", "-1", "x"):
+        with pytest.raises(dev.BuildError):
+            dev.parse_parallel(bad)
+    with pytest.raises(dev.BuildError, match=dev.GROUP_WORKERS_ENV):
+        dev.group_cap(None, None, "0")
+
+
+def test_threads_budget_and_pressure_floor():
+    assert dev.threads_per_group(16, 3) == 5
+    assert dev.threads_per_group(4, 9) == 1
+    assert dev.threads_per_group(192, 1) == 192
+    # Other load shrinks the budget; our own running groups do not.
+    assert dev.current_budget(80 * GIB, 100 * GIB, []) == 80 * GIB
+    assert dev.current_budget(80 * GIB, 70 * GIB, [30 * GIB]) == 80 * GIB
+    assert dev.current_budget(80 * GIB, 50 * GIB, []) == 40 * GIB
+    # The 20% system reserve, lowered for a group that runs alone above the budget.
+    assert dev.pressure_floor(100 * GIB, 80 * GIB, 100 * GIB, 30 * GIB) == 20 * GIB
+    assert dev.pressure_floor(10 * GIB, 8 * GIB, 10 * GIB, 9 * GIB) == 1 * GIB
+
+
+def test_group_worker_cap_is_never_a_key_field(repo, tmp_path):
+    assert keys(plan(repo, tmp_path)) == keys(plan(repo, tmp_path, dict(ENV, **{dev.GROUP_WORKERS_ENV: "3"})))
+
+
+def test_auto_compile_threads_follow_the_caller_and_amd():
+    assert dev.auto_compile_jobs("identical", {"MOJOLEARN_GPU_ARCHS": "sm_89"}, "linux")
+    assert dev.auto_compile_jobs("host", {}, "darwin")
+    assert not dev.auto_compile_jobs("host", {"MOJOLEARN_COMPILE_JOBS": "1"}, "darwin")
+    assert not dev.auto_compile_jobs("identical", {"MOJOLEARN_GPU_ARCHS": "gfx942"}, "linux")
+    assert dev.auto_compile_jobs("host", {"MOJOLEARN_GPU_ARCHS": "gfx942"}, "linux")
+
+
+def fake_group_compiler(seen):
+    def compiler(command, root, env, log):
+        seen.append((command[command.index("--group") + 1], env["MOJOLEARN_COMPILE_JOBS"],
+                     json.loads(env[dev.GUARD_ENV])))
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (command[command.index("--group") + 1] + ".so")).write_bytes(b"built")
+        Path(str(log) + ".execution.json").write_text(json.dumps(
+            {"complete": True, "status": "passed", "exit_code": 0, "peak_rss_bytes": GIB}))
+        return 0
+    return compiler
+
+
+def test_main_packs_groups_keys_their_threads_and_reuses_them(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    cache = tmp_path / "cache"
+    cache_plan_support = plan(repo, tmp_path)
+    for row in cache_plan_support["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    groups = len(cache_plan_support["groups"])
+    # No records: every group needs the 12 GiB Linux floor; 80 GiB holds all of them.
+    assert len(seen) == groups == report["compile_attempts"]
+    assert report["groups_concurrent_max"] == groups
+    assert report["host_cores"] == 16 and report["host_memory_bytes"] == 128 * GIB
+    assert report["scheduler"]["parallel"] == "auto" and report["scheduler"]["slots"] == 16
+    assert {jobs for _, jobs, _ in seen} == {str(16 // groups)}
+    assert all(limits["rss_bytes"] == 12 * GIB and limits["min_available_bytes"] == 20 * GIB
+               for _, _, limits in seen)
+    assert all(r["workers_at_launch"] == 16 // groups and r["peak_rss_bytes"] == GIB
+               and r["groups_running_at_launch"] == groups for r in report["results"])
+    assert report["state"] == "activated"
+    # The keys differ from the platform default's, and the next plan finds them.
+    built = {r["stem"]: r["key"] for r in report["plan"]["groups"]}
+    assert built != keys(cache_plan_support)
+    again = plan(repo, tmp_path)
+    assert keys(again) == built and all(r["action"] == "reuse" for r in again["groups"])
+    # Recorded peaks (1 GiB passed -> 1.2 GiB) size the next packing.
+    assert all(abs(r["recorded_need_bytes"] - int(1.2 * GIB)) <= 1 for r in again["groups"])
+
+
+def test_parallel_one_is_the_serial_budget(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    cache = tmp_path / "cache"
+    for row in plan(repo, tmp_path)["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence),
+                     "--parallel", "1"]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert report["jobs"] == 1 and report["groups_concurrent_max"] == 1
+    assert report["scheduler"] == {"parallel": 1, "slots": 1}
+    # The old serial run: platform default compiler workers, 80% of available memory.
+    assert {jobs for _, jobs, _ in seen} == {"2"}
+    assert all(limits["jobs"] == 1 and limits["rss_bytes"] == 80 * GIB for _, _, limits in seen)
+    assert report["state"] == "activated"
+
+
+def test_group_worker_variable_caps_concurrency(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev.os, "environ", dict(ENV, **{dev.GROUP_WORKERS_ENV: "2"}))
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    cache = tmp_path / "cache"
+    for row in plan(repo, tmp_path)["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert report["scheduler"]["slots"] == 2 and report["groups_concurrent_max"] <= 2
+    assert all(dev.GROUP_WORKERS_ENV not in r["fields"]["environment"] for r in report["plan"]["groups"])
+    assert report["state"] == "activated"
+
+
+def test_caller_compile_jobs_keep_their_keys_under_the_scheduler(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    env = dict(ENV, MOJOLEARN_COMPILE_JOBS="1")
+    monkeypatch.setattr(dev.os, "environ", dict(env))
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    cache = tmp_path / "cache"
+    before = plan(repo, tmp_path, env)
+    for row in before["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert {jobs for _, jobs, _ in seen} == {"1"}
+    assert {r["stem"]: r["key"] for r in report["plan"]["groups"]} == keys(before)
+    assert report["state"] == "activated"
