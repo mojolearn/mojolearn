@@ -302,6 +302,63 @@ class AmdRouteTests(unittest.TestCase):
         self.assertEqual(len(list(hip.workdir.glob("hip-gfx942.log.failed-*"))), 1)
 
 
+class StepTableTests(unittest.TestCase):
+    """The step graph around the readiness analysis (lane post-readiness-off-mac, 2026-11-07)."""
+
+    def test_readiness_needs_only_the_freeze_and_gates_both_builds(self):
+        self.assertIn("readiness", release.Release.STEPS)
+        self.assertEqual(release.NEEDS["readiness"], ["freeze-commit"])
+        self.assertEqual(release.PIPELINE_OF["readiness"], "common")
+        # no resource: it runs beside cross-compile (GitHub), and before the Mac build by NEEDS
+        self.assertIsNone(release.RESOURCE["readiness"])
+        self.assertNotIn("readiness", release.NEEDS["cross-compile"])
+        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "cross-compile", "readiness"])
+        self.assertEqual(release.NEEDS["macos-build"], ["reuse-plan", "readiness"])
+        steps = release.Release.STEPS
+        self.assertLess(steps.index("freeze-commit"), steps.index("readiness"))
+        self.assertLess(steps.index("readiness"), steps.index("linux-builds"))
+        self.assertLess(steps.index("readiness"), steps.index("macos-build"))
+        self.assertIn("readiness", release.Release.PLAN_STEP_KINDS)
+
+    def test_linux_pack_takes_a_mac_slot_not_the_mac_token(self):
+        # the token is exclusive: with it, linux-pack waited behind the whole macOS pipeline
+        self.assertIsNone(release.RESOURCE["linux-pack"])
+        self.assertEqual(release.RESOURCE["macos-build"], "mac")
+        source = pathlib.Path(release.__file__).read_text()
+        body = source.split("    def step_linux_pack(self):", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn('"mac_slot.py"), "run", "--"] + args', body)
+
+    def test_readiness_runs_the_analysis_through_prefetch_on_every_core(self):
+        import release_requirement_dependencies as dependencies
+        from types import SimpleNamespace
+        seen = {}
+
+        def prefetch(compute, *, jobs, worker, say, ran):
+            seen.update(jobs=jobs, worker=worker, compute=compute)
+            ran.append(dict(token="t", seconds=1.0, ok=True))
+            return dict(requirements={"a": {}, "b": {}})
+        from unittest import mock
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("MOJOLEARN_ADMISSION_JOBS", "MOJOLEARN_ADMISSION_WORKER")}
+        ctx = SimpleNamespace(dry=False, say=lambda line: None, readiness_manifest=lambda: None)
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(dependencies, "prefetch", prefetch):
+            result, data = release.Release.step_readiness(ctx)
+        self.assertEqual(seen["jobs"], os.cpu_count() or 1)
+        self.assertEqual(seen["worker"], "local")
+        self.assertIs(seen["compute"], ctx.readiness_manifest)
+        self.assertIn("2 requirement unit(s)", result)
+        self.assertEqual(data["snapshots"], 1)
+        self.assertEqual(data["snapshot_jobs"], os.cpu_count() or 1)
+
+    def test_dry_readiness_runs_nothing(self):
+        from types import SimpleNamespace
+
+        def never():
+            raise AssertionError("a dry run never runs the analysis")
+        ctx = SimpleNamespace(dry=True, say=lambda line: None, readiness_manifest=never)
+        self.assertIn("would run the frozen dependency analysis", release.Release.step_readiness(ctx))
+
+
 class ReceiptTests(unittest.TestCase):
     def test_smoke_receipt_must_be_about_this_wheel(self):
         with tempfile.TemporaryDirectory() as d:
@@ -372,6 +429,12 @@ class RunTests(unittest.TestCase):
             else:
                 self.assertIn("-- " + step, out.stdout)
         self.assertFalse(self.state.exists())
+        # THE READINESS ANALYSIS GOES FIRST (lane post-readiness-off-mac, 2026-11-07): the step runs, and is
+        # reported done, before linux-builds or macos-build starts, so neither waits on it beside the Mac build.
+        planned = out.stdout.index("would run the frozen dependency analysis")
+        self.assertLess(out.stdout.index("-- readiness"), planned)
+        self.assertLess(planned, out.stdout.index("-- linux-builds"))
+        self.assertLess(planned, out.stdout.index("-- macos-build"))
         return out
 
     def test_dry_run_without_gpu_smoke_skips_every_gpu_column(self):
