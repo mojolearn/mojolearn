@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Full native model gradients against an independent explicit operation chain."""
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -90,6 +90,11 @@ def test_native_samba_complete_gradient_matches_explicit_chain(monkeypatch, laye
                      "samba_afn_norm_head_forward", "samba_afn_tail_train",
                      "samba_afn_embedding_backward_tied"):
             entries.pop(name, None)
+        # The optional-entry record is read once per compiled binding and kept
+        # keyed on `entries.canonical` (bindings/p3_samba_caps.mojo), so a
+        # binding without the fused entries is a different module. Stand one in
+        # as the key; the entries themselves still come from the namespace.
+        entries["canonical"] = ModuleType("mojolearn_samba_per_op_binding")
         monkeypatch.setitem(bridge.CONTEXT, "entries", SimpleNamespace(**entries))
     with monkeypatch.context() as patch:
         _poison(patch)
