@@ -2,6 +2,7 @@
 """Worker lifecycle tests. Subprocesses here execute Python only, never a GPU fit."""
 import json
 import os
+import signal
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -244,7 +245,11 @@ for i, r in enumerate(requests):
     stop = worker.run_batch(batch_requests(5), timeout=5, on_result=lambda i, r: seen.append((i, r["value"])))
     assert stop is None
     assert seen == [(i, f"lane{i}") for i in range(5)]
-    assert len(children) == 1 and children[0].poll() == 0
+    # One worker served all five. run_batch reaps the worker group (SIGKILL) as soon as
+    # the last result lands, so a child that wrote its last result but had not yet
+    # finished interpreter shutdown reports -9: a race with the reap, lost more often
+    # when the machine is busy (seen under pytest-xdist). Exit 0 or that reap, never a crash.
+    assert len(children) == 1 and children[0].poll() in (0, -signal.SIGKILL)
 
 
 @pytest.mark.parametrize("tail, kind, index", [

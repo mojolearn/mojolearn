@@ -34,6 +34,7 @@ The last three tests are the blast-radius guard. They are the reason this fix
 is narrow rather than "match the basename", which would have admitted eight
 `unfixed/` and `probe/` columns.
 """
+import pathlib
 import sys
 
 import pytest
@@ -563,6 +564,10 @@ def test_the_cpu_column_must_equal_the_gpu_reference(tmp_path, monkeypatch, case
     cpu_commit = 'b' * 40 if case == 'older-commit' else 'a' * 40
     table = _cpu_table(tmp_path, monkeypatch, cpu_value, cpu_commit)
     ent = table['cells']['x/base']['train']
+    # The guard imports its tools/ siblings (lane_applicability) by name; put tools/ on
+    # sys.path here instead of relying on another test file having done it earlier in
+    # the same process (it failed under pytest-xdist, where that file ran elsewhere).
+    monkeypatch.syspath_prepend(str(pathlib.Path(__file__).resolve().parents[3] / 'tools'))
     problems = _guard_problems(table)
     if case == 'agree':
         assert ent['ref'] == 'a' * 16 and isinstance(ent['cols']['cpu'], int)

@@ -191,7 +191,11 @@ def test_encoding_preserves_scalar_rank_layout_and_signed_zero():
     assert encode(x)==encode(x.copy())
 
 
-def test_inventory_regeneration_cannot_hide_a_new_unmapped_api():
+def test_inventory_regeneration_cannot_hide_a_new_unmapped_api(monkeypatch):
+    # tools/verification_endpoints.py is imported by name: put tools/ on sys.path here
+    # rather than rely on another test file having done it in the same process.
+    import pathlib
+    monkeypatch.syspath_prepend(str(pathlib.Path(__file__).resolve().parents[3] / 'tools'))
     from verification_endpoints import require_complete_mapping
     old=[{'endpoint':'existing.call'}]
     routes={'existing.call':object()}
