@@ -227,6 +227,24 @@ def connect(context, register, registry):
     context['family_msel_bindings'] = modules
     trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE, metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
     linear._XL_CONTEXT.update(native_estimator_entry=ms._NATIVE, native_estimator_context=context)
+    _connect_device_rows(registry)
+
+
+def _connect_device_rows(registry):
+    # glue: import-time ABI flag. Model selection hands these classes a
+    # fold's X as `_arena_io.DeviceRows` (bindings/msel_cv.mojo
+    # msel_device_rows_ok): every CV method of each reads X through a door
+    # that resolves it with the rows gathered on the device out of model
+    # selection's resident base. LinearRegression / Ridge: fit, predict and
+    # score through classical_check_x and the classical admission
+    # (bindings/device_rows_door.mojo). MaxAbsScaler / RobustScaler: fit and
+    # transform through x_prep_native_owner.xprep_values, which keeps the
+    # rows on the device. The same rows in the same order reach the same
+    # kernels: no bit changes (tools/test_device_rows_door_cv.py).
+    from . import linear_model, _expansion_prep as prep
+    for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler):  # glue: fixed ABI metadata connected once during package import
+        if cls in registry:
+            registry[cls]['device_rows'] = True
 
 
 def connect_estimator_defaults():
