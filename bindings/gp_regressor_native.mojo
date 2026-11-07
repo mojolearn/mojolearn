@@ -20,6 +20,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
+from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
@@ -38,6 +39,10 @@ from bindings.gp_common_native import (
 
 comptime _GPR = "mojolearn GaussianProcessRegressor"
 comptime _K_PROD = 5
+
+
+# The prepared-owner slot of a regressor's device-resident fitted state.
+comptime _GPR_RESIDENT_SLOT = "gpr_resident_fitted_v1"
 
 
 def _gpr_ext(model: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -459,10 +464,25 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
                              PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(1 if return_std else 0),
                              fields["info_"])
     _gpr_tail(fields, params)
+    var caps = gp_caps(ext)
+    var predict_name = String("gpr_predict_ptr") if (caps & 2) == 2 else String("gpr_predict")
+    if (caps & 4) == 4:
+        # Device-resident fitted state (lane ne1-a-gp-svm): X_train_, alpha_
+        # and L_ cross to the device once per fitted state; the lease word
+        # follows the pointer route's params. Lease 0 (an array the binding
+        # reads is not the field itself, or cannot be made read-only) uploads
+        # per call, as before.
+        var lease = 0
+        if xt is fields["X_train_"] and lf is fields["L_"] and dual is fields["alpha_"]:
+            lease = fitted_resident_lease(model, _GPR_RESIDENT_SLOT, ext, "gp_resident_lease",
+                                          Python.list(xt, dual, lf))
+        _ = py_call(params.append, PythonObject(lease))
+        predict_name = String("gpr_predict_resident")
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
     # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out, std_out, clamped_out;
     # n_train, n_features, n_star, n_nodes, n_ls, return_std, info (+ normalize_y, y_std, y_mean)
-    var n_clamped = family_call(gp_entry(ext, String("gpr_predict_ptr") if (gp_caps(ext) & 2) == 2 else String("gpr_predict")),
+    # (+ lease: gpr_predict_resident_binding)
+    var n_clamped = family_call(gp_entry(ext, predict_name),
         Python.list(classical_address(xt), classical_address(lf), classical_address(dual), classical_address(q),
                     classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
                     classical_address(arrays[3]), classical_address(mean), var_address,
