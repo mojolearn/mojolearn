@@ -131,7 +131,12 @@ def lin_connected_binding(context: PythonObject) raises -> PythonObject:
     # Resolve the live import-connected module once per operation. Linalg's
     # own provider supplies its compile-mode/profile metadata immediately below.
     var binding = estimator_binding(PythonObject(None), "_mojolearn_linalg", context, False)
-    py_setitem(state, "_binding_cache", binding)
+    # Row N240: the module-state entries are written only when their value
+    # changes (an unchanged binding and provider cost four identity reads,
+    # not five dict writes per call). The binding and the provider factory
+    # are still read live on every call.
+    if py_get(state, "_binding_cache") is not binding:
+        py_setitem(state, "_binding_cache", binding)
     if py_get(state, "_mode_binding") is not binding:
         py_setitem(state, "_mode_binding", binding)
         py_setitem(state, "_mode_cache", PythonObject(None))
@@ -140,8 +145,10 @@ def lin_connected_binding(context: PythonObject) raises -> PythonObject:
     var provider = PythonObject(None)
     if factory is not None:
         provider = neural_descriptor_reuse(py_get(state, "_native_provider"), factory, "mojolearn.linalg.v1", 15)
-    py_setitem(state, "_native_provider", provider)
-    py_setitem(state, "_native_provider_binding", binding)
+    if py_get(state, "_native_provider") is not provider:
+        py_setitem(state, "_native_provider", provider)
+    if py_get(state, "_native_provider_binding") is not binding:
+        py_setitem(state, "_native_provider_binding", binding)
     return binding
 
 
