@@ -22,7 +22,7 @@ from providers.python.transformer_resident_pyapi import transformer_resident_dec
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
-from bindings.native_model_records import records_stampable, model_generation
+from bindings.native_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
 from std.ffi import _Global
 
 
@@ -48,6 +48,9 @@ struct TransformerDecodeHandle(Movable, Writable):
     var batch: Int
     var params: List[Int]
     var live_state: PythonObject
+    # The block's option tail is a list the dictionary watcher cannot see
+    # edited in place: its item words are checked natively per step.
+    var tail_content: ContentRecord
 
     def __init__(out self, binding: PythonObject, block: PythonObject, state: PythonObject):
         self.binding = binding
@@ -68,6 +71,7 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.batch = 0
         self.params = List[Int]()
         self.live_state = PythonObject(None)
+        self.tail_content = ContentRecord()
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("TransformerDecodeHandle(open=", self.open, ")")
@@ -370,16 +374,17 @@ def _transformer_decode_copy(value: PythonObject, context: PythonObject) raises 
 
 def _transformer_decode_remember(hobj: PythonObject, fields: PythonObject, slots: PythonObject, context: PythonObject) raises:
     # Row N177: after a full admission (init or a step that re-admitted),
-    # keep the checked step words and the generation words that prove them.
-    # A block whose option tail is a list (editable in place, which no
-    # dictionary watcher sees) or an object with no generation keeps the full
-    # admission on every step.
+    # keep the checked step words and the generation words that prove them,
+    # plus a native content record of the option tail list (its in-place
+    # edits change no dictionary). An object with no generation, or a tail
+    # the content record cannot check, keeps the full admission every step.
     var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     var block = h[].block
     var state = h[].state
     var live_block = neural_block_fields(block, context)
-    var tail_fixed = py_type(py_get(live_block, "_opts_tail")) is native_loaded_module("builtins").tuple
-    var block_word = model_generation(block) if tail_fixed and records_stampable(block) else 0
+    var tail = ContentRecord()
+    content_value(tail, py_get(live_block, "_opts_tail"), 0, 2, False)
+    var block_word = model_generation(block) if tail.ok and records_stampable(block) else 0
     var state_word = model_generation(state) if records_stampable(state) else 0
     var width = Int(py=fields["d_model"])
     var batch = Int(py=slots["batch_size"])
@@ -390,6 +395,7 @@ def _transformer_decode_remember(hobj: PythonObject, fields: PythonObject, slots
     h[].batch = batch
     h[].params = params^
     h[].live_state = live
+    h[].tail_content = tail^
     h[].block_generation = block_word
     h[].state_generation = state_word
 
@@ -402,7 +408,10 @@ def _transformer_decode_unchanged(hobj: PythonObject) raises -> Bool:
     var state = h[].state
     var block_word = h[].block_generation
     var state_word = h[].state_generation
-    return model_generation(block) == block_word and model_generation(state) == state_word
+    if model_generation(block) != block_word or model_generation(state) != state_word:
+        return False
+    h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    return content_same(h[].tail_content)
 
 
 def transformer_decode_init(session: PythonObject, block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
