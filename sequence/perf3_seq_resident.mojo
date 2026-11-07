@@ -29,10 +29,12 @@ than `_KEEP_BYTES` is not kept and is uploaded per call as before.
 THREADS AND DEATH (lane ne1-a-cluster-spectral, owed row N172). Every
 store read and write takes the store's lock word, so two descriptor entries
 on two threads (a GIL released around a device entry) never interleave a
-lookup, an upload record and an eviction. A model's death is posted by its
-death callback (`seq_resident_owner_died`,
-sequence/perf3_seq_resident_words.mojo); every call drains the posts first
-and frees those models' blocks, after a synchronize of the shared context,
+lookup, an upload record and an eviction. A model's death is posted on the
+records module's dead-key ring (`records_release`,
+bindings/native_model_records.mojo); every call drains it first
+(`seq_resident_take_dead`, sequence/perf3_seq_resident_words.mojo) and
+frees those models' blocks (every unpinned block when the ring overflowed
+since the last drain), after a synchronize of the shared context,
 before any lookup, so a block leaves at the model's death instead of
 waiting for the least-recently-used eviction, and a new model at a reused
 address never meets the old block. `seq_resident_release_owner` frees one
@@ -149,8 +151,16 @@ def _drop_owner_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin], mu
 
 
 def _drain_dead_locked(store: UnsafePointer[_SeqResidentStore, MutAnyOrigin], mut ex: DeviceExec) raises:
-    """Free the blocks of every model whose death was posted."""
-    var dead = seq_resident_take_dead()
+    """Free the blocks of every model whose death was posted; every unpinned
+    block when the records ring overflowed since the last drain."""
+    var forget_all = False
+    var dead = seq_resident_take_dead(forget_all)
+    if forget_all:
+        var i = len(store[].owners) - 1
+        while i >= 0:  # driver-loop: over resident fitted-model slots (at most _SLOTS), newest first so pops keep indices
+            if store[].pins[i] == 0:
+                _evict_locked(store, ex, i)
+            i -= 1
     for j in range(len(dead)):  # driver-loop: over posted model deaths
         _drop_owner_locked(store, ex, dead[j])
 
