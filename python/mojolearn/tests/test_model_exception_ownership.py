@@ -10,7 +10,7 @@ from mojolearn.tests.test_models_loader import _llama_config, _llama_tensors, _w
 
 
 @pytest.mark.parametrize("case", ["plan", "config", "missing_tensor", "bad_vocab"])
-def test_custom_exception_refcount_is_stable_for_64_refusals(tmp_path, case):
+def test_custom_exception_refcount_is_stable_for_8_refusals(tmp_path, case):
     if case == "plan":
         value = HFConfig({"model_type": "unknown"})
         operation = lambda: plan_for(value)
@@ -33,7 +33,9 @@ def test_custom_exception_refcount_is_stable_for_64_refusals(tmp_path, case):
 
     gc.collect()
     before = sys.getrefcount(UnsupportedModel)
-    for _ in range(64):
+    # The count is checked after every refusal, so a lost reference fails on
+    # the first one; eight repeats show it as plainly as 64 did.
+    for _ in range(8):
         try:
             operation()
         except UnsupportedModel as error:
