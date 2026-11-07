@@ -2,7 +2,8 @@
 # Fixed scorer records call verified compiled estimator/metric entries. The
 # Python function objects identify import-time plans; they are never invoked.
 from bindings.native_loaded_module import NativeModules, native_loaded_module
-from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
+from bindings.native_class_admission import class_record, class_admit
+from bindings.native_model_records import RECORDS_PREPARED, ContentRecord, records_stamped_get, records_stamped_put
 from bindings.cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -37,6 +38,8 @@ def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> Py
 
 #: The class-record slot of native_class_admission for the scorer class rows.
 comptime _SCORER_CLASS_SLOT = "msel_scorer_class_v1"
+#: The stamped-record name of a scorer's field-key admission (family RECORDS_PREPARED).
+comptime _SCORER_FIELDS_RECORD = "msel_scorer_fields_v1"
 
 
 def _scorer_class(context: PythonObject) raises -> PythonObject:
@@ -94,16 +97,22 @@ def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> Py
     if py_type(scorer) is not cls:
         raise Error("TypeError: Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric")
     var fields = py_call(context["family_msel_scorer_fields"], scorer, cls)
-    # N067: the exact-str key admission once per dictionary state
-    # (dictionary watchers: any insertion, replacement, deletion or clear
-    # forces the full scan again); every call without watchers.
-    if not dict_keys_admitted(fields):
+    # N067: the exact-str key admission once per scorer state: a stamped
+    # record of the scorer (bindings/native_model_records.mojo, keyed by the
+    # scorer's identity, released when it dies). Its generation word follows
+    # the scorer's instance dictionary (any insertion, replacement, deletion
+    # or clear misses), and the keys are all that this scan reads, so the
+    # record needs no content words. Without dictionary watchers (Python <
+    # 3.12) the scan runs on every call.
+    var hooks = context["family_msel_scorer_hooks"]
+    var stamped = records_stamped_get(RECORDS_PREPARED, scorer, _SCORER_FIELDS_RECORD)
+    if stamped is None or stamped is not hooks:
         var keys = py_call(b.list, fields.keys())
         for k in range(len(keys)):  # driver-loop: exact scorer keys before metadata lookup
             if py_type(keys[k]) is not b.str:
                 raise Error("TypeError: native scorer fields require exact string keys")
         if py_type(fields) is b.dict:
-            dict_keys_admit(fields)
+            _ = records_stamped_put(RECORDS_PREPARED, scorer, _SCORER_FIELDS_RECORD, ContentRecord(), hooks)
     _ = msel_metric_plan(fields["_score_func"], context)
     return fields
 
