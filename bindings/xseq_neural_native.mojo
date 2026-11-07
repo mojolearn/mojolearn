@@ -285,10 +285,12 @@ def xseq_readonly_view(value: PythonObject) raises -> PythonObject:
     return py_call(py_type(value), value.shape, dtype=value.dtype, buffer=view)
 
 
-def _xseq_array_frozen(value: PythonObject, freeze: Bool) raises -> Bool:
+def _xseq_array_frozen(value: PythonObject, freeze: Bool, ndarray: PythonObject) raises -> Bool:
     """Whether `value` is an exact ndarray that is read-only (after marking
-    it so when `freeze`); False for anything else."""
-    var ndarray = native_loaded_module("numpy").ndarray
+    it so when `freeze`); False for anything else. `ndarray` is the type the
+    bridge connected (`context["xseq_ndarray"]`): NumPy is not an
+    import-time module connection, so `native_loaded_module("numpy")`
+    refuses."""
     if py_type(value) is not ndarray:
         return False
     var flags = value.flags
@@ -297,20 +299,20 @@ def _xseq_array_frozen(value: PythonObject, freeze: Bool) raises -> Bool:
     return not Bool(py=flags.writeable)
 
 
-def _xseq_field_frozen(value: PythonObject, freeze: Bool) raises -> Bool:
+def _xseq_field_frozen(value: PythonObject, freeze: Bool, ndarray: PythonObject) raises -> Bool:
     """One fitted field: an array, or the arrays of an exact list or tuple
     (`coefs_`, `intercepts_`)."""
     var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if kind is b.list or kind is b.tuple:
         for i in range(len(value)):  # driver-loop: over fitted layer arrays
-            if not _xseq_array_frozen(value[i], freeze):
+            if not _xseq_array_frozen(value[i], freeze, ndarray):
                 return False
         return True
-    return _xseq_array_frozen(value, freeze)
+    return _xseq_array_frozen(value, freeze, ndarray)
 
 
-def _xseq_params_frozen(first: PythonObject, second: PythonObject, freeze: Bool) raises -> Int:
+def _xseq_params_frozen(first: PythonObject, second: PythonObject, freeze: Bool, context: PythonObject) raises -> Int:
     """p3-cnn-sequence-tsa: replaces the per-predict FNV-1a64 hash of every
     fitted host byte (pass 2 H2). The record stamp is 1 when every fitted
     array of `first` (and `second`, unless None) is read-only (made so here
@@ -322,9 +324,10 @@ def _xseq_params_frozen(first: PythonObject, second: PythonObject, freeze: Bool)
     caller turns writeable again fails the check on the next predict and the
     record is rebuilt. Cost: one flags read per array, not one pass over the
     bytes."""
-    if not _xseq_field_frozen(first, freeze):
+    var ndarray = context["xseq_ndarray"]
+    if not _xseq_field_frozen(first, freeze, ndarray):
         return 0
-    if second is not None and not _xseq_field_frozen(second, freeze):
+    if second is not None and not _xseq_field_frozen(second, freeze, ndarray):
         return 0
     return 1
 
@@ -474,7 +477,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var params: PythonObject
     var record = _record_get(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None))
     # a record is valid while params_ stays read-only (p3-cnn-sequence-tsa)
-    if record is not None and _xseq_params_frozen(source_params, PythonObject(None), False) == 0:
+    if record is not None and _xseq_params_frozen(source_params, PythonObject(None), False, context) == 0:
         prepared_drop(mods, _RNN_PARAMS_SLOT, model)
         record = PythonObject(None)
     var token = 0
@@ -483,7 +486,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
         token = Int(py=record[2])
     else:
         params = xseq_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
-        var stamp = _xseq_params_frozen(source_params, PythonObject(None), True)
+        var stamp = _xseq_params_frozen(source_params, PythonObject(None), True, context)
         token = _record_put_token(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params), stamp)
     var ip = _rnn_ints(model, fields)
     var network = net_of(ip)
@@ -815,7 +818,7 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
     if packed is not None and Int(py=packed[3]) != columns:
         packed = PythonObject(None)
     # a packed copy is valid while the fitted arrays stay read-only (p3-cnn-sequence-tsa)
-    if packed is not None and _xseq_params_frozen(coefs, intercepts, False) == 0:
+    if packed is not None and _xseq_params_frozen(coefs, intercepts, False, context) == 0:
         prepared_drop(mods, _MLP_PACKED_SLOT, model)
         packed = PythonObject(None)
     var operands: PythonObject
@@ -825,7 +828,7 @@ def _mlp_forward(model: PythonObject, fields: PythonObject, source: PythonObject
         token = Int(py=packed[5])
     else:
         operands = _mlp_pack(coefs, intercepts, columns, context)
-        var stamp = _xseq_params_frozen(coefs, intercepts, True)
+        var stamp = _xseq_params_frozen(coefs, intercepts, True, context)
         token = _record_put_token(mods, _MLP_PACKED_SLOT, model, coefs, intercepts, operands, stamp)
     var params = operands[0]
     var hidden_widths = operands[1]
