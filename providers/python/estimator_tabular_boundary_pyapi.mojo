@@ -52,7 +52,10 @@ def _refusal(error: Error, fitting: Bool, nested: Bool, rows: Int, columns: Int,
                 message = (String("Input") if fitting else String("Input X")) + " contains NaN or infinity (" + name + ": " + text + ")"
                 break
     if message.byte_length() == 0 and fitting and not nested:
-        var value_error = original is b.ValueError or (not pending and not text.startswith("TypeError:") and not text.startswith("RuntimeError:") and not text.startswith("ImportError:") and not text.startswith("AttributeError:") and not text.startswith("OverflowError:") and not text.startswith("IndexError:"))
+        # A typed parameter refusal (GaussianProcessClassifier's optimizer)
+        # keeps its NotImplementedError instead of reading as a one-column
+        # ValueError; only untyped or ValueError refusals are refined.
+        var value_error = original is b.ValueError or (not pending and not text.startswith("TypeError:") and not text.startswith("RuntimeError:") and not text.startswith("ImportError:") and not text.startswith("AttributeError:") and not text.startswith("OverflowError:") and not text.startswith("IndexError:") and not text.startswith("NotImplementedError:") and not text.startswith("NotFittedError:"))
         if rows == 1 and (value_error or original is b.Exception or original is b.ZeroDivisionError):
             message = name + " cannot be fit on n_samples=1: " + text
         elif columns == 1 and value_error:
