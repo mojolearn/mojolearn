@@ -46,6 +46,7 @@ from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import neural_cast_i32_2d
 from bindings.byte_perf_helpers import byte_int_list_from_i64
+from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -593,7 +594,7 @@ def _run_stateless(mut mods: NativeModules, fields: PythonObject, tokens: Python
             descriptors.append(Int(py=addresses[i]))
         for i in range(len(named)):  # driver-loop: named gradient buffers
             descriptors.append(Int(py=named[i]))
-        var locked_teardown = String(getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")) == "1"
+        var locked_teardown = byte_lm_teardown_with_gil()
         var plan = _native_plan(shape, state, train, 0, 0, locked_teardown)
         completed = PythonObject(neural_descriptor_execute(provider, 8, descriptors, plan[0], plan[1]))
         mods.released()

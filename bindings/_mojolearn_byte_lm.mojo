@@ -42,6 +42,7 @@ from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from training.byte_lm_binding_impl import (
     ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
     _span_cells, _validate_addresses, _read_f32, _require_inputs_unchanged, _write_f32,
@@ -225,7 +226,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     var completed = _params_completed(params)
     var cfg = _params_optimizer(params)
     var addr = _read_addresses(addresses, 11)
-    var locked_teardown = String(getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")) == "1"
+    var locked_teardown = byte_lm_teardown_with_gil()
     var result = 0
     with GILReleased(Python()):
         result = byte_lm_run_native(addr, action, completed, cfg, shape, session, retain, locked_teardown)
