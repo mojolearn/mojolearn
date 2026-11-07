@@ -6,6 +6,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
+from bindings.admitted_call import AdmittedCall
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.mode_metadata_native import _fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -19,17 +20,26 @@ def estimator_binding(model: PythonObject, name: String, context: PythonObject, 
     return estimator_binding_mode(requested, name, context, check_mode)
 
 
-def estimator_binding_mode(requested: PythonObject, name: String, context: PythonObject,
-                           check_mode: Bool = True) raises -> PythonObject:
+def estimator_binding(mut call: AdmittedCall, model: PythonObject, name: String, context: PythonObject,
+                      check_mode: Bool = True) raises -> PythonObject:
+    # The door's admission record: its admitted fields are the mode reader
+    # and the resolved binding is kept on the record for the rest of the call.
+    var requested = PythonObject(None)
+    if model is not None:
+        if not call.fields_admitted:
+            call.admit_fields(_fields(model))
+        requested = py_get(call.fields, "numeric_mode")
+    return estimator_binding_mode(call, requested, name, context, check_mode)
+
+
+def _selected_mode(bi: PythonObject, requested: PythonObject, context: PythonObject) raises -> String:
     # Callers with retained numeric_mode_ pass that already captured scalar.
     # Do not reread the current model setting: transforms must use the fitted
     # mode when their public contract stores one. Validate exact str before
     # any normalization protocol; None alone selects the current default.
-    var bi = native_loaded_module("builtins")
-    var backend = context["backend_fields"]
     var mode = requested
     if mode is None:
-        mode = backend["_DEFAULT_MODE"]
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not bi.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var selected_mode = String(py=mode)
@@ -38,6 +48,37 @@ def estimator_binding_mode(requested: PythonObject, name: String, context: Pytho
         selected_mode = String(py=mode.strip().lower())
     if selected_mode != "identical" and selected_mode != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    return selected_mode
+
+
+def estimator_binding_mode(mut call: AdmittedCall, requested: PythonObject, name: String, context: PythonObject,
+                           check_mode: Bool = True) raises -> PythonObject:
+    # One resolution per (binding name, mode, checked) per public call (rows
+    # N219, N256, N267: a GP classifier resolved its binding four times). The
+    # mode word is still validated on every call; the registry reads, the
+    # live sys.modules slot and the compiled-mode check run once per call and
+    # again after a GIL release window (AdmittedCall.released()).
+    var bi = call.builtins()
+    var selected_mode = _selected_mode(bi, requested, context)
+    var found = call.find_binding(name, selected_mode, check_mode)
+    if found >= 0:
+        return call.binding_at(found)
+    var module = _estimator_binding_selected(bi, call.module("sys"), selected_mode, name, context, check_mode)
+    call.remember_binding(name, selected_mode, check_mode, module)
+    return module
+
+
+def estimator_binding_mode(requested: PythonObject, name: String, context: PythonObject,
+                           check_mode: Bool = True) raises -> PythonObject:
+    # Callers without an admission record.
+    var bi = native_loaded_module("builtins")
+    var selected_mode = _selected_mode(bi, requested, context)
+    return _estimator_binding_selected(bi, native_loaded_module("sys"), selected_mode, name, context, check_mode)
+
+
+def _estimator_binding_selected(bi: PythonObject, sys_module: PythonObject, selected_mode: String, name: String,
+                                context: PythonObject, check_mode: Bool) raises -> PythonObject:
+    var backend = context["backend_fields"]
     var record = context["family_binding_connections"][name][selected_mode]
     if not Bool(py=context["family_binding_offerings"][name][selected_mode]):
         raise Error(String(record[0]))
@@ -46,7 +87,7 @@ def estimator_binding_mode(requested: PythonObject, name: String, context: Pytho
             raise Error(String(record[0]))
         # Import setup resolves the lazy HostBinding facade to its exact native
         # module. Read the live module slot so replacement/removal is observed.
-        var module = py_get(native_loaded_module("sys").modules, record[1])
+        var module = py_get(sys_module.modules, record[1])
         if module is None:
             raise Error("ImportError: native host binding was removed after import-time connection: " + String(record[1]))
         if py_type(module) is not py_type(bi):
@@ -152,6 +193,18 @@ def estimator_checked_mode(module: PythonObject, reader: String, name: String,
             raise Error("RuntimeError: mojolearn: " + name + " was compiled for " + compiled
                         + ", but this call requested " + requested + "; rebuild the " + requested + " binding")
     return module
+
+
+def estimator_arguments(mut call: AdmittedCall, model: PythonObject, name: String, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    # As below, resolving through the door's admission record.
+    if len(args) == 0 or args[0] is not None:
+        return args
+    var selected = estimator_binding(call, model, name, context)
+    var values = Python.list(selected)
+    for i in range(1, len(args)):  # driver-loop: over fixed public method arguments
+        _ = py_call(values.append, args[i])
+    return py_call(call.builtins().tuple, values)
 
 
 def estimator_arguments(model: PythonObject, name: String, args: PythonObject,
