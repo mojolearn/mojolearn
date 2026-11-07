@@ -1675,6 +1675,8 @@ FAMILIES = (
             # lane native-parallel-driver-20261024: the Python-sharded
             # multi-GPU drivers' owner (bindings/parallel_shard_native.mojo)
             "parallel_shard_call",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "backend_public_native_call", "byte_lm_pooled_finalize_call", "catalog_public_call", "lm_corpus_public_call", "neural_native_dispatch_info", "numeric_profile_native_call", "operation_lock_connect", "public_attribute_generic_slot_native_call", "sequence_tensor_finalize", "small_mlp_finalize", "tokenizer_public_call", "transformer_decode_native_call", "transformer_public_call",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -1756,6 +1758,8 @@ FAMILIES = (
             "neural_arithmetic_profile",
             # checkpoint integrity digest (core/sha256.mojo)
             "sha256_hex",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "mamba_block_api_v1", "mamba_state_api_v1", "neural_primitives_api_v1", "transformer_block_api_v1",
         ),
         gate="python/mojolearn/tests/test_neural_inference.py, tools/step_vs_full_check.py and tools/identity_break.py (mlp, transformer, transformer-window, transformer-decode, mamba1, mamba2, mamba3, mamba1-decode, mamba2-decode, mamba3-decode, mamba2-dtlimit, samba, samba-decode, samba-untied-dropout-accum)",
         wheel_note=(
@@ -1924,6 +1928,8 @@ FAMILIES = (
             "qr_r", "eigh", "svdvals",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "linalg_numerical_profile", "from_f16",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "linalg_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2210,6 +2216,8 @@ FAMILIES = (
             "solver_host_numeric_mode", "solver_host_vendor", "solver_host_column",
             "solver_host_sabotage", "solver_vendor", "cd_fit", "cd_predict",
             "linkage_fit",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "hierarchy_solver_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2250,6 +2258,8 @@ FAMILIES = (
             "svc_dual_gemv",
             # lane perf-trees-misc (2026-11-05): the resident host forest
             "iforest_resident", "iforest_resident_release",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "svm_binary_api_v1",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2450,6 +2460,8 @@ FAMILIES = (
             "nystroem_transform", "rbf_sampler_fit", "rbf_sampler_transform",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "scale_gamma_limbs", "py2mojo_linear_flags",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "kernel_methods_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2844,6 +2856,8 @@ FAMILIES = (
             "training_experiment_profile",
             # checkpoint integrity digest (core/sha256.mojo)
             "sha256_hex",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "neural_primitives_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2959,6 +2973,8 @@ FAMILIES = (
             "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_info", "mamba3_prefill_session_close",
             "mamba3_prefill_session_install_weights", "mamba3_prefill_session_forward_owned", "mamba3_prefill_session_backward_owned",
             "mamba3_prefill_session_export_weights", "mamba3_forward_tape_enabled",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "mamba_block_api_v1", "mamba_prefill_native_handle_v1", "mamba_state_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
@@ -3250,6 +3266,8 @@ FAMILIES = (
             "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
             "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
             "transformer_session_forward_tape", "transformer_session_backward_tape",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "transformer_block_api_v1", "transformer_native_session_handle_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
