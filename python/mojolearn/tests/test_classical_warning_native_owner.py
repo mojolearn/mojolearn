@@ -163,6 +163,7 @@ def test_nested_list_target_retains_legacy_refusal_without_warning():
     assert not captured
 
 
+@pytest.mark.needs_installed_package
 @pytest.mark.parametrize("stream_kind", ["string", "file"])
 def test_native_default_warning_output_without_python_formatting(tmp_path, stream_kind):
     import json

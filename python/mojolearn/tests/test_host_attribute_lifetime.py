@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.needs_installed_package
 @pytest.mark.parametrize('route', ['generic', 'mixin'])
 def test_missing_attribute_keeps_owner_and_original_exception(tmp_path, route):
     code = r'''

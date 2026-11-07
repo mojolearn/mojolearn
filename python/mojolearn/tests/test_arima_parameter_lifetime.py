@@ -12,6 +12,7 @@ import textwrap
 import pytest
 
 
+@pytest.mark.needs_installed_package
 @pytest.mark.parametrize('case', ['ar', 'ma', 'seasonal_exog'])
 def test_public_parameter_bits_and_owner_lifetime(tmp_path, case):
     code = r'''

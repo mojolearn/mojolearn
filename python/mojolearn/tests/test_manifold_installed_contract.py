@@ -90,6 +90,7 @@ def test_application_overrides_execute_with_fitted_tracking_and_numpy_output(nam
     assert np.shares_memory(result, x)
 
 
+@pytest.mark.needs_numpy_free_python
 @pytest.mark.parametrize("name, settings", CASES)
 def test_numpy_free_native_result_in_fresh_installed_process(name, settings):
     # No fake modules or import blocking. Prove NumPy was never imported, use

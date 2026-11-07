@@ -73,7 +73,7 @@ def binding(monkeypatch):
     return modules
 
 
-@pytest.mark.parametrize('mode', ['fast', 'identical'])
+@pytest.mark.parametrize('mode', [pytest.param('fast', marks=pytest.mark.needs_fast_tier), 'identical'])
 @pytest.mark.parametrize('normalize', [None, 'true', 'pred', 'all'])
 def test_confusion_order_subset_normalize_and_mode(binding, mode, normalize):
     yt = np.array(['a', 'b', 'c', 'b', 'a'])

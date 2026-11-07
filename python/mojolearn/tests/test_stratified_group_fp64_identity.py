@@ -5,7 +5,9 @@ import math
 import numpy as np
 import pytest
 import mojolearn as ml
-from mojolearn import _identity_break as fixtures
+from mojolearn.tests._suite_env import identity_harness_or_skip
+
+fixtures = identity_harness_or_skip()
 
 
 def _fma(a, b, c):

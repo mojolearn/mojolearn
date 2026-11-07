@@ -8,6 +8,9 @@ import onnx
 import pytest
 from onnx import TensorProto, helper, numpy_helper
 
+# Every test runs its child without PYTHONPATH, so it imports the installed package.
+pytestmark = pytest.mark.needs_installed_package
+
 
 @pytest.fixture(scope="module")
 def artifact(tmp_path_factory):
