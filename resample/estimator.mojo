@@ -338,6 +338,70 @@ def _upload(
     return buf^
 
 
+#: The caller-pointer type of the `*_into` entries: the binding's own
+#: (`core/hostptr.mojo::f32_ptr`), so an address goes straight through.
+comptime ResampleF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def _list_f32_ptr(values: List[Float32]) -> ResampleF32Ptr:
+    """A List's storage as the `*_into` pointer (the List outlives the call)."""
+    return ResampleF32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
+
+
+def _upload_from(
+    ctx: DeviceContext, src: ResampleF32Ptr, n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """`_upload` of `n` words read in place at `src` (lane ne2-b-rounds,
+    N078): one host-to-device copy from the caller's buffer, no List and no
+    staging copy. The same words."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
+    ctx.synchronize()
+    return buf^
+
+
+def _upload_pooled(
+    ctx: DeviceContext, xp: ResampleF32Ptr, n_x: Int, yp: ResampleF32Ptr, n_y: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The pooled sample `x ++ y` on the device, each half copied from its
+    caller buffer into its place (the permutation test's `_upload(pooled)`
+    without the host concatenation)."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](n_x + n_y)
+    if n_x > 0:
+        var head = buf.create_sub_buffer[DType.float32](0, n_x)
+        ctx.enqueue_copy(dst_buf=head, src_ptr=xp)
+        ctx.synchronize()
+        _ = head^
+    if n_y > 0:
+        var tail = buf.create_sub_buffer[DType.float32](n_x, n_y)
+        ctx.enqueue_copy(dst_buf=tail, src_ptr=yp)
+        ctx.synchronize()
+        _ = tail^
+    ctx.synchronize()
+    return buf^
+
+
+def _download_f32_into(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], dst: ResampleF32Ptr, n: Int
+) raises:
+    """The `n` words of `buf` (its whole length) straight into the caller's
+    buffer `dst`: one device-to-host copy, no List."""
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
+    ctx.synchronize()
+
+
+def _download_f32_list(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
+) raises -> List[Float32]:
+    """`_download_f32` copied straight into the List's storage (no staging
+    buffer, no per-word append)."""
+    var out = List[Float32](unsafe_uninit_length=n)
+    _download_f32_into(ctx, buf, _list_f32_ptr(out), n)
+    return out^
+
+
 def _download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
@@ -1224,6 +1288,38 @@ def bootstrap_host(
     map_tpb: Int = RESAMPLE_MAP_TPB,
     plan: Optional[DevicePlan] = None,
 ) raises -> BootstrapResult:
+    """`bootstrap_into` over a List sample, the distribution returned as a
+    List (the checks, the speed driver and `resample_main` read it). The
+    refusals and the bits are `bootstrap_into`'s."""
+    var dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = bootstrap_into(
+        _list_f32_ptr(x), len(x), n, n_features, statistic, n_resamples, seed, method,
+        _list_f32_ptr(dist), confidence_level, alternative, q_or_prop, r_first,
+        tpb, with_bca_diagnostics, map_tpb, plan,
+    )
+    r.distribution = dist^
+    return r^
+
+
+def bootstrap_into(
+    xp: ResampleF32Ptr,
+    x_words: Int,
+    n: Int,
+    n_features: Int,
+    statistic: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    dist_out: ResampleF32Ptr,
+    confidence_level: Float32 = Float32(0.95),
+    alternative: Int = ALT_TWO_SIDED,
+    q_or_prop: Float32 = Float32(0.5),
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+    with_bca_diagnostics: Bool = False,
+    map_tpb: Int = RESAMPLE_MAP_TPB,
+    plan: Optional[DevicePlan] = None,
+) raises -> BootstrapResult:
     """`scipy.stats.bootstrap((x,), statistic, n_resamples=..., rng=seed,
     method=..., confidence_level=..., alternative=...)`, one shot.
 
@@ -1238,6 +1334,14 @@ def bootstrap_host(
     answers are bit-identical to the corresponding slice of the whole run.
     SciPy's equivalent -- passing `bootstrap_result` back in -- CONTINUES a
     stream and therefore cannot make that promise.
+
+    POINTER FORM (lane ne2-b-rounds, N078): the sample is read in place at
+    `xp` (`x_words` float32 words, at least n * n_features) and its n *
+    n_features words are uploaded straight from it; the replicate
+    distribution is downloaded straight into `dist_out` (n_resamples
+    float32 slots), so the returned `distribution` is EMPTY.
+    The sorted distribution comes back once into the returned List the
+    interval reads. The same words reach the same kernels as before.
     """
     validate_positions(n_resamples, n)
     if r_first < 0:
@@ -1259,15 +1363,15 @@ def bootstrap_host(
             "bootstrap: statistic 'std' is ddof=1 (DEVIATION 1697) and needs"
             " at least 2 observations; got n=" + String(n)
         )
-    if len(x) < n * n_features:
+    if x_words < n * n_features:
         raise Error(
             "bootstrap: the sample holds "
-            + String(len(x))
+            + String(x_words)
             + " values but n * n_features is "
             + String(n * n_features)
         )
     for i in range(n * n_features):
-        var v = x[i]
+        var v = xp[i]
         if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
             raise Error(
                 "bootstrap: the sample contains NaN or infinity at position "
@@ -1336,7 +1440,7 @@ def bootstrap_host(
     var key_words: List[Int32] = [key_lo(key), key_hi(key)]
     trace.record_list_i32("resample.key", key_words)
 
-    var dx = _upload(ctx, x)
+    var dx = _upload_from(ctx, xp, n * n_features)
     var theta = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
 
@@ -1366,11 +1470,11 @@ def bootstrap_host(
     var dplan = _resample_plan(plan)
     var owners = resample_device_count(dplan)
     bootstrap_theta_dispatch(
-        dplan, owners, ctx, theta, dx, x, key, r_first, n_resamples, n,
-        n_features, statistic, q_or_prop, tpb, map_tpb,
+        dplan, owners, ctx, theta, dx, xp, n * n_features, key, r_first,
+        n_resamples, n, n_features, statistic, q_or_prop, tpb, map_tpb,
     )
     trace.record_device(ctx, "resample.theta", theta, n_resamples)
-    var dist = _download_f32(ctx, theta, n_resamples)
+    _download_f32_into(ctx, theta, dist_out, n_resamples)
 
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
@@ -1378,7 +1482,7 @@ def bootstrap_host(
     # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch.
     _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     trace.record_device(ctx, "resample.sorted", sorted_buf, n_resamples)
-    var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+    var sorted_dist = _download_f32_list(ctx, sorted_buf, n_resamples)
 
     var theta_hat = point_estimate_device(ctx, dx, n, n_features, statistic, q_or_prop)
     trace.record_scalar_f32("resample.point", theta_hat)
@@ -1454,7 +1558,7 @@ def bootstrap_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return BootstrapResult(
-        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+        theta_hat, List[Float32](), sorted_dist^, se, interval, pos_lo, pos_hi
     )
 
 
@@ -1463,7 +1567,20 @@ def _unpaired_validate(
     method: Int, confidence_level: Float32, r_first: Int,
 ) raises:
     """`bootstrap_unpaired_host`'s refusals, shared word for word with the
-    host twin (`resample/host/resample_host.mojo`)."""
+    host twin (`resample/host/resample_host.mojo`): `_unpaired_validate_ptr`
+    over the Lists' storage."""
+    _unpaired_validate_ptr(
+        _list_f32_ptr(x), len(x), n_x, _list_f32_ptr(y), len(y), n_y,
+        n_resamples, method, confidence_level, r_first,
+    )
+
+
+def _unpaired_validate_ptr(
+    xp: ResampleF32Ptr, x_words: Int, n_x: Int, yp: ResampleF32Ptr, y_words: Int,
+    n_y: Int, n_resamples: Int, method: Int, confidence_level: Float32, r_first: Int,
+) raises:
+    """The refusals of `_unpaired_validate`, in its order, over the samples
+    read in place (`x_words` / `y_words` words at `xp` / `yp`)."""
     validate_positions(n_resamples, n_x)
     validate_positions(n_resamples, n_y)
     if r_first < 0:
@@ -1472,12 +1589,12 @@ def _unpaired_validate(
         )
     validate_positions(r_first + n_resamples, n_x)
     validate_positions(r_first + n_resamples, n_y)
-    if len(x) < n_x or len(y) < n_y:
+    if x_words < n_x or y_words < n_y:
         raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
     for k in range(2):
         var m = n_x if k == 0 else n_y
         for i in range(m):
-            var v = x[i] if k == 0 else y[i]
+            var v = xp[i] if k == 0 else yp[i]
             if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
                 raise Error(
                     "bootstrap: sample " + String(k) + " contains NaN or"
@@ -1510,6 +1627,34 @@ def bootstrap_unpaired_host(
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
 ) raises -> BootstrapResult:
+    """`bootstrap_unpaired_into` over List samples, the distribution
+    returned as a List. The refusals and the bits are the pointer form's."""
+    var dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = bootstrap_unpaired_into(
+        _list_f32_ptr(x), len(x), n_x, _list_f32_ptr(y), len(y), n_y,
+        n_resamples, seed, method, _list_f32_ptr(dist), confidence_level,
+        alternative, r_first, tpb,
+    )
+    r.distribution = dist^
+    return r^
+
+
+def bootstrap_unpaired_into(
+    xp: ResampleF32Ptr,
+    x_words: Int,
+    n_x: Int,
+    yp: ResampleF32Ptr,
+    y_words: Int,
+    n_y: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    dist_out: ResampleF32Ptr,
+    confidence_level: Float32 = Float32(0.95),
+    alternative: Int = ALT_TWO_SIDED,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> BootstrapResult:
     """`scipy.stats.bootstrap((x, y), diff_means, paired=False, ...)`: the
     two samples resampled INDEPENDENTLY (2026-09-28), each by its own map --
     sample 0 under kind 1 (so its replicate is exactly the one-sample
@@ -1517,13 +1662,21 @@ def bootstrap_unpaired_host(
     mean(y*_r)`, each mean the pinned tree of the one-sample `mean` arm, the
     difference one flushed subtraction (the paired `diff_means` spelling).
     BCa uses SciPy's multi-sample acceleration (`bca_acceleration_two`)
-    over each sample's leave-one-out means with the other sample whole."""
-    _unpaired_validate(x, n_x, y, n_y, n_resamples, method, confidence_level, r_first)
+    over each sample's leave-one-out means with the other sample whole.
+
+    POINTER FORM (lane ne2-b-rounds, N078): both samples are read in place
+    and uploaded straight from `xp` / `yp`; the distribution is downloaded
+    into `dist_out` (n_resamples slots), so the returned `distribution` is
+    EMPTY. The same words reach the same kernels."""
+    _unpaired_validate_ptr(
+        xp, x_words, n_x, yp, y_words, n_y, n_resamples, method,
+        confidence_level, r_first,
+    )
     var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
     var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dxb = _upload(ctx, x)
-    var dyb = _upload(ctx, y)
+    var dxb = _upload_from(ctx, xp, x_words)
+    var dyb = _upload_from(ctx, yp, y_words)
     var tx = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     var ty = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
@@ -1534,12 +1687,12 @@ def bootstrap_unpaired_host(
     # once (it is returned)
     var theta = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     enqueue_diff_map(ctx, theta, tx, ty.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_resamples, Float32(0.0), 0)
-    var dist = _download_f32(ctx, theta, n_resamples)
+    _download_f32_into(ctx, theta, dist_out, n_resamples)
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1: see bootstrap_host.
     _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
-    var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+    var sorted_dist = _download_f32_list(ctx, sorted_buf, n_resamples)
 
     var mx = point_estimate_device(ctx, dxb, n_x, 1, STAT_MEAN, Float32(0.5))
     var my = point_estimate_device(ctx, dyb, n_y, 1, STAT_MEAN, Float32(0.5))
@@ -1600,7 +1753,7 @@ def bootstrap_unpaired_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return BootstrapResult(
-        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+        theta_hat, List[Float32](), sorted_dist^, se, interval, pos_lo, pos_hi
     )
 
 
@@ -1620,6 +1773,32 @@ def permutation_test_host(
     tpb: Int = RESAMPLE_TPB,
     plan: Optional[DevicePlan] = None,
 ) raises -> PermutationResult:
+    """`permutation_test_into` over List samples, the null returned as a
+    List. The refusals and the bits are the pointer form's."""
+    var null_dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = permutation_test_into(
+        _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), statistic,
+        n_resamples, seed, alternative, _list_f32_ptr(null_dist), r_first, tpb,
+        plan,
+    )
+    r.null_distribution = null_dist^
+    return r^
+
+
+def permutation_test_into(
+    xp: ResampleF32Ptr,
+    n_x: Int,
+    yp: ResampleF32Ptr,
+    n_y: Int,
+    statistic: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    alternative: Int,
+    null_out: ResampleF32Ptr,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+    plan: Optional[DevicePlan] = None,
+) raises -> PermutationResult:
     """`scipy.stats.permutation_test((x, y), statistic,
     permutation_type='independent', n_resamples=..., rng=seed,
     alternative=...)`.
@@ -1635,9 +1814,14 @@ def permutation_test_host(
     (DEVIATION 1702), which is CONSERVATIVE -- it can only make a p-value
     larger -- and is stated so nobody reads a floor of `1/(R+1)` as a claim
     of exactness.
+
+    POINTER FORM (lane ne2-b-rounds, N078): `x` (n_x words at `xp`) and `y`
+    (n_y words at `yp`) are read in place and each is copied into its half
+    of the pooled device buffer (no host concatenation); the null comes back
+    straight into `null_out` (n_resamples slots), so the returned
+    `null_distribution` is EMPTY. The pooled words are the ones the host
+    concatenation built, in the same order.
     """
-    var n_x = len(x)
-    var n_y = len(y)
     var n_pooled = n_x + n_y
     if n_x <= 0 or n_y <= 0:
         raise Error(
@@ -1653,13 +1837,8 @@ def permutation_test_host(
             "permutation_test: statistic 'std' is ddof=1 and needs at least"
             " 2 observations in the first sample; got n_x=" + String(n_x)
         )
-    var pooled = List[Float32]()
-    for i in range(n_x):
-        pooled.append(x[i])
-    for i in range(n_y):
-        pooled.append(y[i])
     for i in range(n_pooled):
-        var v = pooled[i]
+        var v = xp[i] if i < n_x else yp[i - n_x]
         if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
             raise Error(
                 "permutation_test: the pooled sample contains NaN or infinity"
@@ -1687,7 +1866,7 @@ def permutation_test_host(
     var key_words: List[Int32] = [key_lo(key), key_hi(key)]
     trace.record_list_i32("resample.key", key_words)
 
-    var dpool = _upload(ctx, pooled)
+    var dpool = _upload_pooled(ctx, xp, n_x, yp, n_y)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     var dplan = _resample_plan(plan)
@@ -1704,12 +1883,12 @@ def permutation_test_host(
         )
     if not selected:
         perm_null_dispatch(
-            dplan, owners, ctx, null_buf, dpool, pooled, key, r_first,
+            dplan, owners, ctx, null_buf, dpool, xp, yp, key, r_first,
             n_resamples, n_pooled, n_x, statistic, tpb,
         )
     ctx.synchronize()
     trace.record_device(ctx, "resample.null", null_buf, n_resamples)
-    var null_dist = _download_f32(ctx, null_buf, n_resamples)
+    _download_f32_into(ctx, null_buf, null_out, n_resamples)
 
     # The OBSERVED statistic is the pooled sample split where it already is,
     # i.e. the identity permutation, over `host_tree_sum`'s pinned tree (the
@@ -1729,22 +1908,32 @@ def permutation_test_host(
     _ = null_buf^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
-    return PermutationResult(observed, null_dist^, pv)
+    return PermutationResult(observed, List[Float32](), pv)
 
 
 def perm_samples_validate(
     x: List[Float32], y: List[Float32], two: Bool, n_resamples: Int, r_first: Int
 ) raises:
     """`permutation_samples_host`'s refusals (shared word for word by the
-    host twin)."""
-    var n = len(x)
+    host twin): `perm_samples_validate_ptr` over the Lists' storage."""
+    perm_samples_validate_ptr(
+        _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), two, n_resamples, r_first
+    )
+
+
+def perm_samples_validate_ptr(
+    xp: ResampleF32Ptr, n: Int, yp: ResampleF32Ptr, n_y: Int, two: Bool,
+    n_resamples: Int, r_first: Int,
+) raises:
+    """The refusals of `perm_samples_validate`, in its order, over the
+    samples read in place (`n` words at `xp`, `n_y` at `yp`)."""
     if n <= 0:
         raise Error("permutation_test(permutation_type='samples'): the sample is empty")
-    if two and len(y) != n:
+    if two and n_y != n:
         raise Error(
             "permutation_test(permutation_type='samples'): the two samples"
             " must be PAIRED, the same length; got n_x=" + String(n)
-            + ", n_y=" + String(len(y))
+            + ", n_y=" + String(n_y)
         )
     validate_positions(n_resamples, n)
     if r_first < 0:
@@ -1752,7 +1941,7 @@ def perm_samples_validate(
     validate_positions(r_first + n_resamples, n)
     for k in range(2 if two else 1):
         for i in range(n):
-            var v = x[i] if k == 0 else y[i]
+            var v = xp[i] if k == 0 else yp[i]
             if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
                 raise Error(
                     "permutation_test: sample " + String(k) + " contains NaN"
@@ -1771,21 +1960,49 @@ def permutation_samples_host(
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
 ) raises -> PermutationResult:
+    """`permutation_samples_into` over List samples, the null returned as a
+    List. The refusals and the bits are the pointer form's."""
+    var null_dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = permutation_samples_into(
+        _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), two, n_resamples,
+        seed, alternative, _list_f32_ptr(null_dist), r_first, tpb,
+    )
+    r.null_distribution = null_dist^
+    return r^
+
+
+def permutation_samples_into(
+    xp: ResampleF32Ptr,
+    n: Int,
+    yp: ResampleF32Ptr,
+    n_y: Int,
+    two: Bool,
+    n_resamples: Int,
+    seed: UInt64,
+    alternative: Int,
+    null_out: ResampleF32Ptr,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> PermutationResult:
     """`scipy.stats.permutation_test(data, statistic,
     permutation_type='samples', ...)` (2026-09-28): `two` is `(x, y)` with
     `diff_means`, else `(x,)` with `mean` (SciPy's sign-flip convention).
     `perm_samples_kernel` draws each pair's coin at its own Philox position
     (kind 5); the observed statistic is the identity arrangement, the pinned
     tree on the device; the p-value is `permutation_pvalue`'s (DEVIATION 1702)
-    from device counts."""
-    perm_samples_validate(x, y, two, n_resamples, r_first)
-    var n = len(x)
+    from device counts.
+
+    POINTER FORM (lane ne2-b-rounds, N078): `x` (n words at `xp`) and, when
+    `two`, `y` (n_y words at `yp`) are read in place and uploaded straight
+    from the caller's buffers; the null comes back into `null_out`
+    (n_resamples slots), so the returned `null_distribution` is EMPTY."""
+    perm_samples_validate_ptr(xp, n, yp, n_y, two, n_resamples, r_first)
     var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = _upload(ctx, x)
-    var dy = _upload(ctx, x)
-    if two:
-        dy = _upload(ctx, y)
+    var dx = _upload_from(ctx, xp, n)
+    # one sample: the kernel's second operand is unread; the old route
+    # uploaded x a second time for it
+    var dy = _upload_from(ctx, yp if two else xp, n_y if two else n)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     if tpb != 256 and tpb != 128 and tpb != 64:
@@ -1808,7 +2025,7 @@ def permutation_samples_host(
                     grid_dim=(n_resamples, 1, 1), block_dim=(width, 1, 1),
                 )
     ctx.synchronize()
-    var null_dist = _download_f32(ctx, null_buf, n_resamples)
+    _download_f32_into(ctx, null_buf, null_out, n_resamples)
     # the identity arrangement's statistic and the p-value's counts on the
     # device (resample/device_post.mojo), the replicate kernels' tree
     var observed = _perm_observed(ctx, dx, n, n, 0, STAT_MEAN)
@@ -1822,7 +2039,7 @@ def permutation_samples_host(
     _ = null_buf^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
-    return PermutationResult(observed, null_dist^, pv)
+    return PermutationResult(observed, List[Float32](), pv)
 
 
 # ===========================================================================

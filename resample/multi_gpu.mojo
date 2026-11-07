@@ -24,10 +24,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.device_plan import DevicePlan
 from metrics.checks.pinned_sum import PINNED_SUM_W
 from resample.estimator import (
+    ResampleF32Ptr,
     _bootstrap_theta,
     _launch_perm_stat,
     _mc_partials,
     _upload,
+    _upload_from,
+    _upload_pooled,
 )
 
 
@@ -62,7 +65,8 @@ def _owner_offset(rank: Int) -> Int:
 def _bootstrap_theta_owners(
     ctx: DeviceContext,
     mut theta: DeviceBuffer[DType.float32],
-    x: List[Float32],
+    xp: ResampleF32Ptr,
+    x_words: Int,
     key: UInt64,
     r_first: Int,
     n_resamples: Int,
@@ -82,7 +86,7 @@ def _bootstrap_theta_owners(
         var begin = n_resamples * rank // active
         var rows = n_resamples * (rank + 1) // active - begin
         var owner = DeviceContext(device_id=plan.device(rank))
-        var ox = _upload(owner, x)
+        var ox = _upload_from(owner, xp, x_words)
         var ot = owner.enqueue_create_buffer[DType.float32](rows)
         owner.synchronize()
         _bootstrap_theta(
@@ -104,7 +108,8 @@ def _bootstrap_theta_owners(
 def _perm_null_owners(
     ctx: DeviceContext,
     mut null_buf: DeviceBuffer[DType.float32],
-    pooled: List[Float32],
+    xp: ResampleF32Ptr,
+    yp: ResampleF32Ptr,
     key: UInt64,
     r_first: Int,
     n_resamples: Int,
@@ -122,7 +127,7 @@ def _perm_null_owners(
         var begin = n_resamples * rank // active
         var rows = n_resamples * (rank + 1) // active - begin
         var owner = DeviceContext(device_id=plan.device(rank))
-        var op = _upload(owner, pooled)
+        var op = _upload_pooled(owner, xp, n_x, yp, n_pooled - n_x)
         var on = owner.enqueue_create_buffer[DType.float32](rows)
         owner.synchronize()
         _launch_perm_stat(
@@ -207,7 +212,8 @@ def bootstrap_theta_dispatch(
     ctx: DeviceContext,
     mut theta: DeviceBuffer[DType.float32],
     mut dx: DeviceBuffer[DType.float32],
-    x: List[Float32],
+    xp: ResampleF32Ptr,
+    x_words: Int,
     key: UInt64,
     r_first: Int,
     n_resamples: Int,
@@ -222,7 +228,7 @@ def bootstrap_theta_dispatch(
     or contiguous replicate ranges on the plan's owners."""
     if owners > 1 and n_resamples > 1:
         _bootstrap_theta_owners(
-            ctx, theta, x, key, r_first, n_resamples, n, n_features,
+            ctx, theta, xp, x_words, key, r_first, n_resamples, n, n_features,
             statistic, q_or_prop, tpb, map_tpb, plan, owners,
         )
     else:
@@ -238,7 +244,8 @@ def perm_null_dispatch(
     ctx: DeviceContext,
     mut null_buf: DeviceBuffer[DType.float32],
     mut dpool: DeviceBuffer[DType.float32],
-    pooled: List[Float32],
+    xp: ResampleF32Ptr,
+    yp: ResampleF32Ptr,
     key: UInt64,
     r_first: Int,
     n_resamples: Int,
@@ -253,7 +260,7 @@ def perm_null_dispatch(
     not called; owners > 1 is IDENTICAL only.)"""
     if owners > 1 and n_resamples > 1:
         _perm_null_owners(
-            ctx, null_buf, pooled, key, r_first, n_resamples, n_pooled, n_x,
+            ctx, null_buf, xp, yp, key, r_first, n_resamples, n_pooled, n_x,
             statistic, tpb, plan, owners,
         )
     else:
