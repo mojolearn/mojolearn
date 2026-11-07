@@ -336,6 +336,16 @@ def test_worker_count_is_cores_capped_by_memory_and_units(monkeypatch):
         q.unit_workers(73, cores=10, env={q.QUALIFY_JOBS_ENV: "0"})
 
 
+def test_free_memory_is_the_cgroup_headroom_when_lower(monkeypatch):
+    import build_sizing
+    import mac_slot
+    monkeypatch.setattr(mac_slot, "available_bytes", lambda: 64 * 2**30)
+    monkeypatch.setattr(build_sizing, "cgroup_memory_headroom", lambda: 8 * 2**30)
+    assert q.free_memory_bytes() == 8 * 2**30
+    monkeypatch.setattr(build_sizing, "cgroup_memory_headroom", lambda: None)
+    assert q.free_memory_bytes() == 64 * 2**30
+
+
 def test_busy_cores_of_total_are_printed_every_period():
     lines = []
     sampler = q.BusySampler(10, lambda: 7, every=0.02, sample=lambda: 9.5,
