@@ -6,7 +6,11 @@ expansion's estimators (bindings/decomp_native.mojo)."""
 #: that operation by name).
 ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project", "x_decomp_nmf_fit", "x_decomp_nmf_inverse",
                "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig",
-               "x_decomp_rp_fit", "x_decomp_rp_project")
+               "x_decomp_rp_fit", "x_decomp_rp_project",
+               # the pool entries a resident fitted matrix is held through
+               # (GPU bindings only; bindings/rp_native.mojo, lane
+               # ne1-a-decomp-resident): a build without them uploads per call
+               "x_decomp_dev_alloc", "x_decomp_dev_upload", "x_decomp_dev_free", "x_decomp_dev_ew")
 
 #: The x_neighbors entries KernelPCA's kernel matrix steps call (connected
 #: only for a caller that asks, `neighbors=True`).

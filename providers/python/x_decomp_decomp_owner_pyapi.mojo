@@ -262,10 +262,13 @@ def rp_fit_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: Pyt
 
 
 def rp_project_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject) raises -> PythonObject:
-    """X matrix^T. p = [x, m, d, matrix, rows, tiled, out]. Returns 1 when
-    the tiled projection flagged a non-finite X."""
-    if len(p) != 7:
-        raise Error("x_decomp_rp_project: params must hold x, m, d, the matrix, rows, tiled and out")
+    """X matrix^T. p = [x, m, d, matrix, rows, tiled, out], optionally
+    followed by the pool id of the matrix's resident device copy (a GPU
+    binding; bindings/rp_native.mojo). Returns 1 when the tiled projection
+    flagged a non-finite X."""
+    if len(p) != 7 and len(p) != 8:
+        raise Error("x_decomp_rp_project: params must hold x, m, d, the matrix, rows, tiled and out "
+                    + "(and the matrix's resident pool id)")
     var x = door_ptr(p, 0)
     var m = door_dim(p, 1)
     var d = door_dim(p, 2)
@@ -273,7 +276,8 @@ def rp_project_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject) ra
     var rows = door_dim(p, 4)
     var tiled = Int(py=p[5]) != 0
     var out = door_ptr(p, 6)
+    var matrix_dev = Int(py=p[7]) if len(p) == 8 else -1
     var flagged = 0
     with GILReleased(Python()):
-        flagged = rp_project_run[E, D, RES, X](x, m, d, matrix, rows, tiled, out)
+        flagged = rp_project_run[E, D, RES, X](x, m, d, matrix, rows, tiled, out, matrix_dev)
     return PythonObject(flagged)
