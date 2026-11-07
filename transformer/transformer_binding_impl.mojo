@@ -28,6 +28,7 @@ from std.os import abort
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast, memcpy
 from std.os import getenv
+from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
@@ -715,29 +716,52 @@ def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int],
 
 
 
-def _stage_reset_on() -> Bool:
+struct _TransformerSessionEnv(Defaultable, Movable):
+    """The session entries' environment switches, read once per process
+    (lane ne3-c-blocks-embedding, row N159: every session forward built three
+    or four `String(getenv(...))` values). They are A/B and timing switches
+    set before the process starts; a change after the first session call is
+    not seen."""
+    var stage_reset: Bool
+    var retain_cap_bytes: Int
+    var retain_weights: Bool
+    var timing: Bool
+
+    def __init__(out self):
+        self.stage_reset = String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
+        var cap_mb = 512
+        var s = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_MB"))
+        if s != "":
+            try:
+                cap_mb = Int(atol(s))
+            except:
+                cap_mb = 512
+        if cap_mb < 0:
+            cap_mb = 0
+        self.retain_cap_bytes = cap_mb * 1024 * 1024
+        self.retain_weights = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS")) != "0"
+        self.timing = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+
+
+# Process-wide (one environment per process); bump the name with the layout.
+comptime _TRANSFORMER_SESSION_ENV = _Global[StorageType=_TransformerSessionEnv,
+    name="MojolearnTransformerSessionEnvV1", init_fn=_TransformerSessionEnv.__init__]
+
+
+def _stage_reset_on() raises -> Bool:
     """`MOJOLEARN_TRANSFORMER_STAGE_RESET=0` skips the thirty zero-fills a
     reused workspace gets before each call. Bit-safe only if every cell a
     call reads it also wrote this call; the identity gate decides."""
-    return String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
+    return _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].stage_reset
 
 
 
-def _session_retain_cap_bytes() -> Int:
+def _session_retain_cap_bytes() raises -> Int:
     """Retained workspace budget per session: `MOJOLEARN_TRANSFORMER_RETAIN_MB`
     (an integer, MiB), default 512. Was a fixed 64 MiB, which the board's
     block shape (B1 L2048 DM384 FF1024: about 87 MiB of lean stages) exceeded
     on every call, so the whole workspace was rebuilt per call."""
-    var cap_mb = 512
-    var s = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_MB"))
-    if s != "":
-        try:
-            cap_mb = Int(atol(s))
-        except:
-            cap_mb = 512
-    if cap_mb < 0:
-        cap_mb = 0
-    return cap_mb * 1024 * 1024
+    return _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].retain_cap_bytes
 
 
 
@@ -759,7 +783,7 @@ def _session_weights(
     # MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0: the per-call upload for every
     # block (the A/B against the byte compare; measured 0.3 ms per call on
     # an L40S, where the upload it replaces was already cheap).
-    if String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS")) == "0":
+    if not _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].retain_weights:
         extended = True
     if extended:
         session.weights = None
@@ -832,7 +856,7 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
     if not session.ctx:
         session.ctx = neural_ctx[_NEURAL_CTX]()
         session.contexts += 1
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].timing
     var tk = Int(perf_counter_ns())
     var lean = _lean_for(hd, opts)
     var key = _workspace_key(b, l, dims, smax, window, lean, opts)

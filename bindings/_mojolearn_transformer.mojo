@@ -759,6 +759,13 @@ def transformer_forward_fresh_binding(
     return PythonObject(out_len)
 
 
+# Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
+# this GPU binding. TransformerBlock decodes and prefills through
+# `transformer_session_forward` (weights, cache and RoPE retained by the
+# block's session) whenever the binding exports it; this per-call entry,
+# which uploads the nine weights and both caches per call, is reached only
+# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
+# of the extension. CPU host bindings export their own host entry.
 def transformer_forward_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -853,6 +860,13 @@ def transformer_forward_binding(
     return PythonObject(out_len)
 
 
+# Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
+# this GPU binding. TransformerBlock decodes and prefills through
+# `transformer_session_forward` (weights, cache and RoPE retained by the
+# block's session) whenever the binding exports it; this per-call entry,
+# which uploads the nine weights and both caches per call, is reached only
+# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
+# of the extension. CPU host bindings export their own host entry.
 def transformer_decode_step_binding(
     addrs: PythonObject,
     params: PythonObject,
