@@ -18,6 +18,7 @@
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.x_neighbors_admission_pyapi import xn_capabilities
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.math import floor, isinf
 from std.memory import memcpy
@@ -738,25 +739,24 @@ def _nc_uniform(fields: PythonObject, context: PythonObject) raises -> Bool:
     return uniform
 
 
+def _nc_fused_available(binding: PythonObject) raises -> Bool:
+    """The binding carries nc_labels / nc_proba (exports on a loaded module,
+    capability bit 5 on the native descriptor route)."""
+    if xn_is_module(binding):
+        return neural_descriptor_entry(xn_module(binding), "x_neighbors_nc_labels", False) is not None
+    return (xn_capabilities(binding) & 32) != 0
+
+
 def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """`NearestCentroid._decision_matrix(X)`."""
-    if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
-        raise Error("AttributeError: decision_function is available for metric='euclidean' only")
-    var q = _f32(source, context)
-    # `Array.from_list(class_prior_.tolist(), "<f4")`: each prior rounded once
-    var given = family_field(fields, "class_prior_")
-    var count = _size(given)
-    var C = count  # one fitted prior per class (see `_nc_uniform`)
-    var prior = labels_vector(count, "<f4", context)
-    var gp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(given)))
-    var fp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(prior)))
-    for i in range(count):  # driver-loop: over the k class priors
-        fp[i] = Float32(gp[i])
-    _ = given  # keep the Python object alive through the reads above
-    var cent = family_field(fields, "centroids_")
-    var std = family_field(fields, "within_class_std_dev_")
+    var inputs = _nc_decision_inputs(fields, source, context)
+    var q = inputs[0]
+    var cent = inputs[1]
+    var std = inputs[2]
+    var prior = inputs[3]
     var nq = _rows(q)
+    var C = _size(prior)
     var out = _out(Python.tuple(nq, C), "<f4", context)
     _op(binding, "nc_decision", Python.list(classical_address(q), classical_address(cent), classical_address(std),
                                             classical_address(prior), classical_address(out)),
@@ -769,6 +769,42 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
     return out
 
 
+def _nc_fused(binding: PythonObject, name: String, q: PythonObject, cent: PythonObject, std: PythonObject,
+              prior: PythonObject, out: PythonObject, C: Int, mode: Int, context: PythonObject) raises:
+    """One fused NearestCentroid session (`nc_labels` / `nc_proba`, lane
+    ne3-g-svc-gp-neighbors, N327): the distance or decision matrix stays on
+    the device. `std` and `prior` are only read by the decision modes; the
+    caller passes live arrays for both."""
+    _op(binding, name, Python.list(classical_address(q), classical_address(cent), classical_address(std),
+                                   classical_address(prior), classical_address(out)),
+        Python.list(_i(_rows(q)), _i(_cols(q)), _i(C), _i(mode)), Python.list(), context)
+    _ = q  # keep the Python object alive through the native call above
+    _ = cent  # keep the Python object alive through the native call above
+    _ = std  # keep the Python object alive through the native call above
+    _ = prior  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+
+
+def _nc_decision_inputs(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_decision_matrix`'s operands as a Python tuple (q, centroids_,
+    within_class_std_dev_, the float32 priors), after the metric refusal."""
+    if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
+        raise Error("AttributeError: decision_function is available for metric='euclidean' only")
+    var q = _f32(source, context)
+    # `Array.from_list(class_prior_.tolist(), "<f4")`: each prior rounded once
+    var given = family_field(fields, "class_prior_")
+    var count = _size(given)  # one fitted prior per class (see `_nc_uniform`)
+    var prior = labels_vector(count, "<f4", context)
+    var gp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(given)))
+    var fp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(prior)))
+    for i in range(count):  # driver-loop: over the k class priors
+        fp[i] = Float32(gp[i])
+    _ = given  # keep the Python object alive through the reads above
+    var cent = family_field(fields, "centroids_")
+    var std = family_field(fields, "within_class_std_dev_")
+    return Python.tuple(q, cent, std, prior)
+
+
 def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
                 labels: PythonObject) raises -> PythonObject:
     """`NearestCentroid.predict(X)`. `labels`: the label list of `classes_`
@@ -777,8 +813,16 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var binding = args[0]
     var q = _f32(args[1], context)
     var classes = labels if labels is not None else classifier_label_list(family_field(fields, "classes_"), context)
+    var fused = _nc_fused_available(binding)
     if _nc_uniform(fields, context):
         var cent = family_field(fields, "centroids_")
+        if fused:
+            var C = _rows(cent)
+            var fcodes = _out(Python.tuple(_rows(q)), "<i4", context)
+            # std and prior are not read by the distance modes: q stands in.
+            _nc_fused(binding, "nc_labels", q, cent, q, q, fcodes, C,
+                      0 if _eq(family_field(fields, "metric"), PythonObject("euclidean")) else 1, context)
+            return _class_array(classes, fcodes, context)
         var dmat: PythonObject
         if _eq(family_field(fields, "metric"), PythonObject("euclidean")):
             dmat = _sqdist(binding, q, cent, context)
@@ -792,6 +836,12 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = idx  # keep the Python object alive through the copy above
         return _class_array(classes, codes, context)
     # `_argmax_labels`: the first maximum of each row on the device
+    if fused:
+        var inputs = _nc_decision_inputs(fields, q, context)
+        var C = _size(inputs[3])
+        var fcodes = _out(Python.tuple(_rows(inputs[0])), "<i4", context)
+        _nc_fused(binding, "nc_labels", inputs[0], inputs[1], inputs[2], inputs[3], fcodes, C, 2, context)
+        return _class_array(classes, fcodes, context)
     var mat = _nc_decision_matrix(binding, fields, q, context)
     var n = _rows(mat)
     var C = _cols(mat)
@@ -829,12 +879,15 @@ def _nc_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     matrix, float64 where the binary has `xn_softmax64`."""
     var b = _b()
     var binding = args[0]
-    var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
-    var shape = py_call(b.tuple, dec.shape)
     # A shared native descriptor does not imply optional kernel availability.
     # Query its admitted compiled owner just as for a direct module binding;
     # identical bindings correctly omit the optional float64 softmax export.
     var wide = neural_descriptor_entry(xn_module(binding), "xn_softmax64", False) is not None
+    if _nc_fused_available(binding):
+        return _nc_proba_fused(binding, py_fields(model), args[1], 2 if wide else 0, "<f8" if wide else "<f4",
+                               context)
+    var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
+    var shape = py_call(b.tuple, dec.shape)
     var out = _out(shape, "<f8" if wide else "<f4", context)
     _op(binding, "softmax64" if wide else "softmax", Python.list(classical_address(dec), classical_address(out)),
         Python.list(_i(_rows(dec)), _i(_cols(dec))), Python.list(), context)
@@ -843,10 +896,23 @@ def _nc_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     return out
 
 
+def _nc_proba_fused(binding: PythonObject, fields: PythonObject, source: PythonObject, mode: Int, typestr: String,
+                    context: PythonObject) raises -> PythonObject:
+    """predict_proba / predict_log_proba through `nc_proba`: the decision
+    matrix and its softmax in one session, the (n, C) result downloaded once."""
+    var inputs = _nc_decision_inputs(fields, source, context)
+    var C = _size(inputs[3])
+    var out = _out(Python.tuple(_rows(inputs[0]), C), typestr, context)
+    _nc_fused(binding, "nc_proba", inputs[0], inputs[1], inputs[2], inputs[3], out, C, mode, context)
+    return out
+
+
 def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     # The public result is the existing float32 log-softmax, including the
     # metric/fitted checks and native decision matrix preparation.
     var binding = args[0]
+    if _nc_fused_available(binding):
+        return _nc_proba_fused(binding, py_fields(model), args[1], 1, "<f4", context)
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
     var rows = _rows(dec)
     var cols = _cols(dec)
