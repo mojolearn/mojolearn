@@ -131,8 +131,10 @@ def test_non_string_field_name_is_refused_before_its_protocol():
     assert not calls
 
 
-def test_passive_subclass_preserves_configuration():
+def test_passive_subclass_is_refused_before_configuration():
+    # Splitters are the classes connected at import (their native layouts);
+    # a subclass, even one that overrides nothing, is refused by name.
     class Passive(ms.KFold):
         pass
-    splitter = Passive(3)
-    assert checked(splitter.get_params)['n_splits'] == 3
+    with pytest.raises(TypeError, match="requires a connected native splitter"):
+        Passive(3)
