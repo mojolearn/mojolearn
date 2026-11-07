@@ -654,7 +654,7 @@ struct DartForests(Defaultable, Movable):
         self.next_id = 1
 
     def find(self, id: Int) raises -> Int:
-        for i in range(len(self.forests)):  # small-loop(self.forests: kept DART forests, bounded by the door's resident cap)
+        for i in range(len(self.forests)):  # driver-loop: over kept DART forests (a handle lookup, bounded by the door resident cap)
             if self.forests[i].id == id:
                 return i
         raise Error("x_trees dart: unknown or released forest handle")
@@ -765,7 +765,7 @@ def dart_forest_predict(id: Int, x_addr: Int, out_addr: Int, n: Int, d: Int, k: 
 
 def dart_forest_release(id: Int) raises:
     var registry = DART_FORESTS.get_or_create_ptr()
-    for i in range(len(registry[].forests)):  # small-loop(registry forests: kept DART forests)
+    for i in range(len(registry[].forests)):  # driver-loop: over kept DART forests (a handle lookup)
         if registry[].forests[i].id == id:
             # Queued launches on it finished at their own sync (every predict
             # synchronizes before it returns).
