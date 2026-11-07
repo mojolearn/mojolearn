@@ -3,5 +3,9 @@ head	f9e06ecacfa91f06bc1560ae8275d9f1469e5a75
 overlay_after	d5d7463b99e826fe2f03d2adc1c715f327af8341
 history_paths	\.mojo$
 paths	387
-overlay_paths	20
-blobs	782
+overlay_paths	0
+blobs	823
+overlay	patches
+patches_dir	patches
+patches	22
+overlay_extra	94fb9b3758

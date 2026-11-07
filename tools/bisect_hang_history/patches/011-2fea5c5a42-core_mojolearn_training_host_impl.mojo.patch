@@ -1,0 +1,26 @@
+diff --git a/core/mojolearn_training_host_impl.mojo b/core/mojolearn_training_host_impl.mojo
+index a1c4a9b055be3738215118a3f372220eabf84879..9deb75e15eacccf375cebb62ae1cd485aea89557 100644
+--- a/core/mojolearn_training_host_impl.mojo
++++ b/core/mojolearn_training_host_impl.mojo
+@@ -198,7 +198,7 @@ def mlp_bias_activation_host_into(x_address: Int, b_address: Int, op: MutPointer
+ 
+ 
+ def ce_loss_host_into(
+-    lp: MutPointer[Float32, MutUntrackedOrigin], rp: MutPointer[Float32, MutUntrackedOrigin], dp: MutPointer[Float32, MutUntrackedOrigin], x_address: Int, t_address: Int, n_rows: Int, vocab: Int,
++    lp: MutPointer[Float32, MutUntrackedOrigin], rp: Optional[MutPointer[Float32, MutUntrackedOrigin]], dp: MutPointer[Float32, MutUntrackedOrigin], x_address: Int, t_address: Int, n_rows: Int, vocab: Int,
+     ignore_index: Int, reduction: Int, num_items: Int, want_grad: Int, label_smoothing: Float32,
+ ) raises -> Int:
+     var count = 0
+@@ -232,9 +232,10 @@ def ce_loss_host_into(
+     count = st.count
+     if want_grad != 0:
+         ce_backward_oracle(st, targets, cfg)
+-    if Int(rp) != 0:  # row N118: a null row buffer (SUM or MEAN) is not written
++    if rp:  # row N118: no row buffer (None: SUM or MEAN) is not written
++        var row_out = rp.value()
+         for i in range(n_rows):
+-            rp[i] = st.row[i]
++            row_out[i] = st.row[i]
+     if reduction != REDUCTION_NONE:
+         lp[0] = st.loss[0]
+     else:

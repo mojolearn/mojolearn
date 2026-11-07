@@ -1,0 +1,62 @@
+diff --git a/training/estimator.mojo b/training/estimator.mojo
+index 106705ea968e74662ce43e13ec3aa9de5685b771..ce3ea41ce0d86685becc5c7fc4a0522390f03ea7 100644
+--- a/training/estimator.mojo
++++ b/training/estimator.mojo
+@@ -1488,7 +1488,7 @@ def identical_ce_loss_host(
+ def identical_ce_loss_dev(
+     ctx: DeviceContext,
+     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    row_ptr: Optional[MutPointer[Float32, MutUntrackedOrigin]],
+     mut dlogits: DeviceBuffer[DType.float32],
+     mut logits: DeviceBuffer[DType.float32],
+     targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+@@ -1547,7 +1547,7 @@ def _ce_ret[pool: StaticString](var b: DeviceBuffer[DType.float32]) raises:
+ def identical_ce_loss_resident[pool: StaticString = ""](
+     ctx: DeviceContext,
+     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    row_ptr: Optional[MutPointer[Float32, MutUntrackedOrigin]],
+     mut dlogits: DeviceBuffer[DType.float32],
+     mut logits: DeviceBuffer[DType.float32],
+     mut targets: DeviceBuffer[DType.int32],
+@@ -1567,12 +1567,16 @@ def identical_ce_loss_resident[pool: StaticString = ""](
+     already run the refusals and `ce_count`."""
+     # lane afn-optim: FAST + Apple + MOJOLEARN_AFN_LOSS_FUSED takes the
+     # fused two-launch form; every other build runs the code below.
++    # `row_ptr` is None when the caller has no use for the per-row losses
++    # (SUM or MEAN, row N118); the fused form always writes them, so that
++    # call takes the code below.
+     comptime if AFN_LOSS_FUSED:
+-        afn_ce_loss_resident(
+-            ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
+-            reduction, want_grad, cfg,
+-        )
+-        return
++        if row_ptr:
++            afn_ce_loss_resident(
++                ctx, loss_ptr, row_ptr.value(), dlogits, logits, targets, n_rows, count,
++                reduction, want_grad, cfg,
++            )
++            return
+     var vocab = cfg.vocab
+     var cells = n_rows * vocab
+     var smoothing = cfg.smoothing_is_spelled()
+@@ -1660,11 +1664,12 @@ def identical_ce_loss_resident[pool: StaticString = ""](
+     ctx.synchronize()
+ 
+     # ---- Transport out.
+-    # Lane ne3-c-blocks-embedding (row N118): a null `row_ptr` (SUM or MEAN,
+-    # admitted by the binding) skips the per-row download; the rows are
+-    # still computed, so no stage and no bit changes.
+-    if Int(row_ptr) != 0:
+-        ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=row)
++    # Lane ne3-c-blocks-embedding (row N118): no `row_ptr` (None: SUM or
++    # MEAN, admitted by the binding) skips the per-row download; the rows are
++    # still computed, so no stage and no bit changes. Optional, because a
++    # `Pointer` is never null.
++    if row_ptr:
++        ctx.enqueue_copy(dst_ptr=row_ptr.value(), src_buf=row)
+     if reduction != REDUCTION_NONE:
+         ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=loss)
+     ctx.synchronize()
