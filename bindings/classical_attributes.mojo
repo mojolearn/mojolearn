@@ -2,6 +2,7 @@
 # Native public model attribute lookup. Only connected function/native
 # descriptors may bind; arbitrary Python properties/hooks are never called.
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
+from bindings.admitted_call import AdmittedCall
 from bindings.cpython_table import cpython_table
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp, prepared_class_matches
@@ -250,17 +251,42 @@ def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: P
 
 def classical_getattribute(model: PythonObject, name: PythonObject, context: PythonObject,
                            layout_checked: Bool = False) raises -> PythonObject:
-    # `layout_checked`: the caller ran classical_check_layout on this model in
-    # the same native call (classical_c does, before every instance
-    # operation), so the class and instance-key admission is not repeated.
-    # One module view and one plan resolution for the whole read.
+    # Callers without an admission record (host density, KDE, neighbours,
+    # SVC option reads). `layout_checked`: the caller ran
+    # classical_check_layout on this model in the same native call.
     var mods = NativeModules()
-    var b = mods.module("builtins")
-    if py_type(name) is not b.str:
-        raise Error("TypeError: native model attribute name must be an exact string")
     var plan = PythonObject(None)
     if not layout_checked:
         plan = classical_check_layout(mods, model, context)
+    return _classical_getattribute_impl(mods, model, name, context, plan)
+
+
+def classical_check_layout(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The door's one layout check (ne1-e-admitted-call, row N259): the plan it
+    # admitted is kept on the call, so a later read in the same call neither
+    # re-checks the class and instance keys nor resolves the plan again.
+    if not call.layout_checked:
+        call.layout_plan = classical_check_layout(call.modules, model, context)
+        call.layout_checked = True
+    return call.layout_plan
+
+
+def classical_getattribute(mut call: AdmittedCall, model: PythonObject, name: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
+    # The door's admission record: its module view and its admitted plan.
+    var plan = classical_check_layout(call, model, context)
+    return _classical_getattribute_impl(call.modules, model, name, context, plan)
+
+
+def _classical_getattribute_impl(mut mods: NativeModules, model: PythonObject, name: PythonObject,
+                                 context: PythonObject, admitted_plan: PythonObject) raises -> PythonObject:
+    # `admitted_plan`: the plan classical_check_layout returned in this call
+    # (None when no installer metadata exists). One module view and one plan
+    # resolution for the whole read.
+    var b = mods.module("builtins")
+    if py_type(name) is not b.str:
+        raise Error("TypeError: native model attribute name must be an exact string")
+    var plan = admitted_plan
     if plan is None:
         plan = _public_plan(model, context)
     var cls = py_type(model)

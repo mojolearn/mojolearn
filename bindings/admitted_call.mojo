@@ -19,7 +19,10 @@
 #   inputs          per admitted argument: address, shape, strides, item code,
 #                   read-only flag, sparse code and the owner that keeps the
 #                   buffer alive.
-#   layout_checked  the class layout check of this call already ran.
+#   layout_checked  the class layout check of this call already ran;
+#   layout_plan     the connected public plan that check admitted (None when
+#                   the class has no installer metadata). Added for
+#                   classical_attributes (row N259).
 #
 # Rules:
 # - Never stored on a Python object and never kept past its operation: no
@@ -118,6 +121,7 @@ struct AdmittedCall(Movable):
     var _fitted_filled: List[Bool]
     var inputs: List[AdmittedInput]
     var layout_checked: Bool
+    var layout_plan: PythonObject
 
     def __init__(out self):
         self.modules = NativeModules()
@@ -137,6 +141,7 @@ struct AdmittedCall(Movable):
             self._fitted_filled.append(False)
         self.inputs = List[AdmittedInput]()
         self.layout_checked = False
+        self.layout_plan = PythonObject(None)
 
     # --- modules -----------------------------------------------------------
     def module(mut self, name: String) raises -> PythonObject:
@@ -157,6 +162,7 @@ struct AdmittedCall(Movable):
         self._binding_checked.clear()
         self._bindings.clear()
         self.layout_checked = False
+        self.layout_plan = PythonObject(None)
 
     # --- binding -----------------------------------------------------------
     def find_binding(self, name: String, mode: String, checked: Bool) -> Int:
