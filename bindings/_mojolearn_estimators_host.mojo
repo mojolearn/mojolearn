@@ -67,6 +67,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from bindings.py2mojo_cluster_est import dbscan_core_arrays_host_binding
 from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
+from core.py2mojo_rows import rows_log_host_inplace
 from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
@@ -1166,10 +1167,14 @@ def qn_proba_binding(
     """`predict_proba` in one call on the host: `qn_decision_function` then
     the sigmoid (n_classes < 3: out float64 (n_rows, 2)) or softmax link,
     the same restatements as the two entries called in turn, the scores in
-    native scratch. params: n_rows, n_features, fit_intercept, n_classes.
-    Returns 0."""
-    if len(params) != 4:
-        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes")
+    native scratch. params: n_rows, n_features, fit_intercept, n_classes and
+    an optional 5th, log (0/1): 1 writes `log(p)` (`py2mojo_rows` ROWS_LOG's
+    words, `predict_log_proba`) instead of `p`. Returns 0."""
+    # ne2-g-linear (N361): the GPU binding's contract; log_proba in the same
+    # call (was qn_proba then a py2mojo_rows crossing over the output).
+    if len(params) != 4 and len(params) != 5:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes and an optional log flag")
+    var log_out = len(params) == 5 and _index(params[4]) != 0
     var x_address = _index(x_addr)
     var w_address = _index(coef_addr)
     var op = f64_ptr(_index(out_addr))
@@ -1195,6 +1200,9 @@ def qn_proba_binding(
                 host_predict_task_count(nr),
             )
             host_qn_sigmoid_into(sp, op, nr, host_predict_task_count(nr))
+        if log_out:
+            var n_out = nr * (nt if nt > 2 else 2)
+            rows_log_host_inplace(Int(op), n_out, host_predict_task_count(n_out))
     _ = scores^
     return PythonObject(0)
 
