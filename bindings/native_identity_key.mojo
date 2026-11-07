@@ -12,7 +12,6 @@ from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_type, py_call
 from bindings.native_array_snapshot import native_array_slots
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 struct NativeIdentityKey(Movable, Writable):
@@ -111,7 +110,7 @@ struct NativeIdentityKey(Movable, Writable):
         else:
             # Container kind is stable during this GIL-held native walk; choose
             # the supported accessor once, outside the item loop.
-            var table = perf2_cpython_table()
+            var table = cpython_table()
             var is_list = cls is self.list_type
             for i in range(size):  # driver-loop: over retained exact container metadata
                 var item = table[].PyList_GetItem(value._obj_ptr, i) if is_list else table[].PyTuple_GetItem(value._obj_ptr, i)
@@ -142,7 +141,7 @@ struct NativeIdentityKey(Movable, Writable):
         else:
             # Container kind is stable during this GIL-held native walk; choose
             # the supported accessor once, outside the item loop.
-            var table = perf2_cpython_table()
+            var table = cpython_table()
             var is_list = cls is self.list_type
             for i in range(size):  # driver-loop: over live retained container pointers
                 var item = table[].PyList_GetItem(value._obj_ptr, i) if is_list else table[].PyTuple_GetItem(value._obj_ptr, i)

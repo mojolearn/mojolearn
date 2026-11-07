@@ -35,7 +35,6 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -134,7 +133,7 @@ def _knn_list_items_same(value: PythonObject, snapshot: PythonObject) raises -> 
     var count = len(value)
     if count != len(snapshot):
         return False
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     for i in range(count):  # driver-loop: over retained class-list item identities
         var live = PythonObject(from_borrowed=table[].PyList_GetItem(value._obj_ptr, i))
         var kept = PythonObject(from_borrowed=table[].PyTuple_GetItem(snapshot._obj_ptr, i))

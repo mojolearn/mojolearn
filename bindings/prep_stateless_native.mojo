@@ -25,7 +25,7 @@ from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.py_typed_call import py_call_typed
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
+from bindings.cpython_table import cpython_table
 from bindings.prep_support_native import prep_support
 from bindings.prep_normalizer_lifecycle import normalizer_transform
 from bindings.prep_normalizer_fit import normalizer_fit
@@ -455,7 +455,7 @@ def _support_columns(mask_value: PythonObject) raises -> List[Int]:
         mask = py_call(b.list, mask_value)
         kind = b.list
     var is_list = kind is b.list
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     var true_ptr = PythonObject(True)._obj_ptr
     var false_ptr = PythonObject(False)._obj_ptr
     var keep = List[Int]()

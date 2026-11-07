@@ -28,7 +28,6 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module, shared_dict_watcher, shared_dict_epoch, shared_dict_watch
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call
@@ -130,7 +129,7 @@ def class_record(mut mods: NativeModules, slot: String, cls: PythonObject) raise
         return PythonObject(None)
     # Pointers resolved once per process (perf2-shared table), not three
     # dlsym lookups per record read: doors read records per MRO row.
-    var t = perf2_cpython_table()
+    var t = cpython_table()
     var raw_epoch = t[].PyTuple_GetItem(record._obj_ptr, 0)
     var epoch = t[].PyLong_AsLongLong(raw_epoch)
     if Int(epoch) != _class_epoch(cls):

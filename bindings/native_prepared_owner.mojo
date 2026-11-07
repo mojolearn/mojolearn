@@ -28,7 +28,6 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -93,7 +92,7 @@ def _prepared_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -
     # as argument two. No Python function implementation is invoked.
     try:
         ref cpy = Python().cpython()
-        var table = perf2_cpython_table()
+        var table = cpython_table()
         if table[].PyTuple_Size(args_ptr) != 2:
             raise Error("prepared owner cleanup requires its native ID and weakref")
         var raw_id = table[].PyTuple_GetItem(args_ptr, 0)
@@ -151,7 +150,7 @@ def prepared_get(mut mods: NativeModules, slot: String, owner: PythonObject) rai
     # interpreter from 3.10 (PyWeakref_GetRef starts at 3.13 and
     # PyWeakref_GetObject ends at 3.15; both were looked up per call).
     var weak = g[].entries[identifier].weak._obj_ptr
-    var raw = perf2_cpython_table()[].PyObject_CallNoArgs(weak)
+    var raw = cpython_table()[].PyObject_CallNoArgs(weak)
     if not raw:
         raise cpy.unsafe_get_error()
     var held = PythonObject(from_owned=raw)
@@ -173,7 +172,7 @@ def prepared_put(mut mods: NativeModules, slot: String, owner: PythonObject, rec
     # it; PyWeakref_NewRef invokes the native callback promptly on owner death.
     # https://docs.python.org/3/c-api/method.html#c.PyMethod_New
     # https://docs.python.org/3/c-api/weakref.html#c.PyWeakref_NewRef
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     var raw_callback = table[].PyMethod_New(function._obj_ptr, token._obj_ptr)
     if not raw_callback:
         raise cpy.unsafe_get_error()
@@ -290,7 +289,7 @@ def prepared_namespace_admit(mut mods: NativeModules, module: PythonObject, fiel
 
 
 def _class_stamp_identity(stamp: PythonObject, value: PythonObject, mut offset: Int) raises -> Bool:
-    var table = perf2_cpython_table()
+    var table = cpython_table()
     if offset >= table[].PyList_Size(stamp._obj_ptr):
         return False
     var current = table[].PyList_GetItem(stamp._obj_ptr, offset)
@@ -346,7 +345,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
         # retained stamp to avoid another iterator or temporary Python list.
         offset = row_offset
         for field_index in range(field_count):  # small-loop(field_count: class fields): compare admitted namespace values second
-            var raw_key = perf2_cpython_table()[].PyList_GetItem(stamp._obj_ptr, offset)
+            var raw_key = cpython_table()[].PyList_GetItem(stamp._obj_ptr, offset)
             offset += 1
             var raw_value = cpython_table()[].PyObject_GetItem(fields._obj_ptr, raw_key)
             if not raw_value:
@@ -354,4 +353,4 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
             var value = PythonObject(from_owned=raw_value)
             if not _class_stamp_identity(stamp, value, offset):
                 return False
-    return offset == perf2_cpython_table()[].PyList_Size(stamp._obj_ptr)
+    return offset == cpython_table()[].PyList_Size(stamp._obj_ptr)

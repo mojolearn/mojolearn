@@ -19,7 +19,7 @@ from bindings.native_numpy_metadata import native_numpy_type
 from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot
 from bindings.mode_metadata_native import _class_fields
 from bindings.native_class_admission import class_record, class_admit
-from bindings.p3_lm_tokenizer_cpython import lm_cpython_table
+from bindings.cpython_table import cpython_table
 from bindings.causal_model_config import model_record_fields, model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.linalg_ops_lowbit import _lin_from_f16, lin_connected_binding
@@ -185,7 +185,7 @@ def _checkpoint_pinned_bytes(pin: AdmittedBorrowedBuffer) raises -> PythonObject
     if count > 0 and pin.layout.value().contiguous():
         # One copy: the bytes object is built straight from the pinned
         # contiguous storage (no zero-filled intermediate List).
-        var direct = lm_cpython_table()[].PyBytes_FromStringAndSize(pin.layout.value().address, count)
+        var direct = cpython_table()[].PyBytes_FromStringAndSize(pin.layout.value().address, count)
         _ = pin
         if not direct:
             raise cpy0.unsafe_get_error()

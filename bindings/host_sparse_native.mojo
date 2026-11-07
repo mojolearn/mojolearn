@@ -18,7 +18,6 @@ from core.classical_pandas_impl import _pd_double
 from core.scaler_fit_impl import scaler_cast
 from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, host_sparse_coo, host_sparse_dia, host_sparse_uint64_bound
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 def host_sparse_format(value: PythonObject) raises -> String:
@@ -353,7 +352,7 @@ def _sparse_scalar_word_k(value: PythonObject, kind: Int, width: Int, mut kinds:
     var source_width = 8
     var word = UInt64(0)
     if cls == kinds.int_class or cls == kinds.bool_class:
-        var t = perf2_cpython_table()
+        var t = cpython_table()
         var number = t[].PyLong_AsLongLong(value._obj_ptr)
         if number == -1 and cpython_table()[].PyErr_Occurred():
             # Outside int64: the old exact path (uint64 high-bit values, or
@@ -540,7 +539,7 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         # p3-array-arena: classes read once per conversion; the snapshot's
         # pairs and coordinates read borrowed through the C API.
         var kinds = _SparseKinds(context)
-        var t = perf2_cpython_table()
+        var t = cpython_table()
         var tuple_class = Int(b.tuple._obj_ptr)
         for i in range(len(pairs)):  # driver-loop: native dictionary's sparse coordinate records
             var pair = t[].PyList_GetItem(pairs._obj_ptr, i)
@@ -561,7 +560,7 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         if indices.count != rows or values.count != rows:
             raise Error("sparse LIL storage requires one native object row per sample")
         var kinds = _SparseKinds(context)
-        var t = perf2_cpython_table()
+        var t = cpython_table()
         for row in range(rows):  # driver-loop: captured sparse object-row storage
             var row_indices = _sparse_object_at(indices, row)
             var row_values = _sparse_object_at(values, row)

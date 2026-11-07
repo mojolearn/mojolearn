@@ -9,7 +9,6 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_address import native_buffer_address
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.cpython_table import cpython_table
-from bindings.perf2_shared_cpython_table import perf2_cpython_table
 
 
 def _storage_metadata() raises -> PythonObject:
@@ -97,7 +96,7 @@ def native_array_from_values(code: String, source: PythonObject) raises -> Pytho
         # PythonObject item per element (an array.array source needs no
         # check: its iteration yields exact primitives).
         ref cpy = Python().cpython()
-        var t = perf2_cpython_table()
+        var t = cpython_table()
         var is_list = cls is b.list
         var int_type = b.int._obj_ptr
         var float_type = b.float._obj_ptr
