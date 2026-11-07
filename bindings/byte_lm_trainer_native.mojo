@@ -322,6 +322,22 @@ def _native_execute(fields: PythonObject, binding: PythonObject, provider: Pytho
     return result
 
 
+def _native_execute_words(fields: PythonObject, binding: PythonObject, provider: PythonObject,
+                          operation: Int, addresses: List[Int], shape: _Shape, state: PythonObject,
+                          train: Bool, batch: Int = 0, length: Int = 0, release: Bool = False) raises -> Int:
+    """`_native_execute` for descriptors already held as native words."""
+    var session = fields["_native_session"]
+    var a = List[Int]()
+    a.append(_session_handle(fields, binding, provider))
+    for i in range(len(addresses)):  # small-loop(the admitted operation buffer descriptors)
+        a.append(addresses[i])
+    var plan = _native_plan(shape, state, train, batch, length, release)
+    var result = neural_descriptor_execute(provider, operation, a, plan[0], plan[1])
+    _ = session  # owner is live through the synchronous native call
+    _ = binding
+    return result
+
+
 def _forget(mut mods: NativeModules, fields: PythonObject, context: PythonObject) raises:
     """`_forget_session`."""
     py_setitem(fields, "_provider_session", PythonObject(None))
@@ -544,34 +560,33 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
     var out_loss = _f32(1, context)
     var out_flags = _i32(shape.n_tensors(), context) if train else PythonObject(None)
     var grads = _gradient_outputs(mods, shape, True, context) if full else Python.tuple(PythonObject(None), b.dict())
-    var addresses = Python.list(classical_address(tokens), classical_address(state["flags"]))
-    if Bool(py=fields["_session_open"]):
-        for _ in range(3):  # small-loop(the three admission slots)
-            _ = py_call(addresses.append, 0)
-    else:
-        for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three named state arrays)
-            _ = py_call(addresses.append, classical_address(state[key]))
-    _ = py_call(addresses.append, classical_address(out_loss))
-    _ = out_loss  # keep the Python object alive through the native call above
-    _ = py_call(addresses.append, classical_address(out_flags) if train else PythonObject(0))
-    _ = out_flags  # keep the Python object alive through the native call above
-    _ = out_loss  # keep the Python object alive through the native call above
-    _ = py_call(addresses.append, classical_address(grads[0]) if full else PythonObject(0))
-    _ = out_flags  # keep the Python object alive through the native call above
-    _ = out_loss  # keep the Python object alive through the native call above
+    # The operation's buffer descriptors as native words (plan row N104): no
+    # Python list is built for the provider route.
+    var a = List[Int]()
+    a.append(Int(py=classical_address(tokens)))
+    a.append(Int(py=classical_address(state["flags"])))
+    var is_open = Bool(py=fields["_session_open"])
+    for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three named state arrays)
+        a.append(0 if is_open else Int(py=classical_address(state[key])))
+    a.append(Int(py=classical_address(out_loss)))
+    a.append(Int(py=classical_address(out_flags)) if train else 0)
+    a.append(Int(py=classical_address(grads[0])) if full else 0)
     var by_name = grads[1]
     var keys = py_call(b.list, by_name)
     for i in range(len(keys)):  # driver-loop: one address per model parameter tensor
-        _ = py_call(addresses.append, classical_address(by_name[keys[i]]))
-        _ = out_flags  # keep the Python object alive through the native call above
-        _ = out_loss  # keep the Python object alive through the native call above
+        a.append(Int(py=classical_address(by_name[keys[i]])))
+    _ = out_flags  # keep the Python object alive through the native call below
+    _ = out_loss  # keep the Python object alive through the native call below
     py_setitem(fields, "_grad_step", -1)
     var returned = PythonObject(None)
     try:
         if provider is not None:
-            returned = PythonObject(_native_execute(fields, binding, provider, 1, addresses, shape, state, train))
+            returned = PythonObject(_native_execute_words(fields, binding, provider, 1, a, shape, state, train))
             mods.released()
         else:
+            var addresses = Python.list()
+            for i in range(len(a)):  # small-loop(the admitted operation buffer descriptors)
+                _ = py_call(addresses.append, a[i])
             returned = py_call_typed(_entry(binding, "byte_lm_trainer_step"), session, addresses, _parameters(mods, state, train),
                                      shape.native_shape())
             mods.released()
