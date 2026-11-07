@@ -2029,3 +2029,118 @@ def op_p2m_row_sort(indptr: Int, cols: Int, dists: Int, out_cols: Int, out_d: In
     _ = d_perm^
     _ = d_rowid^
     _ = ctx^
+
+
+# ---------------------------------------------- NearestCentroid fused queries
+# Lane ne3-g-svc-gp-neighbors (row N327 of the native entry-point plan):
+# NearestCentroid predict / predict_proba / predict_log_proba as one device
+# session each. The launches are the ops the caller ran one by one (sqdist or
+# l1dist then knn_select with k = 1; nc_decision then row_argmax, softmax,
+# log_softmax or softmax64) with the same kernels, items and dimension words;
+# only the nq x C matrix no longer crosses to the host and back, so the codes
+# and probabilities are the same bits.
+comptime XN_NC_SQDIST = 0
+comptime XN_NC_L1DIST = 1
+comptime XN_NC_DECISION = 2
+comptime XN_NC_SOFTMAX = 0
+comptime XN_NC_LOG_SOFTMAX = 1
+comptime XN_NC_SOFTMAX64 = 2
+
+
+def _nc_decision_launch(ctx: DeviceContext, mut d_q: DeviceBuffer[DType.float32],
+                        mut d_cent: DeviceBuffer[DType.float32], mut d_std: DeviceBuffer[DType.float32],
+                        mut d_prior: DeviceBuffer[DType.float32], mut d_mat: DeviceBuffer[DType.float32],
+                        n: Int, d: Int, c: Int) raises:
+    ctx.enqueue_function[nc_decision_kernel](
+        d_q.unsafe_ptr(), d_cent.unsafe_ptr(), d_std.unsafe_ptr(), d_prior.unsafe_ptr(), d_mat.unsafe_ptr(),
+        Int64(n), Int64(d), Int64(c),
+        grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
+    )
+
+
+def op_nc_labels(q: Int, cent: Int, std: Int, prior: Int, codes: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+    """codes (n int32): the nearest centroid (mode XN_NC_SQDIST /
+    XN_NC_L1DIST: the distance matrix then knn_select k = 1, ties to the
+    lowest index as before) or the first maximum of the decision matrix
+    (XN_NC_DECISION: nc_decision then row_argmax). `std` and `prior` are
+    read in XN_NC_DECISION only."""
+    var ctx = xn_ctx()
+    var d_q = _buf(ctx, q, n * d, True)
+    var d_cent = _buf(ctx, cent, c * d, True)
+    var d_mat = _buf(ctx, 0, n * c, False)
+    var d_codes = _buf_i(ctx, 0, n, False)
+    var decision = mode == XN_NC_DECISION
+    var d_std = _buf(ctx, std, d if decision else 0, decision)
+    var d_prior = _buf(ctx, prior, c if decision else 0, decision)
+    var d_dist = _buf(ctx, 0, 0 if decision else n, False)
+    if decision:
+        _nc_decision_launch(ctx, d_q, d_cent, d_std, d_prior, d_mat, n, d, c)
+        if n > 0:
+            ctx.enqueue_function[row_argmax_kernel](
+                d_mat.unsafe_ptr(), d_codes.unsafe_ptr(), Int64(n), Int64(c),
+                grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+            )
+    else:
+        if mode == XN_NC_SQDIST:
+            ctx.enqueue_function[sqdist_kernel](
+                d_q.unsafe_ptr(), d_cent.unsafe_ptr(), d_mat.unsafe_ptr(), Int64(n), Int64(c), Int64(d),
+                grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
+            )
+        else:
+            ctx.enqueue_function[l1dist_kernel](
+                d_q.unsafe_ptr(), d_cent.unsafe_ptr(), d_mat.unsafe_ptr(), Int64(n), Int64(c), Int64(d),
+                grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
+            )
+        ctx.enqueue_function[knn_select_kernel](
+            d_mat.unsafe_ptr(), d_dist.unsafe_ptr(), d_codes.unsafe_ptr(), Int64(n), Int64(c), Int64(1), Int64(0),
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+    _down_i(ctx, d_codes, codes, n)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_cent^
+    _ = d_std^
+    _ = d_prior^
+    _ = d_mat^
+    _ = d_dist^
+    _ = d_codes^
+    _ = ctx^
+
+
+def op_nc_proba(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+    """res: the softmax (XN_NC_SOFTMAX, n x c float32), the log-softmax
+    (XN_NC_LOG_SOFTMAX) or the float64 softmax (XN_NC_SOFTMAX64, 2 n c
+    float32 words) of the nc_decision matrix, in one device session."""
+    var ctx = xn_ctx()
+    var d_q = _buf(ctx, q, n * d, True)
+    var d_cent = _buf(ctx, cent, c * d, True)
+    var d_std = _buf(ctx, std, d, True)
+    var d_prior = _buf(ctx, prior, c, True)
+    var d_mat = _buf(ctx, 0, n * c, False)
+    var words = 2 * n * c if mode == XN_NC_SOFTMAX64 else n * c
+    var d_res = _buf(ctx, 0, words, False)
+    _nc_decision_launch(ctx, d_q, d_cent, d_std, d_prior, d_mat, n, d, c)
+    if mode == XN_NC_SOFTMAX:
+        ctx.enqueue_function[softmax_kernel](
+            d_mat.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(c),
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+    elif mode == XN_NC_LOG_SOFTMAX:
+        ctx.enqueue_function[log_softmax_kernel](
+            d_mat.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(c),
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+    else:
+        ctx.enqueue_function[softmax64_kernel](
+            d_mat.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(c),
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+    _down(ctx, d_res, res, words)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_cent^
+    _ = d_std^
+    _ = d_prior^
+    _ = d_mat^
+    _ = d_res^
+    _ = ctx^
