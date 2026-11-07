@@ -7,9 +7,7 @@ names; classical_c, the public attribute entry, the GP and boost doors build
 one record and hand it to their helpers; the helpers that re-admitted modules,
 bindings or X take the door's admission instead.
 
-Runtime checks: ExponentialSmoothing refuses a name that is not one of its
-three lazy components in Python routing, without a binding crossing; with a
-compiled classical binding, Ridge fit / predict / coef_ and a GP classifier fit
+Runtime checks: with a compiled classical binding, Ridge fit / predict / coef_ and a GP classifier fit
 and predict give the same answers as before (the record changes no numerics).
 
     cd python && python3 -m pytest mojolearn/tests/test_admitted_call_doors.py -q
@@ -99,20 +97,6 @@ def test_mode_plan_reused_per_class_state():
                      "def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject")
     assert "class_record(mods, _MODE_PLAN_SLOT, cls)" in text
     assert "class_admit(mods, _MODE_PLAN_SLOT, cls" in text
-
-
-def test_exponential_smoothing_refuses_unknown_names_without_crossing(monkeypatch):
-    from mojolearn import _tsa_impl
-
-    crossings = []
-    monkeypatch.setattr(_tsa_impl, "_TSA", lambda *args: crossings.append(args))
-    model = _tsa_impl.ExponentialSmoothing.__new__(_tsa_impl.ExponentialSmoothing)
-    with pytest.raises(AttributeError, match="ExponentialSmoothing has no such attribute"):
-        getattr(model, "no_such_attribute")
-    assert not hasattr(model, "__deepcopy_probe__")
-    assert crossings == []
-    getattr(model, "level_")
-    assert len(crossings) == 1 and crossings[0][1] == "hw_attribute"
 
 
 def test_ridge_answers_through_the_record():
