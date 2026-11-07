@@ -6,6 +6,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.mode_metadata_native import _fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -161,7 +162,23 @@ def estimator_arguments(model: PythonObject, name: String, args: PythonObject,
     if len(args) == 0 or args[0] is not None:
         return args
     var selected = estimator_binding(model, name, context)
-    var values = Python.list(selected)
-    for i in range(1, len(args)):  # driver-loop: over fixed public method arguments
-        _ = py_call(values.append, args[i])
-    return py_call(native_loaded_module("builtins").tuple, values)
+    if py_type(args) is not native_loaded_module("builtins").tuple:
+        var values = Python.list(selected)
+        for i in range(1, len(args)):  # driver-loop: over fixed public method arguments
+            _ = py_call(values.append, args[i])
+        return py_call(native_loaded_module("builtins").tuple, values)
+    # Exact tuple (every thin public call): one presized tuple filled with
+    # borrowed items, no Python list, append calls or tuple() call (lane
+    # ne1-e-table, row N234).
+    ref cpy = Python().cpython()
+    var count = len(args)
+    var envelope = cpy.PyTuple_New(count)
+    if not envelope:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=envelope)
+    _ = cpy.PyTuple_SetItem(envelope, 0, cpy.Py_NewRef(selected._obj_ptr))
+    var table = cpython_table()
+    for i in range(1, count):  # small-loop(args: positional arguments of one public call)
+        _ = cpy.PyTuple_SetItem(envelope, i, cpy.Py_NewRef(table[].PyTuple_GetItem(args._obj_ptr, i)))
+    _ = args  # the borrowed items stay owned by args until each new reference is taken
+    return result
