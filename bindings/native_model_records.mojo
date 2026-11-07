@@ -17,7 +17,9 @@ Accessor list (the ne1 contract; other lanes code against exactly these):
     records_open(model) raises -> Int              key with a live entry, or 0 when the
                                                    object takes no weak reference
     records_live(model) raises -> Bool             a live entry exists for this object
-    records_release(model_key: Int)                drop every family slot (death callback)
+    records_release(model_key: Int)                drop every family slot (death callback),
+                                                   then run every registered release hook
+    records_register_release_hook(hook) -> Bool    hook: def(Int) thin -> None
   Generation word
     model_generation(model) raises -> Int          0 = no proof (never stamped, or no
                                                    dictionary watcher); else >= 1
@@ -45,6 +47,22 @@ Accessor list (the ne1 contract; other lanes code against exactly these):
     records_slot_resident(model_key) raises -> UnsafePointer[ResidentSlot, MutAnyOrigin]
     (each raises when `model_key` has no entry: call records_open first)
   Family codes: RECORDS_PREPARED, RECORDS_TREES, RECORDS_CLUSTER, RECORDS_GP_SVM.
+
+Release hooks (2026-11-06): a family store keyed by model identity outside
+this table (the cluster/spectral resident table `cres_forget_key`, the
+sequence store's `seq_resident_owner_died`) registers a non-raising
+`def(Int) thin -> None` with `records_register_release_hook`; records_release
+calls every hook with the model key after the entry is gone. This module
+imports no family module (no import cycle, no family code in every
+binding). Rules for a hook: non-raising, runs no Python code (it runs inside a
+weakref callback), may release native or device memory it owns or post the
+death for its store's next call, and is idempotent (it may run for a key the
+store never saw). Mojo has no module
+initializer, so the owner registers at its store's first use and keeps a
+shared `_Global` "registered" flag, so one registration serves every
+extension (each extension holds its own copy of the hook function; any one
+of them is correct because they all act on the same shared store). The
+registry holds at most RECORDS_RELEASE_HOOKS_MAX hooks.
 
 The generation word, and the `__setattr__` hook question of rows N050, N071
 and N320, settled here once (2026-11-06):
@@ -85,11 +103,6 @@ from bindings.cpython_table import cpython_table
 from bindings.perf2_shared_cpython_table import perf2_cpython_table
 from bindings.native_loaded_module import native_loaded_module, shared_dict_watch, shared_dict_epoch
 from bindings.py_balanced import py_call, py_type, py_fields, _is_exact_dict
-# Sibling lanes' release hooks (lane/ne1-a-cluster-spectral at the
-# integration merge): `cres_forget_key(model_key: Int)` and
-# `seq_resident_owner_died(owner: Int)`, both non-raising.
-from bindings.cluster_resident_table import cres_forget_key
-from sequence.perf3_seq_resident_words import seq_resident_owner_died
 
 
 # Family codes of the named payload records.
@@ -292,12 +305,58 @@ def records_release(model_key: Int):
         _ = released^
     except:
         return
-    # The families' resident device stores keyed by this model (workstream A;
-    # both non-raising): the cluster/spectral resident table drops its
-    # entries now; the sequence store gets the death posted and drains it on
-    # its next call (device releases never run inside a weakref callback).
-    cres_forget_key(model_key)
-    seq_resident_owner_died(model_key)
+    # Every registered release hook (the families' resident device stores
+    # keyed by this model; see records_register_release_hook).
+    _records_run_release_hooks(model_key)
+
+
+# ------------------------------------------------------------------ release hooks
+
+comptime RecordsReleaseHook = def(Int) thin -> None
+comptime RECORDS_RELEASE_HOOKS_MAX = 64
+
+
+struct RecordsReleaseHooks(Defaultable, Movable):
+    var hooks: List[RecordsReleaseHook]
+
+    def __init__(out self):
+        self.hooks = List[RecordsReleaseHook](capacity=RECORDS_RELEASE_HOOKS_MAX)
+
+
+# Shared by every Mojo extension in the process (one registry, like the table).
+comptime MODEL_RECORDS_HOOKS = _Global[
+    StorageType=RecordsReleaseHooks, name="MojolearnModelRecordsHooksV1",
+    init_fn=RecordsReleaseHooks.__init__,
+]
+
+
+def records_register_release_hook(hook: RecordsReleaseHook) -> Bool:
+    """Register `hook` to run with the model key whenever an entry is
+    released (model death, a stale entry, an explicit records_release).
+    False when the registry is full (RECORDS_RELEASE_HOOKS_MAX) or not
+    reachable; the caller's store then keeps its own eviction."""
+    try:
+        var g = MODEL_RECORDS_HOOKS.get_or_create_ptr()
+        if len(g[].hooks) >= RECORDS_RELEASE_HOOKS_MAX:
+            return False
+        # Appends run with the GIL held (registration happens inside a
+        # native call), so no lock is needed; capacity is reserved up front,
+        # so the append never reallocates under a concurrent reader.
+        g[].hooks.append(hook)
+        return True
+    except:
+        return False
+
+
+def _records_run_release_hooks(model_key: Int):
+    try:
+        var g = MODEL_RECORDS_HOOKS.get_or_create_ptr()
+        var n = len(g[].hooks)
+        for i in range(n):  # small-loop(registered release hooks, at most RECORDS_RELEASE_HOOKS_MAX)
+            var hook = g[].hooks[i]
+            hook(model_key)
+    except:
+        pass
 
 
 def _records_release_token(token: Int) raises:
