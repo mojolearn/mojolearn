@@ -44,11 +44,11 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
         # and a record must not strongly retain its class.
         class_admit(mods, MSEL_PLAN_CLASS_SLOT, cls, PythonObject(Int(plan._obj_ptr)))
     var fields = py_call(plan["fields_get"], model, cls)
-    if msel_fields_admitted(fields, plan):
+    if msel_fields_admitted(model, fields, plan):
         return plan
     _msel_check_fields(fields, plan, b)
     if py_type(fields) is b.dict:
-        msel_fields_admit(fields, plan)
+        msel_fields_admit(model, fields, plan)
     return plan
 
 

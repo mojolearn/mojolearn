@@ -62,7 +62,7 @@ def msel_search_fields(model: PythonObject, context: PythonObject) raises -> Pyt
     var b = native_loaded_module("builtins")
     var plan = msel_search_plan(model, context)
     var fields = py_call(plan["fields_get"], model, py_type(model))
-    if msel_fields_admitted(fields, plan):
+    if msel_fields_admitted(model, fields, plan):
         return fields
     var keys = py_call(b.list, fields.keys())
     var protected = plan["protected"]
@@ -72,7 +72,7 @@ def msel_search_fields(model: PythonObject, context: PythonObject) raises -> Pyt
         if py_contains(protected, keys[k]):
             raise Error("TypeError: native search instance overrides a method or storage hook")
     if py_type(fields) is b.dict:
-        msel_fields_admit(fields, plan)
+        msel_fields_admit(model, fields, plan)
     return fields
 
 
