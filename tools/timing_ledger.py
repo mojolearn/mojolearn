@@ -205,23 +205,29 @@ def safe(fn, *args, **kw):
 # ---------------------------------------------------------------- feeds (existing clocks -> ledger)
 def ingest_tests(directory, ledger=None, force=False):
     """One record per test from a run's durations-*.json (python/mojolearn/tests/conftest.py). Each file's
-    mtime is the session end; a test's start is derived from its seconds. A directory is ingested once
-    (marker file INGESTED_MARK) unless force. Returns the number of tests recorded."""
+    mtime is its session end; a test's start is derived from its seconds. A file is ingested once: the
+    directory's INGESTED_MARK lists each ingested file as name:mtime_ns (conftest's default dir `latest` is
+    rewritten by every bare pytest run, so a rewritten file is new). force re-ingests. Returns tests recorded."""
     directory = Path(directory)
     mark = directory / INGESTED_MARK
+    done = set()
     if mark.exists() and not force:
-        return 0
-    rows = []
+        done = set(mark.read_text(encoding="utf-8").split())
+    rows, keys = [], []
     for path in sorted(directory.glob("durations-*.json")):
-        end = path.stat().st_mtime
+        stat = path.stat()
+        key = f"{path.name}:{stat.st_mtime_ns}"
+        if key in done:
+            continue
+        end = stat.st_mtime
         tests = json.loads(path.read_text(encoding="utf-8")).get("tests", {})
         for nodeid, entry in tests.items():
-            row = _line("test", nodeid, end - float(entry["seconds"]), end,
-                        extra=dict(outcome=entry.get("outcome"), file=nodeid.split("::", 1)[0],
-                                   source=str(path), start_derived=True))
-            rows.append(row)
-    if rows and _append(rows, ledger) is not None:
-        mark.write_text(f"{len(rows)} tests ledgered at {time.time():.0f}\n")
+            rows.append(_line("test", nodeid, end - float(entry["seconds"]), end,
+                              extra=dict(outcome=entry.get("outcome"), file=nodeid.split("::", 1)[0],
+                                         source=str(path), start_derived=True)))
+        keys.append(key)
+    if keys and (not rows or _append(rows, ledger) is not None):
+        mark.write_text("\n".join(sorted(done | set(keys))) + "\n", encoding="utf-8")
     return len(rows)
 
 
