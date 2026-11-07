@@ -222,47 +222,64 @@ def _held_matches(held: PythonObject, model: PythonObject, context: PythonObject
 # so its generation; an in-place edit of a list or dict parameter changes its
 # content words.
 def _stamp_into(mut rec: ContentRecord, value: PythonObject, context: PythonObject, depth: Int) raises:
-    if not rec.ok or value is None:
-        return
-    if depth > _MAX_DEPTH:
-        rec.ok = False
+    # Iterative (ne-fix-hang2): an explicit stack in place of the former
+    # self-recursion, a suspect of the classical-host compile hang. Children
+    # are pushed in reverse so they pop in order: the same depth-first
+    # pre-order of content words, the same `_MAX_DEPTH` refusal and the same
+    # stop once `rec.ok` is False.
+    if not rec.ok:
         return
     var b = native_loaded_module("builtins")
-    var kind = py_type(value)
-    if kind is b.bool or kind is b.int or kind is b.float or kind is b.str:
-        return
-    if kind is b.set or kind is b.frozenset:
-        rec.ok = False
-        return
-    if kind is b.dict:
-        # The entries' identities (exact str / int keys only), one level.
-        content_value(rec, value, 0, 1, True)
-        var pairs = py_call(b.list, value.items())
-        for k in range(len(pairs)):  # driver-loop: constructor parameter mapping entries (once per stamp)
-            _stamp_into(rec, pairs[k][1], context, depth + 1)
-        return
-    if kind is b.list or kind is b.tuple:
-        # A list's length and item identities (a tuple cannot change), then
-        # each item.
-        content_value(rec, value, 0, 1, True)
-        for k in range(len(value)):  # driver-loop: constructor parameter container items (once per stamp)
-            _stamp_into(rec, value[k], context, depth + 1)
-        return
-    var plan = prep_estimator_plan(value, context)
-    if plan is None:
-        # Identity alone, as the record; its class is kept too.
-        content_value(rec, value, 0, 1, True)
-        return
-    var fields = py_call(plan["fields_get"], value, kind)
-    if not (fields is py_fields(value)):
-        rec.ok = False
-        return
-    # The member's class and generation word (limit 0: its values are walked
-    # below, parameter by parameter, as the record walks them).
-    content_object(rec, value, 0)
-    var names = plan["parameters"]
-    for k in range(len(names)):  # driver-loop: a member's fixed constructor parameters (once per stamp)
-        _stamp_into(rec, py_get(fields, names[k]), context, depth + 1)
+    var pending = List[PythonObject]()
+    var depths = List[Int]()
+    pending.append(value)
+    depths.append(depth)
+    while len(pending) > 0 and rec.ok:  # driver-loop: over a configuration's nested values (once per stamp)
+        var item = pending.pop()
+        var level = depths.pop()
+        if item is None:
+            continue
+        if level > _MAX_DEPTH:
+            rec.ok = False
+            return
+        var kind = py_type(item)
+        if kind is b.bool or kind is b.int or kind is b.float or kind is b.str:
+            continue
+        if kind is b.set or kind is b.frozenset:
+            rec.ok = False
+            return
+        if kind is b.dict:
+            # The entries' identities (exact str / int keys only), one level.
+            content_value(rec, item, 0, 1, True)
+            var pairs = py_call(b.list, item.items())
+            for k in range(len(pairs) - 1, -1, -1):  # driver-loop: constructor parameter mapping entries (once per stamp)
+                pending.append(pairs[k][1])
+                depths.append(level + 1)
+            continue
+        if kind is b.list or kind is b.tuple:
+            # A list's length and item identities (a tuple cannot change), then
+            # each item.
+            content_value(rec, item, 0, 1, True)
+            for k in range(len(item) - 1, -1, -1):  # driver-loop: constructor parameter container items (once per stamp)
+                pending.append(item[k])
+                depths.append(level + 1)
+            continue
+        var plan = prep_estimator_plan(item, context)
+        if plan is None:
+            # Identity alone, as the record; its class is kept too.
+            content_value(rec, item, 0, 1, True)
+            continue
+        var fields = py_call(plan["fields_get"], item, kind)
+        if not (fields is py_fields(item)):
+            rec.ok = False
+            return
+        # The member's class and generation word (limit 0: its values are walked
+        # below, parameter by parameter, as the record walks them).
+        content_object(rec, item, 0)
+        var names = plan["parameters"]
+        for k in range(len(names) - 1, -1, -1):  # driver-loop: a member's fixed constructor parameters (once per stamp)
+            pending.append(py_get(fields, names[k]))
+            depths.append(level + 1)
 
 
 def _stamp(model: PythonObject, context: PythonObject) raises:
