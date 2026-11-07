@@ -35,7 +35,7 @@ from bindings.trees_public_inputs import (
 )
 from bindings.trees_side_records import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
 from bindings.trees_resident_table import (
-    TREES_RESIDENT_FOREST, trees_resident_find, trees_resident_put, trees_resident_pin, trees_resident_unpin,
+    TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_put, trees_resident_pin, trees_resident_unpin,
     trees_resident_watch,
 )
 from bindings.native_model_records import model_identity_key, model_generation
@@ -1407,6 +1407,66 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
     return ForestHandle(handle, kept, release)
 
 
+def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput, out: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    """The sequential vote of a host binding over its strict snapshot
+    (bindings/forest_host_strict_binding.mojo), kept in the tree resident
+    table like the device snapshots: keyed by the model's identity and
+    generation, the dimensions and the identities of the five frozen model
+    arrays. Returns the rows written."""
+    var native = staged.native
+    var prepare = trees_need(native, "forest_strict_prepare", "rebuild the forest host binding")
+    var query = trees_need(native, "forest_strict_predict", "rebuild the forest host binding")
+    var release = trees_need(native, "forest_strict_release", "rebuild the forest host binding")
+    var features = Int(py=_int(fields["n_features_in_"]))
+    var trees = Int(py=_int(fields["_n_trees"]))
+    var outputs = staged.outputs
+    var arrays = _model_arrays(fields)
+    var mirrors = List[PythonObject]()
+    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
+        mirrors.append(arrays[i])
+    var words = List[Int]()
+    words.append(features)
+    words.append(trees)
+    words.append(outputs)
+    var model_key = model_identity_key(model)
+    var generation = model_generation(model)
+    var handle = trees_resident_find(model_key, generation, TREES_RESIDENT_FOREST_STRICT, native, words, mirrors)
+    var kept = handle > 0
+    if not kept:
+        var dtypes = _dtypes()
+        for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
+            var a = arrays[i]
+            if py_type(a) is not context["array_class"] or String(a.dtype) != String(dtypes[i]) or Int(py=a.ndim) != 1:
+                raise Error("forest model arrays must have their original flat dtypes")
+            _ = fitted_freeze(a, context)
+        handle = Int(py=py_call_typed(prepare, PythonObject(trees_address(arrays[0])), PythonObject(trees_address(arrays[1])),
+                                      PythonObject(trees_address(arrays[2])), PythonObject(trees_address(arrays[3])),
+                                      PythonObject(trees_address(arrays[4])),
+                                      Python.list(PythonObject(features), PythonObject(trees), PythonObject(outputs))))
+        _ = arrays  # keep the Python objects alive through the native call above
+        var nodes = Int(py=arrays[1].size)
+        var bytes = 4 * ((trees + 1) + 3 * nodes + nodes * outputs)
+        try:
+            if trees_resident_watch(model, model_key):
+                kept = trees_resident_put(model_key, generation, TREES_RESIDENT_FOREST_STRICT, native, release, handle,
+                                          words^, mirrors^, bytes)
+        except error:
+            _ = py_call(release, PythonObject(handle))
+            raise error^
+    if kept:
+        trees_resident_pin(handle)
+    var use = ForestHandle(handle, kept, release)
+    var wrote = PythonObject(None)
+    try:
+        wrote = py_call_typed(query, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+                              Python.list(PythonObject(staged.x.rows), PythonObject(staged.x.cols), PythonObject(outputs)))
+    finally:
+        forest_handle_done(use)
+    _ = out  # keep the Python object alive through the native call above
+    return wrote
+
+
 struct ForestInput(Copyable, Movable):
     """One predict's resolved state, read once (lane perf-trees-owed,
     2026-11-06; `_int`, `_engine` and `_ordered_export` were re-read two or
@@ -1464,7 +1524,11 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
     var out = trees_vector(rows * outputs, "<f4", context)
     var engine = staged.engine
     var wrote = PythonObject(None)
-    if engine == "sequential" and not staged.ordered_export:
+    if engine == "sequential" and not staged.ordered_export and trees_entry(staged.native, "forest_strict_prepare") is not None:
+        # The host column's kept trees (N044): the same sequential vote over
+        # trees rebuilt once per fitted model, not once per call.
+        wrote = _strict_vote(model, fields, staged, out, context)
+    elif engine == "sequential" and not staged.ordered_export:
         # The refusal's words are built only when the entry is missing.
         var function = trees_entry(staged.native, sequential_name)
         if function is None:

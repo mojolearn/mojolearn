@@ -52,6 +52,7 @@ comptime TREES_RESIDENT_KEEP_BYTES = 1 << 30
 # Entry kinds (one per snapshot shape a door keeps).
 comptime TREES_RESIDENT_FOREST = 1
 comptime TREES_RESIDENT_DART = 2
+comptime TREES_RESIDENT_FOREST_STRICT = 3
 
 comptime _DEATH_SLOT = "trees_resident_death_v1"
 

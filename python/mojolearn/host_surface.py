@@ -2292,6 +2292,7 @@ FAMILIES = (
             "et_classifier_fit_weighted_shard", "et_regressor_fit_weighted_shard",
             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
             "forest_release_gpu",
+            "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2339,6 +2340,7 @@ FAMILIES = (
             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
             "rf_classifier_fit_shard_export", "rf_regressor_fit_shard_export",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
+            "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
             "rf_data_session_open", "rf_data_session_close",
             "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",

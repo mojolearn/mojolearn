@@ -81,6 +81,9 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import et_host_predict, et_host_trees
+from bindings.forest_host_strict_binding import (
+    forest_strict_prepare_host_binding, forest_strict_predict_host_binding, forest_strict_release_host_binding,
+)
 from bindings.forest_host_groves_binding import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
@@ -693,6 +696,10 @@ def build__mojolearn_trees_host() -> PythonObject:
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
         module.def_function[resident_release_binding]("forest_release_gpu")
+        # The strict snapshot of the sequential engine (N044, ne1-a-trees).
+        module.def_function[forest_strict_prepare_host_binding[False]]("forest_strict_prepare")
+        module.def_function[forest_strict_predict_host_binding[False]]("forest_strict_predict")
+        module.def_function[forest_strict_release_host_binding[False]]("forest_strict_release")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_trees_host: ", error))
