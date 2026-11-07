@@ -15,7 +15,7 @@ so the CPU dispatch and the bindings can import it.
 """
 from std.ffi import _Global
 from std.atomic import Atomic, Ordering
-from bindings.native_model_records import records_register_release_hook
+from bindings.native_model_records import records_dead_keys_since
 
 #: the marker left by the device dispatch: params is already this
 #: executor's device memory, read-only; no allocation, no upload.
@@ -34,25 +34,9 @@ comptime _SEQ_RESIDENT_TOKENS = _Global[
 ]
 
 
-def _hook_once() raises:
-    """Register `seq_resident_owner_died` with the records module's release
-    hooks once per process (bindings/native_model_records.mojo
-    `records_register_release_hook`), so a model's death posts its key here.
-    Called only with the GIL held (the registration's rule): from
-    `seq_resident_token`, the provider's record write. The flag is set before
-    the call, so a release run during registration cannot register twice; a
-    full registry (False) leaves dead blocks to the store's LRU eviction."""
-    var dead = _dead()
-    if dead[].hooked:
-        return
-    dead[].hooked = True
-    _ = records_register_release_hook(seq_resident_owner_died)
-
-
 def seq_resident_token() raises -> Int:
     """A new process-unique, nonzero token for one admitted fitted block.
     Called with the GIL held (the binding's record write)."""
-    _hook_once()
     var tokens = _SEQ_RESIDENT_TOKENS.get_or_create_ptr()
     var token = tokens[].next
     tokens[].next += 1
@@ -75,12 +59,13 @@ def seq_resident_words(addresses: List[Int], base: Int, operation: String) raise
 # Free at model death (lane ne1-a-cluster-spectral, owed row N172). The
 # device store lives in the GPU sequence binding and the record that names a
 # block in the provider; neither sees the model die. The records module's
-# release (bindings/native_model_records.mojo) calls the hook registered by
-# `_hook_once`, which posts the model's identity word here, and the
-# device store frees that model's block at its next call, before any lookup
-# (`sequence/perf3_seq_resident.mojo` `_drain_dead`): a new model at the
-# reused address never sees the old block. Host-only: the provider and the
-# records module can import it.
+# release (bindings/native_model_records.mojo) posts the model's identity
+# word on its dead-key ring; `seq_resident_take_dead` pulls the ring from
+# the last sequence word it saw (no callback, no function pointer), and the
+# device store frees those models' blocks at its next call, before any
+# lookup (`sequence/perf3_seq_resident.mojo` `_drain_dead_locked`): a new
+# model at the reused address never sees the old block. Host-only: the
+# provider and the records module can import it.
 comptime SEQ_DEAD_OWNERS_MAX = 4096
 """Posted deaths kept before the oldest are dropped (a bound on host memory;
 a dropped post leaves that block to the store's least-recently-used
@@ -92,17 +77,17 @@ struct _SeqDeadOwners(Defaultable, Movable):
     # One lock word: the post runs with the GIL held, the take from a device
     # entry that may run with it released.
     var lock: List[Int64]
-    # The once-flag of the release-hook registration (`_hook_once`).
-    var hooked: Bool
+    # The records module's dead-key sequence word this queue pulled to.
+    var seen: Int
 
     def __init__(out self):
         self.owners = List[Int]()
         self.lock = List[Int64](length=1, fill=Int64(0))
-        self.hooked = False
+        self.seen = 0
 
 
 comptime _SEQ_DEAD_OWNERS = _Global[
-    StorageType=_SeqDeadOwners, name="MojoXSequenceResidentDeadOwnersV2", init_fn=_SeqDeadOwners.__init__
+    StorageType=_SeqDeadOwners, name="MojoXSequenceResidentDeadOwnersV3", init_fn=_SeqDeadOwners.__init__
 ]
 
 
@@ -127,8 +112,8 @@ def _dead() raises -> UnsafePointer[_SeqDeadOwners, MutAnyOrigin]:
 
 
 def seq_resident_owner_died(owner: Int):
-    """Post the death of the model whose identity word is `owner` (called
-    from the death callback). Non-raising."""
+    """Post the death of the model whose identity word is `owner` again
+    (the store's repost of a pinned slot). Non-raising."""
     try:
         var dead = _dead()
         _dead_lock(dead)
@@ -140,11 +125,24 @@ def seq_resident_owner_died(owner: Int):
         pass
 
 
-def seq_resident_take_dead() raises -> List[Int]:
-    """Every posted death since the last take (the device store's drain)."""
+def seq_resident_take_dead(mut forget_all: Bool) raises -> List[Int]:
+    """Every death since the last take (the device store's drain): the
+    records module's dead-key ring since `seen`, after the reposts. Sets
+    `forget_all` when the ring overflowed since the last take (which models
+    died is not known: the store frees every block it can). Any thread: the
+    queue and the ring each take their own lock word."""
     var dead = _dead()
     _dead_lock(dead)
+    var released = List[Int]()
+    var now = records_dead_keys_since(dead[].seen, released)
+    if now < 0:
+        forget_all = True
+        dead[].seen = -now
+    else:
+        dead[].seen = now
     var taken = dead[].owners.copy()
     dead[].owners.clear()
     _dead_unlock(dead)
+    for j in range(len(released)):  # driver-loop: over models released since the last take
+        taken.append(released[j])
     return taken^
