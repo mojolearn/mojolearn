@@ -130,19 +130,74 @@ def _snapshot(source: PythonObject, dtype: String, rank: Int, name: String,
     return out
 
 
-def _join(parts: PythonObject, count: Int, dtype: String, context: PythonObject) raises -> PythonObject:
-    var out = trees_vector(count, dtype, context)
-    var dst = _U8(unsafe_from_address=trees_address(out))
-    var at = 0
-    for i in range(len(parts)):  # driver-loop: flatten captured tree buffers in boosting order
-        var part = parts[i]
-        var n = Int(py=part.shape[0])
-        memcpy(dest=dst + at * 4, src=_U8(unsafe_from_address=trees_address(part)), count=n * 4)
-        at += n
-        _ = part
-    if at != count:
-        raise Error("ValueError: inconsistent DART tree storage")
-    return out
+def _tree_offsets_size(source: PythonObject, context: PythonObject, snapshots: PythonObject) raises -> Int:
+    """A DART member's node count from its one-tree `_offsets` ([0, size]):
+    read in place from an int32 C-order buffer (no snapshot Array); any
+    other storage goes through `_snapshot` as before."""
+    var lo = 0
+    var hi = 0
+    var identity = PythonObject(Int(source._obj_ptr))
+    if not py_contains(snapshots, identity):
+        classical_admit_value(source, context)
+        var owners = array_owner_once(source, context)
+        var view = trees_view(source, "tree offsets", context)
+        trees_check_rank(view, 1, "tree offsets")
+        if view.typestr == "<i4" and view.c_order():
+            if view.shape[0] != 2:
+                raise Error("ValueError: a DART tree must hold one tree")
+            var tp = _I32(unsafe_from_address=view.addr)
+            lo = Int(tp[0])
+            hi = Int(tp[1])
+            _ = view
+            _ = owners
+            if lo != 0 or hi - lo < 1:
+                raise Error("ValueError: invalid DART tree offsets")
+            return hi - lo
+        _ = view
+        _ = owners
+    var tree_offsets = _snapshot(source, "<i4", 1, "tree offsets", context, snapshots)
+    if Int(py=tree_offsets.shape[0]) != 2:
+        raise Error("ValueError: a DART tree must hold one tree")
+    var tp = _I32(unsafe_from_address=trees_address(tree_offsets))
+    lo = Int(tp[0])
+    hi = Int(tp[1])
+    _ = tree_offsets
+    if lo != 0 or hi - lo < 1:
+        raise Error("ValueError: invalid DART tree offsets")
+    return hi - lo
+
+
+def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, out: PythonObject, at: Int,
+               context: PythonObject, snapshots: PythonObject) raises:
+    """Write a DART member's `size` node words into the flat buffer `out`
+    at element `at` (4-byte words). A C-order buffer already of `dtype` is
+    admitted and copied in place, one block copy while the GIL is held (as
+    `_snapshot` copies); any other storage (another dtype, strides, a
+    source already snapshotted in this operation) goes through `_snapshot`
+    (its copy and cast) and then one block copy."""
+    var dst = _U8(unsafe_from_address=trees_address(out)) + at * 4
+    var identity = PythonObject(Int(source._obj_ptr))
+    if not py_contains(snapshots, identity):
+        classical_admit_value(source, context)
+        var owners = array_owner_once(source, context)
+        var view = trees_view(source, name, context)
+        trees_check_rank(view, 1, name)
+        if view.typestr == dtype and view.item == 4 and view.c_order():
+            if view.shape[0] != size:
+                raise Error("ValueError: DART node buffers differ from tree offsets")
+            memcpy(dest=dst, src=_U8(unsafe_from_address=view.addr), count=size * 4)
+            _ = view
+            _ = owners
+            _ = out
+            return
+        _ = view
+        _ = owners
+    var part = _snapshot(source, dtype, 1, name, context, snapshots)
+    if Int(py=part.shape[0]) != size:
+        raise Error("ValueError: DART node buffers differ from tree offsets")
+    memcpy(dest=dst, src=_U8(unsafe_from_address=trees_address(part)), count=size * 4)
+    _ = part
+    _ = out
 
 
 def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,
@@ -193,39 +248,51 @@ def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,
             raise Error("ValueError: DART tree coefficient count differs from tree count")
         var offsets = trees_vector(count + 1, "<i4", context)
         var off = _I32(unsafe_from_address=trees_address(offsets))
-        var columns = Python.list()
-        var questions = Python.list()
-        var children = Python.list()
-        var leaves = Python.list()
+        # One pass reads each member's four node arrays where they are and
+        # writes them once into the flat buffers (lane ne2-b-members, N085,
+        # per fit): before, each member's whole field dictionary was copied,
+        # each of its five arrays admitted, snapshotted into its own Array
+        # and kept in a dictionary, and four joins copied every word again.
+        # The member's fields are read once (the four values are held here,
+        # so a later change to its dictionary cannot reach this operation);
+        # its class is checked once per distinct class. Same words in the
+        # same order: no bit changes.
+        var sources = Python.list()
+        var sizes = List[Int]()
         var total = 0
-        for i in range(count):  # driver-loop: capture each distinct fitted tree once
-            var state = _capture(trees[i], context, captures)
-            var tree_offsets = _snapshot(_get(state, "_offsets"), "<i4", 1, "tree offsets", context, snapshots)
-            if Int(py=tree_offsets.shape[0]) != 2:
-                raise Error("ValueError: a DART tree must hold one tree")
-            var tp = _I32(unsafe_from_address=trees_address(tree_offsets))
-            var size = Int(tp[1]) - Int(tp[0])
-            if tp[0] != 0 or size < 1 or total > 2147483647 - size:
+        var checked = PythonObject(None)
+        for i in range(count):  # driver-loop: read each fitted tree's node arrays once
+            var member = trees[i]
+            if checked is None or not (py_type(member) is checked):
+                _ = _kind(member, context)
+                checked = py_type(member)
+            var state = _fields(member)
+            var size = _tree_offsets_size(_get(state, "_offsets"), context, snapshots)
+            if total > 2147483647 - size:
                 raise Error("ValueError: invalid DART tree offsets")
-            var col = _snapshot(_get(state, "_colid"), "<i4", 1, "tree columns", context, snapshots)
-            var q = _snapshot(_get(state, "_quesval"), "<f4", 1, "tree thresholds", context, snapshots)
-            var lc = _snapshot(_get(state, "_left_child"), "<i4", 1, "tree children", context, snapshots)
-            var val = _snapshot(values[i], "<f4", 1, "tree values", context, snapshots)
-            if Int(py=col.shape[0]) != size or Int(py=q.shape[0]) != size or Int(py=lc.shape[0]) != size or Int(py=val.shape[0]) != size:
-                raise Error("ValueError: DART node buffers differ from tree offsets")
-            _ = py_call(columns.append, col)
-            _ = py_call(questions.append, q)
-            _ = py_call(children.append, lc)
-            _ = py_call(leaves.append, val)
+            _ = py_call(sources.append, Python.tuple(_get(state, "_colid"), _get(state, "_quesval"),
+                                                     _get(state, "_left_child"), values[i]))
+            sizes.append(size)
             total += size
             off[i + 1] = Int32(total)
-            _ = tree_offsets
-        var vals = _join(leaves, total, "<f4", context)
+        var columns = trees_vector(total, "<i4", context)
+        var questions = trees_vector(total, "<f4", context)
+        var children = trees_vector(total, "<i4", context)
+        var vals = trees_vector(total, "<f4", context)
+        var at = 0
+        for i in range(count):  # driver-loop: write each fitted tree's nodes into the flat buffers
+            var parts = sources[i]
+            var size = sizes[i]
+            _copy_into(parts[0], "<i4", size, "tree columns", columns, at, context, snapshots)
+            _copy_into(parts[1], "<f4", size, "tree thresholds", questions, at, context, snapshots)
+            _copy_into(parts[2], "<i4", size, "tree children", children, at, context, snapshots)
+            _copy_into(parts[3], "<f4", size, "tree values", vals, at, context, snapshots)
+            at += size
         var expanded = vals
         if k > 1:
             expanded = trees_vector(total * k, "<f4", context)
             _ = py_call(_entry(table, "x_trees_spread_leaves"), trees_address(vals), trees_address(offsets), trees_address(expanded), Python.list(total, count, k))
-        arrays = Python.list(offsets, _join(columns, total, "<i4", context), _join(questions, total, "<f4", context), _join(children, total, "<i4", context), expanded)
+        arrays = Python.list(offsets, columns, questions, children, expanded)
     return Python.tuple(py_call(native_loaded_module("builtins").tuple, arrays), scales, initial)
 
 
