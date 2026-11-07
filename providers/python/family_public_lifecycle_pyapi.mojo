@@ -14,6 +14,7 @@
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.admitted_call import AdmittedCall, admitted_input_dense, admitted_input_shape, ADMITTED_ITEM_F32, ADMITTED_SPARSE_OTHER, ADMITTED_GRAPH_TUPLE
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _fitted
 from bindings.classical_attributes import classical_connect_numpy
@@ -167,11 +168,24 @@ def family_lifecycle_begin(model: PythonObject, operation: String, spec: FamilyL
     """Admission and validation before the owner runs; the returned call
     carries the owner's argument list (X replaced by its admitted snapshot
     where `spec.replace`, y by its validated form)."""
+    # Owners that do not yet hold an admission record.
+    var admitted = AdmittedCall()
+    return family_lifecycle_begin(admitted, model, operation, spec, args, x_index, context)
+
+
+def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, operation: String,
+                           spec: FamilyLifecycle, args: PythonObject, x_index: Int,
+                           context: PythonObject) raises -> NeighborPublicCall:
+    """As above, filling the owner's admission record: its modules, the model
+    fields and X (shape, and for a dense X the admitted float32 snapshot's
+    address and read-only flag at position `x_index`), so the owner reads
+    them from `admitted` instead of admitting X again."""
     classical_connect_numpy(context)
-    var b = native_loaded_module("builtins")
+    var b = admitted.builtins()
     if py_type(py_type(model)) is not b.type:
         raise Error("TypeError: native estimator operations refuse Python metaclass hooks")
-    var fields = _fields(model)
+    var fields = _fields(admitted.modules, model)
+    admitted.admit_fields(fields)
     var method = spec.method
     var fitting = method == "fit" or method == "fit_predict" or method == "fit_transform"
     var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
@@ -204,10 +218,15 @@ def family_lifecycle_begin(model: PythonObject, operation: String, spec: FamilyL
             raise Error("TypeError: sparse input shape requires native dimensions")
         rows = Int(py=shape[0])
         columns = Int(py=shape[1])
+        _ = admitted.add_input(admitted_input_shape(x_index, source, source, shape, ADMITTED_SPARSE_OTHER))
     elif not (spec.graph and py_type(source) is b.tuple):
         var snapshot = family_f32_snapshot(source, 2, "X", context, True)
         rows = snapshot.shape[0]
         columns = snapshot.shape[1]
+        # The snapshot's buffer and owner, recorded before any refusal below
+        # so an owner never re-admits the X this door admitted.
+        _ = admitted.add_input(admitted_input_dense(x_index, source, snapshot.keep, Int(snapshot.source.addr),
+                                                    rows, columns, ADMITTED_ITEM_F32, snapshot.readonly))
         if rows == 0:
             raise Error("Found array with 0 sample(s) (shape=(0, " + String(columns) + ")) while a minimum of 1 is required by " + name + ".")
         if columns == 0 and not spec.graph:
