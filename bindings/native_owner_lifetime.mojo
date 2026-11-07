@@ -155,8 +155,8 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
         # labels are read through the C list accessors, never its Python
         # __getitem__, and admitted as a list's elements are.
         var table = cpython_table()
-        var count = table[].PyList_Size(value._obj_ptr)
-        for i in range(count):  # driver-loop: over the fitted class labels (k entries), no element protocols
+        var n_classes = table[].PyList_Size(value._obj_ptr)
+        for i in range(n_classes):  # driver-loop: over the fitted classes of the model, no element protocols
             native_release_admit(PythonObject(from_borrowed=table[].PyList_GetItem(value._obj_ptr, i)),context,depth+1)
         return
     if cls is b["dict"]:
