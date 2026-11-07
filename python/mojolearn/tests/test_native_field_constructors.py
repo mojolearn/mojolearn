@@ -181,17 +181,13 @@ def test_reinitialization_keeps_unrelated_fields_in_place(cls):
     assert_same(model, expected)
 
 
-def test_numeric_mode_rule_matches_the_wrapper():
-    for mode in (None, 'identical'):
-        assert_same(construct(ml.KMeans, numeric_mode=mode), oracle(ml.KMeans, numeric_mode=mode))
-    model = construct(ml.KMeans, numeric_mode='identical')
-    clean(model.__init__, n_clusters=3)
-    expected = oracle(ml.KMeans, numeric_mode='identical')
-    _CONTEXT['originals'][ml.KMeans](expected, n_clusters=3)
-    assert_same(model, expected)
-    # KMeans takes numeric_mode in its own signature: a reinitialization that
-    # omits it writes the default, as every other parameter.
-    assert vars(model)['numeric_mode'] is None
+# DELETED 2026-11-07 (lane ne1-k-fail-a): test_numeric_mode_rule_matches_the_wrapper
+# asserted the NumericModeMixin wrapper rule (a reinitialization without
+# numeric_mode keeps the old mode) on KMeans, which now takes numeric_mode in
+# its own signature. The current contracts are tested by
+# test_every_keyword_matches_the_original_order_and_reference_identity[KMeans],
+# test_reinitialization_keeps_unrelated_fields_in_place[KMeans] and, for the
+# wrapper rule itself, test_passive_subclass_class_mode_and_user_initializer.
 
 
 def test_passive_subclass_class_mode_and_user_initializer():
