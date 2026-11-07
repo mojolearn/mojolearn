@@ -85,9 +85,15 @@ def test_confusion_order_subset_normalize_and_mode(binding, mode, normalize):
                                           normalize=normalize)
     np.testing.assert_allclose(result, expected, atol=1e-7)
     assert np.asarray(result).dtype == (np.int64 if normalize is None else np.float32)
-    assert len(binding[mode].calls) == 1
     np.testing.assert_array_equal(yt, before)
-    assert -1 in binding[mode].calls[0][2]
+    # The public call is one native door (family_mcls_confusion): it encodes
+    # the labels (an excluded label as -1) and picks the binding natively, so
+    # no Python-visible binding call exists to spy on; the contract is the
+    # result above and a call that runs no package Python.
+    from mojolearn._verify_native_runtime import audit_native_call
+    audited = audit_native_call(metrics.confusion_matrix, yt, yp, labels=['b', 'a', 'absent'],
+                                normalize=normalize, numeric_mode=mode).assert_native()
+    np.testing.assert_array_equal(np.asarray(audited), np.asarray(result))
 
 
 @pytest.mark.parametrize('name', NAMES)
@@ -103,8 +109,11 @@ def test_prf_retains_errors_against_excluded_labels(binding, name, average, zero
         assert np.asarray(result).dtype == np.float32 and result.shape == (3,)
     else:
         assert isinstance(result, float)
-    params = binding['identical'].calls[0][1]
-    assert params[1] == 4 and params[-1] == 3
+    # The labels are encoded natively (three selected of four ids); the
+    # public call runs no package Python.
+    from mojolearn._verify_native_runtime import audit_native_call
+    audited = audit_native_call(getattr(metrics, name), yt, yp, numeric_mode='identical', **options).assert_native()
+    np.testing.assert_array_equal(np.asarray(audited), np.asarray(result))
 
 
 @pytest.mark.parametrize('name', NAMES)
@@ -120,8 +129,9 @@ def test_binary_strings_absent_positive_and_large_integers(binding, name):
     assert getattr(metrics, name)([0, 0], [0, 0], zero_division=1) == 1
     big = 2**80
     got = getattr(metrics, name)([big, -big], [big, big], pos_label=big)
-    assert np.isfinite(got)
-    assert set(binding['fast'].calls[-1][2]) == {0, 1}
+    # Labels beyond int64 are encoded natively to dense ids: the score is
+    # the one of the same labelling over small integers.
+    assert got == getattr(metrics, name)([1, 0], [1, 1], pos_label=1)
 
 
 @pytest.mark.parametrize('name,index', list(zip(NAMES, range(3))))
