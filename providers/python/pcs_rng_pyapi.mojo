@@ -73,12 +73,18 @@ def _pcs_connect(context: PythonObject) raises -> PythonObject:
     if (py_type(state_getter) is not getset_type or py_type(capsule_getter) is not getset_type
             or py_type(lock_getter) is not getset_type):
         raise Error("TypeError: PCS RNG requires native NumPy state/capsule/lock getters")
-    var lock_type = native_loaded_module("_thread").LockType
-    var lock_fields = _class_fields(lock_type)
-    var acquire = py_get(lock_fields, "acquire")
-    var release = py_get(lock_fields, "release")
-    if py_type(acquire) is not method_type or py_type(release) is not method_type:
-        raise Error("TypeError: PCS RNG requires ordinary native lock methods")
+    # NumPy's BitGenerator.lock is a `_thread.lock` before NumPy 2.5 and a
+    # `_thread.RLock` from 2.5 on; both are C types whose acquire/release are
+    # method descriptors, pinned here per type.
+    var thread_module = native_loaded_module("_thread")
+    var lock_types = Python.tuple(thread_module.LockType, thread_module.RLock)
+    var plain_fields = _class_fields(lock_types[0])
+    var reentrant_fields = _class_fields(lock_types[1])
+    var acquires = Python.tuple(py_get(plain_fields, "acquire"), py_get(reentrant_fields, "acquire"))
+    var releases = Python.tuple(py_get(plain_fields, "release"), py_get(reentrant_fields, "release"))
+    for i in range(2):  # driver-loop: over the two CPython lock types
+        if py_type(acquires[i]) is not method_type or py_type(releases[i]) is not method_type:
+            raise Error("TypeError: PCS RNG requires ordinary native lock methods")
     var record = Python.dict()
     py_setitem(record, "mtrand", mtrand)
     py_setitem(record, "randomstate", randomstate)
@@ -90,9 +96,9 @@ def _pcs_connect(context: PythonObject) raises -> PythonObject:
     py_setitem(record, "capsule_get", capsule_getter.__get__)
     py_setitem(record, "lock_getter", lock_getter)
     py_setitem(record, "lock_get", lock_getter.__get__)
-    py_setitem(record, "lock_type", lock_type)
-    py_setitem(record, "acquire", acquire)
-    py_setitem(record, "release", release)
+    py_setitem(record, "lock_types", lock_types)
+    py_setitem(record, "acquires", acquires)
+    py_setitem(record, "releases", releases)
     # A second thread that connects concurrently (the import above may run
     # Python and switch threads) stores a record of the same identities.
     py_setitem(context, "family_pcs_rng", record)
@@ -133,10 +139,16 @@ def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("TypeError: NumPy native capsule/lock getters changed")
     var capsule = py_call(record["capsule_get"], bitgen, py_type(bitgen))
     var lock = py_call(record["lock_get"], bitgen, py_type(bitgen))
-    if py_type(lock) is not record["lock_type"]:
+    var lock_types = record["lock_types"]
+    var lock_index = -1
+    for i in range(len(lock_types)):  # driver-loop: over the two CPython lock types
+        if lock_index < 0 and py_type(lock) is lock_types[i]:
+            lock_index = i
+    if lock_index < 0:
         raise Error("TypeError: native PCS RNG requires NumPy's ordinary native lock")
-    var lock_fields = _class_fields(record["lock_type"])
-    if py_get(lock_fields, "acquire") is not record["acquire"] or py_get(lock_fields, "release") is not record["release"]:
+    var lock_fields = _class_fields(lock_types[lock_index])
+    if (py_get(lock_fields, "acquire") is not record["acquires"][lock_index]
+            or py_get(lock_fields, "release") is not record["releases"][lock_index]):
         raise Error("TypeError: native PCS RNG lock methods changed")
     ref cpy = Python().cpython()
     var name = String("BitGenerator")
@@ -158,8 +170,8 @@ def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
     # the one native draw needs no Python execution and keeps every owner alive.
     # Allocate the call envelope before acquisition. In particular, do not use
     # py_call in finally: a failed tuple allocation there could strand the lock.
-    var acquire = record["acquire"]
-    var release = record["release"]
+    var acquire = record["acquires"][lock_index]
+    var release = record["releases"][lock_index]
     var lock_args = cpy.PyTuple_New(1)
     if not lock_args:
         raise cpy.unsafe_get_error()
