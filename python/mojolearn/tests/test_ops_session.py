@@ -183,3 +183,29 @@ def test_refusals():
             s.numpy(x)
     with pytest.raises(ValueError):
         s.numpy(1)
+
+
+def test_program_run_reads_ndarray_inputs_through_one_buffer_view():
+    # Row N143: an ndarray input is described by one buffer export (address,
+    # shape, strides, format). Strided, Fortran-order and wider-dtype inputs
+    # give the same bits as their C-contiguous float32 copies; byte-swapped
+    # input keeps its refusal.
+    ops = _ops()
+    rng = np.random.default_rng(4)
+    w = rng.standard_normal((4, 3), dtype=np.float32)
+    with ops.Session() as s:
+        x = s.tensor(np.zeros((6, 4), np.float32))
+        y = s.softmax(s.linear(x, s.tensor(w)))
+        prog = s.capture(inputs=[x], outputs=[y])
+        s.reset()
+        base = rng.standard_normal((6, 8), dtype=np.float32)
+        strided = base[:, ::2]
+        assert not strided.flags.c_contiguous
+        want = np.asarray(prog.run(np.ascontiguousarray(strided)))
+        assert np.asarray(prog.run(strided)).tobytes() == want.tobytes()
+        fortran = np.asfortranarray(strided)
+        assert np.asarray(prog.run(fortran)).tobytes() == want.tobytes()
+        wide = strided.astype(np.float64)
+        assert np.asarray(prog.run(wide)).tobytes() == want.tobytes()
+        with pytest.raises(TypeError):
+            prog.run(strided.astype(">f4"))
