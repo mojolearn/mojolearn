@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_type
 from bindings.native_loaded_module import native_loaded_module
-from bindings.p3_labels_metrics_native import p3_table
+from bindings.cpython_table import cpython_table
 
 
 struct MetricPlanOpcodes(Movable):
@@ -21,7 +21,7 @@ struct MetricPlanOpcodes(Movable):
         # p3-labels-metrics: PyDict_Copy from the process-wide table (it was
         # resolved by name, dlsym, per program). The per-program snapshot
         # stays: it is what protects a running program from an edited table.
-        var raw = p3_table()[].dict_copy(values._obj_ptr)
+        var raw = cpython_table()[].PyDict_Copy(values._obj_ptr)
         if not raw:
             raise cpy.unsafe_get_error()
         self.values = PythonObject(from_owned=raw)

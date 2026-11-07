@@ -49,7 +49,7 @@ from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.label_input_sources import LABELS_LIST_INT
 from bindings.p3_labels_metrics_native import (
     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
-    p3_integral_list, p3_item, p3_type_word, p3_table, P3_TEXT_OK, P3_TEXT_NOT_STR)
+    p3_integral_list, p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -157,7 +157,7 @@ def labels_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     var envelope = py_call(labels_builtins().tuple, args)
     # p3-labels-metrics: PyObject_CallObject from the process-wide table (it
     # was resolved by name, dlsym, on every call).
-    var result = p3_table()[].call_object(entry._obj_ptr, envelope._obj_ptr)
+    var result = cpython_table()[].PyObject_CallObject(entry._obj_ptr, envelope._obj_ptr)
     if not result:
         raise typed_python_error()
     return PythonObject(from_owned=result)
@@ -766,7 +766,7 @@ def _flatten_into(item: PythonObject, out_list: PythonObject, list_word: Int, tu
                 _flatten_into(PythonObject(from_borrowed=raw), out_list, list_word, tuple_word, context, kinds, depth + 1)
             else:
                 _ = kinds.admit_raw(raw, context)
-                if Int(p3_table()[].list_append(out_list._obj_ptr, raw)) != 0:
+                if Int(cpython_table()[].PyList_Append(out_list._obj_ptr, raw)) != 0:
                     raise cpy.unsafe_get_error()
         _ = item
         return
