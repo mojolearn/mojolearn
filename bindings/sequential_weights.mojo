@@ -13,6 +13,7 @@ from autograd.program_io import ProgramInput
 from bindings.sequential_description import sequential_fields, sequential_program, sequential_table
 from bindings.sequential_execution import sequential_entries
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_input
+from bindings.native_model_records import bump_model_generation
 
 
 def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
@@ -33,6 +34,9 @@ def _exact_mapping(value: PythonObject, mapping_types: PythonObject) raises -> B
 
 
 def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
     if len(fields["_layers"]) == 0:

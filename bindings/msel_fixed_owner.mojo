@@ -10,6 +10,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.native_typed_context import native_typed_context
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.sequential_admission import _one_of
+from bindings.native_model_records import bump_model_generation
 
 
 def _parameter(name: PythonObject, value: PythonObject, context: PythonObject) raises:
@@ -62,6 +63,9 @@ def fixed_owner_fields(model: PythonObject, context: PythonObject) raises -> Pyt
 
 def fixed_owner_set_params(model: PythonObject, values: PythonObject,
                            context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")
     var fields = fixed_owner_fields(model, context)
     var plan = context["cv_fixed_owner"]

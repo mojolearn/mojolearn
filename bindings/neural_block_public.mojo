@@ -27,6 +27,7 @@ from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from core.native_mamba_workspace_abi import MAMBA2_WORKSPACE_CREATE, MAMBA2_WORKSPACE_CLOSE
 from providers.python.operation_lock_pyapi import OperationLockLease, operation_lock_create
+from bindings.native_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_reserved_execute,
     neural_descriptor_handle, neural_descriptor_adopt,
@@ -364,6 +365,9 @@ def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weig
 
 
 def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(block)
     var bi = mods.module("builtins")
     if py_type(updates) is not bi.dict:
         raise Error("TypeError: block parameters require an ordinary dictionary")

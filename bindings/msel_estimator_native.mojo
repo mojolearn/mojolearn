@@ -15,6 +15,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.family_common import family_call
 from bindings.sequential_admission import sequential_admit_value
+from bindings.native_model_records import bump_model_generation
 
 
 def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -340,6 +341,9 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
 
 def msel_native_set_params(model: PythonObject, params: PythonObject,
                            context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(model)
     var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     if py_type(params) is not b.dict:

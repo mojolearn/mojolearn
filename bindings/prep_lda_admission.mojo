@@ -26,6 +26,7 @@ from bindings.py_balanced import py_fields
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.label_admission_native import _labels_class as native_labels_class
 from bindings.py_attr import py_attr
+from bindings.native_model_records import bump_model_generation
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -236,6 +237,9 @@ def lda_native_get_params(fields: PythonObject, context: PythonObject) raises ->
 
 def lda_native_set_params(model: PythonObject, fields: PythonObject, values: PythonObject,
                           context: PythonObject) raises -> PythonObject:
+    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
+    # every stamped record of this object misses from here on.
+    _ = bump_model_generation(model)
     if py_type(values) is not py_type(Python.dict()):
         raise Error("TypeError: native LDA parameter updates require an ordinary dictionary")
     var names = context["lda_parameters"]
