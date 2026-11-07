@@ -2959,6 +2959,9 @@ FAMILIES = (
             "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_info", "mamba3_prefill_session_close",
             "mamba3_prefill_session_install_weights", "mamba3_prefill_session_forward_owned", "mamba3_prefill_session_backward_owned",
             "mamba3_prefill_session_export_weights", "mamba3_forward_tape_enabled",
+            # the shared native provider's block/state descriptors and the
+            # prefill session handle (1ac27a4d9d), registered in the binding source
+            "mamba_block_api_v1", "mamba_state_api_v1", "mamba_prefill_native_handle_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
