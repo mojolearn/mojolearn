@@ -25,6 +25,7 @@ def test_every_legacy_classical_name_is_the_exact_new_native_entry():
         assert type(entry) is BuiltinFunctionType
         assert entry is getattr(native, name)
     assert legacy._TreesResident is native._TreesResident
+    assert legacy._TreesResidentDeath is native._TreesResidentDeath
     assert legacy._mojolearn_missing_import_owners == ()
     assert _backend.load_host_module('_mojolearn_tokenizer_host') is legacy
     assert _backend.load_host_module('_mojolearn_runtime_classical_host') is native
@@ -52,13 +53,16 @@ def test_tree_resident_type_comes_from_the_single_classical_owner():
     model = audit_native_call(ml.RandomForestClassifier, n_estimators=3, max_depth=3,
                               random_state=13, numeric_mode='identical').assert_native()
     audit_native_call(model.fit, x, y).assert_native()
+    # The snapshot lives in the classical owner's native resident table
+    # (bindings/trees_resident_table.mojo), never in the model's __dict__.
+    from mojolearn import _native_trees_bridge
+    entry, context = _native_trees_bridge.connect()
+    kept_before = entry(None, 'trees_resident_stats', (), context)[0]
     audit_native_call(model.predict, x).assert_native()
     fields = object.__getattribute__(model, '__dict__')
-    holder = fields.get('_resident_holder', {}).get('native')
-    if holder is None:
-        pytest.skip('this selected backend exposes no resident forest snapshot; GPU lifecycle proof remains owed')
-    assert type(holder[0]) is native._TreesResident
-    assert type(holder[0]) is legacy._TreesResident
+    assert not fields.get('_resident_holder')
+    assert entry(None, 'trees_resident_stats', (), context)[0] == kept_before + 1
+    assert native._TreesResidentDeath is legacy._TreesResidentDeath
 
 
 def test_classical_public_input_protocol_is_refused_before_callback():
