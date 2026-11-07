@@ -163,41 +163,57 @@ def test_sequential_adds_no_registered_type_and_existing_types_each_keep_one_own
     assert release_host_members().count('_mojolearn_runtime_sequential_host') == 1
 
 
+#: The twelve development units the classical and tokenizer owners became
+#: (2026-11-07 host split, docs/build/HOT_GROUPS.md section 6).
+SPLIT_UNITS = ('runtime_classical', 'runtime_trees', 'runtime_family', 'runtime_prep', 'runtime_decomp',
+               'runtime_linear', 'tokenizer', 'runtime_catalog', 'runtime_xseq', 'runtime_byte_trainer',
+               'runtime_parallel', 'runtime_neural')
+
+
 def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development_unit():
     groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
     graph = SourceGraph(ROOT)
-    paths = ('bindings/trees_lifetime.mojo', 'bindings/trees_public_forest.mojo',
-             'bindings/host_svr_native.mojo', 'bindings/host_svc_native.mojo',
-             'bindings/classical_native.mojo', 'bindings/host_archive_native.mojo')
-    owners = {path: set() for path in paths}
+    # The classical door and the two doors it forwards to are each in exactly
+    # one unit (the import graph at file level).
+    expected = {'bindings/classical_native.mojo': {('host', 'runtime_classical')},
+                'bindings/classical_trees_door.mojo': {('host', 'runtime_trees')},
+                'bindings/trees_public_native.mojo': {('host', 'runtime_trees')},
+                'bindings/classical_family_door.mojo': {('host', 'runtime_family')},
+                'bindings/family_native.mojo': {('host', 'runtime_family')}}
+    owners = {path: set() for path in expected}
     for mode, partitions in groups.items():
         for name, members in partitions.items():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
-            for path in paths:
+            for path in expected:
                 if path in closure['files']:
                     owners[path].add((mode, name))
-    # The tokenizer imports iforest_validate and the RBC metric descriptor.
-    # Their files also define resident allocator callers, but these two helpers
-    # do not reach them. Check the named export graph instead of treating every
-    # definition in an imported file as executed by the tokenizer.
-    for path, found in owners.items():
-        expected = {('host', 'runtime_classical')}
-        if path in ('bindings/trees_lifetime.mojo', 'bindings/host_archive_native.mojo'):
-            expected.add(('host', 'tokenizer'))
-        assert found == expected, (path, found)
+    assert owners == expected, owners
+    # Files such as trees_lifetime.mojo and host_archive_native.mojo are
+    # imported by several units for a type or one helper, so the resident
+    # allocator's owner is checked on the export graph instead: of the split
+    # units' exports, only the tree door reaches trees_lifetime.mojo, and the
+    # others reach host_archive_native.mojo only for its metric and layout
+    # helpers.
     from lane_select import _MojoDefGraph, _binding_exports
-    source = 'bindings/_mojolearn_tokenizer_host.mojo'
-    graph = _MojoDefGraph()
-    exports = _binding_exports(source)
-    assert exports
-    for name in exports:
-        closure = graph.closure(source, name)
-        assert closure is not None, name
-        assert not any(node[1] == 'bindings/trees_lifetime.mojo' for node in closure), name
-        archive_nodes = {node for node in closure if node[1] == 'bindings/host_archive_native.mojo'}
-        assert archive_nodes <= {('t', 'bindings/host_archive_native.mojo',
-                                  'host_archive_rbc_metric_object')}, (name, archive_nodes)
+    defs = _MojoDefGraph()
+    helpers = {'host_archive_rbc_metric_object', 'host_archive_radius_refusals',
+               'host_archive_check_layout', 'host_archive_class_values'}
+    reached = set()
+    for unit in SPLIT_UNITS:
+        assert groups['host'][unit] == [f'_mojolearn_{unit}_host']
+        source = f'bindings/_mojolearn_{unit}_host.mojo'
+        exports = _binding_exports(source)
+        assert exports, unit
+        for name in exports:
+            closure = defs.closure(source, name)
+            assert closure is not None, (unit, name)
+            if any(node[1] == 'bindings/trees_lifetime.mojo' for node in closure):
+                reached.add((unit, name))
+            if unit != 'runtime_trees':
+                archive = {node[2] for node in closure if node[1] == 'bindings/host_archive_native.mojo'}
+                assert archive <= helpers, (unit, name, archive - helpers)
+    assert reached == {('runtime_trees', 'trees_native_call')}, reached
 
 
 def test_classical_legacy_exports_are_declared_native_aliases_with_one_type_registration():
@@ -207,16 +223,28 @@ def test_classical_legacy_exports_are_declared_native_aliases_with_one_type_regi
     aliases = next(ast.literal_eval(node.value) for node in manifest.body
                    if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name)
                        and t.id == 'HOST_IMPORT_ALIASES' for t in node.targets))
-    spec, = aliases['_mojolearn_tokenizer_host']
-    assert spec['binding'] == '_mojolearn_runtime_classical_host'
-    assert spec['types'] == ('_TreesResident',)
-    assert len(spec['functions']) == 29
+    specs = aliases['_mojolearn_tokenizer_host']
+    # One spec per owner (2026-11-07 host split); the classical owner, which
+    # registers the resident tree types, is connected first.
+    assert [spec['binding'] for spec in specs] == [f'_mojolearn_{unit}_host' for unit in SPLIT_UNITS
+                                                   if unit != 'tokenizer']
+    assert specs[0]['types'] == ('_TreesResident', '_TreesResidentDeath')
+    assert all(spec['types'] == () for spec in specs[1:])
+    assert {spec['marker'] for spec in specs} == {'tokenizer_host_runtime_classical_abi'}
+    assert {spec['abi'] for spec in specs} == {2}
     legacy = (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    owner = (ROOT/'bindings/_mojolearn_runtime_classical_host.mojo').read_text()
     names = lambda text: set(re.findall(r'module\.def_py_c_function\([^,]+, "([^"]+)"\)', text))
-    assert set(spec['functions']) <= names(legacy)
-    assert set(spec['functions']) == names(owner)
+    refusals = set(re.findall(r'module\.def_py_c_function\(runtime_classical_unavailable_c, "([^"]+)"\)', legacy))
+    seen = set()
+    for spec in specs:
+        owner = (ROOT/f"bindings/{spec['binding']}.mojo").read_text()
+        assert set(spec['functions']) <= names(legacy), spec['binding']
+        assert set(spec['functions']) == names(owner), spec['binding']
+        assert not seen & set(spec['functions'])
+        seen |= set(spec['functions'])
+        assert release_host_members().count(spec['binding']) == 1
+    # Every native refusal the legacy module registers has exactly one owner.
+    assert refusals <= seen, sorted(refusals - seen)
     registrations = [str(path.relative_to(ROOT)) for path in (ROOT/'bindings').glob('*.mojo')
                      if 'module.add_type[TreesResident]' in path.read_text()]
     assert registrations == ['bindings/_mojolearn_runtime_classical_host.mojo']
-    assert release_host_members().count(spec['binding']) == 1
