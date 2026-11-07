@@ -155,7 +155,10 @@ def test_direct_native_constructor_preserves_weights_and_fixed15(tmp_path, monke
         _poison(patch)
         audit_native_call(CausalLM.__init__, model, plan, weights, device=DEVICE,
                           numeric_profile=profile).assert_native()
-    assert model._embed is source and model._head is source
+    # The constructor copies the caller's array (no aliasing of a buffer the
+    # caller may still write); the stored weights keep the exact bytes.
+    assert model._embed is not source and model._head is not source
+    assert model._embed.tobytes() == source.tobytes() and model._head.tobytes() == source.tobytes()
     if profile == "fixed15_v1":
         assert tuple(v.tobytes() for v in model._head_int15) == tuple(v.tobytes() for v in (hi, lo, exponents))
     else:
