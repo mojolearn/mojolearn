@@ -7,7 +7,8 @@
 #   bash tools/bisect_hang_group.sh --export-base <tgz> --base <commit> [--suspects <file>]   # git only, no compile
 #   bash tools/bisect_hang_group.sh --group <stem> --set <host|identical> --history <dir> --out <dir> [same options]
 #   bash tools/bisect_hang_group.sh --export-history <dir> --base <commit> [--head HEAD] [--overlay-after <commit>]
-#        [--history-paths '\.mojo$']                                                       # git only, no compile
+#        [--history-paths '\.mojo$'] [--overlay-patches <dir> [--overlay-extra <sha,...>]]   # git only, no compile
+#   run options for history mode: [--history-range FIRST:LAST] [--overlay-patches <dir>]
 #
 # On a RunPod CPU pod (cwd = the unpacked repo, the default pixi env installed):
 #   bash tools/runpod_cpu_leg.sh --lane bisect-hang --worktree ~/mojolearn-wt/ne-bisect-hang \
@@ -50,7 +51,17 @@
 # from git alone: <dir>/history.tsv (index, sha, subject), <dir>/manifest/hNN.tsv (path, blob sha or "-" for absent),
 # <dir>/blobs.tgz (every distinct blob once, named by its sha: one archive per candidate would be ~2.5 MB x 62) and
 # <dir>/meta.tsv. The run prints the table in first-parent order and the CULPRIT: the first commit whose verdict is HANG
-# while its predecessor's is COMPILED or ERROR. Exit 4 when the --head candidate does not HANG.
+# while its predecessor's is COMPILED or ERROR. Exit 4 when the --head candidate does not HANG (the last one run).
+#
+# PATCH OVERLAY (export with --overlay-patches <dir>; replaces the whole-file overlay, which broke early trees because
+# head's files import modules that do not exist there yet): the manifests carry each commit's own content, and <dir>
+# gets one patch per (fix commit, .mojo file): `git diff C^1 C -- <file>` for every --overlay-extra commit, then every
+# first-parent commit after --overlay-after up to --head, in that order (<dir>/order.tsv). At build time each patch
+# is tried on the candidate tree in order, all-or-nothing per file (patch -p1 --forward --fuzz=0 --dry-run, then for
+# real; git apply when patch is missing); a patch that does not apply is skipped (that lane's code is not there yet). What
+# applied is recorded in <out>/cand/<id>.patches.tsv and as [patches a/n] in the candidate's label. A patch dir inside
+# the history dir is found from meta.tsv; --overlay-patches at run time overrides it. --history-range FIRST:LAST
+# (indexes of history.tsv, inclusive) limits the candidates.
 #
 # Outputs: <out>/plan.tsv, <out>/cand/<id>.{log,json,verdict}, <out>/cand/<id>/ (the build evidence and the group
 # log), <out>/bisect.tsv (file, verdict, seconds, first_error, status, id; ERROR, then COMPILED, then HANG),
@@ -91,6 +102,7 @@ R=$(cd "$(dirname "$0")/.." && pwd)
 GROUP="" SET="" BASE="" SUSPECTS_FILE="" OUT="" PARALLEL="" STALL=420 DEADLINE=3600
 BASE_ARCHIVE="" WORK="${BISECT_WORK:-$HOME/bisect-hang-work}" KEEP=0 DRY=0 EXPORT=""
 HIST="" EXPORT_HIST="" HEAD_REF=HEAD OVERLAY_AFTER=d5d7463b99 HPATHS='\.mojo$'
+PATCHES="" OVERLAY_EXTRA="" HRANGE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --group) shift; GROUP="${1:-}" ;;
@@ -111,6 +123,9 @@ while [ $# -gt 0 ]; do
         --head) shift; HEAD_REF="${1:-}" ;;
         --overlay-after) shift; OVERLAY_AFTER="${1:-}" ;;
         --history-paths) shift; HPATHS="${1:-}" ;;
+        --overlay-patches) shift; PATCHES="${1:-}" ;;
+        --overlay-extra) shift; OVERLAY_EXTRA="${1:-}" ;;
+        --history-range) shift; HRANGE="${1:-}" ;;
         -h|--help) usage ;;
         *) die "unknown argument: $1 (see --help)" ;;
     esac
@@ -129,7 +144,26 @@ if [ -n "$EXPORT_HIST" ]; then
     D=$EXPORT_HIST
     rm -rf "$D/manifest" "$D/blobs.tgz" "$D/history.tsv" "$D/meta.tsv"; mkdir -p "$D/manifest" "$st/b"
     git -C "$R" diff --name-only "$B" "$H" | grep -E "$HPATHS" | sort > "$st/paths"
-    git -C "$R" diff --name-only "$OV" "$H" | grep -E "$HPATHS" | sort > "$st/overlay"
+    if [ -n "$PATCHES" ]; then
+        : > "$st/overlay"   # no whole-file overlay: the fixes go in as patches
+        case "$PATCHES" in /*) ;; *) PATCHES="$(pwd)/$PATCHES" ;; esac
+        rm -rf "$PATCHES"; mkdir -p "$PATCHES"
+        printf 'seq\tcommit\tpath\tpatch\n' > "$PATCHES/order.tsv"
+        { printf '%s\n' "$OVERLAY_EXTRA" | tr ',' '\n' | awk 'NF'
+          git -C "$R" rev-list --first-parent --reverse "$OV..$H"; } > "$st/fixes"
+        n=0
+        while IFS= read -r c; do  # driver-loop: over fix commits
+            c=$(full "$c"); cs=$(git -C "$R" rev-parse --short=10 "$c")
+            git -C "$R" diff --name-only "$c^1" "$c" | grep -E "$HPATHS" > "$st/fixfiles"
+            while IFS= read -r f; do
+                n=$((n + 1)); pf=$(printf '%03d-%s-%s.patch' "$n" "$cs" "$(printf '%s' "$f" | tr '/' '_')")
+                git -C "$R" diff --full-index "$c^1" "$c" -- "$f" > "$PATCHES/$pf" || die "git diff $cs -- $f failed"
+                printf '%s\t%s\t%s\t%s\n' "$n" "$cs" "$f" "$pf" >> "$PATCHES/order.tsv"
+            done < "$st/fixfiles"
+        done < "$st/fixes"
+    else
+        git -C "$R" diff --name-only "$OV" "$H" | grep -E "$HPATHS" | sort > "$st/overlay"
+    fi
     git -C "$R" ls-tree -r "$H" > "$st/head.tree"
     { echo "$B"; git -C "$R" rev-list --first-parent --reverse "$B..$H"; } > "$st/commits"
     printf 'index\tsha\tsubject\n' > "$D/history.tsv"
@@ -156,6 +190,15 @@ if [ -n "$EXPORT_HIST" ]; then
     printf 'base\t%s\nhead\t%s\noverlay_after\t%s\nhistory_paths\t%s\npaths\t%s\noverlay_paths\t%s\nblobs\t%s\n' \
         "$B" "$H" "$OV" "$HPATHS" "$(wc -l < "$st/paths" | tr -d ' ')" "$(wc -l < "$st/overlay" | tr -d ' ')" \
         "$(wc -l < "$st/blobs" | tr -d ' ')" > "$D/meta.tsv"
+    if [ -n "$PATCHES" ]; then
+        Dabs=$(cd "$D" && pwd)
+        case "$PATCHES/" in "$Dabs"/*) rel=${PATCHES#"$Dabs"/} ;; *) rel=$PATCHES ;; esac
+        printf 'overlay\tpatches\npatches_dir\t%s\npatches\t%s\noverlay_extra\t%s\n' "$rel" \
+            "$(( $(wc -l < "$PATCHES/order.tsv") - 1 ))" "$OVERLAY_EXTRA" >> "$D/meta.tsv"
+        echo "patches: $(( $(wc -l < "$PATCHES/order.tsv") - 1 )) per-file patches -> $PATCHES"
+    else
+        printf 'overlay\tfiles\n' >> "$D/meta.tsv"
+    fi
     echo "exported $i candidates, $(wc -l < "$st/paths" | tr -d ' ') paths ($(wc -l < "$st/overlay" | tr -d ' ') overlaid from head), $(wc -l < "$st/blobs" | tr -d ' ') blobs -> $D"
     rm -rf "$st"
     exit 0
@@ -210,7 +253,22 @@ PLAN="$OUT/plan.tsv"
 if [ -n "$HIST" ]; then
     HIST=$(cd "$HIST" 2> /dev/null && pwd) || die "--history directory does not exist"
     { [ -f "$HIST/history.tsv" ] && [ -f "$HIST/blobs.tgz" ]; } || die "$HIST has no history.tsv or blobs.tgz (make it with --export-history)"
-    awk -F'\t' 'NR > 1 { printf "h%02d\t%s %s %s\tH:h%02d\n", $1, $1, $2, $3, $1 }' "$HIST/history.tsv" > "$PLAN"
+    LO=0 HI=999999
+    if [ -n "$HRANGE" ]; then
+        case "$HRANGE" in *[!0-9:]*|:*|*:|*:*:*) die "--history-range is FIRST:LAST (history.tsv indexes)" ;; *:*) ;; *) die "--history-range is FIRST:LAST" ;; esac
+        LO=${HRANGE%:*} HI=${HRANGE#*:}
+    fi
+    awk -F'\t' -v lo="$LO" -v hi="$HI" 'NR > 1 && $1 >= lo && $1 <= hi { printf "h%02d\t%s %s %s\tH:h%02d\n", $1, $1, $2, $3, $1 }' \
+        "$HIST/history.tsv" > "$PLAN"
+    [ -s "$PLAN" ] || die "--history-range $HRANGE selects no candidate"
+    if [ -z "$PATCHES" ]; then
+        rel=$(awk -F'\t' '$1 == "patches_dir" { print $2 }' "$HIST/meta.tsv" 2> /dev/null)
+        [ -n "$rel" ] && case "$rel" in /*) PATCHES=$rel ;; *) PATCHES="$HIST/$rel" ;; esac
+    fi
+    if [ -n "$PATCHES" ]; then
+        PATCHES=$(cd "$PATCHES" 2> /dev/null && pwd) || die "--overlay-patches directory does not exist"
+        [ -f "$PATCHES/order.tsv" ] || die "$PATCHES has no order.tsv"
+    fi
     while IFS=$'\t' read -r id _ _; do [ -f "$HIST/manifest/$id.tsv" ] || die "$HIST/manifest/$id.tsv is missing"; done < "$PLAN"
 else {
     printf 'control-head\t(none reverted)\t-\n'
@@ -240,7 +298,8 @@ command_for() {  # $1 id, $2 tree
 }
 
 if [ -n "$HIST" ]; then
-    BASE_SRC="history $HIST ($(awk -F'\t' '$1 == "base" || $1 == "head" || $1 == "overlay_after" { printf "%s=%.10s ", $1, $2 }' "$HIST/meta.tsv" 2> /dev/null))"
+    BASE_SRC="history $HIST ($(awk -F'\t' '$1 == "base" || $1 == "head" || $1 == "overlay_after" || $1 == "overlay" { printf "%s=%.10s ", $1, $2 }' "$HIST/meta.tsv" 2> /dev/null))"
+    [ -n "$PATCHES" ] && BASE_SRC="$BASE_SRC; patches $PATCHES ($(( $(wc -l < "$PATCHES/order.tsv") - 1 )))"
 elif git_has_base; then
     BASE_SRC="git ($BASE in $R)"
 else
@@ -328,6 +387,25 @@ sample_load &
 SAMPLER=$!
 trap 'kill "$SAMPLER" 2> /dev/null' EXIT
 
+apply_patches() {  # $1 id, $2 tree: each per-file patch all-or-nothing, in order; a patch that does not apply is skipped
+    local seq c f pf res
+    printf 'seq\tcommit\tpath\tresult\n' > "$OUT/cand/$1.patches.tsv"
+    while IFS=$'\t' read -r seq c f pf; do  # driver-loop: over overlay patches
+        [ "$seq" = seq ] && continue
+        res=skipped
+        if command -v patch > /dev/null; then
+            if (cd "$2" && patch -p1 --forward --fuzz=0 --batch --silent --dry-run -r - < "$PATCHES/$pf") > /dev/null 2>&1; then
+                (cd "$2" && patch -p1 --forward --fuzz=0 --batch --silent --no-backup-if-mismatch -r - < "$PATCHES/$pf") > /dev/null 2>&1 \
+                    && res=applied || res=failed-after-check
+            fi
+        elif (cd "$2" && GIT_CEILING_DIRECTORIES=$(dirname "$2") git apply --check -p1 "$PATCHES/$pf") > /dev/null 2>&1; then
+            (cd "$2" && GIT_CEILING_DIRECTORIES=$(dirname "$2") git apply -p1 "$PATCHES/$pf") > /dev/null 2>&1 \
+                && res=applied || res=failed-after-check
+        fi
+        printf '%s\t%s\t%s\t%s\n' "$seq" "$c" "$f" "$res" >> "$OUT/cand/$1.patches.tsv"
+    done < "$PATCHES/order.tsv"
+}
+
 make_tree() {  # $1 id, $2 revert set
     local wt="$WORK/wt/$1" f
     rm -rf "$wt"; mkdir -p "$wt"
@@ -344,6 +422,7 @@ make_tree() {  # $1 id, $2 revert set
                  if [ "$b" = - ]; then rm -f "$wt/$p"
                  else mkdir -p "$wt/$(dirname "$p")" && cp "$BLOBS/$b" "$wt/$p" || return 1; fi
              done < "$HIST/manifest/${2#H:}.tsv"
+             [ -n "$PATCHES" ] && apply_patches "$1" "$wt"
              return 0 ;;
         ALL) set -- "${FILES[@]}" ;;
         *) set -- "$2" ;;
@@ -369,6 +448,9 @@ run_candidate() {  # $1 id, $2 label, $3 revert set
     if ! make_tree "$id" "$revert" > "$OUT/cand/$id.log" 2>&1; then
         printf '%s\ttree copy failed\n' "$(date -u +%H:%M:%SZ)" >> "$OUT/cand/$id.attempt"
         rm -f "$OUT/cand/$id.running"; return 0
+    fi
+    if [ -f "$OUT/cand/$id.patches.tsv" ] && [ "${revert#H:}" != "$revert" ]; then
+        label="$label [patches $(awk -F'\t' 'NR > 1 && $4 == "applied" { a++ } NR > 1 { n++ } END { printf "%d/%d", a, n }' "$OUT/cand/$id.patches.tsv")]"
     fi
     t0=$(date +%s)
     ( cd "$wt" && MOJOLEARN_COMPILE_JOBS=1 PYTHONPATH="$wt/python" "$PY" tools/development_build.py build \
@@ -434,8 +516,9 @@ if [ -n "$HIST" ]; then
     note "done: seconds=$(( $(date +%s) - T0 )) busy ${busy:-no samples}"
     EXIT=0
     last_v=$(tail -n 1 "$OUT/bisect.tsv" | cut -f2)
-    [ "$last_v" = HANG ] || { note "the head candidate is $last_v, not HANG: this tree does not reproduce the hang"; EXIT=4; }
-    note "first candidate (base + overlay): $(sed -n 2p "$OUT/bisect.tsv" | cut -f2,4)"
+    [ "$last_v" = HANG ] || { note "the last candidate is $last_v, not HANG: the range does not end in the hang"; EXIT=4; }
+    [ "$(sed -n 2p "$OUT/bisect.tsv" | cut -f2)" = HANG ] && note "the first candidate already HANGs: the culprit is at or before it"
+    note "first candidate: $(sed -n 2p "$OUT/bisect.tsv" | cut -f1,2,4)"
     culprit=$(awk -F'\t' 'NR > 1 { if ($2 == "HANG" && (prev == "COMPILED" || prev == "ERROR")) { print $1 " (after " prevc ": " prev ")"; exit } prev = $2; prevc = $1 }' "$OUT/bisect.tsv")
     note "CULPRIT (first HANG whose predecessor is COMPILED or ERROR): ${culprit:-none found}"
     missing=$(awk -F'\t' '$2 == "NO-VERDICT" { printf "%s ", $6 }' "$OUT/bisect.tsv")

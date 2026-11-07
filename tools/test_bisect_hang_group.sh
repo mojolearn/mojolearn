@@ -87,6 +87,16 @@ if [ -f "$HD/history.tsv" ]; then
     np=$(awk -F'\t' '$1 == "paths" { print $2 }' "$HD/meta.tsv")
     short=0; for m in "$HD"/manifest/*.tsv; do [ "$(wc -l < "$m" | tr -d ' ')" = "$np" ] || short=1; done
     [ "$short" = 0 ] && ok "every manifest lists all $np paths" || bad "a manifest is short"
+    bash "$S" --group _mojolearn_dev_runtime_classical_host --set host --history "$HD" --history-range 12:45 \
+        --out "$T/rout" --work "$T/rwork" --dry-run > "$T/rplan.txt" 2>&1
+    [ "$(grep -c '^PLAN h[0-9]' "$T/rplan.txt")" = 34 ] && ok "--history-range 12:45 selects 34 commits" || bad "range plan size"
+    grep -q $'^PLAN h12\t' "$T/rplan.txt" && grep -q $'^PLAN h45\t' "$T/rplan.txt" && ! grep -q $'^PLAN h46\t' "$T/rplan.txt" \
+        && ok "range is inclusive h12..h45" || bad "range ends"
+    if [ "$(awk -F'\t' '$1 == "overlay" { print $2 }' "$HD/meta.tsv")" = patches ]; then
+        grep -q 'patches .*(22)' "$T/rplan.txt" && ok "dry run names the 22 overlay patches" || bad "dry run patch count"
+        miss=0; while IFS=$'\t' read -r s _ _ pf; do [ "$s" = seq ] || [ -s "$HD/patches/$pf" ] || miss=1; done < "$HD/patches/order.tsv"
+        [ "$miss" = 0 ] && ok "every listed patch exists" || bad "a listed patch is missing"
+    fi
     # where git has the commits: h00 is the base plus the overlay, the last is the head
     if git -C "$R" rev-parse --verify --quiet 'f9e06ecacf^{commit}' > /dev/null 2>&1; then
         git -C "$R" ls-tree -r f9e06ecacf | awk -F'\t' '{ split($1, a, " "); print $2 "\t" a[3] }' > "$T/head.tree"
