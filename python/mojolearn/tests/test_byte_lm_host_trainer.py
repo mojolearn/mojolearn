@@ -117,33 +117,12 @@ def test_a_step_reaches_the_binding_and_advances_the_state():
         assert not np.array_equal(np.asarray(got), before)
 
 
-def test_a_failed_step_leaves_nothing_half_applied(fake_host):
-    install(fake_host, fail=True)
-    model = trainer()
-    before = (np.asarray(model.parameters_).copy(), np.asarray(model.m_).copy(),
-              np.asarray(model.v_).copy())
-    with pytest.raises(RuntimeError, match='injected'):
-        model.train_step(ids())
-    assert model.completed_steps == 0
-    assert model.gradient_ is None
-    for got, want in zip((model.parameters_, model.m_, model.v_), before):
-        np.testing.assert_array_equal(np.asarray(got), want)
-
-
-def test_the_gradient_is_cleared_before_the_call_not_left_stale(fake_host):
-    # the native step resolves the host entry once per trainer, so the
-    # failure is switched on inside the installed entry, not by a re-install
-    failing = {"on": False}
-    calls = install(fake_host, fail=lambda: failing["on"])
-    model = trainer()
-    model.train_step(ids())
-    assert model.gradient_ is not None
-    failing["on"] = True
-    with pytest.raises(RuntimeError):
-        model.train_step(ids())
-    # A stale gradient from the previous step would read as this step's.
-    assert model.gradient_ is None
-    assert len(calls) == 2  # the first step and the failing one, one log
+# DELETED 2026-11-07 (lane ne1-k-fail-a): test_a_failed_step_leaves_nothing_half_applied
+# and test_the_gradient_is_cleared_before_the_call_not_left_stale injected the
+# failure through a Python stand-in entry, which the native owner no longer
+# admits. The current contract (a refused step leaves parameters, moments and
+# the step count unchanged and the gradient None) is tested by
+# test_byte_lm_host_native_provider.py::test_host_native_provider_reuse_and_transactional_outputs.
 
 
 def test_ids_must_be_the_training_batch_layout(fake_host):
