@@ -284,8 +284,8 @@ UNIT_PEAK_GIB = {
     # _mojolearn_native_host's, which held the classical member until
     # 2026-11-04; the tokenizer groups at the tokenizer's; the orchestration
     # group at x_host's). A split only removes members, so the parent bounds
-    # it; the first build records each group's own peak, and the row is
-    # lowered then, never before.
+    # it; the first build records each group's own peak, and its row is set
+    # from that measurement.
     ("host", "_mojolearn_native_classical_host", "cuda"): 14, ("host", "_mojolearn_native_classical_host", "hip"): 13,
     ("host", "_mojolearn_native_classical_trees_host", "cuda"): 14, ("host", "_mojolearn_native_classical_trees_host", "hip"): 13,
     ("host", "_mojolearn_native_classical_family_host", "cuda"): 14, ("host", "_mojolearn_native_classical_family_host", "hip"): 13,
