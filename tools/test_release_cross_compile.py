@@ -1,8 +1,10 @@
 """The release's cross-compile step (tools/release.py step_cross_compile), with
 `gh` stubbed on PATH: it dispatches .github/workflows/cross-compile-check.yml
 on the FROZEN commit against the previous release's source commit, finds its
-run by token, waits, and fails BY NAME on any job that did not pass; it gates
-linux-builds (the first rental) and nothing on the Mac.
+run by token, waits, and fails BY NAME on any job that did not pass. It runs
+beside linux-builds on the free `github` backend and gates linux-wait (so
+linux-pack, every box and every publish); on a rented backend it still gates
+linux-builds (the first rental). Nothing on the Mac waits for it.
 
     python3 -m pytest -q tools/test_release_cross_compile.py
 """
@@ -147,8 +149,11 @@ class CrossCompileStep(unittest.TestCase):
         self.assertIn("would dispatch", out)
         self.assertEqual(self.calls(), [])
 
-    def test_it_gates_the_first_rental_and_nothing_on_the_mac(self):
-        self.assertIn("cross-compile", release.NEEDS["linux-builds"])
+    def test_it_runs_beside_the_linux_builds_and_gates_linux_wait(self):
+        # 2026-11-07: linux-builds on github compiles the same sources for the same targets; it no longer waits
+        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan"])
+        self.assertIn("cross-compile", release.NEEDS["linux-wait"])
+        self.assertIn("linux-builds", release.NEEDS["linux-wait"])
         # identity-at-freeze (Andrew 2026-11-05) settles identity at the freeze before anything is built
         self.assertEqual(release.NEEDS["cross-compile"], ["identity-at-freeze"])
         self.assertEqual(release.NEEDS["identity-at-freeze"], ["freeze-commit"])
@@ -156,6 +161,32 @@ class CrossCompileStep(unittest.TestCase):
         for mac in ("macos-build", "macos-smoke", "publish-macos", "reuse-plan", "rehearsal"):
             self.assertNotIn("cross-compile", release.NEEDS[mac])
         self.assertIn("cross-compile", release.Release.SKIP_IF_RECORDED)
+
+    def test_everything_after_the_builds_still_waits_for_it(self):
+        def ancestors(step, needs):
+            seen, todo = set(), list(needs[step])
+            while todo:
+                s = todo.pop()
+                if s not in seen:
+                    seen.add(s)
+                    todo.extend(needs.get(s, ()))
+            return seen
+        for step in ("linux-assemble", "linux-pack", "gate-boxes", "gate-nvidia", "gate-amd", "gpu-column-nvidia",
+                     "gpu-column-amd", "publish-core-linux", "publish-nvidia", "publish-amd", "publish-meta-linux",
+                     "publish-macos"):
+            self.assertIn("cross-compile", ancestors(step, release.NEEDS), step)
+
+    def test_github_backend_builds_at_once(self):
+        r = self.release(build_backend="github")
+        self.assertNotIn("cross-compile", r.NEEDS["linux-builds"])
+        self.assertIn("cross-compile", r.NEEDS["linux-wait"])
+
+    def test_a_rented_backend_still_waits_for_it_before_renting(self):
+        for backend in release.RENTED_BUILD_BACKENDS:
+            r = self.release(build_backend=backend)
+            self.assertEqual(r.NEEDS["linux-builds"], ["reuse-plan", "cross-compile"], backend)
+        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan"], "the module table is not mutated")
+        self.assertEqual(set(release.RENTED_BUILD_BACKENDS), set(release.BUILD_BACKENDS) - {"github"})
 
     def test_the_workflow_is_dispatch_only(self):
         text = (ROOT / ".github" / "workflows" / "cross-compile-check.yml").read_text()
