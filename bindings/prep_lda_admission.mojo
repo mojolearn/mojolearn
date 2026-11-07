@@ -18,6 +18,11 @@ from bindings.label_input_sources import labels_storage_source, labels_list_inte
 from bindings.native_typed_context import native_typed_context
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
+from bindings.native_model_records import (
+    records_stamped_get, records_stamped_put, records_stampable, records_key_same_exact, ContentRecord,
+    content_value, RECORDS_PREPARED,
+)
+from bindings.py_balanced import py_fields
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.label_admission_native import _labels_class as native_labels_class
 from bindings.py_attr import py_attr
@@ -61,6 +66,55 @@ def lda_native_initialize(model: PythonObject, args: PythonObject, context: Pyth
 
 comptime _LABELS_CLASS_SLOT = "prep_labels_class_checked_v1"
 comptime _LDA_FIELDS_SLOT = "prep_lda_fields_admitted_v1"
+comptime _LDA_STAMP = "prep_lda_fields_stamp_v1"
+
+
+def _lda_stamp(model: PythonObject, fields: PythonObject, names: PythonObject, fitted: PythonObject,
+               plain: PythonObject, configure: Bool) raises:
+    """Stamp the admitted LDA fields with the model's generation (lane
+    ne1-e-records, row N258). The generation proves every stored name's
+    identity and presence; the content words cover exact containers item by
+    item (and other values' classes). Only when `fields` is the model's own
+    instance dictionary (the record holds it)."""
+    if not (py_fields(model) is fields) or not records_stampable(model):
+        return
+    var content = ContentRecord()
+    for i in range(len(names)):  # driver-loop: fixed constructor configuration (content words, once per record)
+        content_value(content, fields[names[i]], 0, 5, False)
+    for i in range(len(fitted)):  # driver-loop: consumed fitted state (content words, once per record)
+        if py_contains(fields, fitted[i]):
+            content_value(content, fields[fitted[i]], 0, 5, False)
+    _ = records_stamped_put(RECORDS_PREPARED, model, _LDA_STAMP, content^,
+                            Python.tuple(fields, names, fitted, plain, PythonObject(configure)))
+
+
+def _lda_stamped(model: PythonObject, fields: PythonObject, names: PythonObject, fitted: PythonObject,
+                 configure: Bool, context: PythonObject) raises -> PythonObject:
+    """`(fields, plain)` from the stamped record, or None (run the key path).
+    `plain` is derived from `classes_` again unless the record's `classes_`
+    is itself the plain list: an ndarray's elements can change in place, so
+    the derived labels are compared as the key path compares them."""
+    var stamped = records_stamped_get(RECORDS_PREPARED, model, _LDA_STAMP)
+    if stamped is None or not (stamped[0] is fields) or not (stamped[1] is names) or not (stamped[2] is fitted):
+        return PythonObject(None)
+    if Bool(py=stamped[4]) != configure:
+        return PythonObject(None)
+    var kept = stamped[3]
+    if kept is None or not py_contains(fields, "classes_"):
+        return Python.tuple(fields, kept)
+    var value = fields["classes_"]
+    if kept is value:
+        return Python.tuple(fields, kept)
+    var again = PythonObject(None)
+    try:
+        again = prep_plain_classes(value, context)
+    except:
+        # The key path raises it at its original position.
+        return PythonObject(None)
+    var list_t = py_type(Python.list())
+    if py_type(kept) is not list_t or py_type(again) is not list_t or not records_key_same_exact(kept, again):
+        return PythonObject(None)
+    return Python.tuple(fields, again)
 
 
 def prep_plain_classes(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -103,6 +157,9 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
     an ndarray. The covariance_estimator refusal runs on every call."""
     var fields = _lda_storage(model, context)
     var names = context["lda_parameters"]
+    var hit = _lda_stamped(model, fields, names, context["lda_fitted_fields"], configure, context)
+    if hit is not None:
+        return hit
     var mods = NativeModules()
     var key = Python.list()
     # A missing parameter or a covariance_estimator refusal takes the full
@@ -145,6 +202,7 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
                 prepared_key_add(mods, key, value)
     var held = PythonObject(None) if full else prepared_get(mods, _LDA_FIELDS_SLOT, model)
     if held is not None and prepared_key_same(held, key):
+        _lda_stamp(model, fields, names, fitted, plain, configure)
         return Python.tuple(fields, plain)
     for i in range(len(names)):  # driver-loop: fixed constructor configuration, before comparisons or conversion
         if not py_contains(fields, names[i]):
@@ -160,6 +218,7 @@ def lda_native_fields_plain(model: PythonObject, context: PythonObject, configur
                 classical_admit_value(fields[fitted[i]], context)
     if not full:
         prepared_put(mods, _LDA_FIELDS_SLOT, model, key)
+        _lda_stamp(model, fields, names, fitted, plain, configure)
     return Python.tuple(fields, plain)
 
 
