@@ -58,8 +58,25 @@ def test_multi_slot_job_takes_all_or_nothing(env):
     many.release()
     one.release()
     assert not any(p.exists() for p in one.slots)
-    with pytest.raises(ValueError):
-        many.attempt(True, ["gpu"], slots=2)
+
+
+def test_metal_job_with_several_slots_holds_the_lock_once_and_all_its_slots(env):
+    env = dict(env, MAC_SLOTS="3")
+    cpu, gpu, other = Scheduler(env), Scheduler(env), Scheduler(env)
+    assert cpu.attempt(False, ["cpu"])
+    gpu.enqueue(["gpu"])
+    assert not gpu.attempt(True, ["gpu"], slots=3)          # all or nothing: one slot is taken
+    assert not gpu.metal.exists() and not gpu.held and gpu.ticket.exists()
+    assert gpu.attempt(True, ["gpu"], slots=2)
+    assert gpu.metal.exists() and len(gpu.held) == 3 and gpu.ticket is None
+    assert all(p.exists() for p in gpu.slots)
+    other.enqueue(["other"])
+    assert not other.attempt(True, ["other"])               # the lock stays single
+    gpu.release()
+    cpu.release()
+    assert not gpu.metal.exists() and not any(p.exists() for p in gpu.slots)
+    assert other.attempt(True, ["other"])
+    other.release()
 
 
 def test_slots_sets_the_build_jobs_and_nothing_else(env, tmp_path):
@@ -70,7 +87,7 @@ def test_slots_sets_the_build_jobs_and_nothing_else(env, tmp_path):
     p = launch(env, "--slots", "4", "run", sys.executable, "-c", body, str(out))
     p.communicate(timeout=10)
     assert p.returncode == 0 and out.read_text() == "4 1 1"
-    for bad in (("--slots", "5", "run"), ("--slots", "2", "metal"), ("--slots", "0", "run")):
+    for bad in (("--slots", "5", "run"), ("--slots", "2", "cuda"), ("--slots", "0", "run")):
         p = launch(env, *bad, sys.executable, "-c", "pass")
         p.communicate(timeout=10)
         assert p.returncode == 2, bad
