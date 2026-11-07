@@ -125,10 +125,11 @@ def _sealed(value: PythonObject) raises -> PythonObject:
     assignment bumps). `value` must already be read-only (`_readonly`); its
     memoryview is then read-only and NumPy refuses to turn WRITEABLE back on
     for an array whose base buffer is read-only. Same bytes, no copy."""
-    var numpy = native_loaded_module("numpy")
+    # The exact ndarray type of `value` builds the view: `numpy` itself is not
+    # an import-time connection (native_loaded_module("numpy") raised
+    # ImportError at MoEBlock construction), and the C type needs no module.
     var view = py_call(_b().memoryview, value)
-    var flat = py_call(numpy.frombuffer, view, value.dtype)
-    return py_call(flat.reshape, value.shape)
+    return py_call(py_type(value), value.shape, dtype=value.dtype, buffer=view)
 
 
 def _owner_word(fields: PythonObject) -> Int:
