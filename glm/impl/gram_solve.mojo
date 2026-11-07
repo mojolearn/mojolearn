@@ -55,6 +55,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul, identical_mul_add
 from x_decomp.cells import F32Ptr, chol_diag, div0, sqrt0
 from core.blocked_moments import bm_centered_cross_panels, bm_centered_gram_panels
+from core.blocked_moments_multi_gpu import bm_centered_gram_cross_dispatch
+from core.device_plan import DevicePlan
 from core.device_zero import enqueue_fill
 from gemm.contract import contract_leaf_size
 from glm.impl.center_device import col_means_buf, col_sums_pair_buf
@@ -627,6 +629,7 @@ def _gs_ridge_resident_fallback(
 
 
 def linear_gram_fit_host(
+    plan: DevicePlan,
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
     y_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -640,7 +643,11 @@ def linear_gram_fit_host(
 ) raises -> Int:
     """The entry (module docstring). Returns 0 and writes coef (d floats)
     and, with `center`, mu (float32 d) and the y mean (binary64); returns 1
-    with nothing written when the Gram is not trusted (the caller's route)."""
+    with nothing written when the Gram is not trusted (the caller's route).
+    `plan` is the Gram family's plan, read once by the binding entry: the
+    centered Gram and cross run over its devices
+    (`core/blocked_moments_multi_gpu.mojo`, the same words at any count);
+    the column sums, the solve and the fallbacks stay on `ctx`."""
     if n_features <= 0 or n_rows <= 0:
         raise Error("linear_gram_fit: n_rows and n_features must be positive")
     if alpha < Float32(0.0):
@@ -677,8 +684,10 @@ def linear_gram_fit_host(
     var leaf = contract_leaf_size(n_rows)
     var d_g = ctx.enqueue_create_buffer[DType.float32](d * d)
     var d_c = ctx.enqueue_create_buffer[DType.float32](d)
-    bm_centered_gram_panels(ctx, _p(d_g), _p(d_x), _p(d_mx), n_rows, d, leaf)
-    bm_centered_cross_panels(ctx, _p(d_c), _p(d_x), _p(d_mx), _p(d_y), _p(d_my), n_rows, d, leaf)
+    # lane ne2-i-j (2026-11-07): through the plan. One device runs
+    # `bm_centered_gram_panels` then `bm_centered_cross_panels` exactly as
+    # before; several devices take whole leaves each and fold on `ctx`.
+    bm_centered_gram_cross_dispatch(plan, ctx, d_g, d_c, d_x, d_mx, d_y, d_my, n_rows, d, leaf)
     var d_a = ctx.enqueue_create_buffer[DType.float32](d * d)
     var d_adiag = ctx.enqueue_create_buffer[DType.float32](d)
     var d_b = ctx.enqueue_create_buffer[DType.float32](d)

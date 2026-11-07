@@ -24,14 +24,14 @@ def doc(name, arms, ranks=None):
 
 def test_the_list_is_short_fixed_and_well_formed():
     assert LS.lane_errors() == []
-    assert 6 <= len(LS.LANES) <= 12
+    assert 6 <= len(LS.LANES) <= LS.MAX_LANES
     assert LS.COUNTS[0] == 1 and len(LS.COUNTS) >= 2
 
 
 def test_a_malformed_list_is_refused():
     row = LS.LANES[0]
     assert any("duplicate" in e for e in LS.lane_errors(LS.LANES[:6] + (row,)))
-    assert any("not 6..12" in e for e in LS.lane_errors(LS.LANES[:3]))
+    assert any("not 6..%d" % LS.MAX_LANES in e for e in LS.lane_errors(LS.LANES[:3]))
     bad = (row[0] + "-x", "other.mojo", "no-such-recipe") + row[3:]
     assert any("unknown recipe" in e for e in LS.lane_errors(LS.LANES[:6] + (bad,)))
 
@@ -111,18 +111,61 @@ def test_a_broken_rank_record_names_the_binding_in_the_fail_reason():
 
 
 def test_the_gram_lane_is_a_route_that_reaches_the_gram_plan():
-    # Ridge / LinearRegression take linear_gram_fit (no DevicePlan) in IDENTICAL: never on the list.
     rows = {r[0]: r for r in LS.LANES}
-    assert "ridge-gram" not in rows and all(r[2] != "ridge" for r in LS.LANES)
     name, family, recipe, _fixture, n_rows, features, _seed = rows["tsvd-gram"]
     assert family == "core/gram_multi_gpu.mojo" and recipe == "tsvd" and LS.RECIPES[recipe] is LS._tsvd
     # the split-K arm needs features <= 128; three live row chunks need rows >= 3 * 128
     assert features <= 128 and n_rows >= 3 * 128
 
 
-def test_no_lane_names_a_dispatcher_no_identical_call_reaches():
-    # every GLM takes the QN tiled gradient in IDENTICAL (glm/impl/qn/glm_base.mojo), never gradient_columns
-    assert all(r[1] != "glm/impl/qn/multi_gpu.mojo" and r[2] != "logistic" for r in LS.LANES)
+def test_the_linear_lanes_reach_their_plans():
+    # lane ne2-i-j (2026-11-07): the GLM gradient columns shard the tile order (both objectives), Ridge's resident
+    # Gram fit shards whole leaves, LinearRegression's TSQR shards whole row blocks; each is now on the list
+    rows = {r[0]: r for r in LS.LANES}
+    _n, family, recipe, fixture, n_rows, features, _s = rows["glm-logistic"]
+    assert family == "glm/impl/qn/multi_gpu.mojo" and LS.RECIPES[recipe] is LS._logistic
+    assert fixture == "blobs" and features >= max(LS.COUNTS)  # active = min(count, features); 4 blob labels
+    _n, family, recipe, _f, n_rows, features, _s = rows["ridge-gram"]
+    assert family == "core/blocked_moments_multi_gpu.mojo" and LS.RECIPES[recipe] is LS._ridge
+    assert n_rows >= max(LS.COUNTS) * 128 + 1 and features >= 2  # three leaves of 128 rows; Ridge at d = 1 refuses
+    _n, family, recipe, _f, n_rows, _features, _s = rows["ols-tsqr"]
+    assert family == "x_decomp/tsqr_multi_gpu.mojo" and LS.RECIPES[recipe] is LS._ols
+    assert n_rows >= max(LS.COUNTS) * 4096  # three row blocks of TS_ROWS (4096; 2048 under C24_ROWS2048)
+
+
+def test_the_logistic_recipe_fits_binary_and_multiclass():
+    import types
+    calls = []
+
+    class Fitted:
+        coef_ = intercept_ = [0.0]
+
+    def fit_logistic(est, X, y, devices):
+        calls.append(sorted(set(int(v) for v in y)))
+        return Fitted()
+
+    import sys
+    fake = types.ModuleType("mojolearn.parallel_classical")
+    fake.fit_logistic = fit_logistic
+    pkg = types.ModuleType("mojolearn")
+    pkg.parallel_classical = fake
+    saved = {k: sys.modules.get(k) for k in ("mojolearn", "mojolearn.parallel_classical")}
+    sys.modules["mojolearn"], sys.modules["mojolearn.parallel_classical"] = pkg, fake
+    try:
+        import numpy as np
+        ml = types.SimpleNamespace(LogisticRegression=lambda **kw: object())
+        parts = LS._logistic(ml, np.zeros((8, 3), np.float32), np.array([0, 1, 2, 3] * 2), (0, 0))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    assert calls == [[0, 1, 2], [0, 1]]
+    assert [p[0] for p in parts] == ["multi coef_", "multi intercept_", "binary coef_", "binary intercept_"]
+
+
+def test_the_gp_lane_spreads_over_covariance_rows():
     name, family, recipe, _fixture, n_rows, _features, _seed = {r[0]: r for r in LS.LANES}["gp-regress"]
     assert family == "gaussian_process/checks/kernels.mojo" and LS.RECIPES[recipe] is LS._gp
     assert n_rows >= max(LS.COUNTS)  # covariance rows: active = min(count, rows)

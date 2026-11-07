@@ -185,6 +185,9 @@ from checks.rtf_seam import rtf_mul_add
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape, qntm_chunk_cells, qntm_ws_floats
+# lane ne2-i-j (N453): the tile-order kernels live in their own module so the
+# GLM column shards (glm/impl/qn/multi_gpu.mojo) launch the same ones.
+from glm.impl.qn.qn_tiled_multi import qntm_partial_kernel, qntm_fold_kernel, qntm_tiled_into
 
 
 @fieldwise_init
@@ -1606,100 +1609,8 @@ def qn_tiled_multi_applies(n_rows: Int, d: Int, c: Int) -> Bool:
     return False
 
 
-def qntm_partial_kernel(
-    part: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    dz: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    d_in: Int32,
-    c_in: Int32,
-    tiles_in: Int32,
-    b0_in: Int32,
-    cnt_in: Int32,
-):
-    """Pass 1: thread `(k, bl)`, `bl` fastest, the `X^T dZ` cell `b = b0 +
-    bl` (`b = c + C*j`) over tile `k`'s rows ascending. Stores
-    `part[bl * tiles + k]`. The cells `[b0, b0 + cnt)` are one chunk of
-    `qntm_tiled_into`; a chunk never changes a cell's chain."""
-    var n = Int(n_in)
-    var D = Int(d_in)
-    var C = Int(c_in)
-    var tiles = Int(tiles_in)
-    var cnt = Int(cnt_in)
-    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var k = gid // cnt
-    var bl = gid - k * cnt
-    if k >= tiles:
-        return
-    var b = Int(b0_in) + bl
-    var c = b % C
-    var j = b // C
-    var r0 = k * QNT_ROWS
-    var r1 = min(n, r0 + QNT_ROWS)
-    var acc = strided_mul_add[1](x, D, j, dz, C, c, r1, r0)
-    part.unsafe_store(bl * tiles + k, acc)
-
-
-def qntm_fold_kernel(
-    out_v: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[Float32, MutAnyOrigin],
-    tiles_in: Int32,
-    b0_in: Int32,
-):
-    """Pass 2: block `bl`, STATS_TPB lanes, the pinned fold of cell `b0 +
-    bl`'s tile partials into `out_v[b0 + bl]` (the cuBLAS epilogue follows
-    as before)."""
-    var tiles = Int(tiles_in)
-    var bl = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var acc = strided_ftz_sum[STATS_TPB](part, 1, bl * tiles, tiles, tid, Float32(0.0))
-    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
-    if tid == 0:
-        out_v.unsafe_store(Int(b0_in) + bl, s0)
-
-
-def qntm_tiled_into(
-    ctx: DeviceContext,
-    mut xtdz: DeviceBuffer[DType.float32],
-    mut x: DeviceBuffer[DType.float32],
-    mut dz: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32],
-    n_rows: Int,
-    d: Int,
-    C: Int,
-) raises:
-    """`xtdz[c + C*j] = X^T dZ` in the tile order (`qntm_partial_kernel`,
-    then `qntm_fold_kernel` per cell), for any `C >= 1`: the order of the
-    host column's `host_qnt_xty` (C == 1) and its tiled multinomial
-    gradient (C > 1). The cells run in chunks of `qntm_chunk_cells` so the
-    partials fit `ws` (`qntm_ws_floats` floats); every chunk is the same
-    chains and fold, so the bits do not depend on the chunking.
-    Asynchronous. Lane debt-block-per-n (2026-10-21): this replaced
-    `xtdz_multi_kernel` / `xty_kernel`, one block per cell walking all n
-    rows, wherever the gradient took them."""
-    comptime assert not (is_defined["MOJOLEARN_QN_TILED_MULTI_OFF"]() or is_defined["MOJOLEARN_QN_TILED_MULTI_ALL"]()), "removed (lane debt-block-per-n, 2026-10-21): QN_TILED_MULTI_OFF selected xtdz_multi_kernel (one block per gradient cell walking all n rows) and QN_TILED_MULTI_ALL is now the rule"
-    var cd = C * d
-    if cd < 1:
-        return
-    var tiles = qnt_tiles(n_rows)
-    var chunk = qntm_chunk_cells(n_rows, cd)
-    var n_chunks = (cd + chunk - 1) // chunk
-    for ci in range(n_chunks):  # driver-loop: over workspace-bounded chunks of gradient cells
-        var b0 = ci * chunk
-        var cnt = min(chunk, cd - b0)
-        var threads = tiles * cnt
-        if threads >= 1:
-            ctx.enqueue_function[qntm_partial_kernel](
-                ws.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
-                Int32(n_rows), Int32(d), Int32(C), Int32(tiles),
-                Int32(b0), Int32(cnt),
-                grid_dim=((threads + QNT_TPB - 1) // QNT_TPB, 1, 1),
-                block_dim=(QNT_TPB, 1, 1),
-            )
-        ctx.enqueue_function[qntm_fold_kernel](
-            xtdz.unsafe_ptr(), ws.unsafe_ptr(), Int32(tiles), Int32(b0),
-            grid_dim=(cnt, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+# `qntm_partial_kernel`, `qntm_fold_kernel` and `qntm_tiled_into` moved to
+# glm/impl/qn/qn_tiled_multi.mojo unchanged (lane ne2-i-j, N453).
 
 
 def qn_grad_tiles_needed(d: Int, c: Int) -> Bool:
@@ -1792,14 +1703,17 @@ def linear_bwd(
     # lane fam2-linear: the tiled `C > 1` gradient is decided first (one
     # rule with the host column), so no other route computes these cells
     var tiled_multi = qn_tiled_multi_applies(n_rows, d, dims.C)
-    var distributed = False
-    if not tiled_multi:
-        distributed = gradient_columns(dplan, ctx, xtdz, x, dz, n_rows, d, dims.C)
+    # lane ne2-i-j (N453): the column shards run the same tile order
+    # (`gradient_columns`), so a plan of several devices takes them at every
+    # C; they used to be skipped whenever the tile order applied, which ran
+    # every multinomial fit with `devices=` on one device. One device: False,
+    # and the routes below run as before.
+    var distributed = gradient_columns(dplan, ctx, xtdz, x, dz, n_rows, d, dims.C)
     # AUDIT (i): unreached at C == 1; the C == 1 body below is certified.
     if dims.C > 1:
         var cd = dims.C * d
         var fast_done = False
-        if tiled_multi:
+        if tiled_multi and not distributed:
             qntm_tiled_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         comptime if QN_FAST_XTDZ:
@@ -2606,6 +2520,13 @@ struct GLMWithData(Movable):
         var d = self.dims.D
         var tiles = qnt_tiles(n)
         var cells = tiles * (d + 2)
+        # lane ne2-i-j (N453): a plan of several devices shards the gradient
+        # columns (IDENTICAL only; FAST keeps its one-device objective). One
+        # device never enters.
+        comptime if QN_TILED:
+            if not self.dplan.single():
+                self._enqueue_tiled_columns(ctx, w, g, set_zero)
+                return
         comptime if QN_IDN_FUSED:
             if not self.weighted:
                 # lane fam2-linear: the forward, the loss map and the tile
@@ -2656,6 +2577,59 @@ struct GLMWithData(Movable):
             Int32(0) if set_zero else Int32(1),
             Int32(1) if self.dims.fit_intercept else Int32(0),
             grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
+
+    def _enqueue_tiled_columns(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        set_zero: Bool,
+    ) raises:
+        """`enqueue_tiled` over a plan of several devices (lane ne2-i-j,
+        plan row N453): the same words in `g` and `slots[0]`.
+
+        The root runs the four-launch forward and loss map (the chains
+        QN_IDN_FUSED keeps), so `z` holds dZ and `loss_terms` the row terms.
+        The `D` gradient cells go to the column shards (`gradient_columns`:
+        `qntm_tiled_into` at C == 1, `qnt_partial_kernel`'s chain for an
+        output `o < D` and `qnt_fold_kernel`'s fold), then
+        `gemm_epilogue_kernel` applies `qnt_fold_kernel`'s epilogue
+        (`ftz(alpha * s)`, `+ g` rounded when `set_zero` is False) with the
+        same `alpha`. The two row sums stay on the root: `qnt_partial_kernel`
+        and `qnt_fold_kernel` with `d_in = 0` run exactly their outputs `D`
+        (the dZ sum: the bias mean into `g[D]`) and `D + 1` (the loss into
+        `slots[0]`), with `g` offset by `D`; neither chain reads X or `D`."""
+        var n = self.n_rows
+        var d = self.dims.D
+        var tiles = qnt_tiles(n)
+        var alpha = Float32(1.0 / Float64(n))
+        linear_fwd(ctx, self.z, self.x, w, self.w_weights, n, self.dims)
+        self.enqueue_loss_and_dz(
+            ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False
+        )
+        # synchronous: the shards read the dZ the loss map just wrote
+        _ = gradient_columns(self.dplan, ctx, self.xtdz, self.x, self.z, n, d, 1)
+        var sums = tiles * 2
+        ctx.enqueue_function[qnt_partial_kernel](
+            self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.z.unsafe_ptr(),
+            self.loss_terms.unsafe_ptr(), Int32(n), Int32(0), Int32(tiles),
+            grid_dim=((sums + QNT_TPB - 1) // QNT_TPB, 1, 1),
+            block_dim=(QNT_TPB, 1, 1),
+        )
+        ctx.enqueue_function[qnt_fold_kernel](
+            (g.unsafe_ptr() + d).unsafe_origin_cast[MutAnyOrigin](),
+            self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
+            Int32(n), Int32(0), Int32(tiles), alpha,
+            Int32(0) if set_zero else Int32(1),
+            Int32(1) if self.dims.fit_intercept else Int32(0),
+            grid_dim=(2, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[gemm_epilogue_kernel](
+            g.unsafe_ptr(), self.xtdz.unsafe_ptr(), Int32(d), alpha,
+            Int32(0) if set_zero else Int32(1),
+            grid_dim=((d + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
+            block_dim=(VEC_ELEM_TPB, 1, 1),
         )
 
     def enqueue_blocks(

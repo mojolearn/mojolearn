@@ -1038,14 +1038,23 @@ def ts_pack_center_device(
     return out^
 
 
-def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool) raises:
-    """R (n x n) of the m x n row-major `da` (factored in place) into the host
-    r; with `keep` the factored state stays for `ts_apply_device`."""
-    comptime if not TS_SMEM_OK:
-        raise Error("x_decomp tsqr: the panel kernels' threadgroup memory does not fit this column")
-    comptime if (TS_WY_PAIR or TS_TREE_PAR) and not TS_SMEM2_OK:
-        raise Error("x_decomp tsqr: the pair and tree kernels' threadgroup memory does not fit this column")
-    ts_free_device()
+@fieldwise_init
+struct TsFactorWork(Movable):
+    """The factor's per-call buffers: `dt` the panel T factors, `dt2` the
+    pair T2 factors, `dtl` the R tiles, `dtau` the tree taus. Lane ne2-i-j
+    (2026-11-07): `ts_factor_device` is split into `ts_factor_begin`,
+    `ts_leaf_phase` and `ts_factor_finish` with the same launches in the same
+    order, so the plan-taking factor (`x_decomp/tsqr_multi_gpu.mojo`) runs
+    the leaf phase of whole blocks on other devices and the rest here."""
+    var dt: DeviceBuffer[DType.float32]
+    var dt2: DeviceBuffer[DType.float32]
+    var dtl: DeviceBuffer[DType.float32]
+    var dtau: DeviceBuffer[DType.float32]
+
+
+def ts_factor_work(ctx: DeviceContext, m: Int, n: Int) raises -> TsFactorWork:
+    """`ts_factor_device`'s allocations on `ctx`, in its order (no
+    `ts_free_device`: a shard's buffers never touch the kept state)."""
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
@@ -1054,6 +1063,37 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     var dtl = ctx.enqueue_create_buffer[DType.float32](nb * n * n)
     var dtau = ctx.enqueue_create_buffer[DType.float32](nb * n)
     enqueue_fill(ctx, dtau, Float32(0.0))
+    _ = npan
+    _ = npair
+    return TsFactorWork(dt^, dt2^, dtl^, dtau^)
+
+
+def ts_factor_begin(ctx: DeviceContext, m: Int, n: Int) raises -> TsFactorWork:
+    """`ts_factor_device`'s guards, `ts_free_device`, then its allocations."""
+    comptime if not TS_SMEM_OK:
+        raise Error("x_decomp tsqr: the panel kernels' threadgroup memory does not fit this column")
+    comptime if (TS_WY_PAIR or TS_TREE_PAR) and not TS_SMEM2_OK:
+        raise Error("x_decomp tsqr: the pair and tree kernels' threadgroup memory does not fit this column")
+    ts_free_device()
+    return ts_factor_work(ctx, m, n)
+
+
+def ts_leaf_phase(
+    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut work: TsFactorWork,
+    m: Int, n: Int, blo: Int, bhi: Int,
+) raises:
+    """The leaf phase of `ts_factor_device` (every panel, or panel pair, of
+    each row block: factor, T factors, trailing update) for the blocks
+    `[blo, bhi)` of `ts_blocks(m)`. A block's launches read and write only
+    its own rows of `da` and its own `dt` / `dt2` slots, and every kernel is
+    handed the global block count and the global block index, so a range
+    runs exactly the words the full range runs for those blocks.
+    `(0, ts_blocks(m))` is `ts_factor_device`'s leaf phase launch for launch."""
+    var nb = ts_blocks(m)
+    var npan = ts_panels(n)
+    var npair = ts_pairs(n)
+    var dt = work.dt
+    var dt2 = work.dt2
     var mbmax = m - ts_block_lo(nb - 1)
     var bpl = _per_launch(3 * mbmax * n * TS_NB)
     comptime if TS_WY_PAIR:
@@ -1065,9 +1105,9 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
             var has_b = pa + 1 < npan
             var j1 = pa * TS_NB + ts_pair_width(n, q)
             var nch = (n - j1 + TS_NB - 1) // TS_NB
-            var b0 = 0
-            while b0 < nb:
-                var cnt = min(bpl2, nb - b0)
+            var b0 = blo
+            while b0 < bhi:
+                var cnt = min(bpl2, bhi - b0)
                 ctx.enqueue_function[ts_leaf_panel_kernel](
                     da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pa),
                     grid_dim=cnt, block_dim=TS_TPB,
@@ -1098,9 +1138,9 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
                 b0 += cnt
     comptime if not TS_WY_PAIR:
         for pan in range(npan):
-            var b0 = 0
-            while b0 < nb:
-                var cnt = min(bpl, nb - b0)
+            var b0 = blo
+            while b0 < bhi:
+                var cnt = min(bpl, bhi - b0)
                 ctx.enqueue_function[ts_leaf_panel_kernel](
                     da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pan),
                     grid_dim=cnt, block_dim=TS_TPB,
@@ -1124,6 +1164,23 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
                             )
                         _wait_apple(ctx)
                 b0 += cnt
+    _ = npair
+    _ = dt^
+    _ = dt2^
+
+
+def ts_factor_finish(
+    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut work: TsFactorWork,
+    m: Int, n: Int, r: F32Ptr, keep: Bool,
+) raises:
+    """`ts_factor_device` after the leaf phase: the R tiles, the tree
+    combine, the NaN refusal, R into the host `r`, and with `keep` the kept
+    state for `ts_apply_device`."""
+    var nb = ts_blocks(m)
+    var dt = work.dt
+    var dt2 = work.dt2
+    var dtl = work.dtl
+    var dtau = work.dtau
     ctx.enqueue_function[ts_rtile_kernel](
         da.unsafe_ptr(), dtl.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), grid_dim=_grid(nb * n * n), block_dim=TS_TPB
     )
@@ -1171,6 +1228,15 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     _ = dt2^
     _ = dtl^
     _ = dtau^
+
+
+def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool) raises:
+    """R (n x n) of the m x n row-major `da` (factored in place) into the host
+    r; with `keep` the factored state stays for `ts_apply_device`."""
+    var work = ts_factor_begin(ctx, m, n)
+    ts_leaf_phase(ctx, da, work, m, n, 0, ts_blocks(m))
+    ts_factor_finish(ctx, da, work, m, n, r, keep)
+    _ = work^
 
 
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.

@@ -36,7 +36,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.parallel_public_result import parallel_public_result
-from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit
+from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common import family_call, family_as_f32, family_view, family_f32_snapshot
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
@@ -49,7 +49,8 @@ from bindings.native_prepared_owner import prepared_key_fields, prepared_key_sam
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
     shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
-    shard_dtype,
+    shard_dtype, shard_run_stored, shard_stored_ref, shard_store_token, shard_store_put, shard_store_drop,
+    shard_resolve_stored,
 )
 from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
@@ -57,6 +58,7 @@ from bindings.gp_classifier_native import (
 )
 from bindings.gp_common_native import gp_kernel_arrays
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
+from bindings.trees_public_inputs import trees_encode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
 
@@ -370,12 +372,22 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
     var max_iter = work["_max_iter_predict"]
-    _ = shard_devices(args[3])
+    var n_devices = shard_devices(args[3])
+    # N452 (lane ne2-i-j): with more class columns than workers, X and the
+    # codes go to each worker once (`shard_run_stored`), not once per column
+    var stored = len(columns) > n_devices
+    var token = shard_store_token() if stored else String("")
     var requests = b.list()
     for i in range(len(columns)):  # driver-loop: one worker request per class column
-        _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
-                                                  Python.tuple(x, codes, columns[i])))
-    var parts = shard_run(requests, args[3], _CHILD)
+        if stored:
+            _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
+                                                      Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
+                                                                   columns[i])))
+        else:
+            _ = py_call(requests.append, Python.tuple("gpc_class_fit", Python.tuple(carried, max_iter),
+                                                      Python.tuple(x, codes, columns[i])))
+    var parts = (shard_run_stored(Python.tuple(x, codes), token, requests, args[3], _CHILD) if stored
+                 else shard_run(requests, args[3], _CHILD))
     var fits = b.list()
     for i in range(len(parts)):  # driver-loop: one binary fit per class column
         var f = parts[i]
@@ -421,13 +433,23 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
     var fits = fields["estimators_"]
-    _ = shard_devices(args[2])
+    var n_devices = shard_devices(args[2])
+    # N452 (lane ne2-i-j): with more fitted classes than workers, X_train_
+    # and the query rows go to each worker once (`shard_run_stored`)
+    var stored = len(fits) > n_devices
+    var token = shard_store_token() if stored else String("")
     var requests = b.list()
     for i in range(len(fits)):  # driver-loop: one worker request per fitted class
         var fit_state = shard_state(py_fields(fits[i]), b.frozenset(), context)
-        _ = py_call(requests.append, Python.tuple("gpc_class_predict", Python.tuple(carried, fields["X_train_"], fit_state),
-                                                  Python.tuple(q, want_proba, out_kind)))
-    var columns = shard_run(requests, args[2], _CHILD)
+        if stored:
+            _ = py_call(requests.append, Python.tuple("gpc_class_predict",
+                                                      Python.tuple(carried, shard_stored_ref(token, 0), fit_state),
+                                                      Python.tuple(shard_stored_ref(token, 1), want_proba, out_kind)))
+        else:
+            _ = py_call(requests.append, Python.tuple("gpc_class_predict", Python.tuple(carried, fields["X_train_"], fit_state),
+                                                      Python.tuple(q, want_proba, out_kind)))
+    var columns = (shard_run_stored(Python.tuple(fields["X_train_"], q), token, requests, args[2], _CHILD) if stored
+                   else shard_run(requests, args[2], _CHILD))
     var n_star = Int(py=q.shape[0])
     for i in range(len(columns)):  # driver-loop: checks one result column per class
         if Int(py=columns[i].shape[0]) != n_star:
@@ -451,17 +473,28 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
 # ---------------------------------------------------------------- forests
 
 def _forest_y(y: PythonObject, regressor: Bool, context: PythonObject) raises -> PythonObject:
-    """The targets a forest shard receives: float32 for a regressor (the old
-    driver's `as_f32_c(y, ndim=1)`); a classifier's labels as given (a native
-    Array or a list), or their `tolist()` (the old driver's flat label list)
-    when the codec cannot carry the object itself."""
+    """The targets a forest shard receives, and the class list the joined
+    classifier publishes: `(float32 y, None)` for a regressor (the old
+    driver's `as_f32_c(y, ndim=1)`); `(int32 codes, classes)` for a
+    classifier.
+
+    Lane ne2-i-j (2026-11-07, plan row N450): a classifier's labels were sent
+    as given or as `y.tolist()`, one Python object per row that the codec
+    encoded element by element into every tree-range request. They are now
+    encoded ONCE here by the encoder the plain fit runs
+    (`trees_encode_labels`, bindings/trees_public_forest.mojo
+    `_rf_fit_classifier` / the ExtraTrees fit): `classes` is the list the
+    plain fit stores as `classes_`, `codes` one int32 per row, a native Array
+    the codec carries as one buffer. A shard fits on the codes: they are the
+    integers `0 .. k - 1`, every one present, so the shard's own encode
+    returns them unchanged with classes `[0, .., k - 1]`, and its trees, leaf
+    class order and votes are the words the plain fit on the labels gives
+    (class order = code order = the order of `classes`). NO BIT MOVES; the
+    driver puts `classes` back as `classes_` (`_fit_forest`)."""
     if regressor:
-        return family_as_f32(y, 1, "y", context)
-    var b = shard_b()
-    var cls = py_type(y)
-    if cls is context["array_class"] or cls is b.list or cls is b.tuple:
-        return y
-    return py_call(py_attr(y, "tolist"))
+        return Python.tuple(family_as_f32(y, 1, "y", context), PythonObject(None))
+    var labels = trees_encode_labels(y, _t("trees_context"))
+    return Python.tuple(labels.codes, labels.classes)
 
 
 def _fit_forest(args: PythonObject) raises -> PythonObject:
@@ -499,12 +532,18 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     py_setitem(params, "numeric_mode", "identical")
     var x = family_as_f32(args[1], 2, "X", context)
     var regressor = Bool(py=py_call(py_attr(regressors, "__contains__"), cls))
-    var y = _forest_y(args[2], regressor, context)
+    var targets = _forest_y(args[2], regressor, context)
+    var y = targets[0]
+    var label_classes = targets[1]
     var count = Int(py=params["n_estimators"])
     if count < 1:
         raise Error("ValueError: n_estimators must be positive")
     var ranges = shard_ranges(count, tps, "trees_per_shard", "")
     var n_devices = shard_devices(args[3])
+    # N452 (lane ne2-i-j): with more tree ranges than workers, X and y go to
+    # each worker once (`shard_run_stored`), not once per tree range
+    var stored = len(ranges) // 2 > n_devices
+    var token = shard_store_token() if stored else String("")
     var requests = b.list()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per tree range
         var lo = ranges[2 * r]
@@ -512,9 +551,15 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
         var shard_params = py_call(b.dict, params)
         py_setitem(shard_params, "n_estimators", hi - lo)
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
-                                                  Python.tuple(x, y, lo - shift)))
-    var parts = shard_run(requests, args[3], _CHILD)
+        if stored:
+            _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
+                                                      Python.tuple(shard_stored_ref(token, 0), shard_stored_ref(token, 1),
+                                                                   lo - shift)))
+        else:
+            _ = py_call(requests.append, Python.tuple("forest_fit", Python.tuple(cls.__name__, shard_params),
+                                                      Python.tuple(x, y, lo - shift)))
+    var parts = (shard_run_stored(Python.tuple(x, y), token, requests, args[3], _CHILD) if stored
+                 else shard_run(requests, args[3], _CHILD))
     var merged = b.dict()
     # node offsets: one rebased table over every shard's trees
     var offsets = b.list()
@@ -538,9 +583,17 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     py_setitem(fields, "_n_trees", count)
     py_setitem(fields, "n_estimators", count)
     if not regressor:
+        # The shards fitted on the int32 codes (`_forest_y`): their
+        # `classes_` is `[0, .., k - 1]`; the labels are the class list the
+        # plain fit stores, encoded once above (same length, same order).
+        if len(fields["classes_"]) != len(label_classes):
+            raise Error("ValueError: forest worker returned " + String(len(fields["classes_"]))
+                        + " classes for " + String(len(label_classes)) + " labels")
+        py_setitem(fields, "classes_", label_classes)
+        py_setitem(fields, "n_classes_", PythonObject(len(label_classes)))
         # The plain fit's completed-classifier metadata: public `classes_`
-        # labels from the shards' plain list, and `feature_names_in_` from
-        # this caller's X (an object array the codec does not carry).
+        # labels, and `feature_names_in_` from this caller's X (an object
+        # array the codec does not carry).
         classifier_after_fit(fields, args[1], trees_context)
     var cfg = py_get(fields, PythonObject("_cfg"), PythonObject(None))
     if cfg is not None:
@@ -1067,8 +1120,13 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         raise error^
     var outputs = b.list()
     var diagnostics = b.list()
+    var radius = String(method) == "radius_neighbors"
     for r in range(len(results)):  # driver-loop: one result and diagnostic per query row block
-        _ = py_call(outputs.append, results[r][0])
+        if radius:
+            # N451: the worker sent its CSR triple; the ragged rows are built here once
+            _ = py_call(outputs.append, neighbor_radius_rows(results[r][0], context))
+        else:
+            _ = py_call(outputs.append, results[r][0])
         var record = b.dict()
         py_setitem(record, "start", ranges[2 * r])
         py_setitem(record, "end", ranges[2 * r + 1])
@@ -1258,8 +1316,13 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     if len(request) != 3:
         raise Error("parallel shards: invalid worker request envelope")
     var operation = String(request[0])
-    var state = request[1]
-    var args = request[2]
+    # N452 (lane ne2-i-j): a call's shared operands, stored once per worker
+    if operation == "shard_store":
+        return shard_store_put(request[1], request[2])
+    if operation == "shard_release":
+        return shard_store_drop(request[1])
+    var state = shard_resolve_stored(request[1])
+    var args = shard_resolve_stored(request[2])
     if operation == "rbf_rows":
         var model = shard_model(_t("rbf_class"), state)
         var rows_meta = family_f32_snapshot(args[0], 2, "X", context, True)

@@ -257,6 +257,8 @@ comptime _ADMITTED_MODULES = _Global[
 
 
 # ------------------------------------------------- shared dictionary watcher
+# Lane ne2-i-j (2026-11-07): CPython 3.10 / 3.11 stamps (no watcher there).
+from bindings.py_version_tags import dict_version_tags, dict_version_tag
 # CPython >= 3.12 dictionary watchers (`PyDict_AddWatcher` / `PyDict_Watch`)
 # report every insertion, replacement, deletion, clear, clone and
 # deallocation of a watched dictionary. Each event bumps that dictionary's
@@ -321,8 +323,23 @@ def shared_dict_watcher() raises -> Int:
     return g[].watcher
 
 
+def shared_dict_stamped() raises -> Bool:
+    """True when `shared_dict_watch` / `shared_dict_epoch` prove dictionary
+    edits in this process: the 3.12+ watcher, or on CPython 3.10 / 3.11 the
+    dictionaries' own PEP 509 version tags (bindings/py_version_tags.mojo,
+    lane ne2-i-j). Callers that test `shared_dict_watcher() < 0` before
+    using the pair test this instead."""
+    if shared_dict_watcher() >= 0:
+        return True
+    return dict_version_tags()
+
+
 def shared_dict_epoch(address: Int) raises -> Int:
-    """Watch epoch of the dictionary at `address` (0 until its first event)."""
+    """Watch epoch of the dictionary at `address` (0 until its first event).
+    On CPython 3.10 / 3.11 with proven version tags, the live dictionary's
+    `ma_version_tag` (every caller holds the dictionary it asks about)."""
+    if shared_dict_watcher() < 0 and dict_version_tags():
+        return dict_version_tag(address)
     var g = SHARED_DICT_WATCH.get_or_create_ptr()
     if address in g[].epochs:
         return g[].epochs[address]
@@ -331,10 +348,12 @@ def shared_dict_epoch(address: Int) raises -> Int:
 
 def shared_dict_watch(fields: PyObjectPtr) raises -> Bool:
     """Watch the exact dictionary `fields`; False where watching is not
-    available or was refused (the caller keeps its full check)."""
+    available or was refused (the caller keeps its full check). On CPython
+    3.10 / 3.11 with proven version tags there is nothing to arm: True, and
+    `shared_dict_epoch` reads the dictionary's own tag."""
     var watcher = shared_dict_watcher()
     if watcher < 0:
-        return False
+        return dict_version_tags()
     ref cpy = Python().cpython()
     if cpy.lib.get_function[Int32]("PyDict_Watch")(Int32(watcher), fields) < 0:
         cpython_table()[].PyErr_Clear()

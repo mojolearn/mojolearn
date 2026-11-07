@@ -164,6 +164,7 @@ from x_decomp.tsqr_device import (
     TS_SMEM_OK, ts_apply_device, ts_apply_device_buf, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
 )
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
+from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
@@ -4050,11 +4051,15 @@ struct DevExec(Exec):
     @staticmethod
     def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
         """The blocked TSQR on the device (x_decomp/tsqr_device.mojo)."""
+        # lane ne2-i-j (2026-11-07): the QR family's plan, read once here
+        # (x_decomp/tsqr_multi_gpu.mojo; one device unless a parallel driver
+        # bound a plan, and the same words either way)
+        var plan = tsqr_plan_current()
         var ctx = xd_ctx()
         var n = d + nrhs
         if nrhs == 0:
             var da = _up(ctx, a, m * n)
-            ts_factor_device(ctx, da, m, n, r, keep)
+            ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         else:
             var ta = _up(ctx, a, m * d)
@@ -4062,14 +4067,14 @@ struct DevExec(Exec):
             var da = ts_pack_device(ctx, ta, tb, m, d, nrhs)
             comptime if IDN_XD_NO_WAIT:
                 # no wait before the factorization: a and b live until its own
-                ts_factor_device(ctx, da, m, n, r, keep)
+                ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
                 _ = ta^
                 _ = tb^
             else:
                 ctx.synchronize()
                 _ = ta^
                 _ = tb^
-                ts_factor_device(ctx, da, m, n, r, keep)
+                ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         ctx.synchronize()
         _ = ctx^
@@ -4084,6 +4089,11 @@ struct DevExec(Exec):
         (`center_cell`, inside the pack) and the blocked TSQR of
         [X - mu | y - ymean] all read the resident buffers. The words of
         lm_col_sums + lm_center + tsqr_factor, which crossed X four times."""
+        # lane ne2-i-j (2026-11-07): the QR family's plan, read once here;
+        # under `fit_gram_estimator(..., devices=...)` the TSQR's row blocks
+        # run over its devices (x_decomp/tsqr_multi_gpu.mojo, the same
+        # words), one device otherwise.
+        var plan = tsqr_plan_current()
         var ctx = xd_ctx()
         var n = d + 1
         var ta = _up(ctx, a, m * d)
@@ -4101,7 +4111,7 @@ struct DevExec(Exec):
         ctx.enqueue_copy(dst_ptr=ymean, src_buf=d_m64.create_sub_buffer[DType.uint64](d, 1))
         comptime if TARGET_COLUMN == COLUMN_APPLE:
             ctx.synchronize()
-        ts_factor_device(ctx, da, m, n, r, False)
+        ts_factor_dispatch(plan, ctx, da, m, n, r, False)
         ctx.synchronize()
         _ = ta^
         _ = tb^
