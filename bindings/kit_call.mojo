@@ -38,12 +38,12 @@ def kit_connect(binding: PythonObject, factory_name: String, abi: String, operat
     var retained = compiled_binding_retained(binding, factory, abi)
     if retained is not None:
         return retained
-    var provider = neural_descriptor_connect(factory, abi, operation_count)
+    var provider = neural_descriptor_connect(factory, String(abi), operation_count)
     var mode = neural_descriptor_execute(provider, mode_operation, [], [], [], False)
     if mode != 0 and mode != 1:
         raise Error("kit provider: unsupported compiled numeric mode")
     var capabilities = neural_descriptor_execute(provider, capabilities_operation, [], [], [], False)
-    var snapshot = PythonObject(alloc=CompiledBindingSnapshot(provider, binding, abi, mode, [capabilities]))
+    var snapshot = PythonObject(alloc=CompiledBindingSnapshot(provider, binding, String(abi), mode, [capabilities]))
     compiled_binding_retain(binding, factory, abi, snapshot)
     return snapshot
 
