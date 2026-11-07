@@ -11,7 +11,7 @@ from x_neighbors.svgp_b32_gate import (
 )
 from gemm.host.gemm_oracle import gemm_oracle
 from gemm.contract import OP_TN as _SVGP_OP_TN
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
@@ -25,6 +25,9 @@ from x_neighbors.items import (
 
 from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.host_ops import op_unary as _host_unary, op_p2m_sign_label as _host_sign_label
+from x_neighbors.host_ops import (
+    op_absdiff_sum as _host_absdiff_sum, op_lp_clamp as _host_lp_clamp, op_ls_clamp as _host_ls_clamp,
+)
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     K_RBF, U_IDENTITY,
@@ -572,49 +575,48 @@ def op_lp_iterate_knn(
     cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
     n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
 ) raises:
-    """The CPU column of the resident kNN-graph loop (lane/apple-fast-neighbors2):
-    `_LabelPropagationBase.fit`'s Python loop over the same items
-    (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp)."""
+    """The CPU column of the resident kNN-graph loop: the loop the binding
+    door ran on a host binary (bindings/neighbors_semi_native.mojo `_lp_fit`,
+    one `xn_*` crossing per op per iteration), now inside one call. Each
+    iteration runs the same host ops in the same order with the same words:
+    `op_absdiff_sum` (the part / fin fold items), the float64 compare of
+    that float32 sum with float(tol), `op_lp_knn_product`, then
+    `op_lp_clamp` / `op_ls_clamp` (sabotage hooks included), so the
+    distributions, n_iter_ and the stop are the same bits as the door's
+    loop. Lane ne3-g-svc-gp-neighbors (row N303): before, this column
+    folded the stopping sum with the serial `absdiff_sum_item`, which is
+    not the door's fold, and `lp_fast_resident` kept it unused."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
     var nc = n * c
-    var pc = IP(unsafe_from_address=cols)
-    var pv = FP(unsafe_from_address=vals)
-    var pld = FP(unsafe_from_address=ld)
-    var pys = FP(unsafe_from_address=ystatic)
-    var pun = IP(unsafe_from_address=unlabeled)
     var cur = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     var prev = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     var nxt = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     var hs = List[Float32](length=1, fill=Float32(0))
-    var p_cur = FP(unsafe_from_address=Int(cur.unsafe_ptr()))
-    var p_prev = FP(unsafe_from_address=Int(prev.unsafe_ptr()))
-    var p_nxt = FP(unsafe_from_address=Int(nxt.unsafe_ptr()))
-    var p_hs = FP(unsafe_from_address=Int(hs.unsafe_ptr()))
-    for q in range(nc):
-        cur[q] = pld.unsafe_load(q)
+    var a_cur = Int(cur.unsafe_ptr())
+    var a_prev = Int(prev.unsafe_ptr())
+    var a_nxt = Int(nxt.unsafe_ptr())
+    var a_hs = Int(hs.unsafe_ptr())
+    if nc > 0:
+        memcpy(dest=FP(unsafe_from_address=a_cur), src=FP(unsafe_from_address=ld), count=nc)
     var n_iter = 0
     var converged = False
-    for it in range(max_iter):
+    for it in range(max_iter):  # driver-loop: over propagation iterations (each depends on the last)
         n_iter = it
-        absdiff_sum_item(0, p_cur, p_prev, p_hs, nc)
-        if Float64(hs[0]) < tol:
+        _host_absdiff_sum(a_cur, a_prev, a_hs, nc)
+        if Float64(FP(unsafe_from_address=a_hs).unsafe_load(0)) < tol:
             converged = True
             break
-        for q in range(nc):
-            prev[q] = cur[q]
-        var finite = lp_knn_finite(p_cur, nc)
-        for t in range(nc):
-            lp_knn_product_item(t, pc, pv, p_cur, p_nxt, n, n, k, c, finite)
+        if nc > 0:
+            memcpy(dest=FP(unsafe_from_address=a_prev), src=FP(unsafe_from_address=a_cur), count=nc)
+        op_lp_knn_product(cols, vals, a_cur, a_nxt, n, n, k, c)
         if variant == 0:
-            for t in range(n):
-                lp_clamp_item(t, p_nxt, pys, pun, p_cur, n, c)
+            _host_lp_clamp(a_nxt, ystatic, unlabeled, a_cur, n, c)
         else:
-            for t in range(nc):
-                ls_clamp_item(t, p_nxt, pys, p_cur, nc, alpha)
+            _host_ls_clamp(a_nxt, ystatic, a_cur, nc, alpha)
     if not converged:
         n_iter += 1
-    for q in range(nc):
-        pld.unsafe_store(q, cur[q])
+    if nc > 0:
+        memcpy(dest=FP(unsafe_from_address=ld), src=FP(unsafe_from_address=a_cur), count=nc)
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
@@ -625,6 +627,7 @@ def op_lp_iterate_knn(
 
 
 def lp_fast_resident() -> Int:
-    """The host column never takes the resident kNN-graph loop by default
-    (LP_FAST_RESIDENT is FAST + Apple; the Python loop runs here)."""
-    return 0
+    """1: the host column takes the resident kNN-graph loop (op_lp_iterate_knn
+    above runs the door's host ops in its order, so the bits are the door
+    loop's). Lane ne3-g-svc-gp-neighbors, row N303."""
+    return 1

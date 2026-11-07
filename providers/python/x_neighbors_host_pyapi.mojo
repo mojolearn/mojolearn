@@ -21,7 +21,7 @@ def kpca_resident_binding() raises -> PythonObject:
 
 
 def lp_fast_resident_binding() raises -> PythonObject:
-    """0: the host column never takes the resident kNN-graph loop."""
+    """1: the host column takes the resident kNN-graph loop (op_lp_iterate_knn)."""
     return PythonObject(lp_fast_resident())
 
 
