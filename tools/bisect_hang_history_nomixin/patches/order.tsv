@@ -18,5 +18,4 @@ seq	commit	path	patch
 18	aa71e649ea	sequence/perf3_seq_resident.mojo	018-aa71e649ea-sequence_perf3_seq_resident.mojo.patch
 19	1cf5aa1539	training/estimator.mojo	019-1cf5aa1539-training_estimator.mojo.patch
 20	70dd7e815b	bindings/samba_checkpoint_native.mojo	020-70dd7e815b-bindings_samba_checkpoint_native.mojo.patch
-21	800d1aa5c1	bindings/family_native.mojo	021-800d1aa5c1-bindings_family_native.mojo.patch
 22	f9e06ecacf	bindings/trees_staged_input.mojo	022-f9e06ecacf-bindings_trees_staged_input.mojo.patch
