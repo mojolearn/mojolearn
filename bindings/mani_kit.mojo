@@ -31,6 +31,10 @@ from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_opt
 # N290-N301): the kit's primitive operations call one abi("C") dispatch
 # function per operation (bindings/kit_call.mojo).
 from bindings.kit_call import kit_connect, kit_provider, kit_call
+from bindings.manifold_storage_native import (
+    matrix_frozen, matrix_freeze, matrix_kept_store, matrix_kept_device,
+    matrix_set_kept_store, matrix_set_kept_device,
+)
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES,
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE,
@@ -216,9 +220,55 @@ def mk_one(ctx: PythonObject) raises -> PythonObject:
     return one
 
 
+def mk_frozen_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
+    """The host words of a frozen fitted matrix without moving it: its store,
+    or the kept host copy of a device matrix, downloaded once and reused by
+    every later read (rows N291, N301)."""
+    var store = matrix_store(m)
+    if store is not None:
+        return store
+    var kept = matrix_kept_store(m)
+    if kept is not None:
+        return kept
+    var d = matrix_device(m)
+    var n = mk_n(m)
+    var a = mk_store_zeros(n, ctx)
+    if n > 0:
+        _ = family_call(mk_required(device_download(d), "x_decomp_dev_download"), device_identifier(d),
+                        mk_store_addr(a), PythonObject(n))
+        _ = a  # keep the Python object alive through the native call above
+    # Another thread may have kept a copy while the download released the
+    # GIL: every reader then shares that one.
+    var raced = matrix_kept_store(m)
+    if raced is not None:
+        return raced
+    matrix_set_kept_store(m, a)
+    return a
+
+
+def mk_writable(m: PythonObject) raises:
+    """In-place writers (fill0, place_strided, graph_join) refuse fitted
+    state: a frozen matrix's two copies would disagree afterwards."""
+    if matrix_frozen(m):
+        raise Error("RuntimeError: a fitted manifold matrix is read-only")
+
+
+def mk_freeze_fitted(fields: PythonObject, names: List[String]) raises:
+    """Freeze the fitted matrices a fit stored under `names` (absent names
+    are skipped). Called once when the fit returns, so each matrix keeps the
+    side the fit left it on."""
+    for i in range(len(names)):  # small-loop(fitted: the fixed fitted-matrix names of one estimator)
+        var value = py_get(fields, PythonObject(names[i]))
+        if value is not None:
+            matrix_freeze(value)
+
+
 def mk_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
     """`m.s`: the host store, downloaded once if the matrix is on the device;
-    the matrix is a host matrix afterwards."""
+    the matrix is a host matrix afterwards. A frozen fitted matrix is read
+    without moving (mk_frozen_store)."""
+    if matrix_frozen(m):
+        return mk_frozen_store(m, ctx)
     if matrix_store(m) is None:
         var d = matrix_device(m)
         var n = mk_n(m)
@@ -613,14 +663,38 @@ struct MKit(Movable):
         var d = matrix_device(m)
         if not (d is None) and device_binding(d) is self.raw:
             return device_identifier(d)
+        if matrix_frozen(m):
+            return self._frozen_did(m)
         var a = mk_store(m, self.ctx)
         var n = mk_store_len(a)
         var nd = self._devbuf(n)
         if n > 0:
-            _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(nd), mk_store_addr(a), PythonObject(n))
+            self.upload(Int(py=device_identifier(nd)), words_address(a), n)
             _ = a  # keep the Python object alive through the native call above
         matrix_set_store(m, PythonObject(None))
         matrix_set_device(m, nd)
+        _ = a^
+        return device_identifier(nd)
+
+    def _frozen_did(mut self, m: PythonObject) raises -> PythonObject:
+        """A frozen fitted matrix's device id on this binding without moving
+        it: the kept device copy, uploaded once (rows N291, N301). The copy
+        is keyed by binding module, as every device buffer of the kit is."""
+        var kd = matrix_kept_device(m)
+        if not (kd is None) and device_binding(kd) is self.raw:
+            return device_identifier(kd)
+        var a = mk_store(m, self.ctx)
+        var n = mk_store_len(a)
+        var nd = self._devbuf(n)
+        if n > 0:
+            self.upload(Int(py=device_identifier(nd)), words_address(a), n)
+            _ = a  # keep the Python object alive through the native call above
+        # Another thread may have kept a copy while the upload released the
+        # GIL: use that one (ours goes back to the pool unused).
+        var raced = matrix_kept_device(m)
+        if not (raced is None) and device_binding(raced) is self.raw:
+            return device_identifier(raced)
+        matrix_set_kept_device(m, nd)
         _ = a^
         return device_identifier(nd)
 
@@ -641,7 +715,7 @@ struct MKit(Movable):
         if d is None or not (device_binding(d) is self.raw):
             d = self._devbuf(1)
             var z = mk_store_zeros(1, self.ctx)
-            _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(d), mk_store_addr(z), PythonObject(1))
+            self.upload(Int(py=device_identifier(d)), words_address(z), 1)
             _ = z  # keep the Python object alive through the native call above
             _ = z^
             py_setitem(cache, key, d)
@@ -1020,6 +1094,7 @@ struct MKit(Movable):
         """A[start + t * stride] = 0 for t < count, in place."""
         if count == 0:
             return
+        mk_writable(a)
         var n = mk_n(a)
         var params = mk_ints([MV_FILL0, count, start, stride, 0, 0, 0, n, n, 1])
         if self.use1(a):
@@ -1080,6 +1155,7 @@ struct MKit(Movable):
         var cnt = mk_n(v)
         if cnt == 0:
             return
+        mk_writable(d)
         var params = mk_ints([MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, mk_n(d), 1])
         if self.use2(d, v):
             var iv = self.did(v)
@@ -1354,6 +1430,7 @@ struct MKit(Movable):
 
     def graph_join(mut self, w: PythonObject, d: PythonObject, comp: PythonObject, count: Int) raises:
         """sklearn `_fix_connected_components`, W changed in place."""
+        mk_writable(w)
         var n = mk_r(w)
         if self.res():
             var iw = self.did(w)
@@ -1426,6 +1503,10 @@ def mk_t(m: PythonObject, mut hk: MKit, ctx: PythonObject) raises -> PythonObjec
         if hk.res():
             _ = hk.did(m)
             d = matrix_device(m)
+            if d is None and matrix_frozen(m):
+                # a frozen fitted matrix stays where it is; its kept copy
+                # on this binding is what the transpose reads
+                d = matrix_kept_device(m)
     if not (d is None) and (r == 1 or c == 1):
         return mk_dev_view(d, c, r, ctx)
     if not (d is None) and n < I32_MAX:
