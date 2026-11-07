@@ -60,8 +60,13 @@ def prep_estimator_admit(est: PythonObject, owner: String, context: PythonObject
     """Refuse an estimator without a connected native plan: a user class, a
     subclass of a mojolearn estimator, or a built-in whose native schema is
     still pending. Its methods would be Python code in the runtime."""
-    if py_type(py_type(est)) is not native_loaded_module("builtins").type:
-        raise Error("TypeError: native estimator admission refuses Python metaclass hooks")
+    var b = native_loaded_module("builtins")
+    if py_type(py_type(est)) is not b.type:
+        # A class with its own metaclass (scikit-learn's ABCMeta estimators)
+        # has no connected plan either: the same by-name refusal, its name
+        # read through type's own descriptor so no metaclass hook runs.
+        var name = py_call(b.type.__dict__["__name__"].__get__, py_type(est))
+        raise Error("TypeError: mojolearn: " + owner + " requires a mojolearn estimator; got " + String(name))
     if prep_estimator_plan(est, context) is None:
         raise Error("TypeError: mojolearn: " + owner + " requires a mojolearn estimator; got "
                     + String(py_type(est).__name__))
