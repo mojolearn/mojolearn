@@ -73,31 +73,6 @@ def ridge_multi_icpt_kernel(
     )
 
 
-def ridge_multi_icpt_device(
-    ctx: DeviceContext, xm: _F32P, wp: _F32P, mp: _F32P, ic: _F32P, nf: Int, nt: Int,
-) raises:
-    """`ridge_fit_multi`'s intercepts on the device
-    (`ridge_multi_icpt_kernel`), one thread per target."""
-    var d_xm = ctx.enqueue_create_buffer[DType.float32](nf)
-    var d_w = ctx.enqueue_create_buffer[DType.float32](nt * nf)
-    var d_m = ctx.enqueue_create_buffer[DType.float32](nt)
-    var d_ic = ctx.enqueue_create_buffer[DType.float32](nt)
-    ctx.enqueue_copy(dst_buf=d_xm, src_ptr=xm)
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=wp)
-    ctx.enqueue_copy(dst_buf=d_m, src_ptr=mp)
-    ctx.enqueue_function[ridge_multi_icpt_kernel](
-        d_xm.unsafe_ptr(), d_w.unsafe_ptr(), d_m.unsafe_ptr(),
-        d_ic.unsafe_ptr(), Int64(nf), Int64(nt),
-        grid_dim=(nt + 255) // 256, block_dim=256,
-    )
-    ctx.enqueue_copy(dst_ptr=ic, src_buf=d_ic)
-    ctx.synchronize()
-    _ = d_xm^
-    _ = d_w^
-    _ = d_m^
-    _ = d_ic^
-
-
 comptime QN_SOFTMAX_TPB = 128
 comptime QN_SOFTMAX_MAX_BLOCKS = 65535
 

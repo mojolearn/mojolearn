@@ -127,7 +127,6 @@ from core.estimators_impl import (
     qn_link_from_device,
     qn_sigmoid_device,
     qn_softmax_device,
-    ridge_multi_icpt_device,
 )
 
 
