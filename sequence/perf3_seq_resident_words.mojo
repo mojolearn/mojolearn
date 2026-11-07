@@ -15,7 +15,7 @@ so the CPU dispatch and the bindings can import it.
 """
 from std.ffi import _Global
 from std.atomic import Atomic, Ordering
-from bindings.native_model_records import records_dead_keys_since
+from core.records_death_ring import records_dead_keys_since
 
 #: the marker left by the device dispatch: params is already this
 #: executor's device memory, read-only; no allocation, no upload.
@@ -60,7 +60,8 @@ def seq_resident_words(addresses: List[Int], base: Int, operation: String) raise
 # device store lives in the GPU sequence binding and the record that names a
 # block in the provider; neither sees the model die. The records module's
 # release (bindings/native_model_records.mojo) posts the model's identity
-# word on its dead-key ring; `seq_resident_take_dead` pulls the ring from
+# word on its dead-key ring (core/records_death_ring.mojo, Python-free);
+# `seq_resident_take_dead` pulls the ring from
 # the last sequence word it saw (no callback, no function pointer), and the
 # device store frees those models' blocks at its next call, before any
 # lookup (`sequence/perf3_seq_resident.mojo` `_drain_dead_locked`): a new
