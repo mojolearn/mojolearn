@@ -327,8 +327,14 @@ def _gmm_needs_ext(model: PythonObject) raises -> Bool:
 
 
 def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
-                     context: PythonObject) raises -> PythonObject:
-    """The default fit (`gmm_fit`); returns the float32 X it read."""
+                     context: PythonObject, fit_predict: Bool) raises -> PythonObject:
+    """The default fit (`gmm_fit`); returns (the float32 X it read, labels).
+
+    `fit_predict` and a binding that exports `gmm_fit_predict` (the GPU
+    binding; row N401): the fit writes predict(X) of the fitted model into
+    `labels` (an int32 (n,) Array, the array `predict` returns) from its own
+    device buffers, in the same crossing; X is not uploaded again. Else
+    `labels` is None and the caller predicts as before."""
     var b = native_loaded_module("builtins")
     var operator = native_loaded_module("operator")
     py_setattr(model, "_ext", PythonObject(None))
@@ -368,13 +374,23 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     var log_det = family_array(Python.tuple(k), "<f4", context)
     var scalars = family_array(Python.tuple(3), "<f8", context)
     _check_mode(binding, model, context)
-    var entry = neural_descriptor_entry(binding, "gmm_fit")
+    var labels = PythonObject(None)
+    var entry = PythonObject(None)
+    if fit_predict:
+        entry = neural_descriptor_entry(binding, "gmm_fit_predict", False)
+    if entry is not None:
+        labels = family_array(Python.tuple(n), "<i4", context)
+    else:
+        entry = neural_descriptor_entry(binding, "gmm_fit")
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_fit_binding.
-    # x, weights_out, means_out, covariances_out, precisions_chol_out, log_det_chol_out, scalars_out;
+    # x, weights_out, means_out, covariances_out, precisions_chol_out, log_det_chol_out, scalars_out
+    # (gmm_fit_predict: then labels_out);
     # n, d, n_components, covariance_type, tol, reg_covar, max_iter, init_params, random_state
     var addrs = Python.list(classical_address(x), classical_address(weights), classical_address(means),
                             classical_address(covariances), classical_address(precisions),
                             classical_address(log_det), classical_address(scalars))
+    if labels is not None:
+        _ = py_call(addrs.append, classical_address(labels))
     _ = means  # keep the Python object alive through the native call above
     _ = weights  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -406,7 +422,8 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     py_setattr(model, "lower_bound_", PythonObject(words[2]))
     _ = scalars  # keep the Python object alive through the native call above
     _ = scalars^
-    return x
+    _ = labels  # keep the Python object alive through the native call above
+    return Python.tuple(x, labels)
 
 
 def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject, name: String, what: String,
@@ -737,7 +754,7 @@ def _gmm_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     the float32 X it read."""
     if _gmm_needs_ext(model):
         return _gmm_ext_fit(model, args[1], args[2], context)
-    return _gmm_default_fit(model, args[0], args[2], context)
+    return _gmm_default_fit(model, args[0], args[2], context, False)[0]
 
 
 # ------------------------------------------------- BayesianGaussianMixture
@@ -914,7 +931,13 @@ def mixture_operation(model: PythonObject, operation: String, args: PythonObject
         _ = _gmm_fit(model, args, context)
         return model
     if operation == "family_mix_gmm_fit_predict":
-        # `fit(X).predict(X)` on the float32 X the fit read.
+        # `fit(X).predict(X)` on the float32 X the fit read; on the GPU
+        # binding the fit returns those labels itself (N401).
+        if not _gmm_needs_ext(model):
+            var held = _gmm_default_fit(model, args[0], args[2], context, True)
+            if held[1] is not None:
+                return held[1]
+            return _gmm_default_infer(model, args[0], held[0], 2, context, PythonObject(None))
         var x = _gmm_fit(model, args, context)
         if _get_or(model, "_ext", PythonObject(None)) is not None:
             return _gmm_ext_labels(model, x, 2, context)

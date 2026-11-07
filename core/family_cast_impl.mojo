@@ -7,6 +7,8 @@ negative-input refusal reads."""
 from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, cast_w64_bits
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 
 def family_cast_rows(
@@ -20,6 +22,55 @@ def family_cast_rows(
             for k in range(item):
                 raw |= UInt64(bytes[k]) << UInt64(k * 8)
             dst[r * cols + c] = bitcast[DType.float32](classical_f32_bits(raw, kind, item))
+
+
+def family_cast_rows_finite(
+    addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int,
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+) -> Bool:
+    """`family_cast_rows` followed by `family_all_finite_f32` of its output,
+    in one pass over the input (rows N352, N353 of
+    docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md): the same
+    classical_f32_bits word per item, written to the same cell, and True
+    when none of the written words is a NaN or an infinity. Rows are
+    independent (each writes only its own cells and its task's flag), so
+    they are split into contiguous row tasks over the host's cores
+    (core/host_predict_threads.mojo, with its grain floor); the output words
+    do not depend on the split, and the flag is the AND of the tasks'."""
+    if rows <= 0 or cols <= 0:
+        return True
+    var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
+    var chunk = host_predict_chunk(rows, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+
+    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm flag_ptr}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, rows)
+        var finite = True
+        for r in range(lo, hi):  # native input marshaling: this task's input rows
+            for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
+                var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
+                var raw = UInt64(0)
+                for k in range(item):
+                    raw |= UInt64(bytes[k]) << UInt64(k * 8)
+                var bits = classical_f32_bits(raw, kind, item)
+                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
+                if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+                    finite = False
+        if not finite:
+            flag_ptr.unsafe_store(t, UInt8(0))
+
+    if tasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
+    var all_finite = True
+    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
+        if flags[t] == UInt8(0):
+            all_finite = False
+    _ = flags^
+    return all_finite
 
 
 def family_min_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Float32:

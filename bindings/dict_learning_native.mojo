@@ -165,9 +165,29 @@ def _split_sign(mut kit: DecompKit, code: Int) raises -> Int:
     return kit.hstack([positive, negative])
 
 
+def _query_gram(mut kit: DecompKit, d: Int, gram_source: PythonObject) raises -> Int:
+    # G = D D^T of the dictionary matrix `d`. On a query of a fitted model
+    # (`gram_source` the fitted components_ Array `d` was read from; None on
+    # every other call) G depends only on that frozen Array, so its device
+    # copy is kept with the model's resident record and served while the
+    # Array is the same object at the same generation (N339, N333;
+    # DecompKit.resident_derived / resident_keep, lane
+    # ne1-a-decomp-resident). The words are the ones this gemm computes, so
+    # no bit changes. A host binding keeps nothing and computes it per call.
+    if gram_source is not None:
+        var held = kit.resident_derived(gram_source, "components_#gram")
+        if held >= 0:
+            return held
+    var g = kit.mm(d, d, tb=True)
+    if gram_source is not None:
+        _ = kit.resident_keep(gram_source, "components_#gram", g)
+    return g
+
+
 def _sparse_encode(mut kit: DecompKit, x: Int, d: Int, algorithm: PythonObject, alpha: PythonObject,
-                   nnz: PythonObject, init: Int, max_iter: PythonObject, positive: PythonObject) raises -> Int:
-    # `_expansion_decomp._sparse_encode`.
+                   nnz: PythonObject, init: Int, max_iter: PythonObject, positive: PythonObject,
+                   gram_source: PythonObject) raises -> Int:
+    # `_expansion_decomp._sparse_encode`. `gram_source`: see _query_gram.
     var index = _algo_index(algorithm)
     if index < 0:
         raise Error("algorithm=" + String(py=py_call(native_loaded_module("builtins").repr, algorithm))
@@ -186,7 +206,7 @@ def _sparse_encode(mut kit: DecompKit, x: Int, d: Int, algorithm: PythonObject, 
     elif alpha is not None:
         reg = decomp_float(alpha)
     if index == 2:
-        var g = kit.mm(d, d, tb=True)
+        var g = _query_gram(kit, d, gram_source)
         var q = kit.mm(x, d, tb=True)
         return kit.lars_rows(g, q, m, count)
     var q = kit.mm(x, d, tb=True)
@@ -195,7 +215,7 @@ def _sparse_encode(mut kit: DecompKit, x: Int, d: Int, algorithm: PythonObject, 
         if Bool(py=positive):
             return kit.ew(XD_MAXS, code, scalar=0.0)
         return code
-    var g = kit.mm(d, d, tb=True)
+    var g = _query_gram(kit, d, gram_source)
     if index == 3:
         return kit.omp_rows(g, q, count)
     var w = kit.copy_host(init) if (index == 1 and init >= 0) else kit.zeros(n, kc)
@@ -311,10 +331,14 @@ def _normalize(mut kit: DecompKit, c: Int) raises -> Int:
     return kit.ew(XD_DIV, c, safe)
 
 
-def _spca_project(mut kit: DecompKit, x: Int, mean: Int, comps: Int, ridge_alpha: PythonObject) raises -> Int:
+def _spca_project(mut kit: DecompKit, x: Int, mean: Int, comps: Int, ridge_alpha: PythonObject,
+                  gram_source: PythonObject) raises -> Int:
     # `_BaseSparsePCA.transform`: ridge regression of the centered rows.
+    # `gram_source`: see _query_gram (the Gram of the fitted components is
+    # kept; the ridge diagonal and the factor depend on ridge_alpha too and
+    # are formed per call).
     var xc = kit.ew(XD_SUB, x, mean)
-    var gram = kit.mm(comps, comps, tb=True)
+    var gram = _query_gram(kit, comps, gram_source)
     var alpha = kit.const(Float32(decomp_float(ridge_alpha)))
     var g = kit.diag_add(gram, alpha)
     var factor = kit.lu(g)
@@ -323,13 +347,13 @@ def _spca_project(mut kit: DecompKit, x: Int, mean: Int, comps: Int, ridge_alpha
     return kit.transpose(solved)
 
 
-def _coding_encode(mut kit: DecompKit, x: Int, d: Int, fields: PythonObject) raises -> Int:
-    # `_SparseCoding._encode`.
+def _coding_encode(mut kit: DecompKit, x: Int, d: Int, fields: PythonObject, gram_source: PythonObject) raises -> Int:
+    # `_SparseCoding._encode`. `gram_source`: see _query_gram.
     var alpha = py_get(fields, "transform_alpha")
     if alpha is None:
         alpha = py_get(fields, "alpha", PythonObject(1.0))
     var code = _sparse_encode(kit, x, d, fields["transform_algorithm"], alpha, fields["transform_n_nonzero_coefs"],
-                              -1, fields["transform_max_iter"], fields["positive_code"])
+                              -1, fields["transform_max_iter"], fields["positive_code"], gram_source)
     if Bool(py=fields["split_sign"]):
         return _split_sign(kit, code)
     return code
@@ -410,7 +434,7 @@ def minibatch_dictionary_fit(model: PythonObject, args: PythonObject, project: B
         py_setitem(fields, "n_features_in_", PythonObject(kit.ncols(x)))
         if not project:
             return model
-        return kit.publish(_coding_encode(kit, x, fit[0], fields))
+        return kit.publish(_coding_encode(kit, x, fit[0], fields, PythonObject(None)))
     finally:
         kit.close()
 
@@ -429,7 +453,7 @@ def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, con
             return _coding_inverse(kit, c, d, fields)
         var x = _matrix(kit, args[0], "X", context)
         var d = _fitted_matrix(kit, fields["components_"], "components_", context)
-        return kit.publish(_coding_encode(kit, x, d, fields))
+        return kit.publish(_coding_encode(kit, x, d, fields, fields["components_"]))
     finally:
         kit.close()
 
@@ -467,7 +491,7 @@ def sparse_coder(model: PythonObject, operation: String, args: PythonObject, con
             var c = _matrix(kit, args[0], "code", context)
             return _coding_inverse(kit, c, d, fields)
         var x = _matrix(kit, args[0], "X", context)
-        return kit.publish(_coding_encode(kit, x, d, fields))
+        return kit.publish(_coding_encode(kit, x, d, fields, PythonObject(None)))
     finally:
         kit.close()
 
@@ -526,7 +550,7 @@ def sparse_pca_fit(model: PythonObject, args: PythonObject, project: Bool, conte
             py_setitem(p, "max_no_improvement", fields["max_no_improvement"])
             var fit = _minibatch_fit(kit, xt, nc, -1, p)
             var code = _sparse_encode(kit, xt, fit[0], PythonObject("lasso_lars"), fields["alpha"], PythonObject(None),
-                                      -1, PythonObject(1000), PythonObject(False))
+                                      -1, PythonObject(1000), PythonObject(False), PythonObject(None))
             var code_t = kit.transpose(code)
             comps = _normalize(kit, code_t)
             py_setitem(fields, "components_", kit.publish(comps))
@@ -536,7 +560,7 @@ def sparse_pca_fit(model: PythonObject, args: PythonObject, project: Bool, conte
         py_setitem(fields, "n_features_in_", PythonObject(cols))
         if not project:
             return model
-        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"]))
+        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"], PythonObject(None)))
     finally:
         kit.close()
 
@@ -555,7 +579,7 @@ def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool,
         if inverse:
             var product = kit.mm(x, comps)
             return kit.publish(kit.ew(XD_ADD, product, mean))
-        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"]))
+        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"], fields["components_"]))
     finally:
         kit.close()
 
@@ -568,7 +592,8 @@ def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> Pyth
         var init = -1 if args[5] is None else _matrix(kit, args[5], "init", context)
         var x = _matrix(kit, args[0], "X", context)
         var d = _matrix(kit, args[1], "dictionary", context)
-        return kit.publish(_sparse_encode(kit, x, d, args[2], args[4], args[3], init, args[6], args[7]))
+        return kit.publish(_sparse_encode(kit, x, d, args[2], args[4], args[3], init, args[6], args[7],
+                                          PythonObject(None)))
     finally:
         kit.close()
 

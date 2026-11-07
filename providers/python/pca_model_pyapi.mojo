@@ -11,6 +11,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same
+from bindings.native_model_records import records_open, model_generation, records_key_append
 
 
 def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
@@ -219,26 +220,67 @@ def _pca_query_key(state: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def _pca_entries_key(context: PythonObject, mode: PythonObject) raises -> PythonObject:
-    # The selected mode's binding table and every entry in it, by identity.
+    # The selected mode's binding table and the six entries the query
+    # consumes (pca_query_entries' names), by identity (N316: every other
+    # entry of the table was listed into the key before; none is read).
     var selected = py_get(context["pca_bindings"], mode)
     var key = Python.list(selected)
     if py_type(selected) is py_type(Python.dict()):
-        var items = py_call(py_type(Python.list()), py_call(py_type(selected).__dict__["items"], selected))
-        for index in range(len(items)):  # driver-loop: connected compiled entries of one mode, identity only
-            _ = py_call(key.append, items[index][0])
-            _ = py_call(key.append, items[index][1])
+        var names = Python.tuple("estimators_vendor", "estimators_numeric_mode", "pca_transform", "inverse_transform",
+                                 "pca_whiten_transform", "pca_whiten_inverse_transform")
+        for index in range(6):  # small-loop(the six consumed compiled entry names)
+            records_key_append(key, py_get(selected, names[index]))
     return key
+
+
+def _pca_context_key(state: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The connected-context part of _pca_query_key (no per-field items):
+    # what a generation word of the instance dictionary does not cover.
+    var key = Python.list(context, py_get(context, "ndarray"), context["pca_parameters"], context["pca_state"],
+                          py_get(context, "vendor"), context["pca_bindings"], context["pca_query_connections"])
+    if py_get(state, "numeric_mode") is None:
+        var backend = context["backend_fields"]
+        records_key_append(key, backend)
+        records_key_append(key, backend["_DEFAULT_MODE"])
+    return key
+
+
+def _pca_generation(model: PythonObject) raises -> Int:
+    # The model's generation word (bindings/native_model_records.mojo), its
+    # record entry opened first; 0 proves nothing.
+    _ = records_open(model)
+    return model_generation(model)
 
 
 def pca_query_admitted(model: PythonObject, context: PythonObject, operation: String) raises -> PythonObject:
     """(fields, entries) of a PCA transform or inverse_transform: the full
     admission on first use and after any recorded change, else the record."""
     var state = classical_family_admit(model)
-    var key = _pca_query_key(state, context)
     var mods = NativeModules()
+    # Generation path (N315, N316): the record was taken (or last matched)
+    # at the model's generation word; an unchanged word proves the instance
+    # dictionary, and so every per-field item of the key, unchanged. Only
+    # the connected-context items and the six consumed entries are compared
+    # then; the 22-field key is not built. A word of 0 proves nothing.
+    var generation = _pca_generation(model)
+    if generation != 0:
+        var stamped = prepared_get(mods, _PCA_QUERY_SLOT, model)
+        if (stamped is not None and len(stamped) == 7 and Int(py=stamped[5]) == generation
+                and prepared_key_same(stamped[6], _pca_context_key(state, context))
+                and prepared_key_same(stamped[3], _pca_entries_key(context, stamped[2]))):
+            var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
+            _ = py_call(py_type(Python.dict()).__dict__["update"], fields, stamped[1])
+            return Python.tuple(fields, stamped[4])
+    var key = _pca_query_key(state, context)
     if key is not None:
         var held = prepared_get(mods, _PCA_QUERY_SLOT, model)
         if held is not None and prepared_key_same(held[0], key) and prepared_key_same(held[3], _pca_entries_key(context, held[2])):
+            if len(held) == 7 and generation != 0 and Int(py=held[5]) != generation:
+                # Re-stamp at the current word (the dictionary changed and
+                # changed back, or our own bookkeeping wrote it).
+                prepared_put(mods, _PCA_QUERY_SLOT, model,
+                             Python.tuple(held[0], held[1], held[2], held[3], held[4], PythonObject(generation),
+                                          _pca_context_key(state, context)))
             var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
             _ = py_call(py_type(Python.dict()).__dict__["update"], fields, held[1])
             return Python.tuple(fields, held[4])
@@ -260,5 +302,6 @@ def pca_query_admitted(model: PythonObject, context: PythonObject, operation: St
                     py_setitem(overlay, decoded[index], fields[decoded[index]])
             var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
             prepared_put(mods, _PCA_QUERY_SLOT, model,
-                         Python.tuple(key, overlay, mode, _pca_entries_key(context, mode), entries))
+                         Python.tuple(key, overlay, mode, _pca_entries_key(context, mode), entries,
+                                      PythonObject(generation), _pca_context_key(state, context)))
     return Python.tuple(fields, entries)

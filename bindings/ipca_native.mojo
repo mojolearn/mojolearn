@@ -20,6 +20,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32
 from bindings.decomp_inputs import decomp_input
+from bindings.entries_verified import entries_verified, entries_mark_verified
 from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
@@ -64,16 +65,26 @@ def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) r
     var mode = _attr(model, fields, "numeric_mode_")
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    var name = py_call(py_call(mode.strip).lower)
-    if String(name) != "identical" and String(name) != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
+    # The exact spellings answer natively (N340: two Python calls per query
+    # before); any other text is normalized as before.
+    var text = String(py=mode)
+    var name = mode
+    if text != "identical" and text != "fast":
+        name = py_call(py_call(mode.strip).lower)
+        if String(name) != "identical" and String(name) != "fast":
+            raise Error("numeric_mode must be fast, identical or None")
     var entries = context["ipca_decomp"][name]
     if py_type(entries) is b.str:
         raise Error(String(entries))
+    # The three drivers are probed once per connected table
+    # (bindings/entries_verified.mojo; a table's entries are fixed at import).
+    if entries_verified(context, "ipca_entries_verified", name, entries):
+        return entries
     if py_get(entries, "x_decomp_ipca_fit") is None or py_get(entries, "x_decomp_ipca_partial") is None \
             or py_get(entries, "x_decomp_ipca_project") is None:
         raise Error("NotImplementedError: mojolearn IncrementalPCA: this build of _mojolearn_x_decomp does not export "
                     + "the x_decomp_ipca_* drivers; rebuild it with bindings/build_x_decomp.sh")
+    entries_mark_verified(context, "ipca_entries_verified", name, entries)
     return entries
 
 

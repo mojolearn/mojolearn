@@ -372,9 +372,11 @@ def _labels(mut kit: DecompKit, x: Int, fields: PythonObject, context: PythonObj
     return labels
 
 
-def mcd_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def mcd_operation(model: PythonObject, operation: String, args: PythonObject, envelope: Bool,
+                  context: PythonObject) raises -> PythonObject:
+    # `envelope`: the model is an EllipticEnvelope, resolved once in mcd_c
+    # and passed down (N345; it was asked twice per call).
     var fields = py_fields(model)
-    var envelope = decomp_is_a(model, context["elliptic_envelope_class"])
     if operation == "fit" or operation == "fit_predict":
         if envelope:
             var c = fields["contamination"]
@@ -436,11 +438,11 @@ def mcd_operation(model: PythonObject, operation: String, args: PythonObject, co
         kit.close()
 
 
-def elliptic_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, context: PythonObject) raises -> PythonObject:
     """EllipticEnvelope.score: the native predict, then the (weighted) match
     fraction of the x_metrics accuracy program in the fitted mode, the
     prediction handed straight to it (`accuracy_fraction`)."""
-    var prediction = mcd_operation(model, "predict", Python.tuple(args[0]), context)
+    var prediction = mcd_operation(model, "predict", Python.tuple(args[0]), envelope, context)
     var n = labels_shape_of(prediction, context)[0]
     var y = args[1]
     var sample_weight = args[2]
@@ -476,16 +478,17 @@ def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var operation = String(py=call[1])
         var args = call[2]
         var kind = String("")
-        if decomp_is_a(model, context["elliptic_envelope_class"]):
+        var envelope = decomp_is_a(model, context["elliptic_envelope_class"])
+        if envelope:
             kind = "outlier_detector"  # float64 scores for callers outside the package
         var method = decomp_public_method(operation)
         var depth = decomp_public_begin(model, method, args, True, True, context)
         var result = PythonObject(None)
         try:
             if operation == "elliptic_score":
-                result = elliptic_score(model, args, context)
+                result = elliptic_score(model, args, envelope, context)
             else:
-                result = mcd_operation(model, operation, args, context)
+                result = mcd_operation(model, operation, args, envelope, context)
         finally:
             lifecycle_end(model, method, depth)
         result = decomp_public_finish(model, method, args, result, kind, context)

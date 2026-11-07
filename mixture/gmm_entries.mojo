@@ -30,8 +30,11 @@ def _gmm_fit_run(
     pp: MutPointer[Float32, MutUntrackedOrigin],
     lp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    labels_address: Int = 0,
 ) raises -> Int:
-    var model = gaussian_mixture_fit(x, n, d, params)
+    # `labels_address` non-zero: fit_predict's labels (n int32 words) are
+    # written by the fit itself (mixture/estimator.mojo, N401).
+    var model = gaussian_mixture_fit(x, n, d, params, labels_address=labels_address)
     var k = model.n_components
     copy_f32(model.weights.unsafe_ptr(), wp, k)
     copy_f32(model.means.unsafe_ptr(), mp, k * d)

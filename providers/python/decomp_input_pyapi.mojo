@@ -9,7 +9,7 @@ from bindings.family_common import family_array
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
-from core.family_cast_impl import family_cast_rows, family_all_finite_f32
+from core.family_cast_impl import family_cast_rows_finite, family_all_finite_f32
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _RESHAPE = ". Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
@@ -73,17 +73,22 @@ def decomp_input_snapshot(source: PythonObject, name: String, context: PythonObj
         raise Error(failure)
     var snapshot = captured.value().copy()
     var original_owner = Python.tuple(source, snapshot.owner)
+    # The cast and the finiteness scan are one pass (N352): a converted X
+    # is scanned while it is written; an X already C float32 is scanned once.
+    var finite = True
     if not snapshot.f32_c():
         var tuple_shape = Python.tuple(snapshot.shape[0]) if nd == 1 else Python.tuple(snapshot.shape[0], snapshot.shape[1])
         var result = family_array(tuple_shape, "<f4", context)
         var address = Int(py=classical_address(result))
         var src = snapshot.source
-        family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
-                         _F32(unsafe_from_address=address))
+        finite = family_cast_rows_finite(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
+                                         _F32(unsafe_from_address=address))
         snapshot.replace_f32(result, address)
+    else:
+        finite = family_all_finite_f32(_F32(unsafe_from_address=snapshot.source.addr), snapshot.count)
     # Pin the captured source storage even when a converted output is owned.
     snapshot.owner = Python.tuple(original_owner, snapshot.owner)
-    if not family_all_finite_f32(_F32(unsafe_from_address=snapshot.source.addr), snapshot.count):
+    if not finite:
         if public_target and public_name != "":
             raise Error("Input y contains NaN or infinity (" + public_name + ").")
         raise Error(name + ": input must be finite; NaN/inf are unsupported")

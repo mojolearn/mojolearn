@@ -37,6 +37,9 @@ struct _Model(Movable):
     var precisions: List[Float32]
     var log_det: List[Float32]
     var x: List[Float32]
+    # The caller's addresses (weights, means, precisions_chol, log_det_chol,
+    # x): `_model_load` copies them with the GIL released (N346).
+    var addresses: List[Int]
 
 
 def _rebuild_model(
@@ -63,12 +66,25 @@ def _rebuild_model(
     var k = Int(py=params[0])
     var d = Int(py=params[1])
     var n = Int(py=params[5])
-    var weights = read_f32(Int(py=addrs[0]), max(0, k))
-    var means = read_f32(Int(py=addrs[1]), max(0, k * d))
-    var precisions = read_f32(Int(py=addrs[3]), max(0, k * d * d))
-    var log_det = read_f32(Int(py=addrs[4]), max(0, k))
-    var x = read_f32(Int(py=addrs[5]), max(0, n * d))
-    return _Model(k, d, n, weights^, means^, precisions^, log_det^, x^)
+    var addresses = List[Int]()
+    addresses.append(Int(py=addrs[0]))
+    addresses.append(Int(py=addrs[1]))
+    addresses.append(Int(py=addrs[3]))
+    addresses.append(Int(py=addrs[4]))
+    addresses.append(Int(py=addrs[5]))
+    return _Model(k, d, n, List[Float32](), List[Float32](), List[Float32](), List[Float32](), List[Float32](),
+                  addresses^)
+
+
+def _model_load(mut m: _Model) raises:
+    """The host copies of the model blocks and X (the oracle bodies take
+    Lists), made inside the caller's GIL-released block (N346): the same
+    words as before, without holding the GIL through n * d copies."""
+    m.weights = read_f32(m.addresses[0], max(0, m.k))
+    m.means = read_f32(m.addresses[1], max(0, m.k * m.d))
+    m.precisions = read_f32(m.addresses[2], max(0, m.k * m.d * m.d))
+    m.log_det = read_f32(m.addresses[3], max(0, m.k))
+    m.x = read_f32(m.addresses[4], max(0, m.n * m.d))
 
 
 def gmm_score_samples_binding(
@@ -78,6 +94,7 @@ def gmm_score_samples_binding(
     var m = _rebuild_model(addrs, params, String("gmm_score_samples"))
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        _model_load(m)
         var s = gmmh_score_samples(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
@@ -94,6 +111,7 @@ def gmm_predict_proba_binding(
     var m = _rebuild_model(addrs, params, String("gmm_predict_proba"))
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        _model_load(m)
         var r = gmmh_predict_proba(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
@@ -110,6 +128,7 @@ def gmm_predict_binding(
     var m = _rebuild_model(addrs, params, String("gmm_predict"))
     var op = i32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        _model_load(m)
         var labels = gmmh_predict(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
@@ -127,6 +146,7 @@ def gmm_score_bic_aic_binding(
     var m = _rebuild_model(addrs, params, String("gmm_score_bic_aic"))
     var sp = f64_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        _model_load(m)
         var r = gmmh_score_bic_aic(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
