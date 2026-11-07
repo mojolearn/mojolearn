@@ -258,3 +258,16 @@ def test_publish_macos_needs_a_passed_apple_adapter_smoke(tmp_path, monkeypatch)
     r = apple_runner(tmp_path, "NO_FRAMEWORK")
     with pytest.raises(release.StepFailed, match="run gate-apple"):
         r.step_publish_macos()
+
+
+def test_cpu_column_records_the_adapter_refusal_as_its_expected_outcome():
+    why = ("FAILED: the installed wheel carries no usable framework adapters: ImportError: mojolearn: the framework "
+           "adapters run on a GPU, and this install selected no GPU set (mojolearn: MOJOLEARN_VENDOR=cpu; ...)")
+    rec = AG.cpu_refusal({"vendor": "cpu", "status": "FAILED", "ok": False, "why": why})
+    assert (rec["status"], rec["ok"], rec["refused_why"]) == ("refused-by-design", True, why)
+    other = {"vendor": "cpu", "status": "FAILED", "ok": False, "why": "FAILED: torch-compile exit 1"}
+    assert AG.cpu_refusal(other) is other
+    gpu = {"vendor": "nvidia", "status": "FAILED", "ok": False, "why": why}
+    assert AG.cpu_refusal(gpu) is gpu
+    venv = {"vendor": "cpu", "status": "VENV_FAILED", "ok": False, "why": "adapter venv setup failed (exit 1)"}
+    assert AG.cpu_refusal(venv)["ok"] is False
