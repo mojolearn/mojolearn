@@ -14,6 +14,7 @@ host executor ignores the three words. Host-only code: no GPU import here,
 so the CPU dispatch and the bindings can import it.
 """
 from std.ffi import _Global
+from std.atomic import Atomic, Ordering
 
 #: the marker left by the device dispatch: params is already this
 #: executor's device memory, read-only; no allocation, no upload.
@@ -71,9 +72,13 @@ eviction, which is where it went before)."""
 
 struct _SeqDeadOwners(Defaultable, Movable):
     var owners: List[Int]
+    # One lock word: the post runs with the GIL held, the take from a device
+    # entry that may run with it released.
+    var lock: List[Int64]
 
     def __init__(out self):
         self.owners = List[Int]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
 comptime _SEQ_DEAD_OWNERS = _Global[
@@ -81,21 +86,45 @@ comptime _SEQ_DEAD_OWNERS = _Global[
 ]
 
 
+def _dead_lock(dead: UnsafePointer[_SeqDeadOwners, MutAnyOrigin]):
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](dead[].lock.unsafe_ptr())
+    while True:  # driver-loop: spin on the queue's lock word (held for one list step only)
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, Int64(1)):
+            return
+
+
+def _dead_unlock(dead: UnsafePointer[_SeqDeadOwners, MutAnyOrigin]):
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](dead[].lock.unsafe_ptr())
+    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
+
+
+def _dead() raises -> UnsafePointer[_SeqDeadOwners, MutAnyOrigin]:
+    return _SEQ_DEAD_OWNERS.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
 def seq_resident_owner_died(owner: Int):
     """Post the death of the model whose identity word is `owner` (called
-    with the GIL held, from the death callback). Non-raising."""
+    from the death callback). Non-raising."""
     try:
-        var dead = _SEQ_DEAD_OWNERS.get_or_create_ptr()
+        var dead = _dead()
+        _dead_lock(dead)
         if len(dead[].owners) >= SEQ_DEAD_OWNERS_MAX:
             _ = dead[].owners.pop(0)
         dead[].owners.append(owner)
+        _dead_unlock(dead)
     except:
         pass
 
 
 def seq_resident_take_dead() raises -> List[Int]:
     """Every posted death since the last take (the device store's drain)."""
-    var dead = _SEQ_DEAD_OWNERS.get_or_create_ptr()
-    var taken = dead[].owners^
-    dead[].owners = List[Int]()
+    var dead = _dead()
+    _dead_lock(dead)
+    var taken = dead[].owners.copy()
+    dead[].owners.clear()
+    _dead_unlock(dead)
     return taken^
