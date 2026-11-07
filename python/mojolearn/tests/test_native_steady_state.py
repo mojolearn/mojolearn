@@ -27,9 +27,11 @@ CALLS = 200
 # what still shows the property. A retained object shows up in every window
 # at its full per-call size whatever the window length, so a shorter window
 # keeps the same bound; WINDOWS (the quietest of four) is unchanged.
+# Measured on the M4 laptop: 26 and 42 bytes per call at (50, 100), against
+# 216 and 159 at (40, 40), where the warm-up had not settled.
 COUNTS = {
-    "SmallMLPTrainer.train_step": (40, 40),
-    "SmallByteLanguageModelTrainer.train_step": (40, 40),
+    "SmallMLPTrainer.train_step": (50, 100),
+    "SmallByteLanguageModelTrainer.train_step": (50, 100),
 }
 # Bytes per call that may remain in the quietest window. Allocator arenas and
 # free lists settle unevenly (measured up to about 100 bytes per call on a
