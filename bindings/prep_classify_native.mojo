@@ -813,9 +813,17 @@ def _dnb_partial_fit(model: PythonObject, fields: PythonObject, kind: String, ar
 def _resident_enter(context: PythonObject) raises -> PythonObject:
     """`with _arena_io.resident():` entered natively (the scope's own native
     enter): the two programs share their big inputs' device copies."""
+    return resident_enter_min(context, context["resident_min_words"])
+
+
+def resident_enter_min(context: PythonObject, min_words: PythonObject) raises -> PythonObject:
+    """`with _arena_io.resident(min_words):` entered natively: inputs of at
+    least `min_words` words keep one device copy for the scope (RFE's rounds
+    pass n * d, so only X is held; lane ne2-b-rounds, N059). Inside an
+    enclosing scope the enclosing one is used and this one closes nothing."""
     var scope = py_call(cls_builtins().object.__new__, context["resident_class"])
     var fields = py_fields(scope)
-    py_setitem(fields, "min_words", context["resident_min_words"])
+    py_setitem(fields, "min_words", min_words)
     py_setitem(fields, "_scope", PythonObject(None))
     # the arena rows owner connects its context when model_selection imports
     _ = arena_cache_release_operation(scope, "scope_enter", Python.tuple(), context["arena_io_fields"]["_ROWS_CONTEXT"])

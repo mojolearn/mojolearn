@@ -34,7 +34,8 @@ from bindings.prep_encode_native import (
     EncProg, _cs, _codes, _fit_categories, _take1, _take2, _word, _iword, _put_codes, _default_mode,
     _seed64, _score_words)
 from bindings.prep_classify_prog import ClsProg, f32_array
-from bindings.prep_classify_common import cls_x2d, cls_mode
+from bindings.prep_classify_common import cls_x2d, cls_mode, XIn
+from bindings.prep_classify_native import resident_enter_min, _resident_exit
 from bindings.prep_native_estimator import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute)
 
@@ -197,6 +198,39 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if py_type(fit_params) is not b.dict:
         raise Error("TypeError: mojolearn: RFE.fit parameters require an exact dict")
     var arr = cls_x2d(args[0], cc)
+    # lane ne2-b-rounds (N059): X stays on the device for every elimination
+    # round and the final fit. One resident scope (the classifier owner's
+    # native `with resident():`) spans the rounds with min_words = n * d, so
+    # the round programs' X input (the same admitted Array each round) is put
+    # once and every later gather reads its device copy; the smaller round
+    # blocks, masks and rankings are not held. An enclosing user scope, when
+    # one is active, is the one used. Same inputs, same stages: no bit moves.
+    # A context whose arena rows owner is not connected yet runs the rounds
+    # without the scope (each round puts X, as before).
+    var scope = PythonObject(None)
+    try:
+        scope = resident_enter_min(cc, PythonObject(arr.n * arr.d))
+    except:
+        scope = PythonObject(None)
+    try:
+        _rfe_rounds(model, fields, estimator, g, y, fit_params, arr, context, cc)
+        if scope is not None:
+            _resident_exit(scope, cc)
+    except error:
+        if scope is not None:
+            try:
+                _resident_exit(scope, cc)
+            except ignored:
+                _ = ignored^
+        raise error^
+
+
+def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObject, g: PythonObject,
+                y: PythonObject, fit_params: PythonObject, arr: XIn, context: PythonObject,
+                cc: PythonObject) raises:
+    """The elimination rounds and the final fit of `_rfe_fit`, inside its
+    resident scope."""
+    var b = native_loaded_module("builtins")
     var n = arr.n
     var d = arr.d
     var mode = cls_mode(cc)
