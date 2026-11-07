@@ -284,7 +284,13 @@ def samba_validate_state(state: PythonObject, context: PythonObject) raises -> P
 
 
 def samba_publish(model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
-    var checked = samba_validate_state(state, context)
+    return _samba_publish_checked(model, samba_validate_state(state, context), context)
+
+
+def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `checked` is a samba_validate_state result (its arrays are already
+    # private copies): samba_from_state publishes it without validating and
+    # copying the three state arrays a second time (row N166).
     var fields = samba_fields(model)
     if Bool(py=samba_config_dict(fields["config"]) != checked["config"]):
         raise Error("Samba: state config differs from this stack")
@@ -295,9 +301,10 @@ def samba_publish(model: PythonObject, state: PythonObject, context: PythonObjec
     var schedule = samba_schedule_from_state(checked["schedule"], context)
     var flat = fields["flat"]
     var source = checked["parameters"]
-    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=flat._addr))
-    var src = Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr))
-    memcpy(dest=dst, src=src, count=Int(py=flat.nbytes))
+    if flat is not source:
+        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=flat._addr))
+        var src = Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr))
+        memcpy(dest=dst, src=src, count=Int(py=flat.nbytes))
     py_setitem(opt, "_m", checked["exp_avg"])
     py_setitem(opt, "_v", checked["exp_avg_sq"])
     py_setitem(opt, "_host_fresh", True)
@@ -422,7 +429,7 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
     py_setattr(model, "optimizer", optimizer)
     samba_build_blocks(model, context)
     py_setattr(model, "last_", PythonObject(None))
-    return samba_publish(model, checked, context)
+    return _samba_publish_checked(model, checked, context)
 
 
 def samba_optimizer_device_plan() raises -> DevicePlan:
