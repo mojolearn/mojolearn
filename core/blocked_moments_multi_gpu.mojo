@@ -115,9 +115,14 @@ def bm_centered_gram_cross_dispatch(
         bm_centered_gram_panels(ctx, _bp(g), _bp(x), _bp(cx), n, d, leaf)
         bm_centered_cross_panels(ctx, _bp(c), _bp(x), _bp(cx), _bp(y), _bp(cy), n, d, leaf)
         return
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        # FAST keeps the one-device launchers it ran before the plan reached it
+        bm_centered_gram_panels(ctx, _bp(g), _bp(x), _bp(cx), n, d, leaf)
+        bm_centered_cross_panels(ctx, _bp(c), _bp(x), _bp(cx), _bp(y), _bp(cy), n, d, leaf)
+        return
     var count = Int(plan.setting)
-    if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("parallel Gram requires IDENTICAL and 1..64 devices")
+    if count < 1 or count > 64:
+        raise Error("parallel Gram requires 1..64 devices")
     var active = min(count, leaves)
     var cells = d * d
     var tiles = (d + BM_TILE - 1) // BM_TILE

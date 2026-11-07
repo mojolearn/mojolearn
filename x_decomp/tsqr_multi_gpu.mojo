@@ -86,9 +86,13 @@ def ts_factor_dispatch(
         # one device, or one block: the one-device factor, unchanged
         ts_factor_device(ctx, da, m, n, r, keep)
         return
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        # FAST keeps the one-device factor it ran before the plan reached it
+        ts_factor_device(ctx, da, m, n, r, keep)
+        return
     var count = Int(plan.setting)
-    if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("parallel TSQR requires IDENTICAL and 1..64 devices")
+    if count < 1 or count > 64:
+        raise Error("parallel TSQR requires 1..64 devices")
     var active = min(count, nb)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
