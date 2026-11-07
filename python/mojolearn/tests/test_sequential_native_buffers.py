@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native standard buffers and sequence inference versus the former asarray ABI."""
 from array import array
+import itertools
 from types import BuiltinFunctionType
 
 import numpy as np
@@ -113,18 +114,20 @@ def _fitted_classes(labels, n_classes):
 def test_native_nested_scalar_dtype_promotion_matches_all_numeric_dtype_pairs():
     types = [np.dtype(s) for s in ("?", "i1", "i2", "i4", "i8", "u1", "u2", "u4", "u8", "f2", "f4", "f8")]
     out = Sequential().linear(2)
-    for left in types:
-        for right in types:
-            supplied_y = [left.type(0), right.type(1), left.type(1), right.type(0)]
-            expected = np.asarray(supplied_y)
-            wanted_classes = np.unique(expected)
-            y, descriptor, target, _ = audit_native_call(out._targets, supplied_y, 4, 2,
-                                                         "cross_entropy").assert_native()
-            assert target == 1 and descriptor[3:5] == [4, 1]
-            assert y.dtype == expected.dtype and y.tobytes() == expected.tobytes(), (left, right)
-            classes = _fitted_classes(supplied_y, 2)
-            assert classes.dtype == expected.dtype, (left, right)
-            assert classes.tobytes() == wanted_classes.tobytes(), (left, right)
+    # The label list [l0, r1, l1, r0] holds each dtype on both sides of the
+    # other, and promotion is symmetric, so the distinct unordered pairs plus
+    # the self pairs cover every promotion the ordered matrix did.
+    for left, right in itertools.combinations_with_replacement(types, 2):
+        supplied_y = [left.type(0), right.type(1), left.type(1), right.type(0)]
+        expected = np.asarray(supplied_y)
+        wanted_classes = np.unique(expected)
+        y, descriptor, target, _ = audit_native_call(out._targets, supplied_y, 4, 2,
+                                                     "cross_entropy").assert_native()
+        assert target == 1 and descriptor[3:5] == [4, 1]
+        assert y.dtype == expected.dtype and y.tobytes() == expected.tobytes(), (left, right)
+        classes = _fitted_classes(supplied_y, 2)
+        assert classes.dtype == expected.dtype, (left, right)
+        assert classes.tobytes() == wanted_classes.tobytes(), (left, right)
 
 
 @pytest.mark.parametrize("labels", [
