@@ -4,6 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.native_model_records import bump_model_generation
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_estimator_name
 from bindings.classical_labels import _flatten_labels
@@ -77,6 +78,9 @@ def estimator_fit_end(model: PythonObject, depth: Int) raises:
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
     else:
         _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
+        # End of an outermost fit: the generation word moves on even when
+        # the fit only edited containers in place (warm-start appends).
+        _ = bump_model_generation(model)
 
 
 def estimator_fit_complete(model: PythonObject, source: PythonObject, classifier: Bool,
