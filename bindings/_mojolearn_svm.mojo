@@ -110,6 +110,13 @@ from svm.estimator import (
 
 from providers.python.svm_impl_scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from svm.estimator import _family_ctx as _sg_family_ctx
+from svm.svm_resident_state import (
+    SvmResidentLease,
+    svm_resident_lease_open,
+    svm_resident_stats_words,
+    svc_predict_resident_host,
+    svr_predict_resident_host,
+)
 from providers.python.svm_impl_svc_ovo_layout_pyapi import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -507,6 +514,119 @@ def svr_predict_binding(
     return PythonObject(n_rows)
 
 
+# ---------------------------------------------------------------- resident
+# Device-resident fitted state (lane ne1-a-gp-svm, 2026-11-06;
+# svm/svm_resident_state.mojo, core/fitted_resident_store.mojo). The public
+# door takes a lease once per fitted state and names it, with the machine's
+# slot, on every predict: the support rows and duals cross once, the query
+# and the decisions cross between the caller's memory and the device with no
+# host list.
+
+
+def svm_resident_lease_binding() raises -> PythonObject:
+    """A new lease: `(owner, lease)`. `owner` is the native object whose
+    destruction frees every device copy the lease holds."""
+    var lease = svm_resident_lease_open()
+    var owner = PythonObject(alloc=SvmResidentLease(lease))
+    return Python.tuple(owner, PythonObject(lease))
+
+
+def svm_resident_stats_binding() raises -> PythonObject:
+    """`(live leases, kept entries, kept bytes, uploads, cap bytes)` of this
+    binding's store: a test-only readout."""
+    var words = svm_resident_stats_words()
+    return Python.tuple(PythonObject(words[0]), PythonObject(words[1]), PythonObject(words[2]),
+                        PythonObject(words[3]), PythonObject(words[4]))
+
+
+def svc_predict_resident_binding(
+    x_addr: PythonObject,
+    dual_addr: PythonObject,
+    support_matrix_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`svc_predict` with the same arguments and `params` = its 12 values
+    followed by two words: the lease (`svm_resident_lease`; 0 = this call
+    only) and the machine's slot. Writes `n_rows` float32 to `out_addr` and
+    returns `n_rows`."""
+    if len(params) != 14:
+        raise Error(
+            "svc_predict_resident: params must contain 14 values (svc_predict's 12, lease, slot), got "
+            + String(len(params))
+        )
+    var x = Int(py=x_addr)
+    var out_word = Int(py=out_addr)
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var n_support = Int(py=params[2])
+    var b = Float32(Float64(py=params[3]))
+    var label0 = Float32(Float64(py=params[4]))
+    var label1 = Float32(Float64(py=params[5]))
+    var kernel = Int(py=params[6])
+    var gamma = Float64(py=params[7])
+    var predict_class = Int(py=params[8]) != 0
+    var buffer_mib = Float64(py=params[9])
+    var degree = Int(py=params[10])
+    var coef0 = Float64(py=params[11])
+    var lease = Int(py=params[12])
+    var slot = Int(py=params[13])
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("svc_predict: n_rows and n_features must both be positive")
+    if n_support < 0:
+        raise Error("svc_predict: n_support cannot be negative")
+    var dual = Int(py=dual_addr) if n_support > 0 else 0
+    var support = Int(py=support_matrix_addr) if n_support > 0 and kernel != 4 else 0
+    with GILReleased(Python()):
+        svc_predict_resident_host(
+            lease, slot, x, n_rows, n_cols, support, dual, n_support, b, label0, label1,
+            kernel, gamma, predict_class, buffer_mib, degree, coef0, out_word,
+        )
+    return PythonObject(n_rows)
+
+
+def svr_predict_resident_binding(
+    x_addr: PythonObject,
+    dual_addr: PythonObject,
+    support_matrix_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`svr_predict` with the same arguments and `params` = its 9 values
+    (degree and coef0 included) followed by two words: the lease and the
+    slot. Writes `n_rows` float32 to `out_addr` and returns `n_rows`."""
+    if len(params) != 11:
+        raise Error(
+            "svr_predict_resident: params must contain 11 values (svr_predict's 9, lease, slot), got "
+            + String(len(params))
+        )
+    var x = Int(py=x_addr)
+    var out_word = Int(py=out_addr)
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var n_support = Int(py=params[2])
+    var b = Float32(Float64(py=params[3]))
+    var kernel = Int(py=params[4])
+    var gamma = Float64(py=params[5])
+    var buffer_mib = Float64(py=params[6])
+    var degree = Int(py=params[7])
+    var coef0 = Float64(py=params[8])
+    var lease = Int(py=params[9])
+    var slot = Int(py=params[10])
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("svr_predict: n_rows and n_features must both be positive")
+    if n_support < 0:
+        raise Error("svr_predict: n_support cannot be negative")
+    var dual = Int(py=dual_addr) if n_support > 0 else 0
+    var support = Int(py=support_matrix_addr) if n_support > 0 and kernel != 4 else 0
+    with GILReleased(Python()):
+        svr_predict_resident_host(
+            lease, slot, x, n_rows, n_cols, support, dual, n_support, b, kernel, gamma,
+            buffer_mib, degree, coef0, out_word,
+        )
+    return PythonObject(n_rows)
+
+
 def iforest_run_binding(
     train_addr: PythonObject,
     query_addr: PythonObject,
@@ -782,6 +902,12 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         m.def_function[svc_ovo_layout_binding]("svc_ovo_layout")
         m.def_function[svc_dual_gemv_binding]("svc_dual_gemv")
+        # Device-resident fitted state (lane ne1-a-gp-svm).
+        _ = m.add_type[SvmResidentLease]("_SvmResidentLease")
+        m.def_function[svm_resident_lease_binding]("svm_resident_lease")
+        m.def_function[svm_resident_stats_binding]("svm_resident_stats")
+        m.def_function[svc_predict_resident_binding]("svc_predict_resident")
+        m.def_function[svr_predict_resident_binding]("svr_predict_resident")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_svm: ", e))

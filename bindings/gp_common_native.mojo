@@ -11,7 +11,9 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _plan
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
-from bindings.family_common import family_repr, family_is_str, family_call, family_as_f32
+from std.memory import memcpy
+from bindings.family_common import family_repr, family_is_str, family_call, family_as_f32, family_owned, family_array, FAMILY_F32P
+from bindings.classical_arrays import classical_address
 from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_store
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 
@@ -269,3 +271,19 @@ def gp_f32(fields: PythonObject, name: String, ndim: Int, context: PythonObject)
     if not py_contains(fields, PythonObject(name)):
         raise Error("AttributeError: object has no attribute '" + name + "'")
     return family_as_f32(fields[name], ndim, name, context)
+
+
+def gp_fit_owned(source: PythonObject, caller: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`family_owned(source)`, except that the caller's own Array is never
+    kept as `X_train_`: it is copied once (lane ne1-a-gp-svm). The resident
+    predict freezes `X_train_` read-only (bindings/fitted_resident_door.mojo),
+    which must never reach the caller's array; `copy_X_train=False` is
+    refused, so `X_train_` is a copy in every admitted fit."""
+    if source is caller:
+        var b = native_loaded_module("builtins")
+        var result = family_array(py_call(b.tuple, source.shape), "<f4", context)
+        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
+               src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))), count=Int(py=source.size))
+        _ = result  # keep the Python object alive through the native call above
+        return result
+    return family_owned(source, context)
