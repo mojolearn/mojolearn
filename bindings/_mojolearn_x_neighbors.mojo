@@ -30,7 +30,7 @@ from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
 from providers.python.x_neighbors_dev_pyapi import ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from providers.python.x_neighbors_dev_pyapi import unit_ff_binding
-from providers.python.x_neighbors_dev_pyapi import ocsvm_labels_binding
+from providers.python.x_neighbors_dev_pyapi import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
 from providers.python.x_neighbors_dev_pyapi import (
     kfeat_first_negative_binding,
@@ -1211,6 +1211,9 @@ def build__mojolearn_x_neighbors() -> PythonObject:
             m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
         # lane ne3-g-svc-gp-neighbors (N369): OneClassSVM.predict in one session
         m.def_function[ocsvm_labels_binding]("x_neighbors_ocsvm_labels")
+        # lane ne3-g-svc-gp-neighbors (N327): NearestCentroid predict / proba in one session
+        m.def_function[nc_labels_binding]("x_neighbors_nc_labels")
+        m.def_function[nc_proba_binding]("x_neighbors_nc_proba")
         # lane apple-fast-w2-kfeat: the chi2 samplers' fit entries
         # (x_neighbors/kfeat_dev.mojo; FAST + Apple, opt-in defines)
         comptime if XN_KFEAT_ANY:
