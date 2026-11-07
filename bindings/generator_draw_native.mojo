@@ -16,10 +16,17 @@ from bindings.generation_buffers import generation_initialize_binding, generatio
 def _generator_shape(shape: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = _builtins()
     var scalar = PythonObject(None)
-    try:
-        scalar = py_call(context["generator_index"], shape)
-    except:
-        pass
+    # Row N202: exact types are decided without the index probe and its
+    # swallowed exception: an exact tuple or list never has __index__, and an
+    # exact int is its own index. Every other object keeps the probe.
+    var kind = py_type(shape)
+    if kind is bi.int:
+        scalar = shape
+    elif kind is not bi.tuple and kind is not bi.list:
+        try:
+            scalar = py_call(context["generator_index"], shape)
+        except:
+            pass
     var source = Python.tuple(scalar) if scalar is not None else py_call(bi.tuple, shape)
     var dims = bi.list()
     var count = PythonObject(1)
