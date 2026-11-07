@@ -1420,6 +1420,7 @@ class Record:
             fh.write(json.dumps(dict(script=script, outcome=outcome, key=key, files=placed,
                                      archive_source_commit=manifest.get("source_commit", ""),
                                      archive_built=manifest.get("built", ""),
+                                     archive_build_seconds=manifest.get("build_seconds"),
                                      archive_builder=manifest.get("builder", {})), sort_keys=True) + "\n")
 
     def upload_row(self, leg, slot, dest, key, sabotage=False):
@@ -1588,6 +1589,21 @@ def darwin_toolchain():
 
 
 _REF_RE = re.compile(r"(?<![\w./-])((?:[\w.-]+/)*[\w.-]+\.(?:sh|py))\b")
+
+
+def head_commit(repo):
+    """The commit REPO's checkout is at (40 hex), or "" when it is not a git
+    checkout. Not a key field: a LOCAL archive carries it as `source_commit`
+    so a later placement can name the revision the bytes were compiled from,
+    and a verifier recomputes the key's closure at that revision
+    (tools/release_requirements_macos_build.py admits a placed group so)."""
+    try:
+        out = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    head = out.stdout.strip()
+    return head if out.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", head) else ""
 
 
 def local_inputs(repo, script):
@@ -1954,6 +1970,10 @@ def cmd_build_local(script, args, environ, cache_dir):
                     print("built %s (from the local bincache, key %s, sha256 %s)"
                           % (rel, key[:16], placed[-1]["sha256"]))
                 os.utime(arc)
+                # The archive's own record of its compile (revision, date,
+                # seconds, builder) next to the hit row: a placed group's
+                # compile evidence (tools/release_requirements_macos_build.py).
+                rec.placement(rel_script, "hit", key, placed, manifest)
                 rec.row(rel_script, "hit", key, time.time() - t0, placed)
                 return 0
         except Reject as exc:
@@ -1979,6 +1999,8 @@ def cmd_build_local(script, args, environ, cache_dir):
             tmp = tf.name
         pack(tmp, key, fields, repo, outputs, dict(
             builder=dict(host=platform.node(), leg="local"),
+            # WHICH COMMIT THESE BYTES WERE COMPILED FROM (not a key field).
+            source_commit=head_commit(repo),
             build_seconds=round(build_seconds, 1), build_log_sha256=log_sha,
             installed_toolchain=installed_toolchain(repo),
             built=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
