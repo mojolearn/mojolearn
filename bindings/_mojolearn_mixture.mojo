@@ -118,11 +118,35 @@ def gmm_fit_binding(
         7  init_params            a STRING, decoded on the Mojo side
         8  random_state
     """
-    if len(addrs) != 7:
+    return _gmm_fit_entry(addrs, params, False)
+
+
+def gmm_fit_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`GaussianMixture(...).fit_predict(X)` in one crossing (row N401 of
+    docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md): `gmm_fit`'s seven
+    addresses followed by
+
+        7  labels_out             n int32, WRITTEN: predict(X) of the
+                                   fitted model, computed on the fit's own
+                                   device buffers (the bits fit(X).predict(X)
+                                   returns; mixture/estimator.mojo)
+
+    and `gmm_fit`'s nine params. Returns `n_iter_`."""
+    return _gmm_fit_entry(addrs, params, True)
+
+
+def _gmm_fit_entry(
+    addrs: PythonObject, params: PythonObject, labels: Bool
+) raises -> PythonObject:
+    var count = 8 if labels else 7
+    if len(addrs) != count:
         raise Error(
-            "gmm_fit: addrs must contain 7 addresses (x, weights_out,"
+            (String("gmm_fit_predict") if labels else String("gmm_fit"))
+            + ": addrs must contain " + String(count) + " addresses (x, weights_out,"
             " means_out, covariances_out, precisions_chol_out,"
-            " log_det_chol_out, scalars_out), got "
+            " log_det_chol_out, scalars_out" + (String(", labels_out") if labels else String("")) + "), got "
             + String(len(addrs))
         )
     if len(params) != 9:
@@ -153,11 +177,12 @@ def gmm_fit_binding(
     # was taken under the GIL; p3 rank 776). The fit's List signature
     # (mixture/estimator.mojo) keeps the copy itself.
     var x_address = Int(xp)
+    var labels_address = Int(py=addrs[7]) if labels else 0
     var x = List[Float32]()
     var n_iter = 0
     with GILReleased(Python()):
         x = read_f32(x_address, max(0, n * d))
-        n_iter = _gmm_fit_run(x, n, d, gp, wp, mp, cp, pp, lp, sp)
+        n_iter = _gmm_fit_run(x, n, d, gp, wp, mp, cp, pp, lp, sp, labels_address)
     return PythonObject(n_iter)
 
 
@@ -313,6 +338,7 @@ def build__mojolearn_mixture() -> PythonObject:
         m.def_function[mixture_vendor_binding]("mixture_vendor")
         m.def_function[mixture_numeric_mode_binding]("mixture_numeric_mode")
         m.def_function[gmm_fit_binding]("gmm_fit")
+        m.def_function[gmm_fit_predict_binding]("gmm_fit_predict")
         m.def_function[gmm_score_samples_binding]("gmm_score_samples")
         m.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
         m.def_function[gmm_predict_binding]("gmm_predict")

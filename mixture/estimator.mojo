@@ -1078,6 +1078,7 @@ def gaussian_mixture_fit(
     sabotage: Int = GMM_SAB_NONE,
     card_prefix: String = "gmm",
     trace_path: String = "",
+    labels_address: Int = 0,
 ) raises -> GaussianMixtureModel:
     """Reads the device plan once and runs the planned overload below."""
     return gaussian_mixture_fit(
@@ -1095,6 +1096,7 @@ def gaussian_mixture_fit(
         sabotage,
         card_prefix,
         trace_path,
+        labels_address,
     )
 
 
@@ -1113,8 +1115,20 @@ def gaussian_mixture_fit(
     sabotage: Int = GMM_SAB_NONE,
     card_prefix: String = "gmm",
     trace_path: String = "",
+    labels_address: Int = 0,
 ) raises -> GaussianMixtureModel:
     """`GaussianMixture(...).fit(X)`, host in and host out, one shot.
+
+    `labels_address` non-zero (`fit_predict`, row N401 of
+    docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md): the address of n int32
+    words that receive `predict(X)` of the fitted model, computed on the
+    device buffers the fit already holds (X, means, precision Cholesky, log
+    determinants, weights) by exactly `gaussian_mixture_predict`'s steps:
+    the log weights by `gmm_log_weights_kernel`, `gmm_e_step_dispatch` with
+    the precision Cholesky in both factor slots, then `gmm_predict_labels`.
+    The words are the ones the downloaded model would upload again, so the
+    labels are the bits `fit(X).predict(X)` returns; no card is recorded for
+    them (as `predict` records none by default).
 
     `trace_path` empty means READ THE ENVIRONMENT (`MOJOLEARN_IDENTITY_TRACE`),
     which is what `mixture/mixture_main.mojo` wants; a non-empty value points
@@ -1383,6 +1397,36 @@ def gaussian_mixture_fit(
 
     var out_w = _download(ctx, weights, ncomp)
     var out_m = _download(ctx, means, ncomp * d)
+    if labels_address != 0 and n > 0:
+        # fit_predict's final labels on the fit's own device buffers (N401).
+        var final_lw = ctx.enqueue_create_buffer[DType.float32](ncomp)
+        ctx.enqueue_function[gmm_log_weights_kernel](
+            weights.unsafe_ptr(),
+            Int32(ncomp),
+            final_lw.unsafe_ptr(),
+            grid_dim=((ncomp + GMM_INIT_TPB - 1) // GMM_INIT_TPB, 1, 1),
+            block_dim=(GMM_INIT_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        var label_trace = IdentityTrace.disabled()
+        var dlabels = ctx.enqueue_create_buffer[DType.int32](n)
+        gmm_e_step_dispatch(
+            dplan, ctx, dx, means, prec, prec, log_det_chol, final_lw,
+            escratch, gws, mahal, wlp, rowmax, lse, logresp, meanll,
+            n, d, ncomp, label_trace, card_prefix + ".predict", GMM_ELEM_TPB,
+            GMM_ROW_TPB, GMM_SAB_NONE,
+        )
+        gmm_predict_labels(
+            ctx, wlp, dlabels, n, ncomp, label_trace, card_prefix + ".predict",
+            GMM_ROW_TPB,
+        )
+        ctx.enqueue_copy(
+            dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=labels_address),
+            src_buf=dlabels,
+        )
+        ctx.synchronize()
+        _ = dlabels^
+        _ = final_lw^
     var out_c = _download(ctx, cov, ncomp * dd)
     var out_p = _download(ctx, prec, ncomp * dd)
     var out_l = _download(ctx, log_det_chol, ncomp)
