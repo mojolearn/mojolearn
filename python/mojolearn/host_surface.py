@@ -1287,7 +1287,7 @@ HOST_IMPORT_ALIASES = {
             'robust_scaler_native_call',
             'standard_scaler_attribute_call',
         ),
-        "types": ("_TreesResident",),
+        "types": ("_TreesResident", "_TreesResidentDeath"),
     },),
 }
 

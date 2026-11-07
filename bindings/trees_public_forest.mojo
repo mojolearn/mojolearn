@@ -34,7 +34,12 @@ from bindings.trees_public_inputs import (
     trees_view, trees_call,
 )
 from bindings.trees_side_records import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
-from bindings.trees_lifetime import trees_resident_new
+from bindings.trees_resident_table import (
+    TREES_RESIDENT_FOREST, trees_resident_find, trees_resident_put, trees_resident_pin, trees_resident_unpin,
+    trees_resident_watch,
+)
+from bindings.native_model_records import model_identity_key, model_generation
+from bindings.p3nc_fitted_freeze import fitted_freeze
 from bindings.metrics_native_support import metric_is_integral, metric_warning_location
 from bindings.classical_warnings import classical_warning
 from ensemble.rf_notices import (
@@ -1269,33 +1274,61 @@ def _model_arrays(fields: PythonObject) raises -> PythonObject:
     return py_call(trees_builtins().tuple, out)
 
 
-def _frozen(array: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
-    """`_forest_protocol._frozen_copy`: a read-only copy of a flat model
-    array, its bytes copied in C."""
-    var b = trees_builtins()
-    var raw = py_call(py_call(b.memoryview, array._store).tobytes)
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)))
-    _ = py_call(store.frombytes, raw)
-    var copy = classical_wrap_array(store, Python.tuple(len(store)), typestr, "C", context)
-    trees_freeze(copy)
-    return copy
+struct ForestHandle(Movable):
+    """A forest snapshot a predict launches on: its handle, and whether the
+    resident table keeps it (pinned for the call) or the call owns it alone
+    (released when the call ends: a model that takes no weak reference, or
+    a snapshot over the table's byte cap)."""
+    var handle: Int
+    var kept: Bool
+    var release: PythonObject
+
+    def __init__(out self, handle: Int, kept: Bool, release: PythonObject):
+        self.handle = handle
+        self.kept = kept
+        self.release = release
+
+
+def forest_handle_done(use: ForestHandle):
+    """End a predict's use of its snapshot (non-raising: error paths)."""
+    if use.kept:
+        trees_resident_unpin(use.handle)
+        return
+    try:
+        _ = py_call(use.release, PythonObject(use.handle))
+    except:
+        pass
 
 
 def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, mode: String,
               context: PythonObject) raises -> Int:
     """`ForestProtocol._prepare_resident_forest()` through the owner: the
-    device snapshot of the five model arrays, prepared once and reused while
-    the arrays, dimensions, mode and aggregation are the same. The snapshot
-    is released when the holder drops it (a refit, a new snapshot, the
-    model's end). Returns its handle."""
-    return _resident_with(model, fields, native, mode, _engine(fields, mode), _ordered_export(native), context)
+    device snapshot of the five model arrays, prepared once and kept in the
+    tree resident table (bindings/trees_resident_table.mojo) while the
+    model, its generation, the arrays, dimensions, mode and aggregation are
+    the same. Returns its handle, or 0 when nothing could be kept (the
+    snapshot was released again)."""
+    var use = _resident_with(model, fields, native, mode, _engine(fields, mode), _ordered_export(native), context)
+    var handle = use.handle if use.kept else 0
+    forest_handle_done(use)
+    return handle
 
 
 def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObject, mode: String, engine: String,
-                   ordered_export: Bool, context: PythonObject) raises -> Int:
+                   ordered_export: Bool, context: PythonObject) raises -> ForestHandle:
     """`_resident` with the engine and the ordered export its caller already
-    resolved (ForestInput: read once per predict)."""
-    var b = trees_builtins()
+    resolved (ForestInput: read once per predict). The returned handle is
+    pinned (or owned by the call); the caller ends it with
+    `forest_handle_done` after its launch.
+
+    Workstream A (ne1-a-trees, 2026-11-06): the snapshot lives in the native
+    resident table keyed by (model_identity_key, model_generation), never in
+    the model's `__dict__` (it was `fields["_resident_holder"]`). The mirrored
+    arrays are frozen in place (`fitted_freeze`) instead of copied, so an
+    in-place NumPy write raises and the snapshot stays the same bytes as the
+    public arrays; replacing an array changes its identity and the next call
+    uploads again. No bit change: `forest_prepare_gpu` reads the same five
+    arrays it read before."""
     if engine != "parallel_groves" and not (engine == "sequential" and ordered_export):
         raise Error("resident forest preparation requires parallel_groves")
     if not py_contains(fields, "_offsets"):
@@ -1310,65 +1343,68 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
     var outputs = Int(py=_int(fields["_num_outputs"]))
     # The aggregation (`_resident_ordered_flag`): strict for the sequential
     # engine, the 32-grove graph named explicitly under IDENTICAL, the
-    # binary's default otherwise.
-    var ordered = PythonObject(None)
+    # binary's default otherwise. Word: -1 the default, 1 strict, 0 groves.
+    var ordered = -1
     if ordered_export:
         if engine == "sequential":
-            ordered = PythonObject(True)
+            ordered = 1
         elif mode == "identical":
-            ordered = PythonObject(False)
+            ordered = 0
     var arrays = _model_arrays(fields)
-    var holder = py_get(fields, "_resident_holder")
-    if holder is None:
-        holder = Python.dict()
-        py_setitem(fields, "_resident_holder", holder)
-    var cached = py_get(holder, "native")
-    if cached is not None:
-        var same = (cached[2] is native and Int(py=cached[3]) == features and Int(py=cached[4]) == trees
-            and Int(py=cached[5]) == outputs and String(cached[6]) == mode and Bool(py=cached[7] == ordered))
-        for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-            same = same and cached[8 + i] is arrays[i]
-        if same:
-            return Int(py=cached[1])
+    var mirrors = List[PythonObject]()
+    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
+        mirrors.append(arrays[i])
+    var words = List[Int]()
+    words.append(features)
+    words.append(trees)
+    words.append(outputs)
+    words.append(1 if mode == "fast" else 0)
+    words.append(ordered)
+    var model_key = model_identity_key(model)
+    var generation = model_generation(model)
+    var held = trees_resident_find(model_key, generation, TREES_RESIDENT_FOREST, native, words, mirrors)
+    if held > 0:
+        trees_resident_pin(held)
+        return ForestHandle(held, True, release)
     var dtypes = _dtypes()
-    var frozen = Python.list()
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
         var a = arrays[i]
         if py_type(a) is not context["array_class"] or String(a.dtype) != String(dtypes[i]) or Int(py=a.ndim) != 1:
             raise Error("forest model arrays must have their original flat dtypes")
-        _ = py_call(frozen.append, a)
-    var nodes = Int(py=frozen[1].size)
-    var offsets = frozen[0]
+    var nodes = Int(py=arrays[1].size)
+    var offsets = arrays[0]
     var last = (Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(offsets))[Int(py=offsets.size) - 1])
         if Int(py=offsets.size) > 0 else -1)
     _ = offsets  # keep the Python object alive through the native call above
-    if (Int(py=offsets.size) != trees + 1 or nodes < 1 or Int(py=frozen[2].size) != nodes
-            or Int(py=frozen[3].size) != nodes or Int(py=frozen[4].size) != nodes * outputs or last != nodes):
+    if (Int(py=offsets.size) != trees + 1 or nodes < 1 or Int(py=arrays[2].size) != nodes
+            or Int(py=arrays[3].size) != nodes or Int(py=arrays[4].size) != nodes * outputs or last != nodes):
         raise Error("forest model array shapes do not match metadata")
     _ = offsets  # keep the Python object alive through the native calls above
-    var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-        var a = frozen[i]
-        if not Bool(py=a._readonly):
-            # A caller retaining a mutable alias cannot alter the snapshot.
-            var copy = _frozen(a, String(dtypes[i]), context)
-            py_setitem(frozen, PythonObject(i), copy)
-            py_setitem(fields, names[i], copy)
+        # The read-only rule (p3nc_fitted_freeze): every mirrored exact Array
+        # is read-only from here on (the fit stored them frozen already; an
+        # Array assigned later is frozen in place, not copied).
+        _ = fitted_freeze(arrays[i], context)
     var params = Python.list(PythonObject(features), PythonObject(trees), PythonObject(outputs))
-    if ordered is not None:
-        _ = py_call(params.append, PythonObject(1 if Bool(py=ordered) else 0))
-    var handle = py_call_typed(prepare, PythonObject(trees_address(frozen[0])), PythonObject(trees_address(frozen[1])),
-                               PythonObject(trees_address(frozen[2])), PythonObject(trees_address(frozen[3])),
-                               PythonObject(trees_address(frozen[4])), params)
-    var lifetime = trees_resident_new(release, Int(py=handle))
-    var entry = Python.list(lifetime, handle, native, PythonObject(features), PythonObject(trees),
-                            PythonObject(outputs), PythonObject(mode), ordered)
-    for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-        _ = py_call(entry.append, frozen[i])
-    # Replacing the entry drops the previous snapshot's lifetime, which
-    # releases it.
-    py_setitem(holder, "native", py_call(b.tuple, entry))
-    return Int(py=handle)
+    if ordered >= 0:
+        _ = py_call(params.append, PythonObject(ordered))
+    var handle = Int(py=py_call_typed(prepare, PythonObject(trees_address(arrays[0])), PythonObject(trees_address(arrays[1])),
+                                      PythonObject(trees_address(arrays[2])), PythonObject(trees_address(arrays[3])),
+                                      PythonObject(trees_address(arrays[4])), params))
+    _ = arrays  # keep the Python objects alive through the native call above
+    # The snapshot's device bytes: the five flat arrays, 4 bytes an item.
+    var bytes = 4 * ((trees + 1) + 3 * nodes + nodes * outputs)
+    var kept = False
+    try:
+        if trees_resident_watch(model, model_key):
+            kept = trees_resident_put(model_key, generation, TREES_RESIDENT_FOREST, native, release, handle,
+                                      words^, mirrors^, bytes)
+        if kept:
+            trees_resident_pin(handle)
+    except error:
+        _ = py_call(release, PythonObject(handle))
+        raise error^
+    return ForestHandle(handle, kept, release)
 
 
 struct ForestInput(Copyable, Movable):
@@ -1452,10 +1488,13 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
         _ = out  # keep the Python object alive through the native call above
         _ = arrays^
     else:
-        var handle = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
-        wrote = py_call_typed(trees_entry(staged.native, "forest_predict_resident_reuse_gpu"), PythonObject(handle),
-                              PythonObject(staged.x.addr), PythonObject(trees_address(out)),
-                              Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(outputs)))
+        var use = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
+        try:
+            wrote = py_call_typed(trees_entry(staged.native, "forest_predict_resident_reuse_gpu"), PythonObject(use.handle),
+                                  PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+                                  Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(outputs)))
+        finally:
+            forest_handle_done(use)
         _ = out  # keep the Python object alive through the native call above
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: " + sequential_name + " wrote " + _str(wrote) + " of " + String(rows) + " rows")
@@ -1507,9 +1546,13 @@ def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestIn
         return PythonObject(None)
     var rows = staged.x.rows
     var out = trees_vector(rows, "<i4", context)
-    var handle = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
-    var wrote = py_call_typed(function, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+    var use = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
+    var wrote = PythonObject(None)
+    try:
+        wrote = py_call_typed(function, PythonObject(use.handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
                               Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(staged.outputs)))
+    finally:
+        forest_handle_done(use)
     _ = out  # keep the Python object alive through the native call above
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: forest label prediction wrote " + _str(wrote) + " of " + String(rows) + " rows")
