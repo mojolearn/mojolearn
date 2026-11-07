@@ -45,7 +45,10 @@ def connect():
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["tsa_bindings"] = bindings
     hw = {}
-    names = ("holtwinters_fit", "holtwinters_forecast", "holtwinters_predict")
+    names = ("holtwinters_fit", "holtwinters_forecast", "holtwinters_predict",
+             # resident components (bindings/tsa_hw_native.mojo); absent on the host binding
+             "holtwinters_resident_prepare", "holtwinters_resident_release", "holtwinters_resident_count",
+             "holtwinters_query_resident")
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
             module = _backend.binding("_mojolearn_tsa", mode)
