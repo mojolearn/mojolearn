@@ -22,19 +22,22 @@ Rules (plan section 2A):
 - Bounded: at most `CRES_HELD_MAX` entries and `CRES_HELD_BYTES` bytes; the
   least recently used entry is released first, and an evicted model uploads
   again at its next call.
-- Model death: `cres_forget_key(model_key)` drops every family's entry. It
-  is registered once with the records module
-  (`records_register_release_hook`, bindings/native_model_records.mojo) the
-  first time `cres_lookup` or `cres_store` runs, and the records module's
-  `records_release` calls it with the dead model's key. Held objects keep
-  their addresses taken, so a new model at the same address can never be
-  served the old copy.
+- Model death: the records module's `records_release` posts the dead
+  model's key on its dead-key ring (bindings/native_model_records.mojo);
+  `cres_lookup` and `cres_store` drain the ring at entry
+  (`records_dead_keys_since`, from the last sequence word this table saw)
+  and `cres_forget_key` drops every family's entry of each dead key; when
+  the ring overflowed since the last drain every entry is released. The
+  drain runs before any lookup or store, so a key on the ring always names a
+  model that died after its entry was made. Held objects keep their
+  addresses taken, so a new model at the same address can never be served
+  the old copy.
 - Nothing here computes on data: the device copy is the same bytes."""
 from std.ffi import _Global
 from std.python import Python, PythonObject
 # Imports: std and the records module's contract only (the records module
-# reaches this table through its release hook, never by import).
-from bindings.native_model_records import model_identity_key, model_generation, records_register_release_hook
+# never reaches this table: this table polls its dead-key ring).
+from bindings.native_model_records import model_identity_key, model_generation, records_dead_keys_since
 
 comptime CRES_X_CLUSTER = 1
 """Family code: x_cluster `cluster_centers_` (MiniBatchKMeans, BisectingKMeans,
@@ -81,37 +84,25 @@ struct CresTable(Defaultable, Movable):
     var entries: Dict[Int, CresHeld]
     var tick: Int
     var bytes: Int
-    # The once-flag of the release-hook registration.
-    var hooked: Bool
+    # The records module's dead-key sequence word this table drained to.
+    var seen: Int
 
     def __init__(out self):
         self.entries = Dict[Int, CresHeld]()
         self.tick = 0
         self.bytes = 0
-        self.hooked = False
+        self.seen = 0
 
 
-comptime _CRES = _Global[StorageType=CresTable, name="MojolearnClusterResidentHeldV2", init_fn=CresTable.__init__]
+comptime _CRES = _Global[StorageType=CresTable, name="MojolearnClusterResidentHeldV3", init_fn=CresTable.__init__]
 
 
 def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:
-    # Only the table pointer: the release-hook registration is its own step
-    # (_hook_once), taken by the public entries. Registering here made
-    # _table -> cres_forget_key -> _forget_slot -> _table a recursive cycle
-    # through a function-pointer reference, the suspected trigger of the
-    # compiler deadlock bisected to this lane's merge (ne-fix-hang4).
+    # Only the table pointer. The release-hook registration that lived next
+    # to it (a thin function pointer handed to the records module) is gone:
+    # it was the trigger of the compiler deadlock bisected to this table
+    # (lanes ne-fix-hang4/5); the public entries poll instead (_drain_dead).
     return _CRES.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-
-
-def _hook_once(t: UnsafePointer[CresTable, MutAnyOrigin]):
-    """Register cres_forget_key with the records module the first time the
-    table is used (the sequence store's _hook_once shape)."""
-    if t[].hooked:
-        return
-    # Set first: registering may run a release that reaches this table.
-    t[].hooked = True
-    # Bool: False (registry full) leaves dead entries to the LRU bound.
-    _ = records_register_release_hook(cres_forget_key)
 
 
 def _release_quiet(var held: CresHeld):
@@ -137,10 +128,35 @@ def _forget_slot(slot: Int):
 
 
 def cres_forget_key(model_key: Int):
-    """Drop every family's entry of `model_key` (the model died).
-    Non-raising: it runs from death callbacks."""
+    """Drop every family's entry of `model_key` (the model died; called by
+    the dead-key drain). Non-raising."""
     for family in range(1, _CRES_FAMILIES):  # driver-loop: over the family codes
         _forget_slot(model_key + family)
+
+
+def _forget_all(t: UnsafePointer[CresTable, MutAnyOrigin]) raises:
+    """Release every entry (the dead-key ring overflowed since the last
+    drain, so which models died is not known)."""
+    var slots = List[Int]()
+    for key in t[].entries.keys():  # driver-loop: over at most CRES_HELD_MAX held entries
+        slots.append(key)
+    for j in range(len(slots)):  # driver-loop: over at most CRES_HELD_MAX held entries
+        _forget_slot(slots[j])
+
+
+def _drain_dead(t: UnsafePointer[CresTable, MutAnyOrigin]) raises:
+    """Forget every model released since the last drain (GIL held, the
+    public entries' rule). The sequence word is advanced before any release
+    runs: a release entry that frees another model only posts to the ring."""
+    var dead = List[Int]()
+    var now = records_dead_keys_since(t[].seen, dead)
+    if now < 0:
+        t[].seen = -now
+        _forget_all(t)
+        return
+    t[].seen = now
+    for j in range(len(dead)):  # driver-loop: over models released since the last drain
+        cres_forget_key(dead[j])
 
 
 def cres_forget(model: PythonObject, family: Int):
@@ -198,7 +214,7 @@ def cres_lookup(model: PythonObject, family: Int, binding: PythonObject, objects
     generation, else None (a stale entry is released here)."""
     var slot = model_identity_key(model) + family
     var t = _table()
-    _hook_once(t)
+    _drain_dead(t)
     if slot not in t[].entries:
         return PythonObject(None)
     var generation = model_generation(model)
@@ -224,9 +240,9 @@ def cres_store(model: PythonObject, family: Int, binding: PythonObject, objects:
     is released first); the least recently used entries are released while
     the table is over its bounds."""
     var slot = model_identity_key(model) + family
-    _forget_slot(slot)
     var t = _table()
-    _hook_once(t)
+    _drain_dead(t)
+    _forget_slot(slot)
     while len(t[].entries) > 0 and (len(t[].entries) >= CRES_HELD_MAX or t[].bytes + nbytes > CRES_HELD_BYTES):  # driver-loop: LRU eviction over held entries
         if not _evict_one(t):
             break
