@@ -295,6 +295,32 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             self.mats[a].host = 0
         return self.mats[a].dev
 
+    def keep(mut self, a: Int) raises -> Int:
+        """A pool id holding `a`'s words that the CALLER now owns (lane
+        ne1-a-decomp-resident: IncrementalPCA's running state kept on the
+        device between calls): `a`'s own device buffer when this kit
+        allocated it (it leaves the ledger, so `close` does not free it),
+        else a fresh buffer with its words uploaded (a view's or a borrowed
+        buffer, or a host matrix). -1 on a host binding. Data movement only."""
+        comptime if Self.RES:
+            var dev = self.mats[a].dev
+            if dev >= 0:
+                for i in range(len(self.allocations)):  # driver-loop: over this kit's device allocations
+                    if self.allocations[i] == dev:
+                        _ = self.allocations.pop(i)
+                        return dev
+            var n = self.mats[a].rows * self.mats[a].cols
+            var words = self.host(a)
+            var handle = Self.D.alloc(max(n, 1))
+            if n:
+                try:
+                    Self.D.upload(handle, F32Ptr(unsafe_from_address=words), n)
+                except error:
+                    Self.D.free(handle)
+                    raise error^
+            return handle
+        return -1
+
     def copy_out(mut self, a: Int, dst: F32Ptr, count: Int) raises:
         """The first `count` words of `a` into caller memory (`_M.out`)."""
         if count <= 0:
