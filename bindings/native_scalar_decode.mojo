@@ -75,8 +75,10 @@ def native_scalar_buffer_dtype(value: PythonObject, dtype: PythonObject) raises 
     # strides but never requests the unsupported PEP3118 spelling.
     # Allocate both owners before acquisition. Every successful export is
     # released on all error paths; fixed private bytes outlive both decodes.
-    var view = List[Int](length=10, fill=0)
-    var bytes = List[UInt8](length=32, fill=UInt8(0))
+    # Fixed-size stack storage (N197): ten Py_buffer words and at most 32
+    # scalar bytes (width is checked above), so no heap List per decode.
+    var view = InlineArray[Int, 10](fill=0)
+    var bytes = InlineArray[UInt8, 32](fill=UInt8(0))
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()
