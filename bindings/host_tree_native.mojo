@@ -47,8 +47,8 @@ def host_tree_input(source: PythonObject, context: PythonObject) raises -> Pytho
 def host_tree_cast(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """The 2-D checks and C-order float32 cast of host_tree_input for an input
     the caller already admitted and viewed (classical_input), so a door that
-    inspected the view does not admit X a second time (row N279). `value`
-    must outlive the result only through the caller's own references."""
+    inspected the view does not admit X a second time (row N279). The caller
+    keeps `value` (and whatever it views) alive through this call."""
     if Int(py=value.ndim) != 2:
         raise Error("X must be 2-D")
     var rows = Int(py=value.shape[0])
