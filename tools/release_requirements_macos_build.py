@@ -332,7 +332,8 @@ def _facts(root, producer):
     placements_path = cache / "provenance" / "placements.jsonl"
     placed_any = any(OUTCOMES[o] == "placed" for o in outcomes.values())
     placements = _placements(placements_path) if placed_any else {}
-    evidence = [wheel_ref, log_ref, rows_ref] + ([reference(placements_path)] if placed_any else [])
+    evidence = [wheel_ref, log_ref, rows_ref] + ([reference(placements_path)]
+                                                 if placed_any and placements_path.is_file() else [])
     with zipfile.ZipFile(wheel_ref["path"]) as archive:
         revision = archive.read("mojolearn/identity_columns/COMMIT").decode().strip()
         require(HEX40.fullmatch(revision) is not None, "the wheel names no source commit")
