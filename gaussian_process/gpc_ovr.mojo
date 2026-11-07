@@ -243,7 +243,7 @@ def _gpc_upload_checked(
 
 
 def _gpc_check_finite(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], rows: Int, cols: Int, what: String
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], rows: Int, cols: Int, what: String
 ) raises:
     """`gp_validate_data`'s refusals (DEVIATION 1768) over `rows x cols`
     uploaded float32: the row and the feature of the first NaN or infinity."""
