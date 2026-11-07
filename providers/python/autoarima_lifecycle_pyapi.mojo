@@ -13,6 +13,10 @@ from core.xseq_marshal import xseq_cast_nd
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_SIGNED
 from bindings.sequential_admission import _one_of
 from providers.python.forecast_owner_pyapi import forecast_commit
+from bindings.native_prepared_owner import prepared_get
+from bindings.tsa_arima_resident import (
+    ARIMA_RESIDENT_SLOT, arima_resident_words, arima_resident_hit, arima_resident_mint, arima_resident_call,
+)
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _REFUSE_DOUBLE = "TypeError: AutoARIMA: float64 is refused; pass float32 (no float64 on the device)"
@@ -179,6 +183,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         var ids = _packed(ids_all[group], "group indices", context, True)
         var words = Python.list(rows, n_obs, start, end) if prediction else Python.list(rows, n_obs, steps)
         var complexity = k + 1
+        var order_words = List[Int]()
         for axis in range(3):  # small-loop(ARIMA order tuple)
             var word = _integer(order[axis], context)
             if word < 0:
@@ -186,6 +191,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
             if axis != 1:
                 complexity += word
             _ = py_call(words.append, word)
+            order_words.append(word)
         for axis in range(4):  # small-loop(seasonal order tuple)
             var word = _integer(seasonal[axis], context)
             if word < 0:
@@ -193,6 +199,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
             if axis == 0 or axis == 2:
                 complexity += word
             _ = py_call(words.append, word)
+            order_words.append(word)
         if y.count != rows * n_obs or params.count != rows * complexity or ids.count != rows:
             raise Error("ValueError: AutoARIMA fitted buffer dimensions disagree")
         _ = py_call(words.extend, Python.tuple(k, 0) if prediction else Python.tuple(k, 0, 0))
@@ -212,9 +219,30 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
             raise Error("RuntimeError: ARIMA binary numeric mode disagrees with its selected tier")
         var part = classical_typed(Python.tuple(rows, steps), "<f4", context)
         var part_address = Int(py=classical_address(part))
-        # n_exog is zero: y supplies a live unused pointer for the two exog slots.
-        _ = py_call_typed(entries["arima_predict" if prediction else "arima_forecast"], y.source.addr, y.source.addr, y.source.addr,
-                          params.source.addr, part_address, words)
+        # The group model's resident fitted state (lane ne1-a-decomp-tsa,
+        # N029): its y and parameters are uploaded once per fit, the record
+        # shared with ARIMA.predict (bindings/tsa_arima_resident.mojo); a
+        # binding without the resident entries keeps the per-call upload.
+        var member = fitted[group]
+        var resident_words = arima_resident_words(rows, n_obs, order_words, k, 0)
+        var resident_mods = NativeModules()
+        var record = prepared_get(resident_mods, ARIMA_RESIDENT_SLOT, member)
+        var handle = -1
+        if record is not None:
+            handle = arima_resident_hit(record, state, entries, resident_words)
+        if handle < 0:
+            record = arima_resident_mint(member, state, entries, resident_words, y.source.addr, y.source.addr,
+                                         params.source.addr)
+            if record is not None:
+                handle = Int(py=record[5])
+        if handle >= 0:
+            # n_exog is zero: the output supplies a live unused future pointer.
+            arima_resident_call(entries, handle, part_address, part, start, end, steps, not prediction)
+        else:
+            # n_exog is zero: y supplies a live unused pointer for the two exog slots.
+            _ = py_call_typed(entries["arima_predict" if prediction else "arima_forecast"], y.source.addr, y.source.addr,
+                              y.source.addr, params.source.addr, part_address, words)
+        _ = record  # the record (and its capsule) outlive the query
         # The connected base scatter owns bounds validation and finished-result
         # assembly on its compiled target; no Python indexing or data loops.
         _ = py_call_typed(context["base_scatter_rows_bytes"], part_address, ids.source.addr, rows,
