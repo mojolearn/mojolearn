@@ -74,12 +74,26 @@ struct ManifoldMatrix(Movable, Writable):
     # holder's address valid, as `_M._one` did); its other fields are unused.
     # Native words replace the array.array store (lane perf-manifold-kit): no
     # Python allocation, len() or buffer_info() call per matrix or operation.
+    #
+    # Fitted state (rows N291, N301, lane ne3-f-kernel-table): a matrix the
+    # fit stored on the model is `frozen` when the fit returns. A read of a
+    # frozen matrix never moves it: `store` / `device` keep the side the fit
+    # left it on (so every route decision of a later transform is the one the
+    # first transform made before), and the other side's copy is kept in
+    # `kept_store` / `kept_device`, made once and reused by every later read.
+    # Neither copy is released while the model holds the matrix, so a device
+    # id a running kernel reads cannot go back to the pool under it. In-place
+    # writers refuse a frozen matrix (bindings/mani_kit.mojo mk_writable);
+    # replacing the attribute drops both copies with the old matrix.
     var store: PythonObject
     var device: PythonObject
     var rows: Int
     var cols: Int
     var words: List[Float32]
     var count: Int
+    var frozen: Bool
+    var kept_store: PythonObject
+    var kept_device: PythonObject
 
     def __init__(out self, store: PythonObject, device: PythonObject, rows: Int, cols: Int):
         self.store = store
@@ -88,6 +102,9 @@ struct ManifoldMatrix(Movable, Writable):
         self.cols = cols
         self.words = List[Float32]()
         self.count = 0
+        self.frozen = False
+        self.kept_store = PythonObject(None)
+        self.kept_device = PythonObject(None)
 
     def __init__(out self, *, words_of: Int):
         """A words holder of `words_of` zero float32 values."""
@@ -97,6 +114,9 @@ struct ManifoldMatrix(Movable, Writable):
         self.cols = 0
         self.words = List[Float32](length=max(words_of, 1), fill=Float32(0))
         self.count = words_of
+        self.frozen = False
+        self.kept_store = PythonObject(None)
+        self.kept_device = PythonObject(None)
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ManifoldMatrix(shape=(", self.rows, ", ", self.cols, "))")
@@ -129,6 +149,33 @@ def matrix_set_device(value: PythonObject, device: PythonObject) raises:
     if device is not None:
         _ = device.downcast_value_ptr[ManifoldDevice]()
     value.downcast_value_ptr[ManifoldMatrix]()[].device = device
+
+
+def matrix_frozen(value: PythonObject) raises -> Bool:
+    return value.downcast_value_ptr[ManifoldMatrix]()[].frozen
+
+
+def matrix_freeze(value: PythonObject) raises:
+    """Mark a fitted matrix read-only (see ManifoldMatrix); idempotent."""
+    value.downcast_value_ptr[ManifoldMatrix]()[].frozen = True
+
+
+def matrix_kept_store(value: PythonObject) raises -> PythonObject:
+    return value.downcast_value_ptr[ManifoldMatrix]()[].kept_store
+
+
+def matrix_kept_device(value: PythonObject) raises -> PythonObject:
+    return value.downcast_value_ptr[ManifoldMatrix]()[].kept_device
+
+
+def matrix_set_kept_store(value: PythonObject, store: PythonObject) raises:
+    value.downcast_value_ptr[ManifoldMatrix]()[].kept_store = store
+
+
+def matrix_set_kept_device(value: PythonObject, device: PythonObject) raises:
+    if device is not None:
+        _ = device.downcast_value_ptr[ManifoldDevice]()
+    value.downcast_value_ptr[ManifoldMatrix]()[].kept_device = device
 
 
 def device_binding(value: PythonObject) raises -> PythonObject:

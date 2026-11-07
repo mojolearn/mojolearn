@@ -155,7 +155,7 @@ def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
         # transpose is data movement
         var kit = _lin_xd(context)
         try:
-            var held = kit.of_buffer(a.addr, rows, cols)
+            var held = kit.borrow(a.keep, a.addr, rows, cols)
             var t = kit.transpose(held)
             var moved = kit.out(t)
             buf = LinBuf(moved, Int(py=classical_address(moved)), [cols, rows])
@@ -194,7 +194,7 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var kit = _lin_xd(context)
     try:
         var v = 0
-        var held = kit.of_buffer(a.addr, rows, rows)
+        var held = kit.borrow(a.keep, a.addr, rows, rows)
         _ = a  # keep the Python object alive through the native call above
         var w = kit.eigh(held, 1 if lower else 2, v)
         _ = a  # keep the Python object alive through the native call above
@@ -235,7 +235,7 @@ def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonOb
             _ = signs  # keep the Python object alive through the native call above
             return _keep_ret_signs^
         var tau = 0
-        var held = kit.of_buffer(a.addr, rows, cols)
+        var held = kit.borrow(a.keep, a.addr, rows, cols)
         var h = kit.geqrf(held, tau)
         var kk = min(rows, cols)
         if mode == "raw":
@@ -281,7 +281,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var kit = _lin_xd(context)
         try:
             var tau = 0
-            var held = kit.of_buffer(a.addr, rows, cols)
+            var held = kit.borrow(a.keep, a.addr, rows, cols)
             _ = a  # keep the Python object alive through the native call above
             var h = kit.geqrf(held, tau)
             _ = a  # keep the Python object alive through the native call above
@@ -327,7 +327,7 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
                 # Tried: the 2^-40 cut + Householder U_R branch here (qfix bit 1).
                 # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
-                var r_held = kit.of_buffer(r.addr, cols, cols)
+                var r_held = kit.borrow(r.keep, r.addr, cols, cols)
                 _ = r  # keep the Python object alive through the native call above
                 var ur = _lin_svd_tall(kit, r_held, False, context, s, vt)
                 _ = r  # keep the Python object alive through the native call above
@@ -342,7 +342,7 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
             _ = c_store  # keep the Python object alive through the native call above
             _ = a^
             return result
-        var m = kit.of_buffer(a.addr, rows, cols)
+        var m = kit.borrow(a.keep, a.addr, rows, cols)
         if hermitian:
             if rows != cols:
                 raise Error("mojolearn.linalg.svd: hermitian=True needs a square matrix")

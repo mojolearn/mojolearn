@@ -28,6 +28,20 @@ from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family
 from core.family_cast_impl import family_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module
 from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_optional_entry
+# The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows
+# N290-N301): the kit's primitive operations call one abi("C") dispatch
+# function per operation (bindings/kit_call.mojo).
+from bindings.kit_call import kit_connect, kit_provider, kit_call
+from bindings.manifold_storage_native import (
+    matrix_frozen, matrix_freeze, matrix_kept_store, matrix_kept_device,
+    matrix_set_kept_store, matrix_set_kept_device,
+)
+from x_decomp.descriptor_schema import (
+    XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES,
+    XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE,
+    XD_DEV_ALLOC, XD_DEV_UPLOAD, XD_DEV_EW, XD_DEV_GEMM, XD_DEV_COLSUM, XD_DEV_ROWSUM,
+    XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN,
+)
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -198,18 +212,77 @@ def mk_fill(value: Float64, r: Int, c: Int, ctx: PythonObject) raises -> PythonO
     return mk_of(values, r, c, ctx)
 
 
+def mk_cache_home(ctx: PythonObject) raises -> PythonObject:
+    """Where the kit's cross-call constants live (row N290): the long-lived
+    shared connection context bindings/manifold_native.mojo hands down as
+    `family_mani_shared`, not the operation's private copy (whose entries
+    lasted one call, so the 'one per binding' device zero was allocated and
+    uploaded again on every call). A caller without it keeps its own."""
+    var home = py_get(ctx, "family_mani_shared")
+    return ctx if home is None else home
+
+
 def mk_one(ctx: PythonObject) raises -> PythonObject:
-    """`_M._one`, the shared host 1 x 1 zero."""
-    var one = py_get(ctx, "family_mani_native_one")
+    """`_M._one`, the shared host 1 x 1 zero (frozen: a read never moves it,
+    so every operation and thread sees the same host zero)."""
+    var home = mk_cache_home(ctx)
+    var one = py_get(home, "family_mani_native_one")
     if one is None:
         one = mk_zeros(1, 1, ctx)
-        py_setitem(ctx, "family_mani_native_one", one)
+        matrix_freeze(one)
+        py_setitem(home, "family_mani_native_one", one)
     return one
+
+
+def mk_frozen_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
+    """The host words of a frozen fitted matrix without moving it: its store,
+    or the kept host copy of a device matrix, downloaded once and reused by
+    every later read (rows N291, N301)."""
+    var store = matrix_store(m)
+    if store is not None:
+        return store
+    var kept = matrix_kept_store(m)
+    if kept is not None:
+        return kept
+    var d = matrix_device(m)
+    var n = mk_n(m)
+    var a = mk_store_zeros(n, ctx)
+    if n > 0:
+        _ = family_call(mk_required(device_download(d), "x_decomp_dev_download"), device_identifier(d),
+                        mk_store_addr(a), PythonObject(n))
+        _ = a  # keep the Python object alive through the native call above
+    # Another thread may have kept a copy while the download released the
+    # GIL: every reader then shares that one.
+    var raced = matrix_kept_store(m)
+    if raced is not None:
+        return raced
+    matrix_set_kept_store(m, a)
+    return a
+
+
+def mk_writable(m: PythonObject) raises:
+    """In-place writers (fill0, place_strided, graph_join) refuse fitted
+    state: a frozen matrix's two copies would disagree afterwards."""
+    if matrix_frozen(m):
+        raise Error("RuntimeError: a fitted manifold matrix is read-only")
+
+
+def mk_freeze_fitted(fields: PythonObject, names: List[String]) raises:
+    """Freeze the fitted matrices a fit stored under `names` (absent names
+    are skipped). Called once when the fit returns, so each matrix keeps the
+    side the fit left it on."""
+    for i in range(len(names)):  # small-loop(fitted: the fitted-matrix names of one estimator): bounded by the estimator
+        var value = py_get(fields, PythonObject(names[i]))
+        if value is not None:
+            matrix_freeze(value)
 
 
 def mk_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
     """`m.s`: the host store, downloaded once if the matrix is on the device;
-    the matrix is a host matrix afterwards."""
+    the matrix is a host matrix afterwards. A frozen fitted matrix is read
+    without moving (mk_frozen_store)."""
+    if matrix_frozen(m):
+        return mk_frozen_store(m, ctx)
     if matrix_store(m) is None:
         var d = matrix_device(m)
         var n = mk_n(m)
@@ -422,6 +495,7 @@ struct MKit(Movable):
     var optional: Dict[String, PythonObject]  # optional entries (None when absent), once each
     var one_host: PythonObject  # `_M._one`, read from the context once per kit
     var one_dev: PythonObject  # `_dev_one(kit)`'s buffer, looked up once per kit
+    var table: PythonObject  # the binding's x_decomp_native_api_v1 provider, connected once per kit
 
     def __init__(out self, mode: String, binding: PythonObject, ctx: PythonObject) raises:
         self.mode = mode
@@ -441,6 +515,55 @@ struct MKit(Movable):
         self.optional = Dict[String, PythonObject]()
         self.one_host = PythonObject(None)
         self.one_dev = PythonObject(None)
+        self.table = PythonObject(None)
+
+    # ---- the native kernel-call table (x_decomp/descriptor_schema.mojo)
+    def xd(mut self) raises -> PythonObject:
+        """The binding's kernel-call provider: admitted on the first
+        operation of this kit (a process-wide record keyed by the module and
+        its live factory entry, so later kits pay one namespace read)."""
+        if self.table is None:
+            var snapshot = kit_connect(self.raw, "x_decomp_native_api_v1", String(XD_ABI_NAME),
+                                       XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES)
+            self.table = kit_provider(snapshot)
+        return self.table
+
+    def dcall(mut self, op: Int, ints: List[Int], s: Float64 = 0.0) raises -> Int:
+        """A device-resident operation on pool ids (enqueue-only, under the
+        GIL, as the `dev_*_py` doors ran)."""
+        var floats = List[Float64]()
+        if op == XD_DEV_EW or op == XD_DEV_SQDIST:
+            floats.append(s)
+        return kit_call(self.xd(), op, List[Int](), ints, floats, False)
+
+    def hcall(mut self, op: Int, addresses: List[Int], ints: List[Int], s: Float64 = 0.0) raises -> Int:
+        """A host-address operation (the GIL released, as the doors did).
+        The caller keeps every addressed holder alive through the call."""
+        var floats = List[Float64]()
+        if op == XD_EW or op == XD_SQDIST:
+            floats.append(s)
+        return kit_call(self.xd(), op, addresses, ints, floats, True)
+
+    def upload(mut self, identifier: Int, address: Int, n: Int) raises:
+        """`x_decomp_dev_upload`: synchronous, the GIL released."""
+        _ = kit_call(self.xd(), XD_DEV_UPLOAD, [address], [identifier, n], List[Float64](), True)
+
+    def dix(mut self, m: PythonObject) raises -> Int:
+        """`did(m)` as the pool id word."""
+        return Int(py=self.did(m))
+
+    def dmove(mut self, src: Int, idx: Int, dst: Int, words: List[Int]) raises:
+        """`x_decomp_dev_move` on pool ids; words = [op, count, a1, a2, a3,
+        ist, ioff, nsrc, ndst, nidx]."""
+        var ints = [src, idx, dst]
+        for i in range(len(words)):  # small-loop(params: the ten move words): 10
+            ints.append(words[i])
+        _ = self.dcall(XD_DEV_MOVE, ints)
+
+    def hmove(mut self, src: Int, idx: Int, dst: Int, words: List[Int]) raises:
+        """`x_decomp_move` on host addresses (the caller keeps the holders
+        alive)."""
+        _ = self.hcall(XD_MOVE, [src, idx, dst], words)
 
     def fn(mut self, name: String) raises -> PythonObject:
         """`self.b.<name>`: resolved (module dict read and compiled-entry
@@ -467,7 +590,7 @@ struct MKit(Movable):
         buffer keeps for every later download, move or buffer made from it."""
         var release = self.fn("x_decomp_dev_free")
         var alloc = self.fn("x_decomp_dev_alloc")
-        var identifier = family_call(alloc, PythonObject(max(n, 1)))
+        var identifier = PythonObject(self.dcall(XD_DEV_ALLOC, [max(n, 1)]))
         return PythonObject(alloc=ManifoldDevice(self.raw, release, identifier, n, alloc,
                                                  self.fn_opt("x_decomp_dev_upload"),
                                                  self.fn_opt("x_decomp_dev_download"),
@@ -567,16 +690,96 @@ struct MKit(Movable):
         var d = matrix_device(m)
         if not (d is None) and device_binding(d) is self.raw:
             return device_identifier(d)
+        if matrix_frozen(m):
+            return self._frozen_did(m)
         var a = mk_store(m, self.ctx)
         var n = mk_store_len(a)
         var nd = self._devbuf(n)
         if n > 0:
-            _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(nd), mk_store_addr(a), PythonObject(n))
+            self.upload(Int(py=device_identifier(nd)), words_address(a), n)
             _ = a  # keep the Python object alive through the native call above
         matrix_set_store(m, PythonObject(None))
         matrix_set_device(m, nd)
         _ = a^
         return device_identifier(nd)
+
+    def _frozen_did(mut self, m: PythonObject) raises -> PythonObject:
+        """A frozen fitted matrix's device id on this binding without moving
+        it: the kept device copy, uploaded once (rows N291, N301). The copy
+        is keyed by binding module, as every device buffer of the kit is."""
+        var kd = matrix_kept_device(m)
+        if not (kd is None) and device_binding(kd) is self.raw:
+            return device_identifier(kd)
+        var a = mk_store(m, self.ctx)
+        var n = mk_store_len(a)
+        var nd = self._devbuf(n)
+        if n > 0:
+            self.upload(Int(py=device_identifier(nd)), words_address(a), n)
+            _ = a  # keep the Python object alive through the native call above
+        # Another thread may have kept a copy while the upload released the
+        # GIL: use that one (ours goes back to the pool unused).
+        var raced = matrix_kept_device(m)
+        if not (raced is None) and device_binding(raced) is self.raw:
+            return device_identifier(raced)
+        matrix_set_kept_device(m, nd)
+        _ = a^
+        return device_identifier(nd)
+
+    def _adopt(mut self, identifier: Int, n: Int) raises -> PythonObject:
+        """A pool id a native operation allocated, owned as `_devbuf`'s are
+        (freed back to the pool when its last holder dies)."""
+        return PythonObject(alloc=ManifoldDevice(self.raw, self.fn("x_decomp_dev_free"), PythonObject(identifier), n,
+                                                 self.fn("x_decomp_dev_alloc"),
+                                                 self.fn_opt("x_decomp_dev_upload"),
+                                                 self.fn_opt("x_decomp_dev_download"),
+                                                 self.fn_opt("x_decomp_dev_move")))
+
+    def iso_gather_min(mut self, d: PythonObject, im: PythonObject, sq: PythonObject, q: Int,
+                       nn: Int) raises -> PythonObject:
+        """Isomap.transform's per-rank gather-and-min (row N295) as one native
+        operation (x_decomp/descriptor_device.mojo xd_iso_gather_min): G =
+        min over ranks a of (rows im[:, a] of D) + SQ[:, a], the launches the
+        per-rank kit calls made, in their order. None on a host kit or a
+        shape the per-rank path takes another route for (then the caller
+        runs that path)."""
+        if not self.res():
+            return PythonObject(None)
+        var dc = mk_c(d)
+        if q * dc <= 0 or nn <= 0 or mk_r(sq) != q or mk_c(sq) != nn or not mk_res_moves(sq, q):
+            return PythonObject(None)
+        var idd = self.dix(d)
+        var iim = self.dix(im)
+        var isq = self.dix(sq)
+        var one = Int(py=self.dev_one())
+        var gid = self.dcall(XD_DEV_ISO_GATHER_MIN, [idd, iim, isq, q, dc, nn, one, mk_n(d), mk_n(im)])
+        var g = mk_dev_view(self._adopt(gid, q * dc), q, dc, self.ctx)
+        _ = d
+        _ = im
+        _ = sq
+        return g
+
+    def from_snapshot(mut self, value: ArrayMetadata, name: String) raises -> PythonObject:
+        """`mk_from_snapshot` on this kit (row N296). A resident kit uploads
+        straight from the admitted snapshot's address into a pooled device
+        buffer: no host words copy and no later upload of that copy (the
+        matrix the first device operation would have uploaded is device
+        resident from the start; every route the input takes is an exact
+        copy or a device route on either side, so no bit changes). The
+        finiteness refusal reads the same immutable snapshot, before the
+        upload, with the same sentence. A host kit keeps mk_from_snapshot."""
+        if not self.res():
+            return mk_from_snapshot(value, name, self.ctx)
+        var r = value.source.rows
+        var c = value.source.cols
+        if len(value.shape) != 2 or r == 0 or c == 0:
+            raise Error(name + ": a nonempty two-dimensional input is required")
+        var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
+        if not family_all_finite_f32(src, r * c):
+            raise Error(name + ": input must be finite; NaN/inf are unsupported")
+        var nd = self._devbuf(r * c)
+        self.upload(Int(py=device_identifier(nd)), value.source.addr, r * c)
+        _ = value  # keep the snapshot's owners alive through the synchronous upload
+        return mk_dev_view(nd, r, c, self.ctx)
 
     def dout(mut self, r: Int, c: Int) raises -> PythonObject:
         return mk_dev_view(self._devbuf(r * c), r, c, self.ctx)
@@ -586,16 +789,17 @@ struct MKit(Movable):
         per binding (the Python kit's own cache), looked up once per kit."""
         if not (self.one_dev is None):
             return device_identifier(self.one_dev)
-        var cache = py_get(self.ctx, "family_mani_native_dev_one")
+        var home = mk_cache_home(self.ctx)
+        var cache = py_get(home, "family_mani_native_dev_one")
         if cache is None:
             cache = Python.dict()
-            py_setitem(self.ctx, "family_mani_native_dev_one", cache)
+            py_setitem(home, "family_mani_native_dev_one", cache)
         var key = py_call(native_loaded_module("builtins").id, self.raw)
         var d = py_get(cache, key, PythonObject(None))
         if d is None or not (device_binding(d) is self.raw):
             d = self._devbuf(1)
             var z = mk_store_zeros(1, self.ctx)
-            _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(d), mk_store_addr(z), PythonObject(1))
+            self.upload(Int(py=device_identifier(d)), words_address(z), 1)
             _ = z  # keep the Python object alive through the native call above
             _ = z^
             py_setitem(cache, key, d)
@@ -638,8 +842,8 @@ struct MKit(Movable):
             var ib = one_id if b is None else self.did(bm)
             var ic = one_id if c is None else self.did(cm)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_ew"), ia, ib, ic, device_identifier(matrix_device(out)),
-                            mk_ints([op, n, mk_c(a), mk_n(bm), bmode, mk_n(cm), cmode]), PythonObject(s))
+            _ = self.dcall(XD_DEV_EW, [Int(py=ia), Int(py=ib), Int(py=ic), Int(py=device_identifier(matrix_device(out))),
+                                       op, n, mk_c(a), mk_n(bm), bmode, mk_n(cm), cmode], s)
             return out
         var out = mk_zeros(mk_r(a), mk_c(a), self.ctx)
         if n > 0:
@@ -650,9 +854,10 @@ struct MKit(Movable):
             _ = cm  # keep the Python object alive through the native call above
             var po = mk_addr(out, self.ctx)
             _ = out  # keep the Python object alive through the native call above
-            var params = mk_ints([op, n, mk_c(a), mk_store_len(mk_store(bm, self.ctx)), bmode,
-                                  mk_store_len(mk_store(cm, self.ctx)), cmode])
-            _ = family_call(self.fn("x_decomp_ew"), pa, pb, pc, po, params, PythonObject(s))
+            var lb = mk_store_len(mk_store(bm, self.ctx))
+            var lc = mk_store_len(mk_store(cm, self.ctx))
+            _ = self.hcall(XD_EW, [Int(py=pa), Int(py=pb), Int(py=pc), Int(py=po)],
+                           [op, n, mk_c(a), lb, bmode, lc, cmode], s)
             _ = out  # keep the Python object alive through the native call above
             _ = cm  # keep the Python object alive through the native call above
             _ = bm  # keep the Python object alive through the native call above
@@ -685,7 +890,8 @@ struct MKit(Movable):
         var n = mk_r(b) if tb else mk_c(b)
         if k != k2:
             raise Error("x_decomp: gemm inner dimensions " + String(k) + " and " + String(k2) + " differ")
-        var params = mk_ints([m, k, n, 1 if ta else 0, 1 if tb else 0])
+        var words = [m, k, n, 1 if ta else 0, 1 if tb else 0]
+        var params = mk_ints(words)
         if not (self.lle_mm is None):
             var out = mk_zeros(m, n, self.ctx)
             var pa = mk_addr(a, self.ctx)
@@ -697,14 +903,18 @@ struct MKit(Movable):
             var out = self.dout(m, n)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_gemm"), ia, ib, device_identifier(matrix_device(out)), params)
+            _ = self.dcall(XD_DEV_GEMM, [Int(py=ia), Int(py=ib), Int(py=device_identifier(matrix_device(out))),
+                                         words[0], words[1], words[2], words[3], words[4]])
             return out
         var out = mk_zeros(m, n, self.ctx)
         if m * n > 0:
             var pa = mk_addr(a, self.ctx)
             var pb = mk_addr(b, self.ctx)
-            _ = family_call(self.fn("x_decomp_gemm"), pa, pb, mk_addr(out, self.ctx), params)
+            var po = mk_addr(out, self.ctx)
+            _ = self.hcall(XD_GEMM, [Int(py=pa), Int(py=pb), Int(py=po)], words)
             _ = out  # keep the Python object alive through the native call above
+            _ = a
+            _ = b
         return out
 
     def colsum(mut self, a: PythonObject) raises -> PythonObject:
@@ -713,12 +923,14 @@ struct MKit(Movable):
         if r * c > 0 and self.use1(a):
             var out = self.dout(1, c)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_colsum"), ia, device_identifier(matrix_device(out)), mk_ints([r, c]))
+            _ = self.dcall(XD_DEV_COLSUM, [Int(py=ia), Int(py=device_identifier(matrix_device(out))), r, c])
             return out
         var out = mk_zeros(1, c, self.ctx)
         var pa = mk_addr(a, self.ctx)
-        _ = family_call(self.fn("x_decomp_colsum"), pa, mk_addr(out, self.ctx), mk_ints([r, c]))
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_COLSUM, [Int(py=pa), Int(py=po)], [r, c])
         _ = out  # keep the Python object alive through the native call above
+        _ = a
         return out
 
     def rowsum(mut self, a: PythonObject) raises -> PythonObject:
@@ -727,12 +939,14 @@ struct MKit(Movable):
         if r * c > 0 and self.use1(a):
             var out = self.dout(r, 1)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_rowsum"), ia, device_identifier(matrix_device(out)), mk_ints([r, c]))
+            _ = self.dcall(XD_DEV_ROWSUM, [Int(py=ia), Int(py=device_identifier(matrix_device(out))), r, c])
             return out
         var out = mk_zeros(r, 1, self.ctx)
         var pa = mk_addr(a, self.ctx)
-        _ = family_call(self.fn("x_decomp_rowsum"), pa, mk_addr(out, self.ctx), mk_ints([r, c]))
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_ROWSUM, [Int(py=pa), Int(py=po)], [r, c])
         _ = out  # keep the Python object alive through the native call above
+        _ = a
         return out
 
     def total(mut self, a: PythonObject) raises -> PythonObject:
@@ -744,18 +958,22 @@ struct MKit(Movable):
         var ar = mk_r(a)
         var br = mk_r(b)
         var ac = mk_c(a)
-        var params = mk_ints([ar, br, ac])
+        # [na, nb, d]: the doors' defaults kind 0 (squared Euclidean), p 2
         if ar * br > 0 and ac > 0 and self.use2(a, b):
             var out = self.dout(ar, br)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, device_identifier(matrix_device(out)), params)
+            _ = self.dcall(XD_DEV_SQDIST, [Int(py=ia), Int(py=ib), Int(py=device_identifier(matrix_device(out))),
+                                           ar, br, ac, 0], 2.0)
             return out
         var out = mk_zeros(ar, br, self.ctx)
         var pa = mk_addr(a, self.ctx)
         var pb = mk_addr(b, self.ctx)
-        _ = family_call(self.fn("x_decomp_sqdist"), pa, pb, mk_addr(out, self.ctx), params)
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_SQDIST, [Int(py=pa), Int(py=pb), Int(py=po)], [ar, br, ac, 0], 2.0)
         _ = out  # keep the Python object alive through the native call above
+        _ = a
+        _ = b
         return out
 
     def pdist(mut self, a: PythonObject, b: PythonObject, kind: Int, pw: Float64) raises -> PythonObject:
@@ -764,19 +982,21 @@ struct MKit(Movable):
         var ar = mk_r(a)
         var br = mk_r(b)
         var ac = mk_c(a)
-        var params = mk_ints([ar, br, ac, kind])
-        mk_append(params, PythonObject(pw))
         if ar * br > 0 and ac > 0 and self.use2(a, b):
             var out = self.dout(ar, br)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, device_identifier(matrix_device(out)), params)
+            _ = self.dcall(XD_DEV_SQDIST, [Int(py=ia), Int(py=ib), Int(py=device_identifier(matrix_device(out))),
+                                           ar, br, ac, kind], pw)
             return out
         var out = mk_zeros(ar, br, self.ctx)
         var pa = mk_addr(a, self.ctx)
         var pb = mk_addr(b, self.ctx)
-        _ = family_call(self.fn("x_decomp_sqdist"), pa, pb, mk_addr(out, self.ctx), params)
+        var po = mk_addr(out, self.ctx)
+        _ = self.hcall(XD_SQDIST, [Int(py=pa), Int(py=pb), Int(py=po)], [ar, br, ac, kind], pw)
         _ = out  # keep the Python object alive through the native call above
+        _ = a
+        _ = b
         return out
 
     def rand(mut self, r: Int, c: Int, seed: PythonObject, stream: Int, kind: Int) raises -> PythonObject:
@@ -952,19 +1172,22 @@ struct MKit(Movable):
         ioff]) + radd of A for t < m."""
         var c = mk_c(a)
         var count = m * c
-        var params = mk_ints([MV_TAKE_ROWS, count, c, radd, 0, ist, ioff, mk_n(a), count, mk_n(idx)])
+        var words = [MV_TAKE_ROWS, count, c, radd, 0, ist, ioff, mk_n(a), count, mk_n(idx)]
         if count > 0 and self.use2(a, idx):
             var out = self.dout(m, c)
-            var ia = self.did(a)
-            var ii = self.did(idx)
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, device_identifier(matrix_device(out)), params)
+            var ia = self.dix(a)
+            var ii = self.dix(idx)
+            self.dmove(ia, ii, Int(py=device_identifier(matrix_device(out))), words)
             return out
         var out = mk_zeros(m, c, self.ctx)
         if count > 0:
             var pa = mk_addr(a, self.ctx)
             var pi = mk_addr(idx, self.ctx)
-            _ = family_call(self.fn("x_decomp_move"), pa, pi, mk_addr(out, self.ctx), params)
+            var po = mk_addr(out, self.ctx)
+            self.hmove(Int(py=pa), Int(py=pi), Int(py=po), words)
             _ = out  # keep the Python object alive through the native call above
+            _ = a
+            _ = idx
         return out
 
     def take_rows(mut self, a: PythonObject, idx: PythonObject) raises -> PythonObject:
@@ -974,15 +1197,20 @@ struct MKit(Movable):
         """A[start + t * stride] = 0 for t < count, in place."""
         if count == 0:
             return
+        mk_writable(a)
         var n = mk_n(a)
-        var params = mk_ints([MV_FILL0, count, start, stride, 0, 0, 0, n, n, 1])
+        var words = [MV_FILL0, count, start, stride, 0, 0, 0, n, n, 1]
         if self.use1(a):
-            var ia = self.did(a)
-            var one = self.dev_one()
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, one, ia, params)
+            var ia = self.dix(a)
+            var one = Int(py=self.dev_one())
+            self.dmove(ia, one, ia, words)
             return
         var pa = mk_addr(a, self.ctx)
-        _ = family_call(self.fn("x_decomp_move"), pa, mk_addr(self.one(), self.ctx), pa, params)
+        var host_one = self.one()
+        var po = mk_addr(host_one, self.ctx)
+        self.hmove(Int(py=pa), Int(py=po), Int(py=pa), words)
+        _ = a
+        _ = host_one
 
     def reduce(mut self, a: PythonObject, op: Int) raises -> PythonObject:
         """max |A| (0), max A (1) or min A (2) as a 1 x 1 matrix."""
@@ -1006,21 +1234,22 @@ struct MKit(Movable):
         var stride = off + 1 if count == 1 else stride_in
         var idx = mk_of([Float64(off)], 1, 1, self.ctx)
         var n = mk_n(a)
-        var params = mk_ints([MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1])
+        var words = [MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1]
         if count > 0 and self.use1(a):
             var out = self.dout(1, count)
-            var ia = self.did(a)
-            var ii = self.did(idx)
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, device_identifier(matrix_device(out)), params)
+            var ia = self.dix(a)
+            var ii = self.dix(idx)
+            self.dmove(ia, ii, Int(py=device_identifier(matrix_device(out))), words)
             return out
         var out = mk_zeros(1, count, self.ctx)
         if count > 0:
             var pa = mk_addr(a, self.ctx)
             var pi = mk_addr(idx, self.ctx)
-            _ = idx  # keep the Python object alive through the native call above
-            _ = family_call(self.fn("x_decomp_move"), pa, pi, mk_addr(out, self.ctx), params)
+            var po = mk_addr(out, self.ctx)
+            self.hmove(Int(py=pa), Int(py=pi), Int(py=po), words)
             _ = out  # keep the Python object alive through the native call above
             _ = idx  # keep the Python object alive through the native call above
+            _ = a
         return out
 
     def word(mut self, a: PythonObject, i: Int) raises -> Float64:
@@ -1034,17 +1263,22 @@ struct MKit(Movable):
         var cnt = mk_n(v)
         if cnt == 0:
             return
-        var params = mk_ints([MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, mk_n(d), 1])
+        mk_writable(d)
+        var words = [MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, mk_n(d), 1]
         if self.use2(d, v):
-            var iv = self.did(v)
-            var one = self.dev_one()
-            var id = self.did(d)
-            _ = family_call(self.fn("x_decomp_dev_move"), iv, one, id, params)
+            var iv = self.dix(v)
+            var one = Int(py=self.dev_one())
+            var id = self.dix(d)
+            self.dmove(iv, one, id, words)
             return
         var pv = mk_addr(v, self.ctx)
-        var po = mk_addr(self.one(), self.ctx)
+        var host_one = self.one()
+        var po = mk_addr(host_one, self.ctx)
         var pd = mk_addr(d, self.ctx)
-        _ = family_call(self.fn("x_decomp_move"), pv, po, pd, params)
+        self.hmove(Int(py=pv), Int(py=po), Int(py=pd), words)
+        _ = v
+        _ = d
+        _ = host_one
 
     def place_rows(mut self, d: PythonObject, v: PythonObject, row: Int) raises:
         """V (r x D.c) into rows row .. row + r - 1 of D, in place."""
@@ -1068,9 +1302,9 @@ struct MKit(Movable):
         for i in range(len(ms)):  # small-loop(ms: one Mojo move per stacked matrix): bounded by the caller
             var cnt = mk_n(ms[i])
             if cnt > 0:
-                var im = self.did(ms[i])
-                _ = family_call(self.fn("x_decomp_dev_move"), im, one, device_identifier(matrix_device(out)),
-                                mk_ints([MV_PLACE_COLS, cnt, c, c, off * c, 0, 0, cnt, rows * c, 1]))
+                var im = self.dix(ms[i])
+                self.dmove(im, Int(py=one), Int(py=device_identifier(matrix_device(out))),
+                           [MV_PLACE_COLS, cnt, c, c, off * c, 0, 0, cnt, rows * c, 1])
             off += mk_r(ms[i])
         return out
 
@@ -1160,12 +1394,11 @@ struct MKit(Movable):
             var one = self.dev_one()
             var cnt = r * c
             if cnt > 0:
-                var ix = self.did(x)
-                _ = family_call(self.fn("x_decomp_dev_move"), ix, one, device_identifier(matrix_device(out)),
-                                mk_ints([MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1]))
-            var oid = device_identifier(matrix_device(out))
-            _ = family_call(self.fn("x_decomp_dev_move"), oid, one, oid,
-                            mk_ints([MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1]))
+                var ix = self.dix(x)
+                self.dmove(ix, Int(py=one), Int(py=device_identifier(matrix_device(out))),
+                           [MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1])
+            var oid = Int(py=device_identifier(matrix_device(out)))
+            self.dmove(oid, Int(py=one), oid, [MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1])
             return out
         # X's words, then one zero row (the holder starts zeroed)
         var src = mk_store(x, self.ctx)
@@ -1308,6 +1541,7 @@ struct MKit(Movable):
 
     def graph_join(mut self, w: PythonObject, d: PythonObject, comp: PythonObject, count: Int) raises:
         """sklearn `_fix_connected_components`, W changed in place."""
+        mk_writable(w)
         var n = mk_r(w)
         if self.res():
             var iw = self.did(w)
@@ -1380,6 +1614,10 @@ def mk_t(m: PythonObject, mut hk: MKit, ctx: PythonObject) raises -> PythonObjec
         if hk.res():
             _ = hk.did(m)
             d = matrix_device(m)
+            if d is None and matrix_frozen(m):
+                # a frozen fitted matrix stays where it is; its kept copy
+                # on this binding is what the transpose reads
+                d = matrix_kept_device(m)
     if not (d is None) and (r == 1 or c == 1):
         return mk_dev_view(d, c, r, ctx)
     if not (d is None) and n < I32_MAX:
