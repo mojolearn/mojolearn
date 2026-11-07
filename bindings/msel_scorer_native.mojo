@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Fixed scorer records call verified compiled estimator/metric entries. The
 # Python function objects identify import-time plans; they are never invoked.
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import NativeModules, native_loaded_module
+from bindings.native_class_admission import class_record, class_admit
+from bindings.native_model_records import RECORDS_PREPARED, ContentRecord, records_stamped_get, records_stamped_put
+from bindings.cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
@@ -22,8 +25,10 @@ def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> Py
         raise Error("TypeError: Python metric callbacks are not accepted; use a connected native mojolearn metric")
     # Native function metadata avoids function.__code__'s audit callback while
     # preserving its connected-code identity check at every scoring boundary.
+    # N067: through the one CPython table (resolved once per process), not
+    # a by-name lookup on every score.
     ref cpy = Python().cpython()
-    var code = cpy.lib.get_function[PyObjectPtr]("PyFunction_GetCode")(function._obj_ptr)
+    var code = cpython_table()[].PyFunction_GetCode(function._obj_ptr)
     if not code:
         raise cpy.unsafe_get_error()
     if code != plan["code"]._obj_ptr:
@@ -31,20 +36,41 @@ def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> Py
     return plan
 
 
+#: The class-record slot of native_class_admission for the scorer class rows.
+comptime _SCORER_CLASS_SLOT = "msel_scorer_class_v1"
+#: The stamped-record name of a scorer's field-key admission (family RECORDS_PREPARED).
+comptime _SCORER_FIELDS_RECORD = "msel_scorer_fields_v1"
+
+
 def _scorer_class(context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var cls = context["family_msel_scorer_class"]
     if py_type(cls) is not b.type:
         raise Error("TypeError: native scorer metadata refuses metaclass hooks")
+    # N067: the ancestry and hook rows depend only on the class state, so
+    # they are checked once per class state (native_class_admission type
+    # watchers: any class or ancestor modification, `__bases__` included,
+    # drops the record), not on every score. The payload is the address of
+    # the import-time hook tuple (alive for the process), never the class.
+    # Without watchers (Python < 3.12) the full check runs on every call.
+    var hooks = context["family_msel_scorer_hooks"]
+    var mods = NativeModules()
+    var held = class_record(mods, _SCORER_CLASS_SLOT, cls)
+    if held is not None and Int(py=held) == Int(hooks._obj_ptr):
+        return cls
+    _scorer_class_rows(cls, hooks, b)
+    class_admit(mods, _SCORER_CLASS_SLOT, cls, PythonObject(Int(hooks._obj_ptr)))
+    return cls
+
+
+def _scorer_class_rows(cls: PythonObject, hooks: PythonObject, b: PythonObject) raises:
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     if len(mro) != 2 or mro[1] is not b.object:
         raise Error("TypeError: native scorer metadata refuses inherited lifecycle hooks")
     var source = py_call(b.type.__dict__["__dict__"].__get__, cls)
-    var hooks = context["family_msel_scorer_hooks"]
     for k in range(len(hooks)):  # driver-loop: connected scorer storage and method identities before allocation or access
         if py_get(source, hooks[k][0]) is not hooks[k][1]:
             raise Error("TypeError: native scorer methods or storage hooks changed")
-    return cls
 
 
 def msel_scorer_create(function: PythonObject, response: PythonObject, sign: Int,
@@ -71,10 +97,22 @@ def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> Py
     if py_type(scorer) is not cls:
         raise Error("TypeError: Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric")
     var fields = py_call(context["family_msel_scorer_fields"], scorer, cls)
-    var keys = py_call(b.list, fields.keys())
-    for k in range(len(keys)):  # driver-loop: exact scorer keys before metadata lookup
-        if py_type(keys[k]) is not b.str:
-            raise Error("TypeError: native scorer fields require exact string keys")
+    # N067: the exact-str key admission once per scorer state: a stamped
+    # record of the scorer (bindings/native_model_records.mojo, keyed by the
+    # scorer's identity, released when it dies). Its generation word follows
+    # the scorer's instance dictionary (any insertion, replacement, deletion
+    # or clear misses), and the keys are all that this scan reads, so the
+    # record needs no content words. Without dictionary watchers (Python <
+    # 3.12) the scan runs on every call.
+    var hooks = context["family_msel_scorer_hooks"]
+    var stamped = records_stamped_get(RECORDS_PREPARED, scorer, _SCORER_FIELDS_RECORD)
+    if stamped is None or stamped is not hooks:
+        var keys = py_call(b.list, fields.keys())
+        for k in range(len(keys)):  # driver-loop: exact scorer keys before metadata lookup
+            if py_type(keys[k]) is not b.str:
+                raise Error("TypeError: native scorer fields require exact string keys")
+        if py_type(fields) is b.dict:
+            _ = records_stamped_put(RECORDS_PREPARED, scorer, _SCORER_FIELDS_RECORD, ContentRecord(), hooks)
     _ = msel_metric_plan(fields["_score_func"], context)
     return fields
 
@@ -101,9 +139,11 @@ struct _MetricItems(Movable):
         var position = 0
         var key = PyObjectPtr()
         var item = PyObjectPtr()
-        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+        # N067: the one CPython table (addresses as Int, its stated form).
+        var table = cpython_table()
         for i in range(len(value)):  # driver-loop: capture admitted option references once after preparation
-            if next_item(value._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=item)) == 0:
+            if table[].PyDict_Next(value._obj_ptr, Int(MutPointer(to=position)), Int(MutPointer(to=key)),
+                                   Int(MutPointer(to=item))) == 0:
                 return False
             var owner = PythonObject(from_owned=cpy.Py_NewRef(key))
             if py_type(owner) is not str_type:
@@ -116,13 +156,13 @@ struct _MetricItems(Movable):
     def same(self, value: PythonObject) raises -> Bool:
         if py_type(value) is not self.kind or len(value) != len(self.keys):
             return False
-        ref cpy = Python().cpython()
         var position = 0
         var key = PyObjectPtr()
         var item = PyObjectPtr()
-        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+        var table = cpython_table()
         for i in range(len(self.keys)):  # driver-loop: check mutable options after every prediction/GIL boundary
-            if next_item(value._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=item)) == 0:
+            if table[].PyDict_Next(value._obj_ptr, Int(MutPointer(to=position)), Int(MutPointer(to=key)),
+                                   Int(MutPointer(to=item))) == 0:
                 return False
             if key != self.keys[i]._obj_ptr or item != self.values[i]._obj_ptr:
                 return False
@@ -291,16 +331,17 @@ struct MselMetricPrepared(Movable):
             self.prepare(function, plan, y, predicted, keywords, context, b)
         # Fresh immutable call arguments: no tuple retained by an entry can be
         # mutated by a later phase, and dynamic y/predicted never enter template.
+        # N067: the standard library's tuple builders (the cpython_table
+        # rule keeps them there), not two by-name lookups per score.
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyTuple_New")(len(self.arguments))
+        var raw = cpy.PyTuple_New(len(self.arguments))
         if not raw:
             raise cpy.unsafe_get_error()
         var envelope = PythonObject(from_owned=raw)
-        var put = cpy.lib.get_function[Int32]("PyTuple_SetItem")
         for i in range(len(self.arguments)):  # driver-loop: native ABI slots and owned references only
             var value = y if self.sources[i] == 1 else predicted if self.sources[i] == 2 else self.arguments[i]
             # SetItem steals the new reference, including on failure.
-            if put(envelope._obj_ptr, i, cpy.Py_NewRef(value._obj_ptr)) != 0:
+            if cpy.PyTuple_SetItem(envelope._obj_ptr, i, cpy.Py_NewRef(value._obj_ptr)) != 0:
                 raise cpy.unsafe_get_error()
         return family_call(entry, PythonObject(None), self.operation, envelope, self.metric_context)
 

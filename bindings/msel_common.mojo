@@ -307,11 +307,13 @@ def _msel_exact_str_items(value: PythonObject) raises -> Bool:
     if n == 0:
         return False
     ref cpy = Python().cpython()
-    var get_item = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem" if is_tuple else "PyList_GetItem")
+    # N066: the item reads through the one CPython table (resolved once per
+    # process), not a by-name lookup per call.
+    var table = cpython_table()
     var str_type = b.str
     var exact = True
     for i in range(n):  # driver-loop: exact list/tuple item classes by pointer, one C read per label
-        var raw = get_item(value._obj_ptr, i)
+        var raw = table[].PyTuple_GetItem(value._obj_ptr, i) if is_tuple else table[].PyList_GetItem(value._obj_ptr, i)
         if not raw:
             raise cpy.unsafe_get_error()
         var item_type = cpy.PyObject_Type(raw)
@@ -1041,12 +1043,11 @@ def msel_take_labels(values: PythonObject, indices: PythonObject, context: Pytho
                 or layout.count != Int(py=metadata["size"]) or pin.format != "q"):
             raise Error("ValueError: model-selection label index storage disagrees with its metadata")
         ref cpy = Python().cpython()
-        var get_name = String("PyTuple_GetItem") if tuple_input else String("PyList_GetItem")
-        var size_name = String("PyTuple_Size") if tuple_input else String("PyList_Size")
-        var get_item = cpy.lib.get_function[PyObjectPtr](get_name)
-        var set_item = cpy.lib.get_function[Int32]("PyList_SetItem")
-        var count = cpy.lib.get_function[Int](size_name)(values._obj_ptr)
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(layout.count)
+        # N066: every C entry through the one CPython table (resolved once
+        # per process), not four by-name lookups per fold side.
+        var table = cpython_table()
+        var count = table[].PyTuple_Size(values._obj_ptr) if tuple_input else table[].PyList_Size(values._obj_ptr)
+        var raw = table[].PyList_New(layout.count)
         if not raw:
             var failure = stash_python_error()
             raise failure^
@@ -1059,11 +1060,12 @@ def msel_take_labels(values: PythonObject, indices: PythonObject, context: Pytho
             # GetItem reports the original list/tuple IndexError for either
             # bound. Py_NewRef supplies the owned reference SetItem steals,
             # including on failure; out owns and cleans up any partial list.
-            var label = get_item(values._obj_ptr, index)
+            var label = (table[].PyTuple_GetItem(values._obj_ptr, index) if tuple_input
+                         else table[].PyList_GetItem(values._obj_ptr, index))
             if not label:
                 var failure = stash_python_error()
                 raise failure^
-            if set_item(out._obj_ptr, i, cpy.Py_NewRef(label)) != 0:
+            if table[].PyList_SetItem(out._obj_ptr, i, cpy.Py_NewRef(label)) != 0:
                 var failure = stash_python_error()
                 raise failure^
         _ = values  # borrowed labels remain owned through the final incref

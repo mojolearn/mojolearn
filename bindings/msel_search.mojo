@@ -36,6 +36,8 @@ from bindings.msel_common import (
     msel_slice_i64, msel_index_i64, msel_get_scorer, msel_score, msel_admit, MselRng, MselGroups, msel_apply,
 )
 from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
+from bindings.msel_common import msel_signed32
+from bindings.family_common import FAMILY_I32P
 from bindings.msel_cv import (
     msel_clone, msel_cv_folds, msel_device_rows_ok, msel_require_serial, msel_scorers, MselFoldRows, MselScores,
     msel_cross_validate_run, msel_seconds, msel_fit, msel_fit_planned, msel_error_value,
@@ -678,6 +680,10 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     var w_inv = prog.want(w_inv_slot, 2 * n)
     prog.stage("rows64", n, [ordr, w_ord])
     prog.stage("rows64", n, [inv, w_inv])
+    # N056: the int32 words of the group order and its inverse, read back
+    # once per call for the per-permutation program (`_group_index`).
+    var w_ord32 = prog.want(ordr, n)
+    var w_inv32 = prog.want(inv, n)
     var arena = _reg_run(prog, PythonObject(None), context)
     var base = _arena_base(arena)
     var offsets = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=base + 4 * off)
@@ -690,11 +696,22 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     _ = rows_sorted  # keep the Python object alive through the native call above
     memcpy(dest=msel_p64(inverse), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_inv), count=n)
     _ = inverse  # keep the Python object alive through the native call above
+    var ord32 = msel_new(n, "<i4", context)
+    var inv32 = msel_new(n, "<i4", context)
+    var off32 = msel_new(m + 1, "<i4", context)
+    memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(ord32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * w_ord32), count=n)
+    _ = ord32  # keep the Python object alive through the native copy above
+    memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(inv32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * w_inv32), count=n)
+    _ = inv32  # keep the Python object alive through the native copy above
+    memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(off32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * off), count=m + 1)
+    _ = off32  # keep the Python object alive through the native copy above
     # Both raw source addresses still point into this arena after the final
     # offset read. Allocating the result Arrays must not release its storage.
     _ = arena^
     _ = prog^
-    return Python.tuple(sizes, rows_sorted, inverse)
+    # (sizes, rows_sorted, inverse) as before, then the int32 order, inverse,
+    # group offsets and row group codes the one-program `_group_index` reads.
+    return Python.tuple(sizes, rows_sorted, inverse, ord32, inv32, off32, gc.codes)
 
 
 def _group_sizes(order: PythonObject) raises -> List[Int]:
@@ -710,27 +727,40 @@ def _group_index(mut rng: MselRng, order: PythonObject, sizes: List[Int], n: Int
                  context: PythonObject) raises -> PythonObject:
     """`_NativePermutation._group_index`: each group's rows permuted by its
     draw over the group-sorted rows, put back in row order. `sizes` is
-    `_group_sizes(order)`, read once per call, not once per permutation."""
-    var gather = msel_entry("gather_i64", context)
-    var src = msel_new(n, "<i8", context)
-    var s0 = msel_addr(src)
-    _ = src  # keep the Python object alive through the native call above
-    var o0 = msel_addr(order[1])
-    var perms = rng.permutation_rows(sizes, context)
+    `_group_sizes(order)`, read once per call, not once per permutation.
+
+    N056 (lane ne2-b-search-workers): ONE program per permutation. The
+    groups' draws are `permute` stages at each group's offset (the draws in
+    group order, one per group, as `permutation_rows` made them), then
+    `group_take` permutes each group's rows by its draw and `take_rows64`
+    puts them back in row order: the words the per-group `gather_i64` calls
+    and the final inverse gather gave, read back once. Same draws, same
+    rows, same order: no bit changes."""
+    var prog = _Prog(context["family_metrics_ops"])
+    var key = prog.put_i32(order[6])
+    var ordr = prog.put_i32(order[3])
+    var off = prog.put_i32(order[5])
+    var inv = prog.put_i32(order[4])
+    var draws = prog.alloc(max(n, 1))
     var at = 0
-    for g in range(len(sizes)):  # driver-loop: over groups (one device gather each)
-        _ = family_call(gather, PythonObject(o0 + 8 * at), PythonObject(sizes[g]), PythonObject(msel_addr(perms[g])),
-                        PythonObject(sizes[g]), PythonObject(s0 + 8 * at))
-        _ = src  # keep the Python object alive through the native call above
+    for g in range(len(sizes)):  # driver-loop: over groups (one permute stage each, all in one program)
+        var s = rng.salt()
+        prog.stage("permute", 1, [sizes[g], draws + at, msel_signed32(s), msel_signed32(s >> 32)])
         at += sizes[g]
-    # The last address extraction does not keep the owning permutation list
-    # alive through the last native gather's reads.
-    _ = perms^
+    var src = prog.alloc(max(n, 1))
+    var out_slot = prog.alloc(2 * n)
+    var out = prog.want(out_slot, 2 * n)
+    if n > 0:
+        prog.stage("group_take", n, [key, ordr, off, draws, src])
+        prog.stage("take_rows64", n, [src, inv, out])
+    var arena = _reg_run(prog, PythonObject(None), context)
     var idx = msel_new(n, "<i8", context)
-    _ = family_call(gather, PythonObject(s0), PythonObject(n), PythonObject(msel_addr(order[2])), PythonObject(n),
-                    PythonObject(msel_addr(idx)))
-    _ = src  # keep the Python object alive through the native call above
-    _ = idx  # keep the Python object alive through the native call above
+    if n > 0:
+        memcpy(dest=msel_p64(idx), src=FAMILY_I64P(unsafe_from_address=_arena_base(arena) + 4 * out), count=n)
+    _ = idx  # keep the Python object alive through the native copy above
+    # The copied address points into this arena: keep it through the copy.
+    _ = arena^
+    _ = prog^
     return idx
 
 
