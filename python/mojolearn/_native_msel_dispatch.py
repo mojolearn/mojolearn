@@ -107,6 +107,14 @@ def connect(context, package):
     connect_prep(context, register, registry)
     from .neighbors import KNeighborsClassifier
     registry[KNeighborsClassifier]["classes_kind"] = "knn"  # glue: native form of the connected class-label property
+    # glue: the DeviceRows door (bindings/device_rows_door.mojo) reads these
+    # three connected identities from the owner context a door receives; a
+    # context without them treats no argument as DeviceRows.
+    door = dict(door_rows_class=_arena_io.DeviceRows, door_rows_call=_arena_io._ROWS_CALL,
+                door_rows_context=_arena_io._ROWS_CONTEXT)
+    for plan in registry.values():  # glue: import-time connection of fixed identities into each owner context
+        if type(plan['context']) is dict:
+            plan['context'].update(door)
     context.update(family_msel_estimators=registry,
                    family_msel_pending_estimators=tuple(value for value in vars(package).values()  # glue: distinguish known migration debt from external callbacks
                                                         if type(value) is type and value not in registry),

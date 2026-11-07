@@ -1826,6 +1826,8 @@ FAMILIES = (
             "cast_elements", "reduce_stat", "equal_elements",
             "gather_i32", "check_indices_i64", "indices_overlap_i64",
             "fold_ids", "select_fold_i64",
+            # lane ne1-b-door (N051): every fold's partition as one split plan
+            "select_folds_i64",
             # lane/py-dn-kern (2026-09-28): the spectral routes' float32
             # dense-to-COO scan and precomputed kNN affinity (core/dense_coo.mojo)
             "nonzero_f32_count", "nonzero_f32_fill", "knn_affinity_f32",

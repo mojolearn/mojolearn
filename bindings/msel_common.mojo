@@ -60,6 +60,14 @@ def msel_entry(name: String, context: PythonObject) raises -> PythonObject:
     return msel_native(name, context)
 
 
+def msel_entry_ready(name: String, context: PythonObject) raises -> Bool:
+    """Whether the compiled helper `name` was connected at import (an older
+    core binding without it keeps its refusal there): the caller then takes
+    the helper it replaces."""
+    var entry = py_get(context["family_msel_entries"], PythonObject(name))
+    return entry is not None and py_type(entry) is context["family_builtin_type"]
+
+
 def msel_try(callable: PythonObject, args: PythonObject, classes: PythonObject,
              context: PythonObject) raises -> PythonObject:
     """`callable(*args)`; an exception of `classes` returns the miss
@@ -720,11 +728,59 @@ struct MselGroups(Movable):
         var out = Python.list()
         var sz = msel_p64(sizes)
         var words_address = msel_addr(words)
+        if msel_entry_ready("select_folds_i64", context):
+            # One split plan for every fold (N051).
+            var planned = msel_select_folds_plan(words, sizes, self.n, k, "the group counts", context)
+            _ = words
+            _ = sizes
+            return planned
         for f in range(k):  # driver-loop: over folds
             _ = py_call(out.append, self._rows_at(words_address, f, Int(sz[f]), context))
         _ = words
         _ = sizes
         return out
+
+
+def msel_select_folds_plan(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k: Int, counted_by: String,
+                           context: PythonObject) raises -> PythonObject:
+    """Every fold's (train, test) in ONE `select_folds_i64` call (lane
+    ne1-b-door, N051: one split plan per CV call; the fold ids go up once and
+    every fold's rows come back behind one synchronize). Same arrays, same
+    integers, same order as the per-fold `select_fold_i64` loop. `fold_store`
+    holds the n int32 fold words, `fold_counts` each fold's int64 row count;
+    `counted_by` names the counts' source in the disagreement refusal."""
+    var counts = msel_p64(fold_counts)
+    var tests = msel_new(k, "<i8", context)
+    var trains = msel_new(k, "<i8", context)
+    var tp = msel_p64(tests)
+    var rp = msel_p64(trains)
+    var out = Python.list()
+    # An empty side shares one private scratch allocation, as in the loop.
+    var scratch = PythonObject(None)
+    var scratch_address = 0
+    for fold in range(k):  # driver-loop: over folds (output allocation only; the selection is one call)
+        var size = Int(counts[fold])
+        var test = msel_new(size, "<i8", context)
+        var train = msel_new(n - size, "<i8", context)
+        if size == 0 or n - size == 0:
+            if scratch is None:
+                scratch = msel_new(n, "<i8", context)
+                scratch_address = msel_addr(scratch)
+        tp.unsafe_store(fold, Int64(msel_addr(test) if size else scratch_address))
+        rp.unsafe_store(fold, Int64(msel_addr(train) if n - size else scratch_address))
+        _ = py_call(out.append, Python.tuple(train, test))
+    var bad = msel_int(family_call(msel_entry("select_folds_i64", context), PythonObject(msel_addr(fold_store)),
+                                   PythonObject(n), PythonObject(k), PythonObject(msel_addr(fold_counts)),
+                                   PythonObject(msel_addr(tests)), PythonObject(msel_addr(trains))))
+    _ = out  # keep every fold array alive through the native call above
+    _ = scratch
+    _ = tests
+    _ = trains
+    _ = fold_store
+    _ = fold_counts
+    if bad >= 0:
+        raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with " + counted_by)
+    return out
 
 
 # ---------------------------------------------------------------- random draws

@@ -270,6 +270,12 @@ struct MselFoldRows(Movable):
     var scope: PythonObject
     var rows_class: PythonObject
     var rows_take: PythonObject
+    # N087 (lane ne1-b-door): one DeviceRows per fold side per CV call, not
+    # one per fold side per candidate: {address of the fold's index object:
+    # (that object, its DeviceRows)}. The index object is held, so its
+    # address cannot be reused while the entry lives.
+    var rows_cache: PythonObject
+    var rows_dict: PythonObject
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -284,6 +290,8 @@ struct MselFoldRows(Movable):
         self.scope = PythonObject(None)
         self.rows_class = PythonObject(None)
         self.rows_take = PythonObject(None)
+        self.rows_cache = Python.dict()
+        self.rows_dict = PythonObject(None)
         if self.dev:
             # DeviceRows exposes a bound take owner to its materializer. Keep
             # that separately mutable public boundary on its existing checks.
@@ -302,14 +310,26 @@ struct MselFoldRows(Movable):
             # `_arena_io` connection read once at the start of the run.
             self.rows_class = family_call(msel_b().getattr, context["family_msel_arena_io"], PythonObject("DeviceRows"))
             self.rows_take = family_call(msel_b().getattr, self.res, PythonObject("take"))
+            self.rows_dict = context["family_msel_rows_context"]["maxabs_rows_dict"]
 
     def xrows(mut self, idx_in: PythonObject, context: PythonObject) raises -> PythonObject:
         if not self.dev:
             var x = self.x
             return self.rows(x, idx_in, context)
+        var key = PythonObject(Int(idx_in._obj_ptr))
+        var hit = py_get(self.rows_cache, key)
+        if hit is not None and hit[0] is idx_in:
+            # Reused only while no route has taken its host rows: a host
+            # snapshot an estimator was handed may since have been written
+            # (an in-place transform), so a materialized one is replaced.
+            var dr = hit[1]
+            var fields = py_call(self.rows_dict.__get__, dr, self.rows_class)
+            if py_get(fields, "_host") is None:
+                return dr
         var idx = msel_index_i64(idx_in, context)
         var dr = native_storage_allocate(self.rows_class)
         _ = _arena_rows_call(dr, "init", Python.tuple(self.x, idx, self.rows_take), context)
+        py_setitem(self.rows_cache, key, Python.tuple(idx_in, dr))
         return dr
 
     def resident_take(mut self, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -357,6 +377,7 @@ struct MselFoldRows(Movable):
 
     def close(mut self, context: PythonObject) raises:
         self.extra = PythonObject(None)
+        self.rows_cache = Python.dict()
         self.rows_take = PythonObject(None)
         var scope = self.scope
         self.scope = PythonObject(None)

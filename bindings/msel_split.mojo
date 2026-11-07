@@ -30,7 +30,7 @@ from bindings.family_common import (
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.label_input_sources import labels_series_values, labels_list_integer_storage
 from bindings.msel_common import (
-    MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
+    MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_entry_ready, msel_select_folds_plan, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
     msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr, msel_admit,
     msel_numeric_vector,
@@ -358,7 +358,10 @@ def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> Python
 
 def _select_folds(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k: Int,
                   context: PythonObject) raises -> PythonObject:
-    """`_select_folds`: each fold's (train, test) by `select_fold_i64`."""
+    """`_select_folds`: each fold's (train, test) by `select_fold_i64`, or
+    all of them in one split plan where `select_folds_i64` is connected."""
+    if msel_entry_ready("select_folds_i64", context):
+        return msel_select_folds_plan(fold_store, fold_counts, n, k, "fold_ids", context)
     var select = msel_entry("select_fold_i64", context)
     var out = Python.list()
     var counts = msel_p64(fold_counts)
@@ -647,6 +650,10 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
                     PythonObject(k), PythonObject(msel_addr(sizes)), PythonObject(0))
     _ = folds  # keep the Python object alive through the native call above
     _ = sizes  # keep the Python object alive through the native call above
+    if msel_entry_ready("select_folds_i64", context):
+        # One split plan for every fold (N051); the sizes are the folds' own
+        # bincount, so the plan's count check always holds.
+        return msel_select_folds_plan(folds, sizes, n, k, "fold_ids", context)
     var select = msel_entry("select_fold_i64", context)
     var sz = msel_p64(sizes)
     _ = sizes  # keep the Python object alive through the native call above

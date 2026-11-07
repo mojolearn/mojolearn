@@ -145,6 +145,7 @@ from bindings.hotpath_device import (
     gather_i32_binding,
     indices_overlap_i64_binding,
     select_fold_i64_binding,
+    select_folds_i64_binding,
     arange_i64_binding,
     leave_range_i64_binding,
     mask_from_indices_u8_binding,
@@ -2123,6 +2124,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
         m.def_function[fold_ids_binding]("fold_ids")
         m.def_function[select_fold_i64_binding]("select_fold_i64")
+        m.def_function[select_folds_i64_binding]("select_folds_i64")
         m.def_function[arange_i64_binding]("arange_i64")
         m.def_function[leave_range_i64_binding]("leave_range_i64")
         m.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")

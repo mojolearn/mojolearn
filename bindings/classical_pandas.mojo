@@ -5,6 +5,7 @@
 from std.memory import bitcast
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
+from bindings.device_rows_door import door_is_device_rows
 from bindings.native_buffer_owner import native_buffer_view
 from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
 from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
@@ -148,6 +149,11 @@ def _classical_admit(mut mods: NativeModules, seq: _SequentialValueTypes, mut ki
         # An exact builtin scalar is never pandas storage: skip the pandas
         # class test.
         _sequential_admit_value(mods, value, context, seq, depth)
+    elif door_is_device_rows(value, context):
+        # A model-selection fold (exact `_arena_io.DeviceRows`): its owner
+        # admitted the base and indices natively when it was made; the X
+        # check resolves it (bindings/device_rows_door.mojo).
+        return
     elif not kinds.pandas_exact(cls):
         _sequential_admit_value(mods, value, context, seq, depth)
 

@@ -7,7 +7,7 @@ _HELPERS = (
     'group_fold_assign_i32', 'indices_overlap_i64', 'leave_range_i64', 'mask_from_indices_u8',
     'msel_alloc', 'msel_free', 'msel_group_fold_perm_i32', 'msel_proba_column', 'msel_read', 'msel_scatter_rows',
     'msel_split_table_i32', 'reduce_stat', 'row_means_f64', 'row_stds_f64', 'select_fold_i64',
-    'select_mask_u8_i64', 'strat_alloc_i64', 'strat_fold_assign_i32', 'strat_group_plan_i32',
+    'select_folds_i64', 'select_mask_u8_i64', 'strat_alloc_i64', 'strat_fold_assign_i32', 'strat_group_plan_i32',
 )
 
 _SPLITTER_FIELDS = ('_default_test_size', '_folds', '_pairs', 'cv', 'cvargs', 'gap', 'max_train_size',

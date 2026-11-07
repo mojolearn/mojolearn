@@ -62,6 +62,9 @@ def test_scores_fold_order_and_fresh_clones_match_serial(data, devices, scoring)
     assert record['status'] == 'COMPLETE'
     assert record['stages'][:3] == ['validate', 'validated', 'start']
     assert record['stages'][3] == 'identity' and record['stages'][-1] == 'close'
+    # X and y reach every worker once, before the first wave; the folds then
+    # carry only their index arrays (lane ne1-b-door, N057).
+    assert record['stages'][4] == 'data' and record['stages'].count('data') == 1
     width = len(devices)
     assert record['waves'] == [min(width, 5 - start) for start in range(0, 5, width)]
     assert [row[0] for row in record['assignments']] == list(range(5))

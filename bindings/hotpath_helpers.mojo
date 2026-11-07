@@ -309,6 +309,31 @@ def select_fold_i64_binding(
     return PythonObject(n_test)
 
 
+def select_folds_i64_binding(
+    fold_addr: PythonObject, n: PythonObject, k: PythonObject, sizes_addr: PythonObject,
+    test_addrs_addr: PythonObject, train_addrs_addr: PythonObject,
+) raises -> PythonObject:
+    """`select_fold_i64` of every fold 0..k-1 in one call (lane ne1-b-door,
+    N051): fold f's rows into the host arrays whose addresses are the int64
+    words `test_addrs[f]` and `train_addrs[f]` (every address nonzero; an
+    empty side may share one scratch array). Returns -1 when every fold's
+    test count equals the int64 `sizes[f]`, else the first fold that
+    differs. The host column of the device split plan."""
+    var rows = Int(py=n)
+    var splits = Int(py=k)
+    var fa = Int(py=fold_addr)
+    var sizes = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sizes_addr))
+    var tests = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=test_addrs_addr))
+    var trains = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=train_addrs_addr))
+    var bad = -1
+    with GILReleased(Python()):
+        for f in range(splits):  # driver-loop: over folds of one split plan
+            var got = select_fold_i64(fa, rows, f, Int(tests.unsafe_load(f)), Int(trains.unsafe_load(f)))
+            if bad < 0 and got != Int(sizes.unsafe_load(f)):
+                bad = f
+    return PythonObject(bad)
+
+
 def arange_i64_binding(dst_addr: PythonObject, start: PythonObject, n: PythonObject) raises -> PythonObject:
     """`dst[i] = start + i` for i < n, int64."""
     var count = Int(py=n)

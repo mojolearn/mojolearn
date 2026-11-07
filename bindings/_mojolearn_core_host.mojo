@@ -128,6 +128,7 @@ from bindings.hotpath_helpers import (
     indices_overlap_i64_binding,
     reduce_stat_binding,
     select_fold_i64_binding,
+    select_folds_i64_binding,
     arange_i64_binding,
     leave_range_i64_binding,
     mask_from_indices_u8_binding,
@@ -1283,6 +1284,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
         module.def_function[fold_ids_binding]("fold_ids")
         module.def_function[select_fold_i64_binding]("select_fold_i64")
+        module.def_function[select_folds_i64_binding]("select_folds_i64")
         module.def_function[arange_i64_binding]("arange_i64")
         module.def_function[leave_range_i64_binding]("leave_range_i64")
         module.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
