@@ -220,7 +220,7 @@ def _upload_all(ctx: DeviceContext, srcs: List[Int], counts: List[Int]) raises -
 def _same_words(a: List[Int], b: List[Int]) -> Bool:
     if len(a) != len(b):
         return False
-    for i in range(len(a)):  # small-loop(the model's fitted arrays: a handful of words)
+    for i in range(len(a)):  # driver-loop: over the model's fitted arrays (a handful of address words)
         if a[i] != b[i]:
             return False
     return True
@@ -250,7 +250,7 @@ def fitted_resident_view(store: _StorePtr, ctx: DeviceContext, lease: Int, slot:
         raise Error("resident fitted arrays: one count per address")
     var device = ctx_cache_key(ctx)
     var bytes = 0
-    for i in range(len(counts)):  # small-loop(the model's fitted arrays: a handful of words)
+    for i in range(len(counts)):  # driver-loop: over the model's fitted arrays (a handful of address words)
         if counts[i] < 0:
             raise Error("resident fitted arrays: negative float count")
         bytes += counts[i] * 4
