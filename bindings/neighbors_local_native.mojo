@@ -771,19 +771,19 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
 
 
 def _nc_fused(binding: PythonObject, name: String, q: PythonObject, cent: PythonObject, std: PythonObject,
-              prior: PythonObject, out: PythonObject, C: Int, mode: Int, context: PythonObject) raises:
+              prior: PythonObject, dest: PythonObject, C: Int, mode: Int, context: PythonObject) raises:
     """One fused NearestCentroid session (`nc_labels` / `nc_proba`, lane
     ne3-g-svc-gp-neighbors, N327): the distance or decision matrix stays on
     the device. `std` and `prior` are only read by the decision modes; the
     caller passes live arrays for both."""
     _op(binding, name, Python.list(classical_address(q), classical_address(cent), classical_address(std),
-                                   classical_address(prior), classical_address(out)),
+                                   classical_address(prior), classical_address(dest)),
         Python.list(_i(_rows(q)), _i(_cols(q)), _i(C), _i(mode)), Python.list(), context)
     _ = q  # keep the Python object alive through the native call above
     _ = cent  # keep the Python object alive through the native call above
     _ = std  # keep the Python object alive through the native call above
     _ = prior  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
+    _ = dest  # keep the Python object alive through the native call above
 
 
 def _nc_decision_inputs(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
