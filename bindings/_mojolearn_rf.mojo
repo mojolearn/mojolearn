@@ -1712,6 +1712,23 @@ def rf_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     return _rf_regressor_fit(x_addr, y_addr, params, criterion, Int(py=tree_start))
 
 
+# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
+# fit, returned as the export descriptor the door copies into its five Arrays
+# through `forest_export`, instead of `_forest_out_trees`' one Python object
+# per node. The bytes are the same (MOJOLEARN_FOREST_EXPORT=verify compares
+# them with `forest_export_legacy`).
+def rf_classifier_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+    weights_addr: PythonObject) raises -> PythonObject:
+    return _rf_classifier_fit[True](x_addr, y_addr, params, criterion,
+                                   Int(py=weights_addr), Int(py=tree_start))
+
+
+def rf_regressor_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    return _rf_regressor_fit[True](x_addr, y_addr, params, criterion, Int(py=tree_start))
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_rf.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1781,6 +1798,8 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
+        m.def_function[rf_classifier_fit_shard_export_binding]("rf_classifier_fit_shard_export")
+        m.def_function[rf_regressor_fit_shard_export_binding]("rf_regressor_fit_shard_export")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))

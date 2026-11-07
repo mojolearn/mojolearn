@@ -617,6 +617,19 @@ def et_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     return _et_regressor_fit(x_addr, y_addr, params, Int(py=tree_start))
 
 
+# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
+# fit returned as the export descriptor the door copies through
+# `forest_export`, not one Python object per node. Same bytes.
+def et_classifier_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    return _et_classifier_fit[True](x_addr, y_addr, params, Int(py=tree_start))
+
+
+def et_regressor_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
+    return _et_regressor_fit[True](x_addr, y_addr, params, Int(py=tree_start))
+
+
 def et_classifier_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, weights_addr: PythonObject, tree_start: PythonObject) raises -> PythonObject:
     """lane sk-final: `et_classifier_fit_shard` with per-row weights."""
@@ -698,6 +711,8 @@ def build__mojolearn_trees() -> PythonObject:
         m.def_function[forest_unstage_input_gpu_binding[False]]("forest_unstage_input_gpu")
         m.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
         m.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
+        m.def_function[et_classifier_fit_shard_export_binding]("et_classifier_fit_shard_export")
+        m.def_function[et_regressor_fit_shard_export_binding]("et_regressor_fit_shard_export")
         m.def_function[et_classifier_fit_weighted_shard_binding]("et_classifier_fit_weighted_shard")
         m.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
         return m.finalize()

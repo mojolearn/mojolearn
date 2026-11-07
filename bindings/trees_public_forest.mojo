@@ -595,7 +595,9 @@ struct ForestFit(Copyable, Movable):
 
 def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, params: PythonObject,
             criterion: PythonObject, device_scan: Bool, context: PythonObject) raises -> PythonObject:
-    """One fit launch and its export (a shard fit returns its lists)."""
+    """One fit launch and its export. Every door fit, shards included, takes
+    the owned export handle (N007, ne1-a-trees: the shard fits no longer
+    return one Python object per node)."""
     var b = trees_builtins()
     var selection = _export_selection() if fit.exported else String("")
     var name = fit.name + ("_export" if fit.exported else "")
@@ -913,11 +915,11 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         _ = weights^
         return model
     if tree_start is not None:
-        if not _has(rf, "rf_classifier_fit_shard"):
+        if not _has(rf, "rf_classifier_fit_shard_export"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
         var tail = Python.list(tree_start, PythonObject(0 if not weights else weights.value().addr))
         _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
-                           ForestFit("rf_classifier_fit_shard", True, tail, False), None, rf, context)
+                           ForestFit("rf_classifier_fit_shard", True, tail, True), None, rf, context)
         _ = labels  # retain shard labels through the address-only fit
         _ = weights^
         return model
@@ -1036,10 +1038,10 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = y32^
         return model
     if tree_start is not None:
-        if not _has(rf, "rf_regressor_fit_shard"):
+        if not _has(rf, "rf_regressor_fit_shard_export"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
         _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.addr, y32.rows, 0,
-                           ForestFit("rf_regressor_fit_shard", True, Python.list(tree_start), False), None, rf, context)
+                           ForestFit("rf_regressor_fit_shard", True, Python.list(tree_start), True), None, rf, context)
         _ = y32^
         return model
     _ = _rf_fit_arrays(fields, kind, _x_for(X, Bool(_rf_entries(rf, "rf_regressor_fit")), context),
@@ -1126,10 +1128,10 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
             _ = weights^
             return model
         if tree_start is not None:
-            if not _has(et, "et_classifier_fit_shard"):
+            if not _has(et, "et_classifier_fit_shard_export"):
                 raise Error("ImportError: rebuild ExtraTrees binding for global tree-ID shards")
             _et_fit_arrays(fields, cfg, X, trees_address(codes), labels.n, k,
-                           ForestFit("et_classifier_fit_shard", False, Python.list(tree_start), False), None, et, context)
+                           ForestFit("et_classifier_fit_shard", False, Python.list(tree_start), True), None, et, context)
             _ = codes  # keep the Python object alive through the native call above
             return model
         _et_fit_arrays(fields, cfg, X, trees_address(codes), labels.n, k,
@@ -1161,10 +1163,10 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         _ = weights^
         return model
     if tree_start is not None:
-        if not _has(et, "et_regressor_fit_shard"):
+        if not _has(et, "et_regressor_fit_shard_export"):
             raise Error("ImportError: rebuild ExtraTrees binding for global tree-ID shards")
         _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0,
-                       ForestFit("et_regressor_fit_shard", False, Python.list(tree_start), False), None, et, context)
+                       ForestFit("et_regressor_fit_shard", False, Python.list(tree_start), True), None, et, context)
         _ = y32  # keep the Python object alive through the native call above
         return model
     _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0, ForestFit("et_regressor_fit", False, Python.list(), True),

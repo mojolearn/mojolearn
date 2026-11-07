@@ -507,6 +507,25 @@ def et_regressor_fit_shard_binding(
     return _et_fit[False, False, False](x_addr, y_addr, params, _index(tree_start))
 
 
+# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
+# fit returned as the export descriptor the door copies through
+# `forest_export`, not one Python object per node. Same bytes.
+def et_classifier_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_classifier_fit_shard_export_binding`."""
+    return _et_fit[True, True, False](x_addr, y_addr, params, _index(tree_start))
+
+
+def et_regressor_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_regressor_fit_shard_export_binding`."""
+    return _et_fit[False, True, False](x_addr, y_addr, params, _index(tree_start))
+
+
 def et_forest_export_binding(
     handle: PythonObject,
     offsets: PythonObject,
@@ -661,6 +680,8 @@ def build__mojolearn_trees_host() -> PythonObject:
         module.def_function[et_forest_export_release_binding]("forest_export_release")
         module.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
         module.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
+        module.def_function[et_classifier_fit_shard_export_binding]("et_classifier_fit_shard_export")
+        module.def_function[et_regressor_fit_shard_export_binding]("et_regressor_fit_shard_export")
         module.def_function[et_classifier_fit_weighted_shard_binding]("et_classifier_fit_weighted_shard")
         module.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
         module.def_function[et_regressor_fit_weighted_binding]("et_regressor_fit_weighted")

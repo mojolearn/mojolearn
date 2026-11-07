@@ -648,6 +648,30 @@ def rf_regressor_fit_shard_binding(
     )
 
 
+# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
+# fit returned as the export descriptor the door copies through
+# `forest_export`, not one Python object per node. Same bytes.
+def rf_classifier_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_classifier_fit_shard_export_binding`."""
+    return _rf_fit[True, True, False](
+        x_addr, y_addr, params, criterion, _index(weights_addr), _index(tree_start)
+    )
+
+
+def rf_regressor_fit_shard_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_shard_export_binding`."""
+    return _rf_fit[False, True, False](
+        x_addr, y_addr, params, criterion, 0, _index(tree_start)
+    )
+
+
 # ---------------------------------------------------------------------------
 # THE DATA SESSION, on the host (lane/fix-dart-host, 2026-10-02). The GPU
 # binding's `rf_data_session_open` (bindings/_mojolearn_rf.mojo, trees-apple3)
@@ -1065,6 +1089,8 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_regressor_fit_rowmajor_export_binding]("rf_regressor_fit_rowmajor_export")
         module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
+        module.def_function[rf_classifier_fit_shard_export_binding]("rf_classifier_fit_shard_export")
+        module.def_function[rf_regressor_fit_shard_export_binding]("rf_regressor_fit_shard_export")
         module.def_function[rf_forest_export_binding]("forest_export")
         module.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[rf_forest_export_release_binding]("forest_export_release")
