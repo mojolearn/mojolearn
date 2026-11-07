@@ -79,7 +79,7 @@ connect_module('array', array, ('array',))
 # Resident fold storage admits an exact native thread-local object before
 # reading its dictionary. This standard-library owner is needed even when
 # NumPy is absent; connect the consumed type once rather than importing at use.
-connect_module('_thread', _thread, ('_local',))
+connect_module('_thread', _thread, ('_local', 'LockType'))  # LockType: PCS RNG lock admission (providers/python/pcs_rng_pyapi.mojo)
 # SmallMLP item iteration over a 1-D float16 Array reads _struct.unpack
 # (bindings/small_mlp_items.mojo); without this connection it always refused.
 connect_module('_struct', _struct, ('unpack',))
@@ -96,7 +96,7 @@ connect_module('math', math, ('floor', 'ceil', 'comb'))
 connect_module('itertools', itertools, tuple(name for name in vars(itertools) if not name.startswith('_')))  # glue: fixed native iterator types
 connect_module('os', os, ('stat', 'urandom', 'getcwd'))
 connect_module('types', types, ('ModuleType', 'SimpleNamespace', 'MemberDescriptorType', 'MethodDescriptorType',
-                                'MethodType', 'BuiltinFunctionType'))
+                                'MethodType', 'BuiltinFunctionType', 'GetSetDescriptorType'))
 connect_module('warnings', warnings, ())  # warning filters are mutable native configuration, validated by their owner
 # TargetEncoder's user-cv test reads numbers.Integral through this connection
 # instead of importing the module on every fit_transform.

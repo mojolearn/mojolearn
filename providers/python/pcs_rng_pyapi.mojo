@@ -15,12 +15,87 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.sys import size_of
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
 from bindings.mode_metadata_native import _class_fields
 
 comptime PCSStatePointer = MutPointer[UInt8, MutUntrackedOrigin]
 comptime PCSNextUInt32 = def(PCSStatePointer) thin abi("C") -> UInt32
+
+
+comptime _PCS_NO_NUMPY = "ImportError: PolynomialCountSketch RandomState/None requires optional NumPy support; pass an integer seed or install mojolearn[numpy]"
+
+
+def _pcs_class(fields: PythonObject, name: String) raises -> PythonObject:
+    var cls = py_get(fields, PythonObject(name))
+    if cls is None:
+        raise Error("TypeError: PCS RNG requires NumPy's native " + name + " BitGenerator")
+    return cls
+
+
+def _pcs_connect(context: PythonObject) raises -> PythonObject:
+    """The NumPy RNG metadata record (exact module, class, descriptor and lock
+    identities), connected natively at the first non-integer seed and kept in
+    the shared family context. Importing the package never loads NumPy
+    (NUMPY_FREE_CONTRACT.md): numpy.random is read from the loaded-module
+    registry, or imported here, inside the call that needs it. The record
+    holds the same identities the former import-time hook pinned
+    (_expansion_neighbors._connect_pcs_rng), so the draw is unchanged."""
+    var sys = native_loaded_module("sys")
+    var random = py_get(sys.modules, "numpy.random")
+    if random is None:
+        try:
+            random = Python.import_module("numpy.random")
+        except error:
+            raise Error(String(_PCS_NO_NUMPY) + " (" + String(error) + ")")
+    var mtrand = py_get(sys.modules, "numpy.random.mtrand")
+    var module_type = py_type(sys)
+    if py_type(random) is not module_type or py_type(mtrand) is not module_type:
+        raise Error("TypeError: PCS RNG requires the native numpy.random modules")
+    # Module dictionaries are read directly: no module attribute hook runs.
+    var fields = _loaded_fields(random)
+    var mtrand_fields = _loaded_fields(mtrand)
+    var randomstate = py_get(mtrand_fields, "RandomState")
+    var bitgenerator = py_get(fields, "BitGenerator")
+    if randomstate is None or bitgenerator is None:
+        raise Error("TypeError: PCS RNG requires NumPy's native RandomState and BitGenerator")
+    var bitgenerators = Python.tuple(_pcs_class(fields, "MT19937"), _pcs_class(fields, "PCG64"),
+                                     _pcs_class(fields, "PCG64DXSM"), _pcs_class(fields, "Philox"),
+                                     _pcs_class(fields, "SFC64"))
+    var state_getter = py_get(_class_fields(randomstate), "_bit_generator")
+    var base_fields = _class_fields(bitgenerator)
+    var capsule_getter = py_get(base_fields, "capsule")
+    var lock_getter = py_get(base_fields, "lock")
+    var types = native_loaded_module("types")
+    var getset_type = types.GetSetDescriptorType
+    var method_type = types.MethodDescriptorType
+    if (py_type(state_getter) is not getset_type or py_type(capsule_getter) is not getset_type
+            or py_type(lock_getter) is not getset_type):
+        raise Error("TypeError: PCS RNG requires native NumPy state/capsule/lock getters")
+    var lock_type = native_loaded_module("_thread").LockType
+    var lock_fields = _class_fields(lock_type)
+    var acquire = py_get(lock_fields, "acquire")
+    var release = py_get(lock_fields, "release")
+    if py_type(acquire) is not method_type or py_type(release) is not method_type:
+        raise Error("TypeError: PCS RNG requires ordinary native lock methods")
+    var record = Python.dict()
+    py_setitem(record, "mtrand", mtrand)
+    py_setitem(record, "randomstate", randomstate)
+    py_setitem(record, "bitgenerator", bitgenerator)
+    py_setitem(record, "bitgenerators", bitgenerators)
+    py_setitem(record, "state_getter", state_getter)
+    py_setitem(record, "state_get", state_getter.__get__)
+    py_setitem(record, "capsule_getter", capsule_getter)
+    py_setitem(record, "capsule_get", capsule_getter.__get__)
+    py_setitem(record, "lock_getter", lock_getter)
+    py_setitem(record, "lock_get", lock_getter.__get__)
+    py_setitem(record, "lock_type", lock_type)
+    py_setitem(record, "acquire", acquire)
+    py_setitem(record, "release", release)
+    # A second thread that connects concurrently (the import above may run
+    # Python and switch threads) stores a record of the same identities.
+    py_setitem(context, "family_pcs_rng", record)
+    return record
 
 
 def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -31,11 +106,11 @@ def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
         return seed
     var record = py_get(context, "family_pcs_rng")
     if record is None:
-        raise Error("ImportError: PolynomialCountSketch RandomState/None requires optional NumPy support; pass an integer seed or install mojolearn[numpy]")
+        record = _pcs_connect(context)
     if py_type(record) is not b.dict:
-        raise Error("TypeError: PCS RNG admission requires its import-connected metadata")
+        raise Error("TypeError: PCS RNG admission requires its natively connected metadata")
     var state = seed
-    var module = native_loaded_module("numpy.random.mtrand")
+    var module = py_get(native_loaded_module("sys").modules, "numpy.random.mtrand")
     if module is not record["mtrand"]:
         raise Error("TypeError: NumPy RandomState module changed after native connection")
     if seed is None:
