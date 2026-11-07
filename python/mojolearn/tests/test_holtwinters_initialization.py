@@ -86,8 +86,17 @@ def test_codes_cross_the_binding_in_one_order():
 
 
 def test_parallel_driver_forwards_the_method():
-    text = (ROOT / "python/mojolearn/parallel_classical.py").read_text(encoding="utf-8")
-    assert "initialization_method=estimator.initialization_method" in text
+    # The multi-GPU Holt-Winters driver is native
+    # (bindings/parallel_forecast_native.mojo `_fit_hw`): every shard's state
+    # is the estimator's fields minus the fitted ones (`_hw_fitted`), so the
+    # constructor's initialization_method reaches each shard's fit.
+    text = (ROOT / "bindings/parallel_forecast_native.mojo").read_text(encoding="utf-8")
+    fit = text[text.index("def _fit_hw("):]
+    fit = fit[:fit.index("\ndef ")]
+    assert "var state = shard_state(fields, drop, context)" in fit
+    assert "var drop = _hw_fitted()" in fit
+    fitted = text[text.index("def _hw_fitted()"):text.index("def _fit_hw(")]
+    assert '"_data"' in fitted and "initialization_method" not in fitted
 
 
 def test_device_and_host_share_one_estimate_function():
