@@ -20,6 +20,7 @@
 #                                           under tools/box_persist_run.sh, so <results-dir> (relative to the tree)
 #                                           persists to R2 from the droplet (measurements/box-jobs/<date>/<tag>-..)
 #                                           every 10 min and on any exit, also when the droplet self-destructs
+#                                           (timing: <results-dir>/timing-ledger.jsonl, busy cores of total)
 #   tools/do_amd_steward.sh ssh <command>   one command on the droplet, as root (status and housekeeping only)
 #   tools/do_amd_steward.sh status          droplet, deadlines, service, queue
 #   tools/do_amd_steward.sh down            DELETE, verify 404, disarm, release the lock
@@ -383,5 +384,5 @@ down)
     mv "$S" "$S.down-$(date -u +%Y%m%dT%H%M%SZ)"
     say "droplet $DROPLET_ID verified gone (GET 404)"
     ;;
-*) sed -n 2,25p "$0"; exit 2 ;;
+*) sed -n 2,26p "$0"; exit 2 ;;
 esac

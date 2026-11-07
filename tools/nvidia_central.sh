@@ -27,6 +27,7 @@
 #                                                      from the pod every NVC_PERSIST_EVERY_MIN and on any exit
 #                                                      (tools/box_persist.py fetch --tag <tag>, printed on stderr).
 #                                                      --no-persist refuses unless MOJOLEARN_ALLOW_UNPERSISTED=1.
+#                                                      Timing: DIR/timing-ledger.jsonl (job time, busy cores of total).
 #                                                      --env K=V (repeatable; K upper case, V plain characters) sets
 #                                                      an environment variable for the persisted job, e.g. the
 #                                                      lane scope tools/reference_refresh.sh passes (SCOPE=all).
@@ -488,5 +489,5 @@ down)
         for f in "$NVC_HOME"/lanes/*/pod; do [ -f "$f" ] && [ "$(cat "$f")" = $k ] && rm -f "$f"; done
     done
     ;;
-*) sed -n 2,33p "$0"; exit 2 ;;
+*) sed -n 2,34p "$0"; exit 2 ;;
 esac
