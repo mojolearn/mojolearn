@@ -97,10 +97,8 @@ from providers.python.transformer_decode_pyapi import TransformerDecodeHandle
 from bindings.mamba_public_native import MambaDecodeHandle
 from bindings.native_transport import transport_c, transport_initialize
 from bindings.cross_vendor_native import cross_vendor_c
-from bindings.parallel_byte_native import ParallelByteOwner
 from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
-from bindings.parallel_causal_native import RemoteStateLifetime
 from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
@@ -1240,8 +1238,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(transport_c, "native_transport_call")
         module.def_py_c_function(cross_vendor_c, "cross_vendor_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "parallel_byte_call")
-        # Native owner record of each byte-LM multi-device trainer.
-        _ = module.add_type[ParallelByteOwner]("_ParallelByteOwner")
         module.def_py_c_function(codec_c, "native_codec_call")
         module.def_py_c_function(process_c, "native_process_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "parallel_mlp_call")
@@ -1423,7 +1419,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(operation_lock_c[4], "operation_lock_exit")
         module.def_py_c_function(operation_lock_c[5], "operation_lock_owned")
         module.def_function[neural_descriptor_info]("neural_native_dispatch_info")
-        _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         # causal_pin_entries stores PythonObject(alloc=CausalExecutionEntries(...)).
         _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
         native_identity_type(module)
