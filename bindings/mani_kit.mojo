@@ -538,6 +538,19 @@ struct MKit(Movable):
         """`did(m)` as the pool id word."""
         return Int(py=self.did(m))
 
+    def dmove(mut self, src: Int, idx: Int, dst: Int, words: List[Int]) raises:
+        """`x_decomp_dev_move` on pool ids; words = [op, count, a1, a2, a3,
+        ist, ioff, nsrc, ndst, nidx]."""
+        var ints = [src, idx, dst]
+        for i in range(len(words)):  # small-loop(params: the ten move words): 10
+            ints.append(words[i])
+        _ = self.dcall(XD_DEV_MOVE, ints)
+
+    def hmove(mut self, src: Int, idx: Int, dst: Int, words: List[Int]) raises:
+        """`x_decomp_move` on host addresses (the caller keeps the holders
+        alive)."""
+        _ = self.hcall(XD_MOVE, [src, idx, dst], words)
+
     def fn(mut self, name: String) raises -> PythonObject:
         """`self.b.<name>`: resolved (module dict read and compiled-entry
         check) once per kit, then the cached handle. The admitted binding is
@@ -1088,19 +1101,22 @@ struct MKit(Movable):
         ioff]) + radd of A for t < m."""
         var c = mk_c(a)
         var count = m * c
-        var params = mk_ints([MV_TAKE_ROWS, count, c, radd, 0, ist, ioff, mk_n(a), count, mk_n(idx)])
+        var words = [MV_TAKE_ROWS, count, c, radd, 0, ist, ioff, mk_n(a), count, mk_n(idx)]
         if count > 0 and self.use2(a, idx):
             var out = self.dout(m, c)
-            var ia = self.did(a)
-            var ii = self.did(idx)
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, device_identifier(matrix_device(out)), params)
+            var ia = self.dix(a)
+            var ii = self.dix(idx)
+            self.dmove(ia, ii, Int(py=device_identifier(matrix_device(out))), words)
             return out
         var out = mk_zeros(m, c, self.ctx)
         if count > 0:
             var pa = mk_addr(a, self.ctx)
             var pi = mk_addr(idx, self.ctx)
-            _ = family_call(self.fn("x_decomp_move"), pa, pi, mk_addr(out, self.ctx), params)
+            var po = mk_addr(out, self.ctx)
+            self.hmove(Int(py=pa), Int(py=pi), Int(py=po), words)
             _ = out  # keep the Python object alive through the native call above
+            _ = a
+            _ = idx
         return out
 
     def take_rows(mut self, a: PythonObject, idx: PythonObject) raises -> PythonObject:
@@ -1112,14 +1128,18 @@ struct MKit(Movable):
             return
         mk_writable(a)
         var n = mk_n(a)
-        var params = mk_ints([MV_FILL0, count, start, stride, 0, 0, 0, n, n, 1])
+        var words = [MV_FILL0, count, start, stride, 0, 0, 0, n, n, 1]
         if self.use1(a):
-            var ia = self.did(a)
-            var one = self.dev_one()
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, one, ia, params)
+            var ia = self.dix(a)
+            var one = Int(py=self.dev_one())
+            self.dmove(ia, one, ia, words)
             return
         var pa = mk_addr(a, self.ctx)
-        _ = family_call(self.fn("x_decomp_move"), pa, mk_addr(self.one(), self.ctx), pa, params)
+        var host_one = self.one()
+        var po = mk_addr(host_one, self.ctx)
+        self.hmove(Int(py=pa), Int(py=po), Int(py=pa), words)
+        _ = a
+        _ = host_one
 
     def reduce(mut self, a: PythonObject, op: Int) raises -> PythonObject:
         """max |A| (0), max A (1) or min A (2) as a 1 x 1 matrix."""
@@ -1143,21 +1163,22 @@ struct MKit(Movable):
         var stride = off + 1 if count == 1 else stride_in
         var idx = mk_of([Float64(off)], 1, 1, self.ctx)
         var n = mk_n(a)
-        var params = mk_ints([MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1])
+        var words = [MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1]
         if count > 0 and self.use1(a):
             var out = self.dout(1, count)
-            var ia = self.did(a)
-            var ii = self.did(idx)
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, device_identifier(matrix_device(out)), params)
+            var ia = self.dix(a)
+            var ii = self.dix(idx)
+            self.dmove(ia, ii, Int(py=device_identifier(matrix_device(out))), words)
             return out
         var out = mk_zeros(1, count, self.ctx)
         if count > 0:
             var pa = mk_addr(a, self.ctx)
             var pi = mk_addr(idx, self.ctx)
-            _ = idx  # keep the Python object alive through the native call above
-            _ = family_call(self.fn("x_decomp_move"), pa, pi, mk_addr(out, self.ctx), params)
+            var po = mk_addr(out, self.ctx)
+            self.hmove(Int(py=pa), Int(py=pi), Int(py=po), words)
             _ = out  # keep the Python object alive through the native call above
             _ = idx  # keep the Python object alive through the native call above
+            _ = a
         return out
 
     def word(mut self, a: PythonObject, i: Int) raises -> Float64:
@@ -1172,17 +1193,21 @@ struct MKit(Movable):
         if cnt == 0:
             return
         mk_writable(d)
-        var params = mk_ints([MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, mk_n(d), 1])
+        var words = [MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, mk_n(d), 1]
         if self.use2(d, v):
-            var iv = self.did(v)
-            var one = self.dev_one()
-            var id = self.did(d)
-            _ = family_call(self.fn("x_decomp_dev_move"), iv, one, id, params)
+            var iv = self.dix(v)
+            var one = Int(py=self.dev_one())
+            var id = self.dix(d)
+            self.dmove(iv, one, id, words)
             return
         var pv = mk_addr(v, self.ctx)
-        var po = mk_addr(self.one(), self.ctx)
+        var host_one = self.one()
+        var po = mk_addr(host_one, self.ctx)
         var pd = mk_addr(d, self.ctx)
-        _ = family_call(self.fn("x_decomp_move"), pv, po, pd, params)
+        self.hmove(Int(py=pv), Int(py=po), Int(py=pd), words)
+        _ = v
+        _ = d
+        _ = host_one
 
     def place_rows(mut self, d: PythonObject, v: PythonObject, row: Int) raises:
         """V (r x D.c) into rows row .. row + r - 1 of D, in place."""
@@ -1206,9 +1231,9 @@ struct MKit(Movable):
         for i in range(len(ms)):  # small-loop(ms: one Mojo move per stacked matrix): bounded by the caller
             var cnt = mk_n(ms[i])
             if cnt > 0:
-                var im = self.did(ms[i])
-                _ = family_call(self.fn("x_decomp_dev_move"), im, one, device_identifier(matrix_device(out)),
-                                mk_ints([MV_PLACE_COLS, cnt, c, c, off * c, 0, 0, cnt, rows * c, 1]))
+                var im = self.dix(ms[i])
+                self.dmove(im, Int(py=one), Int(py=device_identifier(matrix_device(out))),
+                           [MV_PLACE_COLS, cnt, c, c, off * c, 0, 0, cnt, rows * c, 1])
             off += mk_r(ms[i])
         return out
 
