@@ -42,15 +42,12 @@ ROOT = Path(__file__).resolve().parents[3]
 
 ORACLE = "arima/host/arima_oracle.mojo"
 LANES = ("arima", "arima-011", "arima-seasonal-c")
-#: lane/arima-exog (2026-09-15), declared after par-arima.
+#: lane/arima-exog (2026-09-15).
 EXOG_LANES = ("arima-exog", "arima-exog-seasonal")
-#: lane/forecast-predict-cpu-route (2026-09-19), declared last: the driver
-#: behind `parallel_forecasting.forecast_arima` / `.predict_arima`, which had
-#: no lane at all until `forecast_predict` joined the old pool's CPU route (the
-#: drivers are native since lane migrate-neural-2). Pinned here because this tuple is the arima family's
-#: CONTRACT, and a lane appearing in it without a test moving is how a family
-#: grows a member nobody checked.
-FORECAST_LANES = ("par-forecast-arima",)
+# The par-arima and par-forecast-arima lanes left the identity harness with
+# the multi-GPU verification retirement (868702642c, 2026-10-31); this tuple
+# is the arima family's CONTRACT, so a lane appearing in it without a test
+# moving is how a family grows a member nobody checked.
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -61,16 +58,14 @@ def _read(rel):
 def test_manifest_declares_the_arima_family():
     fam = host_surface.family("arima")
     assert fam["routes"] == "_mojolearn_arima"
-    assert fam["training_lanes"] == LANES + ("par-arima",) + EXOG_LANES + FORECAST_LANES
+    assert fam["training_lanes"] == LANES + EXOG_LANES
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("arima")).is_file()
     assert (ROOT / host_surface.binding_source("arima")).is_file()
     assert host_surface.routed_modules()["_mojolearn_arima"] == "_mojolearn_arima_host"
     for lane in LANES:
         assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
-    # par-arima is declared since lane/cpu-training-par-classical (2026-09-15):
-    # fit_arima's series shards run as host fits through the pool's CPU route.
-    assert "par-arima" in host_surface.covered_lanes(), "par-arima is not a covered training lane"
+    assert "par-arima" not in host_surface.covered_lanes(), "a retired par-* lane is declared again"
     assert "ARIMA" not in host_surface.no_cpu_path_sentence(), host_surface.no_cpu_path_sentence()
     assert "seasonal ARIMA" in host_surface.training_sentence()
 
