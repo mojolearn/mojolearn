@@ -21,7 +21,6 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_lookup, cres_store
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
     family_shape_repr,
@@ -124,13 +123,18 @@ def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: St
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
-def _xc_optional_entry(binding: PythonObject, name: String) raises -> PythonObject:
+def _xc_optional_entry(binding: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """The compiled resident door `name` of `binding`, or None: a binding
     that is not an exact compiled module (a host binding proxy) or that
     does not export the door keeps the per-call route."""
+    # A plain keyed read of the module's own namespace, then the same
+    # compiled-entry check as the prepare/release doors (family_entry); no
+    # neural descriptor probe and its closure (lane ne-fix-hang4, cut 3).
     if py_type(binding) is not py_type(native_loaded_module("builtins")):
         return PythonObject(None)
-    return neural_descriptor_entry(binding, name, False)
+    if not py_contains(py_fields(binding), PythonObject(name)):
+        return PythonObject(None)
+    return family_entry(binding, name, context)
 
 
 def _xc_resident(model: PythonObject, binding: PythonObject, centers_field: PythonObject, d: Int,
@@ -152,7 +156,7 @@ def _xc_resident(model: PythonObject, binding: PythonObject, centers_field: Pyth
     var held = cres_lookup(model, CRES_X_CLUSTER, binding, objects, dims)
     if held is not None:
         return held
-    var query = _xc_optional_entry(binding, "x_cluster_resident_query")
+    var query = _xc_optional_entry(binding, "x_cluster_resident_query", context)
     if query is None:
         return PythonObject(None)
     var prepare = family_entry(binding, "x_cluster_centers_prepare", context)
