@@ -1491,7 +1491,17 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
         var provider = _provider(fields, binding)
         mods.released()
         var resident = _is_resident(fields, binding, context)
-        var direct_next = next_bytes and resident and args[1] is None
+        # The greedy pick runs on the device for a ragged batch too (plan row
+        # N091): operation 6 takes the row lengths as a seventh descriptor.
+        # A binding without the provider table keeps the host pick for ragged
+        # rows (its legacy next-bytes entry takes no lengths).
+        var direct_next = next_bytes and resident and (args[1] is None or provider is not None)
+        var row_lengths = PythonObject(None)
+        if direct_next and args[1] is not None:
+            row_lengths = _i32(batch, context)
+            var lengths_out = _I32P(unsafe_from_address=Int(py=classical_address(row_lengths)))
+            for row in range(batch):  # small-loop(batch: one admitted length per row)
+                lengths_out[row] = Int32(admitted[3][row])
         var expected = batch if direct_next else batch * length * shape.vocab()
         var out = _i32(batch, context) if direct_next else (_pooled_logits(mods, fields, batch, length, shape.vocab(), context) if resident else tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context))
         var output_address = _logits_output_address(mods, out, context)
@@ -1510,6 +1520,8 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
             var addresses = Python.list(classical_address(tokens), PythonObject(output_address), classical_address(state["flags"]))
             for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three session admission buffers)
                 _ = py_call(addresses.append, 0 if Bool(py=fields["_session_open"]) else Int(py=classical_address(state[key])))
+            if row_lengths is not None:
+                _ = py_call(addresses.append, classical_address(row_lengths))
             try:
                 if provider is not None:
                     written = _native_execute(fields, binding, provider, 6 if direct_next else 2, addresses, shape, state, False, batch, length)
@@ -1534,6 +1546,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
                 written = Int(py=py_call_typed(_entry(binding, "byte_lm_logits"), Python.list(addresses[0], addresses[1], addresses[2]), Python.list(batch, length), shape.native_shape()))
                 mods.released()
         _ = tokens
+        _ = row_lengths  # keep the Python object alive through the native call above
         if written != expected:
             raise Error("RuntimeError: byte LM returned an unexpected number of logits")
         if next_bytes:
