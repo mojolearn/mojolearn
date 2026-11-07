@@ -22,10 +22,15 @@ def test_cluster_validation_enters_native_without_legacy_python_wrappers(name, m
     import mojolearn._sk_validate as validate
     calls = []
     model = getattr(ml, name)(numeric_mode='identical')
-    monkeypatch.setattr(mode.NumericModeMixin, '_bind', _poison(calls))
     for field in ('before_fit', 'before_call', 'after_fit', 'after_call'):
         monkeypatch.setattr(validate, field, _poison(calls))
     with pytest.raises(ValueError, match='Expected 2D array'):
+        model.fit(np.ones(3, dtype=np.float32))
+    assert calls == []
+    # A replaced class member on the estimator's MRO is refused by the native
+    # family descriptor check before anything runs, never called.
+    monkeypatch.setattr(mode.NumericModeMixin, '_bind', _poison(calls))
+    with pytest.raises(TypeError, match='descriptor changed after connection'):
         model.fit(np.ones(3, dtype=np.float32))
     assert calls == []
 
@@ -66,7 +71,8 @@ def test_cluster_fit_returns_finished_public_result_and_tracks_state(monkeypatch
     calls = []
     model = ml.MiniBatchKMeans(n_clusters=2, max_iter=2, batch_size=4,
                              n_init=1, random_state=7, numeric_mode='identical')
-    monkeypatch.setattr(mode.NumericModeMixin, '_bind', _poison(calls))
+    # `NumericModeMixin._bind` is not replaced here: a changed class member is
+    # refused by the native descriptor check (see the test above).
     for field in ('before_fit', 'before_call', 'after_fit', 'after_call'):
         monkeypatch.setattr(validate, field, _poison(calls))
     x = np.asarray([[0, 0], [0, 1], [8, 8], [8, 9]], dtype=np.float32)
@@ -86,7 +92,9 @@ def test_cluster_missing_context_does_not_invoke_module_hook(monkeypatch):
     fit = model.fit
     monkeypatch.delattr(attributes, '_CONTEXT')
     monkeypatch.setattr(attributes, '__getattr__', _poison(calls), raising=False)
-    with pytest.raises(TypeError, match='connected dictionary'):
+    # The module's __getattr__ hook is refused at connection, before the
+    # missing context is looked up.
+    with pytest.raises(TypeError, match='cannot invoke module attribute hooks'):
         fit(np.ones((4, 2), dtype=np.float32))
     assert calls == []
 

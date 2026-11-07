@@ -753,7 +753,11 @@ def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonO
             digest.update_text(String(cross_vendor_sliced_hash(snapshot[key])))
         py_setitem(event, "state_sha256", PythonObject(digest.hexdigest()))
         py_setitem(event, "gradient_sha256", cross_vendor_sliced_hash(row["total_bytes"]))
-    py_setitem(event, "lr_f32_hex", cross_vendor_float_word(trainer._state["config"]["lr"]))
+    # The trainer's admitted state through its native owner: `trainer._state`
+    # is a Python property (parallel_training.py), so reading it ran a Python
+    # frame inside the worker's native run.
+    var admitted = _cross_vendor_trainer(trainer, "admitted_state", c[].bi.list())
+    py_setitem(event, "lr_f32_hex", cross_vendor_float_word(admitted["config"]["lr"]))
     var losses = c[].bi.list()
     var values = cv_sequence(row["losses"], "committed losses")
     for i in range(len(values)):  # driver-loop: over logical shard loss metadata
@@ -775,7 +779,7 @@ def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonO
                 raise Error("CrossVendorMismatch: committed " + key + " differs from the configured expectation at step " + String(step))
     if py_contains(owner._checkpoint_steps, step):
         var checkpoint_start = transport_clock()
-        var state = py_call(c[].bi.dict, trainer._state)
+        var state = py_call(c[].bi.dict, admitted)
         _ = py_call(state.update, snapshot)
         var filename = PythonObject("ckpt_") + py_call(PythonObject(String(step)).zfill, 8) + PythonObject(".blm")
         var path = py_call(owner.checkpoint_dir.rstrip, "/") + PythonObject("/") + filename

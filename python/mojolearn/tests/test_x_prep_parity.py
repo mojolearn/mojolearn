@@ -163,9 +163,9 @@ def test_target_encoder_cv_categories():
         assert "got KFold" in str(error)
     else:
         raise AssertionError("TargetEncoder accepted a scikit-learn splitter object")
-    m = ml.TargetEncoder(categories=cats, cv=ml.KFold(4), smooth=2.0)
+    m = ml.TargetEncoder(categories=cats, cv=ml.model_selection.KFold(4), smooth=2.0)
     np.testing.assert_array_equal(np.asarray(m.fit_transform(X, y)),
-                                  np.asarray(ml.TargetEncoder(categories=cats, cv=list(ml.KFold(4).split(X, y)),
+                                  np.asarray(ml.TargetEncoder(categories=cats, cv=list(ml.model_selection.KFold(4).split(X, y)),
                                                               smooth=2.0).fit_transform(X, y)))
     try:
         ml.TargetEncoder(cv=[(np.arange(100), np.arange(100))]).fit_transform(X, y)

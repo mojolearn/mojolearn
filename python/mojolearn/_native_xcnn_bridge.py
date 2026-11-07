@@ -131,11 +131,8 @@ def connect():
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
         # Import setup is outside product execution; the native owner only
-        # connects already loaded native NumPy metadata.
-        try:
-            import numpy
-        except ImportError:
-            pass  # glue: scalar-only metadata operations do not require NumPy
+        # connects already loaded native NumPy metadata. Nothing imports
+        # NumPy here: `import mojolearn` stays NumPy-free.
         from ._native_classical_bridge import _state_context
         context = _state_context()
         # Shared neural metadata admission expects its native scalar tables

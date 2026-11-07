@@ -48,7 +48,11 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     }
     archive["host_archive_fitted_estimators"] = tuple(
         name for classes in formats.values() for name, cls in classes.items()  # glue: fixed fitted-state ownership metadata at import
+        # A class with no `fit` (Embedding: a layer built from its weights)
+        # has no fitted state; its public loader writes no fitted marker and
+        # the host load must restore the same fields.
         if issubclass(cls, SklearnTagsMixin) and name not in ("LinearRegression", "Ridge")
+        and callable(getattr(cls, "fit", None))
     )
     archive["host_archive_classical_formats"] = tuple(formats)
     archive.update(forest_metadata)

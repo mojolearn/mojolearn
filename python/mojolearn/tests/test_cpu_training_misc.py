@@ -152,7 +152,9 @@ def test_workflow_diffs_each_set_against_its_columns():
 def test_identity_command_runs_public_reference_probes_on_a_cpu():
     text = _read("python/mojolearn/_identity.py")
     assert "set(host_surface.public_reference_lanes()) & set(host_surface.record_covered_lanes())" in text
-    assert "l in cpu_record_lanes]" in text
+    # The CPU scope is the default scope intersected above (54663edb51
+    # renamed `cpu_record_lanes` to `default_scope`).
+    assert "lanes = [lane for lane in lanes if lane in default_scope]" in text
     host_only = host_surface.PUBLIC_HOST_ONLY_LANES
     trained = set(host_surface.public_reference_lanes()) - set(host_only)
     # `identity` replays the older bundled column; `verify` has a broader,

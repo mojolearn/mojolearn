@@ -50,6 +50,13 @@ def _raw(cls, name):
     return inspect.unwrap(getattr(cls, name))
 
 
+def _outcome(call, *args):
+    """The value, or the error class and text: a score the former path
+    refused (for example floating labels) must be refused the same way."""
+    error = _error(call, *args)
+    return error if error is not None else ("value", call(*args))
+
+
 def _error(call, *args):
     try:
         call(*args)
@@ -91,9 +98,9 @@ def test_classifier_matches_former_path(case, params):
     _same(native.predict_proba(Q), legacy.clf_predict_proba(former, Q))
     truth = y[: Q.shape[0]] if not isinstance(y, list) else y[: Q.shape[0]]
     if np.ndim(y) == 1:
-        assert native.score(Q, truth) == legacy.clf_score(former, Q, truth)
+        assert _outcome(native.score, Q, truth) == _outcome(legacy.clf_score, former, Q, truth)
         w = np.linspace(0.5, 2.0, Q.shape[0], dtype=np.float32)
-        assert native.score(Q, truth, w) == legacy.clf_score(former, Q, truth, w)
+        assert _outcome(native.score, Q, truth, w) == _outcome(legacy.clf_score, former, Q, truth, w)
 
 
 @pytest.mark.parametrize("params", PARAMS, ids=str)
@@ -145,6 +152,13 @@ REFUSED = [
 ]
 
 
+# A parameter that is not a native value (a callable here) is refused by the
+# native state admission before any Python conversion hook can run
+# (bindings/host_inference_scalars.mojo); the former path refused it with a
+# ValueError built from its repr.
+_HOOK_REFUSAL = (TypeError, "scalar model state requires native values without Python conversion hooks")
+
+
 @pytest.mark.parametrize("cls,params", REFUSED, ids=str)
 def test_refusals_keep_class_and_wording(cls, params):
     X, _, rng = _data(3)
@@ -157,6 +171,9 @@ def test_refusals_keep_class_and_wording(cls, params):
         got, want = _error(native.fit, X, y), _error(legacy.clf_fit, former, X, y)
     else:
         got, want = _error(native.fit, X, y), _error(legacy.reg_fit, former, X, y)
+    if any(callable(v) for v in params.values()):
+        assert want is not None and got == _HOOK_REFUSAL
+        return
     assert got is not None and got == want
 
 
@@ -166,6 +183,19 @@ def test_label_refusals_keep_class_and_wording(y):
     X, _, _ = _data(4)
     got = _error(mojolearn.KNeighborsClassifier().fit, X, y)
     want = _error(legacy.clf_fit, mojolearn.KNeighborsClassifier(), X, y)
+    # The row-count and continuous-target refusals now use scikit-learn's
+    # wording (check_consistent_length, check_classification_targets); the
+    # class is unchanged.
+    sklearn_wording = {
+        (40, "i"): None,
+        (39, "i"): "Found input variables with inconsistent numbers of samples: [40, 39]",
+        (40, "f"): ("Unknown label type: continuous. Maybe you are trying to fit a classifier, which "
+                    "expects discrete classes on a regression target with continuous values."),
+    }.get((len(y), y.dtype.kind)) if y.ndim == 1 else None
+    if sklearn_wording is not None:
+        assert want is not None and want[0] is ValueError
+        assert got == (ValueError, sklearn_wording)
+        return
     assert got is not None and got == want
 
 
@@ -176,11 +206,17 @@ def test_predict_refusals_keep_class_and_wording():
         native = mojolearn.KNeighborsClassifier().fit(X, y)
         former = mojolearn.KNeighborsClassifier()
         legacy.clf_fit(former, X, y)
-        native.set_params(**change)
-        former.set_params(**change)
+        # set_params is a full reset (the model is unfitted afterwards); a
+        # parameter assigned on the fitted model is what predict must refuse.
+        for name, value in change.items():
+            setattr(native, name, value)
+            setattr(former, name, value)
         assert _error(native.predict, Q) == _error(legacy.clf_predict, former, Q)
     native = mojolearn.KNeighborsClassifier().fit(X, y)
-    assert _error(native.predict, Q[:, :2]) == (ValueError, "mojolearn: X has 2 features, index has 3")
+    assert _error(native.predict, Q[:, :2]) == (
+        ValueError, "X has 2 features, but KNeighborsClassifier is expecting 3 features as input.")
+    native.set_params(n_neighbors=3)
+    assert _error(native.predict, Q)[0] is mojolearn.exceptions.NotFittedError
 
 
 def test_methods_run_as_one_native_call():

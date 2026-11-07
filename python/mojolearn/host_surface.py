@@ -3496,6 +3496,10 @@ PUBLIC_INAPPLICABLE_PREFIXES = ("par-",)
 #: why this machine cannot state it, and the command that can. The answer is
 #: never "you are missing a feature"; it is "this claim is about two devices
 #: and you have one", which is a fact about the claim, not about the install.
+# The prefix stays after the 2026-10-31 retirement so that a par-* lane name
+# (a record taken before it, a caller's --lanes) reads NOT APPLICABLE with
+# this sentence; without the sentence `inapplicable_prefix_reason` raises for
+# every such lane and tools/lane_accounting.py refuses the table.
 PUBLIC_INAPPLICABLE_PREFIX_REASONS = {
     # The shipped table keeps the retired par-* cells as history (TOMBSTONE
     # MOJOLEARN_PAR_VERIFY above); this sentence is what a user reads for them.

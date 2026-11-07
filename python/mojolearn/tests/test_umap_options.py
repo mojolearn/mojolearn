@@ -23,7 +23,9 @@ def test_accepted(kw):
     (dict(densmap=True), NotImplementedError),
     (dict(output_metric="haversine"), NotImplementedError),
     (dict(metric="hamming"), ValueError),
-    (dict(metric=lambda a, b: 0.0), ValueError),
+    # A callable metric is refused natively as a non-string, before it is
+    # called (bindings/umap_parameters_native.mojo `_string`).
+    (dict(metric=lambda a, b: 0.0), TypeError),
     (dict(metric="manhattan", metric_kwds={"p": 3}), ValueError),
     (dict(a=1.0), ValueError),
     (dict(a=-1.0, b=1.0), ValueError),

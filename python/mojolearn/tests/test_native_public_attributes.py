@@ -236,14 +236,16 @@ def test_pandas_import_after_mojolearn_keeps_opaque_get_params_leaf():
 
 
 def test_installed_subset_and_unported_paths_are_both_explicit():
-    from mojolearn import BaggingRegressor, Ridge
+    from mojolearn import BaggingRegressor, Ridge, SkewedChi2Sampler
     from mojolearn import _mode
     context = owner._CONTEXT
-    for cls in (KMeans, Cholesky):
+    # BaggingRegressor has since been connected; SkewedChi2Sampler is a
+    # public owner still pending (unconnected learned property).
+    for cls in (KMeans, Cholesky, BaggingRegressor):
         assert cls in context['plans']
         assert vars(cls)['__getattribute__'] is context['descriptor']
-    assert BaggingRegressor in context['pending']
-    assert vars(BaggingRegressor)['__getattribute__'] is vars(_mode.PublicOutputsMixin)['__getattribute__']
+    assert SkewedChi2Sampler in context['pending']
+    assert vars(SkewedChi2Sampler)['__getattribute__'] is vars(_mode.PublicOutputsMixin)['__getattribute__']
     # An existing native attribute owner retains its own descriptor/context.
     assert next(vars(base)['__getattribute__'] for base in Ridge.__mro__ if '__getattribute__' in vars(base)) is not context['descriptor']
     assert Ridge not in context['plans']

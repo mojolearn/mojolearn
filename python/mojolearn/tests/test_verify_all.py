@@ -63,13 +63,15 @@ def test_shipped_table_loads_and_is_small():
     table = vref.load_table(path)
     assert table["format"] == vref.FORMAT
     # The inventory grew from 228 to 504 lanes (4,536 fixture cells and
-    # 35,352 recorded parts). The current table is 3.39 MB uncompressed but
-    # 239 KB compressed. Keep both a proportional raw budget and a strict
-    #download-size budget; do not discard evidence to meet the older 2 MB cap.
+    # 35,352 recorded parts). It was 3.39 MB uncompressed but 239 KB
+    # compressed then; after the 0.8.66 column admissions (four columns at
+    # 84da9f145c6d plus apple at fca4c4773eff) it is 5,042,331 bytes raw and
+    # 236,248 bytes compressed. Keep both a proportional raw budget and a
+    # strict download-size budget; do not discard evidence to meet an older cap.
     import gzip
     with open(path, "rb") as source:
         payload = source.read()
-    assert len(payload) < 4_500_000, "reference table exceeds its 4.5 MB raw budget"
+    assert len(payload) < 6_000_000, "reference table exceeds its 6 MB raw budget"
     assert len(gzip.compress(payload, mtime=0)) < 512_000, "reference table exceeds its 512 KB compressed budget"
     assert table["cells"], "the shipped table carries no cell"
     for rec in table["records"]:
@@ -968,17 +970,38 @@ def test_a_lane_the_run_already_executed_is_not_smoked_again():
     """A lane the run RAN is not left with nothing -- its result is kept in
     `ran_state` -- so fitting it twice more would buy a weaker version of what
     the run already has. Explicitly selected diagnostics should not incur
-    another two fits when --smoke is also selected."""
+    another two fits when --smoke is also selected.
+
+    The harness has had no par-* lane since multi-GPU verification was retired
+    (2026-10-31), so the selection is shown on a small harness: two NOT
+    APPLICABLE lanes with a CPU route, one without, one exposed lane."""
+    class Harness:
+        LANES = {"ols": None, "par-forest": None, "par-mlp": None, "par-no-cpu": None}
+
+    class Surface:
+        @staticmethod
+        def covered_lanes():
+            return ["ols", "par-forest", "par-mlp"]
+
+    na = dict(status=va.LANE_NOT_APPLICABLE, reason="claim requires two devices", exposed=True)
+    exposure = {"ols": dict(status="EXPOSED", reason=None, exposed=True),
+                "par-forest": na, "par-mlp": na, "par-no-cpu": na}
+    none_run = va.smokeable_lanes(Harness, Surface, exposure, "cpu", run_lanes=[])
+    assert none_run == ["par-forest", "par-mlp"], (
+        "a CPU box smokes the lanes it can run but cannot judge, and only those "
+        "with a CPU route")
+    assert va.smokeable_lanes(Harness, Surface, exposure, "apple", run_lanes=[]) == [
+        "par-forest", "par-mlp", "par-no-cpu"]
+    assert va.smokeable_lanes(Harness, Surface, exposure, "cpu", run_lanes=["par-forest"]) == ["par-mlp"]
+    already = va.smokeable_lanes(Harness, Surface, exposure, "cpu", run_lanes=none_run)
+    assert already == [], "a lane the run executed was smoked a second time"
+    # The shipped harness: whatever a CPU box could smoke, a run that already
+    # executed it smokes nothing more.
     surface = va.host_surface()
     harness = va.load_harness()
-    exposure = surface.lane_exposure(list(harness.LANES), "cpu")
-    none_run = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=[])
-    assert none_run, "a CPU box has par-* lanes it can run but cannot judge"
-    assert all(l.startswith("par-") for l in none_run)
-    assert set(none_run) <= set(surface.covered_lanes()), (
-        "a lane with no CPU route cannot be smoked on a CPU box either")
-    already = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=none_run)
-    assert already == [], "a lane the run executed was smoked a second time"
+    real = surface.lane_exposure(list(harness.LANES), "cpu")
+    candidates = va.smokeable_lanes(harness, surface, real, "cpu", run_lanes=[])
+    assert va.smokeable_lanes(harness, surface, real, "cpu", run_lanes=candidates) == []
 
 
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():

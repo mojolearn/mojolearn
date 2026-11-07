@@ -79,14 +79,16 @@ def test_token_batch_prefetch_is_ordered_bounded_and_propagates(monkeypatch, tmp
         with pytest.raises(ValueError):
             list(batches.prefetch(args[0], args[1], depth=args[2]))
 
-    original = batches.ids
-    def fail_at_five(step):
-        if step == 5:
-            raise RuntimeError('prefetch-step-five')
-        return original(step)
-    monkeypatch.setattr(batches, 'ids', fail_at_five)
-    with pytest.raises(RuntimeError, match='prefetch-step-five'):
+    # The native prefetch reads batches through its own ids operation; an
+    # instance-level Python override is refused by name, never called.
+    calls = []
+    def overridden(step):
+        calls.append(step)
+        raise RuntimeError('prefetch-step-five')
+    monkeypatch.setattr(batches, 'ids', overridden)
+    with pytest.raises(TypeError, match='cannot call an overridden Python ids method'):
         list(batches.prefetch(3, 7, depth=2))
+    assert calls == []
 
 
 @pytest.mark.parametrize('shard_rows', [1, 3, 20])
