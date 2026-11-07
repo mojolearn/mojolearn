@@ -418,6 +418,17 @@ def linear_backward_dev_binding(handles: PythonObject, params: PythonObject) rai
     return PythonObject(count)
 
 
+def _ce_row_ptr(row_addr: PythonObject, reduction: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+    """The per-row loss buffer. Address 0 is accepted when `reduction` is
+    SUM or MEAN (lane ne3-c-blocks-embedding, row N118): the caller has no
+    use for the rows, so the drivers skip their download; under NONE the
+    rows are the result and a null address is refused as before."""
+    var address = Int(py=row_addr)
+    if address == 0 and reduction != 0:
+        return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+    return _f32_ptr(address)
+
+
 def ce_loss_dev_binding(
     loss_addr: PythonObject,
     row_addr: PythonObject,
@@ -434,12 +445,12 @@ def ce_loss_dev_binding(
         raise Error("ce_loss_dev: params must contain 7 values, got " + String(len(params)))
     var hs = _handles(handles, 2, "ce_loss_dev")
     var lp = _f32_ptr(Int(py=loss_addr))
-    var rp = _f32_ptr(Int(py=row_addr))
+    var reduction = Int(py=params[3])
+    var rp = _ce_row_ptr(row_addr, reduction)
     var tp = _i32_ptr(Int(py=targets_addr))
     var n_rows = Int(py=params[0])
     var vocab = Int(py=params[1])
     var ignore_index = Int(py=params[2])
-    var reduction = Int(py=params[3])
     var num_items = Int(py=params[4])
     var want_grad = Int(py=params[5])
     var label_smoothing = Float32(Float64(py=params[6]))
@@ -487,8 +498,10 @@ def ce_loss_binding(
         `loss_addr`     1 float32, written when `reduction != 0`; left +0.0
                         under `REDUCTION_NONE`, where the certified forward
                         returns before seam L13
-        `row_addr`      N float32, the per-row loss, written on every call.
-                        The only output under `REDUCTION_NONE`
+        `row_addr`      N float32, the per-row loss, written on every call
+                        that names one. The only output under
+                        `REDUCTION_NONE`; under SUM or MEAN it may be 0
+                        (no rows are downloaded)
         `dlogits_addr`  N * V float32, written only when `want_grad != 0`.
                         May be a one-element buffer otherwise, but NEVER 0:
                         `_f32_ptr` refuses a null address
@@ -509,14 +522,14 @@ def ce_loss_binding(
             "ce_loss: params must contain 7 values, got " + String(len(params))
         )
     var lp = _f32_ptr(Int(py=loss_addr))
-    var rp = _f32_ptr(Int(py=row_addr))
+    var reduction = Int(py=params[3])
+    var rp = _ce_row_ptr(row_addr, reduction)
     var dp = _f32_ptr(Int(py=dlogits_addr))
     var xp = _f32_ptr(Int(py=logits_addr))
     var tp = _i32_ptr(Int(py=targets_addr))
     var n_rows = Int(py=params[0])
     var vocab = Int(py=params[1])
     var ignore_index = Int(py=params[2])
-    var reduction = Int(py=params[3])
     var num_items = Int(py=params[4])
     var want_grad = Int(py=params[5])
     var label_smoothing = Float32(Float64(py=params[6]))

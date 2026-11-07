@@ -232,8 +232,9 @@ def ce_loss_host_into(
     count = st.count
     if want_grad != 0:
         ce_backward_oracle(st, targets, cfg)
-    for i in range(n_rows):
-        rp[i] = st.row[i]
+    if Int(rp) != 0:  # row N118: a null row buffer (SUM or MEAN) is not written
+        for i in range(n_rows):
+            rp[i] = st.row[i]
     if reduction != REDUCTION_NONE:
         lp[0] = st.loss[0]
     else:
