@@ -1161,10 +1161,17 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
                 py_setitem(block_fields, "theta_last_", result[4])
             return result[0]
     elif operation != "setstate":
-        var fields = neural_block_fields(mods, values[0], context)
-        var kind = String(fields["_native_kind"])
-        if operation == "allocate":
-            _mamba_scalar(mods, values[1], "batch_size", context)
+        # N191: forward and step admit the block once, in mamba3_forward,
+        # whose neural_block_snapshot_prepared runs this same
+        # neural_block_fields before anything else (same refusal, same type
+        # and message); admitting it here as well read every block field twice
+        # per call (per token when stepping).
+        if (operation != "forward_public" and operation != "step_public"
+                and operation != "forward" and operation != "step"):
+            var fields = neural_block_fields(mods, values[0], context)
+            var kind = String(fields["_native_kind"])
+            if operation == "allocate":
+                _mamba_scalar(mods, values[1], "batch_size", context)
     if operation == "forward_public" or operation == "step_public":
         var step = operation == "step_public"
         var lengths = PythonObject(None)

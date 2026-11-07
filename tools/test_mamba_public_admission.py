@@ -115,3 +115,16 @@ def test_owned_weight_revalidation_admits_plan_and_finished_record():
     assert 'py_setattr(plan,' not in body
     assert 'return neural_block_fields(mods, checked, context)["_w"]' in body
     assert 'checked.__dict__' not in body
+
+
+def test_forward_and_step_admit_the_block_once():
+    # N191: the dispatcher's generic block admission skips the four forward /
+    # step operations, whose mamba3_forward admits the block first itself.
+    door = NATIVE.split('elif operation != "setstate":')[1].split('if operation == "forward_public" or operation == "step_public":')[0]
+    for name in ("forward_public", "step_public", "forward", "step"):
+        assert f'operation != "{name}"' in door
+    assert door.index('operation != "step"') < door.index("neural_block_fields(mods, values[0], context)")
+    forward = NATIVE.split("def mamba3_forward(")[1].split("def mamba3_allocate(")[0]
+    assert forward.index("neural_block_snapshot_prepared(mods, block, context)") < forward.index("_mamba3_forward_captured(")
+    prepared = (ROOT / "bindings/neural_block_public.mojo").read_text().split("def neural_block_snapshot_prepared(")[1]
+    assert prepared.split("\n")[2].strip() == "var live = neural_block_fields(mods, block, context)"
