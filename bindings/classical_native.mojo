@@ -9,7 +9,7 @@ from bindings.classical_ridge import classical_ridge_fit, classical_ridge_parame
 from bindings.classical_ols import classical_ols_fit
 from bindings.classical_score import classical_linear_score
 from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_names
-from bindings.classical_attributes import classical_check_layout, classical_getattribute, classical_connect_numpy
+from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.host_archive_native import host_archive_build
@@ -264,7 +264,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var names = py_call(b.list, classical_parameter_names(ridge))
             return names.steal_data()
         if not class_operation:
-            _ = classical_check_layout(call, model, context)
+            _ = classical_check_layout_call(call, model, context)
         if operation == "getattribute":
             var attribute = classical_getattribute(call, model, args[0], context)
             return attribute.steal_data()

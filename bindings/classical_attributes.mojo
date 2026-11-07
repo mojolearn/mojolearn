@@ -51,10 +51,10 @@ def _public_plan(model: PythonObject, context: PythonObject) raises -> PythonObj
 def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     # Callers without an operation handle keep their own module view.
     var mods = NativeModules()
-    _ = classical_check_layout(mods, model, context)
+    _ = classical_check_layout_plan(mods, model, context)
 
 
-def classical_check_layout(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
+def classical_check_layout_plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
     # Returns the connected public plan it admitted (None when no installer
     # metadata exists), so classical_getattribute does not resolve it again.
     # Existing private-owner callers have no installer metadata. Once public
@@ -257,16 +257,20 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     var mods = NativeModules()
     var plan = PythonObject(None)
     if not layout_checked:
-        plan = classical_check_layout(mods, model, context)
+        plan = classical_check_layout_plan(mods, model, context)
     return _classical_getattribute_impl(mods, model, name, context, plan)
 
 
-def classical_check_layout(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
+def classical_check_layout_call(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Named apart from the two-argument check and the module-view check
+    # (ne-fix-hang2): the three were one overload set differing by return
+    # type, each calling another member; the host-group compiler hang is
+    # suspected there, so no member of the set calls a sibling by overload.
     # The door's one layout check (ne1-e-admitted-call, row N259): the plan it
     # admitted is kept on the call, so a later read in the same call neither
     # re-checks the class and instance keys nor resolves the plan again.
     if not call.layout_checked:
-        call.layout_plan = classical_check_layout(call.modules, model, context)
+        call.layout_plan = classical_check_layout_plan(call.modules, model, context)
         call.layout_checked = True
     return call.layout_plan
 
@@ -274,7 +278,7 @@ def classical_check_layout(mut call: AdmittedCall, model: PythonObject, context:
 def classical_getattribute(mut call: AdmittedCall, model: PythonObject, name: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     # The door's admission record: its module view and its admitted plan.
-    var plan = classical_check_layout(call, model, context)
+    var plan = classical_check_layout_call(call, model, context)
     return _classical_getattribute_impl(call.modules, model, name, context, plan)
 
 
