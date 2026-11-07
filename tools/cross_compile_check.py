@@ -10,11 +10,12 @@ GPU box (2026-09-25).
     python3 tools/cross_compile_check.py --ref v0.8.22 --list-json plan.json   # the job list only
     python3 tools/cross_compile_check.py --summarize results/ --plan plan.json  # merge job results
 
-NOT RUN BY THE RELEASE since 2026-10-13 (Andrew): GitHub's free runners have no
-GPU, so this only catches NVIDIA/AMD-only compile errors and never checks bits;
-the release's own NVIDIA/AMD build legs hit the same compile error within
-minutes on a $1-4/h box, so the extra step and wait per release aren't worth
-it. The release does not run it; this stays a manual tool.
+THE RELEASE RUNS IT ON GITHUB (tools/release.py step cross-compile), beside
+the Linux builds since 2026-11-07: they compile the same sources for the same
+targets, so linux-builds does not wait for it; linux-wait does, so a FAIL still
+stops the Linux pipeline before anything is packed, rented or published. It
+adds a per-binding name on a compile error and STALLED (below). No GPU, never
+bits.
 
 ON GITHUB, BY HAND. .github/workflows/cross-compile-check.yml runs the
 same selection (--list-json, one source of truth) and then one standard
