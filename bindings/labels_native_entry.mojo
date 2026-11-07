@@ -11,6 +11,8 @@
 #                                                             kind, sorted union)
 #   LABELS_OP_SCORE_FROM_CODES (y, classes, codes, w, mode) -> accuracy (float)
 #   LABELS_OP_DECODE           (classes, codes)           -> labels
+#   LABELS_OP_CLASS_WEIGHT_ROWS (class_weight, classes, int32 codes, x_trees entries)
+#                                                         -> float32 row weights or None
 #
 # `kind` of ENCODE is LABELS_KIND_ORDER_RULE (0): the classes under the ORDER
 # RULE of python/mojolearn/_labels.py (Python label objects, sorted) and one
@@ -31,12 +33,14 @@ from bindings.py_balanced import py_type
 from bindings.classical_error_boundary import classical_python_error
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import (
-    classical_encode_labels, classical_decode_labels, classical_union_encode, classical_score_from_codes)
+    classical_encode_labels, classical_decode_labels, classical_union_encode, classical_score_from_codes,
+    labels_class_weight_rows, ClassicalLabels)
 
 comptime LABELS_OP_ENCODE = 0
 comptime LABELS_OP_UNION_ENCODE = 1
 comptime LABELS_OP_SCORE_FROM_CODES = 2
 comptime LABELS_OP_DECODE = 3
+comptime LABELS_OP_CLASS_WEIGHT_ROWS = 4
 
 comptime LABELS_KIND_ORDER_RULE = 0
 
@@ -53,6 +57,12 @@ def _labels_operation(op: Int, args: PythonObject, context: PythonObject) raises
         return PythonObject(classical_score_from_codes(args[0], args[1], args[2], args[3], args[4], context))
     if op == LABELS_OP_DECODE:
         return classical_decode_labels(args[0], args[1], context)
+    if op == LABELS_OP_CLASS_WEIGHT_ROWS:
+        # `_class_weights._class_weight_rows` on the x_trees binding: the
+        # counts, the k weight checks and the per-row gather in one call
+        # (the twin LogisticRegression's owner already calls).
+        var codes = args[2]
+        return labels_class_weight_rows(args[0], ClassicalLabels(args[1], codes, Int(py=codes.size)), args[3], context)
     raise Error("TypeError: mojolearn: unknown label operation")
 
 

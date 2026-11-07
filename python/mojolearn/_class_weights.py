@@ -32,6 +32,17 @@ def _class_weight_rows(class_weight, classes, codes, xbind=None):
     """
     if class_weight is None:
         return None
+    if (xbind is not None and isinstance(codes, Array) and codes.dtype == "<i4" and codes.ndim == 1
+            and type(classes) is list):
+        # Lane ne1-h-labels (N446): the counts, the k weight checks and the
+        # per-row gather in ONE native call (bindings/classical_labels.mojo
+        # `labels_class_weight_rows`, the twin the LogisticRegression owner
+        # calls); the shell only names the binding's two entries.
+        from ._native_labels_bridge import labels_entry, LABELS_OP_CLASS_WEIGHT_ROWS
+        entry, context = labels_entry()
+        table = {"x_trees_code_counts": xbind.x_trees_code_counts,
+                 "x_trees_class_rows": xbind.x_trees_class_rows}
+        return entry(LABELS_OP_CLASS_WEIGHT_ROWS, (class_weight, classes, codes._as_c(), table), context)
     from ._buffer import _native
     if not isinstance(codes, Array):
         codes = Array.from_list(list(codes), "<i8")
