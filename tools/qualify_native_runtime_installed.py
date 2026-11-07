@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import tempfile
 import sys
+import threading
 import time
 import types
 import xml.etree.ElementTree as ET
@@ -1020,13 +1021,39 @@ def partial_junit(progress, destination, stopped=None):
     return junit_summary(destination)
 
 
-def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, poll=5.0):
+def _reaped(process, usage, block=False):
+    """Popen.poll (or wait, when BLOCK) that also keeps the finished child's peak RSS in USAGE
+    (os.wait4: the worker's own resource usage, so units running side by side are measured apart).
+    True once the child has exited."""
+    if process.returncode is not None:
+        return True
+    if usage is None or not hasattr(os, "wait4"):
+        if block:
+            process.wait()
+            return True
+        return process.poll() is not None
+    try:
+        pid, status, rusage = os.wait4(process.pid, 0 if block else os.WNOHANG)
+    except ChildProcessError:
+        return process.poll() is not None
+    if pid == 0:
+        return False
+    process.returncode = os.waitstatus_to_exitcode(status)
+    # ru_maxrss is bytes on macOS and KiB on Linux
+    usage["peak_rss_bytes"] = int(rusage.ru_maxrss) * (1 if sys.platform == "darwin" else 1024)
+    return True
+
+
+def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, poll=1.0, usage=None):
     """Run the worker; stop it when the whole run exceeds run_timeout or no test event has been
-    written for test_timeout seconds (one test running too long). Returns (exit, stop, elapsed)."""
+    written for test_timeout seconds (one test running too long). Returns (exit, stop, elapsed).
+    USAGE (a dict), when given, receives the worker's peak_rss_bytes."""
+    # poll was 5 s through 0.8.66: every unit's seconds were rounded up to the next 5 s step
+    # (0.8.66 gate-apple: 73 units, 80.1 s, 250.3 s, ...), about 3 minutes of a serial run.
     started = time.monotonic()
     process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
     last, size, stop = started, -1, None
-    while process.poll() is None:
+    while not _reaped(process, usage):
         time.sleep(poll)
         now = time.monotonic()
         current = Path(progress).stat().st_size if Path(progress).exists() else 0
@@ -1038,7 +1065,7 @@ def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, 
             stop = dict(kind="test", budget_s=test_timeout)
         if stop:
             process.kill()
-            process.wait()
+            _reaped(process, usage, block=True)
             break
     elapsed = round(time.monotonic() - started, 1)
     if stop:
@@ -1062,21 +1089,109 @@ def unit_status(qualifier_status):
         qualifier_status, "failed")
 
 
+#: PARALLEL UNITS (Andrew, 2026-11-07: tests split across every core; a host at one busy core is a
+#: defect). The 0.8.66 gate-apple ran its 73 units one after another: 63 units in 40 min, one Python
+#: process at 93 % CPU on a 10-core Mac at 25 % busy, and the same serial loop ran on the rented NVIDIA
+#: and AMD boxes. The units are independent (own run dir, request.json, work dir, junit and receipt) and
+#: the full suite already runs these files under pytest-xdist on 10 workers on that Mac, so per-unit mode
+#: runs WORKERS units at once: the host's cores (affinity and cgroup quota), at most one per
+#: UNIT_MEMORY_BYTES of free memory; --jobs or MOJOLEARN_QUALIFY_JOBS overrides.
+QUALIFY_JOBS_ENV = "MOJOLEARN_QUALIFY_JOBS"
+#: Memory one unit is assumed to take until a unit of this run has finished and been measured (the
+#: receipts carry no peak RSS); afterwards the largest measured peak RSS gates each start.
+UNIT_MEMORY_BYTES = 3 * 2**29          # 1.5 GiB
+#: The busy-cores sample period (every report states busy cores of total).
+BUSY_EVERY_S = 60
+
+
+def host_cores():
+    """The cores this process may use: affinity and cgroup quota (tools/release_measurement_smoke.py)."""
+    import release_measurement_smoke as smoke
+    return smoke.box_cores()
+
+
+def unit_workers(count, *, jobs=None, env=None, cores=None, free=None, per_unit=UNIT_MEMORY_BYTES):
+    """(workers, why): how many of COUNT units run at once. JOBS (--jobs), else MOJOLEARN_QUALIFY_JOBS,
+    else CORES capped by FREE bytes // PER_UNIT; never more than COUNT, never under 1."""
+    env = os.environ if env is None else env
+    chosen = jobs or (env.get(QUALIFY_JOBS_ENV) or "").strip()
+    if chosen:
+        require(str(chosen).isdigit() and int(chosen) >= 1, QUALIFY_JOBS_ENV + " must be a positive integer")
+        return max(1, min(int(chosen), count)), ("--jobs %s" % chosen if jobs else "%s=%s" % (QUALIFY_JOBS_ENV, chosen))
+    cores = cores or host_cores()
+    workers, why = cores, "%d core(s)" % cores
+    if free is not None and free // per_unit < workers:
+        workers = max(1, int(free // per_unit))
+        why += ", capped by %.1f GiB free at %.1f GiB per unit" % (free / 2**30, per_unit / 2**30)
+    return max(1, min(workers, count)), why
+
+
+def busy_cores_sample(window=5.0):
+    """Busy cores of the whole host now: /proc/stat over WINDOW seconds on Linux; elsewhere (macOS) the
+    summed %CPU of every process from ps. None when neither can be read."""
+    import release_measurement_smoke as smoke
+    before = smoke.cpu_jiffies()
+    if before is not None:
+        time.sleep(window)
+        return smoke.busy_cores(before, smoke.cpu_jiffies(), os.cpu_count() or 1)
+    try:
+        listing = subprocess.run(["ps", "-A", "-o", "%cpu="], capture_output=True, text=True, timeout=30).stdout
+        return round(sum(float(value) for value in listing.split()) / 100.0, 1)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+class BusySampler(threading.Thread):
+    """Prints `QUALIFY busy cores=<b> of <total> running=<units> at <s>s` every EVERY seconds."""
+
+    def __init__(self, total, running, *, every=BUSY_EVERY_S, sample=busy_cores_sample, say=print):
+        super().__init__(daemon=True)
+        self.total, self.running, self.every, self.sample, self.say = total, running, every, sample, say
+        self.stopped, self.samples, self.t0 = threading.Event(), [], time.monotonic()
+
+    def run(self):
+        while not self.stopped.wait(self.every):
+            busy = self.sample()
+            at = round(time.monotonic() - self.t0)
+            self.samples.append(dict(at_s=at, busy=busy, of=self.total, running=self.running()))
+            self.say("QUALIFY busy cores=%s of %d running=%d at %ds" % (busy, self.total, self.running(), at),
+                     flush=True)
+
+    def stop(self):
+        self.stopped.set()
+        self.join(timeout=30)
+
+
 def run_units(args, selected, *, out, tests, python, env, payload, test_commit, clock=time.monotonic,
-              bounded=None):
-    """Run each selected whole file as its own bounded worker (qualify/runs/<stem>/) and write its unit
-    receipt as soon as it ends. A unit's budget is the plan's (3x its last seconds, at least 120 s),
-    clipped to what the outer --timeout leaves; a unit over its budget, or never started because the
-    outer cap ran out, is a FAILED receipt naming the unit. Returns [{unit, status, seconds, reason}]."""
+              bounded=None, available=None, cores=None, sample=None, admit_poll=5.0):
+    """Run each selected whole file as its own bounded worker (qualify/runs/<stem>/), WORKERS at once
+    (unit_workers), heaviest budget first, and write its unit receipt as soon as it ends. A unit's budget
+    is the plan's (3x its last seconds, at least 120 s), clipped to what the outer --timeout leaves when it
+    starts; a unit over its budget, or never started because the outer cap ran out, is a FAILED receipt
+    naming the unit. A unit starts only while the free memory holds one more unit (the largest peak RSS
+    measured so far, else UNIT_MEMORY_BYTES) or when none is running. Returns
+    [{unit, status, seconds, reason}] in SELECTED order."""
     import runtime_qualifier_units as units
     bounded = bounded or run_bounded
+    if available is None:
+        import mac_slot
+        available = mac_slot.available_bytes
     plan = json.loads(Path(args.unit_plan).read_text())
     require(plan.get("schema") == units.PLAN_SCHEMA, "not a runtime unit plan")
     planned = {row["unit"]: row for row in plan["units"] if row.get("decision") == "run"}
     require(set(selected) == set(planned), "unit plan and selected files differ")
     units_dir, store = Path(plan["units_dir"]), plan.get("store")
-    started, results = clock(), []
-    for name in selected:
+    # heaviest first (longest-processing-time order): the long units start at once, the short ones fill in
+    order = sorted(selected, key=lambda name: -int(planned[name]["budget_s"]))
+    total = cores or host_cores()
+    workers, why = unit_workers(len(order), jobs=getattr(args, "jobs", None), cores=total, free=available())
+    print("QUALIFY units=%d workers=%d of %d core(s) (%s); heaviest first, budget sum %d s" % (
+        len(order), workers, total, why, sum(int(planned[name]["budget_s"]) for name in order)), flush=True)
+    lock = threading.Lock()
+    pending, results, running, peaks, errors = list(order), {}, [0], [], []
+    started = clock()
+
+    def one(name):
         entry = planned[name]
         unit_out = out / units.RUNS_DIR / units.stem(name)
         (unit_out / "work").mkdir(parents=True)
@@ -1084,12 +1199,14 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
                        test_commit=test_commit, test_nodes=None, vendor=args.vendor,
                        numeric_mode=args.numeric_mode, generation_device=env["MOJOLEARN_GENERATION_DEVICE"])
         (unit_out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
-        remaining = int(args.timeout - (clock() - started))
+        with lock:
+            remaining = int(args.timeout - (clock() - started))
         budget = min(int(entry["budget_s"]), remaining)
         common = dict(unit=name, vendor=plan["vendor"], backend=args.vendor, device=plan["device_class"],
                       budget_s=budget, wheels=plan["wheels"], source_commit=plan["source_commit"],
                       test_commit=test_commit, closure=entry.get("closure"),
                       run=unit_out.relative_to(out.parent).as_posix())
+        usage = {}
         if budget < 1:
             receipt = units.unit_receipt(status="failed", seconds=0, scope=None, cases=0, stopped="not-started",
                                          reason=f"unit {name} not started: the whole-run budget of "
@@ -1100,7 +1217,7 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
                 worker_exit, stop, elapsed = bounded(
                     [str(python), str(out / "controller.py"), "--worker", str(unit_out / "request.json")],
                     cwd=unit_out / "work", env=env, log=log, progress=unit_out / PROGRESS,
-                    run_timeout=budget, test_timeout=min(args.test_timeout, budget))
+                    run_timeout=budget, test_timeout=min(args.test_timeout, budget), usage=usage)
             installed_path = unit_out / "installed-modules.json"
             installed = json.loads(installed_path.read_text()) if installed_path.is_file() else {}
             junit_path = unit_out / "tests.xml"
@@ -1133,11 +1250,56 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
         receipt = units.put_receipt(units_dir, receipt, junit)
         if store:
             units.store_receipt(store, receipt, junit)
-        print("UNIT %s %s %.1fs%s" % (name, receipt["status"], receipt["seconds"],
-                                      (" " + receipt["reason"]) if receipt["reason"] else ""), flush=True)
-        results.append(dict(unit=name, status=receipt["status"], seconds=receipt["seconds"],
-                            reason=receipt["reason"]))
-    return results
+        with lock:
+            print("UNIT %s %s %.1fs%s" % (name, receipt["status"], receipt["seconds"],
+                                          (" " + receipt["reason"]) if receipt["reason"] else ""), flush=True)
+            if usage.get("peak_rss_bytes"):
+                peaks.append(usage["peak_rss_bytes"])
+                print("QUALIFY unit-memory %s peak_rss_mib=%d" % (name, usage["peak_rss_bytes"] // 2**20),
+                      flush=True)
+            results[name] = dict(unit=name, status=receipt["status"], seconds=receipt["seconds"],
+                                 reason=receipt["reason"])
+
+    def take():
+        """The next unit to start, or None when none is left (or a unit raised)."""
+        while True:
+            with lock:
+                if not pending or errors:
+                    return None
+                need = max(peaks) if peaks else UNIT_MEMORY_BYTES
+                free = available() if running[0] else None
+                if free is None or free >= need:
+                    running[0] += 1
+                    return pending.pop(0)
+            time.sleep(admit_poll)
+
+    def lane():
+        while True:
+            name = take()
+            if name is None:
+                return
+            try:
+                one(name)
+            except BaseException as error:  # noqa: BLE001 - re-raised on the calling thread below
+                with lock:
+                    errors.append(error)
+            finally:
+                with lock:
+                    running[0] -= 1
+
+    busy = BusySampler(total, lambda: running[0], **(dict(sample=sample) if sample else {}))
+    busy.start()
+    lanes = [threading.Thread(target=lane, name="qualify-unit-%d" % k, daemon=True) for k in range(workers)]
+    try:
+        for thread in lanes:
+            thread.start()
+        for thread in lanes:
+            thread.join()
+    finally:
+        busy.stop()
+    if errors:
+        raise errors[0]
+    return [results[name] for name in selected]
 
 
 def freeze_committed_tests(git_root, revision, destination):
@@ -1226,6 +1388,9 @@ def main():
     parser.add_argument("--unit-plan", type=Path,
                         help="per-unit mode: the JSON plan tools/release_runtime_installed.py writes (budgets, "
                              "closures, units dir, unit store); --timeout stays the outer cap")
+    parser.add_argument("--jobs", type=int,
+                        help="per-unit mode: units run at once (default: MOJOLEARN_QUALIFY_JOBS, else the "
+                             "host's cores, capped by free memory)")
     args = parser.parse_args()
     require(args.unit_plan is None or not args.test_node, "per-unit mode selects whole files")
     selected = selected_files(args.test_file, args.test_node)
