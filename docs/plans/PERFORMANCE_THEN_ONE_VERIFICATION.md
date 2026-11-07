@@ -246,3 +246,18 @@ Compile state: every GPU binding compiles on sm_89, sm_80 and gfx942 (GitHub cro
 Linux release build of e289f32355 compiled all eleven merged shards (three device, eight CPU) and assembled; macOS
 development build in progress on the Mac. Compiler stop without a diagnostic in the model selection group: fixed by
 keeping the estimator clone recursion on PythonObject results (cause not isolated; a standalone reproducer compiles).
+
+## The release order (Andrew, 2026-11-07): everything cheap before anything rented
+
+1. Every lane merges into one integration branch. It compiles once on every target (GitHub cross-compile for sm_89,
+   sm_80 and gfx942; the macOS development build for Apple and the host sets). Compile is the merge gate for main.
+2. The full suite runs from that build on the Mac (parallel, durations recorded); failures go to fix lanes, then main
+   fast-forwards to the integration head.
+3. `tools/release.py` then runs its cheap steps first: freeze, the identity-at-freeze metadata check, the rehearsal
+   (wheel audit, docs facts, extension lists, platform math), the GitHub cross-compile, the wheel builds and packing,
+   the macOS wheel self-test.
+4. The CPU identity column is recorded on GitHub (free) from the exact wheel bytes BEFORE any GPU box is rented
+   (`gate-boxes` needs `identity-cpu` under `--identity-on-wheels`). The CPU column is required to agree with every
+   GPU column (`tools/admit_identity_columns.sh`), so a lane that errors or drifts stops the release before the bill.
+5. Only then the GPU gates: rent, install the same bytes, record NVIDIA (native and PTX), AMD, then admit all five
+   columns, rehearse on TestPyPI, publish, record. Every column's logs stay in the release evidence directory.
