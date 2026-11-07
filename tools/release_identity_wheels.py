@@ -326,7 +326,10 @@ class IdentityOnWheels:
         cache = self.__dict__.setdefault("_units_plan", {})
         if vendor in cache:
             return cache[vendor]
-        wheels = [self.macos_wheel()] if vendor == "apple" else self.candidate_gate_wheels(vendor)
+        # the CPU column installs the core wheel alone (no cpu split package: SPLIT_PACKAGES has none, and
+        # candidate_gate_wheels("cpu") raised KeyError at identity-cpu in 0.8.66 run e, 2026-11-07)
+        wheels = ([self.macos_wheel()] if vendor == "apple" else [Path(self.split_final("linux"))] if vendor == "cpu"
+                  else self.candidate_gate_wheels(vendor))
         out = self.units_plan_path(vendor)
         out.parent.mkdir(parents=True, exist_ok=True)
         cmd = [sys.executable, "tools/release_check_units.py", "plan", "--vendor", vendor,
