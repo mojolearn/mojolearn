@@ -58,7 +58,10 @@ def test_lof_novelty_methods_match_former_path(contamination):
     X, Q = _data(), _data(25, seed=3)
     new = mojolearn.LocalOutlierFactor(n_neighbors=6, contamination=contamination, novelty=True).fit(X)
     old = legacy.LegacyLocalOutlierFactor(n_neighbors=6, contamination=contamination, novelty=True).fit(X)
-    _same(audit_native_call(new.decision_function, Q).assert_native(), old.decision_function(Q))
+    # decision_function returns float64 as documented; the former path kept
+    # the float32 words, which widen exactly.
+    _same(audit_native_call(new.decision_function, Q).assert_native(),
+          np.asarray(old.decision_function(Q)).astype("<f8"))
     _same(audit_native_call(new.predict, Q).assert_native(), old.predict(Q))
 
 
@@ -127,7 +130,13 @@ def test_nearest_centroid_matches_former_path(metric, priors, shrink, kind):
             new.score(Q, yq)
         return
     _same(audit_native_call(new.predict, Q).assert_native(), old.predict(Q))
-    assert audit_native_call(new.score, Q, yq).assert_native() == old.score(Q, yq)
+    if kind == "float":
+        # score is accuracy, whose labels are integers or strings (the
+        # accuracy_score contract); float labels are refused there.
+        with pytest.raises(TypeError, match="floating labels"):
+            new.score(Q, yq)
+    else:
+        assert audit_native_call(new.score, Q, yq).assert_native() == old.score(Q, yq)
     if metric == "euclidean":
         _same(audit_native_call(new.decision_function, Q).assert_native(), old.decision_function(Q))
         _same(audit_native_call(new.predict_proba, Q).assert_native(), old.predict_proba(Q))
