@@ -23,6 +23,16 @@ import pytest
 WARM = 500
 WINDOWS = 4
 CALLS = 200
+# The trainers' steps cost milliseconds each; their (warm, calls) are cut to
+# what still shows the property. A retained object shows up in every window
+# at its full per-call size whatever the window length, so a shorter window
+# keeps the same bound; WINDOWS (the quietest of four) is unchanged.
+# Measured on the M4 laptop: 26 and 42 bytes per call at (50, 100), against
+# 216 and 159 at (40, 40), where the warm-up had not settled.
+COUNTS = {
+    "SmallMLPTrainer.train_step": (50, 100),
+    "SmallByteLanguageModelTrainer.train_step": (50, 100),
+}
 # Bytes per call that may remain in the quietest window. Allocator arenas and
 # free lists settle unevenly (measured up to about 100 bytes per call on a
 # flat path), while a retained object shows up in every window: the leaks this
@@ -35,10 +45,10 @@ def _counts(values):
     return [sys.getrefcount(v) for v in values]
 
 
-def growth(operation, inputs=(), calls=CALLS, windows=WINDOWS):
+def growth(operation, inputs=(), calls=CALLS, windows=WINDOWS, warm=WARM):
     """(traced bytes kept per call in the quietest window, input reference
     count changes across all windows)."""
-    for _ in range(WARM):  # warm caches, lazy imports and pools
+    for _ in range(warm):  # warm caches, lazy imports and pools
         operation()
     gc.collect()
     counts = _counts(inputs)
@@ -71,11 +81,15 @@ def small_mlp():
 
 
 def byte_lm():
-    from mojolearn import SmallByteLanguageModelTrainer
-    model = SmallByteLanguageModelTrainer(np.zeros(34944, dtype=np.float32), data_schedule={
+    # The smallest decoder shape (one layer, width 8, vocabulary 16): the same
+    # train_step entry, session and returned objects as the default shape.
+    from mojolearn import ByteLanguageModelConfig, SmallByteLanguageModelTrainer
+    shape = ByteLanguageModelConfig(batch=1, length=4, d_model=8, n_heads=2, n_kv=1, head_dim=4,
+                                    intermediate=16, n_layers=1, vocab_size=16)
+    model = SmallByteLanguageModelTrainer(np.zeros(shape.n_total, dtype=np.float32), data_schedule={
         'corpus_sha256': '1' * 64, 'token_schedule_sha256': '2' * 64,
-        'batch_offsets': [0, 32], 'planned_steps': 1000})
-    ids = (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
+        'batch_offsets': [0], 'planned_steps': 1000}, shape=shape)
+    ids = (np.arange(5, dtype=np.int32) % 16).reshape(1, 5)
     return (lambda: model.train_step(ids)), (ids,)
 
 
@@ -128,7 +142,8 @@ def _build(name, tmp_path):
 @pytest.mark.parametrize("name", list(OPERATIONS))
 def test_repeated_calls_keep_nothing(name, tmp_path):
     operation, inputs = _build(name, tmp_path)
-    per_call, changed = growth(operation, inputs)
+    warm, calls = COUNTS.get(name, (WARM, CALLS))
+    per_call, changed = growth(operation, inputs, calls=calls, warm=warm)
     assert changed == [0] * len(inputs), (name, changed)
     assert per_call < BOUND, (name, per_call)
 
@@ -141,7 +156,8 @@ if __name__ == "__main__":
         with tempfile.TemporaryDirectory() as root:
             try:
                 operation, inputs = _build(name, Path(root))
-                per_call, changed = growth(operation, inputs)
+                warm, calls = COUNTS.get(name, (WARM, CALLS))
+                per_call, changed = growth(operation, inputs, calls=calls, warm=warm)
                 print(f"{name}: {per_call:.0f} bytes/call, input refcount change {changed}")
             except Exception as error:  # report and continue to the next operation
                 print(f"{name}: ERROR {type(error).__name__}: {str(error)[:200]}")

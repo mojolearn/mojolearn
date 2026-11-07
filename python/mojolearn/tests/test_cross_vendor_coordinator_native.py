@@ -109,7 +109,9 @@ def test_native_ready_signal_and_repeated_custom_exception_preserve_ownership():
     audit_native_call(owner.ready.clear).assert_native()
     gc.collect()
     references = sys.getrefcount(cv.CrossVendorMismatch)
-    for _ in range(128):
+    # A lost or extra reference per refusal moves the count by one each time;
+    # eight refusals show it as plainly as 128 did.
+    for _ in range(8):
         audited = audit_native_call(owner._refuse, 'independent ownership check')
         assert type(audited.exception) is cv.CrossVendorMismatch
         report = audited.report()

@@ -228,21 +228,23 @@ def test_calls_release_the_model_and_its_inputs(cls, tmp_path):
 def test_steady_state_calls_allocate_nothing_lasting(cls):
     x, y = data()
     model = cls(numeric_mode="identical")
+    calls = 50  # iterations per cycle; each runs four public operations
 
     def cycle():
-        for _ in range(200):  # repeated whole public operations
+        for _ in range(calls):  # repeated whole public operations
             model.fit(x, y).predict(x)
             model.score(x, y)
             cls().get_params()
 
     cycle()
     cycle()
-    # One retained object per call adds at least 800 blocks in EVERY cycle.
-    # A one-time interpreter event (a hot loop's specialization/executor,
-    # an internal dict crossing a resize threshold) lands in at most one
-    # cycle; the L4 saw +208 once at 5b1606ab1 with no new retained state on
-    # the path. So: every cycle under the per-call bound, and the quietest
-    # cycle under the original 200-block budget.
+    # One retained object per call adds at least 4 * calls blocks in EVERY
+    # cycle. A one-time interpreter event (a hot loop's specialization/
+    # executor, an internal dict crossing a resize threshold) lands in at
+    # most one cycle; the L4 saw +208 once at 5b1606ab1 with no new retained
+    # state on the path. So: every cycle under the 800-block allowance for
+    # such an event, and the quietest cycle under one block per iteration
+    # (the original 200 blocks over 200 iterations).
     growth = []
     for _ in range(3):
         gc.collect()
@@ -251,4 +253,4 @@ def test_steady_state_calls_allocate_nothing_lasting(cls):
         gc.collect()
         growth.append(sys.getallocatedblocks() - before)
     assert max(growth) < 800, growth
-    assert min(growth) < 200, growth
+    assert min(growth) < calls, growth
