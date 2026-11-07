@@ -270,3 +270,86 @@ def test_the_coverage_evidence_reads_the_set_through_git(tmp_path):
     run("commit", "-qam", "0.9.1")
     assert C.published_base(root, "HEAD", "0.9.2") == ("0.9.1", "2" * 40)
     assert C.published_base(root, "HEAD", "0.9.1") == ("0.9.0", "1" * 40)      # from the set's git history
+
+
+def identity_column(out, column, label, wheels, lanes, seconds, start, end):
+    """A fake tools/identity_wheel_record.py output for one column: its record file and provenance next to it."""
+    rec = out / label / "w0"
+    cells = {"%s/base" % lane: dict(timing=dict(total_seconds=seconds, stages={})) for lane in lanes}
+    put(rec / ("%s.lanes-1.identical.json" % label),
+        dict(commit=COMMIT, vendor=label, platform="Linux-x86_64", cells=cells, complete=True,
+             timing_env=dict(started_utc=start, cpu_model="Some CPU")))
+    put(rec / ("%s.lanes-1.provenance.txt" % label), "commit=%s\nlabel=%s\ndate=%s\n" % (COMMIT, label, end))
+    return dict(label=label, owed=len(lanes), reused=7, rc=0,
+                chunks=[dict(worker=0, device=0, lanes=len(lanes), rc=0, records=[])])
+
+
+def test_summary_md_is_written_from_a_fixture_evidence_dir(tmp_path):
+    ctx = make_release(tmp_path, "0.9.3", single=True)
+    rel = ctx.rel
+    wheel_lines = ["%s %s" % (Path(w).name, E.sha256_file(w)) for w in ctx.wheels.values()]
+    for vendor, columns in (("nvidia", (("nvidia", "nvidia-l40s"), ("ptx", "nvidia-ptx-l40s-sm80"))),
+                            ("amd", (("amd", "amd-mi325x"),))):
+        out = rel / "gates" / vendor / "identity"
+        doc = dict(schema="mojolearn.identity-wheels.v1", ok=True, wheels=wheel_lines, columns={
+            c: identity_column(out, c, label, wheel_lines, ["knn", "pca"], 30.0, "2026-11-06T10:00:00Z",
+                               "2026-11-06T10:05:00Z") for c, label in columns})
+        put(out / "identity-wheels.json", doc)
+        put(rel / "gates" / vendor / "units" / "check-units.json", dict(ok=True))
+        put(rel / "gates" / vendor / "shardcheck" / "shardcheck.json",
+            dict(schema="mojolearn.logical-shard-identity.v1", vendor=vendor, counts=[1, 2],
+                 lanes={"knn": dict(verdict="MATCH"), "pca": dict(verdict="MATCH")}, ok=True))
+        put(rel / "gates" / vendor / "measuresmoke" / "measuresmoke.json",
+            dict(vendor=vendor, ok=True, plan_count=5, counts=dict(PASS=4, UNSUPPORTED=1, FAIL=0)))
+    apple = rel / "identity-wheels" / "apple"
+    put(apple / "identity-wheels.json", dict(ok=True, wheels=wheel_lines[-1:], columns={
+        "apple": identity_column(apple, "apple", "apple-m2pro", wheel_lines, ["knn"], 12.5, "2026-11-06T09:00:00Z",
+                                 "2026-11-06T09:01:00Z")}))
+    for i in range(2):
+        shard = rel / "identity-wheels" / "cpu" / "artifacts" / ("cpu-wheel-identity-%d" % i)
+        put(shard / "identity-wheels.json", dict(ok=True, wheels=wheel_lines[:1], columns={
+            "cpu": identity_column(shard, "cpu", "cpu", wheel_lines, ["knn%d" % i], 100.0, "2026-11-06T08:0%d:00Z" % i,
+                                   "2026-11-06T08:3%d:00Z" % i)}))
+    put(rel / "identity-wheels" / "cpu" / "artifacts" / "cpu-wheel-checks" / "checks.json", dict(ok=True))
+    ctx.identity_admitted = dict(source_commit=COMMIT, commit="c" * 40, table_sha256="d" * 64)
+    root = tmp_path / "repo"
+    manifest = E.write_set(ctx, root)
+    d = root / E.EVIDENCE_DIR
+    text = (d / "SUMMARY.md").read_text()
+    lines = text.splitlines()
+    assert len(lines) <= E.SUMMARY_MAX_LINES
+    assert "SUMMARY.md" in {i["path"] for i in manifest["items"]} and E.audit(d) == []
+    assert "SUMMARY.md" in (d / "README.md").read_text()
+    assert lines[0] == "# Mojolearn 0.9.3: release evidence summary"
+    assert "`v0.9.3`" in text and COMMIT in text and "2026-11-06" in text
+    # the five columns, each with its label, lanes run / reused, lane seconds, start and end
+    for title, label in (("NVIDIA native", "nvidia-l40s"), ("NVIDIA PTX", "nvidia-ptx-l40s-sm80"), ("AMD", "amd-mi325x"),
+                         ("Apple", "apple-m2pro"), ("CPU", "cpu")):
+        row = next(x for x in lines if x.startswith("| %s | `%s` |" % (title, label)))
+        assert row.endswith("| ok |"), row
+    nv = next(x for x in lines if x.startswith("| NVIDIA native |"))
+    assert "Some GPU, 48 GB, 1.0" in nv and "2 / 7" in nv and "1m 00s" in nv
+    assert "2026-11-06T10:00:00Z | 2026-11-06T10:05:00Z" in nv
+    cpu = next(x for x in lines if x.startswith("| CPU |"))
+    assert "2 / 14" in cpu and "3m 20s" in cpu and "2026-11-06T08:00:00Z | 2026-11-06T08:31:00Z" in cpu
+    # the exact wheel bytes each column recorded from, and the published wheels with their sha256
+    for w in ctx.wheels.values():
+        assert E.sha256_file(w) in text and Path(w).name in text
+    assert "All columns agree: **yes**" in text
+    assert "`" + "d" * 64 + "`" in text and "c" * 40 in text
+    assert "nvidia multi-GPU check: **PASS**, 2 of 2 lanes MATCH" in text
+    assert "amd measurement smoke: **PASS**, 4 passed, 1 unsupported, 0 failed of 5 recipes" in text
+    assert 'pip install "mojolearn[verify]==0.9.3"' in text and "python -m mojolearn verify" in text
+    assert "rel-gate-nv-1" in text and "python3 tools/box_persist.py fetch --tag rel-gate-nv-1" in text
+    assert "[`identity/table-summary.json`](identity/table-summary.json)" in text
+    assert "{" not in text.split("## Check it")[0].split("## Identity columns")[1]    # links, never pasted JSON
+
+
+def test_summary_md_says_no_when_a_column_failed_or_a_part_is_missing(tmp_path):
+    ctx = make_release(tmp_path, "0.9.4")
+    ctx.table.write_text(json.dumps(dict(cells={"knn/base": {"fit": dict(ref="a", cols={"nvidia": 1, "amd": 2}),
+                                                             "predict": dict(ref="b", cols={"nvidia": 1})}})))
+    E.write_set(ctx, tmp_path / "repo")
+    text = (tmp_path / "repo" / E.EVIDENCE_DIR / "SUMMARY.md").read_text()
+    assert "All columns agree: **no** (1 part(s) not on every column)" in text
+    assert "recorded no identity column on its wheels" in text
