@@ -70,11 +70,12 @@ def native_setup_numpy_imports(tree, relative):
     Product computation remains audited; these imports populate the retained
     native type/descriptor tables once during package/reader installation.
     """
+    # Package import never loads NumPy (NUMPY_FREE_CONTRACT.md): the PCS RNG
+    # (providers/python/pcs_rng_pyapi.mojo), the CNN owner
+    # (bindings/xcnn_common.mojo) and resample's result storage connect it
+    # natively at call time, so their former setup imports are refused here.
     setup = {
-        "mojolearn/_expansion_neighbors.py": "_connect_pcs_rng",
-        "mojolearn/_native_xcnn_bridge.py": "connect",
         "mojolearn/importers/_native_reader_bridge.py": "connect",
-        "mojolearn/resample.py": None,
     }
     if relative not in setup:
         return set()
@@ -99,11 +100,6 @@ def native_setup_numpy_imports(tree, relative):
                 continue
             for statement in node.body:
                 if isinstance(statement, ast.Import) and len(statement.names) == 1 and statement.names[0].name == "numpy":
-                    admitted.add(id(statement))
-                elif (relative == "mojolearn/_expansion_neighbors.py" and isinstance(statement, ast.ImportFrom)
-                      and statement.level == 0 and statement.module == "numpy.random"
-                      and {name.name for name in statement.names} ==
-                      {"mtrand", "BitGenerator", "MT19937", "PCG64", "PCG64DXSM", "Philox", "SFC64"}):
                     admitted.add(id(statement))
     return admitted
 

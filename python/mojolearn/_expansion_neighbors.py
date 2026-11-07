@@ -45,42 +45,10 @@ _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 from ._native_ops import codes as _operation_codes  # noqa: E402
 _OP = _operation_codes()
 
-def _connect_pcs_rng():
-    # glue: fixed native RNG getter/lock identities, connected once at import.
-    # NumPy's documented BitGenerator capsule is used; no RandomState/private
-    # layout is read. See providers/python/pcs_rng_pyapi.mojo for pinned sources.
-    from types import GetSetDescriptorType, MethodDescriptorType
-    try:
-        from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64
-    except ImportError:
-        _native_family_bridge.tables(family_pcs_rng=None)
-        return
-    from ._native_loaded_modules import connect_module
-    connect_module('numpy.random.mtrand', mtrand, ('RandomState',))
-    # _rand deliberately remains live across supported NumPy global-state APIs.
-    state_getter = vars(mtrand.RandomState)['_bit_generator']
-    capsule_getter = vars(BitGenerator)['capsule']
-    lock_getter = vars(BitGenerator)['lock']
-    # The lock class NumPy's BitGenerator actually holds (read once from a
-    # fresh generator's native getter at import): not necessarily
-    # _thread.LockType, and a mismatch refused every RandomState fit. The
-    # descriptor checks below still refuse a Python-defined lock class.
-    lock_type = type(lock_getter.__get__(MT19937(0), MT19937))
-    acquire, release = vars(lock_type)['acquire'], vars(lock_type)['release']
-    if any(type(value) is not GetSetDescriptorType for value in (state_getter, capsule_getter, lock_getter)):  # glue: fixed native descriptor admission
-        raise TypeError('PCS RNG requires native NumPy state/capsule/lock getters')
-    if any(type(value) is not MethodDescriptorType for value in (acquire, release)):  # glue: fixed native lock descriptor admission
-        raise TypeError('PCS RNG requires ordinary native lock methods')
-    _native_family_bridge.tables(family_pcs_rng=dict(
-        mtrand=mtrand, randomstate=mtrand.RandomState, bitgenerator=BitGenerator,
-        bitgenerators=(MT19937, PCG64, PCG64DXSM, Philox, SFC64),
-        state_getter=state_getter, state_get=state_getter.__get__,
-        capsule_getter=capsule_getter, capsule_get=capsule_getter.__get__,
-        lock_getter=lock_getter, lock_get=lock_getter.__get__, lock_type=lock_type,
-        acquire=acquire, release=release))
-
-
-_connect_pcs_rng()
+# PolynomialCountSketch's NumPy RandomState metadata (random_state=None or a
+# RandomState) is connected natively at the first such call
+# (providers/python/pcs_rng_pyapi.mojo _pcs_connect); importing the package
+# never loads NumPy (NUMPY_FREE_CONTRACT.md).
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",

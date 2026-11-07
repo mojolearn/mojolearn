@@ -128,15 +128,19 @@ def test_native_metadata_import_guard_is_location_and_statement_scoped(tmp_path,
     assert audit.numpy_errors(path, name)
 
 
-def test_rng_setup_admits_only_exact_native_metadata_import(tmp_path):
+def test_former_import_time_numpy_setup_is_refused(tmp_path):
+    # The PCS RNG, the CNN owner and resample connect NumPy natively at call
+    # time; their former package-import setup imports are no longer admitted.
     path = tmp_path / 'rng.py'
     text = ('def _connect_pcs_rng():\n    try:\n'
             '        from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64\n'
             '    except ImportError:\n        return\n')
     path.write_text(text)
-    assert not audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py')
-    path.write_text(text.replace('SFC64', 'default_rng'))
     assert audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py')
+    path.write_text('def connect():\n    try:\n        import numpy\n    except ImportError:\n        pass\n')
+    assert audit.numpy_errors(path, 'mojolearn/_native_xcnn_bridge.py')
+    path.write_text('try:\n    import numpy as _native_numpy_storage\nexcept ImportError:\n    pass\n')
+    assert audit.numpy_errors(path, 'mojolearn/resample.py')
 
 
 def test_compensated_sum_exception_cannot_admit_platform_transcendentals(tmp_path):

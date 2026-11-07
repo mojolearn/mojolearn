@@ -3,8 +3,8 @@
 (bindings/xcnn_native.mojo). A migrated layer method is one call,
 `_XCNN(self, "<operation>", args, _XCNN_CONTEXT)`; Python here only connects
 the compiled `_mojolearn_x_cnn` entries of both numeric modes, the switch
-words the binary reports and the layer classes, once, at import. NumPy is optional during setup; native host-array
-operations require its already loaded native metadata."""
+words the binary reports and the layer classes, once, at import. NumPy is not
+imported here; the native owner connects it at the first CNN operation."""
 
 _ENTRY = None
 _CONTEXT = None
@@ -130,9 +130,9 @@ def connect():
         entry = _binding()._module.xcnn_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
-        # Import setup is outside product execution; the native owner only
-        # connects already loaded native NumPy metadata. Nothing imports
-        # NumPy here: `import mojolearn` stays NumPy-free.
+        # Importing the package never loads NumPy (NUMPY_FREE_CONTRACT.md):
+        # the native owner connects it at the first CNN operation
+        # (bindings/xcnn_common.mojo xcnn_connect_numpy).
         from ._native_classical_bridge import _state_context
         context = _state_context()
         # Shared neural metadata admission expects its native scalar tables
