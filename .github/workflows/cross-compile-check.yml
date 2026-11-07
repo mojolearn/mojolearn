@@ -1,11 +1,12 @@
 name: Cross-compile check
 
-# NOT USED BY THE RELEASE since 2026-10-13 (Andrew): GitHub's free runners have
-# no GPU, so this only catches NVIDIA/AMD-only compile errors and never checks
-# bits; the release's own NVIDIA/AMD build legs hit the same compile error
-# within minutes on a $1-4/h box, so the extra step and wait per release aren't
-# worth it. The release does not dispatch it; kept as a manual tool
-# (2026-09-27 design: dispatched on a frozen commit); it never runs on a merge. tools/cross_compile_check.py, the same script as
+# THE RELEASE DISPATCHES IT (tools/release.py step cross-compile) on the frozen
+# commit, BESIDE the Linux builds (2026-11-07): release-linux-build.yml compiles
+# the same sources for the same targets on the same free runners, so linux-builds
+# no longer waits for it; linux-wait does, so a FAIL still stops the Linux pipeline
+# before anything is packed, rented or published. What it adds over the builds: a
+# per-binding name on a compile error and STALLED after 240 s of flat compiler CPU.
+# No GPU, never bits. Also a manual tool; it never runs on a merge. tools/cross_compile_check.py, the same script as
 # `pixi run cross-compile-check` on the Mac, selects the Linux GPU bindings
 # whose identity inputs changed between `ref` and the commit, and each
 # binding x tier x arch compiles on its own free standard runner, in
