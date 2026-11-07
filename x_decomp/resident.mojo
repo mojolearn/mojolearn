@@ -170,7 +170,7 @@ def pool_free(id: Int) raises:
         ctx.synchronize()
 
 
-def pool_live_count() -> Int:
+def pool_live_count() raises -> Int:
     """The pool ids in use (allocated and not freed): a test-only readout of
     the resident fitted state the decomposition owners hold (lane
     ne1-a-decomp-resident)."""
