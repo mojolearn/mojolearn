@@ -170,6 +170,18 @@ def pool_free(id: Int) raises:
         ctx.synchronize()
 
 
+def pool_live_count() -> Int:
+    """The pool ids in use (allocated and not freed): a test-only readout of
+    the resident fitted state the decomposition owners hold (lane
+    ne1-a-decomp-resident)."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var live = 0
+    for i in range(len(p[].live)):  # driver-loop: over the pool's ids (test readout)
+        if p[].live[i]:
+            live += 1
+    return live
+
+
 def _ptr(id: Int, n: Int) raises -> F32Ptr:
     var p = X_DECOMP_POOL.get_or_create_ptr()
     if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
