@@ -24,6 +24,8 @@ from bindings.sequential_inputs import _promote
 from core.classical_pandas_impl import pd_raw_at, _pd_double
 from core.cast_in import cast_in_kind, cast_w64_bits, _top_bit
 from core.sequence_array_cast import sequence_store_word
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 
 comptime _RPScalarBox = def(MutPointer[UInt8, MutUntrackedOrigin], PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr
@@ -1799,29 +1801,186 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
     for k in range(len(owned)):  # driver-loop: scatter complete admitted block storage to its stable output columns
         ref source = owned[k]
         var positions = placements[k]
+        # lane ne2-b-rounds (N054): the dtype dispatch runs once per block
+        # column (`_rp_plan_column`), then the planned columns copy in one
+        # pass over the rows split across cores (`_rp_copy_block`); a column
+        # that needs object boxing or a refusing conversion keeps the serial
+        # `_rp_copy` loop below
+        var plan = List[Int]()
+        var serial = List[Int]()
         for col in range(source.cols):  # driver-loop: validate column placement before native cell copies
             var dest = Int(py=positions[col])
             if dest < 0 or dest >= cols or seen[dest]:
                 raise Error("ValueError: pandas block columns overlap or exceed output shape")
             seen[dest] = True
-            if target.kind != "O" and source.code == target.code:
-                # p3-cnn-sequence-tsa: same storage code: the dtype dispatch
-                # runs once per column, then a plain strided item copy
-                var item = source.item
-                var step = cols * target.item
-                var out = target.address + dest * target.item
-                for row in range(rows):  # driver-loop: native dtype-preserving storage copy, not model computation
-                    memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=out + row * step),
-                           src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.at(row, col)), count=item)
-                continue
+            if _rp_plan_column(source, target, dest, plan) == _RP_CELL_SERIAL:
+                serial.append(col)
+        _rp_copy_block(source, target, rows, cols, plan)
+        for s in range(len(serial)):  # driver-loop: over the block columns that keep the serial cell copy
+            var col = serial[s]
+            var dest = plan[col * _RP_PLAN_WORDS + 1]
             for row in range(rows):  # driver-loop: native dtype-preserving storage copy, not model computation
                 _rp_copy(source, source.at(row, col), target.address + (row * cols + dest) * target.item, target)
+        _ = plan^
+        _ = serial^
     _ = owned^
     _ = logical^
     _ = raw_owners^
     _ = blocks^
     _ = value
     return result
+
+
+# lane ne2-b-rounds (N054): `_rp_copy`'s branches resolved ONCE per output
+# column into an integer plan, then every cell of the block copied by a
+# typed, non-raising cell routine with the rows split across the host's
+# cores. The cell routines are `_rp_copy`'s own word operations in its order
+# (pd_raw_at, _pd_double, cast_w64_bits, sequence_store_word), so the stored
+# bytes are the same. A column whose branch can refuse or needs object
+# boxing keeps the serial `_rp_copy` loop (plan code 0).
+comptime _RP_PLAN_WORDS = 9
+comptime _RP_CELL_SERIAL = 0
+comptime _RP_CELL_MEMCPY = 1
+comptime _RP_CELL_TIME = 2
+comptime _RP_CELL_FLOAT = 3
+comptime _RP_CELL_INT = 4
+
+
+def _rp_cell_code(source: _RPArray, target: _RPArray, mut delta: Int) raises -> Int:
+    """The `_rp_copy` branch a (source, target) pair takes, as a cell code;
+    `delta` receives the temporal unit steps. Raises where `_rp_copy` raises
+    before touching a cell (the temporal resolution refusal)."""
+    delta = 0
+    if target.kind == "O":
+        return _RP_CELL_SERIAL
+    if source.code == target.code:
+        return _RP_CELL_MEMCPY
+    if (target.kind == "M" or target.kind == "m") and source.kind == target.kind:
+        delta = _rp_time_unit(target.code) - _rp_time_unit(source.code)
+        if delta < 0:
+            raise Error("ValueError: pandas common temporal dtype must retain the finest resolution")
+        return _RP_CELL_TIME
+    if target.kind == "f" or target.kind == "c":
+        var components = 2 if target.kind == "c" else 1
+        var size = target.item // components
+        var source_size = source.item // 2 if source.kind == "c" else source.item
+        var numeric = source.kind == "b" or source.kind == "i" or source.kind == "u" or source.kind == "f" or source.kind == "c"
+        if not numeric or source_size > 8 or (size != 8 and size != 4 and size != 2):
+            return _RP_CELL_SERIAL
+        return _RP_CELL_FLOAT
+    if (target.kind == "i" or target.kind == "u" or target.kind == "b") and (source.kind == "i" or source.kind == "u" or source.kind == "b"):
+        return _RP_CELL_INT
+    return _RP_CELL_SERIAL
+
+
+def _rp_cell(plan: MutPointer[Int, MutUntrackedOrigin], address: Int, destination: Int,
+             source_native: Bool, target_native: Bool):
+    """One cell by its column plan (`_rp_plan_column`'s words): the word
+    operations of the matching `_rp_copy` branch."""
+    var code = plan[0]
+    if code == _RP_CELL_MEMCPY:
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=plan[7])
+        return
+    if code == _RP_CELL_TIME:
+        var word = pd_raw_at(address, 0, 8, source_native)
+        if word != UInt64(1) << 63:
+            for _ in range(plan[2]):  # small-loop(delta: at most three unit steps, s to ns): storage unit scaling
+                word *= UInt64(1000)
+        sequence_store_word(destination, word, 8, target_native)
+        return
+    if code == _RP_CELL_FLOAT:
+        var components = plan[3]
+        var size = plan[4]
+        for component in range(components):  # small-loop(components: real and imaginary, at most two): one scalar per component
+            var value = Float64(0)
+            if plan[8] != 0 or component == 0:
+                # `_rp_number`: a complex source reads its component half;
+                # a real source has no imaginary part
+                var offset = plan[5] if (plan[8] != 0 and component == 1) else 0
+                value = _pd_double(pd_raw_at(address, offset, plan[5], source_native), plan[6], plan[5])
+            var word = UInt64(0)
+            if size == 8:
+                word = bitcast[DType.uint64](value)
+            elif size == 4:
+                word = UInt64(bitcast[DType.uint32](Float32(value)))
+            else:
+                word = UInt64(bitcast[DType.uint16](Float16(value)))
+            sequence_store_word(destination + component * size, word, size, target_native)
+        return
+    if code == _RP_CELL_INT:
+        var word = cast_w64_bits(pd_raw_at(address, 0, plan[7], source_native), plan[6], plan[7])
+        if plan[4] == 1:
+            word = UInt64(1) if word != 0 else UInt64(0)
+        sequence_store_word(destination, word, plan[3], target_native)
+
+
+def _rp_plan_column(source: _RPArray, target: _RPArray, dest: Int, mut plan: List[Int]) raises -> Int:
+    """Append one column's plan words: code, dest, delta, then per code
+    (float: components, size, component bytes, tag, item, complex source;
+    int: target item, target is bool, signed tag, source item). Returns the code."""
+    var delta = 0
+    var code = _rp_cell_code(source, target, delta)
+    plan.append(code)
+    plan.append(dest)
+    plan.append(delta)
+    if code == _RP_CELL_FLOAT:
+        var components = 2 if target.kind == "c" else 1
+        var complex_source = source.kind == "c"
+        var kind = "f" if complex_source else source.kind
+        plan.append(components)
+        plan.append(target.item // components)
+        plan.append(source.item // 2 if complex_source else source.item)
+        plan.append(2 if kind == "f" else (1 if kind == "i" else 0))
+        plan.append(source.item)
+        plan.append(1 if complex_source else 0)
+    elif code == _RP_CELL_INT:
+        plan.append(target.item)
+        plan.append(1 if target.kind == "b" else 0)
+        plan.append(0)
+        plan.append(1 if source.kind == "i" else 0)
+        plan.append(source.item)
+        plan.append(0)
+    else:
+        for _ in range(_RP_PLAN_WORDS - 3):  # small-loop(plan words: six fixed words): pad the column plan
+            plan.append(0)
+        plan[len(plan) - 2] = source.item
+    return code
+
+
+def _rp_copy_block(source: _RPArray, target: _RPArray, rows: Int, cols: Int, plan: List[Int]) raises:
+    """Every planned (non-serial) column of one block, the rows split across
+    the host's cores."""
+    var ncols = len(plan) // _RP_PLAN_WORDS
+    if rows <= 0 or ncols == 0:
+        return
+    var tasks = host_predict_task_count_work(rows, rows * ncols * max(target.item, 1))
+    var chunk = host_predict_chunk(rows, tasks)
+    var pp = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(plan.unsafe_ptr()))
+    var src_base = source.address
+    var row_stride = source.row_stride
+    var col_stride = source.col_stride
+    var dst_base = target.address
+    var item = target.item
+    var source_native = source.native
+    var target_native = target.native
+
+    def _rows_task(c: Int) {imm pp, imm ncols, imm rows, imm cols, imm chunk, imm src_base, imm row_stride,
+                            imm col_stride, imm dst_base, imm item, imm source_native, imm target_native}:
+        var lo = c * chunk
+        var hi = lo + chunk
+        if hi > rows:
+            hi = rows
+        for row in range(lo, hi):  # driver-loop: native dtype-preserving storage copy of one task's rows, not model computation
+            for k in range(ncols):  # driver-loop: over the block's planned output columns
+                var words = pp + k * _RP_PLAN_WORDS
+                if words[0] == _RP_CELL_SERIAL:
+                    continue
+                _rp_cell(words, src_base + row * row_stride + k * col_stride,
+                         dst_base + (row * cols + words[1]) * item, source_native, target_native)
+
+    host_parallelize(_rows_task, tasks)
+    _ = plan
 
 
 def resample_pandas_array(value: PythonObject, context: PythonObject) raises -> PythonObject:
