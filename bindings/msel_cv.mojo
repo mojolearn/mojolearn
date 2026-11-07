@@ -163,6 +163,27 @@ def msel_cv_folds(estimator: PythonObject, x_in: PythonObject, y_in: PythonObjec
     return Python.tuple(x, y, folds)
 
 
+def msel_cv_splitter(estimator: PythonObject, y: PythonObject, cv: PythonObject, pinned: Bool,
+                     context: PythonObject) raises -> PythonObject:
+    """The splitter `msel_cv_folds` resolves (`check_cv(cv, y, classifier)`)
+    for an already materialized y. `check_cv` reads y only for its target
+    type, so a caller that redraws folds for the same labels in another
+    order (permutation_test_score) resolves it once."""
+    return msel_check_cv(cv, y, msel_classifier(estimator, pinned, context), PythonObject(False), PythonObject(None),
+                         context)
+
+
+def msel_cv_folds_admitted(splitter: PythonObject, x: PythonObject, y: PythonObject, group_values: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
+    """`msel_cv_folds(...)[2]` over the X, y and groups the caller already
+    materialized and the splitter it resolved once (`msel_cv_splitter`):
+    the same split and the same fold checks, without copying X, re-reading
+    y and the groups, or resolving the splitter again (lane ne2-b-members,
+    N055)."""
+    var n = msel_n_samples(x, context)
+    return msel_checked_folds(msel_splits_of(splitter, x, y, group_values, context), n, context)
+
+
 def msel_fold_source(cv: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      groups: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_folds(cv, estimator, X, y, groups)`: the default unshuffled folds
