@@ -103,10 +103,13 @@ class DeviceArrayRefusalTest(unittest.TestCase):
 
     # ---------------------------------------------- negative controls
 
-    def test_cpu_dlpack_tensor_keeps_the_zero_copy_path(self):
-        materialized, copied = _buffer._materialize(_TorchCpuLike(), "X")
-        self.assertFalse(copied, "a host DLPack tensor must not be copied")
-        self.assertIsNotNone(materialized)
+    def test_python_subclass_dlpack_exporter_is_refused_without_calling_it(self):
+        # A host exporter whose class is Python-defined (a heap type with a
+        # Python `__dlpack__`) is refused by the native exporter admission
+        # (bindings/array_from_buffer_native.mojo) before any protocol runs:
+        # `__dlpack__` would raise RuntimeError if it were called.
+        with self.assertRaisesRegex(TypeError, "native buffer exporters without Python protocols"):
+            _buffer._materialize(_TorchCpuLike(), "X")
 
     def test_host_buffer_is_untouched(self):
         materialized, copied = _buffer._materialize(array.array("f", [1.0, 2.0]), "X")
