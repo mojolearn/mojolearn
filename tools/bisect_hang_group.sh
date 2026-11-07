@@ -9,6 +9,8 @@
 #   bash tools/bisect_hang_group.sh --export-history <dir> --base <commit> [--head HEAD] [--overlay-after <commit>]
 #        [--history-paths '\.mojo$'] [--overlay-patches <dir> [--overlay-extra <sha,...>]]   # git only, no compile
 #   run options for history mode: [--history-range FIRST:LAST] [--overlay-patches <dir>]
+#   bash tools/bisect_hang_group.sh --group <stem> --set <host|identical> --root-ddmin <member root .mojo> --out <dir>
+#        [--parallel N] [--stall 300] [--deadline 3600] [--work <dir>] [--keep-trees] [--dry-run]
 #
 # On a RunPod CPU pod (cwd = the unpacked repo, the default pixi env installed):
 #   bash tools/runpod_cpu_leg.sh --lane bisect-hang --worktree ~/mojolearn-wt/ne-bisect-hang \
@@ -63,6 +65,19 @@
 # the history dir is found from meta.tsv; --overlay-patches at run time overrides it. --history-range FIRST:LAST
 # (indexes of history.tsv, inclusive) limits the candidates.
 #
+# ROOT MODE (--root-ddmin <member root>, e.g. bindings/_mojolearn_runtime_classical_host.mojo): every candidate is
+# this checkout with only that root rewritten on the box by tools/bisect_root_rewrite.py (see its docstring) from its
+# `from bindings./providers. import` lines, numbered 0.. in file order:
+#   root-keep  the root re-emitted unchanged (must HANG)      root-none  every such import and its users dropped
+#   loo-NN     LEAVE-ONE-OUT: import NN dropped, with every top-level function and builder statement that mentions
+#              a name it binds (and, transitively, a dropped function)
+#   loi-NN     LEAVE-ONE-IN: only import NN (plus the imports its kept users need, transitively) and its users
+# ERROR means the rewrite broke the root: it is recorded with its first error and never counted as COMPILED.
+# Each rewritten root is kept as <out>/cand/<id>.root.mojo with <id>.rewrite.txt (kept imports, item counts).
+# <out>/root-ddmin.tsv: mode, import_line, verdict, seconds, first_error, id; summary lines "imports whose removal
+# clears the hang" (loo COMPILED) and "imports that hang alone" (loi HANG). --stall defaults to 300 here.
+# Exit 4 when root-keep does not HANG.
+#
 # Outputs: <out>/plan.tsv, <out>/cand/<id>.{log,json,verdict}, <out>/cand/<id>/ (the build evidence and the group
 # log), <out>/bisect.tsv (file, verdict, seconds, first_error, status, id; ERROR, then COMPILED, then HANG),
 # <out>/summary.txt. Exit: 0 every candidate has a verdict and control-head hung; 4 control-head did not hang;
@@ -99,7 +114,7 @@ die() { echo "bisect_hang_group: $*" >&2; exit 2; }
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 R=$(cd "$(dirname "$0")/.." && pwd)
-GROUP="" SET="" BASE="" SUSPECTS_FILE="" OUT="" PARALLEL="" STALL=420 DEADLINE=3600
+GROUP="" SET="" BASE="" SUSPECTS_FILE="" OUT="" PARALLEL="" STALL="" DEADLINE=3600 ROOT=""
 BASE_ARCHIVE="" WORK="${BISECT_WORK:-$HOME/bisect-hang-work}" KEEP=0 DRY=0 EXPORT=""
 HIST="" EXPORT_HIST="" HEAD_REF=HEAD OVERLAY_AFTER=d5d7463b99 HPATHS='\.mojo$'
 PATCHES="" OVERLAY_EXTRA="" HRANGE=""
@@ -126,13 +141,15 @@ while [ $# -gt 0 ]; do
         --overlay-patches) shift; PATCHES="${1:-}" ;;
         --overlay-extra) shift; OVERLAY_EXTRA="${1:-}" ;;
         --history-range) shift; HRANGE="${1:-}" ;;
+        --root-ddmin) shift; ROOT="${1:-}" ;;
         -h|--help) usage ;;
         *) die "unknown argument: $1 (see --help)" ;;
     esac
     shift
 done
 
-[ -n "$BASE" ] || [ -n "$HIST" ] || die "--base <commit> is required"
+[ -n "$BASE" ] || [ -n "$HIST" ] || [ -n "$ROOT" ] || die "--base <commit> is required"
+if [ -z "$STALL" ]; then if [ -n "$ROOT" ]; then STALL=300; else STALL=420; fi; fi
 
 # --export-history: per first-parent commit, the content of every changed source path (+ the overlay), from git alone
 if [ -n "$EXPORT_HIST" ]; then
@@ -250,7 +267,24 @@ case "$WORK/" in "$OUT"/*) die "--work must not be inside --out (the trees would
 
 # candidates: id <TAB> label <TAB> revert set ("-" nothing, "ALL" every suspect, "H:<id>" a history manifest, else one file)
 PLAN="$OUT/plan.tsv"
-if [ -n "$HIST" ]; then
+ROOT_IMPORT_RE='^from[[:space:]]+(bindings|providers)\.[A-Za-z0-9_.]+[[:space:]]+import[[:space:]]+'
+if [ -n "$ROOT" ]; then
+    case "$ROOT" in /*|*..*) die "--root-ddmin is a repo-relative path" ;; esac
+    [ -f "$R/$ROOT" ] || die "--root-ddmin $ROOT does not exist in $R"
+    [ -z "$HIST" ] || die "--root-ddmin and --history are separate modes"
+    # The same lines, in the same order, that tools/bisect_root_rewrite.py numbers (single-line imports only).
+    grep -E "$ROOT_IMPORT_RE" "$R/$ROOT" | tr '\t' ' ' > "$OUT/root-imports.txt"
+    NIMP=$(wc -l < "$OUT/root-imports.txt" | tr -d ' ')
+    [ "$NIMP" -gt 0 ] || die "$ROOT has no from bindings./providers. import lines"
+    {
+        printf 'root-keep\tkeep - (root unchanged)\tR:keep:-\n'
+        printf 'root-none\tnone - (all %s imports dropped)\tR:none:-\n' "$NIMP"
+        i=0
+        while IFS= read -r line; do printf 'loo-%02d\tloo %02d %s\tR:loo:%s\n' "$i" "$i" "$line" "$i"; i=$((i + 1)); done < "$OUT/root-imports.txt"
+        i=0
+        while IFS= read -r line; do printf 'loi-%02d\tloi %02d %s\tR:loi:%s\n' "$i" "$i" "$line" "$i"; i=$((i + 1)); done < "$OUT/root-imports.txt"
+    } > "$PLAN"
+elif [ -n "$HIST" ]; then
     HIST=$(cd "$HIST" 2> /dev/null && pwd) || die "--history directory does not exist"
     { [ -f "$HIST/history.tsv" ] && [ -f "$HIST/blobs.tgz" ]; } || die "$HIST has no history.tsv or blobs.tgz (make it with --export-history)"
     LO=0 HI=999999
@@ -297,7 +331,9 @@ command_for() {  # $1 id, $2 tree
         "$2" "$PY" "$SET" "$GROUP" "$STALL" "$DEADLINE" "$WORK/cache/$1" "$OUT/cand/$1" "$OUT/cand/$1.json"
 }
 
-if [ -n "$HIST" ]; then
+if [ -n "$ROOT" ]; then
+    BASE_SRC="root $ROOT rewritten on the box ($NIMP candidate imports)"
+elif [ -n "$HIST" ]; then
     BASE_SRC="history $HIST ($(awk -F'\t' '$1 == "base" || $1 == "head" || $1 == "overlay_after" || $1 == "overlay" { printf "%s=%.10s ", $1, $2 }' "$HIST/meta.tsv" 2> /dev/null))"
     [ -n "$PATCHES" ] && BASE_SRC="$BASE_SRC; patches $PATCHES ($(( $(wc -l < "$PATCHES/order.tsv") - 1 )))"
 elif git_has_base; then
@@ -337,7 +373,12 @@ note() { printf '%s\t%s\n' "$(date -u +%H:%M:%SZ)" "$*" | tee -a "$OUT/summary.t
 # base content (or the history blobs), once
 BASED="$WORK/base"
 BLOBS="$WORK/blobs"
-if [ -n "$HIST" ]; then
+if [ -n "$ROOT" ]; then
+    [ -f "$R/tools/bisect_root_rewrite.py" ] || die "tools/bisect_root_rewrite.py is missing"
+    "$PY" "$R/tools/bisect_root_rewrite.py" list "$R/$ROOT" > "$OUT/root-imports.tsv" || die "bisect_root_rewrite.py list failed"
+    [ "$(wc -l < "$OUT/root-imports.tsv" | tr -d ' ')" = "$NIMP" ] \
+        || die "the rewriter sees $(wc -l < "$OUT/root-imports.tsv" | tr -d ' ') imports, the plan $NIMP (multi-line import?)"
+elif [ -n "$HIST" ]; then
     if [ ! -f "$BLOBS/.ready" ]; then
         rm -rf "$BLOBS"; mkdir -p "$BLOBS"
         tar -C "$BLOBS" -xzf "$HIST/blobs.tgz" || die "cannot unpack $HIST/blobs.tgz"
@@ -417,6 +458,13 @@ make_tree() {  # $1 id, $2 revert set
     ln -s "$R/.pixi" "$wt/.pixi" || return 1
     case "$2" in
         -) return 0 ;;
+        R:*) local cid=$1 m=${2#R:} ix
+             ix=${m#*:} m=${m%%:*}
+             if [ "$ix" = - ]; then set -- --mode "$m"; else set -- --mode "$m" --index "$ix"; fi
+             "$PY" "$R/tools/bisect_root_rewrite.py" rewrite "$R/$ROOT" "$@" --out "$wt/$ROOT" > "$OUT/cand/$cid.rewrite.txt" 2>&1 \
+                 || { cat "$OUT/cand/$cid.rewrite.txt"; return 1; }
+             cp "$wt/$ROOT" "$OUT/cand/$cid.root.mojo"
+             return 0 ;;
         H:*) local p b
              while IFS=$'\t' read -r p b; do
                  if [ "$b" = - ]; then rm -f "$wt/$p"
@@ -446,7 +494,14 @@ run_candidate() {  # $1 id, $2 label, $3 revert set
     touch "$OUT/cand/$id.running"
     rm -rf "$ev" "$WORK/cache/$id" "$OUT/cand/$id.json"
     if ! make_tree "$id" "$revert" > "$OUT/cand/$id.log" 2>&1; then
-        printf '%s\ttree copy failed\n' "$(date -u +%H:%M:%SZ)" >> "$OUT/cand/$id.attempt"
+        if [ "${revert#R:}" != "$revert" ] && [ -s "$OUT/cand/$id.rewrite.txt" ]; then
+            # the rewriter refused this root: deterministic, so a verdict (ERROR), not a retry
+            printf '%s\tERROR\t0\trewrite failed: %s\trewrite\t%s\n' "$label" \
+                "$(head -n 1 "$OUT/cand/$id.rewrite.txt" | tr '\t' ' ' | cut -c1-300)" "$id" > "$OUT/cand/$id.verdict"
+            note "$id ERROR rewrite failed $label"
+        else
+            printf '%s\ttree copy failed\n' "$(date -u +%H:%M:%SZ)" >> "$OUT/cand/$id.attempt"
+        fi
         rm -f "$OUT/cand/$id.running"; return 0
     fi
     if [ -f "$OUT/cand/$id.patches.tsv" ] && [ "${revert#H:}" != "$revert" ]; then
@@ -503,6 +558,37 @@ done < "$PLAN"
 while [ "$(running)" -gt 0 ]; do wait -n; done
 
 # results
+if [ -n "$ROOT" ]; then
+    {
+        printf 'mode\timport_line\tverdict\tseconds\tfirst_error\tid\n'
+        while IFS=$'\t' read -r id label _; do
+            if [ -f "$OUT/cand/$id.verdict" ]; then v=$(cut -f2-4 "$OUT/cand/$id.verdict"); else v=$'NO-VERDICT\t-\t-'; fi
+            # label: "<mode> <NN|-> <import line or note>"
+            printf '%s\t%s\t%s\t%s\n' "${label%% *}" "${label#* }" "$v" "$id"
+        done < "$PLAN"
+    } > "$OUT/root-ddmin.tsv"
+    cp "$OUT/root-ddmin.tsv" "$OUT/bisect.tsv"
+    column -t -s$'\t' "$OUT/root-ddmin.tsv" 2> /dev/null || cat "$OUT/root-ddmin.tsv"
+    busy=$(awk -F'\t' 'NR > 1 { s += $2; n++; if ($2 > m) m = $2 } END { if (n) printf "mean %.1f max %.1f of %d cores (%d samples)", s / n, m, $3, n; else print "no samples" }' \
+        "$OUT/load.tsv" 2> /dev/null)
+    note "done: seconds=$(( $(date +%s) - T0 )) busy ${busy:-no samples}"
+    EXIT=0
+    keep_v=$(awk -F'\t' '$6 == "root-keep" { print $3 }' "$OUT/root-ddmin.tsv")
+    [ "$keep_v" = HANG ] || { note "root-keep is $keep_v, not HANG: the rewrite path does not reproduce the hang"; EXIT=4; }
+    note "root-none: $(awk -F'\t' '$6 == "root-none" { print $3 " " $5 }' "$OUT/root-ddmin.tsv")"
+    pick() { awk -F'\t' -v m="$1" -v v="$2" '$1 == m && $3 == v { print $2 }' "$OUT/root-ddmin.tsv" | paste -sd ';' -; }
+    note "imports whose removal clears the hang (loo COMPILED): $(pick loo COMPILED | sed 's/^$/none/')"
+    note "imports whose removal breaks the root (loo ERROR, not counted): $(pick loo ERROR | sed 's/^$/none/')"
+    note "imports that hang alone (loi HANG): $(pick loi HANG | sed 's/^$/none/')"
+    note "imports that compile alone (loi COMPILED): $(pick loi COMPILED | sed 's/^$/none/')"
+    note "loi ERROR (rewrite broke the root, not counted): $(pick loi ERROR | sed 's/^$/none/')"
+    missing=$(awk -F'\t' '$3 == "NO-VERDICT" { printf "%s ", $6 }' "$OUT/root-ddmin.tsv")
+    if [ -n "$missing" ]; then
+        note "no verdict (see cand/<id>.attempt; re-run to retry): $missing"
+        [ "$EXIT" = 0 ] && EXIT=5
+    fi
+    exit "$EXIT"
+fi
 if [ -n "$HIST" ]; then
     {
         printf 'commit\tverdict\tseconds\tfirst_error\tstatus\tid\n'

@@ -70,6 +70,41 @@ else
     echo "SKIP: export-base round trip (no git history for e49ac7df70 here)"
 fi
 
+# root mode: dry-run plan, then the rewriter itself (python3 only; no compiler)
+RT=bindings/_mojolearn_runtime_classical_host.mojo
+if [ -f "$R/$RT" ]; then
+    NI=$(grep -c -E '^from[[:space:]]+(bindings|providers)\.[A-Za-z0-9_.]+[[:space:]]+import[[:space:]]+' "$R/$RT")
+    bash "$S" --group _mojolearn_dev_runtime_classical_host --set host --root-ddmin "$RT" \
+        --out "$T/qout" --work "$T/qwork" --dry-run > "$T/qplan.txt" 2>&1
+    rc=$?
+    [ "$rc" = 0 ] && ok "root dry run exits 0" || bad "root dry run rc=$rc: $(head -n 3 "$T/qplan.txt")"
+    [ "$(grep -c '^PLAN ' "$T/qplan.txt")" = $((2 * NI + 2)) ] && ok "root plan: keep, none, $NI loo, $NI loi" || bad "root plan size"
+    grep -q $'^PLAN loo-00\trevert=R:loo:0\tloo 00 from ' "$T/qplan.txt" && grep -q $'^PLAN loi-00\trevert=R:loi:0\t' "$T/qplan.txt" \
+        && ok "loo-00 and loi-00 planned" || bad "loo/loi lines"
+    grep -q -- '--stall-seconds 300 ' "$T/qplan.txt" && ok "root mode stalls at 300 s by default" || bad "root stall default"
+    W="$R/tools/bisect_root_rewrite.py"
+    if command -v python3 > /dev/null; then
+        python3 "$W" list "$R/$RT" > "$T/imports.tsv"
+        [ "$(wc -l < "$T/imports.tsv" | tr -d ' ')" = "$NI" ] && ok "rewriter and plan agree on $NI imports" || bad "rewriter import count"
+        python3 "$W" rewrite "$R/$RT" --mode keep --out "$T/keep.mojo" > /dev/null && cmp -s "$R/$RT" "$T/keep.mojo" \
+            && ok "keep re-emits the root unchanged" || bad "keep changed the root"
+        i=0
+        while IFS=$'\t' read -r _ names line; do  # every import: loo drops its line and every mention; loi keeps it
+            python3 "$W" rewrite "$R/$RT" --mode loo --index "$i" --out "$T/loo.mojo" > /dev/null || bad "loo $i failed"
+            grep -qxF "$line" "$T/loo.mojo" && bad "loo $i kept its import"
+            for n in ${names//,/ }; do grep -q -E "(^|[^A-Za-z0-9_.])$n([^A-Za-z0-9_]|\$)" "$T/loo.mojo" && bad "loo $i still mentions $n"; done
+            python3 "$W" rewrite "$R/$RT" --mode loi --index "$i" --out "$T/loi.mojo" > /dev/null || bad "loi $i failed"
+            grep -qxF "$line" "$T/loi.mojo" || bad "loi $i lost its import"
+            grep -q 'return module.finalize()' "$T/loi.mojo" || bad "loi $i lost the builder"
+            i=$((i + 1))
+        done < "$T/imports.tsv"
+        ok "loo/loi checked for $i imports (failures listed above)"
+        python3 "$W" rewrite "$R/$RT" --mode none --out "$T/none.mojo" > /dev/null
+        [ "$(grep -c -E '^from[[:space:]]+(bindings|providers)\.' "$T/none.mojo")" = 0 ] && grep -q 'return module.finalize()' "$T/none.mojo" \
+            && ok "none drops every candidate import and keeps the builder" || bad "none rewrite"
+    fi
+fi
+
 # history mode: the committed export and its dry-run plan
 HD="$R/tools/bisect_hang_history"
 if [ -f "$HD/history.tsv" ]; then
