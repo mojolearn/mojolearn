@@ -22,7 +22,7 @@
 # and control-all (every suspect reverted). Each candidate runs
 #   MOJOLEARN_COMPILE_JOBS=1 <default env python> tools/development_build.py build --sets <set> --group <stem>
 #       --parallel 1 --stall-seconds <stall> --group-seconds <deadline> --cache <work>/cache/<id>
-#       --evidence <out>/cand/<id> --json <out>/cand/<id>.json
+#       --evidence <out>/cand/<id> --json <out>/cand/<id>.json --layout development
 # inside its own tree, so every candidate compiles its own sources with its own cache (no reuse between candidates).
 # Verdict from the group's <mode>-<stem>.log.execution.json status:
 #   HANG      stalled (no CPU progress for --stall s) or timeout (--deadline s reached)
@@ -327,7 +327,7 @@ fi
 
 PY="$R/.pixi/envs/default/bin/python3"
 command_for() {  # $1 id, $2 tree
-    printf 'cd %s && MOJOLEARN_COMPILE_JOBS=1 %s tools/development_build.py build --sets %s --group %s --parallel 1 --stall-seconds %s --group-seconds %s --cache %s --evidence %s --json %s' \
+    printf 'cd %s && MOJOLEARN_COMPILE_JOBS=1 %s tools/development_build.py build --sets %s --group %s --parallel 1 --stall-seconds %s --group-seconds %s --cache %s --evidence %s --json %s --layout development' \
         "$2" "$PY" "$SET" "$GROUP" "$STALL" "$DEADLINE" "$WORK/cache/$1" "$OUT/cand/$1" "$OUT/cand/$1.json"
 }
 
@@ -510,7 +510,7 @@ run_candidate() {  # $1 id, $2 label, $3 revert set
     t0=$(date +%s)
     ( cd "$wt" && MOJOLEARN_COMPILE_JOBS=1 PYTHONPATH="$wt/python" "$PY" tools/development_build.py build \
         --sets "$SET" --group "$GROUP" --parallel 1 --stall-seconds "$STALL" --group-seconds "$DEADLINE" \
-        --cache "$WORK/cache/$id" --evidence "$ev" --json "$OUT/cand/$id.json" ) >> "$OUT/cand/$id.log" 2>&1
+        --cache "$WORK/cache/$id" --evidence "$ev" --json "$OUT/cand/$id.json" --layout development ) >> "$OUT/cand/$id.log" 2>&1
     rc=$?
     secs=$(( $(date +%s) - t0 ))
     rec=$(find "$ev" -maxdepth 1 -name "*-$GROUP.log.execution.json" 2> /dev/null | head -n 1)
