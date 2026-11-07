@@ -1,0 +1,343 @@
+# SPDX-License-Identifier: Apache-2.0
+# The one table of integer operation codes for the classical owner's door
+# (lane ne1-h-labels, plan NATIVE_ENTRY_POINTS_AFTER_0866 section H, lesson
+# 12: dispatch on integer codes through a table, not string chains).
+#
+# The Python shells (`_expansion_{neighbors,trees,metrics}.py`,
+# `_metrics_impl.py`, `_forest_host.py`, `_gbdt_host.py`) passed each
+# operation as a str; `classical_native_call` copied it into a Mojo String and
+# matched it against a chain of exact and prefix tests, then
+# bindings/family_native.mojo ran about 32 more prefix tests before the
+# family owner. Now a shell reads this table once at import
+# (python/mojolearn/_native_ops.py, door operation "operation_codes") and
+# passes the integer code; the door reads the route, the family route and
+# the name from the table (filled once per process) and calls the owner
+# directly. The family owners still receive the operation name (a String
+# built once here, never from the Python object), so their own suffix
+# matches are unchanged.
+#
+# Codes are the index in `_operation_names` (sorted); they hold within one
+# build only, and Python never hard-codes them. Add a name here when a shell
+# passes a new `family_*`, `trees_*` or `host_tree_*` operation by code.
+from std.ffi import _Global
+
+comptime OP_ROUTE_FAMILY = 1
+comptime OP_ROUTE_TREES = 2
+comptime OP_ROUTE_HOST_TREE = 3
+
+# Family owner routes (`family_route`), in the priority order of the former
+# prefix chain of bindings/family_native.mojo.
+comptime FR_UNKNOWN = 0
+comptime FR_DENSITY = 1
+comptime FR_PAR_PUBLIC = 2
+comptime FR_PAR_RUN = 3
+comptime FR_KMEANS = 4
+comptime FR_KM = 5
+comptime FR_SVM = 6
+comptime FR_XC = 7
+comptime FR_METRIC = 8
+comptime FR_XN = 9
+comptime FR_CHOL = 10
+comptime FR_MSEL = 11
+comptime FR_SVC = 12
+comptime FR_GP = 13
+comptime FR_MCLS = 14
+comptime FR_MEXP = 15
+comptime FR_HDBSCAN_PUBLIC = 16
+comptime FR_CFA = 17
+comptime FR_CFB = 18
+comptime FR_MIX = 19
+comptime FR_MANI = 20
+comptime FR_LOW = 21
+comptime FR_LINALG_OPS = 22
+# The estimator-argument binding step that runs before the owner.
+comptime FR_PRE_NONE = 0
+comptime FR_PRE_ESTIMATORS = 1
+comptime FR_PRE_SVM = 2
+comptime FR_PRE_BASE = 3
+comptime FR_PRE_X_NEIGHBORS = 4
+# A packed family route word: owner + 64 * pre + 1024 * cluster flag.
+comptime FR_PRE_SCALE = 64
+comptime FR_CLUSTER_FLAG = 1024
+
+
+def family_route_owner(route: Int) -> Int:
+    return route % FR_PRE_SCALE
+
+
+def family_route_pre(route: Int) -> Int:
+    return (route // FR_PRE_SCALE) % (FR_CLUSTER_FLAG // FR_PRE_SCALE)
+
+
+def family_route_cluster(route: Int) -> Bool:
+    return route >= FR_CLUSTER_FLAG
+
+
+def family_route(operation: String) -> Int:
+    """The packed route word of one `family_*` operation name: the same
+    tests, in the same order, the family dispatcher ran on every call (now
+    run once per name for coded calls, at table fill)."""
+    var pre = FR_PRE_NONE
+    if operation.startswith("family_svc_linear_") or operation.startswith("family_svm_linear_"):
+        pre = FR_PRE_ESTIMATORS
+    elif operation.startswith("family_svc_svc_") or operation.startswith("family_svc_svr_"):
+        pre = FR_PRE_SVM
+    elif operation.startswith("family_kmeans_"):
+        pre = FR_PRE_BASE
+    if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
+            or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
+        pre = FR_PRE_X_NEIGHBORS
+    var cluster = ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
+                   or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
+                       and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_"))
+    var owner = FR_UNKNOWN
+    if operation.startswith("family_density_"):
+        owner = FR_DENSITY
+    elif operation == "family_par_public":
+        owner = FR_PAR_PUBLIC
+    elif operation == "family_par_run":
+        owner = FR_PAR_RUN
+    elif operation.startswith("family_kmeans_"):
+        owner = FR_KMEANS
+    elif operation.startswith("family_km_"):
+        owner = FR_KM
+    elif operation.startswith("family_svm_"):
+        owner = FR_SVM
+    elif operation.startswith("family_xc_"):
+        owner = FR_XC
+    elif operation.startswith("family_metric_"):
+        owner = FR_METRIC
+    elif operation.startswith("family_xn_"):
+        owner = FR_XN
+    elif operation.startswith("family_chol_"):
+        owner = FR_CHOL
+    elif operation.startswith("family_msel_"):
+        owner = FR_MSEL
+    elif operation.startswith("family_svc_"):
+        owner = FR_SVC
+    elif operation.startswith("family_gp_"):
+        owner = FR_GP
+    elif operation.startswith("family_mcls_"):
+        owner = FR_MCLS
+    elif operation.startswith("family_mexp_"):
+        owner = FR_MEXP
+    elif operation.startswith("family_hdbscan_public_"):
+        owner = FR_HDBSCAN_PUBLIC
+    elif operation.startswith("family_cfa_"):
+        owner = FR_CFA
+    elif operation.startswith("family_cfb_"):
+        owner = FR_CFB
+    elif operation.startswith("family_mix_"):
+        owner = FR_MIX
+    elif operation.startswith("family_mani_"):
+        owner = FR_MANI
+    elif operation.startswith("family_low_"):
+        owner = FR_LOW
+    elif (operation.startswith("family_lin_") or operation.startswith("family_rs_")
+            or operation.startswith("family_pg_")):
+        owner = FR_LINALG_OPS
+    return owner + FR_PRE_SCALE * pre + (FR_CLUSTER_FLAG if cluster else 0)
+
+
+def _operation_names(mut names: List[String]):
+    """Every operation a shell passes by code, sorted; the code is the
+    index. Straight-line appends (no branch per name)."""
+    names.append("family_mcls_accuracy")
+    names.append("family_mcls_accuracy_fraction")
+    names.append("family_mcls_adjusted_rand")
+    names.append("family_mcls_completeness")
+    names.append("family_mcls_confusion")
+    names.append("family_mcls_entropy")
+    names.append("family_mcls_fowlkes_mallows")
+    names.append("family_mcls_hcv")
+    names.append("family_mcls_homogeneity")
+    names.append("family_mcls_kl")
+    names.append("family_mcls_log_loss")
+    names.append("family_mcls_mutual_info")
+    names.append("family_mcls_pr_curve")
+    names.append("family_mcls_prf")
+    names.append("family_mcls_r2")
+    names.append("family_mcls_rand")
+    names.append("family_mcls_regression_error")
+    names.append("family_mcls_roc_auc")
+    names.append("family_mcls_silhouette_samples")
+    names.append("family_mcls_silhouette_score")
+    names.append("family_mcls_trustworthiness")
+    names.append("family_mcls_v_measure")
+    names.append("family_metric_d2_absolute")
+    names.append("family_metric_d2_pinball")
+    names.append("family_metric_d2_tweedie")
+    names.append("family_metric_explained_variance")
+    names.append("family_metric_gamma")
+    names.append("family_metric_mape")
+    names.append("family_metric_max_error")
+    names.append("family_metric_medae")
+    names.append("family_metric_msle")
+    names.append("family_metric_pinball")
+    names.append("family_metric_poisson")
+    names.append("family_metric_r2_options")
+    names.append("family_metric_regression_error")
+    names.append("family_metric_regression_report")
+    names.append("family_metric_rmsle")
+    names.append("family_metric_tweedie")
+    names.append("family_mexp_cls_balanced_accuracy")
+    names.append("family_mexp_cls_fbeta")
+    names.append("family_mexp_cls_hamming")
+    names.append("family_mexp_cls_jaccard")
+    names.append("family_mexp_cls_kappa")
+    names.append("family_mexp_cls_likelihood_ratios")
+    names.append("family_mexp_cls_matthews")
+    names.append("family_mexp_cls_mlcm")
+    names.append("family_mexp_cls_prfs")
+    names.append("family_mexp_cls_report")
+    names.append("family_mexp_cls_zero_one")
+    names.append("family_mexp_cluster_ami")
+    names.append("family_mexp_cluster_calinski_harabasz")
+    names.append("family_mexp_cluster_contingency")
+    names.append("family_mexp_cluster_davies_bouldin")
+    names.append("family_mexp_cluster_nmi")
+    names.append("family_mexp_cluster_pair_confusion")
+    names.append("family_mexp_curve_auc")
+    names.append("family_mexp_curve_average_precision")
+    names.append("family_mexp_curve_det")
+    names.append("family_mexp_curve_ranking_report")
+    names.append("family_mexp_curve_roc")
+    names.append("family_mexp_curve_top_k")
+    names.append("family_mexp_rank_brier")
+    names.append("family_mexp_rank_coverage")
+    names.append("family_mexp_rank_d2_brier")
+    names.append("family_mexp_rank_d2_log_loss")
+    names.append("family_mexp_rank_dcg")
+    names.append("family_mexp_rank_hinge")
+    names.append("family_mexp_rank_loss")
+    names.append("family_mexp_rank_lrap")
+    names.append("family_mexp_rank_ndcg")
+    names.append("family_svc_ocsvm_decision")
+    names.append("family_svc_ocsvm_fit")
+    names.append("family_svc_ocsvm_fit_predict")
+    names.append("family_svc_ocsvm_predict")
+    names.append("family_svc_ocsvm_score_samples")
+    names.append("family_xn_graph_connected_components")
+    names.append("family_xn_graph_louvain_fit")
+    names.append("family_xn_graph_louvain_fit_predict")
+    names.append("family_xn_graph_pagerank_fit")
+    names.append("family_xn_graph_svgp_fit")
+    names.append("family_xn_graph_svgp_predict")
+    names.append("family_xn_graph_svgp_predict_f")
+    names.append("family_xn_graph_svgp_predict_y")
+    names.append("family_xn_graph_svgp_score")
+    names.append("family_xn_loc_imp_fit")
+    names.append("family_xn_loc_imp_fit_transform")
+    names.append("family_xn_loc_imp_transform")
+    names.append("family_xn_loc_lof_decision_function")
+    names.append("family_xn_loc_lof_fit")
+    names.append("family_xn_loc_lof_fit_predict")
+    names.append("family_xn_loc_lof_predict")
+    names.append("family_xn_loc_lof_score_samples")
+    names.append("family_xn_loc_nc_decision_function")
+    names.append("family_xn_loc_nc_fit")
+    names.append("family_xn_loc_nc_predict")
+    names.append("family_xn_loc_nc_predict_log_proba")
+    names.append("family_xn_loc_nc_predict_proba")
+    names.append("family_xn_loc_nc_score")
+    names.append("family_xn_names_achi2")
+    names.append("family_xn_names_imputer")
+    names.append("family_xn_names_kpca")
+    names.append("family_xn_names_schi2")
+    names.append("family_xn_pcs_feature_names")
+    names.append("family_xn_pcs_fit")
+    names.append("family_xn_pcs_fit_transform")
+    names.append("family_xn_pcs_transform")
+    names.append("family_xn_schi2_set_weights")
+    names.append("family_xn_schi2_weights")
+    names.append("family_xn_semi_achi2_fit")
+    names.append("family_xn_semi_achi2_fit_transform")
+    names.append("family_xn_semi_achi2_transform")
+    names.append("family_xn_semi_lp_fit")
+    names.append("family_xn_semi_lp_predict")
+    names.append("family_xn_semi_lp_predict_proba")
+    names.append("family_xn_semi_lp_score")
+    names.append("family_xn_semi_schi2_fit")
+    names.append("family_xn_semi_schi2_fit_transform")
+    names.append("family_xn_semi_schi2_transform")
+    names.append("host_tree_count")
+    names.append("host_tree_ctr_dim")
+    names.append("host_tree_ctr_predict")
+    names.append("host_tree_engine")
+    names.append("host_tree_getstate")
+    names.append("host_tree_groves")
+    names.append("host_tree_hash")
+    names.append("host_tree_init_forest")
+    names.append("host_tree_init_gbdt")
+    names.append("host_tree_parse")
+    names.append("host_tree_predict")
+    names.append("host_tree_predict_pair")
+    names.append("host_tree_proba")
+    names.append("host_tree_setstate")
+    names.append("host_tree_vote")
+    names.append("trees_agnostic_kernel_init")
+    names.append("trees_agnostic_kernel_values")
+    names.append("trees_agnostic_permutation_init")
+    names.append("trees_agnostic_permutation_values")
+    names.append("trees_bagging_members")
+    names.append("trees_bagging_members_set")
+    names.append("trees_bagging_members_slice")
+    names.append("trees_dart_construct")
+    names.append("trees_explainer_close")
+    names.append("trees_explainer_init")
+    names.append("trees_explainer_values")
+    names.append("trees_public_boost_apply")
+    names.append("trees_public_boost_decision_function")
+    names.append("trees_public_boost_fit")
+    names.append("trees_public_boost_fit_transform")
+    names.append("trees_public_boost_predict")
+    names.append("trees_public_boost_predict_proba")
+    names.append("trees_public_boost_score")
+    names.append("trees_public_boost_transform")
+    names.append("trees_public_forest_depth")
+    names.append("trees_public_forest_fit")
+    names.append("trees_public_forest_n_leaves")
+    names.append("trees_public_forest_predict")
+    names.append("trees_public_forest_proba")
+    names.append("trees_public_meta_fit")
+    names.append("trees_public_meta_fit_transform")
+    names.append("trees_public_meta_predict")
+    names.append("trees_public_meta_predict_proba")
+    names.append("trees_public_meta_score")
+    names.append("trees_public_meta_transform")
+
+
+struct OperationTable(Movable):
+    """The names, routes and family route words, filled once per process."""
+    var names: List[String]
+    var routes: List[Int]
+    var family_routes: List[Int]
+
+    def __init__(out self):
+        self.names = List[String]()
+        self.routes = List[Int]()
+        self.family_routes = List[Int]()
+        _operation_names(self.names)
+        for i in range(len(self.names)):  # driver-loop: over the fixed operation names, once per process
+            if self.names[i].startswith("trees_"):
+                self.routes.append(OP_ROUTE_TREES)
+                self.family_routes.append(FR_UNKNOWN)
+            elif self.names[i].startswith("host_tree_"):
+                self.routes.append(OP_ROUTE_HOST_TREE)
+                self.family_routes.append(FR_UNKNOWN)
+            else:
+                self.routes.append(OP_ROUTE_FAMILY)
+                self.family_routes.append(family_route(self.names[i]))
+
+
+# Shared by every Mojo extension in the process; bump the version whenever a
+# name is added, removed or reordered (the codes are indices).
+comptime OPERATION_TABLE = _Global[
+    StorageType=OperationTable, name="MojolearnOperationCodesV1",
+    init_fn=OperationTable.__init__,
+]
+
+
+def operation_table() raises -> UnsafePointer[OperationTable, MutAnyOrigin]:
+    """The process-wide table, filled at first use."""
+    return OPERATION_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()

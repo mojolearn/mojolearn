@@ -40,6 +40,10 @@ from ._native_robust_bridge import native_method as _native_local_method
 # at import: PolynomialCountSketch's `fit`, `transform` and `fit_transform`
 # are one native call each, handed the binding `_bind` resolves.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+# Lane ne1-h-labels: operations pass as integer codes from the one native
+# table (bindings/native_operation_codes.mojo), read once at import.
+from ._native_ops import codes as _operation_codes  # noqa: E402
+_OP = _operation_codes()
 
 def _connect_pcs_rng():
     # glue: fixed native RNG getter/lock identities, connected once at import.
@@ -492,7 +496,7 @@ class LocalOutlierFactor(_XNeighbors):
         self : LocalOutlierFactor
             The fitted estimator.
         """
-        return _NATIVE(self, "family_xn_loc_lof_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @available_if(lambda self: not self.novelty)
     @_native_local_method
@@ -514,7 +518,7 @@ class LocalOutlierFactor(_XNeighbors):
         labels : Array of shape (n_samples,), int64
             -1 for outliers, 1 for inliers.
         """
-        return _NATIVE(self, "family_xn_loc_lof_fit_predict", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_fit_predict, (None, X, y), _NATIVE_CONTEXT)
 
     def _novelty(self, what):
         if not self.novelty:
@@ -537,7 +541,7 @@ class LocalOutlierFactor(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_xn_loc_lof_score_samples", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_score_samples, (None, X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
     @_native_local_method
@@ -555,7 +559,7 @@ class LocalOutlierFactor(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_xn_loc_lof_decision_function", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_decision_function, (None, X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
     @_native_local_method
@@ -575,7 +579,7 @@ class LocalOutlierFactor(_XNeighbors):
         labels : Array of shape (n_queries,), int64
             -1 for outliers, 1 for inliers.
         """
-        return _NATIVE(self, "family_xn_loc_lof_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_predict, (None, X), _NATIVE_CONTEXT)
 
 
 # ====================================================================== NearestCentroid
@@ -669,7 +673,7 @@ class NearestCentroid(_XNeighbors):
             If there are fewer than two classes, the priors are invalid, or
             every feature has zero variance.
         """
-        return _NATIVE(self, "family_xn_loc_nc_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @_native_local_method
     def predict(self, X):
@@ -688,7 +692,7 @@ class NearestCentroid(_XNeighbors):
         labels : Array or list of shape (n_queries,)
             Predicted class labels.
         """
-        return _NATIVE(self, "family_xn_loc_nc_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_predict, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def decision_function(self, X):
@@ -708,7 +712,7 @@ class NearestCentroid(_XNeighbors):
             For two classes, shape (n_queries,): the second class's score
             minus the first's, positive for ``classes_[1]``.
         """
-        return _NATIVE(self, "family_xn_loc_nc_decision_function", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_decision_function, (None, X), _NATIVE_CONTEXT)
 
     def _decision_matrix(self, X):
         """The (n_queries, n_classes) discriminant scores."""
@@ -739,7 +743,7 @@ class NearestCentroid(_XNeighbors):
         proba : Array of shape (n_queries, n_classes)
             Probabilities, columns in the order of ``classes_``.
         """
-        return _NATIVE(self, "family_xn_loc_nc_predict_proba", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_predict_proba, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def predict_log_proba(self, X):
@@ -756,7 +760,7 @@ class NearestCentroid(_XNeighbors):
         -------
         log_proba : Array of shape (n_queries, n_classes), float32
         """
-        return _NATIVE(self, "family_xn_loc_nc_predict_log_proba", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_predict_log_proba, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def score(self, X, y, sample_weight=None):
@@ -776,7 +780,7 @@ class NearestCentroid(_XNeighbors):
         score : float
             (Weighted) fraction of correct predictions.
         """
-        return _NATIVE(self, "family_xn_loc_nc_score", (None, X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_score, (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
 
 # ====================================================================== OneClassSVM
@@ -893,7 +897,7 @@ class OneClassSVM(_XNeighbors):
         self : OneClassSVM
             The fitted estimator.
         """
-        return _NATIVE(self, "family_svc_ocsvm_fit", (None, X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_fit, (None, X, sample_weight), _NATIVE_CONTEXT)
 
     def score_samples(self, X):
         """Raw scoring function of the samples (not shifted by ``offset_``).
@@ -908,7 +912,7 @@ class OneClassSVM(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_svc_ocsvm_score_samples", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_score_samples, (None, X), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Signed distance to the boundary: ``score_samples(X) - offset_``.
@@ -924,7 +928,7 @@ class OneClassSVM(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_svc_ocsvm_decision", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_decision, (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Label samples as inliers (1) or outliers (-1).
@@ -938,7 +942,7 @@ class OneClassSVM(_XNeighbors):
         -------
         labels : Array of shape (n_queries,), int64
         """
-        return _NATIVE(self, "family_svc_ocsvm_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_predict, (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit on X and label X: ``fit(X).predict(X)``.
@@ -955,7 +959,7 @@ class OneClassSVM(_XNeighbors):
         labels : Array of shape (n_samples,), int64
             1 for inliers, -1 for outliers.
         """
-        return _NATIVE(self, "family_svc_ocsvm_fit_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_fit_predict, (None, X), _NATIVE_CONTEXT)
 
 
 # OneClassSVM's public methods are one call into the compiled SVM family
@@ -1158,7 +1162,7 @@ class KernelPCA(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_kpca", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_names_kpca, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== RandomState
@@ -1267,7 +1271,7 @@ class PolynomialCountSketch(_XNeighbors):
             If ``degree`` or ``n_components`` is below 1, or ``random_state`` is
             not an int, a numpy RandomState or None.
         """
-        return _NATIVE(self, "family_xn_pcs_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @_native_local_method
     def transform(self, X):
@@ -1283,7 +1287,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_pcs_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_transform, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def fit_transform(self, X, y=None):
@@ -1300,7 +1304,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_pcs_fit_transform", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_fit_transform, (None, X, y), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``polynomialcountsketch0``, ``polynomialcountsketch1``, ...
@@ -1314,7 +1318,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_pcs_feature_names", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_feature_names, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== AdditiveChi2Sampler
@@ -1380,7 +1384,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         self : AdditiveChi2Sampler
             The fitted transformer.
         """
-        return _NATIVE(self, "family_xn_semi_achi2_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_achi2_fit, (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Apply the approximate feature map to X.
@@ -1395,7 +1399,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
             float32; sparse (CSR) when X is sparse.
         """
-        return _NATIVE(self, "family_xn_semi_achi2_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_achi2_transform, (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1411,7 +1415,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         -------
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
         """
-        return _NATIVE(self, "family_xn_semi_achi2_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_achi2_fit_transform, (None, X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
@@ -1429,7 +1433,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_achi2", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_names_achi2, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== SkewedChi2Sampler
@@ -1511,7 +1515,7 @@ class SkewedChi2Sampler(_XNeighbors):
             If X has no features, ``n_components`` is below 1, or
             ``random_state`` is not an int, a numpy RandomState or None.
         """
-        return _NATIVE(self, "family_xn_semi_schi2_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_schi2_fit, (None, X), _NATIVE_CONTEXT)
 
     @property
     def random_weights_(self):
@@ -1520,11 +1524,11 @@ class SkewedChi2Sampler(_XNeighbors):
         # bindings/neighbors_semi_native.mojo `schi2_public_weights`, main's
         # kernel and words) when no transform has made it yet. Stored under
         # `_random_weights` (an older pickle's plain attribute still reads).
-        return _NATIVE(self, "family_xn_schi2_weights", (), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_schi2_weights, (), _NATIVE_CONTEXT)
 
     @random_weights_.setter
     def random_weights_(self, value):
-        _NATIVE(self, "family_xn_schi2_set_weights", (value,), _NATIVE_CONTEXT)
+        _NATIVE(self, _OP.family_xn_schi2_set_weights, (value,), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Apply the approximate feature map to X.
@@ -1539,7 +1543,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_semi_schi2_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_schi2_transform, (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1555,7 +1559,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_semi_schi2_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_schi2_fit_transform, (None, X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``skewedchi2sampler0``, ``skewedchi2sampler1``, ...
@@ -1569,7 +1573,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_schi2", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_names_schi2, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== LabelPropagation
@@ -1604,7 +1608,7 @@ class _LabelPropagationBase(_XNeighbors):
         self
             The fitted estimator.
         """
-        return _NATIVE(self, "family_xn_semi_lp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_fit, (None, X, y), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities of new samples from the fitted label distributions.
@@ -1619,7 +1623,7 @@ class _LabelPropagationBase(_XNeighbors):
         proba : Array of shape (n_queries, n_classes), float32
             Columns in the order of ``classes_``.
         """
-        return _NATIVE(self, "family_xn_semi_lp_predict_proba", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_predict_proba, (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict the class of new samples.
@@ -1634,7 +1638,7 @@ class _LabelPropagationBase(_XNeighbors):
         labels : Array or list of shape (n_queries,)
             The most probable class of each sample.
         """
-        return _NATIVE(self, "family_xn_semi_lp_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_predict, (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of :meth:`predict` on the given data.
@@ -1653,7 +1657,7 @@ class _LabelPropagationBase(_XNeighbors):
         score : float
             (Weighted) fraction of correct predictions.
         """
-        return _NATIVE(self, "family_xn_semi_lp_score", (None, X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_score, (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
 
 class LabelPropagation(_LabelPropagationBase):
@@ -1820,7 +1824,7 @@ class LabelSpreading(_LabelPropagationBase):
         ValueError
             If ``alpha`` is not in (0, 1).
         """
-        return _NATIVE(self, "family_xn_semi_lp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_fit, (None, X, y), _NATIVE_CONTEXT)
 
 
 # The label propagation / chi2 sampler doors (bindings/neighbors_semi_native.mojo)
@@ -1949,7 +1953,7 @@ class KNNImputer(_XNeighbors):
         self : KNNImputer
             The fitted imputer.
         """
-        return _NATIVE(self, "family_xn_loc_imp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_imp_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @_native_local_method
     def transform(self, X):
@@ -1968,7 +1972,7 @@ class KNNImputer(_XNeighbors):
             ``fit`` (unless ``keep_empty_features``), followed by the indicator
             columns when ``add_indicator`` is True.
         """
-        return _NATIVE(self, "family_xn_loc_imp_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_imp_transform, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def fit_transform(self, X, y=None):
@@ -1985,7 +1989,7 @@ class KNNImputer(_XNeighbors):
         -------
         X_imputed : Array of shape (n_samples, n_features_out), float32
         """
-        return _NATIVE(self, "family_xn_loc_imp_fit_transform", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_imp_fit_transform, (None, X, y), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
@@ -2003,7 +2007,7 @@ class KNNImputer(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_imputer", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_names_imputer, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== PageRank
@@ -2100,7 +2104,7 @@ class PageRank(_XNeighbors):
         RuntimeError
             If the iteration does not converge within ``max_iter`` steps.
         """
-        return _NATIVE(self, "family_xn_graph_pagerank_fit", (None, A), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_pagerank_fit, (None, A), _NATIVE_CONTEXT)
 
 
 # ====================================================================== connected components
@@ -2144,7 +2148,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     >>> A = (np.random.default_rng(0).random((500, 500)) < 0.002).astype(np.float32)
     >>> n_components, labels = mojolearn.connected_components(A, directed=False)
     """
-    return _NATIVE(None, "family_xn_graph_connected_components",
+    return _NATIVE(None, _OP.family_xn_graph_connected_components,
                    (numeric_mode, A, directed, connection, return_labels), _NATIVE_CONTEXT)
 
 
@@ -2239,7 +2243,7 @@ class Louvain(_XNeighbors):
             If ``max_level`` is not a positive integer or None, the matrix is not
             symmetric, or the graph has no edges.
         """
-        return _NATIVE(self, "family_xn_graph_louvain_fit", (None, A), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_louvain_fit, (None, A), _NATIVE_CONTEXT)
 
     def fit_predict(self, A, y=None):
         """Detect communities and return ``labels_``.
@@ -2256,7 +2260,7 @@ class Louvain(_XNeighbors):
         labels : Array of shape (n,), int32
             Community of each node.
         """
-        return _NATIVE(self, "family_xn_graph_louvain_fit_predict", (None, A), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_louvain_fit_predict, (None, A), _NATIVE_CONTEXT)
 
 # ====================================================================== SVGP
 # Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian
@@ -2369,7 +2373,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
             system is not positive definite (raise ``jitter`` or
             ``noise_variance``).
         """
-        return _NATIVE(self, "family_xn_graph_svgp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_fit, (None, X, y), _NATIVE_CONTEXT)
 
     def predict_f(self, X):
         """Mean and variance of the latent function at X.
@@ -2384,7 +2388,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         var : Array of shape (n_queries,), float32
         """
-        return _NATIVE(self, "family_xn_graph_svgp_predict_f", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_predict_f, (None, X), _NATIVE_CONTEXT)
 
     def predict_y(self, X):
         """Mean and variance of the observations at X (latent variance plus
@@ -2400,7 +2404,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         var : Array of shape (n_queries,), float32
         """
-        return _NATIVE(self, "family_xn_graph_svgp_predict_y", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_predict_y, (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predictive mean at X (the mean of :meth:`predict_f`).
@@ -2414,7 +2418,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         -------
         mean : Array of shape (n_queries,), float32
         """
-        return _NATIVE(self, "family_xn_graph_svgp_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_predict, (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -2433,7 +2437,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        return _NATIVE(self, "family_xn_graph_svgp_score", (None, X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_score, (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
 # The compiled owner of KernelPCA's fit, fit_transform and transform
 # (bindings/kpca_native.mojo through the decomposition owner door).

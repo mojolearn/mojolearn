@@ -29,7 +29,7 @@ _REFUSED_RECORDS = ()
 
 def parse_model_text(text):
     """Parse saved gradient-boosting model text into native CPU inference buffers."""
-    return _native_host_archive(None, "host_tree_parse", (text,), _ARCHIVE_CONTEXT)
+    return _native_host_archive(None, _OP.host_tree_parse, (text,), _ARCHIVE_CONTEXT)
 
 
 #: The `estimator` members a `mojolearn-gbdt-1` archive may carry, with the
@@ -97,7 +97,7 @@ class HostGBDT:
 
     def __init__(self, *, loss, text, n_features_in, approx_dim, n_classes=None,
                  numeric_mode=None, bias=None, estimator='GradientBoosting'):
-        return _native_host_archive(self, "host_tree_init_gbdt",
+        return _native_host_archive(self, _OP.host_tree_init_gbdt,
             (loss, text, n_features_in, approx_dim, n_classes, numeric_mode, bias, estimator), _ARCHIVE_CONTEXT)
 
     @classmethod
@@ -122,19 +122,19 @@ class HostGBDT:
     @property
     def n_trees(self):
         """Number of trees in the model."""
-        return _native_host_archive(self, "host_tree_count", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_count, (), _ARCHIVE_CONTEXT)
 
     @property
     def inference_engine(self):
         """Name of the prediction engine, ``'sequential'``."""
-        return _native_host_archive(self, "host_tree_engine", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_engine, (), _ARCHIVE_CONTEXT)
 
     def model_sha256(self):
         """Return the SHA-256 hex digest of the model text (UTF-8).
 
         It equals the digest of the archive's ``model`` member.
         """
-        return _native_host_archive(self, "host_tree_hash", (), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_hash, (), _ARCHIVE_CONTEXT)
 
     def predict(self, X):
         """Return raw float32 scores, as ``GradientBoosting.predict`` does.
@@ -158,7 +158,7 @@ class HostGBDT:
         # every float32 bit pattern, NaN payloads included, arrives
         # unchanged", `bindings/_mojolearn.mojo:765-768`); the bytes the
         # binding reads are therefore the GPU path's by that contract.
-        return _native_host_archive(self, "host_tree_predict", (X,), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_predict, (X,), _ARCHIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Return float64 class probabilities ``[1 - p, p]`` for ``Logloss`` and ``CrossEntropy`` models.
@@ -176,7 +176,7 @@ class HostGBDT:
         mojolearn.Array
             Shape ``(n_samples, 2)``.
         """
-        return _native_host_archive(self, "host_tree_proba", (X,), _ARCHIVE_CONTEXT)
+        return _native_host_archive(self, _OP.host_tree_proba, (X,), _ARCHIVE_CONTEXT)
 
 
 # CPU-only entries the gbdt `_HostBinding` serves beside the host binding's
@@ -185,15 +185,19 @@ class HostGBDT:
 # reach these only through a CPU-vendor binding, never by import.
 def gbdt_ctr_model_dim(text):
     """The approx dim of a CTR model text, read by `parse_model_text`."""
-    return _native_host_archive(None, "host_tree_ctr_dim", (text,), _ARCHIVE_CONTEXT)
+    return _native_host_archive(None, _OP.host_tree_ctr_dim, (text,), _ARCHIVE_CONTEXT)
 
 
 def gbdt_ctr_predict(X, *, loss, text, n_features_in, approx_dim, n_classes, estimator):
     """`HostGBDT(...).predict(X)` for a CTR model text."""
-    return _native_host_archive(None, "host_tree_ctr_predict",
+    return _native_host_archive(None, _OP.host_tree_ctr_predict,
         (X, loss, text, n_features_in, approx_dim, n_classes, estimator), _ARCHIVE_CONTEXT)
 
 
 # Defer this import until HostGBDT exists: the shared archive registry also
 # connects this class when HostForest is the first public name imported.
 from ._forest_host import _load, _native_host_archive, _ARCHIVE_CONTEXT
+# Lane ne1-h-labels: operations pass as integer codes from the one native
+# table (bindings/native_operation_codes.mojo), read once at import.
+from ._native_ops import codes as _operation_codes  # noqa: E402
+_OP = _operation_codes()

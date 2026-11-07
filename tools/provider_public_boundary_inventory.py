@@ -37,6 +37,11 @@ def describe(source, filename):
             entries = [n for n in calls if isinstance(n.func, ast.Name) and n.func.id in NATIVE_NAMES]
             operations = [arg.value for call in entries for arg in call.args
                           if isinstance(arg, ast.Constant) and isinstance(arg.value, str)]
+            # An operation passed by its integer code from the one native table
+            # (python/mojolearn/_native_ops.py: `_OP.<name>`) is listed by name.
+            operations += [arg.attr for call in entries for arg in call.args
+                           if isinstance(arg, ast.Attribute) and isinstance(arg.value, ast.Name)
+                           and arg.value.id == '_OP']
             state = 'requires_manual_or_transitive_audit'
             if method.name == '__sklearn_tags__':
                 state = 'allowed_sklearn_tag_metadata_only'
