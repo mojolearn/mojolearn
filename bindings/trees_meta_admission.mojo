@@ -25,9 +25,14 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.prep_native_estimator import prep_estimator_call, prep_estimator_plan
 from bindings.trees_side_records import trees_side_get, trees_side_put
+from bindings.native_model_records import (
+    records_stamped_get, records_stamped_put, records_stampable, ContentRecord, content_value, content_object,
+    RECORDS_TREES,
+)
 
 
 comptime _RECORD_SLOT = "trees_meta_admitted_v1"
+comptime _STAMP_SLOT = "trees_meta_admitted_stamp_v1"
 comptime _MAX_DEPTH = 64
 
 
@@ -200,14 +205,96 @@ def _held_matches(held: PythonObject, model: PythonObject, context: PythonObject
     return pos == len(held)
 
 
+# Generation stamp (lane ne2-b-members, row N071; the generation word of
+# bindings/native_model_records.mojo, lane ne1-e-records): after an admission
+# (or a record match) the configuration is stamped with the meta-estimator's
+# generation word plus native content words for what that word does not
+# prove: the items of every exact list and dict the walk reads, the class of
+# every other non-scalar value, and every nested estimator's class and own
+# generation word, recursively through its constructor parameters, in the
+# walk's order. A call whose words all hold skips the walk (one word per
+# object instead of one identity per constructor value). Any set or
+# frozenset, a dict keyed by anything but exact str / int, a member whose
+# fields are not its instance dictionary, too deep a configuration, or
+# Python 3.10 / 3.11 (no dictionary watcher) stores no stamp: the identity
+# record above decides, exactly as before. `set_params`, a member assignment
+# and any attribute write change the owner's or the member's dictionary and
+# so its generation; an in-place edit of a list or dict parameter changes its
+# content words.
+def _stamp_into(mut rec: ContentRecord, value: PythonObject, context: PythonObject, depth: Int) raises:
+    if not rec.ok or value is None:
+        return
+    if depth > _MAX_DEPTH:
+        rec.ok = False
+        return
+    var b = native_loaded_module("builtins")
+    var kind = py_type(value)
+    if kind is b.bool or kind is b.int or kind is b.float or kind is b.str:
+        return
+    if kind is b.set or kind is b.frozenset:
+        rec.ok = False
+        return
+    if kind is b.dict:
+        # The entries' identities (exact str / int keys only), one level.
+        content_value(rec, value, 0, 1, True)
+        var pairs = py_call(b.list, value.items())
+        for k in range(len(pairs)):  # driver-loop: constructor parameter mapping entries (once per stamp)
+            _stamp_into(rec, pairs[k][1], context, depth + 1)
+        return
+    if kind is b.list or kind is b.tuple:
+        # A list's length and item identities (a tuple cannot change), then
+        # each item.
+        content_value(rec, value, 0, 1, True)
+        for k in range(len(value)):  # driver-loop: constructor parameter container items (once per stamp)
+            _stamp_into(rec, value[k], context, depth + 1)
+        return
+    var plan = prep_estimator_plan(value, context)
+    if plan is None:
+        # Identity alone, as the record; its class is kept too.
+        content_value(rec, value, 0, 1, True)
+        return
+    var fields = py_call(plan["fields_get"], value, kind)
+    if not (fields is py_fields(value)):
+        rec.ok = False
+        return
+    # The member's class and generation word (limit 0: its values are walked
+    # below, parameter by parameter, as the record walks them).
+    content_object(rec, value, 0)
+    var names = plan["parameters"]
+    for k in range(len(names)):  # driver-loop: a member's fixed constructor parameters (once per stamp)
+        _stamp_into(rec, py_get(fields, names[k]), context, depth + 1)
+
+
+def _stamp(model: PythonObject, context: PythonObject) raises:
+    """Stamp `model`'s admitted configuration (see `_stamp_into`)."""
+    if not records_stampable(model):
+        return
+    var plan = prep_estimator_plan(model, context)
+    if plan is None:
+        return
+    var fields = py_call(plan["fields_get"], model, py_type(model))
+    if not (fields is py_fields(model)):
+        return
+    var rec = ContentRecord()
+    var names = plan["parameters"]
+    for k in range(len(names)):  # driver-loop: the meta-estimator's fixed constructor parameters (once per stamp)
+        _stamp_into(rec, py_get(fields, names[k]), context, 1)
+    _ = records_stamped_put(RECORDS_TREES, model, _STAMP_SLOT, rec^, PythonObject(True))
+
+
 def meta_admit_configuration(model: PythonObject, context: PythonObject) raises:
     """The meta-estimator's constructor admission (`__admit__`: one native
-    clone of the model and every member), skipped while the identity record
-    stored by the last successful admission still matches."""
+    clone of the model and every member), skipped while the generation stamp,
+    or else the identity record, stored by the last successful admission
+    still matches."""
+    if records_stamped_get(RECORDS_TREES, model, _STAMP_SLOT) is not None:
+        return
     var held = trees_side_get(_RECORD_SLOT, model)
     if held is not None and _held_matches(held, model, context):
+        _stamp(model, context)
         return
     var record = _record_of(model, context)
     _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
     if record is not None:
         _ = trees_side_put(_RECORD_SLOT, model, record)
+        _stamp(model, context)

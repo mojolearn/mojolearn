@@ -5,7 +5,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.trees_boost_admission import boost_admit, boost_tree_admit
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.trees_public_boost import _clone_from, _seed, _sub_seed
+from bindings.trees_public_boost import _seed, _sub_seed, _validated_clone
 from bindings.trees_public_forest import forest_get_params
 from bindings.trees_public_forest import forest_refresh, forest_capture_mode, forest_kind
 from bindings.trees_public_meta import _copy_block
@@ -54,13 +54,20 @@ def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> Pyt
     var width = PythonObject(outputs)
     var kind = forest_kind(base, context)
     var template = forest_get_params(base, context) if count > 0 else PythonObject(None)
+    # The constructor checks run once per call (lane ne2-b-members, N049):
+    # every member is a clone of the one `base` with only its random_state
+    # changed, so the first member is validated (`forest_refresh`, the full
+    # constructor check and field rebuild, and `forest_capture_mode`) and
+    # every later member copies that validated state with its own seed
+    # (trees_public_boost `_validated_clone`, shared with the DART and
+    # AdaBoost fit loops). Same fields, same values: nothing a member
+    # predicts changes.
+    var memo = Python.list()
     for t in range(count):  # driver-loop: one fitted member per native forest tree
         var lo = Int(py=offsets[t])
         var hi = Int(py=offsets[t + 1])
-        var member = _clone_from(base, template, _sub_seed(seed, t), context)
+        var member = _validated_clone(base, template, _sub_seed(seed, t), kind, memo, context)
         var mf = py_fields(member)
-        _ = forest_refresh(member, kind, context)
-        _ = forest_capture_mode(mf, context)
         py_setitem(mf, "_offsets", classical_wrap_array(native_array_from_values("i", Python.list(0, hi - lo)), Python.tuple(2), "<i4", "C", context))
         py_setitem(mf, "_colid", _copy_block(colid, lo, hi, "<i4", context))
         py_setitem(mf, "_quesval", _copy_block(quesval, lo, hi, "<f4", context))

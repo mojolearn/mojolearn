@@ -39,7 +39,8 @@ from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cl
 from bindings.msel_common import msel_signed32
 from bindings.family_common import FAMILY_I32P
 from bindings.msel_cv import (
-    msel_clone, msel_cv_folds, msel_device_rows_ok, msel_require_serial, msel_scorers, MselFoldRows, MselScores,
+    msel_clone, msel_cv_folds, msel_cv_splitter, msel_cv_folds_admitted, msel_materialize_y, msel_device_rows_ok,
+    msel_require_serial, msel_scorers, MselFoldRows, MselScores,
     msel_cross_validate_run, msel_seconds, msel_fit, msel_fit_planned, msel_error_value,
 )
 from bindings.msel_estimator_native import msel_native_clone_planned
@@ -805,6 +806,17 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
         var rng = MselRng(random_state, context)
         var order = PythonObject(None) if groups is None else _group_order(groups, n, context)
         var group_sizes = List[Int]() if groups is None else _group_sizes(order)
+        # Redrawn folds (lane ne2-b-members, N055): the splitter and the
+        # groups are resolved once per call and every permutation's folds
+        # split the X materialized above (`msel_cv_folds_admitted`); before,
+        # each permutation's msel_cv_folds copied X again, re-read the groups
+        # and resolved the splitter again. check_cv reads y for its target
+        # type only, which a permutation keeps. Same folds.
+        var splitter = PythonObject(None)
+        var group_values = PythonObject(None)
+        if not reuse:
+            group_values = PythonObject(None) if groups is None else msel_materialize_y(groups, context)
+            splitter = msel_cv_splitter(estimator, base, cv, False, context)
         for _ in range(n_permutations):  # driver-loop: over permutations
             var idx = PythonObject(None)
             if order is None:
@@ -817,7 +829,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
             if reuse:
                 perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, context))
             else:
-                var folds = msel_cv_folds(estimator, x, yp, cv, groups, False, context)[2]
+                var folds = msel_cv_folds_admitted(splitter, x, yp, group_values, context)
                 # pass 3 (rank 107): the permutation's folds run on rows0 (X
                 # stored once for the whole call), as the reused folds do;
                 # only the fold index sets change. `_mean_own` built a new

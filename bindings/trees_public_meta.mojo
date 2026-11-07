@@ -32,17 +32,21 @@ from bindings.trees_public_inputs import (
     trees_vector, trees_reshape, trees_address, trees_f32, trees_view, trees_check_rank, trees_itemsize,
     trees_check_sample_weight, trees_encode_labels, trees_decode_labels, trees_cast,
 )
-from bindings.trees_public_forest import _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse
+from bindings.trees_public_forest import (
+    _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
+)
 from bindings.trees_public_boost import (
     _mode, _xt, _x, _P, _F, _A, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
-    _gather_vec, _gather_view, _gather_codes_view, _gather_vec_view, _argmax, _scale,
+    _gather_vec, _gather_view, _gather_codes_view, _gather_vec_view, _argmax, _scale, _member_codes,
 )
-from bindings.trees_public_score import trees_accuracy, trees_r2
+from bindings.trees_public_score import (
+    trees_accuracy, trees_r2, _classification_encoded as score_classification_encoded, _codes as score_codes_into,
+)
 from bindings.prep_native_estimator import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split, prep_entry_call,
 )
-from bindings.classical_labels import _label_list
+from bindings.classical_labels import _label_list, classical_score_from_codes
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
@@ -62,14 +66,28 @@ comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 # ------------------------------------------------------------- utilities
 
 
+comptime _META_KIND_SLOT = "trees_meta_kind_v1"
+
+
 def meta_kind(model: PythonObject, context: PythonObject) raises -> String:
-    """The connected meta schema of the model's class (or an ancestor)."""
+    """The connected meta schema of the model's class (or an ancestor).
+    Once per class (lane ne2-b-members, N072; the forest_kind scheme): every
+    public call walked the class ancestry with one table probe per ancestor.
+    The record, kept weakly on the class in the native side table, holds the
+    connected table, the class's `__mro__` tuple and the answer; a
+    reconnection (a new table) or a `__bases__` assignment (a new `__mro__`
+    tuple) walks again."""
     var b = trees_builtins()
     var table = context["trees_meta_classes"]
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var cls = py_type(model)
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var held = trees_side_get(_META_KIND_SLOT, cls)
+    if held is not None and held[0] is table and held[1] is mro:
+        return String(held[2])
     for i in range(len(mro)):  # driver-loop: over the class ancestry metadata
         var kind = py_get(table, mro[i])
         if kind is not None:
+            _ = trees_side_put(_META_KIND_SLOT, cls, Python.tuple(table, mro, kind))
             return String(kind)
     raise Error("TypeError: the native meta-estimator owner requires a connected meta-estimator class")
 
@@ -296,6 +314,31 @@ def _require_member(est: PythonObject, owner: String, context: PythonObject) rai
 
 def _clone(est: PythonObject, context: PythonObject) raises -> PythonObject:
     return prep_estimator_clone(est, context)
+
+
+def _forest_classifier_member(member: PythonObject, context: PythonObject) raises -> Bool:
+    """True when `member`'s class (or an ancestor) is a connected forest
+    classifier (random forest, extra trees, decision tree): its predict is
+    the forest owner's `forest_predict`, whose codes `forest_predict_codes`
+    returns before the decode."""
+    try:
+        return _classifier(forest_kind(member, context))
+    except:
+        return False
+
+
+def _member_label_codes(member: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`as_i32_c(member.predict(Xa))` of a fitted member whose classes are
+    the ensemble's int codes (a hard vote, a stacking final estimator, a
+    binary OneVsRest member, a MultiOutput column). A forest member is asked
+    for its codes (`forest_predict_codes` through trees_public_boost
+    `_member_codes`, the AdaBoost member route): no label decode and int32
+    re-cast per member per call (lane ne2-b-members, N075 / N076); the
+    int32 values are the decoded labels' in every case, so no bits move.
+    Every other member predicts through its compiled plan as before."""
+    if _forest_classifier_member(member, context):
+        return _member_codes(member, Xa, context)
+    return _i32_vec(prep_estimator_call(member, "predict", Python.tuple(Xa), context), "codes", context)
 
 
 def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights: PythonObject,
@@ -608,9 +651,34 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
     var acc = _class_zero(xt, n * k, context)
     var w = _voting_weights(model)
     var members = _attr(model, "estimators_", Python.list())
-    for i in range(len(members)):  # driver-loop: over members
-        var e = members[i]
-        _acc_cols_w(xt, acc, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, Float64(py=w[i]), context)
+    var fused = py_get(xt, PythonObject("x_trees_accumulate_cols_many"))
+    if fused is not None:
+        # Every member's probabilities into the vote in one call (lane
+        # ne2-b-members, N083): the accumulator stays on the device across
+        # the members instead of one `x_trees_accumulate_cols` crossing (and
+        # one accumulator upload and readback) per member. The same adds in
+        # member order: the same bits.
+        var keep = Python.list()
+        var blocks = Python.list()
+        for i in range(len(members)):  # driver-loop: over members
+            var e = members[i]
+            var xa = trees_f32(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), 2, "C",
+                               "sub-estimator output", context)
+            var cols = _sub_cols(e, context)
+            var cols_view = _view_of_array(cols)
+            _ = py_call(keep.append, xa.keep)
+            _ = py_call(keep.append, cols)
+            _ = py_call(blocks.append, Python.tuple(_P(xa.addr), _P(cols_view.addr), _P(cols_view.shape[0]),
+                                                    _F(Float64(py=w[i]))))
+            _ = cols_view
+            _ = xa^
+        _ = py_call_typed(fused, _A(acc), blocks, Python.list(_P(n), _P(k)))
+        _ = keep  # keep the members' blocks alive through the native call above
+        _ = acc  # keep the Python object alive through the native call above
+    else:
+        for i in range(len(members)):  # driver-loop: over members
+            var e = members[i]
+            _acc_cols_w(xt, acc, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 
@@ -625,6 +693,12 @@ def _voting_predict_proba(model: PythonObject, X: PythonObject, context: PythonO
 
 
 def _voting_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _voting_codes(model, X, context), context)
+
+
+def _voting_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`VotingClassifier.predict` before its decode: int32 codes into
+    `classes_`."""
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
@@ -637,8 +711,8 @@ def _voting_predict(model: PythonObject, X: PythonObject, context: PythonObject)
         var w = _voting_weights(model)
         var members = _attr(model, "estimators_", Python.list())
         for i in range(len(members)):  # driver-loop: over members
-            _acc_votes(xt, acc, _i32_vec(prep_estimator_call(members[i], "predict", Python.tuple(Xa), context), "codes", context), n, k, Float64(py=w[i]))
-    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _argmax(xt, acc, n, k, context), context)
+            _acc_votes(xt, acc, _member_label_codes(members[i], Xa, context), n, k, Float64(py=w[i]))
+    return _argmax(xt, acc, n, k, context)
 
 
 def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
@@ -911,8 +985,15 @@ def _stacking_predict(model: PythonObject, X: PythonObject, classifier: Bool, co
     var Xm = _stacking_meta32(model, X, context)
     if not classifier:
         return prep_estimator_call(final_, "predict", Python.tuple(Xm), context)
-    var codes = _i32_vec(prep_estimator_call(final_, "predict", Python.tuple(Xm), context), "codes", context)
-    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), codes, context)
+    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _member_label_codes(final_, Xm, context),
+                               context)
+
+
+def _stacking_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`StackingClassifier.predict` before its decode: the final estimator's
+    int32 codes into `classes_`."""
+    var final_ = _attr(model, "final_estimator_", PythonObject(None))
+    return _member_label_codes(final_, _stacking_meta32(model, X, context), context)
 
 
 def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1204,18 +1285,35 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     return model
 
 
+def _multioutput_member_codes(model: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Each output's member codes (int32, into that output's `classes_[j]`;
+    the members were fitted on the column codes): `_member_label_codes`."""
+    var members = _attr(model, "estimators_", Python.list())
+    var out = Python.list()
+    for j in range(len(members)):  # driver-loop: over members
+        _ = py_call(out.append, _member_label_codes(members[j], Xa, context))
+    return out
+
+
 def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = trees_builtins()
     var Xa = _check_x(model, X, context)
+    return _multioutput_assemble(model, Xa, _multioutput_member_codes(model, Xa, context), context)
+
+
+def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """`MultiOutputClassifier.predict` from each output's member codes: the
+    decoded columns stacked into one (n, m) Array, or per-row label lists
+    for label objects no Array holds."""
+    var b = trees_builtins()
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var members = _attr(model, "estimators_", Python.list())
     var classes = _attr(model, "classes_", Python.list())
     var cols = Python.list()
     var stacked = True
     var all_int = True
-    for j in range(len(members)):  # driver-loop: over members
-        var col = trees_decode_labels(classes[j], _i32_vec(prep_estimator_call(members[j], "predict", Python.tuple(Xa), context), "codes", context), context)
+    for j in range(len(codes)):  # driver-loop: over members
+        var col = trees_decode_labels(classes[j], codes[j], context)
         _ = py_call(cols.append, col)
         if py_type(col) is not context["array_class"]:
             stacked = False
@@ -1290,7 +1388,12 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     """`MultiOutputClassifier.score`: the (weighted) fraction of rows whose
     every output matches."""
     var b = trees_builtins()
-    var pred = _multioutput_classifier_predict(model, X, context)
+    var Xa = _check_x(model, X, context)
+    var codes = _multioutput_member_codes(model, Xa, context)
+    var pred = _multioutput_assemble(model, Xa, codes, context)
+    if py_type(pred) is not context["array_class"]:
+        # Label objects no Array holds (str classes): scored in codes.
+        return _multioutput_score_codes(model, codes, _rows(Xa), y, sample_weight, context)
     var truth = trees_view(y, "y", context)
     var shown = py_call(b.tuple, pred.shape)
     var truth_shape = Python.list()
@@ -1300,9 +1403,9 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
         raise Error("y has shape " + _repr(py_call(b.tuple, truth_shape)) + ", the predictions have shape " + _repr(shown))
     var n = _rows(pred)
     var m = _cols(pred)
-    # One mismatch flag per cell (the base binding's elementwise compare at
-    # one exact dtype), one all-match flag per row (x_neighbors
-    # `xn_row_all_zero`), then the (weighted) accuracy of those flags.
+    # One equality flag per cell (the base binding's elementwise compare at
+    # one exact dtype), one any-mismatch flag per row (`x_trees_rows_any_unset`),
+    # then the (weighted) accuracy of those flags.
     var pdt = String(pred.dtype)
     var tdt = truth.typestr
     var t_int = tdt == "<i4" or tdt == "<i8" or tdt == "<u4" or tdt == "<u1" or tdt == "<u2" or tdt == "<i1"
@@ -1325,26 +1428,65 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
         _ = flts  # keep the Python object alive through the native call above
         _ = ints  # keep the Python object alive through the native call above
     _ = truth^
-    var flip = py_call(b.bytes.maketrans, py_call(b.bytes, Python.list(PythonObject(0), PythonObject(1))),
-                       py_call(b.bytes, Python.list(PythonObject(1), PythonObject(0))))
-    var miss_u1 = py_call(context["array_type"], PythonObject("B"), py_call(py_call(eq.tobytes).translate, flip))
-    var miss = trees_vector(size, "<i4", context)
-    _cast_u1(miss_u1, miss, size, context)
-    var hit = trees_vector(n, "<i4", context)
-    var xn = trees_table(context, _mode(py_fields(model), context), "_mojolearn_x_neighbors")
-    _ = py_call_typed(trees_entry(xn, "xn_row_all_zero"), Python.list(_A(miss), _A(hit)), Python.list(_P(n), _P(m)),
-                      Python.list())
-    _ = hit  # keep the Python object alive through the native call above
+    return _multioutput_rows_score(model, eq, n, m, False, sample_weight, context)
+
+
+def _multioutput_rows_score(model: PythonObject, eq: PythonObject, n: Int, m: Int, col_major: Bool,
+                            sample_weight: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The (weighted) fraction of rows whose m equality flags (`eq`, an
+    array('B') of n * m cells) are all set. One native pass writes each
+    row's any-mismatch flag (`x_trees_rows_any_unset`; lane ne2-b-members,
+    N081: before it a bytes translate to flip the flags, an int32 cast, the
+    x_neighbors row test and an `array('i', [1]) * n` of fake labels). The
+    accuracy of those flags against zeros counts exactly the rows the
+    all-match flags against ones counted, with the same weights: the same
+    score bits."""
+    var xt = _xt(py_fields(model), context)
+    var miss = trees_vector(n, "<i4", context)
+    _ = py_call_typed(_x(xt, "x_trees_rows_any_unset"), py_call(eq.buffer_info)[0], _A(miss),
+                      Python.list(_P(n), _P(m), _P(1 if col_major else 0)))
+    _ = eq  # keep the flag store alive through the native call above
     _ = miss  # keep the Python object alive through the native call above
-    var store = py_call(py_attr(py_call(context["array_type"], PythonObject("i"), Python.list(PythonObject(1))), "__mul__"), PythonObject(n))
-    var ones = classical_wrap_array(store, Python.tuple(n), "<i4", "C", context)
+    var zero = trees_vector(n, "<i4", context)
     var mode = py_get(py_fields(model), "numeric_mode")
-    return PythonObject(trees_accuracy(ones, hit, sample_weight, mode, context))
+    return PythonObject(trees_accuracy(zero, miss, sample_weight, mode, context))
 
 
-def _cast_u1(source: PythonObject, out_buf: PythonObject, size: Int, context: PythonObject) raises:
-    """`astype("<i4")` of a uint8 flag store."""
-    trees_cast(Int(py=py_call(source.buffer_info)[0]), "<u1", trees_address(out_buf), "<i4", size, context)
+def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y: PythonObject,
+                             sample_weight: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`MultiOutputClassifier.score` for outputs whose classes are label
+    objects (str): each truth column encoded once against that output's
+    fitted classes (-1 for a label it never saw, which never matches) and
+    compared with the member's codes (lane ne2-b-members, N084: this score
+    raised before, the predicted label lists have no buffer). A label
+    matches exactly when it is the predicted class."""
+    var b = trees_builtins()
+    var classes = _attr(model, "classes_", Python.list())
+    var m = len(codes)
+    var rows = Python.list()
+    if _has(y, "tolist"):
+        rows = _label_list(y, context)  # cpu-route: label objects (str/mixed) no Array holds, the explicit label input step
+    else:
+        rows = py_call(b.list, py_call(b.map, b.list, y))  # cpu-route: label objects (str/mixed) no Array holds
+    var width = len(rows[0]) if len(rows) > 0 and _has(rows[0], "__len__") else 0
+    if len(rows) != n or width != m:
+        raise Error("y has shape " + _repr(Python.tuple(len(rows), width)) + ", the predictions have shape "
+                    + _repr(Python.tuple(n, m)))
+    var eq = py_call(context["array_type"], PythonObject("B"), py_call(context["native_bytes_type"], n * m))
+    var base = Int(py=py_call(eq.buffer_info)[0])
+    var equal = trees_helper(context, "equal_elements")
+    var getter = native_loaded_module("operator").itemgetter
+    for j in range(m):  # driver-loop: over the output columns (one member each)
+        var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
+        var listed = classifier_label_list(classes[j], context)
+        if py_type(listed) is not b.list and py_type(listed) is not b.tuple:
+            listed = _label_list(listed, context)
+        var truth = score_codes_into(score_classification_encoded(column, "y", context), listed, context)
+        var pred = codes[j]
+        _ = py_call_typed(equal, _A(truth), _A(pred), _P(2), _P(n), _P(base + j * n))
+        _ = truth  # keep the Python object alive through the native call above
+        _ = pred  # keep the Python object alive through the native call above
+    return _multioutput_rows_score(model, eq, n, m, True, sample_weight, context)
 
 
 # --------------------------------------------------------------- OneVsRest
@@ -1443,6 +1585,12 @@ def _ovr_fused(xt: PythonObject, fused: PythonObject, members: PythonObject, Xa:
 
 
 def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _ovr_codes(model, X, context), context)
+
+
+def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`OneVsRestClassifier.predict` before its decode: int32 codes into
+    `classes_`."""
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
@@ -1450,17 +1598,17 @@ def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     var k = len(classes)
     var members = _attr(model, "estimators_", Python.list())
     if k == 2:
-        return trees_decode_labels(classes, _i32_vec(prep_estimator_call(members[0], "predict", Python.tuple(Xa), context), "codes", context), context)
+        return _member_label_codes(members[0], Xa, context)
     var fused = py_get(xt, PythonObject("x_trees_ovr_assemble"))
     if fused is not None and len(members) == k:
-        return trees_decode_labels(classes, _ovr_fused(xt, fused, members, Xa, n, k, True, 2, context), context)
+        return _ovr_fused(xt, fused, members, Xa, n, k, True, 2, context)
     var acc = _class_zero(xt, n * k, context)
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_positive(xt, members[j], Xa, context), n, context)
         _ = _place(xt, acc, n, k, blk, rows, j)
         _ = blk^
-    return trees_decode_labels(classes, _argmax(xt, acc, n, k, context), context)
+    return _argmax(xt, acc, n, k, context)
 
 
 def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1758,10 +1906,17 @@ def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObjec
 
 
 def _calibrated_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _calibrated_codes(model, X, context),
+                               context)
+
+
+def _calibrated_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`CalibratedClassifierCV.predict` before its decode: the row argmax of
+    the calibrated probabilities, int32 codes into `classes_`."""
     var p = _calibrated_proba(model, X, context)
     var xt = _xt(py_fields(model), context)
     var classes = _attr(model, "classes_", PythonObject(None))
-    return trees_decode_labels(classes, _argmax(xt, p, _rows(p), len(classes), context), context)
+    return _argmax(xt, p, _rows(p), len(classes), context)
 
 
 # ------------------------------------------------------------------- score
@@ -1791,6 +1946,20 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
     _ = truth^
     _ = pred^
     return PythonObject(result)
+
+
+def _meta_class_codes(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A single-output meta classifier's prediction before its decode:
+    int32 codes into its `classes_` (`predict` decodes exactly these)."""
+    if kind == "voting_classifier":
+        return _voting_codes(model, X, context)
+    if kind == "stacking_classifier":
+        return _stacking_codes(model, X, context)
+    if kind == "ovr":
+        return _ovr_codes(model, X, context)
+    if kind == "calibrated":
+        return _calibrated_codes(model, X, context)
+    raise Error("unknown meta classifier schema " + kind)
 
 
 def _meta_predict(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1954,9 +2123,18 @@ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: P
         var sample_weight = args[2]
         if kind == "multioutput_classifier":
             return _multioutput_classifier_score(model, X, y, sample_weight, context)
-        var prediction = _meta_predict(model, kind, X, context)
         if kind.endswith("_regressor"):
+            var prediction = _meta_predict(model, kind, X, context)
             return _regressor_score(model, prediction, y, sample_weight, context)
+        # Scored in codes (lane ne2-b-members, N082): the predicted codes
+        # and `classes_` go to the shared score from codes (y encoded once
+        # against `classes_`, bindings/classical_labels.mojo
+        # `classical_score_from_codes`, lane ne1-h-labels) instead of a decode
+        # to labels (a Python list of n objects for str classes) that the
+        # accuracy then re-encoded. Same refusals, same match count and
+        # weight sums: the same bits.
         var mode = py_get(py_fields(model), "numeric_mode")
-        return PythonObject(trees_accuracy(y, prediction, sample_weight, mode, context))
+        var codes = _meta_class_codes(model, kind, X, context)
+        return PythonObject(classical_score_from_codes(y, _attr(model, "classes_", PythonObject(None)), codes,
+                                                       sample_weight, mode, context))
     raise Error("unknown meta-estimator operation " + operation)

@@ -341,6 +341,47 @@ def accumulate_cols_device(
     _ = d_x^
 
 
+def accumulate_cols_many_device(
+    acc: MutPointer[Float64, MutUntrackedOrigin], xs: List[Int], cols: List[Int], widths: List[Int],
+    weights: List[Float64], n: Int, k: Int,
+) raises:
+    """`accumulate_cols_device` for several members in one call (lane
+    ne2-b-members, N083): acc goes up once and comes back once; for each
+    member in order its columns go up and are checked (the host's refusal),
+    its block goes up and `accumulate_cols_kernel` adds it into the resident
+    acc. The same kernel over the same words in the same order as one call
+    per member: the same bits. Each member's buffers are released only after
+    the stream has finished with them (one synchronize per member)."""
+    var ctx = _ctx()
+    var m = len(xs)
+    var d_acc = _up_f64(ctx, acc, n * k if n > 0 else 0)
+    for j in range(m):
+        var ks = widths[j]
+        var d_c = _up_i32(ctx, MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=cols[j]), ks)
+        if ks > 0:
+            var d_flag = _flags(ctx, 1)
+            ctx.enqueue_function[row_check_kernel](
+                d_c.unsafe_ptr(), Int64(ks), Int64(k), d_flag.unsafe_ptr(), grid_dim=_blocks(ks), block_dim=OPS_TPB,
+            )
+            var fl = _read_i32(ctx, d_flag, 1)
+            _ = d_flag^
+            if fl[0] != 0:
+                raise Error("x_trees accumulate_cols: column out of range")
+        if n > 0 and ks > 0:
+            var d_x = _up_f32(ctx, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=xs[j]), n * ks)
+            ctx.enqueue_function[accumulate_cols_kernel](
+                d_acc.unsafe_ptr(), d_x.unsafe_ptr(), d_c.unsafe_ptr(), Int64(n), Int64(k), Int64(ks), _w(weights[j]),
+                grid_dim=_blocks(n), block_dim=OPS_TPB,
+            )
+            ctx.synchronize()
+            _ = d_x^
+        _ = d_c^
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=acc.bitcast[UInt64](), src_buf=d_acc)
+        ctx.synchronize()
+    _ = d_acc^
+
+
 def rows_mark_kernel(
     rows: MutPointer[Int32, MutAnyOrigin], m: Int64, n: Int64, cnt: MutPointer[Int32, MutAnyOrigin],
     flag: MutPointer[Int32, MutAnyOrigin],

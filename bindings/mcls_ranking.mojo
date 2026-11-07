@@ -227,6 +227,35 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var codes = mc_map_order(true, classes, context)
     var micro = average is not None and String(average) == "micro"
     var weighted_avg = average is not None and String(average) == "weighted"
+    if micro:
+        # One program for the micro average (lane ne2-b-members, N080):
+        # before, the one-vs-rest program (its onehot, k curve folds and the
+        # ROW_SUM check) ran only for its ROW_SUM flag and a second program
+        # uploaded the scores and codes again for the micro fold. Now the
+        # micro program carries the same ROW_SUM stage after its fold (the
+        # place it had in the one-vs-rest program, over the same untouched
+        # scores), and the flag is read before the AUC as before: the same
+        # refusal, the same fold over the same words, the same bits.
+        # `_micro_inputs` and `_curves(s.reshape((n * k,)), flags, wm, n * k, 1, fold="auc")`
+        var p2 = McProg(context)
+        var s2 = p2.put(s)
+        var c2 = p2.put(codes)
+        var pos2 = p2.scratch(n * k)
+        p2.stage("onehot", n * k, [c2, pos2, n, k, 1])
+        var w2 = MC_NONE
+        if w is not None:
+            var w_in = p2.put(w)
+            w2 = p2.scratch(n * k)
+            p2.stage("rep_rows", n * k, [w_in, w2, k])
+        var out2 = mc_fold_stages(p2, s2, 1, pos2, w2, n * k, 1, False, 0.0, MC_NONE)
+        var rows2 = p2.want(p2.alloc(1), 1)
+        if n:
+            p2.stage("rank_epi", n, [_RANK_ROW_SUM, s2, n, k, rows2])
+        var arena2 = mc_run(p2, args[8], context)
+        if mc_arena_int(arena2, rows2) != 0:
+            raise Error(_ROWS_MSG)
+        _ = codes^
+        return mc_fold_auc(arena2, out2, False, 0.0, context)
     # `_fold_curves(s, _OneHot(codes, n, k, 0), w, n, k, stride=k, fold="auc", tail=tail)`
     var prog = McProg(context)
     var s_off = prog.put(s)
@@ -237,7 +266,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     if w is not None:
         w_off = prog.put(w)
     var out = mc_fold_stages(prog, s_off, k, pos, w_off, n, k, False, 0.0, MC_NONE)
-    # the tail: ROW_SUM, then (not micro) the supports, scores and average
+    # the tail: ROW_SUM, then the supports, scores and average
     var rows = prog.want(prog.alloc(1), 1)
     if n:
         prog.stage("rank_epi", n, [_RANK_ROW_SUM, s_off, n, k, rows])
@@ -256,22 +285,6 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var arena = mc_run(prog, args[8], context)
     if mc_arena_int(arena, rows) != 0:
         raise Error(_ROWS_MSG)
-    if micro:
-        # `_micro_inputs` and `_curves(s.reshape((n * k,)), flags, wm, n * k, 1, fold="auc")`
-        var p2 = McProg(context)
-        var s2 = p2.put(s)
-        var c2 = p2.put(codes)
-        var pos2 = p2.scratch(n * k)
-        p2.stage("onehot", n * k, [c2, pos2, n, k, 1])
-        var w2 = MC_NONE
-        if w is not None:
-            var w_in = p2.put(w)
-            w2 = p2.scratch(n * k)
-            p2.stage("rep_rows", n * k, [w_in, w2, k])
-        var out2 = mc_fold_stages(p2, s2, 1, pos2, w2, n * k, 1, False, 0.0, MC_NONE)
-        var arena2 = mc_run(p2, args[8], context)
-        _ = codes^
-        return mc_fold_auc(arena2, out2, False, 0.0, context)
     _ = codes^
     # `_OvrTail.result`: one warning per class without both labels (an AUC
     # never takes the AP curve rule)

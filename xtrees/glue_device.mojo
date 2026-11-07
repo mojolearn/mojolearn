@@ -129,6 +129,48 @@ def stack_w64_device(cols: List[Int], n: Int, dst: MutPointer[UInt64, MutUntrack
     _ = d_dst^
 
 
+def rows_any_unset_kernel(
+    eq: MutPointer[UInt8, MutAnyOrigin], n: Int64, m: Int64, col_major: Int32, miss_out: MutPointer[Int32, MutAnyOrigin],
+):
+    """miss_out[r] = 1 when any of row r's m flags is 0, else 0, one thread per row
+    (lane ne2-b-members, N081: compares only)."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while r < Int(n):
+        var miss = Int32(0)
+        for j in range(Int(m)):
+            var at = j * Int(n) + r if col_major != 0 else r * Int(m) + j
+            if eq.unsafe_load(at) == UInt8(0):
+                miss = Int32(1)
+                break
+        miss_out.unsafe_store(r, miss)
+        r += stride
+
+
+def rows_any_unset_device(
+    eq: MutPointer[UInt8, MutUntrackedOrigin], n: Int, m: Int, col_major: Bool,
+    miss_out: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    """`ops.rows_any_unset` on the device: one upload of the n * m flags,
+    one launch, one readback of the n row flags."""
+    if n <= 0:
+        return
+    var ctx = _ctx()
+    var cells = n * m if m > 0 else 1
+    var d_eq = ctx.enqueue_create_buffer[DType.uint8](cells)
+    if m > 0:
+        ctx.enqueue_copy(dst_buf=d_eq, src_ptr=eq)
+    var d_out = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[rows_any_unset_kernel](
+        d_eq.unsafe_ptr(), Int64(n), Int64(m), Int32(1) if col_major else Int32(0), d_out.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=miss_out, src_buf=d_out)
+    ctx.synchronize()
+    _ = d_eq^
+    _ = d_out^
+
+
 def binary_proba_kernel(
     p: MutPointer[UInt32, MutAnyOrigin], n: Int64, res: MutPointer[UInt64, MutAnyOrigin],
 ):
