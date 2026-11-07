@@ -1277,9 +1277,9 @@ def msel_n_splits(model: PythonObject, x: PythonObject, y: PythonObject, groups:
     if sp.kind == SPLITTER_LPO:
         return _comb(PythonObject(msel_n_samples(x, context)), sp.field("p", context))
     if sp.kind == SPLITTER_LOGO:
-        return family_call(b.len, py_call(b.set, msel_labels_list(groups, "groups", context)))
+        return _distinct_group_count(groups, context)
     if sp.kind == SPLITTER_LPGO:
-        var m = family_call(b.len, py_call(b.set, msel_labels_list(groups, "groups", context)))
+        var m = _distinct_group_count(groups, context)
         return _comb(m, sp.field("n_groups", context))
     if sp.kind == SPLITTER_PREDEFINED:
         var classes = msel_encode(sp.field("_folds", context), context)[0]
@@ -1297,6 +1297,27 @@ def msel_n_splits(model: PythonObject, x: PythonObject, y: PythonObject, groups:
     if sp.kind == SPLITTER_ITERABLE:
         return family_call(b.len, sp.field("_pairs", context))
     return sp.field("n_splits", context)
+
+
+def _distinct_group_count(groups: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`len(set(labels_list(groups)))`. N074: an integer ndarray / Array
+    vector is counted from its buffer by the shared encoder (its classes are
+    the distinct ints, the same count the set of the listed Python ints
+    has) instead of boxing every label into a list and a set. Float, bool,
+    str and mixed labels keep the listed set (NaN and 1 == 1.0 == True
+    follow Python's set equality there)."""
+    if groups is not None and msel_numeric_vector(groups, False, context) and _integer_vector(groups, context):
+        return PythonObject(len(msel_encode(groups, context)[0]))
+    var b = msel_b()
+    return family_call(b.len, py_call(b.set, msel_labels_list(groups, "groups", context)))
+
+
+def _integer_vector(value: PythonObject, context: PythonObject) raises -> Bool:
+    # The dtype of a vector msel_numeric_vector just admitted (an exact
+    # ndarray or the native Array; no other class reaches here).
+    var ndarray = py_get(context, "ndarray")
+    var typestr = String(value.dtype.str) if ndarray is not None and py_type(value) is ndarray else String(py=value.dtype)
+    return typestr == "<i4" or typestr == "<i8" or typestr == "<u4"
 
 
 def _comb(n: PythonObject, k: PythonObject) raises -> PythonObject:
