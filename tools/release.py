@@ -1452,6 +1452,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
             # gate-apple and identity-cpu run identity lanes, so they join the no-lane-after-publish guard.
             self.AFTER = {k: list(v) for k, v in AFTER.items()}
             self.AFTER["identity-admit"] = ["gate-nvidia", "gate-amd", "gate-apple", "identity-cpu"]
+            # THE CPU COLUMN FIRST (Andrew 2026-11-07): the CPU column is required to agree with every GPU column
+            # (admit_identity_columns.sh), and it runs on GitHub for free, so nothing is rented until it has
+            # recorded: a lane that errors or drifts on the exact wheel bytes stops the release before the bill.
+            self.NEEDS = dict(self.NEEDS, **{"gate-boxes": list(dict.fromkeys(self.NEEDS["gate-boxes"] + ["identity-cpu"]))})
             for publish in PUBLISH_STEPS:
                 self.AFTER[publish] = list(dict.fromkeys(self.AFTER.get(publish, []) + [
                     "gate-apple", "identity-cpu", "identity-admit"]))
