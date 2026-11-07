@@ -22,11 +22,10 @@ def native_interpreter_finalizing() raises -> Bool:
     interpreter has no modules dictionary"), not a NULL return. Resolved per
     call; only finalizers ask, never a public hot path."""
     ref cpy = Python().cpython()
-    var lib = cpy.lib.borrow()
-    if lib.check_symbol("Py_IsFinalizing"):
-        return _Py_IsFinalizing.load(lib)() != 0
-    if lib.check_symbol("_Py_IsFinalizing"):
-        return _Py_IsFinalizing_old.load(lib)() != 0
+    if cpy.lib.check_symbol("Py_IsFinalizing"):
+        return _Py_IsFinalizing.load(cpy.lib.borrow())() != 0
+    if cpy.lib.check_symbol("_Py_IsFinalizing"):
+        return _Py_IsFinalizing_old.load(cpy.lib.borrow())() != 0
     return False
 
 
