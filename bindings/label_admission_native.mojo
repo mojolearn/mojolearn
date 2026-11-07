@@ -78,7 +78,8 @@ struct LabelTypeKinds(Movable):
     def admit(mut self, value: PythonObject, context: PythonObject) raises -> Int:
         var kind = self.kind(py_type(value), context)
         if kind == 0:
-            raise labels_refusal(value)
+            var _refusal = labels_refusal(value)
+            raise _refusal^
         return kind
 
     def kind_raw(mut self, raw: PyObjectPtr, context: PythonObject) raises -> Int:
@@ -93,7 +94,8 @@ struct LabelTypeKinds(Movable):
         """`admit` of a borrowed label (same refusal)."""
         var kind = self.kind_raw(raw, context)
         if kind == 0:
-            raise labels_refusal(PythonObject(from_borrowed=raw))
+            var _refusal = labels_refusal(PythonObject(from_borrowed=raw))
+            raise _refusal^
         return kind
 
 
@@ -109,7 +111,8 @@ def labels_refusal(value: PythonObject) raises -> Error:
 def labels_admit_primitive(value: PythonObject, context: PythonObject) raises -> Int:
     var kind = labels_primitive_kind(py_type(value), context)
     if kind == 0:
-        raise labels_refusal(value)
+        var _refusal = labels_refusal(value)
+        raise _refusal^
     return kind
 
 

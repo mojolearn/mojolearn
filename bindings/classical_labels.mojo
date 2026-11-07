@@ -808,7 +808,8 @@ def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> C
         var kind = 1 if primitive == 1 else 2 if primitive > 1 else 0
         if kind == 0:
             if PythonObject(from_borrowed=raw) is None:
-                raise labels_refusal(PythonObject(None))
+                var _refusal = labels_refusal(PythonObject(None))
+                raise _refusal^
             raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols, got " + labels_type_name(py_type(PythonObject(from_borrowed=raw))))
         if kind == 2:
             # An exact int or bool is never NaN (`v != v` is False for it).
