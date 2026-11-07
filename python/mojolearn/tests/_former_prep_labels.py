@@ -40,7 +40,7 @@ def _numeric_labels(values):
     holds exactly (so the device's categories are the labels themselves),
     else None (str labels, ints beyond 2**24: the Python route)."""
     # every label read once natively (bindings/user_objects_native.mojo f32_exact)
-    from . import _user_objects
+    from mojolearn import _user_objects
     return _user_objects.call("f32_exact", values)
 
 
@@ -52,7 +52,7 @@ def _label_classes(mode, values):
         classes, _ = sorted_classes(values)
         return classes, None
     cats = _fit_categories(mode, Array._from_flat(nums, (len(nums), 1), "<f4"))[0]
-    from . import _user_objects
+    from mojolearn import _user_objects
     ints = _user_objects.kinds(values)[_user_objects.KIND_INTEGRAL] == len(values)
     classes = [int(c) if ints else float(c) for c in cats.tolist()]  # glue: class list from the device categories (cats-sized: distinct class values)
     return classes, cats
@@ -61,7 +61,7 @@ def _label_classes(mode, values):
 def _label_codes(pr, values, cats):
     """Stages: each label's index among `cats` (or -1). Returns the codes
     offset and the unknown-count offset."""
-    from . import _user_objects
+    from mojolearn import _user_objects
     words = _user_objects.call("floats", values)
     arr = Array._owned(words, (len(words), 1), "<f8", "C").astype("<f4")
     return _codes(pr, arr, [cats])
@@ -87,7 +87,7 @@ def _multilabel_indicator(y):
         if len(shape) != 2:
             return None
         return _multilabel_buffer(y, shape)
-    from . import _user_objects
+    from mojolearn import _user_objects
     if not (isinstance(y, (list, tuple)) and y and _user_objects.kinds(y)[_user_objects.KIND_SEQ] == len(y)):
         return None
     if len(y[0]) < 2:
@@ -110,8 +110,8 @@ def _multilabel_buffer(y, shape):
         return None
     if "bool" in str(getattr(y, "dtype", "")):
         raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from ._buffer import as_f64_c
+    from mojolearn._array import _NATIVE_CODE, _REDUCE_INTEGRAL
+    from mojolearn._buffer import as_f64_c
     Y, _ = as_f64_c(y, ndim=2, name="y")
     refuse = ValueError("mojolearn: Multioutput target data is not supported with label binarization")
     if not int(Y._native_reduce(_REDUCE_INTEGRAL)):
@@ -379,7 +379,7 @@ class LabelEncoder(_PrepBase):
         if got is not None:
             return got
         # str classes or a Python code list: the explicit input-prep route (G5)
-        from . import _user_objects
+        from mojolearn import _user_objects
         # the codes read once natively, range-checked by the base helper
         codes = _user_objects.call("ints", flatten_labels(y))
         if len(codes) and int(_native_helper("check_indices_i64")(
@@ -566,7 +566,7 @@ class LabelBinarizer(_PrepBase):
         if self._cats is None:
             # str classes: the codes come back for the explicit object-label decode (G5)
             pr.run(self.numeric_mode_)
-            from . import _user_objects
+            from mojolearn import _user_objects
             # one class object per code, placed natively (user_objects take)
             idx = _user_objects.call("ints", pr.values(codes, n)) if K != 1 else array.array("q", bytes(8 * n))
             return _classes_array(_user_objects.take(self._classes, idx))
