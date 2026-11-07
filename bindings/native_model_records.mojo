@@ -849,7 +849,7 @@ def content_value(mut rec: ContentRecord, value: PythonObject, depth: Int, limit
     non-scalar by class. `sets_fail`: an exact set / frozenset makes the
     record unusable (the trees_key_value walk reads their items)."""
     # Iterative (ne-fix-hang2): an explicit stack in place of the former
-    # self-recursion, a suspect of the classical-host compile hang. Children
+    # self-recursion (the compile hang was the dead-key ring, not this). Children
     # are pushed in reverse so they pop in item order: the same depth-first
     # pre-order, the same words in `rec.ops`, the same `limit` cut and the
     # same stop once `rec.ok` is False.

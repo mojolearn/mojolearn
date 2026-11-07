@@ -223,7 +223,7 @@ def _held_matches(held: PythonObject, model: PythonObject, context: PythonObject
 # content words.
 def _stamp_into(mut rec: ContentRecord, value: PythonObject, context: PythonObject, depth: Int) raises:
     # Iterative (ne-fix-hang2): an explicit stack in place of the former
-    # self-recursion, a suspect of the classical-host compile hang. Children
+    # self-recursion (the compile hang was the dead-key ring, not this). Children
     # are pushed in reverse so they pop in order: the same depth-first
     # pre-order of content words, the same `_MAX_DEPTH` refusal and the same
     # stop once `rec.ok` is False.

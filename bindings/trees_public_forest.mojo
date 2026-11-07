@@ -1674,8 +1674,8 @@ def forest_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
     """`predict_proba`: RF and DT the float32 vote fractions; ET the vote
     widened to float64; a random-splitter tree its inner forest's."""
     # A random-splitter tree answers through its inner forest: followed in a
-    # loop, not by self-recursion (ne-fix-hang2, a classical-host compile
-    # hang suspect); same model reached, same calls on it.
+    # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
+    # the compile hang was elsewhere); same model reached, same calls on it.
     var target = model
     var fields = py_fields(target)
     var kind = forest_kind(target, context)
@@ -1694,8 +1694,8 @@ def forest_predict(model: PythonObject, args: PythonObject, context: PythonObjec
     first-max argmax of the vote) decoded through `classes_`; a regressor's
     values (RF and DT float32, ET float64)."""
     # A random-splitter tree answers through its inner forest: followed in a
-    # loop, not by self-recursion (ne-fix-hang2, a classical-host compile
-    # hang suspect); same model reached, same calls on it.
+    # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
+    # the compile hang was elsewhere); same model reached, same calls on it.
     var target = model
     var fields = py_fields(target)
     var kind = forest_kind(target, context)
@@ -1715,8 +1715,8 @@ def forest_predict_codes(model: PythonObject, args: PythonObject, context: Pytho
     `classes_`. Internal callers that work in codes (AdaBoost's members,
     the string-class accuracy of `score`) skip the decode and re-encode."""
     # A random-splitter tree answers through its inner forest: followed in a
-    # loop, not by self-recursion (ne-fix-hang2, a classical-host compile
-    # hang suspect); same model reached, same calls on it.
+    # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
+    # the compile hang was elsewhere); same model reached, same calls on it.
     var target = model
     var fields = py_fields(target)
     var kind = forest_kind(target, context)

@@ -264,8 +264,8 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
 def classical_check_layout_call(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
     # Named apart from the two-argument check and the module-view check
     # (ne-fix-hang2): the three were one overload set differing by return
-    # type, each calling another member; the host-group compiler hang is
-    # suspected there, so no member of the set calls a sibling by overload.
+    # type, each calling another member; named apart so no member calls a sibling
+    # by overload (kept on its own merits; the compile hang was elsewhere).
     # The door's one layout check (ne1-e-admitted-call, row N259): the plan it
     # admitted is kept on the call, so a later read in the same call neither
     # re-checks the class and instance keys nor resolves the plan again.
