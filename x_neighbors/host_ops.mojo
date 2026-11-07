@@ -827,3 +827,47 @@ def op_p2m_row_sort(indptr: Int, cols: Int, dists: Int, out_cols: Int, out_d: In
             _f(out_d).unsafe_store(0, _f(out_d).unsafe_load(0) + Float32(1e-3))
     _ = s_perm^
     _ = s_rowid^
+
+
+# ---------------------------------------------- NearestCentroid fused queries
+# Lane ne3-g-svc-gp-neighbors (N327): the host column of the device
+# op_nc_labels / op_nc_proba. Each runs the host ops the caller ran one by
+# one, in the same order and with the same words (sabotage hooks included),
+# over a scratch matrix: the same bits.
+comptime XN_NC_SQDIST = 0
+comptime XN_NC_L1DIST = 1
+comptime XN_NC_DECISION = 2
+comptime XN_NC_SOFTMAX = 0
+comptime XN_NC_LOG_SOFTMAX = 1
+comptime XN_NC_SOFTMAX64 = 2
+
+
+def op_nc_labels(q: Int, cent: Int, std: Int, prior: Int, codes: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+    var mat = List[Float32](length=max(n * c, 1), fill=Float32(0))
+    var mp = Int(mat.unsafe_ptr())
+    if mode == XN_NC_DECISION:
+        op_nc_decision(q, cent, std, prior, mp, n, d, c)
+        if n > 0:
+            op_row_argmax(mp, codes, n, c)
+    else:
+        if mode == XN_NC_SQDIST:
+            op_sqdist(q, cent, mp, n, c, d)
+        else:
+            op_l1dist(q, cent, mp, n, c, d)
+        var dist = List[Float32](length=max(n, 1), fill=Float32(0))
+        op_knn_select(mp, Int(dist.unsafe_ptr()), codes, n, c, 1, 0)
+        _ = dist^
+    _ = mat^
+
+
+def op_nc_proba(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+    var mat = List[Float32](length=max(n * c, 1), fill=Float32(0))
+    var mp = Int(mat.unsafe_ptr())
+    op_nc_decision(q, cent, std, prior, mp, n, d, c)
+    if mode == XN_NC_SOFTMAX:
+        op_softmax(mp, res, n, c)
+    elif mode == XN_NC_LOG_SOFTMAX:
+        op_log_softmax(mp, res, n, c)
+    else:
+        op_softmax64(mp, res, n, c)
+    _ = mat^
