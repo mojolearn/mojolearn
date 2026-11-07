@@ -1,0 +1,54 @@
+rows with an open status in the lane tables: 523
+merged as the same site: 8
+dropped as closed by a later lane or the compile fixes (dropped.tsv): 55
+owed rows kept: 460
+by status:
+   LEFT-NEW-ENTRY 10
+   OWED 338
+   OWED-SHARED 90
+   PARTLY 22
+by kind:
+   1 29
+   2 120
+   3 244
+   4 60
+   5 3
+   6 4
+by frequency:
+   per-call 292
+   per-fit 36
+   per-item 126
+   rare 6
+by round:
+   p3 426
+   pass2 7
+   perf2 22
+   perf3 5
+by workstream:
+   A-resident-state 46
+   B-device-rows 41
+   C-training-sessions 87
+   D-generation-sessions 30
+   E-admitted-call 85
+   F-kernel-call-table 12
+   G-fused-entries 111
+   H-labels-metrics 37
+   J-multi-device-and-gaps 4
+   K-tools-gate 3
+   P-profile-first 4
+by kind_source:
+   guess 30
+   pass3-overlap 4
+   pass3-rank 426
+workstream x frequency:
+   A-resident-state per-item=12 per-call=32 per-fit=2 rare=0
+   B-device-rows per-item=18 per-call=20 per-fit=3 rare=0
+   C-training-sessions per-item=47 per-call=38 per-fit=2 rare=0
+   D-generation-sessions per-item=18 per-call=10 per-fit=2 rare=0
+   E-admitted-call per-item=13 per-call=69 per-fit=0 rare=3
+   F-kernel-call-table per-item=0 per-call=12 per-fit=0 rare=0
+   G-fused-entries per-item=10 per-call=79 per-fit=21 rare=1
+   H-labels-metrics per-item=5 per-call=26 per-fit=5 rare=1
+   J-multi-device-and-gaps per-item=3 per-call=1 per-fit=0 rare=0
+   K-tools-gate per-item=0 per-call=2 per-fit=0 rare=1
+   P-profile-first per-item=0 per-call=3 per-fit=1 rare=0
