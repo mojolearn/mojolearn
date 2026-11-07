@@ -108,6 +108,12 @@ THE STEPS
                      release HOLDS here: "IDENTITY RECORDED AT X, FREEZE IS Y: N lane(s) owed". Record
                      once at the freeze (tools/reference_refresh.sh), merge ref/<sha12>, --refreeze
   rehearsal          pixi run release-rehearsal in the source checkout, logs kept
+  readiness          (common, right after freeze-commit, beside cross-compile) the frozen dependency
+                     analysis (release_requirements -> release_requirement_dependencies.expand_catalog)
+                     through release_requirement_dependencies.prefetch: its frozen snapshots on every core
+                     (os.cpu_count(); MOJOLEARN_ADMISSION_JOBS / _WORKER override), into the content-keyed
+                     cache that linux-builds and every later ledger read then hit. linux-builds AND
+                     macos-build need it, so it never competes with the macOS wheel build for the Mac
   cross-compile      (core-linux, beside the rehearsal) dispatch
                      .github/workflows/cross-compile-check.yml on the frozen
                      commit against the previous release's source commit and
@@ -1060,9 +1066,18 @@ STEP_TABLE = [
     ("freeze-commit", "common", ["freeze-docs-facts"], None),
     ("rehearsal", "common", ["freeze-commit"], None),
     ("reuse-plan", "common", ["rehearsal"], None),
+    # THE READINESS ANALYSIS IS ITS OWN STEP, OFF THE LINUX LEGS' CRITICAL PATH (lane post-readiness-off-mac,
+    # 2026-11-07). 0.8.66 run e: linux-builds ran self.readiness_manifest() (the frozen dependency analysis, on
+    # this Mac) before dispatching a single GitHub leg, while macos-build held 4 compiles, 16 GB and 5.6 GB of
+    # swap (4.2 M pageouts): the analysis sat at ~10 % CPU for 35+ min and the legs were dispatched at 14:35, 97
+    # min after a 12:58 start (cross-compile passed at +35 min; linux-builds took 3826.7 s) while GitHub's
+    # runners idled. Now it runs right after freeze-commit, beside cross-compile (GitHub) and before the Mac
+    # build: linux-builds and macos-build both NEED it, so the analysis has the Mac's every core to itself and
+    # linux-builds dispatches from its cache as soon as cross-compile passes.
+    ("readiness", "common", ["freeze-commit"], None),
     ("cross-compile", "core-linux", ["freeze-commit"], None),
-    ("linux-builds", "core-linux", ["reuse-plan", "cross-compile"], None),
-    ("macos-build", "macos", ["reuse-plan"], "mac"),
+    ("linux-builds", "core-linux", ["reuse-plan", "cross-compile", "readiness"], None),
+    ("macos-build", "macos", ["reuse-plan", "readiness"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
     # THE APPLE ADAPTER GATE (2026-10-24, AGENTS.md "Framework adapters are the same API in another format"):
     # the Torch and MAX adapters of the built macOS wheel, installed into a fresh venv, on MPS/Metal
@@ -1073,7 +1088,10 @@ STEP_TABLE = [
     # already holds) are deleted: the table admit is the identity check.
     ("linux-wait", "core-linux", ["linux-builds"], None),
     ("linux-assemble", "core-linux", ["linux-wait"], None),
-    ("linux-pack", "core-linux", ["linux-assemble"], "mac"),
+    # linux-pack holds no "mac" token (2026-11-07): the token is exclusive, so it waited behind the whole
+    # macOS pipeline (macos-build alone was 8582 s in 0.8.66 run e) although packing compiles nothing. It
+    # takes one tools/mac_slot.py slot instead (step_linux_pack): the build holds 4 of the 5, the 5th packs.
+    ("linux-pack", "core-linux", ["linux-assemble"], None),
     ("gpu-column-nvidia", "nvidia", ["linux-pack"], None),
     ("gpu-column-amd", "amd", ["linux-pack"], None),
     # linux-joint-diff is deleted (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun):
@@ -3110,6 +3128,36 @@ class Release(release_identity_wheels.IdentityOnWheels):
         except Exception as exc:  # a plan line is advice; never fail the step over it
             return [f"linux groups: no plan ({type(exc).__name__}: {exc})"]
 
+    def step_readiness(self):
+        """The frozen dependency analysis of this freeze, before the Linux legs and the macOS build need it
+        (STEP_TABLE: "readiness"). release_requirement_dependencies.prefetch runs readiness_manifest in
+        discovery rounds: every frozen snapshot a round asks for runs at once, on admission_jobs() workers
+        (os.cpu_count() unless MOJOLEARN_ADMISSION_JOBS says otherwise; MOJOLEARN_ADMISSION_WORKER sends them
+        to a held box), into the content-keyed snapshot cache; the last round is the real, sequential
+        computation from that cache. Nothing is written to the ledger here: linux-builds, the gates and the
+        publish read readiness_manifest themselves (the in-process cache, or the snapshot cache after a
+        resume), so the ledger stays the one persistent RequirementsLedger of this version and
+        --requirements-configuration is merged exactly as before."""
+        import release_requirement_dependencies as dependencies
+        jobs = dependencies.admission_jobs()
+        worker = os.environ.get("MOJOLEARN_ADMISSION_WORKER") or "local"
+        if self.dry:
+            return (f"would run the frozen dependency analysis on {worker}, {jobs} snapshot worker(s) at once, "
+                    "before linux-builds and macos-build")
+        ran = []
+        manifest = dependencies.prefetch(self.readiness_manifest, jobs=jobs, worker=worker,
+                                         say=lambda line: self.say("  " + line), ran=ran)
+        units = len(manifest.get("requirements", {}))
+        failed = sum(1 for row in ran if not row.get("ok"))
+        return (f"{units} requirement unit(s); {len(ran)} frozen snapshot(s) run ({failed} failed), "
+                f"{jobs} at once on {worker}", dict(snapshots=len(ran), snapshot_jobs=jobs, snapshot_worker=worker))
+
+    def have_readiness(self, rec):
+        # Done at this freeze by this tooling: the snapshot cache it filled is keyed by revision, request and
+        # analyzer, so a resumed linux-builds reads it without running a worker. Another tooling commit (a
+        # changed analyzer) runs the step again.
+        return rec.get("result") if rec.get("tooling_commit") == self.tooling_commit else None
+
     def step_linux_builds(self):
         legs = linux_legs(self)
         for line in self.linux_group_plan():
@@ -3649,6 +3697,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         args += ["--out", dist]
         # the vendor wheel's README says which native set ships unsmoked (no Hopper box held)
         unsmoked = sorted(self.smoke_notes("nvidia"))
+        # ONE MAC SLOT, NOT THE "mac" TOKEN (2026-11-07): the pack is Python (zip, audits, strip) and compiles
+        # nothing, so it shares the Mac through tools/mac_slot.py like any CPU job: the macOS build holds
+        # min(4, slot_count()) slots (4 of the 10-core M4's 5), and the 5th admits the pack while the build
+        # runs, under mac_slot's load and free-memory test. Before, the scheduler's exclusive "mac" token
+        # held it behind macos-build, macos-smoke and gate-apple.
+        args = [PY, str(ROOT / "tools" / "mac_slot.py"), "run", "--"] + args
         self.must(args, env=dict(MOJOLEARN_RELEASE_UNSMOKED_ARCHES=",".join(unsmoked)) if unsmoked else None,
                   log=self.rel / "linux-pack.log", what="pack_wheel.py", cwd=pack_cwd)
         final_dir = dist / "final"
@@ -5728,6 +5782,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         "freeze-version": ("metadata", None), "freeze-changelog": ("metadata", None),
         "freeze-docs-facts": ("metadata", None), "freeze-commit": ("metadata", None),
         "reuse-plan": ("metadata", None), "finish-line": ("metadata", None), "record": ("metadata", None),
+        "readiness": ("metadata", None),
         "rehearsal": ("package", None), "linux-wait": ("package", None), "linux-assemble": ("package", None),
         "linux-pack": ("package", None),
         "cross-compile": ("artifact", None), "linux-builds": ("artifact", None), "macos-build": ("artifact", None),
