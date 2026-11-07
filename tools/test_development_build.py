@@ -1002,9 +1002,9 @@ def test_group_cap_variable_parallel_and_jobs():
 
 
 def test_threads_budget_and_pressure_floor():
-    assert dev.threads_per_group(16, 3) == 5
-    assert dev.threads_per_group(4, 9) == 1
-    assert dev.threads_per_group(192, 1) == 192
+    assert dev.launch_threads(16, [], [None] * 3) == [6, 5, 5]
+    assert dev.launch_threads(4, [], [None] * 9) == [1, 1, 1, 1]
+    assert dev.launch_threads(192, [], [None]) == [192]
     # Other load shrinks the budget; our own running groups do not.
     assert dev.current_budget(80 * GIB, 100 * GIB, []) == 80 * GIB
     assert dev.current_budget(80 * GIB, 70 * GIB, [30 * GIB]) == 80 * GIB
@@ -1056,11 +1056,16 @@ def test_main_packs_groups_keys_their_threads_and_reuses_them(repo, tmp_path, mo
     assert report["groups_concurrent_max"] == groups
     assert report["host_cores"] == 16 and report["host_memory_bytes"] == 128 * GIB
     assert report["scheduler"]["parallel"] == "auto" and report["scheduler"]["slots"] == 16
-    assert {jobs for _, jobs, _ in seen} == {str(16 // groups)}
+    # All start on the first tick and share the 16 cores: threads sum to the cores.
+    assert sum(int(jobs) for _, jobs, _ in seen) == 16
+    assert {int(jobs) for _, jobs, _ in seen} <= {16 // groups, 16 // groups + 1}
     assert all(limits["rss_bytes"] == 12 * GIB and limits["min_available_bytes"] == 20 * GIB
                for _, _, limits in seen)
-    assert all(r["workers_at_launch"] == 16 // groups and r["peak_rss_bytes"] == GIB
-               and r["groups_running_at_launch"] == groups for r in report["results"])
+    assert all(r["workers_at_launch"] in (16 // groups, 16 // groups + 1) and r["peak_rss_bytes"] == GIB
+               and r["queue_wait_seconds"] >= 0 and r["compile_seconds"] >= 0 for r in report["results"])
+    assert sorted(r["groups_running_at_launch"] for r in report["results"]) == list(range(1, groups + 1))
+    assert max(r["threads_running_at_launch"] for r in report["results"]) == 16
+    assert report["threads_running_max"] == 16
     assert report["state"] == "activated"
     # The keys differ from the platform default's, and the next plan finds them.
     built = {r["stem"]: r["key"] for r in report["plan"]["groups"]}
@@ -1124,3 +1129,133 @@ def test_caller_compile_jobs_keep_their_keys_under_the_scheduler(repo, tmp_path,
     assert {jobs for _, jobs, _ in seen} == {"1"}
     assert {r["stem"]: r["key"] for r in report["plan"]["groups"]} == keys(before)
     assert report["state"] == "activated"
+
+
+def test_launch_threads_sum_to_the_cores_after_every_start():
+    # 32-vCPU box, 15 groups fit memory: every core is given out.
+    threads = dev.launch_threads(32, [], [None] * 15)
+    assert sum(threads) == 32 and len(threads) == 15 and threads[0] >= threads[-1] >= 2
+    # A group finished and freed its 3 threads: the next start takes all 3.
+    running = threads[1:]
+    assert dev.launch_threads(32, running, [None, None]) == [2, 1]
+    assert sum(running) + 3 == 32
+    # No free core: nothing starts beside the running groups.
+    assert dev.launch_threads(32, [16, 16], [None]) == []
+    # Fixed counts (AMD's 8) take their cores; chosen groups get what is left.
+    assert dev.launch_threads(32, [8, 8], [8, None, None]) == [8, 4, 4]
+    assert dev.launch_threads(32, [8, 8, 8], [8, None]) == [8]
+    assert dev.launch_threads(32, [8, 8, 8, 8], [8, None]) == []
+    # A lone group above the cores still starts, alone.
+    assert dev.launch_threads(4, [], [8, None]) == [8]
+
+
+def test_longest_group_starts_first_recorded_seconds_then_source_size(tmp_path):
+    root = tmp_path / "src"
+    for name, size in (("small.mojo", 10), ("large.mojo", 1000), ("mid.mojo", 100)):
+        write(root, name, "x" * size)
+
+    def row(stem, files, seconds=0.0):
+        return {"mode": "identical", "stem": stem, "recorded_seconds": seconds,
+                "fields": {"repo": str(root), "source": {"files": {f: "h" for f in files}}}}
+    # First run, no records: the largest source closure starts first.
+    first = [row("s", ["small.mojo"]), row("l", ["large.mojo"]), row("m", ["mid.mojo"])]
+    ordered, needs = dev.packing_order(first, [12 * GIB] * 3)
+    assert [r["stem"] for r in ordered] == ["l", "m", "s"] and needs == [12 * GIB] * 3
+    # Recorded seconds outrank size and memory; an unrecorded group is
+    # estimated from its bytes at the recorded seconds per byte (600 s / 110 bytes).
+    later = [row("s", ["small.mojo"], 500.0), row("l", ["large.mojo"], 0.0), row("m", ["mid.mojo"], 100.0)]
+    ordered, needs = dev.packing_order(later, [GIB, 3 * GIB, 2 * GIB])
+    assert [r["stem"] for r in ordered] == ["l", "s", "m"] and needs == [3 * GIB, GIB, 2 * GIB]
+    assert dev.estimated_seconds(later) == [500.0, pytest.approx(1000 * 600 / 110), 100.0]
+
+
+def test_unrecorded_groups_pack_by_what_this_run_measured():
+    floor, ceiling = 12 * GIB, 200 * GIB
+    # Nothing measured yet: the floor stays.
+    assert dev.live_need("group-floor", floor, 0, floor, ceiling) == (floor, "group-floor")
+    # A passed group of the set measured 3 GiB: unrecorded groups pack at 3 GiB ...
+    assert dev.live_need("group-floor", floor, 3 * GIB, floor, ceiling) == (3 * GIB, "set-max-live")
+    assert dev.live_need("set-max-live", 3 * GIB, 4 * GIB, floor, ceiling) == (4 * GIB, "set-max-live")
+    # ... but keep the floor as their rss limit.
+    assert dev.guard_rss(3 * GIB, "set-max-live", floor) == floor
+    assert dev.guard_rss(3 * GIB, "recorded", floor) == 3 * GIB
+    # A set maximum from older records only rises; own records and the flag stay.
+    assert dev.live_need("set-max", 5 * GIB, 3 * GIB, floor, ceiling) == (5 * GIB, "set-max")
+    assert dev.live_need("set-max", 5 * GIB, 7 * GIB, floor, ceiling) == (7 * GIB, "set-max")
+    assert dev.live_need("recorded", 2 * GIB, 9 * GIB, floor, ceiling) == (2 * GIB, "recorded")
+    assert dev.live_need("memory-per-job-gib", 2 * GIB, 9 * GIB, floor, ceiling) == (2 * GIB, "memory-per-job-gib")
+    assert dev.live_need("group-floor", floor, 300 * GIB, floor, ceiling) == (ceiling, "set-max-live")
+
+
+def test_sliding_window_starts_a_group_as_soon_as_a_core_frees(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    monkeypatch.setattr(dev, "available_resources", lambda: (2, 100 * GIB))
+    cache = tmp_path / "cache"
+    first = plan(repo, tmp_path)
+    for row in first["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    groups = len(first["groups"])
+    assert groups > 2 and len(seen) == groups
+    # Two cores: two groups at a time, one thread each, never more threads than cores.
+    assert report["groups_concurrent_max"] == 2 and report["threads_running_max"] == 2
+    assert {jobs for _, jobs, _ in seen} == {"1"}
+    assert all(r["threads_running_at_launch"] <= 2 and r["groups_running_at_launch"] <= 2
+               for r in report["results"])
+    assert report["state"] == "activated"
+
+
+def test_input_check_rebuilds_only_the_finished_group(repo, tmp_path, monkeypatch):
+    row = plan(repo, tmp_path)["groups"][0]
+    monkeypatch.setattr(dev, "make_plan", lambda *_, **__: pytest.fail("no whole-set re-plan after a compile"))
+    monkeypatch.setattr(dev, "cached_artifact", lambda *_: None)
+
+    def build(command, *_):
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (row["stem"] + ".so")).write_bytes(b"completed")
+        return 0
+    monkeypatch.setattr(dev, "run_logged", build)
+    reads = []
+    monkeypatch.setattr(dev, "toolchain_facts", lambda root: reads.append(root) or FACTS)
+    probe = dev.ToolchainProbe(repo)
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence", probe,
+                               {"groups_running_at_launch": 3, "threads_running_at_launch": 7,
+                                "cores": 8, "submitted": 0.0})
+    assert result["state"] == "built", result.get("reason")
+    assert result["groups_running_at_launch"] == 3 and result["threads_running_at_launch"] == 7
+    assert result["queue_wait_seconds"] >= 0 and "submitted" not in result
+    assert len(reads) == 1
+    receipt = json.loads((tmp_path / "evidence" / (row["mode"] + "-" + row["stem"] + ".json")).read_text())
+    assert receipt["groups_running_at_launch"] == 3 and "queue_wait_seconds" in receipt
+    # The one-group fields equal the plan's: same key.
+    assert dev.digest(dev.current_group_fields(row, repo, tmp_path / "cache", ENV, FACTS)) == row["key"]
+
+
+def test_one_toolchain_read_serves_groups_that_finished_before_it(monkeypatch, tmp_path):
+    import threading
+    gate, reads = threading.Event(), []
+
+    def slow_facts(root):
+        reads.append(root)
+        gate.wait(5)
+        return FACTS
+    monkeypatch.setattr(dev, "toolchain_facts", slow_facts)
+    monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
+    probe = dev.ToolchainProbe(tmp_path)
+    moment = dev.time.monotonic()
+    out = []
+    workers = [threading.Thread(target=lambda: out.append(probe.facts_after(moment))) for _ in range(4)]
+    for worker in workers:
+        worker.start()
+    dev.time.sleep(0.2)
+    gate.set()
+    for worker in workers:
+        worker.join(10)
+    assert out == [FACTS] * 4 and len(reads) == 1
+    # A group that finished after that read began needs a new read.
+    assert probe.facts_after(dev.time.monotonic()) == FACTS and len(reads) == 2
