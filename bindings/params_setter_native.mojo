@@ -12,7 +12,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_model_records import bump_model_generation
-from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.mode_metadata_native import _fields, _class_fields, instance_protocol_override
 from bindings.params_metadata_native import _read, _resolved
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
@@ -34,7 +34,11 @@ def _constructor_layout(model: PythonObject, fields: PythonObject, plan: PythonO
             raise Error("TypeError: native parameter class ancestry changed")
     var protected = plan["protected"]
     for i in range(len(protected)):  # driver-loop: instance protocols are never product callbacks
-        if py_contains(fields, protected[i]):
+        # The shared predicate admits the trees' native constructor flag
+        # (`_has_constructor_parameters`, an exact bool on every member tree
+        # an ensemble fit builds); the declared release walk of a boosted
+        # ensemble's `estimators_` reaches this check through those members.
+        if instance_protocol_override(fields, protected[i], b):
             raise Error("TypeError: native parameter setters refuse instance protocol overrides")
 
 

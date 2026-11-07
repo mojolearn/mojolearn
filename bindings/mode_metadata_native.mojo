@@ -155,6 +155,26 @@ def _class_fields(cls: PythonObject) raises -> PythonObject:
     return _class_fields(mods, cls)
 
 
+def instance_protocol_override(fields: PythonObject, name: PythonObject, b: PythonObject) raises -> Bool:
+    """True when the instance dictionary `fields` holds `name` as an override
+    of a connected class method or protocol (one shared predicate for every
+    protected-name refusal: the parameter setters, the declared release walk
+    and the model-selection estimator check).
+
+    The tree and forest constructors (trees_constructor_native,
+    trees_public_boost `_new_member`, trees_public_forest) deliberately store
+    the native constructor flag `_has_constructor_parameters` (an exact bool)
+    on each instance. That is native-owned state, not an override: an exact
+    bool is admitted, any other value under that name is refused. Every other
+    protected name present on the instance is an override."""
+    if String(name) == "_has_constructor_parameters":
+        var flag = py_get(fields, name)
+        if flag is not None and py_type(flag) is not b.bool:
+            raise Error("TypeError: native constructor-state flag must be an exact bool")
+        return False
+    return py_contains(fields, name)
+
+
 comptime _CLASS_KEYS_SLOT = "class_string_keys_v1"
 
 
