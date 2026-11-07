@@ -1031,12 +1031,10 @@ def ridge_fit_multi_binding(
     var ic = _f32_ptr(Int(py=params[6])) if want_icpt else wp
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
+        # ne2-g-linear (N408): the intercepts in the same device session
+        # (`ridge_multi_icpt_kernel` on the device coef and ymean).
+        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center, want_icpt, xm, ic)
         ctx.synchronize()
-        if want_icpt:
-            # cpu2-l6-bindings: the intercepts on the device
-            # (`ridge_multi_icpt_kernel`), one thread per target
-            ridge_multi_icpt_device(ctx, xm, wp, mp, ic, nf, nt)
         _ = ctx^
     return PythonObject(0)
 
