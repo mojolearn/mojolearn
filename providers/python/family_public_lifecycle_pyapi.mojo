@@ -28,6 +28,7 @@ from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_complete,
 )
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, _target, _public_result
+from bindings.device_rows_door import door_is_device_rows, door_rows_host
 
 
 struct FamilyLifecycle(Copyable, Movable):
@@ -194,6 +195,13 @@ def family_lifecycle_begin(model: PythonObject, operation: String, spec: FamilyL
     var values = Python.list()
     for i in range(len(args)):  # small-loop(fixed operation argument envelope)
         _ = py_call(values.append, args[i])
+    if door_is_device_rows(source, context):
+        # The DeviceRows door (lane ne1-b-door, workstream B): a
+        # model-selection fold's X resolves to its rows through its own
+        # native materializer (the device gather out of the resident base);
+        # these owners read host addresses. Same rows, same order.
+        source = door_rows_host(source, context)
+        py_setitem(values, PythonObject(x_index), source)
     var rows = -1
     var columns = -1
     if host_sparse_format(source).byte_length() > 0:

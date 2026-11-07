@@ -12,6 +12,7 @@ from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, cl
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from core.classical_arrays_impl import classical_check_weights
+from bindings.device_rows_door import door_is_device_rows, door_rows_host
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
 
@@ -81,8 +82,19 @@ def classical_check_x(source: PythonObject, est: String, context: PythonObject,
                       admitted: Bool = False) raises -> PythonObject:
     """X for fit, predict or score: refused with scikit-learn's wording, then
     cast to C-ordered float32 (the input itself when it already is one)."""
-    classical_refuse_sparse(source, est)
-    var view = classical_view(source, context, "X", admitted)
+    # The DeviceRows door (lane ne1-b-door, workstream B): a model-selection
+    # fold's X arrives as `_arena_io.DeviceRows`; these kernels read host
+    # addresses, so it resolves to its rows through its own native
+    # materializer (the device gather out of the resident base) and is then
+    # checked like any Array. Same rows, same order: the same bytes as the
+    # host path.
+    var x_source = source
+    var x_admitted = admitted
+    if door_is_device_rows(source, context):
+        x_source = door_rows_host(source, context)
+        x_admitted = False
+    classical_refuse_sparse(x_source, est)
+    var view = classical_view(x_source, context, "X", x_admitted)
     var kind = classical_kind(view, context)
     if kind == "c":
         raise Error("Complex data not supported: " + est + " got a complex X.")
