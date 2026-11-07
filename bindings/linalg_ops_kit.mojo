@@ -342,7 +342,7 @@ struct LinKit(Movable):
                         + String(self.r(a)) + "x" + String(self.c(a)))
         var rows = self.r(a)
         var cols = self.c(a)
-        var words = [op, rows * cols, cols, self.n(ib), bm, self.n(ic), cm]
+        var words: List[Int] = [op, rows * cols, cols, self.n(ib), bm, self.n(ic), cm]
         if rows * cols and self.resident:
             var out = self.device_output(rows, cols)
             var da = self.device(a)
@@ -369,7 +369,7 @@ struct LinKit(Movable):
         var n = self.r(b) if tb else self.c(b)
         if k != k2:
             raise Error("x_decomp: gemm inner dimensions " + String(k) + " and " + String(k2) + " differ")
-        var words = [m, k, n, Int(ta), Int(tb)]
+        var words: List[Int] = [m, k, n, Int(ta), Int(tb)]
         if m * n and m * k and k * n and self.resident:
             var out = self.device_output(m, n)
             var da = self.device(a)
@@ -418,7 +418,7 @@ struct LinKit(Movable):
             var out = self.device_output(rows, cols)
             var da = self.device(a)
             var di = self.device(idx)
-            var ints = [da, di, self.matrices[out].device]
+            var ints: List[Int] = [da, di, self.matrices[out].device]
             for i in range(len(words)):  # small-loop(params: the ten move words): 10
                 ints.append(words[i])
             _ = self.dcall(XD_DEV_MOVE, ints)
@@ -468,12 +468,12 @@ struct LinKit(Movable):
         var count = rows * cols
         if rows == 1 or cols == 1:
             return self.reshape(a, cols, rows)
-        var words = [MV_TRANSPOSE, count, rows, cols, 0, 0, 0, count, count, 1]
+        var words: List[Int] = [MV_TRANSPOSE, count, rows, cols, 0, 0, 0, count, count, 1]
         if count and count < I32_MAX and self.resident:
             # the index operand is unused: the source's own id stands in
             var da = self.device(a)
             var out = self.device_output(cols, rows)
-            var ints = [da, da, self.matrices[out].device]
+            var ints: List[Int] = [da, da, self.matrices[out].device]
             for i in range(len(words)):  # small-loop(params: the ten move words): 10
                 ints.append(words[i])
             _ = self.dcall(XD_DEV_MOVE, ints)
@@ -565,12 +565,12 @@ struct LinKit(Movable):
             var source = a if part == 0 else b
             var count = self.n(source)
             if count:
-                var words = [MV_PLACE_COLS, count, self.c(source), w, offset, 0, 0, count, rows * w, 1]
+                var words: List[Int] = [MV_PLACE_COLS, count, self.c(source), w, offset, 0, 0, count, rows * w, 1]
                 var one = self.shared_zero()
                 if resident:
                     var ds = self.device(source)
                     var di = self.device(one)
-                    var ints = [ds, di, self.matrices[out].device]
+                    var ints: List[Int] = [ds, di, self.matrices[out].device]
                     for i in range(len(words)):  # small-loop(params: the ten move words): 10
                         ints.append(words[i])
                     _ = self.dcall(XD_DEV_MOVE, ints)
