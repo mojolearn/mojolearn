@@ -47,6 +47,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNNER = os.path.join(HERE, "box_persist_run.sh")
+TIMING_HELPER = os.path.join(HERE, "timing_ledger.sh")   # the job's timing-ledger line (box_persist_run.sh sources it)
 MAX_EXPIRY_SEC = 7 * 24 * 3600          # SigV4 presigned URLs: 7 days at most
 TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 KEY_ROOT = "measurements/box-jobs"
@@ -195,9 +196,12 @@ def index_row(tag, date, prefix, slots, every, expires, tool):
 def installer(json_path, j, box_root):
     with open(RUNNER) as fh:
         runner = fh.read()
+    with open(TIMING_HELPER) as fh:
+        timing = fh.read()
     with open(json_path) as fh:
         body = fh.read()
-    for marker, text in (("BOX_PERSIST_RUN_EOF", runner), ("BOX_PERSIST_JSON_EOF", body)):
+    for marker, text in (("BOX_PERSIST_RUN_EOF", runner), ("BOX_PERSIST_JSON_EOF", body),
+                         ("BOX_TIMING_LEDGER_EOF", timing)):
         if ("\n%s\n" % marker) in ("\n" + text):
             die("heredoc marker %s occurs in the payload" % marker)
     r = box_root
@@ -209,12 +213,16 @@ mkdir -p "$R/bin" "$R/jobs/%(t)s" "$R/active" "$R/state"
 cat > "$R/bin/box_persist_run.sh.new" <<'BOX_PERSIST_RUN_EOF'
 %(runner)sBOX_PERSIST_RUN_EOF
 chmod 755 "$R/bin/box_persist_run.sh.new" && mv -f "$R/bin/box_persist_run.sh.new" "$R/bin/box_persist_run.sh"
+cat > "$R/bin/timing_ledger.sh.new" <<'BOX_TIMING_LEDGER_EOF'
+%(timing)sBOX_TIMING_LEDGER_EOF
+chmod 755 "$R/bin/timing_ledger.sh.new" && mv -f "$R/bin/timing_ledger.sh.new" "$R/bin/timing_ledger.sh"
 cat > "$R/jobs/%(t)s/persist.json" <<'BOX_PERSIST_JSON_EOF'
 %(body)sBOX_PERSIST_JSON_EOF
 chmod 600 "$R/jobs/%(t)s/persist.json"
 command -v curl > /dev/null 2>&1 || echo "box_persist: WARNING no curl on this box: the job will run but nothing reaches R2" >&2
 echo "BOX_PERSIST_STAGED $R/jobs/%(t)s/persist.json"
 """ % {"r": r, "t": t, "runner": runner if runner.endswith("\n") else runner + "\n",
+       "timing": timing if timing.endswith("\n") else timing + "\n",
        "body": body if body.endswith("\n") else body + "\n"}
 
 
