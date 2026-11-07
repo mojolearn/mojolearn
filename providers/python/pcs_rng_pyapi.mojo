@@ -45,6 +45,7 @@ def _pcs_connect(context: PythonObject) raises -> PythonObject:
     var random = py_get(sys.modules, "numpy.random")
     if random is None:
         try:
+            # import-time: one-time cold connection of optional NumPy RNG metadata; the record is kept in the context
             random = Python.import_module("numpy.random")
         except error:
             raise Error(String(_PCS_NO_NUMPY) + " (" + String(error) + ")")

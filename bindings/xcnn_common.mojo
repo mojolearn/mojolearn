@@ -57,6 +57,7 @@ def xcnn_connect_numpy(context: PythonObject) raises:
         # scalar-only metadata operations; host arrays refuse in xcnn_numpy.
         py_setitem(context, "xcnn_numpy_import_tried", PythonObject(True))
         try:
+            # import-time: one-time cold connection of optional NumPy (xcnn_numpy_import_tried guards every later call)
             _ = Python.import_module("numpy")
         except:
             pass  # NumPy is optional; xcnn_numpy raises the ImportError when arrays are needed
