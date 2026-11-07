@@ -78,7 +78,7 @@ struct LabelTypeKinds(Movable):
     def admit(mut self, value: PythonObject, context: PythonObject) raises -> Int:
         var kind = self.kind(py_type(value), context)
         if kind == 0:
-            raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
+            raise labels_refusal(value)
         return kind
 
     def kind_raw(mut self, raw: PyObjectPtr, context: PythonObject) raises -> Int:
@@ -93,14 +93,23 @@ struct LabelTypeKinds(Movable):
         """`admit` of a borrowed label (same refusal)."""
         var kind = self.kind_raw(raw, context)
         if kind == 0:
-            raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
+            raise labels_refusal(PythonObject(from_borrowed=raw))
         return kind
+
+
+def labels_refusal(value: PythonObject) raises -> Error:
+    """The refusal of a label that is neither an exact native str nor a real
+    numeric scalar. None keeps the label input step's ValueError (the former
+    `_labels.sorted_classes` message); any other object is a TypeError."""
+    if value is None:
+        return Error("mojolearn: label None is neither a number nor a str")
+    return Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
 
 
 def labels_admit_primitive(value: PythonObject, context: PythonObject) raises -> Int:
     var kind = labels_primitive_kind(py_type(value), context)
     if kind == 0:
-        raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
+        raise labels_refusal(value)
     return kind
 
 

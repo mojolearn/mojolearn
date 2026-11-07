@@ -37,7 +37,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
 from bindings.arena_prog_native import _metrics_run
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list, LabelTypeKinds
+from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list, LabelTypeKinds, labels_refusal
 from bindings.label_snapshot_native import label_array_list
 from bindings.label_integer_storage import _ndarray_buffer_address
 from bindings.label_input_sources import (
@@ -807,6 +807,8 @@ def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> C
         var primitive = kinds.kind_raw(raw, context)
         var kind = 1 if primitive == 1 else 2 if primitive > 1 else 0
         if kind == 0:
+            if PythonObject(from_borrowed=raw) is None:
+                raise labels_refusal(PythonObject(None))
             raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols, got " + labels_type_name(py_type(PythonObject(from_borrowed=raw))))
         if kind == 2:
             # An exact int or bool is never NaN (`v != v` is False for it).
@@ -1204,7 +1206,13 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
     var p = _I64P(unsafe_from_address=labels_address(wide_codes))
     _ = wide_codes  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
-        _ = py_call(values.append, classes[Int(p[i])])
+        var c = Int(p[i])
+        if c >= k or c < -k:
+            # Python's list index rule (negative codes index from the end) and
+            # its exception class: a CPython IndexError raised inside the
+            # subscript below would cross the boundary as a ValueError.
+            raise Error("IndexError: list index out of range")
+        _ = py_call(values.append, classes[c])
         _ = wide_codes  # keep the Python object alive through the native call above
     return values
 
