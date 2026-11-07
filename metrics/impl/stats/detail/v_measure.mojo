@@ -22,6 +22,7 @@ theirs (h or c NaN from an MI/entropy NaN) propagates as theirs does.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from metrics.impl.stats.detail.homogeneity_score import homogeneity_score
+from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 
 
 def v_measure(
@@ -50,8 +51,4 @@ def v_measure(
         lower_label_range,
         upper_label_range,
     )
-    if computed_completeness + computed_homogeneity == 0.0:
-        return 0.0
-    var num = (1.0 + beta) * computed_homogeneity * computed_completeness
-    var den = beta * computed_homogeneity + computed_completeness
-    return num / den
+    return v_measure_from(computed_homogeneity, computed_completeness, beta)
