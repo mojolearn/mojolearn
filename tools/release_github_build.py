@@ -543,7 +543,10 @@ def split(builds, shards, weights=None):
 #: shard per compile: the identical, fast and host groups, the adapters, plus
 #: the assemble job; 4 + 4 + 5 + 1 + 1 at the 0.8.59 split, with room to add
 #: a group). The plan refuses a source that needs more (build_plan).
-MERGED_JOBS_PER_SET = 18
+#: 24 since the 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6):
+#: a Linux set plans 4 identical + 17 host compiles + the assemble job = 22,
+#: and two to spare; each job is 80 presigned PUTs (SLOTS_PER_JOB), nothing else.
+MERGED_JOBS_PER_SET = 24
 
 
 def unit_seconds(entry, vendor, merged, share=1.0):
