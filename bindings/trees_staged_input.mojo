@@ -49,6 +49,13 @@ def _member_table(member: PythonObject, cols: Int, context: PythonObject) raises
     if held is not None and Int(py=held[1]) == cols and held[2] is defaults and held[3] is classes:
         return held[0]
     var found = _member_table_walk(member, cols, context)
+    if found[2] is not None:
+        # A random-splitter tree: its inner forest decides, unstamped. The
+        # recursion stays inside `_member_table` (the walk never calls back):
+        # a recursion through the tuple-returning walk is the shape that
+        # stopped the Mojo compiler with no diagnostic (lesson 7,
+        # docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section 4).
+        return _member_table(found[2], cols, context)
     if Bool(py=found[1]) and records_stampable(member):
         _ = records_stamped_put(RECORDS_TREES, member, _TABLE_STAMP, ContentRecord(),
                                 Python.tuple(found[0], PythonObject(cols), defaults, classes))
@@ -56,11 +63,12 @@ def _member_table(member: PythonObject, cols: Int, context: PythonObject) raises
 
 
 def _member_table_walk(member: PythonObject, cols: Int, context: PythonObject) raises -> PythonObject:
-    """`(table or None, stampable)` for `_member_table`."""
+    """`(table or None, stampable, inner or None)` for `_member_table`; a
+    non-None inner (a random-splitter tree's forest) is resolved there."""
     var b = native_loaded_module("builtins")
     var cls = py_type(member)
     if py_type(cls) is not b.type:
-        return Python.tuple(PythonObject(None), PythonObject(False))
+        return Python.tuple(PythonObject(None), PythonObject(False), PythonObject(None))
     var kind = String("")
     try:
         # Once per class (the forest door's own record of the ancestry walk).
@@ -68,30 +76,30 @@ def _member_table_walk(member: PythonObject, cols: Int, context: PythonObject) r
     except:
         # Not a connected forest: no table, and the answer holds while the
         # class does (a class reassignment changes the generation).
-        return Python.tuple(PythonObject(None), PythonObject(True))
+        return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
     var fields = py_fields(member)
     if kind.startswith("dt_"):
         var inner = py_get(fields, "_random_inner")
         if inner is not None:
-            return Python.tuple(_member_table(inner, cols, context), PythonObject(False))
+            return Python.tuple(PythonObject(None), PythonObject(False), inner)
     if not py_contains(fields, "_offsets"):
-        return Python.tuple(PythonObject(None), PythonObject(True))
+        return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
     var width = py_get(fields, "n_features_in_")
     if width is None:
-        return Python.tuple(PythonObject(None), PythonObject(True))
+        return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
     try:
         if Int(py=py_call(b.int, width)) != cols:
-            return Python.tuple(PythonObject(None), PythonObject(True))
+            return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
         var mode = forest_effective_mode(fields, context)
         var native = trees_table(context, mode, "_mojolearn_trees" if kind.startswith("et_") else "_mojolearn_rf")
         var engine = _engine(fields, mode)
         if engine == "parallel_groves" or (engine == "sequential" and _ordered_export(native)):
-            return Python.tuple(native, PythonObject(True))
-        return Python.tuple(PythonObject(None), PythonObject(True))
+            return Python.tuple(native, PythonObject(True), PythonObject(None))
+        return Python.tuple(PythonObject(None), PythonObject(True), PythonObject(None))
     except:
         # The member's own predict reports the refusal, in its own words.
         pass
-    return Python.tuple(PythonObject(None), PythonObject(False))
+    return Python.tuple(PythonObject(None), PythonObject(False), PythonObject(None))
 
 
 def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int,
