@@ -35,6 +35,16 @@ from bindings.xseq_native_common import (
     xseq_float, xseq_truth, xseq_mode,
 )
 from core.xseq_marshal import xseq_var_blocks, xseq_cast_nd
+from bindings.native_loaded_module import NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
+
+# Theta's fitted info per model (lane ne1-a-decomp-tsa, plan section A, row
+# N031): one prepared-owner record, outside the model's __dict__ and dropped
+# with it, `(_y, settings key without h, info copy, model names)`. A predict
+# whose settings match but whose horizon differs runs `theta_forecast` (the
+# fit's forecast-only tail) instead of the whole fit; a refit stores a new
+# `_y` object, so the record no longer matches.
+comptime _THETA_FIT_SLOT = "xseq_theta_fit_v1"
 
 
 def _getattr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -171,6 +181,10 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
                            fields["initial_smoothed"], fields["alpha"], fields["theta"], xseq_mode(fields, context))
     var cached = py_get(fields, "_fitted_h")
     _cache_record(cached, context)
+    var fit_key = Python.tuple(fields["season_length"], fields["decomposition_type"], chosen,
+                               fields["initial_smoothed"], fields["alpha"], fields["theta"], xseq_mode(fields, context))
+    var mods = NativeModules()
+    var fitted = prepared_get(mods, _THETA_FIT_SLOT, model)
     var forecast: PythonObject
     if cached is not None and Bool(py=cached[0] == key):
         if py_type(cached[3]) is not b.list and py_type(cached[3]) is not b.tuple:
@@ -181,6 +195,26 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         _store(fields, "info_", _cache_copy(cached[2], context))
         _store(fields, "model_", py_call(b.list, cached[3]))
         forecast = _cache_copy(cached[1], context)
+    elif (fitted is not None and py_contains(fields, "_y") and fitted[0] is fields["_y"]
+          and Bool(py=fitted[1] == fit_key) and py_contains(xseq_entries(fields, context), "theta_forecast")):
+        # The same fitted series and settings at another horizon: the fit's
+        # own info rows drive the forecast-only tail (no Nelder-Mead); the
+        # words are the full call's (sequence/theta.mojo op_theta_forecast).
+        var entries = xseq_entries(fields, context)
+        var captured = _stored_buffer(fields["_y"], "Theta observations", 2, context)
+        var y = captured.keep
+        var batch = captured.shape[0]
+        var n = captured.shape[1]
+        var info = _cache_copy(fitted[2], context)
+        forecast = xseq_zeros(Python.tuple(batch, h), context)
+        _ = py_call_typed(entries["theta_forecast"], Python.list(captured.address, xseq_addr(info), xseq_addr(forecast)),
+                          Python.list(batch, n, h, fields["season_length"]))
+        _ = info  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _store(fields, "info_", info)
+        var names = py_call(b.list, fitted[3])
+        _store(fields, "model_", names)
+        _store(fields, "_fitted_h", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), py_call(b.list, names)))
     else:
         var entries = xseq_entries(fields, context)
         if not py_contains(fields, "_y"):
@@ -205,6 +239,8 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         var names = _theta_model_names(models, info, batch)
         _store(fields, "model_", names)
         _store(fields, "_fitted_h", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), py_call(b.list, names)))
+        prepared_put(mods, _THETA_FIT_SLOT, model, Python.tuple(fields["_y"], fit_key, xseq_copy(info),
+                                                                 py_call(b.list, names)))
     return xseq_mean_dict(xseq_first(forecast, xseq_truth(fields["_one"])))
 
 
