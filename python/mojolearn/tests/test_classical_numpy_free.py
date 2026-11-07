@@ -171,15 +171,18 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
     gc.collect()
     assert [ref for ref in references if ref() is not None] == []
 
+    calls = 25  # iterations per window; each runs three public operations
+
     def cycle():
-        for _ in range(100):  # repeated whole public operations
+        for _ in range(calls):  # repeated whole public operations
             model.fit(X, y).predict(X)
             model.score(X, y)
     cycle()
     cycle()
-    # A leak grows every window of 300 operations; a one-time lazy allocation
-    # (seen once in the third cycle on the Apple route, then flat) does not.
-    # So the gauge reads three windows and holds the smallest growth.
+    # A leak grows every window of 3 * calls operations; a one-time lazy
+    # allocation (seen once in the third cycle on the Apple route, then flat)
+    # does not. So the gauge reads three windows and holds the smallest
+    # growth, under one block per iteration (the original 100 over 100).
     growth = []
     for _ in range(3):
         gc.collect()
@@ -187,7 +190,7 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
         cycle()
         gc.collect()
         growth.append(sys.getallocatedblocks() - before)
-    assert min(growth) < 100, growth
+    assert min(growth) < calls, growth
     out[name] = r
 
 assert not any(m == "numpy" or m.startswith("numpy.") for m in sys.modules)
