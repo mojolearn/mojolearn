@@ -98,7 +98,8 @@ def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:
     if not t[].hooked:
         # Set first: registering may run a release that reaches this table.
         t[].hooked = True
-        records_register_release_hook(cres_forget_key)
+        # Bool: False (registry full) leaves dead entries to the LRU bound.
+        _ = records_register_release_hook(cres_forget_key)
     return t
 
 
