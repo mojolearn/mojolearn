@@ -12,6 +12,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
+from bindings.native_transport import transport_initialize
 from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
 from bindings.byte_lm_trainer_native import byte_lm_trainer_c, byte_lm_pooled_finalize_c
 from bindings.parallel_byte_native import parallel_byte_c, ParallelByteOwner
@@ -64,6 +65,9 @@ def build__mojolearn_runtime_byte_trainer_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_byte_trainer_host")
+        # The transport boundary these entries reach, set up as the tokenizer host does
+        # (the same values; the tokenizer host initializes it first in one process).
+        transport_initialize()
         module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")
         module.def_py_c_function(byte_lm_trainer_c, "byte_lm_trainer_call")
         module.def_py_c_function(byte_lm_pooled_finalize_c, "byte_lm_pooled_finalize_call")
