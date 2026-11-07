@@ -17,6 +17,7 @@ from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_lifetime import trees_resident_new
 from bindings.trees_side_records import trees_side_get, trees_side_put
+from bindings.p3nc_fitted_freeze import fitted_is_freezable_any
 
 comptime _HOST_TOKEN_SLOT = "trees_iforest_host_resident_v1"
 
@@ -150,6 +151,19 @@ def host_iforest_admit_state(fields: PythonObject, context: PythonObject) raises
         raise Error("TypeError: IsolationForest training state requires native numeric storage")
 
 
+def host_iforest_owned_x(fields: PythonObject) raises -> Bool:
+    """The fitted `_x` is the fit's own read-only float32 copy
+    (`input_copied_` True and its read-only flag set by the fit): the only
+    training storage a resident forest may mirror (lesson 10)."""
+    var copied = py_get(fields, "input_copied_")
+    if copied is None or not Bool(py=copied):
+        return False
+    var x = py_get(fields, "_x")
+    if x is None or not fitted_is_freezable_any(x):
+        return False
+    return Bool(py=x._readonly)
+
+
 def _host_resident_entries(entry: PythonObject, context: PythonObject) raises -> PythonObject:
     """The `(iforest_resident_release,)` entry of the binary that serves
     `entry` when that binary keeps the fitted forest resident between calls
@@ -219,6 +233,13 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     # fresh forest is minted; the replaced record's lifetime releases the old
     # one, and the last one is released when the estimator goes.
     var resident = _host_resident_entries(entry, context)
+    if resident is not None and not host_iforest_owned_x(fields):
+        # N390 (ne1-a-trees, 2026-11-06): the resident key is the training
+        # buffer's address and shape, not its contents. A fitted `_x` that is
+        # the caller's own storage (a float32 C-order input kept without a
+        # copy) can be edited in place and cannot be made read-only, so it
+        # keeps the per-call fit: every build then scores the edited values.
+        resident = PythonObject(None)
     var held = 0
     var record = PythonObject(None)
     var same_train = False
