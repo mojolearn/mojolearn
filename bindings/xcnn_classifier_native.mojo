@@ -38,6 +38,7 @@ from bindings.sequential_arrays import sequential_array
 from bindings.xcnn_common import xcnn_shape, xcnn_tuple, xcnn_reshape, xcnn_numpy
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.array_helpers_impl import nsum_f64
+from x_cnn.shape_words import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
 
 comptime _PREDICT_ROWS = 2048
 comptime _PREDICT_SLOT = "xcnn_clf_predict_v1"  # p3-cnn-sequence-tsa resident predict record
@@ -412,14 +413,16 @@ def _plan(fields: PythonObject, entries: PythonObject, n: Int) raises -> List[_B
         var conv = blocks[i][0]
         var pool = blocks[i][1]
         var prm = _conv_params(conv, shape)
-        var hw = py_call(_e(entries, "x_cnn_conv_shape"), _ints(prm))
-        var cshape: List[Int] = [shape[0], Int(py=_fields(conv)["out_channels"]), Int(py=hw[0]), Int(py=hw[1])]
+        # N149 (ne3-c-cnn): the binding's shape rules imported natively
+        # (x_cnn/shape_words.mojo), no x_cnn_conv_shape / x_cnn_pool_shape crossing.
+        var hw = conv_params(prm)
+        var cshape: List[Int] = [shape[0], Int(py=_fields(conv)["out_channels"]), Int(hw[CP_OH]), Int(hw[CP_OW])]
         var pprm = List[Int]()
         var oshape = cshape.copy()
         if pool is not None:
             pprm = _pool_params(pool, cshape)
-            var phw = py_call(_e(entries, "x_cnn_pool_shape"), _ints(pprm))
-            oshape = [cshape[0], cshape[1], Int(py=phw[0]), Int(py=phw[1])]
+            var phw = pool_params(pprm)
+            oshape = [cshape[0], cshape[1], Int(phw[PP_OH]), Int(phw[PP_OW])]
         var ny = _prod(cshape)
         var wsize = Int(py=_fields(conv)["weight_"].size) // Int(py=_fields(conv)["out_channels"])
         plans.append(_BlockPlan(prm^, pprm^, _prod(shape), _prod(oshape), ny // Int(py=_fields(conv)["out_channels"]) * wsize, ny))
