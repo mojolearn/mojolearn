@@ -7,12 +7,34 @@ No failed assertions are filtered. Both entrypoints must pass for release.
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 from python_test_inventory import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def workers():
+    """pytest-xdist worker count: every core (Andrew, 2026-11-06: the suite ran 17,739 tests in one process,
+    55 min on a 10-core Mac). MOJOLEARN_TEST_WORKERS overrides; 1 is the old serial run."""
+    env = os.environ.get("MOJOLEARN_TEST_WORKERS", "").strip()
+    if env:
+        n = int(env)
+        if n < 1:
+            raise SystemExit(f"MOJOLEARN_TEST_WORKERS must be >= 1, got {env!r}")
+        return n
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
+def parallel_args():
+    """`-n <workers> --dist loadfile`: tests of one file stay on one worker (module-level state)."""
+    n = workers()
+    return [] if n == 1 else ["-n", str(n), "--dist", "loadfile"]
 
 
 def main(argv=None):
@@ -50,9 +72,9 @@ spec.loader.exec_module(tests)
 raise SystemExit(pytest.main(sys.argv[1:]))
 '''
         return subprocess.call([sys.executable, '-I', '-c', code, str(args.tests_root),
-                                '-q', '--import-mode=importlib',
+                                '-q', '--import-mode=importlib', *parallel_args(),
                                 *map(str, suites['pytest']), *pytest_args])
-    return subprocess.call([sys.executable, '-m', 'pytest', '-q',
+    return subprocess.call([sys.executable, '-m', 'pytest', '-q', *parallel_args(),
                             *map(str, suites['pytest']), *pytest_args], cwd=ROOT / 'python')
 
 
