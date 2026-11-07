@@ -31,7 +31,7 @@ from std.os import abort
 from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from std.sys.compile import is_defined
-from core.hostptr import f32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -80,7 +80,7 @@ from autograd.embedding_ops import AG_EMB_PLAN_SORT, embedding_backward_into, em
 from embedding.checks.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,
-    emb_refuse_ids,
+    emb_refuse_ids_at,
     emb_refuse_shape,
     nonfinite_refusal,
 )
@@ -450,6 +450,25 @@ def _upload_i32(
     return dev^
 
 
+def _upload_i32_ptr(
+    ctx: DeviceContext, p: MutPointer[Int32, MutUntrackedOrigin], n: Int
+) raises -> DeviceBuffer[DType.int32]:
+    """`_upload_i32` from the caller's buffer (lane ne3-c-blocks-embedding,
+    row N158: the ids are no longer copied into a host list first); at
+    least one cell, a zero-position call gets one +0 word."""
+    var n_buf = n if n > 0 else 1
+    var dev = ctx.enqueue_create_buffer[DType.int32](n_buf)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.int32](0, n), src_ptr=p)
+    else:
+        var pad = List[Int32](length=1, fill=Int32(0))
+        ctx.enqueue_copy(dst_buf=dev, src_ptr=pad.unsafe_ptr())
+        ctx.synchronize()
+        _ = pad^
+    ctx.synchronize()
+    return dev^
+
+
 def _refuse_nonfinite_upload(
     name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises:
@@ -482,7 +501,7 @@ def _config(vocab: Int, width: Int, padding_idx: Int, accumulate: Bool) raises -
 
 def _forward_run(
     wp: MutPointer[Float32, MutUntrackedOrigin],
-    ids: List[Int32],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
     n_positions: Int,
     cfg: EmbConfig,
     yp: MutPointer[Float32, MutUntrackedOrigin],
@@ -515,7 +534,7 @@ def _forward_run(
         else:
             a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions)
             a_y = ctx.enqueue_create_buffer[DType.float32](cells)
-        ctx.enqueue_copy(dst_buf=a_ids, src_ptr=ids.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=a_ids, src_ptr=idsp)
         fast_embedding_forward_into(ctx, a_y, a_w, a_ids, n_positions, cfg)
         ctx.enqueue_copy(dst_ptr=yp, src_buf=a_y)
         ctx.synchronize()
@@ -538,7 +557,7 @@ def _forward_run(
         var w_cells = cfg.vocab * cfg.width
         var r_w = _table_take(ctx, token, w_addr, wp, w_cells)
         var r_ids = _pool_i32(ctx, n_positions)
-        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
         var r_y = _pool_f32(ctx, cells)
         identical_embedding_forward_prerefused_into(ctx, r_y, r_w, r_ids, n_positions, cfg)
         _download_out(ctx, r_y, yp, cells)
@@ -548,7 +567,7 @@ def _forward_run(
         _ = ctx^
         return
     var d_w = _table_take(ctx, token, w_addr, wp, cfg.vocab * cfg.width)
-    var d_ids = _upload_i32(ctx, ids)
+    var d_ids = _upload_i32_ptr(ctx, idsp, n_positions)
     var d_y = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.synchronize()
     identical_embedding_forward_into(ctx, d_y, d_w, d_ids, n_positions, cfg)
@@ -607,9 +626,54 @@ def _tape_backward(
     ex.sync()
 
 
+def _tape_backward_pooled(
+    ctx: DeviceContext,
+    mut dw: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    plan: Int,
+) raises:
+    """`_tape_backward` on this binding's pooled run scratch (lane
+    ne3-c-blocks-embedding, row N161). The tape route used to allocate new
+    device scratch through its DeviceExec on every call (begin V + 1 words,
+    perm, and the sort's keys) while the pooled counts / begin / perm taken
+    just before went unused. Here begin, perm and (sort only) keys are
+    pooled int32 buffers of the sizes `embedding_backward_into` names, and
+    no counts buffer is taken. Every scratch word is written by a kernel
+    before any kernel reads it (scan: run_begin over [0, V], perm inside each
+    run; sort: the pack writes every padded slot), so the unspecified
+    contents of a pooled buffer move no bit. Waits before returning."""
+    var words = embedding_perm_words(plan, n_positions)
+    var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+    var r_perm = _pool_i32(ctx, words)
+    var begin = FP(unsafe_from_address=Int(r_begin.unsafe_ptr()))
+    var perm = FP(unsafe_from_address=Int(r_perm.unsafe_ptr()))
+    var has_keys = plan == AG_EMB_PLAN_SORT
+    var r_keys = _pool_i32(ctx, words if has_keys else 1)
+    var keys = perm
+    if has_keys:
+        keys = FP(unsafe_from_address=Int(r_keys.unsafe_ptr()))
+    var ex = DeviceExec(ctx)
+    embedding_backward_into(
+        ex,
+        FP(unsafe_from_address=Int(ids.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dy.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dw.unsafe_ptr())),
+        n_positions, cfg.vocab, cfg.width, cfg.padding_idx, cfg.accumulate, plan, begin, perm, keys,
+    )
+    ex.sync()
+    _ = ex^
+    # Back to the pool only after the queue drained (ex.sync).
+    _give_i32(r_begin^, cfg.vocab + 1)
+    _give_i32(r_perm^, words)
+    _give_i32(r_keys^, words if has_keys else 1)
+
+
 def _backward_run(
     dyp: MutPointer[Float32, MutUntrackedOrigin],
-    ids: List[Int32],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
     n_positions: Int,
     cfg: EmbConfig,
     dwp: MutPointer[Float32, MutUntrackedOrigin],
@@ -650,7 +714,7 @@ def _backward_run(
         if n_positions > 0:
             ctx.enqueue_copy(
                 dst_buf=a_ids.create_sub_buffer[DType.int32](0, n_positions),
-                src_ptr=ids.unsafe_ptr(),
+                src_ptr=idsp,
             )
         fast_embedding_backward_into(ctx, a_dw, a_dy, a_ids, n_positions, cfg)
         ctx.enqueue_copy(dst_ptr=dwp, src_buf=a_dw)
@@ -683,26 +747,29 @@ def _backward_run(
             _refuse_nonfinite_device(ctx, String("the carried dW"), r_dw, dwp, cells)
         var r_ids = _pool_i32(ctx, n_positions)
         if n_positions > 0:
-            ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
-        var r_counts = _pool_i32(ctx, cfg.vocab)
-        var r_begin = _pool_i32(ctx, cfg.vocab + 1)
-        var r_perm = _pool_i32(ctx, n_positions)
+            ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
         var tape_route = False
         comptime if AUTOGRAD_EMBEDDING:
             tape_route = n_positions > 0
         if tape_route:
-            _tape_backward(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
+            # Row N161: the tape route runs on pooled begin / perm / keys and
+            # takes no counts buffer.
+            _tape_backward_pooled(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
         else:
+            var r_counts = _pool_i32(ctx, cfg.vocab)
+            var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+            var r_perm = _pool_i32(ctx, n_positions)
             identical_embedding_backward_prerefused_into(
                 ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
             )
+            ctx.synchronize()
+            _give_i32(r_counts^, cfg.vocab)
+            _give_i32(r_begin^, cfg.vocab + 1)
+            _give_i32(r_perm^, n_positions)
         _download_out(ctx, r_dw, dwp, cells)
         _give_f32(r_dw^, cells)
         _give_f32(r_dy^, ty)
         _give_i32(r_ids^, n_positions)
-        _give_i32(r_counts^, cfg.vocab)
-        _give_i32(r_begin^, cfg.vocab + 1)
-        _give_i32(r_perm^, n_positions)
         _ = ctx^
         return
     # the carried dW starts from the caller's bits; a fresh one from +0.0
@@ -717,7 +784,7 @@ def _backward_run(
     _refuse_nonfinite_device(ctx, String("dY"), d_dy, dyp, n_positions * cfg.width)
     if cfg.accumulate:
         _refuse_nonfinite_device(ctx, String("the carried dW"), d_dw, dwp, cells)
-    var d_ids = _upload_i32(ctx, ids)
+    var d_ids = _upload_i32_ptr(ctx, idsp, n_positions)
     var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
     var perm = _upload_i32(ctx, _zeros_i32(n_positions))
@@ -781,16 +848,21 @@ def embedding_forward_binding(
     emb_refuse_shape(cfg, n_positions)
     var w_addr = Int(py=addrs[0])
     var wp = f32_ptr(w_addr)
-    var ids = read_i32(Int(py=addrs[1]), n_positions)
-    emb_refuse_ids(ids, cfg)
-    var yp = f32_ptr(Int(py=addrs[2]))
+    # Lane ne3-c-blocks-embedding (row N158): the ids are read through the
+    # caller's buffer and refused with the GIL released (no host list copy,
+    # no walk under the GIL); the refusal order (ids, then the y address,
+    # then W) and the words are unchanged.
+    var idsp = i32_ptr(Int(py=addrs[1]))
+    var y_addr = Int(py=addrs[2])
     # the W scan runs on the device copy unless there is nothing to gather
     # (then nothing is uploaded)
     var no_run = n_positions * width <= 0
     with GILReleased(Python()):
+        emb_refuse_ids_at(idsp, n_positions, cfg)
+        var yp = f32_ptr(y_addr)
         if no_run:
             _refuse_nonfinite_upload(String("W"), wp, vocab * width)
-        _forward_run(wp, ids, n_positions, cfg, yp, token, w_addr)
+        _forward_run(wp, idsp, n_positions, cfg, yp, token, w_addr)
     return PythonObject(n_positions * width)
 
 
@@ -852,16 +924,19 @@ def embedding_backward_binding(
     var cfg = _config(vocab, width, padding_idx, acc_code == 1)
     emb_refuse_shape(cfg, n_positions)
     var dyp = f32_ptr(Int(py=addrs[0]))
-    var ids = read_i32(Int(py=addrs[1]), n_positions)
-    emb_refuse_ids(ids, cfg)
-    var dwp = f32_ptr(Int(py=addrs[2]))
+    # Lane ne3-c-blocks-embedding (row N158): ids through the caller's
+    # buffer, refused with the GIL released; order and words unchanged.
+    var idsp = i32_ptr(Int(py=addrs[1]))
+    var dw_addr = Int(py=addrs[2])
     var no_run = vocab * width <= 0
     with GILReleased(Python()):
+        emb_refuse_ids_at(idsp, n_positions, cfg)
+        var dwp = f32_ptr(dw_addr)
         if no_run:
             _refuse_nonfinite_upload(String("dY"), dyp, n_positions * width)
             if cfg.accumulate:
                 _refuse_nonfinite_upload(String("the carried dW"), dwp, vocab * width)
-        _backward_run(dyp, ids, n_positions, cfg, dwp, plan)
+        _backward_run(dyp, idsp, n_positions, cfg, dwp, plan)
     return PythonObject(vocab * width)
 
 
@@ -1053,7 +1128,7 @@ def _refuse_nonfinite_resident(
 
 def _forward_dev_run(
     wp: MutPointer[Float32, MutUntrackedOrigin],
-    ids: List[Int32],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
     n_positions: Int,
     cfg: EmbConfig,
     y_h: Int,
@@ -1067,7 +1142,7 @@ def _forward_dev_run(
     var w_cells = cfg.vocab * cfg.width
     var r_w = _table_take(ctx, token, w_addr, wp, w_cells)
     var r_ids = _pool_i32(ctx, n_positions)
-    ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
     var r_y = _tensor_view(y_h, cells, "y")
     comptime if EMB_ATOMIC_BWD:
         fast_embedding_forward_into(ctx, r_y, r_w, r_ids, n_positions, cfg)
@@ -1082,7 +1157,7 @@ def _forward_dev_run(
 
 
 def _backward_dev_run(
-    ids: List[Int32],
+    idsp: MutPointer[Int32, MutUntrackedOrigin],
     n_positions: Int,
     cfg: EmbConfig,
     dy_h: Int,
@@ -1113,27 +1188,28 @@ def _backward_dev_run(
         r_dy = _pool_f32(ctx, 1)
     var r_ids = _pool_i32(ctx, n_positions)
     if n_positions > 0:
-        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=ids.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
     comptime if EMB_ATOMIC_BWD:
         fast_embedding_backward_into(ctx, r_dw, r_dy, r_ids, n_positions, cfg)
         ctx.synchronize()
     else:
-        var r_counts = _pool_i32(ctx, cfg.vocab)
-        var r_begin = _pool_i32(ctx, cfg.vocab + 1)
-        var r_perm = _pool_i32(ctx, n_positions)
         var tape_route = False
         comptime if AUTOGRAD_EMBEDDING:
             tape_route = n_positions > 0
         if tape_route:
-            _tape_backward(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
+            # Row N161: pooled begin / perm / keys, no counts buffer.
+            _tape_backward_pooled(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
         else:
+            var r_counts = _pool_i32(ctx, cfg.vocab)
+            var r_begin = _pool_i32(ctx, cfg.vocab + 1)
+            var r_perm = _pool_i32(ctx, n_positions)
             identical_embedding_backward_prerefused_into(
                 ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
             )
-        ctx.synchronize()
-        _give_i32(r_counts^, cfg.vocab)
-        _give_i32(r_begin^, cfg.vocab + 1)
-        _give_i32(r_perm^, n_positions)
+            ctx.synchronize()
+            _give_i32(r_counts^, cfg.vocab)
+            _give_i32(r_begin^, cfg.vocab + 1)
+            _give_i32(r_perm^, n_positions)
     _give_i32(r_ids^, n_positions)
     _ = r_dy^
     _ = r_dw^
@@ -1161,16 +1237,18 @@ def embedding_forward_dev_binding(
     emb_refuse_shape(cfg, n_positions)
     var w_addr = Int(py=addrs[0])
     var wp = f32_ptr(w_addr)
-    var ids = read_i32(Int(py=addrs[1]), n_positions)
-    emb_refuse_ids(ids, cfg)
+    var idsp = i32_ptr(Int(py=addrs[1]))
     var y_h = Int(py=handles[0])
-    if n_positions * width > 0:
-        _ = _tensor_view(y_h, n_positions * width, "y")
     var no_run = n_positions * width <= 0
     with GILReleased(Python()):
+        # Row N158: the ids refused through the caller's buffer (order: ids,
+        # then the y handle, then W, as before).
+        emb_refuse_ids_at(idsp, n_positions, cfg)
+        if n_positions * width > 0:
+            _ = _tensor_view(y_h, n_positions * width, "y")
         if no_run:
             _refuse_nonfinite_upload(String("W"), wp, vocab * width)
-        _forward_dev_run(wp, ids, n_positions, cfg, y_h, token, w_addr)
+        _forward_dev_run(wp, idsp, n_positions, cfg, y_h, token, w_addr)
     return PythonObject(n_positions * width)
 
 
@@ -1199,16 +1277,18 @@ def embedding_backward_dev_binding(
         raise Error(String("embedding_backward_dev: accumulate must be 0 or 1, got ") + String(acc_code))
     var cfg = _config(vocab, width, padding_idx, acc_code == 1)
     emb_refuse_shape(cfg, n_positions)
-    var ids = read_i32(Int(py=addrs[0]), n_positions)
-    emb_refuse_ids(ids, cfg)
+    var idsp = i32_ptr(Int(py=addrs[0]))
     var dy_h = Int(py=handles[0])
     var dw_h = Int(py=handles[1])
-    if n_positions * width > 0:
-        _ = _tensor_view(dy_h, n_positions * width, "dy")
-    if vocab * width > 0:
-        _ = _tensor_view(dw_h, vocab * width, "dw")
     with GILReleased(Python()):
-        _backward_dev_run(ids, n_positions, cfg, dy_h, dw_h, plan)
+        # Row N158: the ids refused through the caller's buffer (order: ids,
+        # then the two handles, as before).
+        emb_refuse_ids_at(idsp, n_positions, cfg)
+        if n_positions * width > 0:
+            _ = _tensor_view(dy_h, n_positions * width, "dy")
+        if vocab * width > 0:
+            _ = _tensor_view(dw_h, vocab * width, "dw")
+        _backward_dev_run(idsp, n_positions, cfg, dy_h, dw_h, plan)
     return PythonObject(vocab * width)
 
 

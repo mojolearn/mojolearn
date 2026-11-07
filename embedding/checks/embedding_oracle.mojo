@@ -142,6 +142,57 @@ def emb_refuse_ids(ids: List[Int32], cfg: EmbConfig) raises:
 
 
 
+def _emb_id_refusal(t: Int, v: Int, cfg: EmbConfig) raises:
+    if v < 0 or v >= cfg.vocab:
+        raise Error(
+            String("embedding: id ")
+            + String(v)
+            + " at position "
+            + String(t)
+            + " is outside [0, "
+            + String(cfg.vocab)
+            + ") REFUSED (contract 8; never clamped)"
+        )
+
+
+def emb_refuse_ids_at(
+    ids: MutPointer[Int32, MutUntrackedOrigin], n_positions: Int, cfg: EmbConfig
+) raises:
+    """`emb_refuse_ids` read through the caller's buffer, with no copy and
+    no Python object (lane ne3-c-blocks-embedding, row N158): the same
+    wording and the same first position. Eight ids at a time are compared
+    with the range; only a buffer with a hit re-walks id by id, so the
+    refusal names the first bad position exactly as the list scan does. It
+    runs with or without the GIL (it touches no Python state)."""
+    if n_positions <= 0:
+        return
+    # An id is an int32, so with V above the int32 range only a negative id
+    # can be refused.
+    var upper = cfg.vocab <= 2147483647
+    var hi = SIMD[DType.int32, 8](Int32(cfg.vocab if upper else 2147483647))
+    var zero = SIMD[DType.int32, 8](0)
+    var one_u = SIMD[DType.uint32, 8](1)
+    var zero_u = SIMD[DType.uint32, 8](0)
+    var i = 0
+    var hit = False
+    while i + 8 <= n_positions:
+        var x = ids.unsafe_load[width=8](i)
+        var bad = x.lt(zero).select(one_u, zero_u)
+        if upper:
+            bad = bad | x.ge(hi).select(one_u, zero_u)
+        if bad.reduce_or() != UInt32(0):
+            hit = True
+            break
+        i += 8
+    if not hit:
+        while i < n_positions:
+            _emb_id_refusal(i, Int(ids.unsafe_load(i)), cfg)
+            i += 1
+        return
+    for t in range(n_positions):
+        _emb_id_refusal(t, Int(ids.unsafe_load(t)), cfg)
+
+
 def emb_counts(ids: List[Int32], cfg: EmbConfig) -> List[Int32]:
     """`counts[v]`, the length of run `v`."""
     var counts = List[Int32](capacity=cfg.vocab)
