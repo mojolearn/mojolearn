@@ -52,3 +52,50 @@ def seq_resident_words(addresses: List[Int], base: Int, operation: String) raise
     if n == base + 1 and addresses[base] == SEQ_RESIDENT_ON_EXEC:
         return True
     raise Error(operation + ": invalid address descriptor")
+
+
+# Free at model death (lane ne1-a-cluster-spectral, owed row N172). The
+# device store lives in the GPU sequence binding and the record that names a
+# block in the provider; neither sees the model die. The model's death
+# callback (the records module's release, bindings/native_model_records.mojo,
+# OWED-SHARED to ne1-e-records) posts the model's identity word here, and the
+# device store frees that model's block at its next call, before any lookup
+# (`sequence/perf3_seq_resident.mojo` `_drain_dead`): a new model at the
+# reused address never sees the old block. Host-only: the provider and the
+# records module can import it.
+comptime SEQ_DEAD_OWNERS_MAX = 4096
+"""Posted deaths kept before the oldest are dropped (a bound on host memory;
+a dropped post leaves that block to the store's least-recently-used
+eviction, which is where it went before)."""
+
+
+struct _SeqDeadOwners(Defaultable, Movable):
+    var owners: List[Int]
+
+    def __init__(out self):
+        self.owners = List[Int]()
+
+
+comptime _SEQ_DEAD_OWNERS = _Global[
+    StorageType=_SeqDeadOwners, name="MojoXSequenceResidentDeadOwnersV1", init_fn=_SeqDeadOwners.__init__
+]
+
+
+def seq_resident_owner_died(owner: Int):
+    """Post the death of the model whose identity word is `owner` (called
+    with the GIL held, from the death callback). Non-raising."""
+    try:
+        var dead = _SEQ_DEAD_OWNERS.get_or_create_ptr()
+        if len(dead[].owners) >= SEQ_DEAD_OWNERS_MAX:
+            _ = dead[].owners.pop(0)
+        dead[].owners.append(owner)
+    except:
+        pass
+
+
+def seq_resident_take_dead() raises -> List[Int]:
+    """Every posted death since the last take (the device store's drain)."""
+    var dead = _SEQ_DEAD_OWNERS.get_or_create_ptr()
+    var taken = dead[].owners^
+    dead[].owners = List[Int]()
+    return taken^
