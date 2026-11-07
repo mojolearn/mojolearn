@@ -444,18 +444,23 @@ def lin_admit_exporter(value: PythonObject, context: PythonObject, depth: Int = 
 
 
 def lin_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
-              context: PythonObject) raises -> LinBuf:
+              context: PythonObject, admitted: Bool = False) raises -> LinBuf:
     # Native exporters cross the metadata boundary directly. Existing native
     # list/frame/Torch/scalar admission may first materialize supported values;
     # no arbitrary Python conversion or buffer hook is a fallback here.
-    classical_admit_value(source, context)
+    # `admitted`: the family door already ran classical_admit_value over this
+    # very argument. Row N237: the value is admitted once here (or by the
+    # door), not again by classical_view and LinAdmission; a view that
+    # classical_view materialized is a new object and is still admitted.
+    if not admitted:
+        classical_admit_value(source, context)
     var prepared = source
     if not classical_is_array(source, context):
         try:
             lin_admit_exporter(source, context)
         except:
-            prepared = classical_view(source, context, name)
-    var input = LinAdmission(prepared, context)
+            prepared = classical_view(source, context, name, True)
+    var input = LinAdmission(prepared, context, prepared is source)
     var nd = len(input.view.shape)
     if ndim >= 0 and nd != ndim:
         var hint = String("")
@@ -481,8 +486,11 @@ struct LinAdmission(Movable):
     var pin: Optional[AdmittedBorrowedBuffer]
     var owner: PythonObject
 
-    def __init__(out self, value: PythonObject, context: PythonObject) raises:
-        classical_admit_value(value, context)
+    def __init__(out self, value: PythonObject, context: PythonObject, admitted: Bool = False) raises:
+        # `admitted`: the caller ran classical_admit_value over this very
+        # value in the same call (lin_typed, row N237).
+        if not admitted:
+            classical_admit_value(value, context)
         self.keep = value
         var view = TensorView()
         self.pin = None

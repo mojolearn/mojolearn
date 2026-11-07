@@ -175,7 +175,7 @@ def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
 
 
 def _lin_svdvals(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_operand(args[0], "a", context)
+    var a = lin_operand(args[0], "a", context, True)
     var result = lin_svdvals_of(a, context)
     _ = a^
     return result
@@ -183,7 +183,7 @@ def _lin_svdvals(args: PythonObject, context: PythonObject) raises -> PythonObje
 
 def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`eigh(a, UPLO)`."""
-    var a = lin_operand(args[0], "a", context)
+    var a = lin_operand(args[0], "a", context, True)
     var rows = a.dim(0)
     var cols = a.dim(1)
     if rows != cols:
@@ -266,14 +266,14 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
     elif _lin_eq(mode, "raw"):
         named = "raw"
     if named != "":
-        var operand = lin_operand(args[0], "a", context)
+        var operand = lin_operand(args[0], "a", context, True)
         var result = _lin_qr_q(operand, named, context)
         _ = operand^
         return result
     if not _lin_eq(mode, "r"):
         raise Error("mojolearn.linalg.qr: unrecognized mode " + family_repr(mode) + "; numpy's modes "
                     + "are 'reduced', 'complete', 'r' and 'raw'")
-    var a = lin_operand(args[0], "a", context)
+    var a = lin_operand(args[0], "a", context, True)
     var rows = a.dim(0)
     var cols = a.dim(1)
     if rows < cols:
@@ -302,7 +302,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`svd(a, full_matrices, compute_uv, hermitian)`."""
-    var a = lin_operand(args[0], "a", context)
+    var a = lin_operand(args[0], "a", context, True)
     var rows = a.dim(0)
     var cols = a.dim(1)
     if not lin_truth(args[2]):
@@ -400,6 +400,8 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
 def lin_decomp_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     # Admit public scalar controls before equality/truth conversion; input
     # exporters are captured by the shared native linalg buffer boundary.
+    # The one admission of the operand: every _lin_* below passes
+    # admitted=True to lin_operand (row N237).
     classical_admit_value(args[0], context)
     for i in range(1, len(args)):  # small-loop(public decomposition option metadata)
         host_inference_scalar(args[i], context, True)
