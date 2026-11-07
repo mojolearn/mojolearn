@@ -7,6 +7,7 @@ from bindings.native_loaded_module import NativeModules, native_loaded_module, _
 from bindings.mode_metadata_native import _fields, _class_fields, _fitted
 from bindings.classical_attributes import classical_connect_numpy, _type_mro
 from bindings.classical_exceptions import classical_not_fitted_class
+from bindings.native_class_admission import class_record, class_admit
 from bindings.classical_validate import classical_estimator_name, classical_check_width
 from bindings.public_attributes_native import _plan, _lookup
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
@@ -99,6 +100,9 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
                 raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
 
 
+comptime _PCS_CLASS_SLOT = "pcs_public_ancestry_v1"
+
+
 def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PCSPublicCall:
     classical_connect_numpy(context)
@@ -109,16 +113,28 @@ def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
     var plan = _plan(modules, model, attributes)
     var fitting = operation != "family_xn_pcs_transform"
     var method = String("fit") if operation == "family_xn_pcs_fit" else String("fit_transform") if fitting else String("transform")
-    var ancestry = _type_mro(py_type(model))
-    var setter_seen = False
-    for i in range(len(ancestry)):  # driver-loop: connected native model field/callback admission
-        var names = _class_fields(ancestry[i])
-        if not setter_seen and py_contains(names, "__setattr__"):
-            if names["__setattr__"] is not b.object.__dict__["__setattr__"]:
-                raise Error("TypeError: native PCS cannot invoke Python field setters")
-            setter_seen = True
-        if fitting and py_contains(names, "_mojolearn_after_fit"):
-            raise Error("TypeError: native PCS cannot invoke Python after-fit callbacks")
+    # The ancestry verdict depends only on the class rows: kept per class
+    # state (lane ne1-e-records, row N242; native_class_admission type
+    # watchers, Python >= 3.12). The payload says whether the ancestry is
+    # free of after-fit callbacks; a fit on a class that has one walks again
+    # and raises at the original position.
+    var cls = py_type(model)
+    var verdict = class_record(modules, _PCS_CLASS_SLOT, cls)
+    if verdict is None or (fitting and not Bool(py=verdict)):
+        var ancestry = _type_mro(cls)
+        var setter_seen = False
+        var callback_free = True
+        for i in range(len(ancestry)):  # driver-loop: connected native model field/callback admission
+            var names = _class_fields(ancestry[i])
+            if not setter_seen and py_contains(names, "__setattr__"):
+                if names["__setattr__"] is not b.object.__dict__["__setattr__"]:
+                    raise Error("TypeError: native PCS cannot invoke Python field setters")
+                setter_seen = True
+            if py_contains(names, "_mojolearn_after_fit"):
+                if fitting:
+                    raise Error("TypeError: native PCS cannot invoke Python after-fit callbacks")
+                callback_free = False
+        class_admit(modules, _PCS_CLASS_SLOT, cls, PythonObject(callback_free))
     if fitting and py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native PCS cannot invoke Python after-fit callbacks")
     var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
