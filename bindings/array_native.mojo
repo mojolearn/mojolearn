@@ -1068,7 +1068,20 @@ def _array_protocol(a: PythonObject, dtype: PythonObject, copy: PythonObject, co
 
 
 def _buffer(a: PythonObject, context: PythonObject) raises -> PythonObject:
-    """Python 3.12+ buffer protocol: a memoryview with this Array's shape."""
+    """Python 3.12+ buffer protocol: a memoryview with this Array's shape,
+    read-only when the Array is (`_readonly`, set by the fitted-freeze rule
+    of bindings/p3nc_fitted_freeze.mojo)."""
+    var view = _buffer_view(a, context)
+    if _truth(a._readonly):
+        # NumPy reads the buffer BEFORE __array_interface__, so a writable
+        # memoryview here made `numpy.asarray(frozen)` writable although the
+        # interface reports read-only (test_tsa_resident_state, 2026-11-07).
+        return _call(view.toreadonly)
+    return view
+
+
+def _buffer_view(a: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The memoryview of `_buffer`, before the read-only rule."""
     var dtype = String(a.dtype)
     var ndim = Int(py=a.ndim)
     if dtype == "<f2":
