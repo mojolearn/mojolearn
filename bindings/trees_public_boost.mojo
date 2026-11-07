@@ -361,6 +361,49 @@ def _clone_from(base: PythonObject, template: PythonObject, seed: Int, context: 
     return _new_member(py_type(base), params, context)
 
 
+def _member_like(cls: PythonObject, first: PythonObject, member_seed: Int) raises -> PythonObject:
+    """A `cls` member holding `first`'s validated state (a clone's fields
+    after `forest_refresh` and `forest_capture_mode`) with its own
+    `random_state`: the state `_clone_from` / `_new_member` +
+    `forest_refresh` + `forest_capture_mode` give it, key for key in the same
+    order. Members of one template differ only in `random_state`, and the
+    only derived field that reads it is `_cfg`'s `random_state` entry (the RF
+    and ET derivations store the int seed; a member seed is always an exact
+    nonnegative int), which gets its own mapping (lane ne2-b-members,
+    N049 / N061 / N064)."""
+    var b = trees_builtins()
+    var member = py_call(b.object.__new__, cls)
+    var mf = py_fields(member)
+    _ = py_call(mf.update, first)
+    if py_contains(mf, "random_state"):
+        var own_seed = _P(member_seed)
+        py_setitem(mf, "random_state", own_seed)
+        var cfg = py_get(mf, "_cfg")
+        if cfg is not None and py_type(cfg) is b.dict and py_contains(cfg, "random_state"):
+            var own = py_call(b.dict, cfg)
+            py_setitem(own, "random_state", own_seed)
+            py_setitem(mf, "_cfg", own)
+    return member
+
+
+def _validated_clone(base: PythonObject, template: PythonObject, member_seed: Int, kind: String, memo: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`_clone_from(base, template, member_seed)` already through
+    `forest_refresh(kind)` and `forest_capture_mode`: the constructor checks
+    run for the first member of a fit loop only (`memo`, an empty list the
+    loop owns, keeps that member's validated fields); every later member
+    copies them with its own seed (`_member_like`). A member fit that
+    receives such a member skips its own refresh. Same fields, same values:
+    no fit or predict changes."""
+    if len(memo) == 0:
+        var member = _clone_from(base, template, member_seed, context)
+        var fields = forest_refresh(member, kind, context)
+        _ = forest_capture_mode(fields, context)
+        _ = py_call(memo.append, py_call(trees_builtins().dict, fields))
+        return member
+    return _member_like(py_type(base), memo[0], member_seed)
+
+
 def _fitted(member: PythonObject) raises:
     """The flag the fit wrapper sets after a member's `fit`."""
     py_setitem(py_fields(member), "_mojolearn_fitted", PythonObject(True))
@@ -518,9 +561,11 @@ def _member_store(member: PythonObject, result: PythonObject, cols: Int) raises:
 def _member_fit_weighted(member: PythonObject, xcm: TreesMatrix, codes: PythonObject, w32: PythonObject,
                          encoded: Optional[TreesLabels], session: Session, context: PythonObject) raises:
     """`DecisionTreeClassifier._fit_weighted(Xcm, codes, w32, x_finite=True,
-    encoded=..., session=...)` on a column-major float32 X already scanned."""
-    var fields = forest_refresh(member, "dt_classifier", context)
-    var mode = forest_capture_mode(fields, context)
+    encoded=..., session=...)` on a column-major float32 X already scanned.
+    `member` comes from `_validated_clone(..., "dt_classifier", ...)`: its
+    constructor state is refreshed and its mode captured already."""
+    var fields = py_fields(member)
+    var mode = String(fields["_fit_numeric_mode"])
     var labels = encoded.value().copy() if encoded else trees_encode_labels(codes, context)
     py_setitem(fields, "classes_", labels.classes)
     var k = len(labels.classes)
@@ -556,10 +601,12 @@ def _member_fit_weighted(member: PythonObject, xcm: TreesMatrix, codes: PythonOb
 def _member_fit_session_rows(member: PythonObject, session: Session, rows: PythonObject, y32: PythonObject,
                              x_cols: Int, context: PythonObject) raises:
     """`RandomForestRegressor._fit_in_session(session, y, rows=rows)`: the
-    squared-error member fit on the session's X at `rows`."""
+    squared-error member fit on the session's X at `rows`. `member` comes
+    from `_validated_clone`: its constructor state is refreshed and its mode
+    captured already."""
     var kind = forest_kind(member, context)
-    var fields = forest_refresh(member, kind, context)
-    var mode = forest_capture_mode(fields, context)
+    var fields = py_fields(member)
+    var mode = String(fields["_fit_numeric_mode"])
     var y = trees_f32(y32, 1, "C", "y", context)
     var code = fields["_cfg"]["criterion"]
     if Int(py=code) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
@@ -1082,12 +1129,18 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         # Every round's member predicts the same training X: staged on the
         # device once, after the first member is fitted (trees_stage_rounds).
         var rounds_staged = Python.list()
+        # The best-splitter tree members are validated once per fit (lane
+        # ne2-b-members, N064): every round re-ran forest_refresh, the full
+        # constructor check and field rebuild, on a clone of the same base.
+        var memo = Python.list()
         try:
             for it in range(m):  # driver-loop: over the boosting rounds (one member each)
-                var member = _clone_from(base, template, _sub_seed(seed, it), context)
+                var member: PythonObject
                 if xcm:
+                    member = _validated_clone(base, template, _sub_seed(seed, it), "dt_classifier", memo, context)
                     _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
                 else:
+                    member = _clone_from(base, template, _sub_seed(seed, it), context)
                     _member_fit(member, xa, codes, _w32(xt, w, n, context), context)
                 if it == 0 and m > 1:
                     rounds_staged = trees_stage_rounds(member, trees_address(xa), n, d, context)
@@ -1149,13 +1202,23 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
     var y_array = _as_array(y32, Python.tuple(n), context)
     var rounds_staged = Python.list()
+    # The base's parameters read once and the session members validated once
+    # per fit (lane ne2-b-members, N064): every round re-read the unchanged
+    # base's parameters (`_clone`) and the session fit re-ran forest_refresh.
+    var template = forest_get_params(base, context) if m > 0 else Python.dict()
+    var memo = Python.list()
+    var base_kind = forest_kind(base, context) if session.handle > 0 else String("")
     try:
         for it in range(m):  # driver-loop: over the boosting rounds (one member each)
             var rows = trees_vector(n, "<i4", context)
             _ = py_call_typed(_x(xt, "x_trees_weighted_sample"), _A(w), _A(rows), Python.list(_P(n), _P(n), _P(seed), _P(it)))
             _ = rows  # keep the Python object alive through the native call above
             _ = w  # keep the Python object alive through the native call above
-            var member = _clone(base, _sub_seed(seed, it), context)
+            var member: PythonObject
+            if session.handle > 0:
+                member = _validated_clone(base, template, _sub_seed(seed, it), base_kind, memo, context)
+            else:
+                member = _clone_from(base, template, _sub_seed(seed, it), context)
             var yr = _gather_vec(xt, y32.addr, n, rows, context)
             _ = y32  # keep the Python object alive through the native call above
             if session.handle > 0:
@@ -1364,10 +1427,22 @@ def _dart_cols(fields: PythonObject, xt: PythonObject, d: Int, t: Int, context: 
 
 
 def _dart_member(fields: PythonObject, handle: PythonObject, c: Int, n: Int, d: Int, rows: PythonObject,
-                 cols: PythonObject, max_depth: PythonObject, seed: Int, j: Int, context: PythonObject) raises -> PythonObject:
+                 cols: PythonObject, max_depth: PythonObject, seed: Int, j: Int, memo: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
     """One DART member: a one-tree RandomForestRegressor fitted by
     `rf_regressor_fit_dart_export` on the round's device X and class-c
-    target (`RandomForestRegressor._fit_in_dart`)."""
+    target (`RandomForestRegressor._fit_in_dart`).
+
+    The member's settings are the same for every tree of one fit except its
+    random_state, so its constructor checks run once (lane ne2-b-members,
+    N061): the first member is built and validated (`forest_refresh`,
+    `forest_capture_mode`, the criterion check), `memo` (an empty list the
+    fit loop owns) keeps its validated fields, and every later member copies
+    them with its own seed (`_member_like`). Same fields, same values."""
+    if len(memo) > 0:
+        var tree_like = _member_like(context["trees_rf_regressor"], memo[0], _sub_seed(seed, j))
+        return _dart_member_fit(tree_like, py_fields(tree_like), String(py_fields(tree_like)["_fit_numeric_mode"]),
+                                handle, c, n, d, rows, cols, context)
     var settings = Python.dict()
     py_setitem(settings, "n_estimators", _P(1))
     py_setitem(settings, "bootstrap", PythonObject(False))
@@ -1382,9 +1457,17 @@ def _dart_member(fields: PythonObject, handle: PythonObject, c: Int, n: Int, d: 
     var tree = _new_member(context["trees_rf_regressor"], settings, context)
     var tf = forest_refresh(tree, "rf_regressor", context)
     var mode = forest_capture_mode(tf, context)
-    var code = tf["_cfg"]["criterion"]
-    if Int(py=code) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
+    if Int(py=tf["_cfg"]["criterion"]) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
         raise Error("a DART member fits squared_error")
+    _ = py_call(memo.append, py_call(trees_builtins().dict, tf))
+    return _dart_member_fit(tree, tf, mode, handle, c, n, d, rows, cols, context)
+
+
+def _dart_member_fit(tree: PythonObject, tf: PythonObject, mode: String, handle: PythonObject, c: Int, n: Int, d: Int,
+                     rows: PythonObject, cols: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The validated DART member's one-tree fit on the round's device X and
+    class-c target, its arrays stored on the member."""
+    var code = tf["_cfg"]["criterion"]
     var rf = trees_table(context, mode, "_mojolearn_rf")
     var entry = trees_need(rf, "rf_regressor_fit_dart_export", "rebuild the forest binding for DART member fits on the device")
     var m = n if rows is None else len(rows)
@@ -1487,6 +1570,7 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
     _ = inits32  # keep the Python object alive through the native call above
     var cache_start = -1
     var cache = PythonObject(None)
+    var memo = Python.list()
     try:
         for it in range(n_iters):  # driver-loop: over the boosting rounds
             _ = py_call_typed(_x(xt, "x_trees_dart_thresholds"), _A(weights64), _A(coefs64), _A(coef32), _A(thr64),
@@ -1526,7 +1610,7 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
             for c in range(K):  # driver-loop: over the K member trees of one round
                 var j = it * K + c
                 var cols = _dart_cols(fields, xt, d, j, context)
-                var tree = _dart_member(fields, handle, c, n, d, rows, cols, max_depth, seed, j, context)
+                var tree = _dart_member(fields, handle, c, n, d, rows, cols, max_depth, seed, j, memo, context)
                 _ = inits32  # keep the Python object alive through the native call above
                 var tf = py_fields(tree)
                 if cols is not None:

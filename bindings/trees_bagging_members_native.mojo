@@ -5,7 +5,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.trees_boost_admission import boost_admit, boost_tree_admit
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.trees_public_boost import _clone_from, _seed, _sub_seed
+from bindings.trees_public_boost import _seed, _sub_seed, _validated_clone
 from bindings.trees_public_forest import forest_get_params
 from bindings.trees_public_forest import forest_refresh, forest_capture_mode, forest_kind
 from bindings.trees_public_meta import _copy_block
@@ -13,31 +13,6 @@ from bindings.trees_public_auxiliary import _model_buffers
 from bindings.native_array_storage import native_array_from_values
 from bindings.classical_arrays import classical_wrap_array
 from bindings.gp_label_snapshot_native import gp_label_list
-
-
-def _member_like(base: PythonObject, first: PythonObject, member_seed: Int) raises -> PythonObject:
-    """A member of `base`'s class holding `first`'s validated state (the
-    first member's fields after its constructor checks, `forest_refresh`, and
-    `forest_capture_mode`) with its own `random_state`: the state
-    `_clone_from` + `forest_refresh` + `forest_capture_mode` give it, key for
-    key in the same order. Only `random_state` differs between members of
-    one template, and the only derived field that reads it is `_cfg`'s
-    `random_state` entry (the RF and ET derivations store the int seed; a
-    member seed is always an exact nonnegative int), which gets its own
-    mapping."""
-    var b = native_loaded_module("builtins")
-    var member = py_call(b.object.__new__, py_type(base))
-    var mf = py_fields(member)
-    _ = py_call(mf.update, first)
-    if py_contains(mf, "random_state"):
-        var own_seed = PythonObject(member_seed)
-        py_setitem(mf, "random_state", own_seed)
-        var cfg = py_get(mf, "_cfg")
-        if cfg is not None and py_type(cfg) is b.dict and py_contains(cfg, "random_state"):
-            var own = py_call(b.dict, cfg)
-            py_setitem(own, "random_state", own_seed)
-            py_setitem(mf, "_cfg", own)
-    return member
 
 
 def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> PythonObject:
@@ -82,22 +57,16 @@ def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> Pyt
     # The constructor checks run once per call (lane ne2-b-members, N049):
     # every member is a clone of the one `base` with only its random_state
     # changed, so the first member is validated (`forest_refresh`, the full
-    # constructor check and field rebuild) and captured, and every later
-    # member copies that validated state with its own seed (`_member_like`).
-    # Same fields, same values: nothing a member predicts changes.
-    var first = PythonObject(None)
-    var b = native_loaded_module("builtins")
+    # constructor check and field rebuild, and `forest_capture_mode`) and
+    # every later member copies that validated state with its own seed
+    # (trees_public_boost `_validated_clone`, shared with the DART and
+    # AdaBoost fit loops). Same fields, same values: nothing a member
+    # predicts changes.
+    var memo = Python.list()
     for t in range(count):  # driver-loop: one fitted member per native forest tree
         var lo = Int(py=offsets[t])
         var hi = Int(py=offsets[t + 1])
-        var member: PythonObject
-        if first is None:
-            member = _clone_from(base, template, _sub_seed(seed, t), context)
-            _ = forest_refresh(member, kind, context)
-            _ = forest_capture_mode(py_fields(member), context)
-            first = py_call(b.dict, py_fields(member))
-        else:
-            member = _member_like(base, first, _sub_seed(seed, t))
+        var member = _validated_clone(base, template, _sub_seed(seed, t), kind, memo, context)
         var mf = py_fields(member)
         py_setitem(mf, "_offsets", classical_wrap_array(native_array_from_values("i", Python.list(0, hi - lo)), Python.tuple(2), "<i4", "C", context))
         py_setitem(mf, "_colid", _copy_block(colid, lo, hi, "<i4", context))
