@@ -5,11 +5,14 @@ from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV, oci_nu_hi, oc
 from x_neighbors.ocsvm_host import op_ocsvm_alpha_init, op_unit_ff
 from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR, op_kfeat_pcs_draw_idn_host
 from x_neighbors.items import IP
+from x_neighbors.iter_host import op_ocsvm_labels
+# Capability bit 4: this binary carries the ocsvm_labels auxiliary operation.
+comptime XN_AUX_OCSVM_LABELS = True
 
 
 def xn_aux_capabilities() -> Int:
     return (0 | (Int(XN_OCSVM_DEV_INIT) << 1) | (Int(XN_UNIT_DEV) << 2)
-            | (Int(XN_IDN_SKETCH_CTR) << 3))
+            | (Int(XN_IDN_SKETCH_CTR) << 3) | (Int(XN_AUX_OCSVM_LABELS) << 4))
 
 
 def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -60,4 +63,17 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
         return 0
     if op == 2:
         raise Error("AttributeError: x_neighbors_ocsvm_resident_idn is not exported by this host binding")
+    if op == 5:
+        # ocsvm_labels (lane ne3-g-svc-gp-neighbors, N369): addresses
+        # (q, support rows, dual column, int32 labels), ints (n, m, d, kind,
+        # degree, sign mode), floats (gamma, coef0, scale, shift, threshold).
+        for k in range(4):  # small-loop(four admitted address words)
+            if a[k] == 0:
+                raise Error("x_neighbors: null buffer address")
+        for k in range(6):  # small-loop(six admitted dimension words)
+            if p[k] < 0:
+                raise Error("x_neighbors: a negative size was passed")
+        op_ocsvm_labels(a[0], a[1], a[2], a[3], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]),
+                        Float32(f[2]), Float32(f[3]), p[5], Float32(f[4]))
+        return 0
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

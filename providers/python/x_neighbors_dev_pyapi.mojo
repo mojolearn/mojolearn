@@ -22,6 +22,7 @@ from x_neighbors.kfeat_dev import (
 from x_neighbors.nan_cells_device import nc_fit_lean
 from x_neighbors.ocsvm_dev import op_ocsvm_alpha_init, op_ocsvm_x, op_unit_ff
 from x_neighbors.ocsvm_init import oci_nu_hi, oci_nu_lo
+from x_neighbors.native_descriptor_aux_device import xn_aux_execute
 
 
 def kpca_resident_binding() raises -> PythonObject:
@@ -177,4 +178,24 @@ def unit_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     if info == 0 or (n > 0 and (v == 0 or res == 0)):
         raise Error("x_neighbors: null buffer address")
     op_unit_ff(v, res, info, n)
+    return PythonObject(None)
+
+
+def ocsvm_labels_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_ocsvm_labels: OneClassSVM.predict's kernel_matmul,
+    unary and sign-label ops in one native session. Addresses (q, support
+    rows, dual column, int32 labels), ints (n, m, d, kind, degree, sign
+    mode), floats (gamma, coef0, scale, shift, threshold); the typed
+    admission is the descriptor route's auxiliary operation 5."""
+    var a = List[Int]()
+    var p = List[Int]()
+    var f = List[Float64]()
+    for k in range(4):  # small-loop(four address words of the named operation)
+        a.append(Int(py=a_[k]))
+    for k in range(6):  # small-loop(six dimension words of the named operation)
+        p.append(Int(py=i_[k]))
+    for k in range(5):  # small-loop(five scalar words of the named operation)
+        f.append(Float64(py=f_[k]))
+    with GILReleased(Python()):
+        _ = xn_aux_execute(5, a, p, f)
     return PythonObject(None)
