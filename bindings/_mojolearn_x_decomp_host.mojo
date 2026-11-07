@@ -51,6 +51,17 @@ def x_decomp_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(X_DECOMP_HOST_SABOTAGE)
 
 
+from x_decomp.descriptor_host import X_DECOMP_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+
+
+def x_decomp_native_api_v1_binding() raises -> PythonObject:
+    """The x_decomp kernel-call table of the host image (host-address
+    operations only; x_decomp/descriptor_host.mojo)."""
+    var api = X_DECOMP_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_decomp_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -58,6 +69,7 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
     comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp_host")
+        m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
         m.def_function[x_decomp_host_numeric_mode_binding]("x_decomp_host_numeric_mode")
         m.def_function[x_decomp_host_vendor_binding]("x_decomp_host_vendor")
         m.def_function[x_decomp_host_column_binding]("x_decomp_host_column")

@@ -92,6 +92,18 @@ from providers.python.x_decomp_s_linalg_fast_pyapi import (
 )
 
 
+from x_decomp.descriptor_device import X_DECOMP_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+
+
+def x_decomp_native_api_v1_binding() raises -> PythonObject:
+    """The x_decomp kernel-call table (x_decomp/descriptor_schema.mojo): one
+    capsule over this image's dispatch function, connected once per module
+    by the kits (bindings/kit_call.mojo)."""
+    var api = X_DECOMP_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_decomp.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -99,6 +111,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
     comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
+        m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
         # F02 audit belongs to the independent LU route as well as MCD.
         m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")

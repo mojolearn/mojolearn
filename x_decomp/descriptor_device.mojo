@@ -7,7 +7,7 @@
 # providers/python/x_decomp_resident_pyapi.mojo call, with the same checks.
 # No numeric change: the same kernels, the same operands, the same order.
 from std.ffi import _Global
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_decomp.cells import F32Ptr
@@ -132,6 +132,10 @@ struct XDecompDeviceAPI(Defaultable, Movable):
         self.entries.append(x_decomp_device_v1)
 
 
-# The extension image owns the table and name borrowed by PyCapsule.
+# The extension image owns the table and name borrowed by PyCapsule. A named
+# global is process-wide, so the name carries the image's numeric mode (as
+# x_neighbors/device_ops.mojo names its context): the identical and fast
+# images loaded together must each export their own dispatch function.
+comptime _X_DECOMP_DEVICE_API_NAME = "MojoXDecompDeviceAPIIdenticalv1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXDecompDeviceAPIFastv1"
 comptime X_DECOMP_DEVICE_API = _Global[StorageType=XDecompDeviceAPI,
-    name="MojoXDecompDeviceAPIv1", init_fn=XDecompDeviceAPI.__init__]
+    name=_X_DECOMP_DEVICE_API_NAME, init_fn=XDecompDeviceAPI.__init__]
