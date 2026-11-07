@@ -134,7 +134,11 @@ def test_recurrent_state_native_round_trip_and_atomic_rejection(name):
     assert list(state)[-2:] == ['head.weight', 'head.bias']
     assert np.concatenate([v.ravel() for v in state.values()]).tobytes() == expected.tobytes()
     assert all(not np.shares_memory(v, model.params_) for v in state.values())
-    model.params_.fill(0)
+    # Fitted params with a device-resident copy are read-only; replacing the
+    # array still works.
+    with pytest.raises(ValueError, match='read-only'):
+        model.params_.fill(0)
+    model.params_ = np.zeros_like(model.params_)
     assert audit_native_call(model.load_state_dict, OrderedDict(state)).assert_native() is model
     assert model.params_.tobytes() == expected.tobytes()
     bad = dict(state, **{'head.bias': np.zeros((999,), dtype='f4')})
