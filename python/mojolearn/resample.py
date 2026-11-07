@@ -448,12 +448,10 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
                    sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
-# Optional ndarray result storage is connected during package import.
-# Product operations never import NumPy or invoke an array conversion hook.
-try:
-    import numpy as _native_numpy_storage
-except ImportError:
-    _native_numpy_storage = None
+# `import mojolearn` stays NumPy-free: the native owner uses ndarray result
+# storage only when the caller has loaded NumPy itself. Product operations
+# never import NumPy or invoke an array conversion hook. (An unconditional
+# `import numpy` here loaded NumPy for every `import mojolearn`.)
 
 
 # The compiled owner of this module's public functions
