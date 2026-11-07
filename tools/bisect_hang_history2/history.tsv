@@ -1,0 +1,6 @@
+index	sha	subject
+0	f9e06ecacf	trees_staged_input: _member_table recurses into itself; the walk returns the inner forest instead of calling back
+1	bdbd122f9c	classical_attributes: classical_check_layout overloads chained by return type become named wrappers (_plan, _call)
+2	3269a20dce	native_model_records: content_value walks with an explicit stack instead of self-recursion
+3	710af7e913	trees_meta_admission: _stamp_into walks with an explicit stack instead of self-recursion
+4	faf8628178	trees_public_forest: forest_predict, _proba and _codes follow a tree's inner forest in a loop instead of self-recursion
