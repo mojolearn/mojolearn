@@ -711,6 +711,39 @@ struct MKit(Movable):
         _ = a^
         return device_identifier(nd)
 
+    def _adopt(mut self, identifier: Int, n: Int) raises -> PythonObject:
+        """A pool id a native operation allocated, owned as `_devbuf`'s are
+        (freed back to the pool when its last holder dies)."""
+        return PythonObject(alloc=ManifoldDevice(self.raw, self.fn("x_decomp_dev_free"), PythonObject(identifier), n,
+                                                 self.fn("x_decomp_dev_alloc"),
+                                                 self.fn_opt("x_decomp_dev_upload"),
+                                                 self.fn_opt("x_decomp_dev_download"),
+                                                 self.fn_opt("x_decomp_dev_move")))
+
+    def iso_gather_min(mut self, d: PythonObject, im: PythonObject, sq: PythonObject, q: Int,
+                       nn: Int) raises -> PythonObject:
+        """Isomap.transform's per-rank gather-and-min (row N295) as one native
+        operation (x_decomp/descriptor_device.mojo xd_iso_gather_min): G =
+        min over ranks a of (rows im[:, a] of D) + SQ[:, a], the launches the
+        per-rank kit calls made, in their order. None on a host kit or a
+        shape the per-rank path takes another route for (then the caller
+        runs that path)."""
+        if not self.res():
+            return PythonObject(None)
+        var dc = mk_c(d)
+        if q * dc <= 0 or nn <= 0 or mk_r(sq) != q or mk_c(sq) != nn or not mk_res_moves(sq, q):
+            return PythonObject(None)
+        var idd = self.dix(d)
+        var iim = self.dix(im)
+        var isq = self.dix(sq)
+        var one = Int(py=self.dev_one())
+        var gid = self.dcall(XD_DEV_ISO_GATHER_MIN, [idd, iim, isq, q, dc, nn, one, mk_n(d), mk_n(im)])
+        var g = mk_dev_view(self._adopt(gid, q * dc), q, dc, self.ctx)
+        _ = d
+        _ = im
+        _ = sq
+        return g
+
     def from_snapshot(mut self, value: ArrayMetadata, name: String) raises -> PythonObject:
         """`mk_from_snapshot` on this kit (row N296). A resident kit uploads
         straight from the admitted snapshot's address into a pooled device

@@ -29,7 +29,7 @@ from bindings.family_common import (
     family_field,
 )
 from bindings.mani_kit import (
-    MKit, mk_from_input, mk_from_snapshot, mk_copy, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_desc_range, mk_out,
+    MKit, mk_freeze_fitted, mk_from_input, mk_from_snapshot, mk_copy, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_desc_range, mk_out,
     mk_out2, mk_store, mk_store_ptr, mk_at, mk_of, mk_fill, mk_zeros, mk_reshape, mk_dev_view, mk_new,
     mk_on_dev, mk_take_rows_list, mk_ints, mk_addr, mk_store_addr, mk_store_len, mk_store_zeros, mk_store_part,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_SQRT, OP_SQ, OP_SCALE, OP_FMA, OP_ADDS, OP_GTS, OP_MIN, OP_LE,
@@ -498,6 +498,16 @@ def _iso_graph(settings: ManifoldSettings, fields: PythonObject, mut k: MKit, m:
     return (wg, nn_out)
 
 
+# The fitted matrices Isomap / LLE keep on the model (frozen when fit returns).
+def _iso_fitted() -> List[String]:
+    return ["dist_matrix_m_", "_k_col", "_k_all", "eigenvalues_m_", "eigenvectors_m_",
+            "embedding_m_", "_fit_X", "_Kc", "_iso_v_m_"]
+
+
+def _lle_fitted() -> List[String]:
+    return ["embedding_m_", "_fit_X"]
+
+
 def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`Isomap.fit(X)`; returns embedding_."""
     classical_connect_numpy(context)
@@ -548,6 +558,12 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     py_setitem(settings.fields, "_knn", graph[1])
     py_setitem(settings.fields, "n_features_in_", PythonObject(mk_c(m)))
     py_setitem(settings.fields, "_Kc", kc)
+    # transform's eigenvectors / sqrt(eigenvalues) (row N295): the same two
+    # launches transform made on every call, made once here.
+    py_setitem(settings.fields, "_iso_v_m_", k.ew2(OP_DIV, eig[1], k.ew1(OP_SQRT, eig[0], 0.0)))
+    # Fitted state is read-only from here (rows N291, N301): reads never
+    # move it, each side's copy is made once (bindings/mani_kit.mojo).
+    mk_freeze_fitted(settings.fields, _iso_fitted())
     return embedding
 
 
@@ -595,7 +611,12 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
         var sq = got[1]
         if kind == 0:
             sq = k.ew1(OP_SQRT, sq, 0.0)
-        for a in range(nn):  # driver-loop: over neighbor ranks (n_neighbors), one gather-and-min step each
+        # A resident kit makes the whole gather-and-min in one native
+        # operation (row N295): the same launches, in the same order.
+        var fused = k.iso_gather_min(d, im, sq, mk_r(q), nn)
+        if not (fused is None):
+            g = fused
+        for a in range(nn if fused is None else 0):  # driver-loop: over neighbor ranks (n_neighbors), one gather-and-min step each (host kit)
             var rows = k.take_rows_at(d, im, mk_r(q), nn, a, 0)
             var cand = k.ew2(OP_ADD, rows, mk_take_cols(sq, mk_col_range(a, a + 1), context))
             if g is None:
@@ -607,7 +628,11 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     var t1 = k.ew2(OP_SUB, g, family_field(fields, "_k_col"))
     var t2 = k.ew2(OP_SUB, t1, row)
     var kc = k.ew2(OP_ADD, t2, family_field(fields, "_k_all"))
-    var v = k.ew2(OP_DIV, family_field(fields, "eigenvectors_m_"),
+    # eigenvectors / sqrt(eigenvalues), kept by fit (models fitted before
+    # it was kept make it here, as every transform did)
+    var v = py_get(fields, PythonObject("_iso_v_m_"))
+    if v is None:
+        v = k.ew2(OP_DIV, family_field(fields, "eigenvectors_m_"),
                   k.ew1(OP_SQRT, family_field(fields, "eigenvalues_m_"), 0.0))
     return mk_out2(k.mm(kc, v, False, False), context)
 
@@ -813,6 +838,7 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     py_setitem(settings.fields, "_fit_X", m)
     py_setitem(settings.fields, "_knn", PythonObject(nn))
     py_setitem(settings.fields, "n_features_in_", PythonObject(mk_c(m)))
+    mk_freeze_fitted(settings.fields, _lle_fitted())
     return embedding
 
 
