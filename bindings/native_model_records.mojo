@@ -734,9 +734,9 @@ def content_value(mut rec: ContentRecord, value: PythonObject, depth: Int, limit
         rec.ops.append(h)
         rec.ops.append(n)
         var t = perf2_cpython_table()
-        for i in range(n):  # driver-loop: over a stored list's items (identity words, once per record)
+        for i in range(len(value)):  # driver-loop: over a stored list's items (identity words, once per record)
             rec.ops.append(Int(t[].PyList_GetItem(value._obj_ptr, i)))
-        for i in range(n):  # driver-loop: over a stored list's items (nested words, once per record)
+        for i in range(len(value)):  # driver-loop: over a stored list's items (nested words, once per record)
             content_value(rec, value[i], depth + 1, limit, sets_fail)
         return
     if cls is b.tuple:
