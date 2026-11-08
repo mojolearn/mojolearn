@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """tools/smoke_inputs.py and the drivers' smoke input mode without a device: the smoke's arrays are the identity
-verification's fixture `base`, the drivers' prep builds its blocks from it, the loaders read a slice through their
-own code, and a timed run never sees any of it."""
+verification's fixture `base`, the drivers' prep builds its blocks from it, the loaders read a synthetic file in
+their own schema generated on the box, and a timed run never sees any of it."""
 import argparse
 import importlib.util
 import json
@@ -25,8 +25,10 @@ def _mod(name):
 
 
 @pytest.fixture
-def smoke_mode(monkeypatch):
-    monkeypatch.setenv(SI.MODE_ENV, SI.FIXTURES_MODE)
+def smoke_mode(monkeypatch, tmp_path):
+    monkeypatch.setenv(SI.MODE_ENV, SI.SYNTHETIC_MODE)
+    monkeypatch.setenv(SI.SYNTH_DIR_ENV, str(tmp_path / "synthetic"))
+    return tmp_path / "synthetic"
 
 
 # ------------------------------------------------------------------ the fixture is the verification's
@@ -99,78 +101,60 @@ def test_the_algos_prep_builds_its_blocks_from_the_fixture_and_only_its_races_da
         assert z["Y"].shape[0] == A.TS_SERIES
 
 
-# ------------------------------------------------------------------ the slices: the same loader code
-def _full_files(root):
-    rng = np.random.default_rng(3)
-    n = 40000
-    (root / "higgs").mkdir(parents=True)
-    np.savez(root / "higgs" / "higgs_speed.npz", x=rng.standard_normal((n, 28)).astype(np.float32),
-             y=(rng.random(n) > 0.5).astype(np.float32))
-    (root / "taxi").mkdir()
-    card = (np.arange(n) % 3) != 0
-    np.savez(root / "taxi" / "taxi_speed.npz", x=rng.standard_normal((n, 16)).astype(np.float32),
-             fare=(rng.random(n) * 30 + 1).astype(np.float32), tip=(rng.random(n) * 8).astype(np.float32), card=card)
-    (root / "istella").mkdir()
-    np.savez(root / "istella" / "istella_speed.npz", x_train=rng.standard_normal((n, 220)).astype(np.float32),
-             r_train=rng.integers(0, 5, n).astype(np.float32), x_test=rng.standard_normal((9000, 220)).astype(np.float32),
-             r_test=rng.integers(0, 5, 9000).astype(np.float32))
-    np.savez(root / "istella" / "istella_rank.npz", qid_train=np.repeat(np.arange(n // 40), 40),
-             qid_test=np.repeat(np.arange(9000 // 30), 30), x_test=rng.standard_normal((9000, 220)).astype(np.float32),
-             r_test=rng.integers(0, 5, 9000).astype(np.float32))
-    return card
-
-
-def test_the_loaders_read_the_slice_through_their_own_code(tmp_path, monkeypatch, smoke_mode):
-    root = tmp_path / "gbm-bench"
-    card = _full_files(root)
-    for key, form in SI.SLICE_FORMS.items():
-        src = root / key.split("/", 1)[1]
-        rec = SI.make_slice(key, str(src), str(root / SI.slice_name(key.split("/", 1)[1])))
-        assert rec["key"] == SI.slice_key(key) and os.path.getsize(SI.slice_name(str(src))) <= SI.slice_bound_bytes(key)
-    monkeypatch.setenv("GBM_BENCH_DATA", str(root))
+# ------------------------------------------------------------------ synthetic files: the same loader code
+def test_the_loaders_read_a_synthetic_file_in_their_own_schema_through_their_own_code(tmp_path, monkeypatch,
+                                                                                         smoke_mode):
+    monkeypatch.setenv("GBM_BENCH_DATA", str(tmp_path / "no-datasets-here"))     # nothing staged, nothing read
     H = _mod("speed_gbdt_arm")
-    with np.load(root / "taxi" / "taxi_speed.npz") as z:
-        fx, cardx = z["x"], z["card"]
     d = H.load_taxi("shipped", rows_cap=2000)
-    assert d.X_train.shape == (2000, 16) and np.array_equal(d.X_train, fx[cardx][:2000])
-    assert d.X_test.shape[0] == SI.SLICE_TEST and np.array_equal(d.X_test, fx[cardx][-SI.SLICE_TEST:])
-    r = H.load_taxi("shipped", rows_cap=2000, regression=True)
-    assert np.array_equal(r.X_test, fx[-r.X_test.shape[0]:]) and r.X_train.shape[0] == 2000
-    with np.load(root / "higgs" / "higgs_speed.npz") as z:
-        hx = z["x"]
+    assert d.X_train.shape == (2000, 16) and d.X_test.shape == (SI.SMOKE_TEST_ROWS, 16)
+    assert set(np.unique(d.y_train)) == {0.0, 1.0}
+    with np.load(smoke_mode / "taxi" / "taxi_speed.npz") as z:
+        assert sorted(z.files) == sorted(["x", "fare", "tip", "card", SI.TAIL]) and z["card"].dtype == bool
+        assert np.array_equal(d.X_test, z["x"][z["card"]][-SI.SMOKE_TEST_ROWS:])
+    assert len(set(np.unique(H.load_taxi("shipped", rows_cap=2000, multiclass=True).y_train))) == 4
+    c = H.load_taxi("shipped", rows_cap=2000, categorical=True)
+    assert c.cat_idx and c.X_train.shape[0] == 2000
     g = H.load_higgs("shipped", rows_cap=2000)
-    assert np.array_equal(g.X_train, hx[:2000]) and np.array_equal(g.X_test, hx[-SI.SLICE_TEST:])
-    i = H.load_istella("shipped", rows_cap=2000, regression=True)
-    assert i.X_train.shape == (2000, 220) and i.X_test.shape == (SI.SLICE_TEST, 220)
+    assert g.X_train.shape == (2000, 28) and g.X_test.shape == (SI.SMOKE_TEST_ROWS, 28)
+    i = H.load_istella("shipped", rows_cap=2000, multiclass=True)
+    assert i.X_train.shape == (2000, 220) and i.X_test.shape == (SI.SMOKE_TEST_ROWS, 220)
     k = H.load_istella_rank_data("shipped", rows_cap=2000)
-    assert k.X_train.shape[0] <= 2000 and k.X_test.shape[0] <= SI.SLICE_TEST and k.X_test.shape[0] % 30 == 0
+    assert 0 < k.X_train.shape[0] <= 2000 and k.X_test.shape[0] % SI.RANK_QUERY_ROWS == 0
+    assert all(os.path.getsize(p) <= SI.synthetic_bound_bytes(SI._schema_of(p)) for p in smoke_mode.rglob("*.npz"))
     N = _mod("bench_board_neural")
-    assert N.higgs_path() == str(root / "higgs" / "higgs_speed.smoke.npz")
+    assert N.higgs_path() == str(smoke_mode / "higgs" / "higgs_speed.npz")
+    # deterministic: the same bytes on every box
+    first = (smoke_mode / "istella" / "istella_speed.npz").read_bytes()
+    (smoke_mode / "istella" / "istella_speed.npz").unlink()
+    H.load_istella("shipped", rows_cap=2000)
+    assert (smoke_mode / "istella" / "istella_speed.npz").read_bytes() == first
 
 
-def test_a_corpus_slice_is_its_head_and_corpus_path_finds_it(tmp_path, monkeypatch, smoke_mode):
-    corpus = tmp_path / "corpus" / "enwik8"
-    corpus.mkdir(parents=True)
-    (corpus / "input.txt").write_bytes(b"abc" * 1_000_000)
-    SI.make_slice("corpus/enwik8/input.txt", str(corpus / "input.txt"), str(corpus / "input.smoke.txt"))
-    assert (corpus / "input.smoke.txt").read_bytes() == (b"abc" * 1_000_000)[:SI.CORPUS_HEAD_BYTES]
-    monkeypatch.setenv("MOJOLEARN_CORPUS_ROOT", str(tmp_path))
+def test_the_corpus_readers_get_generated_text_of_their_kind(monkeypatch, smoke_mode):
     A = _mod("bench_board_algos")
-    assert A.corpus_path("corpus/enwik8/input.txt") == str(corpus / "input.smoke.txt")
+    p = A.corpus_path("corpus/enwik8/input.txt")
+    q = A.corpus_path("corpus/pile_github/input.txt")
+    assert p == str(smoke_mode / "enwik8" / "input.txt") and os.path.getsize(p) == SI.CORPUS_SYNTH_BYTES
+    assert open(p, "rb").read() != open(q, "rb").read() and b"def" in open(q, "rb").read()
+    X = A.text_counts(p)
+    assert X.shape[0] == SI.CORPUS_SYNTH_BYTES // A.TEXT_DOC_BYTES >= 20       # both labels reach the held-out rows
 
 
-def test_a_timed_run_never_sees_the_slices_or_the_fixture(tmp_path, monkeypatch):
+def test_a_timed_run_never_sees_the_synthetic_files_or_the_fixture(tmp_path, monkeypatch):
     monkeypatch.delenv(SI.MODE_ENV, raising=False)
-    assert SI.loader_path("/d/taxi/taxi_speed.npz") == "/d/taxi/taxi_speed.npz" and not SI.slices_on()
+    assert SI.loader_path("/d/taxi/taxi_speed.npz") == "/d/taxi/taxi_speed.npz" and not SI.synthetic_on()
     H = _mod("speed_gbdt_arm")
-    assert H._smoke_slice("/d/x.npz") == ("/d/x.npz", False)
+    assert H._smoke_input("/d/x.npz") == ("/d/x.npz", False)
     monkeypatch.setenv(SI.MODE_ENV, "bogus")
     with pytest.raises(SystemExit):
         SI.mode()
-    monkeypatch.setenv(SI.MODE_ENV, SI.FIXTURES_MODE)
-    with pytest.raises(RuntimeError):                      # the smoke never falls back to the full file
-        H._smoke_slice(str(tmp_path / "taxi_speed.npz"))
-    assert SI.slice_name("a/b.smoke.npz") == "a/b.smoke.npz"
+    monkeypatch.setenv(SI.MODE_ENV, SI.SYNTHETIC_MODE)
+    monkeypatch.delenv(SI.SYNTH_DIR_ENV, raising=False)
+    with pytest.raises(SystemExit):                      # never a default place, never the full file
+        H._smoke_input(str(tmp_path / "taxi" / "taxi_speed.npz"))
+    with pytest.raises(SystemExit):
+        SI.synthetic_path("/d/criteo/criteo.npz", {SI.SYNTH_DIR_ENV: str(tmp_path)})
 
 
 # ------------------------------------------------------------------ the board routes each race
@@ -183,12 +167,15 @@ def test_the_board_routes_fixture_races_to_their_own_prep_and_refuses_the_mode_o
     path = tmp_path / "map.json"
     path.write_text(json.dumps(imap))
     with pytest.raises(SystemExit):
-        B.set_inputs(argparse.Namespace(inputs="verify-fixtures", inputs_map=str(path), smoke=False))
+        B.set_inputs(argparse.Namespace(inputs="synthetic", inputs_map=str(path), smoke=False, out=str(tmp_path)))
     with pytest.raises(SystemExit):
-        B.set_inputs(argparse.Namespace(inputs="verify-fixtures", inputs_map=None, smoke=True))
+        B.set_inputs(argparse.Namespace(inputs="synthetic", inputs_map=None, smoke=True, out=str(tmp_path)))
     monkeypatch.setenv(SI.MODE_ENV, "datasets")
-    assert B.set_inputs(argparse.Namespace(inputs="verify-fixtures", inputs_map=str(path), smoke=True)) \
-        == "verify-fixtures" and os.environ[SI.MODE_ENV] == "verify-fixtures"
+    monkeypatch.setenv(SI.SYNTH_DIR_ENV, "")
+    out = tmp_path / "b000-smoke"
+    assert B.set_inputs(argparse.Namespace(inputs="synthetic", inputs_map=str(path), smoke=True, out=str(out))) \
+        == "synthetic" and os.environ[SI.MODE_ENV] == "synthetic"
+    assert os.environ[SI.SYNTH_DIR_ENV] == str(out / "work" / "smoke-synthetic")   # under the race scratch
     ridge = dict(id="algos/ridge/taxi/rows=2000", family="algos", lane="ridge", dataset="taxi", rows=2000)
     adam = dict(id="algos/adam/synthetic/rows=2000", family="algos", lane="adam", dataset="synthetic", rows=2000)
     ctx = {"algos_data": str(tmp_path / "a"), "out": str(tmp_path), "data_root": str(tmp_path / "d")}
@@ -196,8 +183,8 @@ def test_the_board_routes_fixture_races_to_their_own_prep_and_refuses_the_mode_o
     assert B.algos_data_dir(ctx, 2000, ridge).endswith("rows-2000-verify-fixtures")
     assert B.algos_data_dir(ctx, 2000, adam).endswith("rows-2000") and B.race_data_files(ctx, ridge) == []
     assert "identity fixture" in B.race_data_sha(ctx, ridge, {})
-    st = B.data_status(str(tmp_path / "d"), ["taxi"])
-    assert st["taxi"]["r2_key"] == "gbm-bench/taxi/taxi_speed.smoke.npz" and st["taxi"]["path"].endswith(".smoke.npz")
+    gru = dict(id="neural/gru-fit/higgs/shape=small", family="neural", lane="gru-fit", dataset="higgs")
+    assert B.race_data_files(ctx, gru) == [("higgs", str(out / "work" / "smoke-synthetic" / "higgs" / "higgs_speed.npz"))]
     cmds = []
     monkeypatch.setattr(B, "run_logged", lambda cmd, env, log, t, nice=0: cmds.append(cmd) or 0)
     ctx.update(python="py", algos_driver="algos.py", nice=0, vendor="nvidia")
