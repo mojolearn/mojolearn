@@ -2071,11 +2071,8 @@ def data_status(data_root, datasets, verify=False):
         path = os.path.join(data_root, DATA_FILES[ds])
         if ds == "higgs":
             path = os.environ.get("MOJOLEARN_BENCH_HIGGS") or path
-        # the smoke's verify-fixtures mode: the loaders open the pinned slice (tools/smoke_inputs.py)
-        key = _smoke_inputs().slice_key(R2_KEYS[ds]) if _slices_on() else R2_KEYS[ds]
-        path = _loader_path(path)
-        rec = {"path": path, "present": os.path.isfile(path), "r2_key": key}
-        pin = pins.get(key)
+        rec = {"path": path, "present": os.path.isfile(path), "r2_key": R2_KEYS[ds]}
+        pin = pins.get(R2_KEYS[ds])
         if pin:
             rec["pinned_bytes"] = int(pin[0])
             rec["pinned_sha256"] = pin[1]
@@ -2564,11 +2561,11 @@ def strip_our_cpu(result):
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# --inputs verify-fixtures: the release measurement smoke's inputs (tools/smoke_inputs.py)
+# --inputs synthetic: the release measurement smoke's inputs, generated on the box (tools/smoke_inputs.py)
 # ---------------------------------------------------------------------------
 
 #: {race id: {input, verify_lanes, files}} from --inputs-map (tools/release_measurement_smoke.py smoke_inputs); empty
-#: outside the smoke's verify-fixtures mode
+#: outside the smoke's synthetic mode
 INPUT_MAP = {}
 INPUT_VERIFY = "verify fixture"
 #: a fixture race's data directories carry this after their rows tag, so its fixture blocks never meet the blocks a
@@ -2584,24 +2581,28 @@ def fixture_race(race):
 
 
 def set_inputs(args):
-    """--inputs: 'datasets' (every timed run) or 'verify-fixtures' (--smoke only, with --inputs-map). The mode
-    reaches every driver as smoke_inputs.MODE_ENV through this process's environment (child_env copies it), which
-    also makes every loader open its pinned slice."""
+    """--inputs: 'datasets' (every timed run) or 'synthetic' (--smoke only, with --inputs-map): THE SMOKE STAGES NO
+    DATA. A race on the verify fixture preps from fixture `base`; every dataset file another race's loader opens is
+    generated on the box in its own schema (tools/smoke_inputs.py), under <out>/work/, which --drop-race-scratch
+    deletes once the race's record is written. The mode reaches every driver through this process's environment
+    (child_env copies it)."""
     mode = getattr(args, "inputs", None) or "datasets"
     if mode == "datasets":
         if getattr(args, "inputs_map", None):
-            raise SystemExit("bench_board: --inputs-map is for --inputs verify-fixtures")
+            raise SystemExit("bench_board: --inputs-map is for --inputs synthetic")
         return mode
     if not args.smoke:
-        raise SystemExit("bench_board: --inputs verify-fixtures is for --smoke runs (a timed board reads its datasets)")
+        raise SystemExit("bench_board: --inputs synthetic is for --smoke runs (a timed board reads its datasets)")
     if not getattr(args, "inputs_map", None):
-        raise SystemExit("bench_board: --inputs verify-fixtures needs --inputs-map (release_measurement_smoke.py "
-                         "writes it)")
+        raise SystemExit("bench_board: --inputs synthetic needs --inputs-map (release_measurement_smoke.py writes it)")
     with open(args.inputs_map) as fh:
         doc = json.load(fh)
     INPUT_MAP.clear()
     INPUT_MAP.update(doc.get("recipes", doc))
-    os.environ[_smoke_inputs().MODE_ENV] = mode
+    SI = _smoke_inputs()
+    os.environ[SI.MODE_ENV] = mode
+    os.environ[SI.SYNTH_DIR_ENV] = os.path.join(os.path.abspath(os.path.expanduser(args.out)), "work",
+                                                "smoke-synthetic")
     return mode
 
 
@@ -2614,12 +2615,8 @@ def _smoke_inputs():
     return _SMOKE_INPUTS[0]
 
 
-def _slices_on():
-    return os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "verify-fixtures"
-
-
-def _loader_path(path):
-    return _smoke_inputs().loader_path(path) if _slices_on() and path else path
+def _synthetic_on():
+    return os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "synthetic"
 
 
 def _fixture_tag(race):
@@ -3288,11 +3285,14 @@ _R2_TO_DATA = {v: k for k, v in R2_KEYS.items()}
 
 
 def race_data_files(ctx, race):
-    """[(name, path)] of the data files a race reads; [] for seeded data (and for a race on the verify fixture in
-    the smoke, which reads none); a loader's file is its slice in the smoke's verify-fixtures mode."""
+    """[(name, path)] of the data files a race reads; [] for seeded data. In the smoke's synthetic mode: [] for a race
+    on the verify fixture, and each file's synthetic stand-in (written on the box when the race's loader opens it)."""
     if fixture_race(race):
         return []
-    return [(n, _loader_path(p)) for n, p in _race_data_files(ctx, race)]
+    if _synthetic_on():
+        SI = _smoke_inputs()
+        return [(n, os.path.join(SI.synthetic_dir(), SI._schema_of(p))) for n, p in _race_data_files(ctx, race)]
+    return _race_data_files(ctx, race)
 
 
 def _race_data_files(ctx, race):
@@ -3335,6 +3335,9 @@ def race_data_sha(ctx, race, box):
     files = race_data_files(ctx, race)
     if not files and fixture_race(race):
         return "identity fixture %s (tools/identity_break.py)" % _smoke_inputs().FIXTURE
+    if files and _synthetic_on():
+        return "synthetic smoke inputs (tools/smoke_inputs.py: %s)" % ", ".join(
+            _smoke_inputs()._schema_of(p) for _, p in files)
     if not files:
         return "synthetic (seed %d)" % SEED
     cache = ctx.setdefault("data_sha", {})
@@ -5137,12 +5140,13 @@ def build_parser():
     p.add_argument("--measurement-source", default=None, metavar="JSON",
                    help="with --preflight-only: reuse this retained source snapshot {source, inventory} "
                         "(tools/gpu_gap_campaign.py --smoke writes it once)")
-    p.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
-                   help="with --smoke: verify-fixtures runs every race named on the verify fixture in --inputs-map "
-                        "on the identity verification's fixture `base` and every dataset loader on its pinned slice "
-                        "(tools/smoke_inputs.py); the timed board always reads its datasets")
+    p.add_argument("--inputs", default="datasets", choices=("datasets", "synthetic"),
+                   help="with --smoke: synthetic stages no data: every race named on the verify fixture in "
+                        "--inputs-map runs on the identity verification's fixture `base`, every dataset loader on a "
+                        "file generated on the box in its own schema (tools/smoke_inputs.py); the timed board always "
+                        "reads its datasets")
     p.add_argument("--inputs-map", default=None, metavar="JSON",
-                   help="with --inputs verify-fixtures: {race id: {input, verify_lanes, files}} "
+                   help="with --inputs synthetic: {race id: {input, verify_lanes, files}} "
                         "(tools/release_measurement_smoke.py smoke_inputs)")
     p.add_argument("--drop-race-scratch", action="store_true",
                    help="with --smoke: delete each race's driver scratch (work/) and its local evidence directory "
@@ -5436,9 +5440,8 @@ def main(argv=None):
         races = select_opponent_arms(races, args.opponent_arms)
     if args.shard:
         races = shard_races(races, args.shard)
-    set_inputs(args)
-    # a race on the verify fixture reads no dataset (tools/smoke_inputs.py); every other one reads its slice
-    needed, corpus_missing = data_needs([r for r in races if not fixture_race(r)], datasets)
+    # the smoke's synthetic inputs need no dataset on the box: nothing is checked, nothing is staged
+    needed, corpus_missing = data_needs(races, datasets) if set_inputs(args) == "datasets" else ([], [])
     data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:
