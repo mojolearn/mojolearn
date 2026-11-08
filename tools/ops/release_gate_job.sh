@@ -200,7 +200,23 @@ if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
     shas=(); for x in "${GATE_IDENTITY_SHA256[@]}"; do shas+=(--sha256 "$x"); done
     whl=(); for w in "${GATE_WHEELS[@]}"; do whl+=(--wheel "$w"); done
     mkdir -p "$GATE_WORK/out/identity"
-    say "identity: columns $GATE_IDENTITY_COLUMNS on $ngpu GPU(s), $(nproc) core(s)"
+    # THE BOX EACH RECORD NAMES (run.box, provenance run_box=; lane post-record-device-time): the RunPod pod id
+    # (container env, or /etc/rp_environment for an ssh session), else the droplet id from the DigitalOcean
+    # metadata service on the droplet itself; a launcher's own IDENTITY_RECORD_BOX wins. Unknown: unset, and
+    # the record writes null with the reason.
+    if [ -z "${IDENTITY_RECORD_BOX:-}" ]; then
+        pod="${RUNPOD_POD_ID:-}"
+        if [ -z "$pod" ] && [ -r /etc/rp_environment ]; then
+            pod=$( { sed -n 's/^export RUNPOD_POD_ID=//p' /etc/rp_environment | head -n 1 | tr -d '"'; } 2>/dev/null || true)
+        fi
+        if [ -n "$pod" ]; then
+            export IDENTITY_RECORD_BOX="runpod:$pod"
+        elif grep -qi '^digitalocean' /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+            droplet=$(curl -fsS -m 3 http://169.254.169.254/metadata/v1/id 2>/dev/null || true)
+            if [[ "$droplet" =~ ^[0-9]+$ ]]; then export IDENTITY_RECORD_BOX="digitalocean:$droplet"; fi
+        fi
+    fi
+    say "identity: columns $GATE_IDENTITY_COLUMNS on $ngpu GPU(s), $(nproc) core(s), box ${IDENTITY_RECORD_BOX:-unnamed}"
     # RUN EVERYTHING by default (Andrew 2026-11-05); GATE_REUSE_UNCHANGED=1 (release.py --reuse-unchanged) opts in
     reuse=(); [ "${GATE_REUSE_UNCHANGED:-0}" = 1 ] && reuse=(--reuse-unchanged)
     python3 tools/identity_wheel_record.py --columns "$GATE_IDENTITY_COLUMNS" ${reuse[@]+"${reuse[@]}"} \

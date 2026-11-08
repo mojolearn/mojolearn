@@ -682,6 +682,12 @@ Start with `SUMMARY.md`: what was released, which wheel bytes each identity colu
 the columns agree, the multi-GPU and measurement checks, how to run the same check on your own machine, and
 where the full logs are.
 
+Each identity column record states its own run: the exact device and how many were used, the driver and
+runtime versions, the Mojo and Python versions, the start and end time (UTC), the total seconds and the
+seconds of each lane, the wheel files it ran on (name, sha256, version) and the machine it ran on (provider
+and instance id). They are in the record's `run` object and the `run_*` lines of its `.provenance.txt`; a fact
+that could not be read is null, with its reason. The identity table in `SUMMARY.md` is read from them.
+
 What is here:
 
 - `SUMMARY.md`: the human-readable account of this release's evidence, written from the files below.
@@ -735,19 +741,43 @@ def identity_record_dirs(ctx, column):
     return sorted(Path(ctx.rel).glob("identity-wheels/cpu/artifacts/cpu-wheel-identity-*"))
 
 
+def _run_driver(driver):
+    """`nvidia_driver 550.54, cuda 12.4, glibc 2.39` from a record's run.driver (null facts left out)."""
+    return ", ".join("%s %s" % (k, v) for k, v in sorted((driver or {}).items()) if v not in (None, "")) or None
+
+
 def column_record_facts(dirs, label):
     """What the column's own record files say: lanes, cells, total lane seconds (sum of every cell's timing),
-    first start and last end (UTC), the machine's CPU model and platform. None when no record file is found."""
+    first start and last end (UTC), the machine's CPU model and platform. THE RUN BLOCK FIRST (lane
+    post-record-device-time; tools/identity_break.py run_facts_static): where a record carries `run`, its device,
+    driver, box, started_utc / finished_utc and seconds_total are read from it, and the older best-effort sources
+    (timing_env, the provenance date, the file time) only fill in for records without one. None when no record
+    file is found."""
     files = []
     for d in dirs:
         files += sorted(Path(d).glob("%s/**/*.identical.json" % label)) if label else []
     if not files:
         return None
     lanes, cells, seconds, starts, ends, cpus, platforms = {}, 0, 0.0, [], [], set(), set()
+    devices, drivers, boxes, record_seconds = set(), set(), set(), []
     for f in files:
         doc = read_json(f)
         if not isinstance(doc, dict):
             continue
+        run = doc.get("run") if isinstance(doc.get("run"), dict) else None
+        if run:
+            dev = run.get("device") or {}
+            if dev.get("model"):
+                count = dev.get("count_used")
+                devices.add("%s%s" % (dev["model"], " x%s" % count if dev.get("kind") == "gpu" and count not in
+                                      (None, 1) else ""))
+            if _run_driver(run.get("driver")):
+                drivers.add(_run_driver(run.get("driver")))
+            box = run.get("box") or {}
+            if box.get("provider"):
+                boxes.add("%s:%s" % (box["provider"], box.get("id") or "?"))
+            if isinstance(run.get("seconds_total"), (int, float)):
+                record_seconds.append(float(run["seconds_total"]))
         for key, cell in (doc.get("cells") or {}).items():
             cells += 1
             lane = str(key).partition("/")[0]
@@ -758,12 +788,17 @@ def column_record_facts(dirs, label):
                 lanes[lane] += float(t)
         for env in [doc.get("timing_env")] + list(doc.get("timing_env_attempts") or []):
             if isinstance(env, dict):
-                if env.get("started_utc"):
+                if env.get("started_utc") and not (run and run.get("started_utc")):
                     starts.append(str(env["started_utc"]))
                 if env.get("cpu_model"):
                     cpus.add(str(env["cpu_model"]))
+        if run and run.get("started_utc"):
+            starts.append(str(run["started_utc"]))
         if doc.get("platform"):
             platforms.add(str(doc["platform"]))
+        if run and run.get("finished_utc"):
+            ends.append(str(run["finished_utc"]))
+            continue
         prov = f.with_name(f.name[:-len(".identical.json")] + ".provenance.txt")
         try:
             ends += PROVENANCE_DATE.findall(prov.read_text(errors="replace"))
@@ -772,6 +807,10 @@ def column_record_facts(dirs, label):
     return dict(records=len(files), lanes=len(lanes), cells=cells, lane_seconds=seconds,
                 start=min(starts) if starts else None, end=max(ends) if ends else None,
                 cpu=", ".join(sorted(cpus)) or None, platform=", ".join(sorted(platforms)) or None,
+                device=", ".join(sorted(devices)) or None, driver="; ".join(sorted(drivers)) or None,
+                box=", ".join(sorted(boxes)[:4]) + (" and %d more" % (len(boxes) - 4) if len(boxes) > 4 else "")
+                if boxes else None,
+                record_seconds=sum(record_seconds) if record_seconds else None,
                 lane_top=sorted(lanes.items(), key=lambda x: (-x[1], x[0]))[:SLOWEST_LANES])
 
 
@@ -791,8 +830,10 @@ def identity_column_rows(ctx, docs):
         wheels = sorted({w for r in reports if isinstance(r, dict) for w in (r.get("wheels") or [])})
         facts = column_record_facts(identity_record_dirs(ctx, column), label)
         box = docs.get("gates/%s/box-facts.json" % COLUMN_BOX.get(column, "-")) or {}
-        machine = "; ".join(x for x in (", ".join(box.get("gpus") or []), box.get("cpu_model"),
-                                        "%s cores" % box["cores"] if box.get("cores") else None) if x) \
+        # the record's own run.device first; the gate job's box-facts.json and the timing CPU model fill in
+        machine = (facts or {}).get("device") or "; ".join(
+            x for x in (", ".join(box.get("gpus") or []), box.get("cpu_model"),
+                        "%s cores" % box["cores"] if box.get("cores") else None) if x) \
             or (facts or {}).get("cpu") or "not recorded"
         owed = sum(int(c.get("owed") or 0) for c in cols)
         reused = [c.get("reused") for c in cols]
@@ -1025,14 +1066,17 @@ def summary_markdown(ctx, entries, wheels, refs, root=ROOT):
     if rows:
         out += ["Each column installed the exact wheel files below (sha256 checked before install) and recorded the "
                 "identity lanes whose code changed since the last good record; the other lanes' rows are reused.", "",
-                "| column | label | machine | lanes run / reused | lane seconds | start (UTC) | end (UTC) | run |",
-                "|---|---|---|---|---|---|---|---|"]
+                "| column | label | machine | driver | box | lanes run / reused | lane seconds | record seconds "
+                "| start (UTC) | end (UTC) | run |",
+                "|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in rows:
             f = r["facts"] or {}
-            out.append("| %s | `%s` | %s | %s / %s | %s | %s | %s | %s |" % (
-                r["title"], r["label"], r["machine"], r["owed"], "?" if r["reused"] is None else r["reused"],
-                _seconds(f["lane_seconds"]) if f else "no record files here", f.get("start") or "-",
-                f.get("end") or "-", "ok" if r["ok"] else "FAILED"))
+            out.append("| %s | `%s` | %s | %s | %s | %s / %s | %s | %s | %s | %s | %s |" % (
+                r["title"], r["label"], r["machine"], f.get("driver") or "-", f.get("box") or "-",
+                r["owed"], "?" if r["reused"] is None else r["reused"],
+                _seconds(f["lane_seconds"]) if f else "no record files here",
+                _seconds(f["record_seconds"]) if f.get("record_seconds") is not None else "-",
+                f.get("start") or "-", f.get("end") or "-", "ok" if r["ok"] else "FAILED"))
         out += ["", "Recorded from (wheel file and sha256, as each column installed it):", ""]
         for r in rows:
             out.append("- %s: %s" % (r["title"], "; ".join("`%s`" % w for w in r["wheels"]) or "not recorded"))

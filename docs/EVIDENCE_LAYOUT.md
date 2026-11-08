@@ -84,6 +84,17 @@ committed together. Wheel packaging checks that its verification payload matches
 the selected release commit. Collection does not automatically promote results
 to references, and ordinary verification does not rewrite its expected answers.
 
+What a record states about its run: every identity column record
+(`bench/results/identity_break/retained/<sha256>/<label>....identical.json`) carries a `run` object, and its
+`.provenance.txt` the matching `run_*` lines. They name the exact device (GPU or CPU model and how many were
+used), the driver and runtime versions (NVIDIA driver and CUDA, ROCm and amdgpu, macOS and Metal, glibc), the
+Mojo toolchain and Python versions, the start and end time (UTC), the total seconds and the seconds of each
+lane, the wheel files the record ran on (name, sha256 and version) when it ran on an installed wheel, the box
+(`runpod:<pod id>`, `digitalocean:<droplet id>`, `github:<run id>/...` or `mac:<hostname hash>`) and the host
+kernel with a hash of its hostname. A fact that could not be read is written as null, with its reason under
+`run.unavailable`; a record is never refused for one. None of this is hashed or compared: two records of
+different machines admit the same way.
+
 Large reusable inputs and artifacts remain in existing local/R2 storage,
 referenced by digest. No separate public evidence repository is needed for this
 workflow. Repository collection preserves the original evidence copies.

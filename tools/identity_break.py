@@ -710,7 +710,7 @@ def resume_signature(args, package_dir, harness, provenance):
         with path.open("rb") as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 h.update(block)
-    options = {k: v for k, v in vars(args).items() if k not in ("json", "resume", "verbose")}
+    options = {k: v for k, v in vars(args).items() if k not in ("json", "resume", "verbose", "provenance_lines")}
     env = {k: hashlib.sha256(v.encode()).hexdigest() for k, v in os.environ.items()
            if k != RESUME_LEASE_ENV and k.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_",
                                                      "VECLIB_", "NUMEXPR_", "BLIS_"))}
@@ -824,6 +824,16 @@ def other_identity_processes():
     return count
 
 
+def _thread_count(value):
+    """A thread setting as recorded: the value when it is a count (digits, as every launcher sets it), None when
+    unset, and only the fact that it is set otherwise. The resume signature keeps these variables as digests
+    because a value can carry anything; a record never publishes a value that is not a count
+    (tools/test_identity_runtime.py test_only_exact_scheduler_token_is_excluded_from_environment)."""
+    if value is None:
+        return None
+    return value if value.strip().isdigit() else "set (not a count)"
+
+
 def timing_environment():
     """What the cells' wall clock ran on, so two records can be judged
     comparable (2026-11-06, lane/tools-timing-pairs): the CPU model, the
@@ -838,11 +848,379 @@ def timing_environment():
     return dict(
         schema=TIMING_ENV_SCHEMA, harness_timing=HARNESS_TIMING_VERSION, cpu_model=cpu_model(), arch=platform.machine(),
         logical_cpus=os.cpu_count(), affinity_cpus=affinity, cgroup_cpu_quota=cgroup_cpu_quota(),
-        threads={k: os.environ.get(k) for k in TIMING_THREAD_ENV},
+        threads={k: _thread_count(os.environ.get(k)) for k in TIMING_THREAD_ENV},
         concurrency=os.environ.get(TIMING_CONCURRENCY_ENV),
         other_identity_processes=other_identity_processes(),
         started_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     )
+
+
+# --------------------------------------------------------------------------
+# THE RUN BLOCK: what ran the record, where, when and from which wheel
+# --------------------------------------------------------------------------
+#
+# Lane post-record-device-time (Andrew 2026-11-08: "for the verification runs,
+# we record the time of the run and the device we ran it on?"). Every record
+# carries a `run` object and its provenance.txt the matching `run_*` lines
+# (`run_provenance_lines`, printed by `--provenance-lines JSON`):
+#
+#   device      {kind gpu|cpu, model, count_used, unit, index}  the exact device:
+#               nvidia-smi / rocminfo (rocm-smi) / sysctl brand string / cpu model
+#   driver      {nvidia_driver, cuda} | {rocm, amdgpu} | {macos, metal} | {} plus
+#               glibc on Linux
+#   mojo        the Mojo toolchain version (MOJOLEARN_MOJO_VERSION, an installed
+#               mojo/max/modular distribution, then `mojo --version`)
+#   python      {version, implementation}
+#   started_utc, finished_utc, seconds_total, attempts   the first attempt's start,
+#               the last write, the wall seconds of every attempt (a resume adds)
+#   seconds_per_lane {lane: s}   the sum of the lane's cells' timing.total_seconds
+#   wheels      [{name, sha256, version}] from IDENTITY_RECORD_WHEELS (a file of
+#               "<wheel file> <sha256>" lines; record_identity_column.sh exports it
+#               under RECORD_FROM_INSTALLED=1); null for a source-tree run
+#   box         {provider, id, source}: IDENTITY_RECORD_BOX=<provider>:<id> when the
+#               launcher sets it, else derived: github (GITHUB_RUN_ID/GITHUB_JOB),
+#               runpod (RUNPOD_POD_ID), mac (hostname hash), digitalocean (DMI vendor)
+#   host        {kernel, hostname_sha256}
+#   unavailable {field: reason}   every fact that could not be read is null here
+#               with its reason; a record is NEVER refused for a missing fact.
+#
+# PROVENANCE ONLY: nothing hashed, no digest, merge equality, resume signature,
+# reuse key or admission reads the run block. The box and wheel variables do not
+# start with MOJO, so the resume signature's environment digests never see them.
+RUN_FACTS_SCHEMA = 1
+RUN_BOX_ENV = "IDENTITY_RECORD_BOX"
+RUN_WHEELS_ENV = "IDENTITY_RECORD_WHEELS"
+RUN_STAMP = "%Y-%m-%dT%H:%M:%SZ"
+#: the Python distributions that carry a Mojo toolchain, in the order asked
+MOJO_DISTRIBUTIONS = ("mojo", "max", "modular", "mojo-compiler")
+
+
+def _run_command(argv, timeout=20):
+    """(stdout, None) of argv, or (None, why not). Never raises."""
+    import shutil
+    if shutil.which(argv[0]) is None:
+        return None, f"{argv[0]} not on PATH"
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"{argv[0]}: {type(exc).__name__}: {exc}"[:200]
+    if p.returncode != 0:
+        return None, f"{' '.join(argv[:2])} exited {p.returncode}"
+    return p.stdout, None
+
+
+def _visible_device(var):
+    """The first device CUDA_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES names (an
+    index or a UUID), or None when unset (device 0 runs)."""
+    raw = (os.environ.get(var) or "").split(",")[0].strip()
+    return raw or None
+
+
+def _pick_row(rows, visible, uuid_of=None):
+    """The row of the device this process sees: by index, then by UUID, else the first."""
+    if not rows:
+        return None
+    if visible is not None and visible.isdigit():
+        for r in rows:
+            if str(r.get("index")) == visible:
+                return r
+    if visible is not None and uuid_of is not None:
+        for r in rows:
+            if uuid_of(r) == visible:
+                return r
+    return rows[0]
+
+
+def _nvidia_device(unavailable):
+    out, why = _run_command(["nvidia-smi", "--query-gpu=index,name,driver_version,uuid",
+                             "--format=csv,noheader"])
+    rows = []
+    for line in (out or "").splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 4:
+            rows.append(dict(index=parts[0], name=parts[1], driver=parts[2], uuid=parts[3]))
+    visible = _visible_device("CUDA_VISIBLE_DEVICES")
+    row = _pick_row(rows, visible, uuid_of=lambda r: r["uuid"])
+    if row is None:
+        unavailable["device.model"] = why or "nvidia-smi listed no GPU"
+        unavailable["driver.nvidia_driver"] = why or "nvidia-smi listed no GPU"
+    plain, why2 = _run_command(["nvidia-smi"])
+    m = re.search(r"CUDA Version:\s*([0-9.]+)", plain or "")
+    if not m:
+        unavailable["driver.cuda"] = why2 or "nvidia-smi printed no CUDA Version"
+    device = dict(model=row["name"] if row else None, index=row["index"] if row else visible)
+    driver = dict(nvidia_driver=row["driver"] if row else None, cuda=m.group(1) if m else None)
+    return device, driver
+
+
+def _amd_device(unavailable):
+    out, why = _run_command(["rocminfo"])
+    rows, cur = [], {}
+    for line in (out or "").splitlines():
+        key, _, value = line.strip().partition(":")
+        key, value = key.strip(), value.strip()
+        if key == "Name" and value.startswith("gfx"):
+            cur = dict(arch=value)
+            rows.append(cur)
+        elif key == "Marketing Name" and cur and "name" not in cur:
+            cur["name"] = value
+    for i, r in enumerate(rows):
+        r["index"] = str(i)
+    row = _pick_row(rows, _visible_device("HIP_VISIBLE_DEVICES") or _visible_device("ROCR_VISIBLE_DEVICES"))
+    model = (row or {}).get("name")
+    if not model:
+        smi, why2 = _run_command(["rocm-smi", "--showproductname"])
+        m = re.search(r"Card (?:Series|series|SKU|Model)\s*:\s*(.+)", smi or "")
+        model = m.group(1).strip() if m else None
+        if not model:
+            unavailable["device.model"] = why or why2 or "rocminfo and rocm-smi named no GPU"
+    rocm = None
+    for p in (os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), ".info", "version"), "/opt/rocm/.info/version"):
+        try:
+            with open(p) as fh:
+                rocm = fh.read().strip() or None
+            break
+        except OSError:
+            continue
+    if not rocm:
+        unavailable["driver.rocm"] = "no /opt/rocm/.info/version (ROCM_PATH)"
+    try:
+        with open("/sys/module/amdgpu/version") as fh:
+            amdgpu = fh.read().strip() or None
+    except OSError:
+        amdgpu = None
+    if not amdgpu:
+        unavailable["driver.amdgpu"] = "no /sys/module/amdgpu/version (an in-tree amdgpu module states none)"
+    return (dict(model=model, index=(row or {}).get("index"), arch=(row or {}).get("arch")),
+            dict(rocm=rocm, amdgpu=amdgpu))
+
+
+def _apple_device(unavailable):
+    model = cpu_model()          # `Apple M4`, `Apple M2 Pro`: the chip the GPU is part of
+    if not model:
+        unavailable["device.model"] = "sysctl machdep.cpu.brand_string unreadable"
+    macos = platform.mac_ver()[0] or None
+    if not macos:
+        unavailable["driver.macos"] = "platform.mac_ver() is empty"
+    out, why = _run_command(["system_profiler", "SPDisplaysDataType"], timeout=30)
+    m = re.search(r"Metal(?: Support| Family)?:\s*(.+)", out or "")
+    cores = re.search(r"Total Number of Cores:\s*(\d+)", out or "")
+    if not m:
+        unavailable["driver.metal"] = why or "system_profiler named no Metal support"
+    return (dict(model=model, gpu_cores=int(cores.group(1)) if cores else None),
+            dict(macos=macos, metal=m.group(1).strip() if m else None))
+
+
+def mojo_toolchain_version():
+    """(version, None) of the Mojo toolchain this machine has, or (None, why not)."""
+    env = (os.environ.get("MOJOLEARN_MOJO_VERSION") or "").strip()
+    if env and env != "unrecorded":
+        return env, None
+    try:
+        from importlib import metadata
+        for dist in MOJO_DISTRIBUTIONS:
+            try:
+                return f"{dist} {metadata.version(dist)}", None
+            except metadata.PackageNotFoundError:
+                continue
+    except Exception:            # never lose a record over a metadata lookup
+        pass
+    out, why = _run_command(["mojo", "--version"])
+    if out and out.strip():
+        return out.strip().splitlines()[0][:120], None
+    return None, ("no MOJOLEARN_MOJO_VERSION, no installed " + "/".join(MOJO_DISTRIBUTIONS)
+                  + " distribution, " + (why or "`mojo --version` printed nothing")
+                  + " (a wheel install carries compiled bindings, not the compiler)")
+
+
+def wheel_version(name):
+    """`mojolearn_nvidia-0.8.66-py3-none-manylinux_2_34_x86_64.whl` -> `0.8.66`, or None."""
+    parts = str(name).split("-")
+    return parts[1] if str(name).endswith(".whl") and len(parts) >= 5 else None
+
+
+def recorded_wheels(package_dir):
+    """([{name, sha256, version}], None) from IDENTITY_RECORD_WHEELS, or (None, why there are none)."""
+    path = os.environ.get(RUN_WHEELS_ENV)
+    if not path:
+        where = Path(package_dir).resolve().parts if package_dir else ()
+        if "site-packages" in where:
+            return None, f"an installed package, but {RUN_WHEELS_ENV} names no wheel list"
+        return None, "recorded from the source tree, not an installed wheel"
+    wheels = []
+    try:
+        with open(path) as fh:
+            for line in fh:
+                bits = line.split()
+                if len(bits) == 2 and re.fullmatch(r"[0-9a-f]{64}", bits[1]):
+                    wheels.append(dict(name=bits[0], sha256=bits[1], version=wheel_version(bits[0])))
+    except OSError as exc:
+        return None, f"{RUN_WHEELS_ENV}={path}: {type(exc).__name__}"
+    return (wheels, None) if wheels else (None, f"{RUN_WHEELS_ENV}={path} holds no '<wheel> <sha256>' line")
+
+
+def box_identity():
+    """{provider, id, source} of the machine: IDENTITY_RECORD_BOX=<provider>:<id> as
+    the launcher set it, else what the environment states. The id is null, with
+    its reason in `source`, when only the provider can be told."""
+    raw = (os.environ.get(RUN_BOX_ENV) or "").strip()
+    if raw:
+        provider, sep, ident = raw.partition(":")
+        if sep and provider and ident:
+            return dict(provider=provider, id=ident, source=RUN_BOX_ENV)
+        return dict(provider=None, id=None, source=f"{RUN_BOX_ENV}={raw[:80]!r} is not <provider>:<id>")
+    if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_RUN_ID"):
+        return dict(provider="github", id="%s/%s" % (os.environ["GITHUB_RUN_ID"], os.environ.get("GITHUB_JOB", "?")),
+                    source="GITHUB_RUN_ID/GITHUB_JOB")
+    if os.environ.get("RUNPOD_POD_ID"):
+        return dict(provider="runpod", id=os.environ["RUNPOD_POD_ID"], source="RUNPOD_POD_ID")
+    if platform.system() == "Darwin":
+        return dict(provider="mac", id=_hostname_hash(), source="hostname sha256 (first 16)")
+    try:
+        with open("/sys/class/dmi/id/sys_vendor") as fh:
+            vendor = fh.read().strip()
+    except OSError:
+        vendor = ""
+    if vendor.lower().startswith("digitalocean"):
+        return dict(provider="digitalocean", id=None,
+                    source=f"DMI vendor only; the launcher sets {RUN_BOX_ENV}=digitalocean:<droplet id>")
+    return dict(provider=None, id=None, source=f"{RUN_BOX_ENV} unset and no provider variable or DMI vendor matched")
+
+
+def _hostname_hash():
+    return hashlib.sha256(platform.node().encode()).hexdigest()[:16]
+
+
+def run_facts_static(vendor_backend, package_dir, devices_used=1):
+    """The facts of a run that do not change while it runs (read once, at start)."""
+    unavailable = {}
+    device, driver = dict(model=None), {}
+    try:
+        if vendor_backend == "cuda":
+            device, driver = _nvidia_device(unavailable)
+        elif vendor_backend == "hip":
+            device, driver = _amd_device(unavailable)
+        elif vendor_backend == "metal":
+            device, driver = _apple_device(unavailable)
+        else:
+            device = dict(model=cpu_model())
+            if not device["model"]:
+                unavailable["device.model"] = "no CPU model string (sysctl, /proc/cpuinfo, lscpu)"
+    except Exception as exc:     # never lose a record over a fact
+        unavailable["device"] = f"{type(exc).__name__}: {exc}"[:200]
+    gpu = vendor_backend in ("cuda", "hip", "metal")
+    threads = os.environ.get("MOJOLEARN_CPU_THREADS")
+    device = dict(kind="gpu" if gpu else "cpu", backend=vendor_backend, **device,
+                  count_used=devices_used if gpu else (int(threads) if (threads or "").isdigit() else os.cpu_count()),
+                  unit="devices" if gpu else "cpu threads")
+    if platform.system() == "Linux":
+        lib, ver = platform.libc_ver()
+        driver["glibc"] = ver if lib == "glibc" and ver else None
+        if not driver["glibc"]:
+            unavailable["driver.glibc"] = f"platform.libc_ver() is {lib or 'empty'}"
+    def guarded(read, empty):
+        try:
+            return read()
+        except Exception as exc:  # never lose a record over a fact
+            return empty(f"{type(exc).__name__}: {exc}"[:200])
+    mojo, why = guarded(mojo_toolchain_version, lambda e: (None, e))
+    if why:
+        unavailable["mojo"] = why
+    wheels, why = guarded(lambda: recorded_wheels(package_dir), lambda e: (None, e))
+    if why:
+        unavailable["wheels"] = why
+    box = guarded(box_identity, lambda e: dict(provider=None, id=None, source=e))
+    if box.get("id") is None:
+        unavailable["box.id"] = box.get("source")
+    u = platform.uname()
+    return dict(schema=RUN_FACTS_SCHEMA, device=device, driver=driver, mojo=mojo,
+                python=dict(version=platform.python_version(), implementation=platform.python_implementation()),
+                wheels=wheels, box=box, host=dict(kernel=f"{u.system} {u.release} {u.machine}",
+                                                  hostname_sha256=_hostname_hash()),
+                unavailable=unavailable)
+
+
+def seconds_per_lane(cells):
+    """{lane: seconds} summed over the lane's cells' `timing.total_seconds`."""
+    out = {}
+    for key, cell in (cells or {}).items():
+        t = ((cell or {}).get("timing") or {}).get("total_seconds") if isinstance(cell, dict) else None
+        if isinstance(t, (int, float)):
+            lane = str(key).partition("/")[0]
+            out[lane] = round(out.get(lane, 0.0) + float(t), 3)
+    return out
+
+
+def run_block(static, cells, started_wall, previous=None, now=None):
+    """The record's `run` object at this write: the static facts, the first
+    attempt's start, now as the end, every attempt's wall seconds and the
+    per-lane seconds of the cells. `previous` is the `run` of a resumed record."""
+    now = time.time() if now is None else now
+    prev = previous if isinstance(previous, dict) else {}
+    first = prev.get("started_utc") or time.strftime(RUN_STAMP, time.gmtime(started_wall))
+    carried = prev.get("seconds_total") if isinstance(prev.get("seconds_total"), (int, float)) else 0.0
+    return dict(static, started_utc=first, finished_utc=time.strftime(RUN_STAMP, time.gmtime(now)),
+                seconds_total=round(carried + max(0.0, now - started_wall), 3),
+                attempts=int(prev.get("attempts") or 0) + 1, seconds_per_lane=seconds_per_lane(cells))
+
+
+def merged_run_block(runs, cells):
+    """One `run` object for a --merge: the first part's facts, the earliest start,
+    the latest end, the parts' summed seconds (they may have run side by side)."""
+    runs = [r for r in runs if isinstance(r, dict)]
+    if not runs:
+        return None
+    starts = [r["started_utc"] for r in runs if r.get("started_utc")]
+    ends = [r["finished_utc"] for r in runs if r.get("finished_utc")]
+    return dict(runs[0], started_utc=min(starts) if starts else None, finished_utc=max(ends) if ends else None,
+                seconds_total=round(sum(float(r.get("seconds_total") or 0.0) for r in runs), 3),
+                attempts=sum(int(r.get("attempts") or 1) for r in runs), parts=len(runs),
+                seconds_per_lane=seconds_per_lane(cells))
+
+
+#: the run_* provenance.txt keys, in the order written
+RUN_PROVENANCE_KEYS = ("run_device", "run_device_count", "run_driver", "run_mojo", "run_python",
+                       "run_started_utc", "run_finished_utc", "run_seconds_total", "run_seconds_per_lane",
+                       "run_wheels", "run_box", "run_host", "run_unavailable")
+
+
+def _flat(d):
+    return ",".join(f"{k}={'null' if v is None else v}" for k, v in sorted((d or {}).items()))
+
+
+def run_provenance_lines(record):
+    """The `run_*` lines of provenance.txt for a record (one `key=value` each;
+    null for an unavailable fact, its reason in run_unavailable)."""
+    run = record.get("run") if isinstance(record, dict) else None
+    if not isinstance(run, dict):
+        return ["run_facts=absent (a record from a harness before the run block)"]
+    dev, box = run.get("device") or {}, run.get("box") or {}
+    null = lambda v: "null" if v is None or v == "" else str(v)
+    wheels = run.get("wheels")
+    values = dict(
+        run_device=null(dev.get("model")), run_device_count=f"{null(dev.get('count_used'))} {dev.get('unit') or ''}".strip(),
+        run_driver=_flat(run.get("driver")) or "null", run_mojo=null(run.get("mojo")),
+        run_python=null((run.get("python") or {}).get("version")),
+        run_started_utc=null(run.get("started_utc")), run_finished_utc=null(run.get("finished_utc")),
+        run_seconds_total=null(run.get("seconds_total")),
+        run_seconds_per_lane=",".join(f"{k}:{v}" for k, v in sorted((run.get("seconds_per_lane") or {}).items())) or "null",
+        run_wheels=",".join(f"{w.get('name')}:{w.get('sha256')}:{null(w.get('version'))}" for w in wheels)
+        if isinstance(wheels, list) and wheels else "null",
+        run_box=f"{null(box.get('provider'))}:{null(box.get('id'))}",
+        run_host="%s %s" % ((run.get("host") or {}).get("kernel") or "null",
+                            (run.get("host") or {}).get("hostname_sha256") or "null"),
+        run_unavailable="; ".join(f"{k}: {v}" for k, v in sorted((run.get("unavailable") or {}).items())) or "none")
+    return [f"{k}={values[k]}".replace("\n", " ") for k in RUN_PROVENANCE_KEYS]
+
+
+def parse_provenance(text):
+    """{key: value} of a provenance.txt (first `=` splits; later lines win)."""
+    out = {}
+    for line in str(text).splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip():
+            out[key.strip()] = value
+    return out
 
 
 def slug(text):
@@ -10754,6 +11132,15 @@ def _run_reference(args):
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
     timing_env = timing_environment()
+    # THE RUN BLOCK (lane post-record-device-time; see run_facts_static): the
+    # device, drivers, toolchain, wheel and box, read once here; the times and
+    # per-lane seconds at every write. Provenance only, never hashed.
+    run_started = time.time()
+    try:
+        run_static = run_facts_static(str(ml.vendor()), os.path.dirname(ml.__file__), max(1, len(_par_devices())))
+    except Exception as exc:                            # never lose a column over provenance
+        run_static = dict(schema=RUN_FACTS_SCHEMA, unavailable=dict(run=f"{type(exc).__name__}: {exc}"[:200]))
+    run_previous = None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
                    numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
@@ -10891,6 +11278,8 @@ def _run_reference(args):
         # Keep the lease that produced retained cells as well as this attempt's
         # lease. These are provenance, not inputs to the equality guard above.
         leases = list(previous.get("execution_leases", [])) + leases
+        # the first attempt's start and every attempt's seconds carry over
+        run_previous = previous.get("run")
         # Retained cells were timed by the earlier attempts: keep their
         # timing environments next to this one (timing record only).
         timing_attempts = list(previous.get("timing_env_attempts")
@@ -11017,6 +11406,11 @@ def _run_reference(args):
         record["package"] = package
         record["resume_signature"] = signature
         record["execution_leases"] = leases
+        try:
+            record["run"] = run_block(run_static, cells, run_started, run_previous)
+        except Exception as exc:                        # never lose a column over provenance
+            record["run"] = dict(run_static, unavailable=dict(run_static.get("unavailable") or {},
+                                                              run=f"{type(exc).__name__}: {exc}"[:200]))
         # The wall-clock environment (timing record only; see
         # timing_environment). `timing_env_attempts` lists every attempt's
         # environment, oldest first, when a resume carried cells over.
@@ -11828,6 +12222,9 @@ def merge(paths, out, allow_separate_builds=False):
     # first part's environment (timing record only).
     if any(j.get("timing_env") for _, j in parts):
         record["timing_env_parts"] = len(parts)
+    run = merged_run_block([j.get("run") for _, j in parts], record["cells"])
+    if run is not None:
+        record["run"] = run
     record["merged_separate_builds"] = len(set(json.dumps(_build_digests(j)) for _, j in parts)) > 1
     # A MERGE NEVER LAUNDERS A PARTIAL PART INTO A WHOLE COLUMN (2026-09-20).
     # MERGE_SAME already refuses parts whose `parts_omitted` differ, so this
@@ -12029,7 +12426,13 @@ def main():
     ap.add_argument("--allow-separate-builds", action="store_true",
                     help="with --merge: admit parts whose binding digests differ (two legs, two builds of the "
                          "same commit on the same box type); every part's digests are kept under merged_from")
+    ap.add_argument("--provenance-lines", default="", metavar="JSON",
+                    help="print the run_* provenance.txt lines of a record (its `run` block) and exit")
     args = ap.parse_args()
+    if args.provenance_lines:
+        with open(args.provenance_lines) as fh:
+            print("\n".join(run_provenance_lines(json.load(fh))))
+        return 0
     if args.jobs < 1:
         raise SystemExit("REFUSING: --jobs must be positive")
     if args.jobs > 1:

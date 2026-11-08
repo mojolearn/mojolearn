@@ -87,6 +87,13 @@
 #                           same source). Needs PYTHON (the venv interpreter) and INSTALLED_WHEELS (a file of
 #                           "<wheel file name> <sha256>" lines the installer verified); the digests land in the
 #                           provenance as installed_wheels=. Lane reuse (the default selection) is unchanged.
+#   IDENTITY_RECORD_BOX     <provider>:<id> of this machine (runpod:<pod id>, digitalocean:<droplet id>,
+#                           github:<run id>/<job>, mac:<host>), written to the record's run.box and the
+#                           provenance's run_box= line. Unset: the harness derives it (GITHUB_RUN_ID/GITHUB_JOB,
+#                           RUNPOD_POD_ID, the Mac's hostname hash) or writes null with the reason
+#   IDENTITY_RECORD_WHEELS  set here from INSTALLED_WHEELS under RECORD_FROM_INSTALLED=1 (never by hand): the
+#                           record's run.wheels [{name, sha256, version}]. Neither variable starts with MOJO, so
+#                           the resume signature never sees them; the run block is provenance, never hashed
 #   SELECT_ONLY=1           the default auto-reuse selection only: prints LANES-SELECTED <csv> (or
 #                           NOTHING-CHANGED) and records nothing
 #   LANE_SELECTION=auto-reuse-chunk  with LANES: this record is one chunk of a SELECT_ONLY selection
@@ -166,6 +173,8 @@ if [ "$INSTALLED" = 1 ]; then
     INSTALLED_LINE=$(awk 'NF == 2 && length($2) == 64 && $2 ~ /^[0-9a-f]+$/ {printf "%s%s:%s", (n++ ? "," : ""), $1, $2} END {if (!n) exit 1}' \
         "$INSTALLED_WHEELS") || die "INSTALLED_WHEELS $INSTALLED_WHEELS holds no '<wheel> <sha256>' line"
     unset PYTHONPATH   # the installed package, never the source tree's python/
+    # the record's run.wheels (tools/identity_break.py recorded_wheels): the exact files installed
+    export IDENTITY_RECORD_WHEELS="$INSTALLED_WHEELS"
 else
     export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
 fi
@@ -405,6 +414,12 @@ rc=${rc:-0}
     echo "date=$(date -u +%FT%TZ)"
     echo "dirty_tracked=${DIRTY:-none}"
     [ "$INSTALLED" = 1 ] && echo "installed_wheels=$INSTALLED_LINE"
+    # THE RUN LINES (lane post-record-device-time): device, driver, Mojo, Python, start/end, seconds total and
+    # per lane, wheels, box and host, from the record's own run block (identity_break.py run_provenance_lines)
+    if [ -f "$JSON" ]; then
+        "${PY[@]}" "$ROOT/tools/identity_break.py" --provenance-lines "$JSON" 2>/dev/null \
+            || echo "run_facts=unreadable (identity_break.py --provenance-lines failed)"
+    fi
     [ -f "$JSON" ] && echo "record_sha256=$(shasum -a 256 "$JSON" | cut -d' ' -f1)"
 } > "$OUT/$NAME.provenance.txt"
 
