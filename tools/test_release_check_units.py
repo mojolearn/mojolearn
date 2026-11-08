@@ -93,3 +93,73 @@ def test_a_check_that_passed_outside_the_runner_gets_its_record(tmp_path):
     U.record_passed(tmp_path, plan, "adapters", "c" * 40, "2026-11-06T00:00:00Z")
     (got,) = U.records(tmp_path, "apple-m2-pro", "adapters")
     assert got["status"] == "passed" and U.decide(key, [got], "apple-m2-pro")[0] == "reuse"
+
+
+def _runner(tmp_path, monkeypatch, torch_in_venv=True, has_vision=False):
+    """A Runner over a plan owing install-load, adapters and two autograd entries, every runner faked: the calls
+    are recorded in order in the returned list."""
+    import argparse
+    import adapter_gate as AG
+    import autograd_smoke as AS
+    key = dict(digest="k" * 64, files={}, natives={}, members={}, closure_available=True)
+    units = [U.INSTALL_LOAD, U.ADAPTERS, "autograd/import-torch-smoke", "autograd/real-model-smoke"]
+    plan = dict(schema=U.PLAN_SCHEMA, vendor="nvidia", device_class="nvidia-sm_89", reused=0, owed=units,
+                units=[dict(unit=u, decision="run", key=dict(key, unit=u)) for u in units])
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "plan.json").write_text(json.dumps(plan))
+    a = argparse.Namespace(plan=str(tmp_path / "plan.json"), python="/identity/venv/bin/python", wheel=["w.whl"],
+                           bin_dir="/bin", version="0.8.66", source_commit="c" * 40, at="2026-11-08T00:00:00Z",
+                           out=str(tmp_path / "units"))
+    calls = []
+
+    def fake_run(cmd, **kw):
+        tool = pathlib.Path(cmd[1]).name
+        calls.append((tool, list(cmd)))
+        if tool == "autograd_smoke.py":
+            out = pathlib.Path(cmd[cmd.index("--out") + 1])
+            names = cmd[cmd.index("--entries") + 1].split(",")
+            out.write_text(json.dumps(dict(rows=[dict(name=n, status="ok", rc=0, log="") for n in names])))
+        if tool == "qualify_verifier_wheel.py":
+            out = pathlib.Path(cmd[cmd.index("--output") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "results.json").write_text(json.dumps(dict(status="PASSED")))
+        return type("P", (), dict(returncode=0))()
+
+    def fake_gate(vendor, base_python, out, installs, env=None, launch=None):
+        calls.append(("adapter_gate.run", [vendor]))
+        py = pathlib.Path(AG.venv_python(pathlib.Path(out) / "venv"))
+        py.parent.mkdir(parents=True, exist_ok=True)
+        py.write_text("")
+        return dict(ok=True, status="PASSED")
+    monkeypatch.setattr(AG, "run", fake_gate)
+    venv_py = AG.venv_python(tmp_path / "units" / "adapters" / "venv")
+    monkeypatch.setattr(AS, "has_module", lambda python, module: str(python) == venv_py and (
+        module == "torch" and torch_in_venv or module == "torchvision" and has_vision))
+    monkeypatch.setattr(AS, "ensure_torchvision", lambda python, log: calls.append(("ensure_torchvision", [python])))
+    return U.Runner(a, run=fake_run), calls, venv_py
+
+
+def test_the_adapters_unit_runs_before_the_autograd_entries(tmp_path, monkeypatch):
+    runner, calls, venv_py = _runner(tmp_path, monkeypatch)
+    assert runner.main() == 0
+    order = [c[0] for c in calls]
+    assert order == ["qualify_verifier_wheel.py", "adapter_gate.run", "ensure_torchvision", "autograd_smoke.py"]
+
+
+def test_the_adapters_venv_python_goes_to_autograd_smoke_and_torchvision_is_installed_once(tmp_path, monkeypatch):
+    runner, calls, venv_py = _runner(tmp_path, monkeypatch)
+    runner.main()
+    (cmd,) = [c[1] for c in calls if c[0] == "autograd_smoke.py"]
+    assert cmd[cmd.index("--torch-python") + 1] == venv_py
+    assert cmd[cmd.index("--python") + 1] == "/identity/venv/bin/python"
+    assert [c[1] for c in calls if c[0] == "ensure_torchvision"] == [[venv_py]]
+
+
+def test_no_torchvision_install_when_present_and_no_torch_python_without_torch(tmp_path, monkeypatch):
+    runner, calls, venv_py = _runner(tmp_path / "a", monkeypatch, has_vision=True)
+    runner.main()
+    assert "ensure_torchvision" not in [c[0] for c in calls]
+    runner, calls, venv_py = _runner(tmp_path / "b", monkeypatch, torch_in_venv=False)
+    runner.main()
+    (cmd,) = [c[1] for c in calls if c[0] == "autograd_smoke.py"]
+    assert "--torch-python" not in cmd and "ensure_torchvision" not in [c[0] for c in calls]
