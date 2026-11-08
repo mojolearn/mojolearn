@@ -117,7 +117,7 @@ ENTRIES = (
     # caller's deadline, recorded in its row. autograd-public: pytest start + torch import + the 45 MB
     # published ResNet-18 weights download of test_guide_import_pretrained + a TorchScript/ONNX export, 21
     # tests; 14.8 s on an L4, killed past 30 s on an MI300X droplet at 0.8.64.
-    {"name": "autograd-public", "pytest": "python/mojolearn/tests/test_autograd_public.py", "pytest_args": ["-s"],
+    {"name": "autograd-public", "torch": True, "pytest": "python/mojolearn/tests/test_autograd_public.py", "pytest_args": ["-s"],
      "timeout_s": 180,
      "what": "the public Sequential and ops.Session examples of the docs, PUBLIC_DIGEST lines"},
     # 2026-10-19 (lane ag-board-twins): the two board lanes of the public tape API, in miniature
@@ -161,10 +161,10 @@ ENTRIES = (
     {"name": "import-model-smoke", "probe": "import",
      "what": "mojolearn.import_model of a tiny ONNX file written in process, then one Program.run"},
     # 2026-10-20 (lane ag-torch-twins; 2026-10-22 two-step): a torch module through ONNX; RUN or SKIPPED, never silent
-    {"name": "import-torch-smoke", "probe": "import-torch",
+    {"name": "import-torch-smoke", "torch": True, "probe": "import-torch",
      "what": "a tiny torch module exported with torch.onnx.export, the file imported, then one Program.run (SKIPPED without torch)"},
     # 2026-10-20 (lane ag-real-models): a real pretrained model, tools/real_model_import.py in miniature
-    {"name": "real-model-smoke", "probe": "real-model",
+    {"name": "real-model-smoke", "torch": True, "probe": "real-model",
      "what": "torchvision squeezenet1_1 (published weights) exported at 1x3x64x64, imported, one Program.run"},
 )
 
@@ -634,6 +634,46 @@ def ensure_pytest(python, log):
     return True
 
 
+#: a compiled GPU check's timer when the entry names none: the first module load on a cold card is most of it
+COMPILED_TIMEOUT_S = 120
+
+
+def has_module(python, module):
+    return subprocess.run([str(python), "-c", "import " + module], capture_output=True).returncode == 0
+
+
+def torch_python_for(python, logs):
+    """The python the torch entries run under. PYTHON itself when it imports torch; else the adapters unit's venv
+    beside this run (tools/release_check_units.py: <units>/adapters/venv, the installed wheel's own `[torch]`
+    extra: the gate's identity venv holds the wheels and numpy only, 0.8.66 run i 2026-11-08: import-torch-smoke
+    SKIPPED, real-model-smoke failed and autograd-public read PARTIAL there) or MOJOLEARN_AUTOGRAD_TORCH_PYTHON;
+    None when no python has torch (the probes then print SKIPPED no torch, as before). torchvision, which
+    real-model-smoke needs, is installed into that venv from the index its torch build came from when missing."""
+    if has_module(python, "torch"):
+        chosen = str(python)
+    else:
+        candidates = [os.environ.get("MOJOLEARN_AUTOGRAD_TORCH_PYTHON", "")]
+        units = Path(logs).resolve().parent.parent
+        candidates += [str(p) for p in sorted(units.glob("adapters/**/venv/bin/python"))]
+        chosen = next((c for c in candidates if c and Path(c).is_file() and has_module(c, "torch")), None)
+        if chosen is None:
+            return None
+    if not has_module(chosen, "torchvision"):
+        ensure_torchvision(chosen, Path(logs) / "ensure-torchvision.log")
+    return chosen
+
+
+def ensure_torchvision(python, log):
+    """torchvision from the same index as the installed torch build (+rocmX.Y / +cuXYZ local tags name it)."""
+    probe = subprocess.run([str(python), "-c", "import torch; print(torch.__version__)"], capture_output=True, text=True)
+    local = probe.stdout.strip().split("+", 1)[1] if "+" in probe.stdout else ""
+    index = ["--index-url", "https://download.pytorch.org/whl/" + local] if local and not local.startswith("cpu") else []
+    with open(log, "w") as stream:
+        subprocess.run([str(python), "-m", "pip", "install", "-q", "--no-cache-dir", *index, "torchvision"],
+                       stdout=stream, stderr=subprocess.STDOUT, text=True)
+    return has_module(python, "torchvision")
+
+
 def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None, deadline=None):
     pool = [e for e in ENTRIES if vendor != "cpu" or "source" not in e]
     if vendor == "cpu" and entries is not None and set(entries) - {e["name"] for e in pool}:
@@ -647,10 +687,14 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
     (logs / "tmp").mkdir(exist_ok=True)
     if any("pytest" in e for e in selected):
         ensure_pytest(python, logs / "ensure-pytest.log")
+    torch_python = torch_python_for(python, logs) if any(e.get("torch") for e in selected) else None
     rows = []
     for e in selected:
         log = logs / ("%s-%s.log" % (e["name"], vendor))
-        entry_timeout = e.get("timeout_s", timeout)       # an entry's own timer replaces the caller's
+        # an entry's own timer replaces the caller's; a compiled GPU check gets COMPILED_TIMEOUT_S (0.8.66 run i,
+        # 2026-11-08: four of them read STARTED at the 5 s default on gfx942, their first HIP module load alone
+        # takes longer; the other compiled checks finished under 1 s. Slow is not broken; the digest is the judge.)
+        entry_timeout = e.get("timeout_s", COMPILED_TIMEOUT_S if "source" in e else timeout)
         row = {"name": e["name"], "vendor": vendor, "what": e["what"], "timeout_s": entry_timeout, "log": str(log)}
         if "source" in e:
             exe = binary(bin_dir, e, vendor).resolve()
@@ -666,7 +710,8 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
             # Stale reports must not turn an incomplete new process into a pass.
             binding_report.unlink(missing_ok=True)
             junit.unlink(missing_ok=True)
-            cmd = [python, "-I", str(Path(__file__).resolve()), "entry", e["name"], "--vendor", vendor,
+            entry_python = torch_python if e.get("torch") and torch_python else python
+            cmd = [entry_python, "-I", str(Path(__file__).resolve()), "entry", e["name"], "--vendor", vendor,
                    "--binding-report", str(binding_report), "--junit", str(junit)]
             if source_package:
                 cmd += ["--source-package", str(Path(source_package).resolve())]
@@ -677,6 +722,11 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
             if vendor != "metal":
                 env["MOJOLEARN_VENDOR"] = BINDING_VENDOR[vendor]
             env.update(MOJOLEARN_NUMERIC_MODE="identical", TMPDIR=str(logs / "tmp"))
+            if e.get("torch") and "pytest" in e and not has_module(entry_python, "torchvision"):
+                # the same filter the gates use with adapters off: the torchvision guide test is deselected,
+                # never left to read PARTIAL (tools/gate_smoke_box.py TORCH_INTEROP_TESTS)
+                env.setdefault("MOJOLEARN_GATE_DESELECT_K", "not test_guide_import_pretrained")
+            row["python"] = entry_python
             row.update(binding_report=str(binding_report))
             if "pytest" in e:
                 row["junit"] = str(junit)
