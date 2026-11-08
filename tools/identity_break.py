@@ -824,6 +824,16 @@ def other_identity_processes():
     return count
 
 
+def _thread_count(value):
+    """A thread setting as recorded: the value when it is a count (digits, as every launcher sets it), None when
+    unset, and only the fact that it is set otherwise. The resume signature keeps these variables as digests
+    because a value can carry anything; a record never publishes a value that is not a count
+    (tools/test_identity_runtime.py test_only_exact_scheduler_token_is_excluded_from_environment)."""
+    if value is None:
+        return None
+    return value if value.strip().isdigit() else "set (not a count)"
+
+
 def timing_environment():
     """What the cells' wall clock ran on, so two records can be judged
     comparable (2026-11-06, lane/tools-timing-pairs): the CPU model, the
@@ -838,7 +848,7 @@ def timing_environment():
     return dict(
         schema=TIMING_ENV_SCHEMA, harness_timing=HARNESS_TIMING_VERSION, cpu_model=cpu_model(), arch=platform.machine(),
         logical_cpus=os.cpu_count(), affinity_cpus=affinity, cgroup_cpu_quota=cgroup_cpu_quota(),
-        threads={k: os.environ.get(k) for k in TIMING_THREAD_ENV},
+        threads={k: _thread_count(os.environ.get(k)) for k in TIMING_THREAD_ENV},
         concurrency=os.environ.get(TIMING_CONCURRENCY_ENV),
         other_identity_processes=other_identity_processes(),
         started_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
