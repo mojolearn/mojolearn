@@ -5139,18 +5139,38 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if not admitted:
             reasons.append(f"identity-admit has no admission of {self.commit[:12]}: run identity-admit")
         elif wheel is not None and platform in (admitted.get("wheels") or {}) and not self.dry:
-            if sha256(wheel) != admitted["wheels"][platform]:
-                reasons.append(f"{Path(wheel).name} (sha256 {sha256(wheel)[:12]}) is not the wheel identity-admit "
-                               f"admitted for {platform} ({admitted['wheels'][platform][:12]})")
+            got = sha256(wheel)
+            want = admitted["wheels"][platform]
+            # the admitted hash is the GATED bytes; the shipped core/macOS wheel is identity-admit's REPACK of them
+            # (the admitted table replaces the shipped one): its receipt binds input -> output -> table. Either the
+            # gated bytes or their recorded repack are the admitted bytes (0.8.66 run t, 2026-11-08: the rehearsal
+            # refused the repacked core wheel against the pre-repack hash).
+            receipt = (admitted.get("repacked") or {}).get(platform) or {}
+            if isinstance(receipt, str):   # the record names the receipt file (release_identity_wheels.repack)
+                receipt = read_json(receipt) or {}
+            repack_ok = (((receipt.get("input") or {}).get("sha256") == want)
+                         and ((receipt.get("output") or {}).get("sha256") == got)
+                         and ((receipt.get("table") or {}).get("new_sha256") == admitted.get("table_sha256")))
+            if got != want and not repack_ok:
+                reasons.append(f"{Path(wheel).name} (sha256 {got[:12]}) is not the wheel identity-admit "
+                               f"admitted for {platform} ({want[:12]}) nor its recorded repack")
         return not reasons, reasons
 
     def admitted_facts(self):
         """What identity-admit admitted, as the publisher binds it: the version, the frozen commit, the admission
         commit and table sha256, and the sha256 of every wheel it admitted (its record, never the ledger)."""
         admitted = self.admitted() or {}
+        wheels = dict(admitted.get("wheels") or {})
+        # the publisher ships the repacked core / macOS wheel: its bytes are admitted through the repack receipt
+        for platform, receipt in (admitted.get("repacked") or {}).items():
+            if isinstance(receipt, str):
+                receipt = read_json(receipt) or {}
+            out_sha = ((receipt or {}).get("output") or {}).get("sha256")
+            if out_sha and ((receipt or {}).get("input") or {}).get("sha256") == wheels.get(platform):
+                wheels[platform + "-shipped"] = out_sha
         return dict(schema="mojolearn.release-admitted-facts.v1", version=self.version, source_commit=self.commit,
                     admitted_commit=admitted.get("commit"), table_sha256=admitted.get("table_sha256"),
-                    wheels=dict(admitted.get("wheels") or {}), admitted_at=admitted.get("at"))
+                    wheels=wheels, admitted_at=admitted.get("at"))
 
     def admitted_wheels(self):
         """{platform: sha256} of every wheel a publish step ships (split_final, macos_wheel), as identity-admit
