@@ -1,0 +1,259 @@
+{
+ "counts": [
+  1,
+  2,
+  3
+ ],
+ "device": 0,
+ "jobs": 15,
+ "lanes": {
+  "bootstrap": {
+   "digests": {
+    "1": "c8788e6329a4e6053d2eb0668fac69fd0b0ad64f40eba5edb9dd0f62a74011a2",
+    "2": "c8788e6329a4e6053d2eb0668fac69fd0b0ad64f40eba5edb9dd0f62a74011a2",
+    "3": "c8788e6329a4e6053d2eb0668fac69fd0b0ad64f40eba5edb9dd0f62a74011a2"
+   },
+   "family": "resample/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "cholesky": {
+   "digests": {
+    "1": "9fb234848a08ed5b8639c2057468621bf39e97d51c4e0d4e0ac35547de90bc21",
+    "2": "9fb234848a08ed5b8639c2057468621bf39e97d51c4e0d4e0ac35547de90bc21",
+    "3": "9fb234848a08ed5b8639c2057468621bf39e97d51c4e0d4e0ac35547de90bc21"
+   },
+   "family": "cholesky/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "dbscan": {
+   "digests": {
+    "1": "56f2919505cd286585c61235512cfb2f920eecd5c84964969dd304967e4c1ba8",
+    "2": "56f2919505cd286585c61235512cfb2f920eecd5c84964969dd304967e4c1ba8",
+    "3": "56f2919505cd286585c61235512cfb2f920eecd5c84964969dd304967e4c1ba8"
+   },
+   "family": "dbscan/impl/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "forest-predict": {
+   "digests": {
+    "1": "e44a60dd8c0d820b45be1b514948b8098ed6750c7214f4d30bdb3ed385d72d64",
+    "2": "e44a60dd8c0d820b45be1b514948b8098ed6750c7214f4d30bdb3ed385d72d64",
+    "3": "e44a60dd8c0d820b45be1b514948b8098ed6750c7214f4d30bdb3ed385d72d64"
+   },
+   "family": "core/forest_inference_pool.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "gbdt": {
+   "digests": {
+    "1": "43ca45610f3684b9cfe635c5a7e6793812adad7cb5d65c8418790181d749a5eb",
+    "2": "43ca45610f3684b9cfe635c5a7e6793812adad7cb5d65c8418790181d749a5eb",
+    "3": "43ca45610f3684b9cfe635c5a7e6793812adad7cb5d65c8418790181d749a5eb"
+   },
+   "family": "gbdt/methods/pointwise_multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "glm-logistic": {
+   "digests": {
+    "1": "4a9343c853e22f53ced2d7bc6b9e3b7afee2b624d8560d9cb9ccff6d51fc9202",
+    "2": "4a9343c853e22f53ced2d7bc6b9e3b7afee2b624d8560d9cb9ccff6d51fc9202",
+    "3": "4a9343c853e22f53ced2d7bc6b9e3b7afee2b624d8560d9cb9ccff6d51fc9202"
+   },
+   "family": "glm/impl/qn/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "gmm": {
+   "digests": {
+    "1": "b72463e0112d9852e94df3490d84eaff4657a865524a4d4f19eec8c6c75bfe9b",
+    "2": "b72463e0112d9852e94df3490d84eaff4657a865524a4d4f19eec8c6c75bfe9b",
+    "3": "b72463e0112d9852e94df3490d84eaff4657a865524a4d4f19eec8c6c75bfe9b"
+   },
+   "family": "mixture/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "gp-regress": {
+   "digests": {
+    "1": "0ad9b7975f5856d1a4ead743d2903b7276d6832438e1d953e34ef2f761abc373",
+    "2": "0ad9b7975f5856d1a4ead743d2903b7276d6832438e1d953e34ef2f761abc373",
+    "3": "0ad9b7975f5856d1a4ead743d2903b7276d6832438e1d953e34ef2f761abc373"
+   },
+   "family": "gaussian_process/checks/kernels.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "iforest": {
+   "digests": {
+    "1": "18f66c095f6df20faf8428c2169e538fd83c2bee70be4facc4a76d780e3447c8",
+    "2": "18f66c095f6df20faf8428c2169e538fd83c2bee70be4facc4a76d780e3447c8",
+    "3": "18f66c095f6df20faf8428c2169e538fd83c2bee70be4facc4a76d780e3447c8"
+   },
+   "family": "isolation_forest/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "kmeans": {
+   "digests": {
+    "1": "6fa2f217a294ff554bc802cc5724968cda2359a3f65d08f1c3c9951a87176fc0",
+    "2": "6fa2f217a294ff554bc802cc5724968cda2359a3f65d08f1c3c9951a87176fc0",
+    "3": "6fa2f217a294ff554bc802cc5724968cda2359a3f65d08f1c3c9951a87176fc0"
+   },
+   "family": "cluster/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "lasso-cd": {
+   "digests": {
+    "1": "c8acc96d638a1e592cf016a741d3d6f7f5b3cbf8f2741eb9b6895923a90029a9",
+    "2": "c8acc96d638a1e592cf016a741d3d6f7f5b3cbf8f2741eb9b6895923a90029a9",
+    "3": "c8acc96d638a1e592cf016a741d3d6f7f5b3cbf8f2741eb9b6895923a90029a9"
+   },
+   "family": "solver/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "ols-tsqr": {
+   "digests": {
+    "1": "c10b36a292367d6dd05be75e83c47a7db46409caad5c91553c93bae10a864ef9",
+    "2": "c10b36a292367d6dd05be75e83c47a7db46409caad5c91553c93bae10a864ef9",
+    "3": "c10b36a292367d6dd05be75e83c47a7db46409caad5c91553c93bae10a864ef9"
+   },
+   "family": "x_decomp/tsqr_multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "ridge-gram": {
+   "digests": {
+    "1": "cbaa295a255d1ed2af34df2524afb290dd0cc1832c1fadb24d9bccb8c0fd9e91",
+    "2": "cbaa295a255d1ed2af34df2524afb290dd0cc1832c1fadb24d9bccb8c0fd9e91",
+    "3": "cbaa295a255d1ed2af34df2524afb290dd0cc1832c1fadb24d9bccb8c0fd9e91"
+   },
+   "family": "core/blocked_moments_multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "svm-rbf": {
+   "digests": {
+    "1": "e4bf610e0d797ac918c3c5c2d3f346b542d263560b3d87b5daa591244801c3c2",
+    "2": "e4bf610e0d797ac918c3c5c2d3f346b542d263560b3d87b5daa591244801c3c2",
+    "3": "e4bf610e0d797ac918c3c5c2d3f346b542d263560b3d87b5daa591244801c3c2"
+   },
+   "family": "svm/multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  },
+  "tsvd-gram": {
+   "digests": {
+    "1": "6d93d59caca0c3078dde7054b491e4e94517d02d08b6da86a55a1c3d3f2e668e",
+    "2": "6d93d59caca0c3078dde7054b491e4e94517d02d08b6da86a55a1c3d3f2e668e",
+    "3": "6d93d59caca0c3078dde7054b491e4e94517d02d08b6da86a55a1c3d3f2e668e"
+   },
+   "family": "core/gram_multi_gpu.mojo",
+   "mojolearn_file": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+   "ranks": {
+    "1": 0,
+    "2": 2,
+    "3": 3
+   },
+   "reason": "",
+   "verdict": "MATCH"
+  }
+ },
+ "mojolearn_files": [
+  "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/lib/python3.12/site-packages/mojolearn/__init__.py"
+ ],
+ "ok": true,
+ "python": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/identity-venv/bin/python",
+ "schema": "mojolearn.logical-shard.v1",
+ "seconds": 2.8,
+ "vendor": "amd"
+}

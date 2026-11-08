@@ -1,0 +1,144 @@
+{
+ "adopted": false,
+ "columns": {
+  "amd": {
+   "backend": "hip",
+   "column": "amd",
+   "first_paths": [
+    ".github/workflows/cpu-identity-gate.yml",
+    ".github/workflows/cross-compile-check.yml",
+    ".github/workflows/light-checks.yml",
+    "AGENTS.md",
+    "CHANGELOG.md"
+   ],
+   "held": true,
+   "lanes": 572,
+   "owed": 572,
+   "owed_lanes": [
+    "agglomerative",
+    "arima",
+    "arima-011",
+    "arima-exog",
+    "arima-exog-seasonal"
+   ],
+   "reason": "the identity harness changed since 84da9f145c6d: tools/identity_break.py, tools/identity_lanes/cluster.py, tools/identity_lanes/coverage.py, tools/identity_lanes/coverage_declared.tsv, tools/identity_lanes/coverage_sabotage.tsv",
+   "recorded_at": "84da9f145c6dddc2d7e5db4a55d794562019ddf4",
+   "source_paths": 1724,
+   "state": "owed"
+  },
+  "apple": {
+   "backend": "metal",
+   "column": "apple",
+   "first_paths": [
+    ".github/workflows/cpu-identity-gate.yml",
+    ".github/workflows/cross-compile-check.yml",
+    ".github/workflows/light-checks.yml",
+    "AGENTS.md",
+    "CHANGELOG.md"
+   ],
+   "held": true,
+   "lanes": 572,
+   "owed": 572,
+   "owed_lanes": [
+    "agglomerative",
+    "arima",
+    "arima-011",
+    "arima-exog",
+    "arima-exog-seasonal"
+   ],
+   "reason": "the identity harness changed since fca4c4773eff: tools/identity_break.py, tools/identity_lanes/cluster.py, tools/identity_lanes/coverage.py, tools/identity_lanes/coverage_declared.tsv, tools/identity_lanes/coverage_sabotage.tsv",
+   "recorded_at": "fca4c4773eff03ae0a173a6a05602c5814b1781a",
+   "source_paths": 1723,
+   "state": "owed"
+  },
+  "cpu": {
+   "backend": null,
+   "column": "cpu",
+   "first_paths": [
+    ".github/workflows/cpu-identity-gate.yml",
+    ".github/workflows/cross-compile-check.yml",
+    ".github/workflows/light-checks.yml",
+    "AGENTS.md",
+    "CHANGELOG.md"
+   ],
+   "held": true,
+   "lanes": 536,
+   "owed": 536,
+   "owed_lanes": [
+    "agglomerative",
+    "arima",
+    "arima-011",
+    "arima-exog",
+    "arima-exog-seasonal"
+   ],
+   "reason": "the identity harness changed since 84da9f145c6d: tools/identity_break.py, tools/identity_lanes/cluster.py, tools/identity_lanes/coverage.py, tools/identity_lanes/coverage_declared.tsv, tools/identity_lanes/coverage_sabotage.tsv",
+   "recorded_at": "84da9f145c6dddc2d7e5db4a55d794562019ddf4",
+   "source_paths": 1724,
+   "state": "owed"
+  },
+  "nvidia": {
+   "backend": "cuda",
+   "column": "nvidia",
+   "first_paths": [
+    ".github/workflows/cpu-identity-gate.yml",
+    ".github/workflows/cross-compile-check.yml",
+    ".github/workflows/light-checks.yml",
+    "AGENTS.md",
+    "CHANGELOG.md"
+   ],
+   "held": true,
+   "lanes": 572,
+   "owed": 572,
+   "owed_lanes": [
+    "agglomerative",
+    "arima",
+    "arima-011",
+    "arima-exog",
+    "arima-exog-seasonal"
+   ],
+   "reason": "the identity harness changed since 84da9f145c6d: tools/identity_break.py, tools/identity_lanes/cluster.py, tools/identity_lanes/coverage.py, tools/identity_lanes/coverage_declared.tsv, tools/identity_lanes/coverage_sabotage.tsv",
+   "recorded_at": "84da9f145c6dddc2d7e5db4a55d794562019ddf4",
+   "source_paths": 1724,
+   "state": "owed"
+  },
+  "ptx": {
+   "backend": "cuda",
+   "column": "ptx",
+   "first_paths": [
+    ".github/workflows/cpu-identity-gate.yml",
+    ".github/workflows/cross-compile-check.yml",
+    ".github/workflows/light-checks.yml",
+    ".gitignore",
+    "AGENTS.md"
+   ],
+   "held": false,
+   "lanes": 569,
+   "owed": 569,
+   "owed_lanes": [
+    "agglomerative",
+    "arima",
+    "arima-011",
+    "arima-exog",
+    "arima-exog-seasonal"
+   ],
+   "reason": "the identity harness changed since 4f7cdf9c2fd3: tools/identity_break.py, tools/identity_lanes/cluster.py, tools/identity_lanes/coverage.py, tools/identity_lanes/coverage_declared.tsv, tools/identity_lanes/coverage_sabotage.tsv",
+   "recorded_at": "4f7cdf9c2fd3fa6ecf5c8915ea7cff5720075595",
+   "source_paths": 1908,
+   "state": "owed"
+  }
+ },
+ "freeze": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "held": [
+  "amd",
+  "apple",
+  "cpu",
+  "nvidia"
+ ],
+ "held_columns": [
+  "nvidia",
+  "amd",
+  "cpu",
+  "apple"
+ ],
+ "schema": "mojolearn.identity-at-freeze.v1"
+}

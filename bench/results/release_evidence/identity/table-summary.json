@@ -1,0 +1,388 @@
+{
+ "columns": {
+  "amd": {
+   "lanes": 572,
+   "parts": 16245
+  },
+  "apple": {
+   "lanes": 572,
+   "parts": 16245
+  },
+  "cpu": {
+   "lanes": 536,
+   "parts": 15156
+  },
+  "nvidia": {
+   "lanes": 572,
+   "parts": 16245
+  },
+  "ptx": {
+   "lanes": 569,
+   "parts": 16164
+  }
+ },
+ "first_parts_not_on_every_column": [
+  {
+   "cell": "optim-resident-io/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/dupes",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/hashed",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/negative",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/odd",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/ties",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "optim-resident-io/wide",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/dupes",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/dupes",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/dupes",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/hashed",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/hashed",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/hashed",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/negative",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/negative",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/negative",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/odd",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/odd",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/odd",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/ties",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/ties",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/ties",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-clf/wide",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-clf/wide",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-clf/wide",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-pointwise/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-pointwise/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-pointwise/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "model"
+  },
+  {
+   "cell": "par-boosting-pointwise/base",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "model"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "model"
+  },
+  {
+   "cell": "par-boosting-pointwise/denormal_ftz",
+   "missing": [
+    "cpu"
+   ],
+   "part": "train"
+  },
+  {
+   "cell": "par-boosting-pointwise/dupes",
+   "missing": [
+    "cpu"
+   ],
+   "part": "batch"
+  },
+  {
+   "cell": "par-boosting-pointwise/dupes",
+   "missing": [
+    "cpu"
+   ],
+   "part": "infer"
+  }
+ ],
+ "parts": 16245,
+ "parts_equal_on_every_column": 15120,
+ "parts_not_on_every_column": 1125,
+ "ptx_divergent": 0,
+ "schema": "mojolearn.release-identity-table-summary.v1",
+ "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "table": {
+  "bytes": 4773235,
+  "ref": "9d70418446aa876bfd10ea5e7c19d31199610939:python/mojolearn/verify_reference/table.json",
+  "sha256": "8efc5b051f9382e2b2b147184af6be1a7d5a671990d635a20ad425cf515d3fe5"
+ },
+ "version": "0.8.66"
+}

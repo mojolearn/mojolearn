@@ -1,0 +1,155 @@
+{
+ "schema": "mojolearn.release-cpu-identity.v1",
+ "shards": {
+  "cpu-wheel-identity-0": {
+   "columns": {
+    "cpu": {
+     "chunks": [
+      {
+       "device": null,
+       "lanes": 128,
+       "rc": 0,
+       "records": [
+        {
+         "admissible": true,
+         "harness_rc": 0,
+         "json": "/home/runner/work/_temp/wheel-out/identity/cpu/w0/cpu.lanes-e7107d86.identical.json",
+         "name": "cpu.lanes-e7107d86"
+        }
+       ],
+       "worker": 0
+      }
+     ],
+     "label": "cpu",
+     "owed": 128,
+     "rc": 0,
+     "reused": 0
+    }
+   },
+   "failures": [],
+   "gpu_free_gib": null,
+   "gpus": 0,
+   "nproc": 4,
+   "ok": true,
+   "schema": "mojolearn.identity-wheels.v1",
+   "shard": "0/4",
+   "wheels": [
+    "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+   ],
+   "workers_per_device": 1
+  },
+  "cpu-wheel-identity-1": {
+   "columns": {
+    "cpu": {
+     "chunks": [
+      {
+       "device": null,
+       "lanes": 128,
+       "rc": 0,
+       "records": [
+        {
+         "admissible": true,
+         "harness_rc": 0,
+         "json": "/home/runner/work/_temp/wheel-out/identity/cpu/w0/cpu.lanes-6b1f4ac0.identical.json",
+         "name": "cpu.lanes-6b1f4ac0"
+        }
+       ],
+       "worker": 0
+      }
+     ],
+     "label": "cpu",
+     "owed": 128,
+     "rc": 0,
+     "reused": 0
+    }
+   },
+   "failures": [],
+   "gpu_free_gib": null,
+   "gpus": 0,
+   "nproc": 4,
+   "ok": true,
+   "schema": "mojolearn.identity-wheels.v1",
+   "shard": "1/4",
+   "wheels": [
+    "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+   ],
+   "workers_per_device": 1
+  },
+  "cpu-wheel-identity-2": {
+   "columns": {
+    "cpu": {
+     "chunks": [
+      {
+       "device": null,
+       "lanes": 127,
+       "rc": 0,
+       "records": [
+        {
+         "admissible": true,
+         "harness_rc": 0,
+         "json": "/home/runner/work/_temp/wheel-out/identity/cpu/w0/cpu.lanes-6b2ea14c.identical.json",
+         "name": "cpu.lanes-6b2ea14c"
+        }
+       ],
+       "worker": 0
+      }
+     ],
+     "label": "cpu",
+     "owed": 127,
+     "rc": 0,
+     "reused": 0
+    }
+   },
+   "failures": [],
+   "gpu_free_gib": null,
+   "gpus": 0,
+   "nproc": 4,
+   "ok": true,
+   "schema": "mojolearn.identity-wheels.v1",
+   "shard": "2/4",
+   "wheels": [
+    "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+   ],
+   "workers_per_device": 1
+  },
+  "cpu-wheel-identity-3": {
+   "columns": {
+    "cpu": {
+     "chunks": [
+      {
+       "device": null,
+       "lanes": 127,
+       "rc": 0,
+       "records": [
+        {
+         "admissible": true,
+         "harness_rc": 0,
+         "json": "/home/runner/work/_temp/wheel-out/identity/cpu/w0/cpu.lanes-1e9c6cdc.identical.json",
+         "name": "cpu.lanes-1e9c6cdc"
+        }
+       ],
+       "worker": 0
+      }
+     ],
+     "label": "cpu",
+     "owed": 127,
+     "rc": 0,
+     "reused": 0
+    }
+   },
+   "failures": [],
+   "gpu_free_gib": null,
+   "gpus": 0,
+   "nproc": 4,
+   "ok": true,
+   "schema": "mojolearn.identity-wheels.v1",
+   "shard": "3/4",
+   "wheels": [
+    "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+   ],
+   "workers_per_device": 1
+  }
+ },
+ "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "version": "0.8.66"
+}

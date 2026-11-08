@@ -1,0 +1,673 @@
+{
+ "checks": [
+  {
+   "check": "pip install mojolearn-core==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-core==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-core==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-core==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-core==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.10.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.11.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.12.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.13.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": [
+    "pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.14.log)"
+   ]
+  },
+  {
+   "check": "pip install mojolearn-nvidia==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-nvidia==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-nvidia==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-nvidia==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-nvidia==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-amd==0.8.66 on manylinux_2_35_x86_64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-amd==0.8.66 on manylinux_2_35_x86_64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-amd==0.8.66 on manylinux_2_35_x86_64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-amd==0.8.66 on manylinux_2_35_x86_64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-amd==0.8.66 on manylinux_2_35_x86_64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on macosx_26_0_arm64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on macosx_26_0_arm64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on macosx_26_0_arm64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on macosx_26_0_arm64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn==0.8.66 on macosx_26_0_arm64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on macosx_26_0_arm64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on macosx_26_0_arm64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on macosx_26_0_arm64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on macosx_26_0_arm64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[max]==0.8.66 on macosx_26_0_arm64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on macosx_26_0_arm64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on macosx_26_0_arm64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on macosx_26_0_arm64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on macosx_26_0_arm64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[numpy]==0.8.66 on macosx_26_0_arm64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on macosx_26_0_arm64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on macosx_26_0_arm64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on macosx_26_0_arm64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on macosx_26_0_arm64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[torch]==0.8.66 on macosx_26_0_arm64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on macosx_26_0_arm64 py3.10",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on macosx_26_0_arm64 py3.11",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on macosx_26_0_arm64 py3.12",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on macosx_26_0_arm64 py3.13",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn[verify]==0.8.66 on macosx_26_0_arm64 py3.14",
+   "problems": []
+  },
+  {
+   "check": "TestPyPI bytes of mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "problems": []
+  },
+  {
+   "check": "TestPyPI bytes of mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "problems": []
+  },
+  {
+   "check": "TestPyPI bytes of mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "problems": []
+  },
+  {
+   "check": "TestPyPI bytes of mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "problems": []
+  },
+  {
+   "check": "TestPyPI bytes of mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+   "problems": []
+  },
+  {
+   "check": "pip install mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl from TestPyPI into a fresh venv and import",
+   "problems": []
+  }
+ ],
+ "commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "local": [],
+ "owed": [],
+ "platforms": [
+  "linux",
+  "nvidia",
+  "amd",
+  "linux-meta",
+  "macos"
+ ],
+ "problems": [
+  "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn-core[max]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_max_manylinux_2_35_x86_64_py3.14.log)",
+  "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn-core[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_numpy_manylinux_2_35_x86_64_py3.14.log)",
+  "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn-core[torch]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_torch_manylinux_2_35_x86_64_py3.14.log)",
+  "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn-core[verify]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_core_verify_manylinux_2_35_x86_64_py3.14.log)",
+  "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn[max]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_max_manylinux_2_35_x86_64_py3.14.log)",
+  "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn[numpy]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_numpy_manylinux_2_35_x86_64_py3.14.log)",
+  "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn[torch]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_torch_manylinux_2_35_x86_64_py3.14.log)",
+  "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.10: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.10.log)",
+  "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.11: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.11.log)",
+  "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.12: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.12.log)",
+  "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.13: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.13.log)",
+  "pip install mojolearn[verify]==0.8.66 on manylinux_2_35_x86_64 py3.14: pip could not resolve it (exit 1; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/resolve/mojolearn_verify_manylinux_2_35_x86_64_py3.14.log)"
+ ],
+ "routed": [
+  [
+   "click",
+   "pypi"
+  ],
+  [
+   "exceptiongroup",
+   "pypi"
+  ],
+  [
+   "filelock",
+   "pypi"
+  ],
+  [
+   "fsspec",
+   "pypi"
+  ],
+  [
+   "jinja2",
+   "pypi"
+  ],
+  [
+   "markdown-it-py",
+   "pypi"
+  ],
+  [
+   "markupsafe",
+   "pypi"
+  ],
+  [
+   "max",
+   "pypi"
+  ],
+  [
+   "max-core",
+   "pypi"
+  ],
+  [
+   "max-mojo-libs",
+   "pypi"
+  ],
+  [
+   "mdurl",
+   "pypi"
+  ],
+  [
+   "ml-dtypes",
+   "pypi"
+  ],
+  [
+   "mojo-compiler",
+   "pypi"
+  ],
+  [
+   "mojo-compiler-mojo-libs",
+   "pypi"
+  ],
+  [
+   "mojolearn",
+   "testpypi"
+  ],
+  [
+   "mojolearn-amd",
+   "testpypi"
+  ],
+  [
+   "mojolearn-core",
+   "testpypi"
+  ],
+  [
+   "mojolearn-nvidia",
+   "testpypi"
+  ],
+  [
+   "mpmath",
+   "pypi"
+  ],
+  [
+   "msgspec",
+   "pypi"
+  ],
+  [
+   "networkx",
+   "pypi"
+  ],
+  [
+   "numpy",
+   "pypi"
+  ],
+  [
+   "onnx",
+   "pypi"
+  ],
+  [
+   "onnx-ir",
+   "pypi"
+  ],
+  [
+   "onnxscript",
+   "pypi"
+  ],
+  [
+   "packaging",
+   "pypi"
+  ],
+  [
+   "protobuf",
+   "pypi"
+  ],
+  [
+   "psutil",
+   "pypi"
+  ],
+  [
+   "pygments",
+   "pypi"
+  ],
+  [
+   "rich",
+   "pypi"
+  ],
+  [
+   "setuptools",
+   "pypi"
+  ],
+  [
+   "sympy",
+   "pypi"
+  ],
+  [
+   "taskgroup",
+   "pypi"
+  ],
+  [
+   "torch",
+   "pypi"
+  ],
+  [
+   "typing-extensions",
+   "pypi"
+  ]
+ ],
+ "schema": "mojolearn.release-testpypi-rehearsal.v1",
+ "uploads": {
+  "amd": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl: uploaded to TestPyPI (testpypi via alpha-api-0.8.66-amd-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b))",
+  "linux": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl: uploaded to TestPyPI (testpypi via alpha-api-0.8.66-linux-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b))",
+  "linux-meta": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl: uploaded to TestPyPI (testpypi via alpha-api-0.8.66-linux-meta-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b))",
+  "macos": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl: uploaded to TestPyPI (testpypi via alpha-api-0.8.66-macos-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b))",
+  "nvidia": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl: uploaded to TestPyPI (testpypi via alpha-api-0.8.66-nvidia-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b))"
+ },
+ "version": "0.8.66",
+ "wheels": {
+  "amd": {
+   "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+  },
+  "linux": {
+   "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+  },
+  "linux-meta": {
+   "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+  },
+  "macos": {
+   "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+   "sha256": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945"
+  },
+  "nvidia": {
+   "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+  }
+ }
+}

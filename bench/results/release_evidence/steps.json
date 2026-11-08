@@ -1,0 +1,232 @@
+{
+ "schema": "mojolearn.release-steps.v1",
+ "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "steps": {
+  "boxes-down": {
+   "at": "2026-11-08T19:53:31Z",
+   "result": "4 box job(s) home (0 fetched now); amd 617196481 taken down; nvidia nvc1 taken down",
+   "seconds": 262.7,
+   "tooling_commit": "bf95deffeaa80deda47691a0389143a9bf7595f8"
+  },
+  "cross-compile": {
+   "at": "2026-11-08T15:53:07Z",
+   "result": "PASS vs 0.8.65 (6519a54c6579): https://github.com/mojolearn/mojolearn/actions/runs/42493889672",
+   "seconds": 2253.7,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "finish-line": {
+   "at": "2026-11-08T20:54:03Z",
+   "platforms": [
+    "macos",
+    "linux",
+    "nvidia",
+    "amd",
+    "linux-meta"
+   ],
+   "result": "mojolearn: PyPI serves mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl with the shipped sha256; mojolearn-core: PyPI serves mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256; mojolearn-nvidia: PyPI serves mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256; mojolearn-amd: PyPI serves mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256; mojolearn: PyPI serves mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256",
+   "seconds": 41.5,
+   "tooling_commit": "cddf55bb403d5b7acbeac36f8387fad829cd6280"
+  },
+  "freeze-changelog": {
+   "at": "2026-11-08T20:56:22Z",
+   "result": "published 2026-11-05 (frozen source)",
+   "seconds": 0.0,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "freeze-commit": {
+   "at": "2026-11-08T20:56:23Z",
+   "result": "source pinned at 43b5f7c320e0942bdef8c212917b440d1ab1d513; tooling runs from HEAD 12a5af7d8984 (--refreeze moves the source to HEAD)",
+   "seconds": 0.0,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "freeze-docs-facts": {
+   "at": "2026-11-08T20:56:22Z",
+   "result": "part of the frozen source 43b5f7c320e0",
+   "seconds": 0.0,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "freeze-version": {
+   "at": "2026-11-08T20:56:22Z",
+   "result": "frozen source 43b5f7c320e0 says 0.8.66",
+   "seconds": 0.0,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "gate-amd": {
+   "at": "2026-11-08T18:17:02Z",
+   "result": "PASS: identity recorded once from these wheels; device-check units passed or reused; logical-shard gate MATCH; measurement smoke SOFT FAIL; None runtime cases; SOFT FAIL (fix lanes owed): autograd/autograd-gradients, autograd/autograd-higher, autograd/autograd-import-ops, autograd/autograd-lm-tape, autograd/autograd-mamba-tape, autograd/autograd-mlp-identity, autograd/autograd-public, autograd/autograd-samba-tape, autograd/autograd-small-mlp-tape, autograd/import-torch-smoke, autograd/real-model-smoke, measuresmoke, runtime",
+   "seconds": 2565.7,
+   "tooling_commit": "bf95deffeaa80deda47691a0389143a9bf7595f8"
+  },
+  "gate-apple": {
+   "at": "2026-11-08T14:06:36Z",
+   "result": "Apple column recorded from the macOS wheel; PASSED (torch-compile, torch-training, max-training); runtime-apple PASSED: 6434 installed-runtime cases (units reused=0 run=73)",
+   "seconds": 1740.9,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "gate-boxes": {
+   "at": "2026-11-08T17:34:17Z",
+   "result": "NVIDIA nvc1 rented; AMD droplet 617196481 rented",
+   "seconds": 1075.9,
+   "tooling_commit": "bf95deffeaa80deda47691a0389143a9bf7595f8"
+  },
+  "gate-nvidia": {
+   "at": "2026-11-08T19:49:08Z",
+   "result": "PASS: identity recorded once from these wheels; device-check units passed or reused; logical-shard gate MATCH; measurement smoke SOFT FAIL; None runtime cases; SOFT FAIL (fix lanes owed): autograd/autograd-public, autograd/import-torch-smoke, autograd/real-model-smoke, measuresmoke, runtime",
+   "seconds": 8091.5,
+   "tooling_commit": "bf95deffeaa80deda47691a0389143a9bf7595f8"
+  },
+  "gpu-column-amd": {
+   "at": "2026-11-08T15:54:40Z",
+   "result": "SKIPPED: no GPU smoke (checked before merge; --gpu-smoke runs it); nothing rented, no lq",
+   "seconds": 0.0,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "gpu-column-nvidia": {
+   "at": "2026-11-08T15:54:40Z",
+   "result": "SKIPPED: no GPU smoke (checked before merge; --gpu-smoke runs it); nothing rented, no lq",
+   "seconds": 0.0,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "gpu-column-nvidia-hopper": {
+   "at": "2026-11-08T15:54:40Z",
+   "result": "SKIPPED: no GPU smoke (checked before merge; --gpu-smoke runs it); nothing rented, no lq",
+   "seconds": 0.0,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "identity-admit": {
+   "at": "2026-11-08T19:50:47Z",
+   "result": "admitted 15 record dir(s) at 9d70418446aa (ref/43b5f7c320e0); repacked linux, macos",
+   "seconds": 98.7,
+   "tooling_commit": "bf95deffeaa80deda47691a0389143a9bf7595f8"
+  },
+  "identity-at-freeze": {
+   "at": "2026-11-08T13:30:46Z",
+   "result": "identity owed at the freeze on amd, apple, cpu, nvidia: recorded once from the built wheels (--identity-on-wheels)",
+   "seconds": 0.9,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "identity-cpu": {
+   "at": "2026-11-08T16:17:07Z",
+   "result": "cpu column and CPU checks PASSED on GitHub (run 42497182151)",
+   "seconds": 1346.3,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "linux-assemble": {
+   "at": "2026-11-08T15:53:09Z",
+   "result": "not needed: every Linux binding is built by the legs",
+   "seconds": 0.0,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "linux-builds": {
+   "at": "2026-11-08T15:16:05Z",
+   "result": "0 leg(s) launched or running (github)",
+   "seconds": 31.6,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "linux-pack": {
+   "at": "2026-11-08T15:54:40Z",
+   "result": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl sha256 c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c, mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl sha256 9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725, mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl sha256 1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed, mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl sha256 8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54",
+   "seconds": 91.5,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "linux-wait": {
+   "at": "2026-11-08T15:53:09Z",
+   "result": "all legs built; host bindings byte-identical across cuda-sm_89, cuda-sm_80, hip-gfx942",
+   "seconds": 1.6,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "macos-build": {
+   "at": "2026-11-08T13:37:35Z",
+   "result": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl sha256 72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1",
+   "seconds": 308.3,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "macos-smoke": {
+   "at": "2026-11-08T20:56:23Z",
+   "result": "SKIPPED (--identity-on-wheels): the Apple column is recorded from this wheel in gate-apple",
+   "seconds": 0.0,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "publish-amd": {
+   "at": "2026-11-08T20:47:03Z",
+   "result": "pypi via alpha-api-0.8.66-amd-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b)",
+   "seconds": 158.2,
+   "tooling_commit": "5504d877ac8b7c5381c75fed144b7b725c7f9812"
+  },
+  "publish-core-linux": {
+   "at": "2026-11-08T20:41:40Z",
+   "result": "pypi via alpha-api-0.8.66-linux-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b)",
+   "seconds": 160.2,
+   "tooling_commit": "5504d877ac8b7c5381c75fed144b7b725c7f9812"
+  },
+  "publish-macos": {
+   "at": "2026-11-08T20:53:21Z",
+   "result": "pypi via alpha-api-0.8.66-macos-20261108 (source 43b5f7c320e0, tooling cddf55bb403d)",
+   "seconds": 179.4,
+   "tooling_commit": "cddf55bb403d5b7acbeac36f8387fad829cd6280"
+  },
+  "publish-meta-linux": {
+   "at": "2026-11-08T20:50:22Z",
+   "result": "pypi via alpha-api-0.8.66-linux-meta-20261108 (source 43b5f7c320e0, tooling cddf55bb403d)",
+   "seconds": 198.7,
+   "tooling_commit": "cddf55bb403d5b7acbeac36f8387fad829cd6280"
+  },
+  "publish-nvidia": {
+   "at": "2026-11-08T20:44:25Z",
+   "result": "pypi via alpha-api-0.8.66-nvidia-20261108 (source 43b5f7c320e0, tooling 5504d877ac8b)",
+   "seconds": 164.3,
+   "tooling_commit": "5504d877ac8b7c5381c75fed144b7b725c7f9812"
+  },
+  "published-amd": {
+   "at": "2026-11-08T20:56:33Z",
+   "result": "PASSED index-resolution=6/6 published-artifact-hashes=2/2 wheel-integrity=3/3 gate-evidence=6/6",
+   "seconds": 8.2,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "published-nvidia": {
+   "at": "2026-11-08T20:56:37Z",
+   "result": "PASSED index-resolution=6/6 published-artifact-hashes=2/2 wheel-integrity=3/3 gate-evidence=6/6",
+   "seconds": 11.4,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "readiness": {
+   "at": "2026-11-08T20:56:23Z",
+   "result": "skipped (the release runs everything: no reuse analysis without --reuse-unchanged)",
+   "seconds": 0.0,
+   "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+  },
+  "record": {
+   "at": "2026-11-08T15:14:24Z",
+   "platforms": [],
+   "result": "nothing published yet",
+   "seconds": 0.0,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "rehearsal": {
+   "at": "2026-11-08T13:30:55Z",
+   "result": "PASS, logs /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/rehearsal",
+   "seconds": 8.5,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "reuse-plan": {
+   "at": "2026-11-08T13:32:27Z",
+   "result": "against 0.8.65 pypi: 0 REUSE, 244 BUILD, legs: cuda-sm_89, cuda-sm_80, hip-gfx942; /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/reuse/plan.json",
+   "seconds": 91.8,
+   "tooling_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "testpypi-rehearsal": {
+   "at": "2026-11-08T20:39:00Z",
+   "platforms": [
+    "linux",
+    "nvidia",
+    "amd",
+    "linux-meta",
+    "macos"
+   ],
+   "result": "TestPyPI rehearsal PASSED for linux, nvidia, amd, linux-meta, macos: 85 resolutions, 5 files' sha256, macOS install+import OK",
+   "seconds": 2586.7,
+   "tooling_commit": "5504d877ac8b7c5381c75fed144b7b725c7f9812"
+  }
+ },
+ "version": "0.8.66"
+}

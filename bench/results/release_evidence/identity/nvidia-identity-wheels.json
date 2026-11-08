@@ -1,0 +1,60 @@
+{
+ "columns": {
+  "nvidia": {
+   "chunks": [
+    {
+     "device": 0,
+     "lanes": 513,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/rel-0.8.66-gate-nvidia-20261108T173417Z/out/identity/nvidia-l40s/w0/nvidia-l40s.lanes-b5b915e8.identical.json",
+       "name": "nvidia-l40s.lanes-b5b915e8"
+      }
+     ],
+     "worker": 0
+    }
+   ],
+   "label": "nvidia-l40s",
+   "owed": 513,
+   "rc": 0,
+   "reused": 0
+  },
+  "ptx": {
+   "chunks": [
+    {
+     "device": 0,
+     "lanes": 513,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/rel-0.8.66-gate-nvidia-20261108T173417Z/out/identity/nvidia-ptx-l40s-sm80/w0/nvidia-ptx-l40s-sm80.lanes-b5b915e8.identical.json",
+       "name": "nvidia-ptx-l40s-sm80.lanes-b5b915e8"
+      }
+     ],
+     "worker": 0
+    }
+   ],
+   "label": "nvidia-ptx-l40s-sm80",
+   "owed": 513,
+   "rc": 0,
+   "reused": 0
+  }
+ },
+ "failures": [],
+ "gpu_free_gib": 23.517578125,
+ "gpus": 1,
+ "nproc": 48,
+ "ok": true,
+ "schema": "mojolearn.identity-wheels.v1",
+ "shard": "0/1",
+ "wheels": [
+  "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c",
+  "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl 9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+ ],
+ "workers_per_device": 1
+}

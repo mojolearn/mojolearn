@@ -1,0 +1,157 @@
+{
+  "device": "mps",
+  "frameworks": {
+    "max": "ran",
+    "torch": "ran"
+  },
+  "installed": {
+    "adapters": {
+      "arch": "apple",
+      "directory": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters",
+      "max": {
+        "version": "26.5.0"
+      },
+      "paths": {
+        "max": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters/mojolearn_ops.mojoc",
+        "native": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters/libmojolearn_adapter.so",
+        "torch": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters/mojolearn_torch.so"
+      },
+      "requirements": {
+        "max": "max==26.5.0",
+        "torch": "torch>=2.13,<2.14"
+      },
+      "torch": {
+        "backend": "mps",
+        "backend_version": null,
+        "cxx11_abi": null,
+        "cxx11_abi_source": null,
+        "index_url": "https://pypi.org/simple",
+        "python_tag": "cp314",
+        "series": "2.13",
+        "version": "2.13.0",
+        "wheel": "torch-2.13.0-cp314-cp314-macosx_14_0_arm64.whl",
+        "wheel_sha256": "d849b390e07d8d333ce8ecaf91b273c656c598379a19c9acf1318a883f6b391c"
+      },
+      "vendor": "metal"
+    },
+    "extras": {
+      "max": [
+        "max==26.5.0"
+      ],
+      "numpy": [
+        "numpy>=1.26.4"
+      ],
+      "torch": [
+        "torch<2.14,>=2.13",
+        "onnx>=1.18",
+        "onnxscript>=0.5"
+      ],
+      "verify": [
+        "numpy>=1.26.4"
+      ]
+    },
+    "extras_distribution": "mojolearn",
+    "max": null,
+    "max_importable": false,
+    "mojolearn": "0.8.66",
+    "mojolearn-amd": null,
+    "mojolearn-core": null,
+    "mojolearn-nvidia": null,
+    "numpy": "2.5.4",
+    "torch": null,
+    "torch_importable": false
+  },
+  "installed_after_install": {
+    "adapters": {
+      "arch": "apple",
+      "directory": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters",
+      "max": {
+        "version": "26.5.0"
+      },
+      "paths": {
+        "max": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters/mojolearn_ops.mojoc",
+        "native": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters/libmojolearn_adapter.so",
+        "torch": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/lib/python3.12/site-packages/mojolearn/_adapters/mojolearn_torch.so"
+      },
+      "requirements": {
+        "max": "max==26.5.0",
+        "torch": "torch>=2.13,<2.14"
+      },
+      "torch": {
+        "backend": "mps",
+        "backend_version": null,
+        "cxx11_abi": null,
+        "cxx11_abi_source": null,
+        "index_url": "https://pypi.org/simple",
+        "python_tag": "cp314",
+        "series": "2.13",
+        "version": "2.13.0",
+        "wheel": "torch-2.13.0-cp314-cp314-macosx_14_0_arm64.whl",
+        "wheel_sha256": "d849b390e07d8d333ce8ecaf91b273c656c598379a19c9acf1318a883f6b391c"
+      },
+      "vendor": "metal"
+    },
+    "extras": {
+      "max": [
+        "max==26.5.0"
+      ],
+      "numpy": [
+        "numpy>=1.26.4"
+      ],
+      "torch": [
+        "torch<2.14,>=2.13",
+        "onnx>=1.18",
+        "onnxscript>=0.5"
+      ],
+      "verify": [
+        "numpy>=1.26.4"
+      ]
+    },
+    "extras_distribution": "mojolearn",
+    "max": "26.5.0",
+    "max_importable": true,
+    "mojolearn": "0.8.66",
+    "mojolearn-amd": null,
+    "mojolearn-core": null,
+    "mojolearn-nvidia": null,
+    "numpy": "2.5.4",
+    "torch": "2.13.0",
+    "torch_importable": true
+  },
+  "phases": {
+    "install-max": {
+      "exit": 0,
+      "log": "install-max.log",
+      "seconds": 3.5,
+      "timed_out": false
+    },
+    "install-torch": {
+      "exit": 0,
+      "log": "install-torch.log",
+      "seconds": 10.8,
+      "timed_out": false
+    },
+    "max-training": {
+      "exit": 0,
+      "log": "max-training.log",
+      "seconds": 10.4,
+      "timed_out": false
+    },
+    "torch-compile": {
+      "exit": 0,
+      "log": "torch-compile.log",
+      "seconds": 6.5,
+      "timed_out": false
+    },
+    "torch-training": {
+      "exit": 0,
+      "log": "torch-training.log",
+      "seconds": 1.0,
+      "timed_out": false
+    }
+  },
+  "problems": [],
+  "python": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/venv/bin/python",
+  "schema": "mojolearn.adapter-wheel-smoke.v1",
+  "status": "PASSED"
+}
