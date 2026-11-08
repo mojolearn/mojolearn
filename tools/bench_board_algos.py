@@ -2726,9 +2726,12 @@ def prep(args):
         return _aft_prepare_full_tree_blocks(args, lanes, datasets)
     base = {"rule": "tools/bench_board_algos.py prep", "smoke_max_rows": cap, "seed": SEED}
     need = set()
+    # --race-datasets (the release measurement smoke): exactly the datasets its races read, so a prep never builds
+    # a block from data its staging group did not stage (a taxi group's prep never reads the text corpora)
+    only = set(d for d in (getattr(args, "race_datasets", None) or "").split(",") if d) or None
     for l in lanes:
         for ds in datasets_of(l):
-            if ds in datasets or ds not in TAB:
+            if (ds in only) if only is not None else (ds in datasets or ds not in TAB):
                 need.add(("ts" if block_of(l) == "seqwin" else block_of(l), ds))
 
     def have(name):
@@ -8881,6 +8884,8 @@ def build_parser():
     pr.add_argument("--lanes", default=",".join(LANE_ORDER))
     pr.add_argument("--datasets", default="taxi,istella")
     pr.add_argument("--max-rows", type=int, default=0)
+    pr.add_argument("--race-datasets", default=None,
+                    help="build only the blocks of these datasets (the races' own; the release measurement smoke)")
     pr.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
                     help="verify-fixtures: the release measurement smoke's blocks from the identity fixture "
                          "(tools/smoke_inputs.py); never a timed run")
