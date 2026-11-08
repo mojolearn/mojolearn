@@ -668,6 +668,42 @@ def torch_python_for(python, logs, torch_python=None):
     return chosen
 
 
+def wheel_libs(python):
+    """The installed wheel's runtime library dirs in PYTHON's venv (site-packages/mojolearn/.libs first, then any
+    other mojolearn*/.libs): on Linux they hold the Mojo runtime (libKGENCompilerRTShared.so and the rest,
+    packaging/linux/stage_libs.py). PYTHON is not resolved: a venv interpreter is a symlink to the base one."""
+    import glob
+    site = str(Path(python).absolute().parent.parent / "lib" / "python*" / "site-packages")
+    first = sorted(glob.glob(site + "/mojolearn/.libs"))
+    return first + [d for d in sorted(glob.glob(site + "/mojolearn*/.libs")) if d not in first]
+
+
+def compiled_env(python, base=None):
+    """The explicit environment of the compiled checks: BASE (default os.environ) with LD_LIBRARY_PATH led by the
+    installed wheel's own runtime (wheel_libs of PYTHON), the same runtime tools/gate_smoke_box.py autograd() gives
+    them. The executables name the Mojo runtime by RUNPATH into the pixi env of the checkout that built them, and
+    tools/gate_autograd_artifacts.py reuses an executable built under another checkout when its inputs are
+    unchanged: 0.8.66 run t (freeze 43b5f7c320e0, AMD gate) ran the binaries built at bc4ecd4518a9, whose RUNPATH
+    /root/release-gate/src/bc4ecd4518a9/.pixi/envs/default/lib is not on that box, and every compiled check exited
+    127 "libKGENCompilerRTShared.so: cannot open shared object file" (run j, the build checkout's own box, found it
+    by RUNPATH). LD_LIBRARY_PATH is searched before RUNPATH, so the wheel's runtime is the one loaded wherever the
+    executable was built. macOS (no LD_LIBRARY_PATH) is BASE unchanged."""
+    env = dict(os.environ if base is None else base)
+    libs = wheel_libs(python) if sys.platform.startswith("linux") else []
+    if libs:
+        env["LD_LIBRARY_PATH"] = ":".join(libs + [p for p in env.get("LD_LIBRARY_PATH", "").split(":")
+                                                  if p and p not in libs])
+    return env
+
+
+def read_torch_env(path):
+    """(python, overrides) from a tools/adapter_gate.py TORCH_ENV file ({"python", "env"}), (None, {}) without one."""
+    if not path:
+        return None, {}
+    doc = json.loads(Path(path).read_text())
+    return doc.get("python"), dict(doc.get("env") or {})
+
+
 def ensure_torchvision(python, log):
     """torchvision from the same index as the installed torch build (+rocmX.Y / +cuXYZ local tags name it)."""
     probe = subprocess.run([str(python), "-c", "import torch; print(torch.__version__)"], capture_output=True, text=True)
@@ -680,7 +716,13 @@ def ensure_torchvision(python, log):
 
 
 def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None, deadline=None,
-        torch_python=None):
+        torch_python=None, torch_env=None):
+    """Start every selected entry once. TORCH_ENV (`run --torch-env`, a tools/adapter_gate.py TORCH_ENV file): the
+    interpreter the adapters smoke ran torch under and the variables it ran with beyond this process's own; the
+    torch entries that run under that interpreter get them (on AMD torch/lib first in LD_LIBRARY_PATH: without
+    it the ROCm torch import failed under mojolearn-first, 0.8.66 run t). Its python stands in for TORCH_PYTHON
+    when none is given. The compiled checks run with compiled_env (the wheel's own Mojo runtime), never with
+    whatever LD_LIBRARY_PATH this process inherited alone."""
     pool = [e for e in ENTRIES if vendor != "cpu" or "source" not in e]
     if vendor == "cpu" and entries is not None and set(entries) - {e["name"] for e in pool}:
         raise ValueError("compiled device checks need a GPU: %s" % sorted(set(entries) - {e["name"] for e in pool}))
@@ -691,10 +733,18 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
     logs = Path(out).resolve().with_suffix("")
     logs.mkdir(parents=True, exist_ok=True)
     (logs / "tmp").mkdir(exist_ok=True)
-    if any("pytest" in e for e in selected):
-        ensure_pytest(python, logs / "ensure-pytest.log")
-    torch_python = (torch_python_for(python, logs, torch_python) if any(e.get("torch") for e in selected)
+    env_python, torch_overrides = read_torch_env(torch_env)
+    torch_python = (torch_python_for(python, logs, torch_python or env_python) if any(e.get("torch") for e in selected)
                     else None)
+
+    def python_of(e):
+        return torch_python if e.get("torch") and torch_python else python
+    # pytest in EVERY interpreter a pytest entry runs under: the torch entries run under the adapters venv, not the
+    # identity venv (0.8.66 run t AMD gate: autograd-public "No module named 'pytest'" under the adapters venv)
+    for i, py in enumerate(dict.fromkeys(str(python_of(e)) for e in selected if "pytest" in e)):
+        ensure_pytest(py, logs / ("ensure-pytest.log" if i == 0 else "ensure-pytest-%d.log" % i))
+    base_env = dict(os.environ)
+    exe_env = compiled_env(python, base_env)
     rows = []
     for e in selected:
         log = logs / ("%s-%s.log" % (e["name"], vendor))
@@ -710,19 +760,27 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
                 rows.append(row)
                 continue
             cmd = [str(exe)]
-            env = None
+            env = dict(exe_env)
         else:
             binding_report = log.with_suffix(".binding.json")
             junit = log.with_suffix(".xml")
             # Stale reports must not turn an incomplete new process into a pass.
             binding_report.unlink(missing_ok=True)
             junit.unlink(missing_ok=True)
-            entry_python = torch_python if e.get("torch") and torch_python else python
+            entry_python = python_of(e)
             cmd = [entry_python, "-I", str(Path(__file__).resolve()), "entry", e["name"], "--vendor", vendor,
                    "--binding-report", str(binding_report), "--junit", str(junit)]
             if source_package:
                 cmd += ["--source-package", str(Path(source_package).resolve())]
-            env = dict(os.environ, MOJOLEARN_AUTOGRAD_SMOKE_OUT=str(logs / ("fit-digests-%s.json" % vendor)))
+            env = dict(base_env)
+            if e.get("torch") and torch_overrides and env_python and str(entry_python) == str(env_python):
+                # the adapters smoke's torch environment (tools/adapter_gate.py framework_env), for its interpreter
+                for k, v in torch_overrides.items():
+                    if v is None:
+                        env.pop(k, None)
+                    else:
+                        env[k] = str(v)
+            env["MOJOLEARN_AUTOGRAD_SMOKE_OUT"] = str(logs / ("fit-digests-%s.json" % vendor))
             env.pop("PYTHONPATH", None)
             env.pop("MOJOLEARN_VENDOR_FORCE", None)
             env.pop("MOJOLEARN_VENDOR", None)
@@ -793,6 +851,8 @@ def main(argv=None):
     r.add_argument("--source-package", help="explicit source package parent (e.g. repo/python); default: installed")
     r.add_argument("--torch-python", default=None,
                    help="the interpreter the torch entries run under when it imports torch (the adapters venv)")
+    r.add_argument("--torch-env", default=None,
+                   help="tools/adapter_gate.py TORCH_ENV file: the torch interpreter and its environment overrides")
     sub.add_parser("list", help="the entries, one line each")
     pr = sub.add_parser("probe", help="one installed-bindings probe (what the probe entries start)")
     pr.add_argument("kind", choices=sorted(PROBES))
@@ -818,7 +878,7 @@ def main(argv=None):
         return 0
     return run(a.vendor, a.bin_dir, a.python, a.out, a.timeout,
                entries=a.entries.split(",") if a.entries is not None else None, source_package=a.source_package,
-               torch_python=a.torch_python)
+               torch_python=a.torch_python, torch_env=a.torch_env)
 
 
 if __name__ == "__main__":
