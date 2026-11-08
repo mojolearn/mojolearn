@@ -77,12 +77,32 @@ def _graph_key(n: Int, arrays: PythonObject, views: PythonObject, context: Pytho
     return Python.tuple(n, arrays, py_call(xcnn_builtins().tuple, sig))
 
 
+def _graph_sig_admit(sig: PythonObject) raises:
+    # The cached signature `_graph_key` built: per graph input None or an
+    # exact 4-tuple (shape, dtype string, address, owned byte snapshot). The
+    # snapshot is an exact `bytes` (compared by its builtin ==, no Python
+    # hook), which the generic neural_plain_value scan does not admit: a
+    # cache hit on the second forward raised "Python conversion hooks are
+    # not supported" (0.8.66 freeze, identity lane x-cnn-gcn infer-model).
+    var bi = xcnn_builtins()
+    if py_type(sig) is not bi.tuple:
+        raise Error("TypeError: graph cache key requires native metadata")
+    for i in range(len(sig)):  # small-loop(one or two graph inputs)
+        var item = sig[i]
+        if item is None:
+            continue
+        if py_type(item) is not bi.tuple or len(item) != 4 or py_type(item[3]) is not bi.bytes:
+            raise Error("TypeError: graph cache key requires native metadata")
+        for j in range(3):  # small-loop(three layout words of one graph input)
+            neural_plain_value(item[j], 0, PythonObject(None))
+
+
 def _keys_equal(a: PythonObject, b: PythonObject) raises -> Bool:
     var bi = xcnn_builtins()
     if py_type(a) is not bi.tuple or len(a) != 3 or py_type(a[1]) is not bi.tuple:
         raise Error("TypeError: graph cache key requires native metadata")
     neural_plain_value(a[0], 0, PythonObject(None))
-    neural_plain_value(a[2], 0, PythonObject(None))
+    _graph_sig_admit(a[2])
     if Int(py=a[0]) != Int(py=b[0]) or len(a[1]) != len(b[1]):
         return False
     for i in range(len(a[1])):  # small-loop(original graph buffer owners)
