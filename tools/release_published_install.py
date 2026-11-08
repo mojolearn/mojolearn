@@ -6,7 +6,11 @@ Andrew, 2026-11-02: the gates verified the exact wheel bytes on every vendor; no
 reinstalls them from PyPI to verify again. So the default producer runs no device job,
 installs nothing and needs no box. For each published package of the vendor:
 
-  index-resolution           `pip download --no-deps --only-binary=:all:` with the candidate
+  index-resolution           the index lists every expected file first: the check polls PyPI's JSON
+                             API (https://pypi.org/pypi/<dist>/<version>/json) and the simple page
+                             until each candidate's file name is on both (at most --index-wait
+                             seconds, a WAIT line every --index-wait-step seconds); then
+                             `pip download --no-deps --only-binary=:all:` with the candidate
                              wheel's own platform tags (--platform/--abi/--python-version)
                              resolves the file a user on that platform gets from the index; its
                              sha256 equals the digest the index's simple page advertises
@@ -33,6 +37,12 @@ https://pypi.org/simple and also compares the published hashes with the ledger's
 artifacts:<vendor>. A report made against any other index re-derives differently and is
 refused there.
 
+A FAILED report names its kind (``failure``): ``index-lag`` when the index never listed an expected file
+within the wait or nothing was resolved (no verdict on the bytes: the record step refuses to record it and
+published-<vendor> runs again once the index lists the files), ``hash-mismatch`` when a published file's
+sha256 differs from the gated candidate's (both hashes named), ``error`` when the check itself broke, and
+``failed`` for any other check (integrity, gate evidence).
+
 ``run`` is the old installed smoke (a fresh venv from PyPI, the eleven installed correctness
 jobs and the adapter phases on the vendor device). tools/release.py calls it only for an
 explicit ``--published-smoke <vendor>`` with a stated reason (recorded in the release state);
@@ -46,6 +56,8 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -64,6 +76,15 @@ SMOKE_COVERAGE_IDS = ("index-install", "published-artifact-hashes", "installed-s
 PYPI_INDEX = "https://pypi.org/simple"
 #: files pip writes or relocates itself; never compared with the wheel's bytes
 PIP_OWNED = ("RECORD", "INSTALLER", "REQUESTED", "direct_url.json")
+# THE INDEX WAIT (0.8.66 run v, 2026-11-08): published-apple ran about a minute after the macOS upload, PyPI did
+# not list the file yet, pip resolved nothing and the release recorded a FAILED published-apple (index-resolution
+# 2/3, published-artifact-hashes 0/1, wheel-integrity 0/1) into the evidence set. The check now waits for the
+# index to list every expected file before it resolves; a listing that never appears within the cap is the failure.
+INDEX_WAIT_S = 900
+INDEX_WAIT_STEP_S = 20
+#: the kinds of a failed report (report["failure"]); only INDEX_LAG is refused by the record step
+INDEX_LAG, HASH_MISMATCH, CHECK_ERROR, CHECK_FAILED = "index-lag", "hash-mismatch", "error", "failed"
+NOTHING_RESOLVED = "nothing was resolved"
 
 
 def require(condition, message):
@@ -277,6 +298,95 @@ def index_digest(index_url, distribution, filename, page=simple_page):
     return None
 
 
+def json_api_url(index_url, distribution, version):
+    """PyPI's JSON API of DISTRIBUTION==VERSION beside a PyPI-shaped simple index (``<host>/simple``), else None
+    (a file:// or other index is judged by its simple page alone)."""
+    parts = urllib.parse.urlparse(index_url)
+    path = parts.path.rstrip("/")
+    if parts.scheme not in ("http", "https") or not path.endswith("/simple"):
+        return None
+    api = "%s/pypi/%s/%s/json" % (path[:-len("/simple")], normalize(distribution), version)
+    return urllib.parse.urlunparse(parts._replace(path=api, params="", query="", fragment=""))
+
+
+def json_api_files(url, timeout=60):
+    """The file names the JSON API lists for one release; [] while the release is not there yet (404)."""
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            doc = json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return []
+        raise
+    return sorted(str(row["filename"]) for row in doc.get("urls") or [] if isinstance(row, dict) and row.get("filename"))
+
+
+def simple_files(index_url, distribution, page=None):
+    """The file names the simple page of DISTRIBUTION links (what pip resolves from)."""
+    parser = _Anchors()
+    parser.feed((page or simple_page)(index_url, distribution))
+    return sorted({urllib.parse.unquote(h.partition("#")[0].rsplit("/", 1)[-1]) for h in parser.hrefs})
+
+
+def index_listing(index_url, version, expected, api=None, page=None):
+    """(missing, errors): the EXPECTED files ({distribution: [file name]}) the index does not list yet. A file is
+    listed when the simple page pip reads names it and, on a PyPI-shaped index, the JSON API does too. A page or
+    API that cannot be read yet (404 before the first upload, a network error) lists nothing this time."""
+    missing, errors = [], []
+    for dist, files in sorted(expected.items()):
+        try:
+            listed = set(simple_files(index_url, dist, page))
+            url = json_api_url(index_url, dist, version)
+            if url:
+                listed &= set((api or json_api_files)(url))
+        except (OSError, ValueError) as error:       # URLError and HTTPError are OSError
+            errors.append("%s: %s: %s" % (dist, type(error).__name__, str(error)[:200]))
+            listed = set()
+        missing += [f for f in files if f not in listed]
+    return sorted(missing), errors
+
+
+def wait_for_index(index_url, version, expected, cap=INDEX_WAIT_S, step=INDEX_WAIT_STEP_S, listing=None,
+                   sleep=None, clock=None, say=None):
+    """Poll the index until it lists every EXPECTED file ({distribution: [file name]}), at most CAP seconds, every
+    STEP seconds, saying one WAIT line per step. Returns the record kept in request.json (``index_wait``):
+    listed (bool), waited_s, polls, missing (still unlisted at the end), errors (the last few), cap_s, step_s.
+    The wait is one listing call per step for one release (no retry of anything else)."""
+    listing, sleep, clock = listing or index_listing, sleep or time.sleep, clock or time.monotonic
+    say = say or (lambda line: print(line, flush=True))
+    start, polls = clock(), 0
+    want = sorted(f for files in expected.values() for f in files)
+    while True:
+        missing, errors = listing(index_url, version, expected)
+        polls += 1
+        waited = clock() - start
+        done = not missing
+        if done or waited >= cap:
+            return dict(listed=done, waited_s=round(waited, 1), polls=polls, expected=want, missing=missing,
+                        errors=errors[-5:], cap_s=cap, step_s=step)
+        say("WAIT published-index version=%s waited=%ds/%ds listed=%d/%d missing=%s%s" % (
+            version, waited, cap, len(want) - len(missing), len(want), ",".join(missing),
+            (" error=" + errors[-1]) if errors else ""))
+        sleep(max(0, min(step, cap - waited)))
+
+
+def failure_kind(report):
+    """The kind of a published-<vendor> report's failure (None when it passed): INDEX_LAG, HASH_MISMATCH,
+    CHECK_ERROR or CHECK_FAILED. Reports written before the kind was stored are classified from their checks
+    (no resolved file = index lag)."""
+    if not isinstance(report, dict) or report.get("status") != "failed":
+        return None
+    if report.get("failure"):
+        return report["failure"]
+    if report.get("mismatch"):
+        return HASH_MISMATCH
+    checks = report.get("checks") or {}
+    if any(isinstance(c, dict) and c.get("why") == NOTHING_RESOLVED for rows in checks.values() for c in rows or []):
+        return INDEX_LAG
+    return CHECK_ERROR if report.get("error") else CHECK_FAILED
+
+
 def wheel_integrity(path):
     """{file, members, problems}: CRCs, RECORD hashes and sizes, METADATA and WHEEL against the file name."""
     import base64
@@ -349,6 +459,11 @@ def judge_bytes(out, index_url=PYPI_INDEX):
     add("index-resolution", "index", request.get("index_url") == index_url, index=request.get("index_url"))
     add("index-resolution", "distributions", sorted(r.get("distribution") for r in resolved) == sorted(wanted)
         and len(resolved) == len(wanted), resolved=sorted(r.get("distribution") for r in resolved), wanted=wanted)
+    wait = request.get("index_wait")
+    if isinstance(wait, dict):
+        # the index listed every expected file before pip resolved (reports before 2026-11-08 have no wait)
+        add("index-resolution", "index-listing", wait.get("listed") is True, waited_s=wait.get("waited_s"),
+            polls=wait.get("polls"), missing=wait.get("missing"))
     published, mismatch = {}, []
     for row in resolved:
         dist, name = row.get("distribution"), row.get("file")
@@ -373,8 +488,8 @@ def judge_bytes(out, index_url=PYPI_INDEX):
         add("wheel-integrity", "record:" + name, not check["problems"] and check["members"] > 0,
             members=check["members"], problems=check["problems"][:20])
     if not published:
-        add("published-artifact-hashes", "resolved-files", False, why="nothing was resolved")
-        add("wheel-integrity", "resolved-files", False, why="nothing was resolved")
+        add("published-artifact-hashes", "resolved-files", False, why=NOTHING_RESOLVED)
+        add("wheel-integrity", "resolved-files", False, why=NOTHING_RESOLVED)
     packaged = set()
     for name in published:
         dist = next(r["distribution"] for r in resolved if r.get("file") == name)
@@ -414,6 +529,23 @@ def judge_bytes(out, index_url=PYPI_INDEX):
         coverage.append(dict(id=name, status="passed" if ok else "failed", exit_code=0 if ok else 1,
                              expected=len(items), completed=passed, failed=len(items) - passed, skipped=0))
     passed = all(row["status"] == "passed" for row in coverage)
+    # THE FAILURE KIND: index lag (the listing never appeared, or nothing was resolved) is no verdict on the bytes
+    # and is named apart from a hash mismatch; the record step refuses to record it (tools/release_evidence_set.py)
+    unlisted = isinstance(wait, dict) and wait.get("listed") is not True
+    failure, failure_why = None, None
+    if not passed:
+        if mismatch:
+            failure, failure_why = HASH_MISMATCH, "; ".join("%s published %s, candidate %s" % (
+                m["file"], m["published_sha256"], m["candidate_sha256"]) for m in mismatch)
+        elif request.get("error"):
+            failure, failure_why = CHECK_ERROR, str(request["error"])[:300]
+        elif unlisted or not published:
+            failure = INDEX_LAG
+            failure_why = ("the index did not list %s after %ss (%s polls)" % (
+                ", ".join(wait.get("missing") or []) or "the expected files", wait.get("waited_s"), wait.get("polls"))
+                if unlisted else NOTHING_RESOLVED)
+        else:
+            failure, failure_why = CHECK_FAILED, ", ".join(r["id"] for r in coverage if r["status"] != "passed")
     paths = [out / "request.json"] + [out / "wheels" / r["distribution"] / r["file"] for r in resolved
                                       if r.get("file") and (out / "wheels" / r["distribution"] / r["file"]).is_file()]
     paths += [out / ref["path"] for ref in gate.get("evidence") or [] if (out / str(ref.get("path", ""))).is_file()]
@@ -425,7 +557,8 @@ def judge_bytes(out, index_url=PYPI_INDEX):
     return dict(schema=REPORT_SCHEMA, tool="tools/release_published_install.py", vendor=vendor, version=version,
                 backend=BACKEND[vendor], index_url=request.get("index_url"), source_revision=commit,
                 published=published, mismatch=mismatch, gate_verdict=gate.get("verdict"), coverage=coverage,
-                checks=rows, status="passed" if passed else "failed", exit_code=0 if passed else 1, evidence=evidence)
+                checks=rows, status="passed" if passed else "failed", exit_code=0 if passed else 1,
+                failure=failure, failure_why=failure_why, evidence=evidence)
 
 
 def check(args):
@@ -441,6 +574,15 @@ def check(args):
                    source_commit=args.source_commit, gate=dict(verdict=args.gate_verdict, evidence=[]))
     resolved = []
     try:
+        expected = {}
+        for wheel in args.candidate_wheel:
+            expected.setdefault(wheel_tags(wheel)["distribution"], []).append(Path(wheel).name)
+        wait = wait_for_index(args.index_url, args.version, expected, args.index_wait, args.index_wait_step)
+        request["index_wait"] = wait
+        if not wait["listed"]:
+            # pip still runs once: its own answer is kept beside the listing; the report fails as index lag
+            print("WAIT-EXPIRED published-index version=%s after %ss: not listed %s" % (
+                args.version, wait["waited_s"], ",".join(wait["missing"])), flush=True)
         python = pip_python(args.python, out, log)
         for wheel in args.candidate_wheel:
             tags = wheel_tags(wheel)
@@ -478,10 +620,16 @@ def check(args):
     (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
     report = judge_bytes(out, args.index_url)
     if "error" in request:
-        report.update(status="failed", exit_code=1, error=request["error"])
+        report.update(status="failed", exit_code=1, error=request["error"],
+                      failure=report.get("failure") or CHECK_ERROR,
+                      failure_why=report.get("failure_why") or str(request["error"])[:300])
     (out / REPORT).write_text(json.dumps(report, indent=2) + "\n")
-    print("PUBLISHED vendor=%s version=%s status=%s %s" % (args.vendor, args.version, report["status"], " ".join(
-        "%s=%d/%d" % (row["id"], row["completed"], row["expected"]) for row in report["coverage"])))
+    print("PUBLISHED vendor=%s version=%s status=%s %s%s" % (args.vendor, args.version, report["status"], " ".join(
+        "%s=%d/%d" % (row["id"], row["completed"], row["expected"]) for row in report["coverage"]),
+        (" failure=" + report["failure"]) if report.get("failure") else ""))
+    if report.get("failure") == INDEX_LAG:
+        print("PUBLISHED-INDEX-LAG vendor=%s version=%s %s (no verdict on the bytes; not recorded)" % (
+            args.vendor, args.version, report.get("failure_why")))
     for row in report["mismatch"]:
         print("PUBLISHED-DIFFERS %s published=%s candidate=%s" % (row["file"], row["published_sha256"],
                                                                    row["candidate_sha256"]))
@@ -574,6 +722,10 @@ def main(argv=None):
     bytes_check.add_argument("--index-url", default=PYPI_INDEX)
     bytes_check.add_argument("--python", default=sys.executable, help="runs pip (a venv of it when it has none)")
     bytes_check.add_argument("--timeout", type=int, default=900, help="seconds per pip download")
+    bytes_check.add_argument("--index-wait", type=float, default=INDEX_WAIT_S,
+                             help="seconds to wait for the index to list every expected file (0: one look)")
+    bytes_check.add_argument("--index-wait-step", type=float, default=INDEX_WAIT_STEP_S,
+                             help="seconds between two looks at the index")
     bytes_check.add_argument("--out", type=Path, required=True)
     go = sub.add_parser("run", help="the installed smoke on the vendor device: only for release.py "
                                     "--published-smoke <vendor> with a stated reason")
