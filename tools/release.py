@@ -3261,9 +3261,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         discovery rounds: every frozen snapshot a round asks for runs at once, on admission_jobs() workers
         (os.cpu_count() unless MOJOLEARN_ADMISSION_JOBS says otherwise; MOJOLEARN_ADMISSION_WORKER sends them
         to a held box), into the content-keyed snapshot cache; the last round is the real, sequential
-        computation from that cache. Nothing is written to the ledger here: linux-builds, the gates and the
-        publish read readiness_manifest themselves (the in-process cache, or the snapshot cache after a
-        resume), so the ledger stays the one persistent RequirementsLedger of this version and
+        computation from that cache. Then prefetch_ledger_rounds evaluates the ledger once for the freeze's
+        inputs and writes the key's document (requirements-eval/<key>.json, manifest included): linux-builds
+        and every later reader of the same key read it (readiness_manifest_keyed, readiness_status), and
         --requirements-configuration is merged exactly as before."""
         import release_requirement_dependencies as dependencies
         jobs = dependencies.admission_jobs()
