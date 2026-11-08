@@ -75,9 +75,10 @@ def gate_receipt(directory, wheels, name="gate-smoke.json"):
     return path
 
 
-def check(tmp_path, vendor, candidates, index, gate, out="out", verdict="PASS: 11 records"):
+def check(tmp_path, vendor, candidates, index, gate, out="out", verdict="PASS: 11 records", wait=("0", "20")):
+    # --index-wait 0: one look at the index (the fixtures list their files up front unless a test says otherwise)
     argv = ["check", "--vendor", vendor, "--version", VERSION, "--index-url", index, "--python", sys.executable,
-            "--gate-verdict", verdict, "--out", str(tmp_path / out)]
+            "--gate-verdict", verdict, "--out", str(tmp_path / out), "--index-wait", wait[0], "--index-wait-step", wait[1]]
     argv += [a for w in candidates for a in ("--candidate-wheel", str(w))]
     argv += [a for g in gate for a in ("--gate-evidence", str(g))]
     rc = P.main(argv)
@@ -126,6 +127,7 @@ def test_published_bytes_that_differ_fail_with_both_hashes_and_nothing_reruns(tm
                                        candidate_sha256=sha(cands[1]))]
     cov = {r["id"]: r["status"] for r in report["coverage"]}
     assert cov["published-artifact-hashes"] == "failed" and cov["index-resolution"] == "passed"
+    assert report["failure"] == P.HASH_MISMATCH == P.failure_kind(report) and sha(other) in report["failure_why"]
     assert (tmp_path / "out" / "resolve.log").read_text().count("pip download") == 2   # one resolution each
 
 
@@ -198,3 +200,90 @@ def test_judge_still_reads_an_old_smoke_directory_as_a_smoke(tmp_path):
     (tmp_path / "request.json").write_text(json.dumps(dict(vendor="amd", version=VERSION)))
     with pytest.raises((OSError, ValueError, KeyError)):
         P.judge(tmp_path)              # the smoke judge wants its manifest; the bytes judge is never used
+
+
+# ---------------------------------------------------------------- the index wait (0.8.66 run v, 2026-11-08)
+class FakeTime:
+    """time for the check: sleep() advances a fake clock and may run a hook (the index publishing late)."""
+    def __init__(self, on_sleep=None):
+        self.now, self.sleeps, self.on_sleep = 0.0, [], on_sleep
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+        if self.on_sleep:
+            self.on_sleep(len(self.sleeps))
+
+
+def test_the_check_waits_for_an_index_that_lists_the_files_late(tmp_path, monkeypatch, capsys):
+    cands = nvidia_set(tmp_path / "cand")
+    index = (tmp_path / "index" / "simple").as_uri()       # nothing there yet: the upload is not listed
+    clock = FakeTime(on_sleep=lambda n: fake_index(tmp_path / "index", cands) if n == 2 else None)
+    monkeypatch.setattr(P, "time", clock)
+    rc, report = check(tmp_path, "nvidia", cands, index, [gate_receipt(tmp_path / "gate", cands)],
+                       wait=("900", "20"))
+    assert rc == 0 and report["status"] == "passed" and report["failure"] is None, report["checks"]
+    wait = json.loads((tmp_path / "out" / "request.json").read_text())["index_wait"]
+    assert wait["listed"] is True and wait["polls"] == 3 and wait["waited_s"] == 40 and clock.sleeps == [20, 20]
+    assert any(c["name"] == "index-listing" and c["passed"] for c in report["checks"]["index-resolution"])
+    waits = [line for line in capsys.readouterr().out.splitlines() if line.startswith("WAIT published-index")]
+    assert len(waits) == 2 and "listed=0/2" in waits[0] and cands[0].name in waits[0]
+    # pip ran after the listing appeared, once per package
+    assert (tmp_path / "out" / "resolve.log").read_text().count("pip download") == 2
+
+
+def test_a_listing_that_never_appears_fails_as_index_lag_not_as_a_hash_mismatch(tmp_path, monkeypatch, capsys):
+    mac = make_wheel(tmp_path / "cand", "mojolearn", tag=MAC)
+    index = (tmp_path / "index" / "simple").as_uri()
+    clock = FakeTime()
+    monkeypatch.setattr(P, "time", clock)
+    rc, report = check(tmp_path, "apple", [mac], index, [gate_receipt(tmp_path / "gate", [mac])], wait=("60", "20"))
+    assert rc == 1 and report["status"] == "failed"
+    assert clock.sleeps == [20, 20, 20]                      # looks at 0, 20, 40 and 60 s, then the cap
+    assert report["failure"] == P.INDEX_LAG == P.failure_kind(report) and mac.name in report["failure_why"]
+    assert report["mismatch"] == []
+    assert any(c["name"] == "index-listing" and not c["passed"] for c in report["checks"]["index-resolution"])
+    out = capsys.readouterr().out
+    assert out.count("WAIT published-index") == 3 and "WAIT-EXPIRED" in out and "PUBLISHED-INDEX-LAG" in out
+    assert "failure=index-lag" in out
+    assert P.judge(tmp_path / "out", index)["failure"] == P.INDEX_LAG     # re-derived the same way
+
+
+def test_the_listing_reads_pypis_json_api_and_the_simple_page():
+    assert P.json_api_url("https://pypi.org/simple", "mojolearn_core", VERSION) == \
+        "https://pypi.org/pypi/mojolearn-core/%s/json" % VERSION
+    assert P.json_api_url("https://test.pypi.org/simple/", "mojolearn", VERSION) == \
+        "https://test.pypi.org/pypi/mojolearn/%s/json" % VERSION
+    assert P.json_api_url("file:///x/simple", "mojolearn", VERSION) is None
+    name = "mojolearn-%s-%s.whl" % (VERSION, MAC)
+    page = lambda index, dist: '<a href="https://files.example/%s#sha256=%s">x</a>' % (name, "0" * 64)
+    api_lists = {"now": []}
+    api = lambda url: api_lists["now"]
+    expected = {"mojolearn": [name]}
+    # on the simple page but not yet in the JSON API: not listed
+    assert P.index_listing("https://pypi.org/simple", VERSION, expected, api=api, page=page)[0] == [name]
+    api_lists["now"] = [name]
+    assert P.index_listing("https://pypi.org/simple", VERSION, expected, api=api, page=page) == ([], [])
+    # a page that cannot be read yet lists nothing and says why
+    def missing(index, dist):
+        raise OSError("404")
+    missing_files, errors = P.index_listing("https://pypi.org/simple", VERSION, expected, api=api, page=missing)
+    assert missing_files == [name] and "OSError" in errors[0]
+
+
+def test_the_json_api_answers_404_with_no_files(monkeypatch):
+    def not_found(request, timeout=None):
+        raise P.urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+    monkeypatch.setattr(P.urllib.request, "urlopen", not_found)
+    assert P.json_api_files("https://pypi.org/pypi/mojolearn/%s/json" % VERSION) == []
+
+
+def test_an_old_report_with_nothing_resolved_is_index_lag():
+    old = dict(status="failed", mismatch=[], checks={"published-artifact-hashes": [
+        dict(name="resolved-files", passed=False, why="nothing was resolved")]})
+    assert P.failure_kind(old) == P.INDEX_LAG
+    assert P.failure_kind(dict(status="passed")) is None
+    assert P.failure_kind(dict(status="failed", mismatch=[dict(file="f")])) == P.HASH_MISMATCH
