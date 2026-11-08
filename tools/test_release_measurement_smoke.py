@@ -329,7 +329,7 @@ def test_release_runs_the_smoke_job_after_the_gate_job_and_only_what_is_missing(
     r.dry = False
     out = tmp_path / "gate"
     state = {"gate": False, "smoke": False}
-    monkeypatch.setattr(r, "readiness_status", lambda write, **kw: None, raising=False)
+    monkeypatch.setattr(r, "readiness_status", lambda write: None, raising=False)
     monkeypatch.setattr(r, "readiness", lambda: type("X", (), dict(begin=lambda s, k: "id", record=lambda s, *a, **k: None))(),
                         raising=False)
     monkeypatch.setattr(r, "record_candidate_requirement", lambda *a, **k: None, raising=False)

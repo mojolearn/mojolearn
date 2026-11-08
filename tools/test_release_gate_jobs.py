@@ -550,7 +550,7 @@ def test_a_gate_whose_runtime_qualifier_did_not_pass_fails_and_names_the_report(
     if runtime.get("timed_out"):
         assert "run timeout after 900.4 s" in why and "1700/1700" in why
     # run_gate refuses at once: the smoke passed and the qualifier ran, so nothing is relaunched
-    r.readiness_status = lambda write=False, **kw: None   # run_gate passes box_step=
+    r.readiness_status = lambda write=False: None
     r.readiness = lambda: SimpleNamespace(begin=lambda name: "run-1")
     launched = []
     r.must = lambda *a, **k: launched.append(a)
