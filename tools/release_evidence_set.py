@@ -1109,10 +1109,10 @@ def summary_markdown(ctx, entries, wheels, refs, root=ROOT):
         link(d) for d in sorted(have) if d.startswith(("alpha-manifest-", "file-admission-"))), ""]
     # --- the published checks: a hash mismatch and index lag are named apart (index lag is never recorded:
     # index_lag_refusal; it can only appear here in a set written by hand)
-    rows = [(d, docs[d]) for d in sorted(docs) if d.startswith("publish/published-")]
-    if rows:
+    published_rows = [(d, docs[d]) for d in sorted(docs) if d.startswith("publish/published-")]
+    if published_rows:
         out += ["## Published checks", ""]
-        for dest, d in rows:
+        for dest, d in published_rows:
             kind = published_failure(d)
             verdict = ("PASS" if d.get("status") == "passed" else "no status") if kind is None else {
                 "hash-mismatch": "FAIL: HASH MISMATCH", "index-lag": "NOT JUDGED: INDEX LAG"}.get(kind, "FAIL: " + kind)
