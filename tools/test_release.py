@@ -356,7 +356,8 @@ class StepTableTests(unittest.TestCase):
     def test_the_steps_that_make_ledger_rounds_knowable_prefetch_them_before_done(self):
         # linux-pack and macos-build produce the candidate wheels the gates' ledger reads depend on (before
         # gate-boxes rents); identity-admit moves the identity reference commit (before the publish preflight)
-        self.assertEqual(release.Release.LEDGER_PREFETCH_AFTER, ("linux-pack", "macos-build", "identity-admit"))
+        # identity-admit is not one: no step after it consults the ledger (publication_gate, post-ledger-once)
+        self.assertEqual(release.Release.LEDGER_PREFETCH_AFTER, ("linux-pack", "macos-build"))
         self.assertIn("linux-pack", release.NEEDS["gate-boxes"])
         for gate in ("gate-nvidia", "gate-amd"):
             self.assertIn("gate-boxes", release.NEEDS[gate])
@@ -473,6 +474,16 @@ class RunTests(unittest.TestCase):
         self.assertLess(planned, out.stdout.index("-- linux-builds"))
         self.assertLess(planned, out.stdout.index("-- macos-build"))
         return out
+
+    def test_dry_run_on_the_wheels_consults_no_ledger_after_identity_admit(self):
+        # THE IDENTITY ADMIT IS THE ONE CHECK (Andrew 2026-11-07): testpypi-rehearsal, publish-*, finish-line and
+        # record ship what identity-admit admitted (Release.publication_gate); none evaluates the ledger.
+        out = self.dry_run("--identity-on-wheels")
+        after = out.stdout.split("-- identity-admit", 1)[1]
+        self.assertNotIn(release.Release.DRY_READINESS, after)
+        self.assertNotIn("ledger evaluation", after)
+        self.assertNotIn("LEDGER EVALUATED", after)
+        self.assertNotIn("release requirements ledger", after)
 
     def test_dry_run_without_gpu_smoke_skips_every_gpu_column(self):
         # Andrew 2026-10-13 (8109d122d): identity and behavior are checked before merge;
