@@ -288,3 +288,40 @@ def test_cpu_column_records_the_adapter_refusal_as_its_expected_outcome():
     assert AG.cpu_refusal(gpu) is gpu
     venv = {"vendor": "cpu", "status": "VENV_FAILED", "ok": False, "why": "adapter venv setup failed (exit 1)"}
     assert AG.cpu_refusal(venv)["ok"] is False
+
+
+def _torch_venv(tmp_path):
+    venv = tmp_path / "venv"
+    lib = venv / "lib" / "python3.12" / "site-packages" / "torch" / "lib"
+    lib.mkdir(parents=True)
+    return venv, lib
+
+
+def test_framework_env_puts_torch_lib_first_on_amd_only_and_never_changes_its_base(tmp_path):
+    venv, lib = _torch_venv(tmp_path)
+    base = {"LD_LIBRARY_PATH": "/job/lib", "KEEP": "1"}
+    amd = AG.framework_env("amd", venv, base)
+    parts = amd["LD_LIBRARY_PATH"].split(":")
+    assert parts[0] == str(lib) and parts[-1].startswith("/opt/rocm") and len(parts) == 2
+    assert amd["KEEP"] == "1" and base == {"LD_LIBRARY_PATH": "/job/lib", "KEEP": "1"}
+    assert AG.framework_env("nvidia", venv, base) == base
+
+
+def test_env_overrides_round_trip_and_name_only_what_changed():
+    base = {"A": "1", "B": "2", "SECRET": "s"}
+    env = dict(base, A="9", C="3")
+    env.pop("B")
+    over = AG.env_overrides(env, base)
+    assert over == {"A": "9", "C": "3", "B": None} and "SECRET" not in over
+    assert AG.apply_overrides(over, base) == env
+
+
+def test_run_records_the_smoke_python_and_its_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/job/lib")
+    calls = []
+    env = dict(__import__("os").environ, LD_LIBRARY_PATH="/torch/lib:/opt/rocm/lib")
+    rec = AG.run("amd", "/base/python3", tmp_path / "a", ["/w/core.whl"], env=env, launch=fake_launch("PASSED", calls))
+    assert rec["python"] == AG.venv_python(tmp_path / "a" / "venv")
+    assert rec["env_overrides"] == {"LD_LIBRARY_PATH": "/torch/lib:/opt/rocm/lib"}
+    assert AG.run("amd", "/base/python3", tmp_path / "b", ["/w/core.whl"],
+                  launch=fake_launch("PASSED", []))["env_overrides"] == {}
