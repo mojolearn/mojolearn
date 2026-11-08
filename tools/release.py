@@ -3296,7 +3296,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
     #: linux-pack for the NVIDIA/AMD candidate wheels and macos-build for the Apple one (before gate-boxes
     #: rents: 0.8.66 run e, both gates ran the analysis serially on the Mac for 20+ min with the NVIDIA pod and
     #: the AMD droplet held), identity-admit for its admission commit (the publish preflight's rounds).
-    LEDGER_PREFETCH_AFTER = ("linux-pack", "macos-build", "identity-admit")
+    # identity-admit is not here (post-ledger-once, Andrew 2026-11-07): no step after it consults the ledger
+    # (publication_gate); they read its written record.
+    LEDGER_PREFETCH_AFTER = ("linux-pack", "macos-build")
 
     def prefetch_ledger_rounds(self, after):
         """THE LEDGER, EVALUATED ONCE FOR THE INPUTS THIS STEP MADE (lane post-ledger-once, 2026-11-07).
@@ -4220,13 +4222,14 @@ class Release(release_identity_wheels.IdentityOnWheels):
             held = self.plan_blocks_publication()
             if held:
                 raise StepFailed("the release plan names evidence that is still missing: " + "; ".join(held[:8]))
-            ready, reasons = self.release_gate(stage="pre")
+            ready, reasons = self.publication_gate(stage="pre", platform=platform, wheel=wheel)
             if not ready:
                 raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
+                                  else "identity-admit has not admitted these bytes: " if self.single()
                                   else "release requirements ledger blocks publication: ") + "; ".join(reasons))
         else:
             try:  # a dry run reports the verdict; it never writes the ledger
-                ready, reasons = self.release_gate(stage="pre")
+                ready, reasons = self.publication_gate(stage="pre", platform=platform, wheel=wheel)
                 self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
                          f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
             except (ValueError, OSError, KeyError, subprocess.CalledProcessError, StepFailed) as error:
@@ -5066,6 +5069,46 @@ class Release(release_identity_wheels.IdentityOnWheels):
         why = self.gate_waiver(vendor)
         return (True, why) if why else self.gate_ok(vendor)
 
+    def publication_gate(self, stage=None, vendors=GATE_VENDORS, platform=None, wheel=None):
+        """The gate of the steps after identity-admit (testpypi-rehearsal, publish-*, record).
+
+        THE IDENTITY ADMIT IS THE ONE CHECK OF A RELEASE (Andrew 2026-11-07, "never-ending verification"): with
+        --identity-on-wheels no step after identity-admit evaluates or consults the requirements ledger. They
+        ship what identity-admit admitted: its written record (state identity_admitted, <identity>/admitted.json:
+        the admitted commit and table sha256 and the sha256 of every wheel it admitted) and the candidate gates'
+        PASS reports. PLATFORM's WHEEL must be the admitted bytes. Without the option, release_gate as before."""
+        if not self.single():
+            return self.release_gate(stage=stage, vendors=vendors)
+        reasons = [f"candidate gate {vendor}: {why}" for vendor in vendors
+                   for ok, why in [self.candidate_verdict(vendor)] if not ok]
+        admitted = self.admitted()
+        if not admitted:
+            reasons.append(f"identity-admit has no admission of {self.commit[:12]}: run identity-admit")
+        elif wheel is not None and platform in (admitted.get("wheels") or {}) and not self.dry:
+            if sha256(wheel) != admitted["wheels"][platform]:
+                reasons.append(f"{Path(wheel).name} (sha256 {sha256(wheel)[:12]}) is not the wheel identity-admit "
+                               f"admitted for {platform} ({admitted['wheels'][platform][:12]})")
+        return not reasons, reasons
+
+    def admitted_wheels(self):
+        """{platform: sha256} of every wheel a publish step ships (split_final, macos_wheel), as identity-admit
+        leaves them (after its repack): written into its record for the publish steps to compare."""
+        out = {}
+        for platform in SPLIT_PACKAGES:
+            try:
+                path = self.split_final(platform)
+            except (StepFailed, OSError, ValueError):
+                path = None
+            if path and Path(path).is_file():
+                out[platform] = sha256(path)
+        try:
+            wheel = self.macos_wheel()
+        except (StepFailed, OSError, ValueError):
+            wheel = None
+        if wheel and Path(wheel).is_file():
+            out["macos"] = sha256(wheel)
+        return out
+
     def release_gate(self, stage=None, vendors=GATE_VENDORS):
         """THE ONE GATE PREDICATE (plan item 2): the candidate gates of VENDORS and
         every required readiness row of STAGE (all stages when None), after the
@@ -5643,10 +5686,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # THE RELEASE GATE cannot be skipped: every published Linux vendor needs its gate PASS
         # (or the owner's --owner-waiver), and every pre- and post-publication row (release_gate)
         if not self.dry:
-            ready, reasons = self.release_gate(vendors=[v for v in GATE_VENDORS if v in published])
+            ready, reasons = self.publication_gate(vendors=[v for v in GATE_VENDORS if v in published])
             if not ready:
-                raise StepFailed("release record requires the candidate gates and the pre- and post-publication "
-                                 "ledger checks: " + "; ".join(reasons))
+                raise StepFailed("release record requires the candidate gates and "
+                                 + ("identity-admit's admission: " if self.single()
+                                    else "the pre- and post-publication ledger checks: ") + "; ".join(reasons))
         # THE RELEASE EVIDENCE SET (Andrew 2026-11-06; tools/release_evidence_set.py): ONE committed set at the
         # fixed bench/results/release_evidence/, replaced as a whole by every release, the release tag v<version>
         # on the commit that holds it; no dated directory per release. The record files the next release's
