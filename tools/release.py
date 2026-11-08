@@ -5014,12 +5014,16 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return why
 
     # ------------------------------------------------------------ the measurement smoke, after the verdict
+    def smoke_fetch_marks(self, vendor):
+        """(pid file, done file, log) of VENDOR's background await-final: by vendor only, so the keeper's tick
+        reads them without hashing the candidate wheels (gate_out)."""
+        work = self.rel / "gates"
+        return (work / f"measuresmoke-fetch-{vendor}.pid", work / f"measuresmoke-fetch-{vendor}.done",
+                work / f"measuresmoke-fetch-{vendor}.log")
+
     def smoke_fetch_paths(self, vendor):
         """(gate job --state, pid file, done file, log) of VENDOR's background await-final."""
-        work = self.rel / "gates"
-        output = self.gate_out(vendor)
-        return (work / f"{vendor}-{output.name}.job.json", work / f"measuresmoke-fetch-{vendor}.pid",
-                work / f"measuresmoke-fetch-{vendor}.done", work / f"measuresmoke-fetch-{vendor}.log")
+        return (self.rel / "gates" / f"{vendor}-{self.gate_out(vendor).name}.job.json", *self.smoke_fetch_marks(vendor))
 
     def smoke_fetch_cmd(self, vendor):
         state, _, _, _ = self.smoke_fetch_paths(vendor)
@@ -5029,13 +5033,13 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def smoke_fetch_alive(self, vendor):
         """True while VENDOR's background await-final runs (its pid lives and its done file is not written)."""
         try:
-            _, pid, done, _ = self.smoke_fetch_paths(vendor)
+            pid, done, _ = self.smoke_fetch_marks(vendor)
             if done.is_file() or not pid.is_file():
                 return False
             os.kill(int(pid.read_text().strip()), 0)
             return True
-        except (OSError, ValueError, StepFailed, KeyError, zipfile.BadZipFile):
-            return False
+        except (OSError, ValueError, StepFailed, KeyError, AttributeError, TypeError):
+            return False   # a partial Release (no release dir) or no live fetch
 
     def smoke_pending_vendors(self):
         """The vendors whose box still runs the measurement smoke for this release (the keeper holds them)."""
