@@ -310,6 +310,7 @@ import release_ledger  # noqa: E402
 import release_reuse  # noqa: E402
 import release_requirements  # noqa: E402
 import release_tooling  # noqa: E402
+import release_verdicts  # noqa: E402
 import release_github_build  # noqa: E402
 import runpy
 GPU_PACKAGES = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
@@ -4222,6 +4223,25 @@ class Release(release_identity_wheels.IdentityOnWheels):
             problems += [f"{label}: {p}" for p in found]
         return problems, rows
 
+    def rehearsal_hard_problems(self, rows, problems, report):
+        """The rehearsal's problems that stop it. HARD: the bytes TestPyPI served differ from the gated sha256
+        (and any resolution that came back with another set or hash). SOFT unless --strict
+        (tools/release_verdicts.py rehearsal/secondary): a resolution pip could not complete, and the macOS
+        install/import from the index (the exact bytes were installed and imported in gate-apple)."""
+        if self.strict():
+            return problems
+        hard = []
+        for row in rows:
+            label = row.get("check", "")
+            for p in row.get("problems") or []:
+                secondary = (label.endswith("into a fresh venv and import")
+                             or (label.startswith("pip install ") and p.startswith("pip could not resolve it")))
+                if secondary:
+                    self.soft_fail("testpypi", "rehearsal/secondary", f"{label}: {p}", report)
+                else:
+                    hard.append(f"{label}: {p}")
+        return hard
+
     def have_testpypi_rehearsal(self, rec):
         """Done when the recorded rehearsal covered every platform ready now, with the bytes they ship now."""
         if self.args.publish != "pypi" or "wheels" not in rec:
@@ -4281,6 +4301,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             schema="mojolearn.release-testpypi-rehearsal.v1", version=self.version, commit=self.commit,
             platforms=ready, wheels={p: dict(file=w.name, sha256=sha256(w)) for p, w in wheels.items()},
             uploads=uploads, owed=owed, local=local, checks=rows, routed=routed, problems=problems))
+        problems = self.rehearsal_hard_problems(rows, problems, out / "rehearsal.json")
         if problems:
             raise StepFailed(f"TestPyPI rehearsal: {problems[0]}"
                              + (f" (+{len(problems) - 1} more)" if len(problems) > 1 else "")
@@ -4434,13 +4455,30 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def step_gate_apple(self):
         """The Apple adapter smoke (when adapters ship) and runtime-apple, the installed-runtime qualifier; with
         --identity-on-wheels first the Apple identity column from the installed macOS wheel (one pass)."""
-        identity = self.apple_identity_gate()
+        identity = self.apple_identity_gate()   # HARD: the Apple column
         # --identity-on-wheels: the adapter smoke and runtime-apple under the unit rule; an unchanged Apple column
         # runs nothing on this Mac (release_identity_wheels.apple_units_gate)
-        adapters = self.apple_adapter_unit_gate() if self.single() else self.apple_adapter_gate()
-        runtime = self.apple_runtime_reused() if self.single() else None
-        runtime = runtime or self.apple_runtime_gate()
+        adapters = self.apple_soft("apple/adapters", lambda: self.apple_adapter_unit_gate() if self.single()
+                                   else self.apple_adapter_gate(), self.rel / "gate-apple.log")
+        runtime = self.apple_soft("apple/runtime", lambda: (self.apple_runtime_reused() if self.single() else None)
+                                  or self.apple_runtime_gate(), self.rel / "gate-apple-runtime.log")
         return "; ".join(str(part) for part in (identity, adapters, runtime) if part) or None
+
+    def apple_soft(self, name, run, log):
+        """RUN's result, or (a SOFT check failing without --strict) the recorded SOFT FAIL line. A missing macOS
+        wheel stays HARD: nothing to ship."""
+        try:
+            return run()
+        except StepFailed as error:
+            if str(error).startswith("no macOS wheel") or not release_verdicts.is_soft(name, self.strict()):
+                raise
+            self.soft_fail("apple", name, str(error), log)
+            return f"SOFT FAIL {name}: {error}"
+
+    def apple_adapters_soft_failed(self):
+        """True when gate-apple recorded the Apple adapter smoke as a SOFT failure (and not --strict)."""
+        return not self.strict() and any(f.get("vendor") == "apple" and f.get("name") == "apple/adapters"
+                                         for f in self.soft_failures())
 
     def apple_adapter_gate(self):
         AG = adapter_gate_module()
@@ -4474,7 +4512,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def step_publish_macos(self):
         AG = adapter_gate_module()
         if AG.enabled() and not self.dry and not self.apple_adapters_ok()[0] and not (
-                self.single() and self.apple_adapter_unit_ok()):
+                self.single() and self.apple_adapter_unit_ok()) and not self.apple_adapters_soft_failed():
             raise StepFailed(f"no PASSED adapter smoke for this macOS wheel ({self.apple_adapters_ok()[1]}); "
                              "run gate-apple")
         # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
@@ -4658,16 +4696,20 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if once:
                 return False, "; ".join(once)
             # the measurement smoke runs in every box job (release_gate_job.sh phase measuresmoke, unconditional)
-            from release_identity_wheels import measure_smoke_errors
+            from release_identity_wheels import measure_smoke_errors, measure_smoke_summary
             smoke = measure_smoke_errors(output) if measure else []
-            if smoke:
-                return False, "; ".join(smoke)
+            soft = [("measuresmoke", "; ".join(smoke), measure_smoke_summary(output))] if smoke else []
             runtime, cases = self.gate_runtime_error(vendor, output)
             if runtime:
-                return False, runtime
+                soft.append(("runtime", runtime, Path(output) / f"runtime-{vendor}" / "runtime-report.json"))
+            # the measurement smoke and the runtime qualifier are SOFT (tools/release_verdicts.py) unless --strict
+            errors, softened = self.soft_judge(vendor, [], soft)
+            if errors:
+                return False, "; ".join(errors)
             return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases, "
                           f"{cases} installed-runtime cases; "
-                          f"elapsed {doc['budget']['elapsed_seconds']:.1f}s (no performance campaign)")
+                          f"elapsed {doc['budget']['elapsed_seconds']:.1f}s (no performance campaign)"
+                          + ("; SOFT FAIL (fix lanes owed): " + ", ".join(softened) if softened else ""))
         m = doc["measure"]
         return True, f"PASS historical performance campaign: {m['expected']} measured lines"
 
@@ -4726,6 +4768,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 if run_id and report.is_file():
                     self.readiness().record(run_id, "failed", [report], job_why, 1, 5, 0, failed=1)
                 raise StepFailed(f"the {vendor} release gate did not pass: {job_why}")
+            exited = getattr(self, "_box_exit", {}).pop(vendor, None)
+            if exited:
+                self.soft_fail(vendor, "box-exit", exited + " (its HARD parts passed)", work / f"gate-{vendor}.log")
         # the gate job has ended and passed: now the measurement smoke's own job on the same box
         self.launch_measure_smoke_job(vendor, work, output)
         if self.dry:
@@ -4766,6 +4811,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         try:
             self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate box job")
         except StepFailed as error:
+            if not self.strict():
+                # FAIL SOFT (Andrew 2026-11-08): the job runs every phase to the end and its results come home
+                # whatever it exited (tools/ops/release_gate.py bring_home); run_gate judges their HARD parts next
+                self._box_exit = dict(getattr(self, "_box_exit", {}), **{vendor: str(error)})
+                self.say(f"  the {vendor} gate box job: {error}; judging the results home by their HARD parts")
+                return
             reports = [p for p in (output / "gate-smoke.json", work / f"gate-{vendor}.log") if p.is_file()]
             if run_id and reports:
                 self.readiness().record(run_id, "failed", reports, str(error), 1, 5, 0, failed=1)
@@ -5238,7 +5289,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                                  "(macos-smoke); the published bytes are judged against a passed gate only")
             if adapter_gate_module().enabled():
                 ok, adapters = self.apple_adapters_ok()
-                if not ok:
+                if not ok and self.apple_adapters_soft_failed():
+                    adapters = "SOFT FAIL (recorded in soft-failures.json): " + adapters
+                elif not ok:
                     raise StepFailed("published-apple: the Apple adapter gate has not passed: " + adapters)
                 out = self.apple_adapters_out()
                 receipts += [p for p in (out / "wheel.json", out / adapter_gate_module().RECEIPT, out / "reuse.json")
@@ -6245,6 +6298,11 @@ def main(argv=None):
                     help="THE ONE RUN (default off until the orchestrator has run it once): identity recorded from "
                          "the built wheels on each device class (NVIDIA/AMD box jobs, Apple in gate-apple, CPU on "
                          "GitHub), admitted, the table repacked into the wheels, then publish; no gate repeats a lane")
+    ap.add_argument("--strict", action="store_true",
+                    help="every SOFT check (tools/release_verdicts.py CHECK_CLASS: autograd smoke, adapters, runtime "
+                         "units, measurement smoke, CPU runtime/autograd/adapter groups, box job exits, the TestPyPI "
+                         "rehearsal's secondary checks) stops the release like a HARD one. Default: SOFT failures are "
+                         "recorded in soft-failures.json, notified, and the release continues")
     ap.add_argument("--reuse-unchanged", action="store_true",
                     help="with --identity-on-wheels: OPT IN to reusing unchanged lanes, check units and runtime units "
                          "(the selector decides). Default off: the one run runs every lane, unit and runtime unit")
