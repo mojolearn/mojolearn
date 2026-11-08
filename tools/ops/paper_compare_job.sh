@@ -153,6 +153,27 @@ $PY tools/bench_board.py "${COMMON[@]}" --cache "$CACHE_ROOT/c1" --race-ids @"$R
 rc=$?; phase_end $rc
 [ $rc -ne 0 ] && { say "dry run failed: $(tail -n 3 "$RES/plan/dry-run.log" | tr '\n' ' ')"; exit; }
 
+# ---- direct ids (PC_IDS_FILE): time exactly these full race ids, no smoke --------------------------------------
+# 0.8.66 NVIDIA run (2026-11-08): 15 of 62 paper races got "no smoke result" because their smoke id did not map
+# back to the full id (taxi classical lanes, int8 gemm, mamba1/samba/transformer-decode, lossguide/pairlogit,
+# iforest); the smoke itself PASSED every race it planned. A follow-up job times the missing ids directly.
+if [ -n "${PC_IDS_FILE:-}" ]; then
+    SJ=()
+    cp "$PC_IDS_FILE" "$RES/plan/race-ids-pass.txt"
+    say "direct ids: $(grep -c . "$RES/plan/race-ids-pass.txt") races from $PC_IDS_FILE (smoke skipped)"
+    phase board; mark board
+    $PY tools/bench_board.py "${COMMON[@]}" --cache "$CACHE_ROOT/c1" --race-ids @"$RES/plan/race-ids-pass.txt" \
+        --out "$RES/board" > "$RES/logs/board.log" 2>&1
+    rc=$?; tail -n 3 "$RES/logs/board.log"; phase_end $rc
+    phase compare; mark compare
+    $PY tools/paper_compare.py compare --recipes "$RECIPES" --board "$RES/board/board.json" \
+        --out-md "$RES/COMPARE-$V.md" --out-json "$RES/compare-$V.json" --summary "$RES/SUMMARY-$V.txt" \
+        > "$RES/logs/compare.log" 2>&1
+    rc=$?; head -n 3 "$RES/logs/compare.log"; phase_end $rc
+    mark finished
+    exit "$WORST"
+fi
+
 # ---- smoke (parallel shards on the one GPU; not timed) ----------------------------------------------------------
 phase smoke; mark smoke
 NRACE=$(grep -c . "$RES/plan/race-ids-smoke.txt")
