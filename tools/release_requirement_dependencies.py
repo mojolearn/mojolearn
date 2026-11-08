@@ -1158,11 +1158,22 @@ def _snapshot_configuration(configuration):
     configuration, including compiler, target, environment and manifest inputs;
     the complete original configuration still determines every final unit.
     """
+    # ONE SOURCE SNAPSHOT PER FREEZE (lane post-readiness-off-mac, 2026-11-07). The worker (_worker_snapshot)
+    # reads only dependency_context.apple_toolchain from this configuration. Two more inputs change while a
+    # release runs and are applied only after the snapshot, so they leave the request too:
+    # - "artifacts:<platform>" (the candidate wheel hashes: there once linux-pack and macos-build have run;
+    #   they enter each unit's inputs in expand_catalog / release_requirements, never the scan);
+    # - dependency_context.optional_native_files (derived from the first expansion by tools/release.py
+    #   optional_native_presence; read by _binding_context, after the snapshot).
+    # 0.8.66 run e: with them in the request, gate-nvidia and gate-amd each re-ran the 7-minute source scan of the
+    # same freeze (tokens 1f85f847dd3b9092, 097b6ba316c44fc1) on the Mac while both rented gate boxes idled.
     result = copy.deepcopy(configuration)
+    for name in [k for k in result if isinstance(k, str) and k.startswith("artifacts:")]:
+        result.pop(name)
     context = result.get("dependency_context", {})
     if isinstance(context, dict):
         for name in ("selected_binding_build_flags", "selected_binding_compile_jobs",
-                     "selected_macos_cpu_toolchains"):
+                     "selected_macos_cpu_toolchains", "optional_native_files"):
             context.pop(name, None)
     return result
 
