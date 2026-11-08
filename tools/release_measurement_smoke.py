@@ -357,7 +357,7 @@ def run_batch(args, k, ids, deadline, recipe_timeout, group=None):
     left = deadline - time.time()
     started = time.time()
     extra = ["--race-ids", "@" + str(idfile)]
-    if not getattr(args, "keep_scratch", False):
+    if not getattr(args, "keep_scratch", False) and board_drops_scratch():
         extra.append("--drop-race-scratch")
     result = P.bounded_run(board_command(args, out, extra, group_cache(args, group)), log, min(budget, left),
                            env=batch_env(args, group), cwd=str(ROOT))
@@ -365,6 +365,15 @@ def run_batch(args, k, ids, deadline, recipe_timeout, group=None):
                   ceiling_hit=left <= budget and result.get("timed_out"), started_late=left <= 0,
                   started_at=started, group=group["name"] if group else None)
     return result
+
+
+def board_drops_scratch():
+    """Whether this tree's bench_board.py has --drop-race-scratch (this tool is a gate overlay file and may run over a
+    frozen tree whose board predates it; then the group cleanup alone bounds the scratch)."""
+    try:
+        return "--drop-race-scratch" in (HERE / "bench_board.py").read_text()
+    except OSError:
+        return False
 
 
 def group_cache(args, group):
