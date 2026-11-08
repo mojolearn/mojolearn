@@ -5673,10 +5673,17 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return False, (f"the report at {out} is a {doc.get('schema')} report for {doc.get('vendor')} "
                            f"{doc.get('version')}")
         if doc.get("status") != "passed" or doc.get("exit_code") != 0:
+            import release_published_install as published_tool
+            kind = published_tool.failure_kind(doc) or published_tool.CHECK_FAILED
             differs = "; ".join("%s published %s, candidate %s" % (m.get("file"), m.get("published_sha256"),
                                                                   m.get("candidate_sha256"))
                                 for m in doc.get("mismatch") or [])
-            return False, (f"published-{vendor} status {doc.get('status')}: "
+            if kind == published_tool.INDEX_LAG:
+                # no verdict on the bytes (0.8.66 run v, 2026-11-08): the step runs again, the record refuses it
+                return False, (f"published-{vendor} INDEX LAG (not a hash mismatch): "
+                               f"{doc.get('failure_why') or published_tool.NOTHING_RESOLVED}; "
+                               f"run published-{vendor} again once the index lists the files")
+            return False, (f"published-{vendor} status {doc.get('status')} ({kind.upper().replace('-', ' ')}): "
                            + (differs or str(doc.get("error") or "")[:200]
                               or ", ".join(r["id"] for r in doc.get("coverage", []) if r.get("status") != "passed")))
         wheels = self.published_wheels(vendor)
