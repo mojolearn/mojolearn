@@ -785,6 +785,14 @@ class IdentityOnWheels:
         log = self.rel / "identity-admit.log"
         env = dict(PYTHON=sys.executable, EVIDENCE=str(self.identity_dir() / "admit-evidence"),
                    REF_TAG="ref-" + self.commit[:12])
+        # the verifier runs from the installed macOS wheel (the Apple column's venv) when it exists: every binding,
+        # the exact bytes; the source tree alone needs host bindings this script never built (0.8.66 run k)
+        apple_python = self.identity_dir() / "apple" / "venv" / "bin" / "python"
+        if apple_python.is_file():
+            env["ADMIT_PYTHON"] = str(apple_python)
+        # the script is the tooling's (HEAD), copied into the frozen tree and run there (it cds to its own root):
+        # the source is frozen, the tooling runs from HEAD; the copy is never committed (only the NEXT paths are)
+        shutil.copy2(ROOT / "tools" / "admit_identity_columns.sh", tree / "tools" / "admit_identity_columns.sh")
         p = subprocess.run(["bash", "tools/admit_identity_columns.sh", "--build-host", *dirs], cwd=str(tree),
                            env=dict(os.environ, **env), capture_output=True, text=True)
         log.write_text((p.stdout or "") + (p.stderr or ""))

@@ -91,7 +91,14 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$MODELS" ] || [ ${#dirs[@]} -gt 0 ] || die "usage: admit_identity_columns.sh [--build-host] [--check-only] [--lanes a,b] <records dir...> | --models <dir>"
 
-if [ -n "${PYTHON:-}" ]; then
+# ADMIT_PYTHON (tools/release_identity_wheels.py admit_records, 2026-11-08): an interpreter with the RELEASE WHEEL
+# installed (the Apple column's venv). The verifier then runs from the installed package, which carries every
+# binding, instead of from this source tree: 0.8.66 run k refused the admission because `import mojolearn` at the
+# frozen commit needs the tokenizer host binding, which this script's two-binding host preflight never built.
+if [ -n "${ADMIT_PYTHON:-}" ]; then
+    PY=("$ADMIT_PYTHON")
+elif [ -n "${PYTHON:-}" ]; then
+
     read -r -a PY <<< "$PYTHON"
 elif command -v pixi > /dev/null 2>&1 && [ -f pixi.toml ]; then
     PY=(pixi run -e default python)
@@ -113,14 +120,18 @@ missing=()
 # Use the runtime's path-selection rules without bootstrapping the package.
 # This accepts compact release and nested development files only when the
 # actual indexed artifact exists, and preserves per-binding precedence.
+if [ -n "${ADMIT_PYTHON:-}" ]; then
+    : > "$EVID/host-missing.txt"   # the installed wheel carries every host binding and the math library
+else
 "${PY[@]}" tools/identity_host_preflight.py --package python/mojolearn \
     --report "$EVID/host-bindings.json" "${HOST_FAMILIES[@]}" \
     > "$EVID/host-missing.txt" 2> "$EVID/host-preflight.log" \
     || die "host binding preflight failed; see $EVID/host-preflight.log"
+fi
 while IFS= read -r fam; do
     [ -z "$fam" ] || missing+=("$fam")
 done < "$EVID/host-missing.txt"
-if [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; then
+if [ -z "${ADMIT_PYTHON:-}" ] && { [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; }; then
     if [ $BUILD_HOST = 1 ]; then
         SLOT=(); [ -x "$HOME/mojolearn-evidence/compile_slot.sh" ] && SLOT=(bash "$HOME/mojolearn-evidence/compile_slot.sh")
         if [ ! -f "$MATH" ]; then
@@ -140,9 +151,13 @@ if [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; then
     fi
 fi
 
-cli() {  # the verifier from source, host column, identical tier
-    env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" \
-        "${PY[@]}" -m mojolearn verify "$@"
+cli() {  # the verifier: from source (PYTHONPATH) or from the installed wheel (ADMIT_PYTHON); host column, identical tier
+    if [ -n "${ADMIT_PYTHON:-}" ]; then
+        env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical "${PY[@]}" -m mojolearn verify "$@"
+    else
+        env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" \
+            "${PY[@]}" -m mojolearn verify "$@"
+    fi
 }
 
 checks() {  # $1 = table; self-test then coverage; sets ST_RC, COV_RC
