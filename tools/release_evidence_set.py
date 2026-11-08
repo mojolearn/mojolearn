@@ -582,6 +582,32 @@ def stale(ctx, doc):
     return None
 
 
+def _published_tool():
+    sys.path.insert(0, str(ROOT / "tools"))
+    import release_published_install
+    return release_published_install
+
+
+def published_failure(doc):
+    """The failure kind of a published-<vendor> report (tools/release_published_install.py failure_kind), or None."""
+    return _published_tool().failure_kind(doc)
+
+
+def index_lag_refusal(dest, doc):
+    """Why the record step refuses the published-<vendor> report DEST, or None. An index-lag failure (the index
+    did not list the published files yet, nothing was resolved) is no verdict on the bytes: it is never recorded
+    (0.8.66 run v, 2026-11-08: a FAILED published-apple went into the set one minute after the upload)."""
+    if not dest.startswith("publish/published-"):
+        return None
+    release_published_install = _published_tool()
+    if published_failure(doc) != release_published_install.INDEX_LAG:
+        return None
+    vendor = dest[len("publish/published-"):].rsplit(".", 1)[0]
+    return ("%s is an INDEX LAG failure, not a hash mismatch (%s): the index had not listed the published files, "
+            "so nothing was compared; it is not recorded. Run published-%s again once the index lists them"
+            % (dest, (doc or {}).get("failure_why") or release_published_install.NOTHING_RESOLVED, vendor))
+
+
 def collect(ctx, root=ROOT):
     """(entries, missing_required, missing_optional, problems). An entry is
     dict(dest, producer, required, against, data (bytes), source, source_sha256, redactions)."""
@@ -606,6 +632,10 @@ def collect(ctx, root=ROOT):
                 why = stale(ctx, read_json(path))
                 if why:
                     problems.append("%s (from %s) is stale: %s" % (dest, src, why))
+                    continue
+                why = index_lag_refusal(dest, read_json(path))
+                if why:
+                    problems.append(why)
                     continue
         elif isinstance(value, str):   # a derived text item (SUMMARY.md)
             data, src, src_sha = value.encode(), "derived", None
@@ -1077,6 +1107,19 @@ def summary_markdown(ctx, entries, wheels, refs, root=ROOT):
         out.append("| %s | `%s` | `%s` | %s |" % (w["platform"], w["file"], w["sha256"], "yes" if w["published"] else "no"))
     out += ["", "Per-platform manifests and file admissions: %s." % ", ".join(
         link(d) for d in sorted(have) if d.startswith(("alpha-manifest-", "file-admission-"))), ""]
+    # --- the published checks: a hash mismatch and index lag are named apart (index lag is never recorded:
+    # index_lag_refusal; it can only appear here in a set written by hand)
+    rows = [(d, docs[d]) for d in sorted(docs) if d.startswith("publish/published-")]
+    if rows:
+        out += ["## Published checks", ""]
+        for dest, d in rows:
+            kind = published_failure(d)
+            verdict = ("PASS" if d.get("status") == "passed" else "no status") if kind is None else {
+                "hash-mismatch": "FAIL: HASH MISMATCH", "index-lag": "NOT JUDGED: INDEX LAG"}.get(kind, "FAIL: " + kind)
+            out.append("- %s: **%s**%s (%s)" % (dest[len("publish/"):-len(".json")], verdict,
+                                                 (": " + str(d.get("failure_why"))) if d.get("failure_why") else "",
+                                                 link(dest)))
+        out.append("")
     # --- device checks
     out += ["## Device checks", ""]
     for vendor in sorted(GPU_VENDOR_OF.values()):
