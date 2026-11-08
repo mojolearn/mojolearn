@@ -279,6 +279,24 @@ UNIT_PEAK_GIB = {
     ("host", "_mojolearn_native_neural_host", "cuda"): 10, ("host", "_mojolearn_native_neural_host", "hip"): 10,
     ("host", "_mojolearn_native_forest_host", "cuda"): 11, ("host", "_mojolearn_native_forest_host", "hip"): 11,
     ("host", "_mojolearn_native_x_host", "cuda"): 10, ("host", "_mojolearn_native_x_host", "hip"): 11,
+    # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): each new
+    # group starts at its parent's row (the classical groups at
+    # _mojolearn_native_host's, which held the classical member until
+    # 2026-11-04; the tokenizer groups at the tokenizer's; the orchestration
+    # group at x_host's). A split only removes members, so the parent bounds
+    # it; the first build records each group's own peak, and its row is set
+    # from that measurement.
+    ("host", "_mojolearn_native_classical_host", "cuda"): 14, ("host", "_mojolearn_native_classical_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_trees_host", "cuda"): 14, ("host", "_mojolearn_native_classical_trees_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_family_host", "cuda"): 14, ("host", "_mojolearn_native_classical_family_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_prep_host", "cuda"): 14, ("host", "_mojolearn_native_classical_prep_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_decomp_host", "cuda"): 14, ("host", "_mojolearn_native_classical_decomp_host", "hip"): 13,
+    ("host", "_mojolearn_native_catalog_host", "cuda"): 14, ("host", "_mojolearn_native_catalog_host", "hip"): 14,
+    ("host", "_mojolearn_native_xseq_host", "cuda"): 14, ("host", "_mojolearn_native_xseq_host", "hip"): 14,
+    ("host", "_mojolearn_native_byte_trainer_host", "cuda"): 14, ("host", "_mojolearn_native_byte_trainer_host", "hip"): 14,
+    ("host", "_mojolearn_native_parallel_host", "cuda"): 14, ("host", "_mojolearn_native_parallel_host", "hip"): 14,
+    ("host", "_mojolearn_native_neural_doors_host", "cuda"): 14, ("host", "_mojolearn_native_neural_doors_host", "hip"): 14,
+    ("host", "_mojolearn_native_orchestration_host", "cuda"): 10, ("host", "_mojolearn_native_orchestration_host", "hip"): 11,
 }
 #: A per-binding build: two at a time fit a free runner (0.8.24..0.8.52 runs).
 PER_BINDING_PEAK_GIB = 6
@@ -525,7 +543,10 @@ def split(builds, shards, weights=None):
 #: shard per compile: the identical, fast and host groups, the adapters, plus
 #: the assemble job; 4 + 4 + 5 + 1 + 1 at the 0.8.59 split, with room to add
 #: a group). The plan refuses a source that needs more (build_plan).
-MERGED_JOBS_PER_SET = 18
+#: 24 since the 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6):
+#: a Linux set plans 4 identical + 17 host compiles + the assemble job = 22,
+#: and two to spare; each job is 80 presigned PUTs (SLOTS_PER_JOB), nothing else.
+MERGED_JOBS_PER_SET = 24
 
 
 def unit_seconds(entry, vendor, merged, share=1.0):

@@ -411,6 +411,16 @@ ordinary CPU `fit` public; it still refuses outside the verifier's scope. Each a
 | forecast | `_mojolearn_forecast_host.so` | `_mojolearn_arima`, `_mojolearn_tsa` when its reference binding is not built | no | ARIMA, ExponentialSmoothing, kpss_test (arima, arima-011, arima-seasonal-c, holtwinters, holtwinters-multiplicative, arima-exog, arima-exog-seasonal) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | transformer | `_mojolearn_transformer_host.so` | `_mojolearn_transformer` | transformer, transformer-window, transformer-bf16w, transformer-int8w, transformer-decode-session, transformer-decode-load-state, transformer-forward-tape | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | runtime_classical | `_mojolearn_runtime_classical_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_trees | `_mojolearn_runtime_trees_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_family | `_mojolearn_runtime_family_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_prep | `_mojolearn_runtime_prep_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_decomp | `_mojolearn_runtime_decomp_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_linear | `_mojolearn_runtime_linear_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_catalog | `_mojolearn_runtime_catalog_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_xseq | `_mojolearn_runtime_xseq_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_byte_trainer | `_mojolearn_runtime_byte_trainer_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_parallel | `_mojolearn_runtime_parallel_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
+| runtime_neural | `_mojolearn_runtime_neural_host.so` | loaded by path | no | no | python/mojolearn/tests/test_runtime_classical_partition.py | yes |
 | runtime_sequential | `_mojolearn_runtime_sequential_host.so` | loaded by path | no | Sequential | python/mojolearn/tests/test_runtime_sequential_partition.py | yes |
 | runtime_manifold | `_mojolearn_runtime_manifold_host.so` | loaded by path | umap, x-ann-tsne, x-ann-tsne-pca, x-decomp-manifold, x-decomp-umap-options | UMAP, TSNE, Isomap, ClassicalMDS, MDS, LocallyLinearEmbedding | python/mojolearn/tests/test_runtime_manifold_partition.py | yes |
 | runtime_model_selection | `_mojolearn_runtime_model_selection_host.so` | loaded by path | x-metrics-splitters | model_selection.KFold, model_selection.LeavePOut, model_selection.GridSearchCV | python/mojolearn/tests/test_runtime_model_selection_partition.py | yes |

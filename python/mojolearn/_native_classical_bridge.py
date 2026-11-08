@@ -132,6 +132,30 @@ def _numpy_free_context():
     }
 
 
+#: The compiled doors `classical_native_call` forwards to (2026-11-07 host
+#: split, docs/build/HOT_GROUPS.md section 6): context key -> entry name on the
+#: tokenizer host, where import setup (host_surface.HOST_IMPORT_ALIASES) put
+#: the owner's entry, or its native refusal when that owner is not built.
+_CLASSICAL_DOORS = (("classical_trees_door", "trees_native_call"),
+                    ("classical_family_door", "family_native_call"))
+
+
+def _classical_doors(binding):
+    # glue: retain the separately compiled classical doors' entries once, at
+    # import; the native door forwards to them and refuses when one is absent.
+    from types import BuiltinFunctionType
+    try:
+        fields = vars(binding()._module)
+    except ImportError:
+        return {}
+    doors = {}
+    for key, name in _CLASSICAL_DOORS:  # glue: fixed door names, connected once at import
+        entry = fields.get(name)
+        if type(entry) is BuiltinFunctionType:
+            doors[key] = entry
+    return doors
+
+
 def _state_context():
     # glue: connect compiled entries and exact native buffer classes once
     from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType, MemberDescriptorType
@@ -172,6 +196,7 @@ def _state_context():
     # so connecting never imports the optional sklearn dependency.
     context.update(classical_tag_plan=None, native_member_descriptor=MemberDescriptorType)
     context.update(connect_warnings())
+    context.update(_classical_doors(_binding))
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
     if not isinstance(io.open, BuiltinFunctionType):
         raise TypeError("classical archives require native binary file opening")

@@ -168,3 +168,84 @@ after, two compiles of 313 and 443 files. Their seconds and peaks are measured b
   9 of 9 / 13 of 13 and re-recorded every lane; a shared guard edit still rebuilds everything. A change inside the
   runtime classical host or the tokenizer host compiles 443 / 656 files instead of 702 / 741, and a change to
   their small neighbours compiles 313 / 117.
+
+## 6. The 2026-11-07 split: the classical and tokenizer hosts by family
+
+Lane post-split-host-groups, on main at bc4ecd4518. Static, like sections 1 to 5: nothing was compiled.
+
+**Why.** On the 0.8.66 macOS wheel build (release run e, `macos-bincache/provenance/provenance.tsv`, column 5)
+`_mojolearn_native_classical_host` took 8,163 s and `_mojolearn_native_tokenizer_host` 8,119 s (0.8.65: 4,282 and
+4,214 s), then `_mojolearn_native_x_host` 2,540 s; every other host group took 54 to 1,005 s. The Mac builds its
+groups four at a time, heaviest first, so the wheel cannot finish before its longest group. Each of the two was one
+member after section 4, and the native entry point program (docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md) had
+added most of its code to them. The same two members compiled alone, one worker, in 1,020 s (5.93 GiB peak) and
+1,131 s (5.08 GiB) on the same Mac that day (development cache, `~/.cache/mojolearn-development/peaks/`): the
+release's 8x comes from four such compiles paging together on 16 GiB (plan section 4, lesson 11).
+
+**What moved.** Each member registered many independent C entries; they now register in their own bindings, one
+merged group each (preprocessing and linear share one), so each group is one `mojo build` of only what its entries
+reach:
+
+- `classical_native_call` stays one entry. Its tree, density, saved-model inference and host archive branches and its
+  `family_*` branch (with the coded routes) moved unchanged into `bindings/classical_trees_door.mojo` and
+  `bindings/classical_family_door.mojo`, registered by `_mojolearn_runtime_trees_host` and
+  `_mojolearn_runtime_family_host` as `trees_native_call` and `family_native_call`. The classical door hands them the
+  caller's own argument tuple (`PyObject_Call` of the entry, no Python frame), so the steps, their order, the contexts
+  and the error mapping are the ones it ran before. Import setup retains the two entries in the classical connection
+  context (`python/mojolearn/_native_classical_bridge.py` `_classical_doors`); `bindings/classical_door_routes.mojo`
+  (a leaf) names which operations go where, so `family_native` and `trees_public_native` left the classical compile.
+- The other entries moved as they were: the same function under the same name. The tokenizer host keeps a native
+  refusal under every moved name (`runtime_classical_unavailable_c`, the 0.8.60 classical precedent), and
+  `host_surface.HOST_IMPORT_ALIASES` replaces each with its owner's entry at import, one spec per owner, the
+  classical owner first. The ownership witness `tokenizer_host_runtime_classical_abi` is 2: an older tokenizer that
+  registers the moved entries itself is refused with the complete-layout message.
+- Types: every Python type stays registered where it was (the classical host for the resident tree types, the
+  compiled-binding snapshot, the scaler snapshot and the linear-algebra pin; the tokenizer host for its neural and
+  generation types), because import setup loads those owners first; the two whose only allocator moved
+  (`ParallelByteOwner`, `RemoteStateLifetime`) moved with it, under lookup-guarded registrars.
+- `_mojolearn_native_x_host` gave its byte LM, model-selection and manifold members to
+  `_mojolearn_native_orchestration_host` (link units only).
+
+**The groups.** Closure files: the closure-v2 walk (`tools/compile_closures.py closure_of`). Reachable functions: the
+union over the binding's exports of `tools/lane_select.py` `_MojoDefGraph` closures (it does not see the indexed
+`neural_block_c[i]` / `causal_public_c[i]` registrations, before or after, so the two neural rows are low). Expected
+seconds: the parent's measured single-worker seconds per reachable function (classical 1,020 s / 6,207, tokenizer
+1,131 s / 5,711; 0.164 and 0.198 s), times the group's functions; the x groups from their members' measured
+single-worker seconds (development runs mac-n1, mac-n11, mac-n13, the largest of each). A group's functions are
+the union over its members. A linear share of a superlinear compile, so an
+upper estimate; the first build measures each group.
+
+| group | members | closure files | reachable functions | expected s, one worker (Mac) |
+|---|---|---:|---:|---:|
+| `_mojolearn_native_classical_host` | runtime_classical | 163 | 789 | 130 |
+| `_mojolearn_native_classical_trees_host` | runtime_trees | 316 | 2,156 | 355 |
+| `_mojolearn_native_classical_family_host` | runtime_family | 353 | 3,148 | 520 |
+| `_mojolearn_native_classical_prep_host` | runtime_prep, runtime_linear | 210 | 2,229 | 365 |
+| `_mojolearn_native_classical_decomp_host` | runtime_decomp | 217 | 1,700 | 280 |
+| `_mojolearn_native_tokenizer_host` | tokenizer | 322 | 2,247 | 445 |
+| `_mojolearn_native_catalog_host` | runtime_catalog | 334 | 866 | 170 |
+| `_mojolearn_native_xseq_host` | runtime_xseq | 289 | 1,914 | 380 |
+| `_mojolearn_native_byte_trainer_host` | runtime_byte_trainer | 267 | 1,165 | 230 |
+| `_mojolearn_native_parallel_host` | runtime_parallel | 383 | 2,132 | 420 |
+| `_mojolearn_native_neural_doors_host` | runtime_neural | 223 | 1,381 | 275 |
+| `_mojolearn_native_orchestration_host` | byte_lm, runtime_model_selection, runtime_manifold | 287 | 2,222 | 190 |
+| `_mojolearn_native_x_host` | x_linear, x_cluster, x_neighbors, x_decomp, x_prep, x_ann | 342 | 4,321 | 340 |
+| before: `_mojolearn_native_classical_host` | runtime_classical | 488 | 6,207 | 1,020 measured |
+| before: `_mojolearn_native_tokenizer_host` | tokenizer | 691 | 5,711 | 1,131 measured |
+
+The largest expected group is about 520 s on one worker, against 1,020 and 1,131 s for the two it replaces. At four
+builds at a time the release saw 1.8x to 8x its single-worker seconds per group (neural host 1,005 s, x host 2,540 s,
+the two giants above); a group of 0.5 to 3 GiB does not page with three others beside it, so the release should
+see the low end of that range. The host set grows from 7 to 17 groups on both platforms (the Linux sets read the
+same manifest); `tools/release_github_build.py` mints 24 upload-slot jobs per set (4 identical + 17 host compiles +
+the assemble job), and every new group's sizing row starts at its parent's peak until its first build records its own.
+
+**One-time cost.** Every split group is a new compile key, and the tokenizer host is in every lane's closure, so the
+first build after this lane misses all 17 host groups on every platform and the next identity record re-records
+every lane whose closure holds any of the twelve split bindings (in practice every lane). Bits do not change: the
+same functions compile from the same sources with the same flags into different link units, and the two doors run
+the moved branches unchanged; a digest that differs is a bug.
+
+**Regenerated after the first compile:** `python/mojolearn/_verification_light_reference.py`
+(`tools/light_verifier_reference.py`, at the next release), the sizing rows above from measured peaks, and this
+table's expected seconds from the measured ones.

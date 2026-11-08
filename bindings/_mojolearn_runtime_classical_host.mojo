@@ -1,8 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Logical host owner for classical. Release builds merge this builder
 # with the other host builders; development builds give it an independent
-# source/cache boundary. TreesResident is registered, allocated and finalized only in this owner
+# source/cache boundary. TreesResident is registered and finalized only in this owner
 # (registered once per process; the registrars below).
+# 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): the tree and
+# family operations of classical_native_call run in their own doors
+# (_mojolearn_runtime_trees_host, _mojolearn_runtime_family_host), and the
+# preprocessing, decomposition and linear doors are their own bindings
+# (_mojolearn_runtime_prep_host, _mojolearn_runtime_decomp_host,
+# _mojolearn_runtime_linear_host), each its own merged group. The Python types
+# their code allocates stay registered HERE, unchanged: import setup loads this
+# owner before them (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES order).
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -20,33 +28,8 @@ from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnap
 from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.host_archive_lifetime import host_archive_finalize_c
-from bindings.host_svr_native import host_svr_attribute_c
-from bindings.host_svc_native import host_svc_attribute_c
-from bindings.pca_native import pca_c
-from bindings.scaler_native import scaler_fit_c
-from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
-from bindings.minmax_native import minmax_lifecycle_c
 from providers.python.preprocessing_input_pyapi import register_scaler_snapshot
 from bindings.linalg_ops_buffers import register_lin_buffer_pin
-from bindings.maxabs_native import maxabs_lifecycle_c
-from bindings.prep_stateless_native import prep_stateless_c
-from bindings.qn_native import qn_c
-from bindings.logistic_native import logistic_c
-from bindings.decomp_native import decomp_c
-from bindings.linalg_decomp_native import linalg_decomp_c
-from bindings.als_native import als_c
-from bindings.mcd_native import mcd_c
-from bindings.pls_native import pls_c
-from bindings.dict_learning_native import dict_learning_c
-from bindings.jl_native import jl_c
-from bindings.ipca_native import ipca_c
-from bindings.tsvd_native import tsvd_c
-from bindings.prep_classify_native import prep_classify_c
-from bindings.prep_owner_native import prep_owner_c
-from bindings.x_linear_native import x_linear_c
-from bindings.str_labels_native import str_labels_c
-from bindings.labels_native_entry import labels_native_c
-from bindings.robust_native import robust_lifecycle_c
 
 comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -132,32 +115,6 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(host_archive_finalize_c, "host_archive_finalize_call")
-        module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
-        module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")
-        module.def_py_c_function(pca_c, "pca_native_call")
-        module.def_py_c_function(scaler_fit_c, "standard_scaler_fit_native")
-        module.def_py_c_function(scaler_lifecycle_c, "standard_scaler_native_call")
-        module.def_py_c_function(minmax_lifecycle_c, "minmax_scaler_native_call")
-        module.def_py_c_function(maxabs_lifecycle_c, "maxabs_scaler_native_call")
-        module.def_py_c_function(prep_stateless_c, "prep_stateless_native_call")
-        module.def_py_c_function(qn_c, "qn_native_call")
-        module.def_py_c_function(logistic_c, "logistic_native_call")
-        module.def_py_c_function(decomp_c, "decomp_native_call")
-        module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")
-        module.def_py_c_function(als_c, "als_native_call")
-        module.def_py_c_function(mcd_c, "mcd_native_call")
-        module.def_py_c_function(pls_c, "pls_native_call")
-        module.def_py_c_function(dict_learning_c, "dict_learning_native_call")
-        module.def_py_c_function(jl_c, "jl_native_call")
-        module.def_py_c_function(ipca_c, "ipca_native_call")
-        module.def_py_c_function(tsvd_c, "tsvd_native_call")
-        module.def_py_c_function(prep_classify_c, "prep_classify_native_call")
-        module.def_py_c_function(prep_owner_c, "prep_encode_native_call")
-        module.def_py_c_function(x_linear_c, "x_linear_native_call")
-        module.def_py_c_function(str_labels_c, "str_labels_native_call")
-        module.def_py_c_function(labels_native_c, "labels_native_call")
-        module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
-        module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
         # Values this host allocates with PythonObject(alloc=...): resident trees, the Tree SHAP
         # owner and the compiled-binding snapshots of the SVM, hierarchy and x_neighbors descriptor
         # owners. Registered once per process here (the manifold and tokenizer hosts allocate

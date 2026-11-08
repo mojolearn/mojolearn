@@ -101,8 +101,9 @@ def test_new_c_registration_is_additive_without_losing_existing_exports(monkeypa
 
 def test_real_scaler_native_doors_are_in_both_censuses():
     # 8188d819d moved the classical native entries out of the tokenizer host
-    # binding into their own runtime classical host binding.
-    source = 'bindings/_mojolearn_runtime_classical_host.mojo'
+    # binding into their own runtime classical host binding; the 2026-11-07
+    # host split moved the scaler doors on into the preprocessing host binding.
+    source = 'bindings/_mojolearn_runtime_prep_host.mojo'
     ls.reset_caches()
     exports = ls._binding_exports(source)
     census = audit.registrations(ls._read(source))

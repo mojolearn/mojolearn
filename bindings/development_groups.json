@@ -3,6 +3,9 @@
     "Development only: one independent cached unit per existing logical binding owner.",
     "Native type registration, allocation and destruction remain inside their logical owner.",
     "Classical, model-selection, manifold and Sequential runtime owners are separate from tokenizer.",
+    "2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): the classical and tokenizer owners are twelve units that",
+    "load together as one alias set (host_surface.HOST_IMPORT_ALIASES); a type an entry moved out of its old owner allocates",
+    "stays registered by that old owner, which loads first, except the two moved with their only allocator.",
     "Release physical groups remain in merged_groups.json; shared code is compiled once there.",
     "Cold development duplication and target memory/time require measured qualification."
   ],
@@ -246,6 +249,36 @@
       ],
       "runtime_classical": [
         "_mojolearn_runtime_classical_host"
+      ],
+      "runtime_trees": [
+        "_mojolearn_runtime_trees_host"
+      ],
+      "runtime_family": [
+        "_mojolearn_runtime_family_host"
+      ],
+      "runtime_prep": [
+        "_mojolearn_runtime_prep_host"
+      ],
+      "runtime_decomp": [
+        "_mojolearn_runtime_decomp_host"
+      ],
+      "runtime_linear": [
+        "_mojolearn_runtime_linear_host"
+      ],
+      "runtime_catalog": [
+        "_mojolearn_runtime_catalog_host"
+      ],
+      "runtime_xseq": [
+        "_mojolearn_runtime_xseq_host"
+      ],
+      "runtime_byte_trainer": [
+        "_mojolearn_runtime_byte_trainer_host"
+      ],
+      "runtime_parallel": [
+        "_mojolearn_runtime_parallel_host"
+      ],
+      "runtime_neural": [
+        "_mojolearn_runtime_neural_host"
       ]
     }
   }

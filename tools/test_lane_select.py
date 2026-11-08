@@ -2008,6 +2008,12 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     # its owners' trees stay per export).
     assert "_mojolearn_runtime_classical_host" in lane_select.host_routes()["_mojolearn_tokenizer_host"]
     shared.add("bindings/_mojolearn_runtime_classical_host.mojo")
+    # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): the alias
+    # set has one owner per split binding, and each owner's source joins the
+    # tokenizer host's lanes the same way.
+    for spec in lane_select.host_surface().HOST_IMPORT_ALIASES["_mojolearn_tokenizer_host"]:
+        assert spec["binding"] in lane_select.host_routes()["_mojolearn_tokenizer_host"]
+        shared.add(f"bindings/{spec['binding']}.mojo")
     # 2026-10-26 (0.8.59): `_array.py` binds `array_native_call` at module
     # level (62a812f92, one native entry per public Array operation) and
     # `_user_objects.py` calls `user_objects_native_call` (aaf682a23). Both are

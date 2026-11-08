@@ -12,54 +12,21 @@ from bindings.classical_metadata import classical_initialize, classical_get_para
 from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
-from bindings.host_archive_native import host_archive_build
-from bindings.host_archive_predict_native import host_archive_predict
-from bindings.host_knn_predict_native import host_knn_predict
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
-from bindings.family_native import family_operation, family_operation_routed
 from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE
-from bindings.host_tree_native import host_tree_operation
-from bindings.trees_public_native import trees_public_operation
-from bindings.host_inference_native import host_inference_operation
-from bindings.host_kde_fit_native import host_kde_fit
-from bindings.host_iforest_fit_native import host_iforest_fit
-from bindings.host_density_constructor_native import host_density_initialize
-from bindings.host_density_archive_native import host_density_save
-from bindings.host_density_hash_native import host_density_hash
+from bindings.classical_door_routes import (
+    CLASSICAL_TREES_DOOR, CLASSICAL_FAMILY_DOOR, classical_trees_operation, classical_family_operation,
+)
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.classical_pandas import classical_admit_value, classical_admit_fields
 from bindings.classical_tags import classical_tags
 from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_caller_frame import native_caller_globals
+from bindings.classical_caller import classical_caller_outside
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.admitted_call import AdmittedCall
-from providers.python.classical_family_admission_pyapi import classical_family_admit
-
-
-def classical_caller_outside(context: PythonObject) raises -> Bool:
-    """True when the Python frame that called the public method belongs to
-    code outside the package (the rule of _mode._caller_outside). Frame and
-    globals metadata are read through CPython's native frame APIs only."""
-    var globs = PythonObject(None)
-    try:
-        # Depth 0 is the public method's own one-call frame.
-        globs = native_caller_globals(1)
-    except:
-        return True
-    if globs is None:
-        return True
-    if py_get(globs, "__mojolearn_user_boundary__") is PythonObject(True):
-        return True
-    if py_get(globs, "__mojolearn_internal__") is PythonObject(True):
-        return False
-    var name = py_get(globs, "__name__")
-    if py_type(name) is not py_type(PythonObject("")):
-        return True
-    var module = String(name)
-    return module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
 
 
 def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -123,22 +90,36 @@ def operation_code_names() raises -> PythonObject:
     return py_call(native_loaded_module("builtins").tuple, names)
 
 
-def classical_coded_operation(model: PythonObject, code: Int, args: PythonObject,
-                              context: PythonObject) raises -> PythonObject:
-    """One `family_*`, `trees_*` or `host_tree_*` operation by its integer
-    code: the route and the name come from the table, and the owner is
-    called as the str path calls it."""
+# The 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): the tree,
+# density, saved-model inference and host archive operations, and the
+# `family_*` operations, are compiled in their own host bindings
+# (bindings/classical_trees_door.mojo, bindings/classical_family_door.mojo).
+# Import setup retains their compiled entries in the connection context
+# (python/mojolearn/_native_classical_bridge.py `_classical_doors`); this door
+# hands them the caller's own argument tuple, so the owner, its steps and its
+# error mapping are the ones that ran here before. The door names and the
+# operation split are in the leaf bindings/classical_door_routes.mojo.
+def classical_door_call(context: PythonObject, key: String, entry: String, args_ptr: PyObjectPtr) raises -> PyObjectPtr:
+    """The compiled door `context[key]` (the export `entry` of its host
+    binding) called with this call's argument tuple: its result, or NULL with
+    the exception it set. Callers spell `entry` as a literal: it is the name
+    the door runs (tools/lane_select.py follows a native body's literal export
+    names into the binding that registers them)."""
+    var door = py_get(context, PythonObject(key))
+    if door is None:
+        raise Error("ImportError: the compiled " + entry + " is not connected; build the complete host layout and start a fresh process")
+    ref cpy = Python().cpython()
+    return cpy.PyObject_Call(door._obj_ptr, args_ptr, PyObjectPtr())
+
+
+def classical_coded_trees(code: Int) raises -> Bool:
+    """Whether the operation with this integer code is the tree door's (else
+    the family door's)."""
     var table = operation_table()
     if code < 0 or code >= len(table[].names):
         raise Error("TypeError: unknown native operation code")
     var route = table[].routes[code]
-    var name = table[].names[code].copy()
-    if route == OP_ROUTE_TREES:
-        return trees_public_operation(model, name, args, context)
-    if route == OP_ROUTE_HOST_TREE:
-        return host_tree_operation(model, name, args, context["host_tree_context"])
-    _ = classical_family_admit(model)
-    return family_operation_routed(model, table[].family_routes[code], name, args, context)
+    return route == OP_ROUTE_TREES or route == OP_ROUTE_HOST_TREE
 
 
 def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -154,9 +135,11 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if py_type(request[1]) is b.int and py_type(request[3]) is b.dict:
             # Lane ne1-h-labels: an integer operation code from the one table
             # (bindings/native_operation_codes.mojo): no String copy of the
-            # operation and no match chain before the owner.
-            var coded = classical_coded_operation(request[0], Int(py=request[1]), request[2], request[3])
-            return coded.steal_data()
+            # operation and no match chain before the owner, which is a tree
+            # or family door (host split, above).
+            if classical_coded_trees(Int(py=request[1])):
+                return classical_door_call(request[3], CLASSICAL_TREES_DOOR, "trees_native_call", args_ptr)
+            return classical_door_call(request[3], CLASSICAL_FAMILY_DOOR, "family_native_call", args_ptr)
         if py_type(request[1]) is not b.str or py_type(request[3]) is not b.dict:
             raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
         var model = request[0]
@@ -173,60 +156,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "reduce_not_fitted":
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
-        if operation == "host_kde_fit":
-            var result = host_kde_fit(model, args, context["host_inference_context"])
-            return result.steal_data()
-        if operation == "host_iforest_fit":
-            var result = host_iforest_fit(model, args, context["host_inference_context"])
-            return result.steal_data()
-        if operation == "host_density_save":
-            var result = host_density_save(model, args, context["host_inference_context"])
-            return result.steal_data()
-        if operation == "host_density_hash":
-            var result = host_density_hash(model, args, context["host_inference_context"])
-            return result.steal_data()
-        if operation == "host_density_initialize":
-            var result = host_density_initialize(model, args, context["host_inference_context"])
-            return result.steal_data()
-        if operation.startswith("host_infer_"):
-            var result = host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
-            return result.steal_data()
-        if operation == "archive_infer_predict" or operation == "archive_infer_predict_proba":
-            var route = "host_infer_predict" if operation == "archive_infer_predict" else "host_infer_predict_proba"
-            var result = host_inference_operation(model, route, args, context["host_inference_context"], context, False)
-            return result.steal_data()
-        if operation == "archive_knn_classifier" or operation == "archive_knn_regressor":
-            var result = host_knn_predict(model, args[0], operation == "archive_knn_classifier", Bool(py=args[1]),
-                                          context["host_archive_predict_context"])
-            return result.steal_data()
-        if operation.startswith("trees_"):
-            # The public tree ensembles' one-call methods
-            # (bindings/trees_public_native.mojo).
-            var result = trees_public_operation(model, operation, args, context)
-            return result.steal_data()
-        if operation.startswith("host_tree_"):
-            var result = host_tree_operation(model, operation, args, context["host_tree_context"])
-            return result.steal_data()
-        if operation == "host_archive_predict" or operation == "host_archive_predict_proba":
-            var predict_context = py_get(context, "host_archive_predict_context")
-            if predict_context is None:
-                raise Error("RuntimeError: native host archive schemas are not connected")
-            var predicted = host_archive_predict(args[0], args[1], operation == "host_archive_predict_proba", predict_context)
-            return predicted.steal_data()
-        if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
-            var archive_context = py_get(context, "host_archive_context")
-            if archive_context is None:
-                raise Error("RuntimeError: native host archive schemas are not connected")
-            # Checkpoint input admission belongs to the archive reader: its
-            # exact native file descriptors and standard path layouts include
-            # BytesIO/FileIO/buffered streams, which numeric-array admission
-            # correctly refuses for unrelated estimator operations.
-            var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None), operation == "host_archive_classical_model")
-            return restored.steal_data()
-        if operation.startswith("family_"):
-            _ = classical_family_admit(model)
-            var family = family_operation(model, operation, args, context)
-            return family.steal_data()
+        if classical_trees_operation(operation):
+            return classical_door_call(context, CLASSICAL_TREES_DOOR, "trees_native_call", args_ptr)
+        if classical_family_operation(operation):
+            return classical_door_call(context, CLASSICAL_FAMILY_DOOR, "family_native_call", args_ptr)
         if operation == "linear_regressor_score":
             # The linear expansion regressors' one-call score: predict and
             # R^2 in one native operation.

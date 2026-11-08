@@ -63,7 +63,10 @@ def test_registration_and_compile_invalidation():
             closure = graph.closure(members)
             if 'bindings/array_native.mojo' in closure['files']:
                 owners.add((mode, name))
-    assert owners == {('host', 'tokenizer')}
+    # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): the small
+    # MLP's item reader (bindings/small_mlp_items.mojo) imports it too, and the
+    # small MLP entry is now the multi-device host binding's.
+    assert owners == {('host', 'tokenizer'), ('host', 'runtime_parallel')}
 
 
 def test_native_owner_runs_no_package_python():
