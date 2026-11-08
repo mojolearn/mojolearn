@@ -1108,13 +1108,18 @@ def run_facts_static(vendor_backend, package_dir, devices_used=1):
         driver["glibc"] = ver if lib == "glibc" and ver else None
         if not driver["glibc"]:
             unavailable["driver.glibc"] = f"platform.libc_ver() is {lib or 'empty'}"
-    mojo, why = mojo_toolchain_version()
+    def guarded(read, empty):
+        try:
+            return read()
+        except Exception as exc:  # never lose a record over a fact
+            return empty(f"{type(exc).__name__}: {exc}"[:200])
+    mojo, why = guarded(mojo_toolchain_version, lambda e: (None, e))
     if why:
         unavailable["mojo"] = why
-    wheels, why = recorded_wheels(package_dir)
+    wheels, why = guarded(lambda: recorded_wheels(package_dir), lambda e: (None, e))
     if why:
         unavailable["wheels"] = why
-    box = box_identity()
+    box = guarded(box_identity, lambda e: dict(provider=None, id=None, source=e))
     if box.get("id") is None:
         unavailable["box.id"] = box.get("source")
     u = platform.uname()
