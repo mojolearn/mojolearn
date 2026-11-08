@@ -38,6 +38,11 @@ DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps",
           # so the CPU checks job records that refusal as its expected outcome (cpu_refusal below)
           "cpu": "cpu"}
 RECEIPT = "adapter-smoke.json"
+#: the smoke's bounds the gate passes (tools/adapter_wheel_smoke.py): each install-<framework> phase 2400 s (the
+#: torch download was killed at 900 s on a pod whose PyPI route ran at 160 kB/s, 0.8.66 run i, 2026-11-08), each
+#: compile/training phase 900 s
+INSTALL_SECONDS = 2400
+PHASE_SECONDS = 900
 
 
 def enabled(environ=None):
@@ -61,7 +66,8 @@ def smoke_command(vendor, venv, out, runner_python=None):
     if vendor not in DEVICE:
         raise ValueError("adapter gate: vendor is one of %s, not %r" % (", ".join(sorted(DEVICE)), vendor))
     return [str(runner_python or sys.executable), str(HERE / "adapter_wheel_smoke.py"), "--python", venv_python(venv),
-            "--out", str(out), "--device", DEVICE[vendor], "--install", FRAMEWORKS, "--require", FRAMEWORKS]
+            "--out", str(out), "--device", DEVICE[vendor], "--install", FRAMEWORKS, "--require", FRAMEWORKS,
+            "--seconds", str(PHASE_SECONDS), "--install-seconds", str(INSTALL_SECONDS)]
 
 
 def judge(receipt):

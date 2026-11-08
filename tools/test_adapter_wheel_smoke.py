@@ -141,3 +141,25 @@ def test_max_training_needs_torch_training(tmp_path):
     assert (code, report["status"]) == (1, "FAILED")
     assert "max-training" not in report["phases"]
     assert report["frameworks"]["max"].startswith("not run")
+
+
+def test_install_phases_get_the_install_bound_and_the_others_the_phase_bound(tmp_path, monkeypatch):
+    facts = dict(adapters=ADAPTERS, torch_importable=True, max_importable=True, extras=EXTRAS)
+    monkeypatch.setattr(smoke, "probe", lambda python, out: facts)
+    monkeypatch.setattr(smoke, "install_commands",
+                        lambda python, adapters, wanted, extras, test_deps=None: {"install-" + w: ["true"] for w in wanted})
+    bounds = {}
+
+    def fake_run(name, argv, out, seconds, env=None):
+        bounds[name] = seconds
+        return dict(exit=0, seconds=0.0, log=name + ".log", timed_out=False)
+    monkeypatch.setattr(smoke, "run", fake_run)
+    assert smoke.main(["--python", "/py", "--out", str(tmp_path / "out"), "--install", "torch,max",
+                       "--require", "torch,max"]) == 0
+    assert bounds == {"install-torch": smoke.INSTALL_SECONDS, "install-max": smoke.INSTALL_SECONDS,
+                      "torch-compile": smoke.PHASE_SECONDS, "torch-training": smoke.PHASE_SECONDS,
+                      "max-training": smoke.PHASE_SECONDS}
+    assert (smoke.INSTALL_SECONDS, smoke.PHASE_SECONDS) == (2400, 900)
+    smoke.main(["--python", "/py", "--out", str(tmp_path / "o2"), "--install", "torch", "--seconds", "5",
+                "--install-seconds", "7"])
+    assert bounds["install-torch"] == 7 and bounds["torch-compile"] == 5

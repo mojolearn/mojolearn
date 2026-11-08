@@ -218,3 +218,23 @@ with_timeout() {
     _secs=$1; shift
     perl -e 'alarm shift @ARGV; exec @ARGV or exit 127' "$_secs" "$@"
 }
+
+# pod_pip_conf_script: prints the shell a pod bring-up runs ON the pod to write
+# /root/.config/pip/pip.conf with `extra-index-url = https://download.pytorch.org/whl/cu<NN>`, NN the CUDA
+# version nvidia-smi reports (12.8 -> cu128). On RunPod files.pythonhosted.org ran at kB/s (160 kB/s in 0.8.66
+# run i, 2026-11-08) and the PyTorch CDN at 85-140 MB/s, so torch and its CUDA wheels come from the CDN. The
+# extra index ONLY ADDS A SOURCE: PyPI stays the index, every requirement and pin is unchanged, and a package the
+# CDN does not carry still comes from PyPI. No nvidia-smi (an AMD pod) writes nothing. MOJOLEARN_POD_PIP_DIR on
+# the pod moves the file (tests only). Always exits 0: a missing pip.conf only costs download time.
+pod_pip_conf_script() {
+    cat <<'PIPCONF_EOF'
+_pipd=${MOJOLEARN_POD_PIP_DIR:-/root/.config/pip}
+_cu=$(nvidia-smi 2>/dev/null | sed -n 's/.*CUDA Version: *\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1\2/p' | head -1)
+if [ -n "$_cu" ] && mkdir -p "$_pipd" && printf '[global]\nextra-index-url = https://download.pytorch.org/whl/cu%s\n' "$_cu" > "$_pipd/pip.conf"; then
+    echo "POD_PIP_CONF cu$_cu $_pipd/pip.conf"
+else
+    echo "POD_PIP_CONF none (no CUDA version from nvidia-smi)"
+fi
+true
+PIPCONF_EOF
+}

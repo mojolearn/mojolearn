@@ -240,6 +240,9 @@ class Runner:
     def __init__(self, a, run=subprocess.run):
         self.a, self.run = a, run
         self.out = Path(a.out)
+        #: the adapters unit's venv interpreter once that unit ran and its venv imports torch: the autograd torch
+        #: entries run under it (one torch per gate: the identity venv holds the wheels and numpy only)
+        self.torch_python = None
 
     def record(self, row, status, digest_=None, detail=""):
         rec = dict(schema=SCHEMA, unit=row["unit"], device_class=self.plan["device_class"], vendor=self.plan["vendor"],
@@ -271,9 +274,12 @@ class Runner:
         out = self.out / "autograd" / "autograd-smoke.json"
         out.parent.mkdir(parents=True, exist_ok=True)
         names = [r["unit"].split("/", 1)[1] for r in rows]
-        self.run([sys.executable, str(TOOLS / "autograd_smoke.py"), "run", "--vendor", self.plan["vendor"],
-                  "--bin-dir", self.a.bin_dir, "--python", self.a.python, "--out", str(out),
-                  "--entries", ",".join(names)], capture_output=True, text=True)
+        cmd = [sys.executable, str(TOOLS / "autograd_smoke.py"), "run", "--vendor", self.plan["vendor"],
+               "--bin-dir", self.a.bin_dir, "--python", self.a.python, "--out", str(out),
+               "--entries", ",".join(names)]
+        if self.torch_python:
+            cmd += ["--torch-python", self.torch_python]
+        self.run(cmd, capture_output=True, text=True)
         try:
             got = {r["name"]: r for r in json.loads(out.read_text()).get("rows", [])}
         except (OSError, ValueError, AttributeError):
@@ -291,6 +297,7 @@ class Runner:
         out = self.out / "adapters"
         rec = AG.run(self.plan["vendor"], sys.executable, out, self.a.wheel)
         ok = bool(rec.get("ok"))
+        self.torch_python = self.adapters_torch_python(out)
         phases = {}
         for name in AG.PHASES:
             for p in sorted(out.glob(name + "*/*.json")) + sorted(out.glob(name + ".json")):
@@ -301,6 +308,20 @@ class Runner:
         return self.record(row, "passed" if ok else "failed", digest(phases) if ok and phases else None,
                            "" if ok else str(rec.get("why", "")))
 
+    def adapters_torch_python(self, out):
+        """The adapters venv's interpreter when it imports torch (the wheel's own `[torch]` extra, installed by the
+        smoke's install-torch phase), with torchvision added ONCE here from the index that torch build came from
+        (real-model-smoke needs it; autograd_smoke.ensure_torchvision), or None. Whether the adapter phases
+        passed does not matter: the torch install is what the autograd entries need."""
+        import adapter_gate as AG
+        import autograd_smoke as AS
+        py = AG.venv_python(Path(out) / "venv")
+        if not Path(py).is_file() or not AS.has_module(py, "torch"):
+            return None
+        if not AS.has_module(py, "torchvision"):
+            AS.ensure_torchvision(py, Path(out) / "ensure-torchvision.log")
+        return py
+
     def main(self):
         self.plan = json.loads(Path(self.a.plan).read_text())
         if self.plan.get("schema") != PLAN_SCHEMA:
@@ -310,14 +331,18 @@ class Runner:
         print("check-units: %s: REUSED %d / RUN %d" % (self.plan["device_class"], self.plan["reused"], len(owed)),
               flush=True)
         results = {}
+        # install-load, then adapters, then the autograd entries: the adapters unit's fresh venv is the gate's one
+        # torch (the wheel's `[torch]` extra) and the autograd torch entries run under it. Run before them, they
+        # found no torch anywhere (0.8.66 run j, both GPU gates: import-torch-smoke SKIPPED, real-model-smoke
+        # "torch or torchvision is not installed"); no harness is installed twice.
         for row in owed:
             if row["unit"] == INSTALL_LOAD:
                 results[row["unit"]] = self.install_load(row)
-        for rec in self.autograd([r for r in owed if r["unit"].startswith("autograd/")]):
-            results[rec["unit"]] = rec
         for row in owed:
             if row["unit"] == ADAPTERS:
                 results[row["unit"]] = self.adapters(row)
+        for rec in self.autograd([r for r in owed if r["unit"].startswith("autograd/")]):
+            results[rec["unit"]] = rec
         summary = dict(schema=SCHEMA + "+summary", device_class=self.plan["device_class"], vendor=self.plan["vendor"],
                        source_commit=self.a.source_commit, plan=self.plan,
                        units={r["unit"]: dict(decision=r["decision"], status=(results.get(r["unit"]) or {}).get(

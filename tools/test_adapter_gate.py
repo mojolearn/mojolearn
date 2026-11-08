@@ -44,6 +44,7 @@ def test_smoke_command_per_vendor(tmp_path, vendor, device):
     assert cmd[cmd.index("--device") + 1] == device
     assert cmd[cmd.index("--install") + 1] == "torch,max" and cmd[cmd.index("--require") + 1] == "torch,max"
     assert cmd[cmd.index("--out") + 1] == str(tmp_path / "out")
+    assert cmd[cmd.index("--install-seconds") + 1] == "2400" and cmd[cmd.index("--seconds") + 1] == "900"
 
 
 def test_smoke_command_refuses_an_unknown_vendor(tmp_path):
