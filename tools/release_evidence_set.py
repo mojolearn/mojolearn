@@ -673,6 +673,12 @@ Start with `SUMMARY.md`: what was released, which wheel bytes each identity colu
 the columns agree, the multi-GPU and measurement checks, how to run the same check on your own machine, and
 where the full logs are.
 
+Each identity column record states its own run: the exact device and how many were used, the driver and
+runtime versions, the Mojo and Python versions, the start and end time (UTC), the total seconds and the
+seconds of each lane, the wheel files it ran on (name, sha256, version) and the machine it ran on (provider
+and instance id). They are in the record's `run` object and the `run_*` lines of its `.provenance.txt`; a fact
+that could not be read is null, with its reason. The identity table in `SUMMARY.md` is read from them.
+
 What is here:
 
 - `SUMMARY.md`: the human-readable account of this release's evidence, written from the files below.
