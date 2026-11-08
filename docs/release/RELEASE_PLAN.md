@@ -124,6 +124,17 @@ the compile the same compile. Since lane `post-one-mac-cache`:
   seeds it from the one Mac cache first (then earlier releases), and after the build copies every
   archive it holds back into the one Mac cache (verified; a key that holds other bytes is a
   conflict and is never replaced).
+- A placed group is that group's compile evidence (lane `post-admit-cache-hit`). The
+  `macos-release-build` admission (`tools/release_requirements_macos_build.py`) takes a group the
+  build log names `miss+built-cached` (compiled now) or `hit` (placed). For both, the closure-v2
+  key's source closure, executed inputs, merged membership and build environment reproduce from the
+  frozen commit. A placed group also needs the release cache's `hit` row naming the archive's
+  bytes, the archive's own record of its compile (`source_commit`, `built`, `build_seconds`,
+  `builder`; `bincache.py` writes it into every local archive), the hit's `placements.jsonl` line
+  naming the same compile, and the key's closure reproducing at that `source_commit`. Anything
+  missing, or a key that does not reproduce, refuses. The admission facts list
+  `compiles: {built, placed}` and each group's `compile` (revision, date, seconds, builder), so the
+  evidence summary can say per group when it was compiled and that it was placed.
 
 To get the hits, run the development build of the frozen commit in the checkout the release will
 build in (`repo_path` is keyed; `Release.source_checkout`: the main checkout when its HEAD is the
