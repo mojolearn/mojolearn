@@ -15,8 +15,10 @@
 #   runtime  AMD with adapters: the ROCm 7.2.3 runtime the ROCm torch build needs
 #            (tools/amd_box_runtime_setup.sh, when /opt/rocm-7.2.3/lib is missing); python3 venv support;
 #   measuresmoke-setup  in the background, while the phases below run (network and disk bound): the measurement
-#            smoke's two venvs (the exact wheels + MEASURE_SMOKE_PIP; the fixture generator's CPU torch), and after
-#            the overlay the plan's data from R2 (measuresmoke-data.json); the smoke itself runs last;
+#            smoke's two venvs (the exact wheels + MEASURE_SMOKE_PIP; the fixture generator's CPU torch); the smoke
+#            itself runs last and stages the plan's data from R2 (measuresmoke-data.json) group by group;
+#   disk     "DISK free=<GB> after <phase>" after every phase; a box with less free than GATE_DISK_NEED_GB
+#            (tools/ops/gate_disk_plan.py) is refused at the start; the gate's venvs go once its reports are home;
 #   identity when GATE_IDENTITY_COLUMNS is set (tools/release.py --identity-on-wheels, Andrew 2026-11-05: ONE
 #            execution of the identity lanes per device class, on the built wheels): tools/identity_wheel_record.py
 #            installs the exact wheels (sha256 against GATE_IDENTITY_SHA256), selects the owed lanes by the
@@ -101,7 +103,7 @@ finish() {
     trap - EXIT
     if [ -n "${SAMPLER:-}" ]; then kill "$SAMPLER" 2>/dev/null || true; fi
     # the measurement smoke's background setup (phase measuresmoke-setup), when the job ends before the smoke
-    for p in ${MS_VPID:-} ${MS_FPID:-} ${MS_DPID:-}; do kill "$p" 2>/dev/null || true; done
+    for p in ${MS_VPID:-} ${MS_FPID:-}; do kill "$p" 2>/dev/null || true; done
     # the overlaid runner files go back to the source commit's bytes: the next job finds a clean tree
     if [ -n "$OVERLAID" ]; then
         ( cd "$GATE_TREE" && for f in $OVERLAID; do git checkout -q -- "$f" 2>/dev/null || rm -f "$f"; done ) \
@@ -224,7 +226,7 @@ PHASE=measuresmoke-setup
 # overlay (its stager is a GATE_OVERLAY file).
 MS_PY="$GATE_WORK/measure-venv/bin/python"
 MS_FPY="$GATE_WORK/fixture-venv/bin/python"
-MS_VPID=""; MS_FPID=""; MS_DPID=""
+MS_VPID=""; MS_FPID=""
 if [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
     { python3 -m venv "$GATE_WORK/measure-venv" \
       && "$MS_PY" -m pip install -q --no-cache-dir "${GATE_WHEELS[@]}" \
@@ -535,12 +537,7 @@ else
     else
         say "measuresmoke: the fixture venv did not install (see fixture-venv.log); the layer recipes will FAIL"
     fi
-    if [ -n "$MS_DPID" ]; then
-        drc=0; wait "$MS_DPID" || drc=$?
-        grep -E '^MEASURESMOKE data' "$J/measuresmoke-data.log" | head -n 12 || true
-        [ "$drc" = 0 ] || { say "measuresmoke: staging the plan's data exited $drc: FAIL"; [ "$mrc" != 0 ] || mrc=$drc; }
-    fi
-    MS_VPID=""; MS_FPID=""; MS_DPID=""
+    MS_VPID=""; MS_FPID=""
 fi
 msdata=()
 if [ -f "$IN/measuresmoke-data.json" ]; then msdata=(--data-plan "$IN/measuresmoke-data.json" --home "$HOME"); fi
