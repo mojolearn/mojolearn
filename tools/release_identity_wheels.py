@@ -157,11 +157,15 @@ class IdentityOnWheels:
             rel = self.rel
         except (AttributeError, KeyError, TypeError):
             return False
-        # the notice goes to ~/mojolearn-evidence/rel<ver>/ (MOJOLEARN_EVIDENCE_ROOT); a run with its own
-        # --state-dir (the tests' fakes) keeps it under that dir
-        state_dir = getattr(getattr(self, "args", None), "state_dir", "") or ""
+        # the notice goes to <evidence root>/rel<ver>/ when the state is in its default place
+        # (<evidence root>/release/<version>, the evidence root being ~/mojolearn-evidence or
+        # MOJOLEARN_EVIDENCE_ROOT); any other state dir (--state-dir, the tests' fakes) keeps it under that dir
+        base = getattr(self, "base", None)
+        root = None if base is None else (Path(base).parent.parent
+                                          if Path(base).name == self.version and Path(base).parent.name == "release"
+                                          else Path(base))
         return RV.record(rel, self.version, vendor, name, reason, log=log, say=self.say,
-                         evidence_root=state_dir or None)
+                         evidence_root=root or Path(rel))
 
     def soft_judge(self, vendor, hard, soft):
         """(errors, soft_names): HARD errors stop the gate; each SOFT (name, reason, log) is recorded and lets it
