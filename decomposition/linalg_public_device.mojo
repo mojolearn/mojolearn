@@ -60,7 +60,7 @@ turn a divergence into a pass.
 
 from core.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
 from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -176,7 +176,14 @@ def device_svdvals(
     # x_decomp/eigh_scale.mojo on A (`host_svdvals` takes the same)
     var dfac = enqueue_es_scale_rect(ctx, F32Ptr(unsafe_from_address=Int(da.unsafe_ptr())), 1, n_rows, n_cols)
     _ = qr_factor(ctx, da, scratch, r_buf, n_rows, n_cols)
-    svd_of_r(ctx, r_buf, v_buf, s_buf, n_cols)
+    # fix-svdvals-jacobi (2026-11-08): the x_decomp convergence rule (60
+    # sweeps, 8 float32 epsilon, insignificant rotations skipped). The
+    # inherited 15 sweeps at 1e-7 sit below float32 epsilon and refused
+    # rank-deficient input (istella's 21 constant columns) on every vendor.
+    # `host_svdvals` passes the same three, so the host column keeps the bits.
+    svd_of_r[False, True](
+        ctx, r_buf, v_buf, s_buf, n_cols, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+    )
     enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(s_buf.unsafe_ptr())), dfac, 1, n_cols)
     # descending on the device (decomposition/spectrum_order_device.mojo)
     var so = ctx.enqueue_create_buffer[DType.float32](n_cols)
