@@ -5065,10 +5065,16 @@ class Release(release_identity_wheels.IdentityOnWheels):
         """After the gate step's HARD verdict: the smoke's summary judged now when it is home, else (its box job
         still running it) the background fetch started; the step line's '; measurement smoke ...' tail."""
         from release_identity_wheels import measure_smoke_summary
-        state, _, _, log = self.smoke_fetch_paths(vendor)
-        if measure_smoke_summary(self.gate_out(vendor)).is_file() or not state.is_file():
-            # home, or no job left to bring it (a gate adopted from a landed final): judged now (SOFT)
+        try:
+            state, _, _, log = self.smoke_fetch_paths(vendor)
+            output = self.gate_out(vendor)
+        except (StepFailed, OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
+            return ""   # no candidate here: nothing of this release ran on a box
+        if measure_smoke_summary(output).is_file():
             return "; measurement smoke " + self.judge_measure_smoke(vendor)
+        if not state.is_file():
+            # no job left to bring it: settle_measure_smoke judges it (SOFT) if the one gate job ran here
+            return ""
         if not self.smoke_fetch_alive(vendor):
             self.start_smoke_fetch(vendor)
         return f"; measurement smoke running on the box (recorded when it lands; {log.name})"
