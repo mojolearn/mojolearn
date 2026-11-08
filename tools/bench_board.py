@@ -5656,6 +5656,10 @@ def main(argv=None):
         ensure_algos_prep(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
+    if _synthetic_on():
+        # the prep's synthetic files are read into its blocks now: they go at once (a race's loader writes its own)
+        import shutil
+        shutil.rmtree(_smoke_inputs().synthetic_dir(), ignore_errors=True)
     if getattr(args, "prep_only", False):
         # smoke-fixes (2026-10-14): the campaign smoke stages every recipe's untimed block prep ONCE before its
         # per-recipe loop, so no recipe's 5 s check is spent preparing data
