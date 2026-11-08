@@ -2071,8 +2071,11 @@ def data_status(data_root, datasets, verify=False):
         path = os.path.join(data_root, DATA_FILES[ds])
         if ds == "higgs":
             path = os.environ.get("MOJOLEARN_BENCH_HIGGS") or path
-        rec = {"path": path, "present": os.path.isfile(path), "r2_key": R2_KEYS[ds]}
-        pin = pins.get(R2_KEYS[ds])
+        # the smoke's verify-fixtures mode: the loaders open the pinned slice (tools/smoke_inputs.py)
+        key = _smoke_inputs().slice_key(R2_KEYS[ds]) if _slices_on() else R2_KEYS[ds]
+        path = _loader_path(path)
+        rec = {"path": path, "present": os.path.isfile(path), "r2_key": key}
+        pin = pins.get(key)
         if pin:
             rec["pinned_bytes"] = int(pin[0])
             rec["pinned_sha256"] = pin[1]
@@ -2560,9 +2563,72 @@ def strip_our_cpu(result):
 # Classical: prep once, race per (lane, dataset); read the race JSON
 # ---------------------------------------------------------------------------
 
-def classical_data_dir(ctx, rows):
+# ---------------------------------------------------------------------------
+# --inputs verify-fixtures: the release measurement smoke's inputs (tools/smoke_inputs.py)
+# ---------------------------------------------------------------------------
+
+#: {race id: {input, verify_lanes, files}} from --inputs-map (tools/release_measurement_smoke.py smoke_inputs); empty
+#: outside the smoke's verify-fixtures mode
+INPUT_MAP = {}
+INPUT_VERIFY = "verify fixture"
+#: a fixture race's data directories carry this after their rows tag, so its fixture blocks never meet the blocks a
+#: sliced-file or no-verify-lane race of the same (block, dataset) reads
+FIXTURE_DIR_TAG = "-verify-fixtures"
+
+
+def fixture_race(race):
+    """True for a race whose prep takes fixture `base` instead of its dataset: on the verify fixture in the map
+    and reading a data file (a race reading no file keeps the driver's own seeded inputs)."""
+    rec = INPUT_MAP.get(race.get("id")) if INPUT_MAP else None
+    return bool(rec and rec.get("input") == INPUT_VERIFY and rec.get("files"))
+
+
+def set_inputs(args):
+    """--inputs: 'datasets' (every timed run) or 'verify-fixtures' (--smoke only, with --inputs-map). The mode
+    reaches every driver as smoke_inputs.MODE_ENV through this process's environment (child_env copies it), which
+    also makes every loader open its pinned slice."""
+    mode = getattr(args, "inputs", None) or "datasets"
+    if mode == "datasets":
+        if getattr(args, "inputs_map", None):
+            raise SystemExit("bench_board: --inputs-map is for --inputs verify-fixtures")
+        return mode
+    if not args.smoke:
+        raise SystemExit("bench_board: --inputs verify-fixtures is for --smoke runs (a timed board reads its datasets)")
+    if not getattr(args, "inputs_map", None):
+        raise SystemExit("bench_board: --inputs verify-fixtures needs --inputs-map (release_measurement_smoke.py "
+                         "writes it)")
+    with open(args.inputs_map) as fh:
+        doc = json.load(fh)
+    INPUT_MAP.clear()
+    INPUT_MAP.update(doc.get("recipes", doc))
+    os.environ[_smoke_inputs().MODE_ENV] = mode
+    return mode
+
+
+_SMOKE_INPUTS = []
+
+
+def _smoke_inputs():
+    if not _SMOKE_INPUTS:
+        _SMOKE_INPUTS.append(_load_tool("smoke_inputs"))
+    return _SMOKE_INPUTS[0]
+
+
+def _slices_on():
+    return os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "verify-fixtures"
+
+
+def _loader_path(path):
+    return _smoke_inputs().loader_path(path) if _slices_on() and path else path
+
+
+def _fixture_tag(race):
+    return FIXTURE_DIR_TAG if race is not None and fixture_race(race) else ""
+
+
+def classical_data_dir(ctx, rows, race=None):
     base = ctx["ctd_data"] or os.path.join(ctx["out"], "ctd-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_classical_prep(ctx, races):
@@ -2571,9 +2637,9 @@ def ensure_classical_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "classical":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
-        d = classical_data_dir(ctx, rows)
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
+        d = classical_data_dir(ctx, rows, r0)
         missing = sorted(p for p in pairs if not os.path.exists(
             os.path.join(d, "%s-%s.json" % (CLASSICAL_BLOCK[p[0]], p[1]))))
         if not missing:
@@ -2584,7 +2650,9 @@ def ensure_classical_prep(ctx, races):
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "classical-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        log = os.path.join(ctx["out"], "logs", "classical-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: classical prep rows=%s lanes=%s datasets=%s"
               % (rows_tag(rows), ",".join(lanes), ",".join(dss)), flush=True)
         rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
@@ -2598,7 +2666,7 @@ def classical_cmd(ctx, race):
     rsec = ctx["round_seconds"] or classical_round_seconds(lane, ds, ctx["vendor"])
     cmd = [ctx["python"], "-u", ctx["classical_driver"], "race",
            "--lane", lane, "--dataset", ds,
-           "--data", classical_data_dir(ctx, race["rows"]),
+           "--data", classical_data_dir(ctx, race["rows"], race),
            "--out", os.path.join(ctx["out"], "raw", "classical", "rows-" + rows_tag(race["rows"])),
            "--work", os.path.join(ctx["out"], "work"),
            "--root", REPO,
@@ -2615,9 +2683,9 @@ def classical_cmd(ctx, race):
     return cmd, env, ceiling
 
 
-def more_data_dir(ctx, rows):
+def more_data_dir(ctx, rows, race=None):
     base = ctx.get("more_data") or os.path.join(ctx["out"], "more-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_more_prep(ctx, races):
@@ -2626,9 +2694,9 @@ def ensure_more_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "classical2":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
-        d = more_data_dir(ctx, rows)
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
+        d = more_data_dir(ctx, rows, r0)
         missing = sorted(p for p in pairs if not os.path.exists(
             os.path.join(d, "%s-%s.json" % (MORE.block_of(p[0]), p[1]))))
         if not missing:
@@ -2639,7 +2707,9 @@ def ensure_more_prep(ctx, races):
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "classical2-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        log = os.path.join(ctx["out"], "logs", "classical2-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: classical2 prep rows=%s lanes=%s datasets=%s"
               % (rows_tag(rows), ",".join(lanes), ",".join(dss)), flush=True)
         rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
@@ -2657,7 +2727,7 @@ def more_cmd(ctx, race):
     rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
     cmd = [ctx["python"], "-u", ctx["more_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
-           "--data", more_data_dir(ctx, race["rows"]),
+           "--data", more_data_dir(ctx, race["rows"], race),
            "--arms", ",".join(race["arms"]),
            "--rounds", str(ctx["rounds"]),
            "--out", os.path.join(ctx["out"], "raw", "classical2", "rows-" + rows_tag(race["rows"])),
@@ -2676,9 +2746,9 @@ def more_json_path(ctx, race):
                         "%s-%s.json" % (race["lane"], race["dataset"]))
 
 
-def algos_data_dir(ctx, rows):
+def algos_data_dir(ctx, rows, race=None):
     base = ctx.get("algos_data") or os.path.join(ctx["out"], "algos-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_algos_prep(ctx, races):
@@ -2687,15 +2757,17 @@ def ensure_algos_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "algos":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
         lanes = sorted({p[0] for p in pairs})
         dss = sorted({p[1] for p in pairs if p[1] in DATASETS}) or ["taxi"]
-        cmd = [ctx["python"], "-u", ctx["algos_driver"], "prep", "--data", algos_data_dir(ctx, rows),
+        cmd = [ctx["python"], "-u", ctx["algos_driver"], "prep", "--data", algos_data_dir(ctx, rows, r0),
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: algos prep rows=%s lanes=%d datasets=%s"
               % (rows_tag(rows), len(lanes), ",".join(dss)), flush=True)
         if _in_smoke_worker():
@@ -2717,7 +2789,7 @@ def algos_cmd(ctx, race):
     rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
     cmd = [ctx["python"], "-u", ctx["algos_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
-           "--data", algos_data_dir(ctx, race["rows"]),
+           "--data", algos_data_dir(ctx, race["rows"], race),
            "--arms", ",".join(race["arms"]),
            "--rounds", str(ctx["rounds"]),
            "--out", os.path.join(ctx["out"], "raw", "algos", "rows-" + rows_tag(race["rows"])),
@@ -3213,7 +3285,14 @@ _R2_TO_DATA = {v: k for k, v in R2_KEYS.items()}
 
 
 def race_data_files(ctx, race):
-    """[(name, path)] of the data files a race reads; [] for seeded data."""
+    """[(name, path)] of the data files a race reads; [] for seeded data (and for a race on the verify fixture in
+    the smoke, which reads none); a loader's file is its slice in the smoke's verify-fixtures mode."""
+    if fixture_race(race):
+        return []
+    return [(n, _loader_path(p)) for n, p in _race_data_files(ctx, race)]
+
+
+def _race_data_files(ctx, race):
     fam, lane, ds = race["family"], race["lane"], race["dataset"]
     if fam == "neural":
         # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27: HIGGS fit
@@ -3251,6 +3330,8 @@ def race_data_sha(ctx, race, box):
             return "mojolearn-sources:git %s" % (c[:-len("-dirty")] + "+dirty" if c.endswith("-dirty") else c)
         return None
     files = race_data_files(ctx, race)
+    if not files and fixture_race(race):
+        return "identity fixture %s (tools/identity_break.py)" % _smoke_inputs().FIXTURE
     if not files:
         return "synthetic (seed %d)" % SEED
     cache = ctx.setdefault("data_sha", {})
@@ -5053,6 +5134,13 @@ def build_parser():
     p.add_argument("--measurement-source", default=None, metavar="JSON",
                    help="with --preflight-only: reuse this retained source snapshot {source, inventory} "
                         "(tools/gpu_gap_campaign.py --smoke writes it once)")
+    p.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
+                   help="with --smoke: verify-fixtures runs every race named on the verify fixture in --inputs-map "
+                        "on the identity verification's fixture `base` and every dataset loader on its pinned slice "
+                        "(tools/smoke_inputs.py); the timed board always reads its datasets")
+    p.add_argument("--inputs-map", default=None, metavar="JSON",
+                   help="with --inputs verify-fixtures: {race id: {input, verify_lanes, files}} "
+                        "(tools/release_measurement_smoke.py smoke_inputs)")
     p.add_argument("--drop-race-scratch", action="store_true",
                    help="with --smoke: delete each race's driver scratch (work/) and its local evidence directory "
                         "once its record is written to board.json (the smoke judges the record only)")
@@ -5345,7 +5433,9 @@ def main(argv=None):
         races = select_opponent_arms(races, args.opponent_arms)
     if args.shard:
         races = shard_races(races, args.shard)
-    needed, corpus_missing = data_needs(races, datasets)
+    set_inputs(args)
+    # a race on the verify fixture reads no dataset (tools/smoke_inputs.py); every other one reads its slice
+    needed, corpus_missing = data_needs([r for r in races if not fixture_race(r)], datasets)
     data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:
