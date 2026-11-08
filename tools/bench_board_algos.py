@@ -2384,10 +2384,10 @@ def r2_keys(lane, dataset):
 def corpus_path(key):
     """Where a staged corpus key lives on this box (tools/dataset_store.sh puts
     keys outside $HOME under ~/r2-stage/<key>). In the release measurement
-    smoke's verify-fixtures mode, its pinned 2 MB head instead (the same
-    places, key tools/smoke_inputs.slice_key: corpus/enwik8/input.smoke.txt)."""
-    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "verify-fixtures":
-        key = _tool("smoke_inputs").slice_key(key)
+    smoke's synthetic mode, generated text of the corpus's kind written on
+    the box (tools/smoke_inputs.py synthetic_path); nothing is staged."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "synthetic":
+        return _tool("smoke_inputs").synthetic_path(key)
     home = os.path.expanduser("~")
     cands = []
     if os.environ.get("MOJOLEARN_CORPUS_ROOT"):
