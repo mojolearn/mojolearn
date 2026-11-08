@@ -94,8 +94,6 @@ MANIFEST="$ROOT/bench/results/dataset_store/manifest.tsv"
 CREDS="${MOJOLEARN_R2_CREDS:-$HOME/.mojolearn_r2}"
 
 # key <TAB> local path, relative to $HOME for data, $ROOT for corpora.
-# The *.smoke.* keys are the release measurement smoke's slices (tools/smoke_inputs.py), written and pinned by
-# `python3 tools/release_measurement_smoke.py make-smoke-slices [--push]` from the full files above.
 # Istella-S ships BOTH the decoded npz (what the arms read) and the source
 # tarball (so a decode can be reproduced without the origin server).
 catalog() {
@@ -119,12 +117,6 @@ corpus/enwik8/tokens/mojolearn-bpe-50257-v1/manifest.json	HOME/mojolearn-evidenc
 corpus/fineweb-edu-10BT/vocab-sample/000-rg0-19.txt	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/fineweb-edu-10BT-000-rg0-19.txt
 vocab/mojolearn-bpe-fineweb-edu-50257-v1/ranks.tsv	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.ranks.tsv
 vocab/mojolearn-bpe-fineweb-edu-50257-v1/tokenizer.json	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.tokenizer.json
-gbm-bench/taxi/taxi_speed.smoke.npz	HOME/datasets/smoke-slices/gbm-bench/taxi/taxi_speed.smoke.npz
-gbm-bench/istella/istella_speed.smoke.npz	HOME/datasets/smoke-slices/gbm-bench/istella/istella_speed.smoke.npz
-gbm-bench/istella/istella_rank.smoke.npz	HOME/datasets/smoke-slices/gbm-bench/istella/istella_rank.smoke.npz
-gbm-bench/higgs/higgs_speed.smoke.npz	HOME/datasets/smoke-slices/gbm-bench/higgs/higgs_speed.smoke.npz
-corpus/enwik8/input.smoke.txt	HOME/datasets/smoke-slices/corpus/enwik8/input.smoke.txt
-corpus/pile_github/input.smoke.txt	HOME/datasets/smoke-slices/corpus/pile_github/input.smoke.txt
 EOF
 }
 
