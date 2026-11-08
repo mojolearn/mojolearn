@@ -17,23 +17,6 @@ import release  # noqa: E402
 from test_release_requirement_receipts import CandidateReceiptTests  # noqa: E402
 import release_gate_profiles as profiles  # noqa: E402
 
-
-@pytest.fixture(autouse=True)
-def _smoke_slice_pins(monkeypatch):
-    """The gate flow under test writes the measurement smoke's data plan, which needs a pin per smoke slice; until
-    `release_measurement_smoke.py make-smoke-slices` has pinned them in the tree, these flow tests get stand-in pins
-    for the slice keys only (test_release_measurement_smoke.py test_every_slice_the_smoke_stages_is_pinned stays red
-    until the real ones are committed)."""
-    import release_measurement_smoke as MS
-    real = MS.pins
-
-    def pins(root=MS.ROOT):
-        got = real(root)
-        for k in MS.slice_sources().values():
-            got.setdefault(k, (1000, "0" * 64))
-        return got
-    monkeypatch.setattr(MS, "pins", pins)
-
 RG = release.release_gate_module()
 COMMIT = "a" * 40
 VERSION = "0.8.57"
