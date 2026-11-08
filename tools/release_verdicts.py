@@ -108,6 +108,8 @@ def first_lines(log, n=12):
 def record(rel, version, vendor, name, reason, log=None, say=print, evidence_root=None):
     """Append one SOFT failure to REL/soft-failures.json unless it is there already (same vendor, name and
     reason); log "SOFT FAIL <vendor> <name>: <reason>" and notify when it is new. True when new."""
+    if rel is None:
+        return False
     rel = Path(rel)
     failures = load(rel)
     reason = str(reason)[:600]
