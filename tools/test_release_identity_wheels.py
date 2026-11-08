@@ -222,12 +222,12 @@ def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monke
     # the measurement smoke is unconditional too: identity, units and shardcheck alone never pass the box job
     ok, why = r.single_gate_ok("amd", out)
     assert not ok and "measuresmoke: no measurement-smoke summary" in why and "--reuse-unchanged" in why
-    # the gate job's own part passes without it (run_gate then launches the smoke's own job)
+    # the gate job's HARD part passes without it (the smoke runs last in the same job and lands later)
     ok, why = r.single_gate_ok("amd", out, measure=False)
-    assert ok and "measurement smoke not judged here" in why
+    assert ok and "measurement smoke judged when it lands" in why
     import release_measurement_smoke as MS
     ids = ["algos/a/taxi/rows=2000", "neural/b/gaussian/shape=small"]
-    smoke = out / "measuresmoke-job" / "measuresmoke"
+    smoke = out / "measuresmoke"
     smoke.mkdir(parents=True)
     failing = MS.summarize("amd", ids, {ids[0]: dict(verdict=MS.PASS, reason="", batch=0),
                                         ids[1]: dict(verdict=MS.FAIL, reason="not run", batch=0)}, {})

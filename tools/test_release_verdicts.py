@@ -60,7 +60,7 @@ def box_job(r, out, units, shard=True, smoke_ok=False, runtime_ok=False, monkeyp
         (out / "shardcheck" / LS.SUMMARY).write_text(json.dumps(dict(schema=LS.SCHEMA, ok=True, counts=list(LS.COUNTS),
                                                                      lanes=lanes)))
     ids = ["algos/a/taxi/rows=2000"]
-    smoke = out / "measuresmoke-job" / "measuresmoke"
+    smoke = out / "measuresmoke"
     smoke.mkdir(parents=True, exist_ok=True)
     verdict = MS.PASS if smoke_ok else MS.FAIL
     (smoke / MS.SUMMARY).write_text(json.dumps(MS.summarize("amd", ids, {ids[0]: dict(verdict=verdict, reason="x",
@@ -78,12 +78,18 @@ def test_a_soft_failure_passes_the_gate_and_reaches_the_summary(tmp_path, monkey
     box_job(r, out, SOFT_UNITS, monkeypatch=monkeypatch)
     ok, why = r.single_gate_ok("amd", out)
     assert ok and "SOFT FAIL (fix lanes owed)" in why
+    # the verdict is HARD-only: the smoke (the job's last phase) is not judged in it, it is recorded when it lands
+    assert sorted(f["name"] for f in RV.load(r.rel)) == ["adapters", "autograd/linear-regression", "runtime"]
+    monkeypatch.setattr(r, "gate_out", lambda vendor: out)
+    assert r.judge_measure_smoke("amd").startswith("SOFT FAIL")
     names = sorted(f["name"] for f in RV.load(r.rel))
     assert names == ["adapters", "autograd/linear-regression", "measuresmoke", "runtime"]
     assert sum(l.startswith("SOFT FAIL amd ") for l in r.lines) == 4
     assert (r.base / "rel0866" / "SOFT-FAILURES.md").is_file()   # a --state-dir run keeps the notice under it
     # read again (resume, status, the record): nothing is recorded twice
     assert r.single_gate_ok("amd", out)[0] and len(RV.load(r.rel)) == 4
+    r.judge_measure_smoke("amd")
+    assert len(RV.load(r.rel)) == 4
     # the evidence set carries the failures and SUMMARY.md lists them
     ctx = ES.Context(version=VERSION, commit=COMMIT, tooling_commit=COMMIT, date="2026-11-08", rel=r.rel,
                      staged=tmp_path / "staged", published=["linux", "amd"], single=True)
@@ -117,7 +123,7 @@ def test_a_hard_failure_always_stops(tmp_path, monkeypatch, strict):
 def test_a_box_job_that_exited_1_on_a_soft_part_passes_the_gate(tmp_path, monkeypatch):
     r = make(tmp_path, identity_on_wheels=True)
     verdicts = iter([(False, "no report"), (False, "no report"), (True, "PASS job"), (True, "PASS")])
-    monkeypatch.setattr(r, "gate_ok", lambda vendor, measure=True: next(verdicts))
+    monkeypatch.setattr(r, "gate_ok", lambda vendor, measure=None: next(verdicts))
     for name, value in (("candidate_gate_wheels", lambda v: [tmp_path / "core.whl"]),
                         ("source_checkout", lambda create=True: tmp_path / "src"),
                         ("gate_out", lambda v: tmp_path / "gate"), ("gate_autograd_prior", lambda v: None),
@@ -125,21 +131,21 @@ def test_a_box_job_that_exited_1_on_a_soft_part_passes_the_gate(tmp_path, monkey
                         ("refuse_device_lanes_after_publish", lambda step: None),
                         ("readiness_status", lambda write=False: None),
                         ("readiness", lambda: type("R", (), {"begin": lambda self, n: None})()),
-                        ("launch_measure_smoke_job", lambda *a: None),
+                        ("follow_measure_smoke", lambda v: "; measurement smoke running on the box"),
                         ("record_candidate_requirement", lambda *a, **k: None)):
         monkeypatch.setattr(r, name, value)
 
     def must(cmd, **kw):
         raise release.StepFailed("the amd release gate box job exited 1")
     monkeypatch.setattr(r, "must", must)
-    assert r.run_gate("amd") == "PASS"
+    assert r.run_gate("amd") == "PASS job; measurement smoke running on the box"
     assert [f["name"] for f in RV.load(r.rel)] == ["box-exit"]
     # --strict: the exit stops it as before
     r2 = make(tmp_path / "s", identity_on_wheels=True, strict=True)
     for name in ("candidate_gate_wheels", "source_checkout", "gate_out", "gate_autograd_prior", "gate_runtime_prior",
                  "gate_identity_args", "refuse_device_lanes_after_publish", "readiness_status", "readiness"):
         monkeypatch.setattr(r2, name, getattr(r, name))
-    monkeypatch.setattr(r2, "gate_ok", lambda vendor, measure=True: (False, "no report"))
+    monkeypatch.setattr(r2, "gate_ok", lambda vendor, measure=None: (False, "no report"))
     monkeypatch.setattr(r2, "must", must)
     with pytest.raises(release.StepFailed, match="exited 1"):
         r2.run_gate("amd")
