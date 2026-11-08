@@ -769,7 +769,10 @@ def prep(args):
     table = [b for b in blocks if b in ("manifold", "cls", "reg", "tsvd", "ivf")]
     if not table:
         return 0
-    harness = ctd._module("speed_gbdt_arm")
+    # --inputs verify-fixtures (the release measurement smoke only): every block from the identity verification's
+    # fixture `base` through the one helper (tools/smoke_inputs.py prep_sources), never from the dataset files
+    harness, knn_ds = _load("smoke_inputs").prep_sources(getattr(args, "inputs", None) or "datasets",
+                                                         ctd._module("speed_gbdt_arm"), None)
     for ds in datasets:
         if ds not in ("taxi", "istella"):
             continue
@@ -798,7 +801,7 @@ def prep(args):
 
         for blk in table:
             if blk == "ivf":
-                knn_ds = ctd._module("knn_datasets")
+                knn_ds = knn_ds or ctd._module("knn_datasets")
                 b = knn_ds.real_block(ds, n_index=_cap(IVF_INDEX, cap, 2048),
                                       n_queries=_cap(IVF_QUERIES, cap and max(64, cap // 50), 64))
                 index, bad_i = ctd.clean_sentinel(b["index"])
@@ -2304,6 +2307,9 @@ def build_parser():
     pr.add_argument("--datasets", default="taxi,istella")
     pr.add_argument("--max-rows", type=int, default=0,
                     help="SMOKE shape: cap every row count near this (0 = the lane shapes)")
+    pr.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
+                    help="verify-fixtures: the release measurement smoke's blocks from the identity fixture "
+                         "(tools/smoke_inputs.py); never a timed run")
     r = sub.add_parser("race")
     r.add_argument("--lane", required=True, choices=LANE_ORDER)
     r.add_argument("--dataset", required=True)
