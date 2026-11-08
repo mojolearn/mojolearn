@@ -18,7 +18,9 @@ docs/release/RUNTIME_QUALIFICATION.md is the contract; in short:
     carry the same bytes in the new wheels, and the same interpreter.
   ``--redo`` runs every unit.
 * A unit's budget is three times its last measured seconds, at least 120 s (DEFAULT_BUDGET_S with
-  no history); the whole-run budget stays the outer cap. A unit over its budget, or never started
+  no history); the whole-run budget stays the outer cap. That budget is the serial bound: a unit that
+  shares its GPU with other units runs under budget x the units sharing it (receipt: budget_s,
+  concurrency, scaled_budget_s), and its seconds count as seconds / concurrency for the next budget. A unit over its budget, or never started
   because the outer cap ran out, is FAILED by name.
 * Tiers: ``smoke`` is the release gate's own installed smoke (the eleven release-light-v1
   correctness records on NVIDIA/AMD, the macOS wheel smoke on Apple), which every gate runs and
@@ -343,9 +345,15 @@ def stage_prior(sources, destination, vendors):
 
 
 def last_seconds(rows):
-    """The newest measured seconds of a unit that ran to an end (passed or failed tests, not stopped)."""
+    """The newest measured seconds of a unit that ran to an end (passed or failed tests, not stopped),
+    as a serial bound: a unit that shared its GPU with CONCURRENCY units (its receipt says so) took about
+    that many times its serial seconds, so its seconds are divided by it. Without this the budget
+    (BUDGET_FACTOR x these seconds) would grow by the concurrency factor every run."""
     for receipt, _ in rows:
         if receipt.get("seconds") is not None and not receipt.get("stopped"):
+            concurrency = receipt.get("concurrency") or 1
+            if concurrency > 1:
+                return round(float(receipt["seconds"]) / concurrency, 1)
             return receipt["seconds"]
     return None
 
@@ -405,11 +413,15 @@ def decide(unit, rows, *, wheels, device, closure, payload=None, interpreter=Non
 
 def unit_receipt(*, unit, vendor, backend, device, status, seconds, budget_s, wheels, source_commit,
                  test_commit, closure, scope, cases, interpreter=None, natives=None, run=None, reason="",
-                 stopped=None, reused=None, finished_at=None):
-    """One unit receipt (UNIT_SCHEMA); put_receipt adds the junit name and digest."""
+                 stopped=None, reused=None, finished_at=None, concurrency=1, scaled_budget_s=None):
+    """One unit receipt (UNIT_SCHEMA); put_receipt adds the junit name and digest. BUDGET_S is the serial
+    bound; CONCURRENCY the most units that shared the unit's GPU while it ran (itself included) and
+    SCALED_BUDGET_S the bound it actually ran under (BUDGET_S x CONCURRENCY, clipped by the whole run)."""
     interpreter = interpreter or {}
     return dict(schema=UNIT_SCHEMA, unit=unit, tier="qualify", status=status, reason=reason,
-                seconds=seconds, budget_s=budget_s, stopped=stopped, vendor=vendor, backend=backend,
+                seconds=seconds, budget_s=budget_s, concurrency=concurrency,
+                scaled_budget_s=budget_s if scaled_budget_s is None else scaled_budget_s,
+                stopped=stopped, vendor=vendor, backend=backend,
                 device_class=device, wheels=dict(wheels), source_commit=source_commit,
                 test_commit=test_commit, closure=closure, scope=scope, cases=cases,
                 interpreter=interpreter, interpreter_cache_tag=interpreter.get("cache_tag"),

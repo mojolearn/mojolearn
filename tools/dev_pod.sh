@@ -101,7 +101,11 @@ NV_GPU_COUNT="${MOJOLEARN_DEVPOD_GPU_COUNT:-1}"
 NV_IMAGE="${MOJOLEARN_DEVPOD_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
 AMD_GPUS="${MOJOLEARN_DEVPOD_AMD_GPUS:-AMD Instinct MI300X OAM}"
 AMD_IMAGE="${MOJOLEARN_DEVPOD_AMD_IMAGE:-rocm/dev-ubuntu-22.04:6.4.1-complete}"
-DISK_GB="${MOJOLEARN_DEVPOD_DISK_GB:-80}"
+# Container disk: sized from the release gate's disk plan (tools/ops/gate_disk_plan.py pod-gb: the gate job's measured
+# footprint + 20 GB headroom, at least the former fixed 80 GB; 0.8.66 run t filled an 80 GB pod). The gate's work is
+# under /root, the container disk, so no network volume is requested (volumeInGb stays 0).
+DISK_GB="${MOJOLEARN_DEVPOD_DISK_GB:-$(python3 "$ROOT/tools/ops/gate_disk_plan.py" pod-gb 2>/dev/null || echo 80)}"
+[[ "$DISK_GB" =~ ^[1-9][0-9]*$ ]] || { echo "dev_pod: the container disk size must be a whole number of GB (got '$DISK_GB')" >&2; exit 2; }
 READY_TIMEOUT=900
 # Slow provider SSH handshakes may need a longer bounded connection attempt.
 SSH_CONNECT_TIMEOUT="${MOJOLEARN_RUNPOD_SSH_CONNECT_TIMEOUT:-20}"

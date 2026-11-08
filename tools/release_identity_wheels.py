@@ -58,12 +58,18 @@ REFERENCE_ENV = "MOJOLEARN_IDENTITY_REFERENCE_AT"
 
 
 #: where the measurement smoke's own box job lands under a gate's out (tools/ops/release_gate.py --job measuresmoke)
+#: where the measurement smoke's own box job (gone 2026-11-08) landed its summary; read only when the one gate job's
+#: <gate out>/measuresmoke/ has none (a gate of an earlier freeze)
 MEASURE_JOB_DIR = "measuresmoke-job"
 
 
 def measure_smoke_summary(output):
+    """<gate out>/measuresmoke/measuresmoke.json: the one gate job runs the smoke last and its final upload brings
+    it home there (tools/ops/release_gate_job.sh phase measuresmoke)."""
     import release_measurement_smoke as MS
-    return Path(output) / MEASURE_JOB_DIR / "measuresmoke" / MS.SUMMARY
+    path = Path(output) / "measuresmoke" / MS.SUMMARY
+    legacy = Path(output) / MEASURE_JOB_DIR / "measuresmoke" / MS.SUMMARY
+    return legacy if not path.is_file() and legacy.is_file() else path
 
 
 def measure_smoke_errors(output):
@@ -418,9 +424,13 @@ class IdentityOnWheels:
             args += ["--units-plan", str(self.units_plan_path(vendor))]
         return args
 
-    def single_gate_ok(self, vendor, output, measure=True):
+    def single_gate_ok(self, vendor, output, measure=None):
         """(ok, why) of the one box job under --identity-on-wheels: the identity summary of its columns, every owed
-        device-check unit passed (the rest reused), and the installed-runtime qualifier's report."""
+        device-check unit passed (the rest reused), and the installed-runtime qualifier's report. MEASURE: judge the
+        measurement smoke's summary here too; None (default) = only under --strict (otherwise the smoke arrives after
+        the verdict and tools/release.py judge_measure_smoke records it)."""
+        if measure is None:
+            measure = self.strict()
         import release_check_units as U
         output = Path(output)
         # HARD (identity, install-load, shardcheck) stop the gate; SOFT (autograd/*, adapters, the measurement
@@ -441,7 +451,8 @@ class IdentityOnWheels:
         errors += ["shardcheck: " + e for e in LS.summary_errors(read_json(Path(output) / "shardcheck" / LS.SUMMARY))]
         # THE MEASUREMENT SMOKE, UNCONDITIONAL (Andrew 2026-11-06): every box job runs every measurement recipe once at
         # its smoke shape, ours only, on these wheel bytes (tools/release_measurement_smoke.py); nothing waives it.
-        # (measure=False: the gate job's own part, so run_gate knows which of the two box jobs still has to run)
+        # It runs LAST in the one gate job (2026-11-08) and its summary comes home after the HARD parts: judged here
+        # only under --strict (measure); otherwise tools/release.py judge_measure_smoke records it when it lands.
         smoke = measure_smoke_errors(output) if measure else []
         if smoke:
             soft.append(("measuresmoke", "; ".join(smoke), measure_smoke_summary(output)))
@@ -455,7 +466,7 @@ class IdentityOnWheels:
         return True, ("PASS: identity recorded once from these wheels; device-check units passed or reused; "
                       "logical-shard gate MATCH; measurement smoke %s; %s runtime cases%s"
                       % ("SOFT FAIL" if "measuresmoke" in softened else measure_smoke_note(output) if measure
-                         else "not judged here", cases,
+                         else "judged when it lands", cases,
                          ("; SOFT FAIL (fix lanes owed): " + ", ".join(softened)) if softened else ""))
 
     def gate_identity_errors(self, vendor, output, correctness):

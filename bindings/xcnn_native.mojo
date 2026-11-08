@@ -8,6 +8,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries
+from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.py_balanced import py_type, py_call, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_tensor_native import xcnn_tensor_operation
@@ -20,6 +21,20 @@ from bindings.xcnn_classifier_native import cnnclf_fit, cnnclf_predict, cnnclf_p
 
 def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject) -> PythonObject:
     try:
+        # A DeviceTensor or resident-handle owner collected during interpreter
+        # teardown (a tensor held in `__main__` or a closure at exit) releases
+        # nothing: the process is ending, and xcnn_builtins() and the layout
+        # check read loaded modules, a fatal error once the interpreter's
+        # modules are cleared, which `except` cannot catch. The 0.8.66 AMD
+        # measurement smoke's own-host reference child (MOJOLEARN_VENDOR=cpu)
+        # exited nonzero with "<no Python frame>" (a fatal error with no
+        # Python frame on the main thread: teardown) on every CNN lane whose
+        # layer takes DeviceTensors (conv,
+        # pools, batch norm, GCN, SAGE, BasicBlock), and those 13 races were
+        # refused. Same rule as host_archive_lifetime.mojo and
+        # embedding_layer_native.mojo.
+        if native_interpreter_finalizing():
+            return PythonObject(None)
         if operation == "tensor_finalize":
             return xcnn_tensor_operation(owner, operation, Python.tuple(), context)
         if operation == "dev_finalize":

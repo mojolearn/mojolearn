@@ -284,8 +284,8 @@ def identity_column(out, column, label, wheels, lanes, seconds, start, end):
                 chunks=[dict(worker=0, device=0, lanes=len(lanes), rc=0, records=[])])
 
 
-def test_summary_md_is_written_from_a_fixture_evidence_dir(tmp_path):
-    ctx = make_release(tmp_path, "0.9.3", single=True)
+def identity_fixture(ctx):
+    """The five identity columns, the gate checks and the admission of a single release (fixture)."""
     rel = ctx.rel
     wheel_lines = ["%s %s" % (Path(w).name, E.sha256_file(w)) for w in ctx.wheels.values()]
     for vendor, columns in (("nvidia", (("nvidia", "nvidia-l40s"), ("ptx", "nvidia-ptx-l40s-sm80"))),
@@ -312,6 +312,11 @@ def test_summary_md_is_written_from_a_fixture_evidence_dir(tmp_path):
                                    "2026-11-06T08:3%d:00Z" % i)}))
     put(rel / "identity-wheels" / "cpu" / "artifacts" / "cpu-wheel-checks" / "checks.json", dict(ok=True))
     ctx.identity_admitted = dict(source_commit=COMMIT, commit="c" * 40, table_sha256="d" * 64)
+    return ctx
+
+
+def test_summary_md_is_written_from_a_fixture_evidence_dir(tmp_path):
+    ctx = identity_fixture(make_release(tmp_path, "0.9.3", single=True))
     root = tmp_path / "repo"
     manifest = E.write_set(ctx, root)
     d = root / E.EVIDENCE_DIR
@@ -464,3 +469,34 @@ def test_a_hash_mismatch_is_recorded_and_the_summary_names_it_apart_from_index_l
     assert "## Published checks" in text
     assert "published-amd: **FAIL: HASH MISMATCH**" in text and "a" * 64 in text
     assert "published-nvidia: **PASS**" in text and "INDEX LAG" not in text
+
+
+def test_summary_reads_device_driver_box_and_times_from_the_records_run_block(tmp_path):
+    # lane post-record-device-time: where a record carries `run`, the identity table reads the machine, driver,
+    # box, start/end and record seconds from it, ahead of the gate's box-facts and the provenance date
+    ctx = identity_fixture(make_release(tmp_path, "0.9.4", single=True))
+    out = ctx.rel / "gates" / "nvidia" / "identity"
+    for label, model in (("nvidia-l40s", "NVIDIA L40S"), ("nvidia-ptx-l40s-sm80", "NVIDIA L40S")):
+        f = out / label / "w0" / ("%s.lanes-1.identical.json" % label)
+        doc = json.loads(f.read_text())
+        doc["run"] = dict(schema=1, device=dict(kind="gpu", backend="cuda", model=model, count_used=1, unit="devices"),
+                          driver=dict(nvidia_driver="550.54.15", cuda="12.4", glibc="2.39"), mojo="Mojo 26.1.0",
+                          started_utc="2026-11-06T09:58:00Z", finished_utc="2026-11-06T10:07:00Z",
+                          seconds_total=540.0, seconds_per_lane={"knn": 30.0, "pca": 30.0},
+                          wheels=None, box=dict(provider="runpod", id="pod123", source="IDENTITY_RECORD_BOX"),
+                          unavailable={})
+        put(f, doc)
+    root = tmp_path / "repo"
+    E.write_set(ctx, root)
+    lines = (root / E.EVIDENCE_DIR / "SUMMARY.md").read_text().splitlines()
+    assert any(x.startswith("| column | label | machine | driver | box |") for x in lines)
+    nv = next(x for x in lines if x.startswith("| NVIDIA native |"))
+    assert "| NVIDIA L40S |" in nv and "Some GPU" not in nv                    # the record, not box-facts
+    assert "cuda 12.4, glibc 2.39, nvidia_driver 550.54.15" in nv and "runpod:pod123" in nv
+    assert "9m 00s" in nv                                                     # record seconds
+    assert "2026-11-06T09:58:00Z | 2026-11-06T10:07:00Z" in nv                 # run start / end, not provenance
+    assert nv.endswith("| ok |")
+    # one SUMMARY.md: the human summary, with the soft failures as its section, listed once in the manifest
+    manifest = json.loads((root / E.EVIDENCE_DIR / "manifest.json").read_text())
+    assert [i["path"] for i in manifest["items"]].count("SUMMARY.md") == 1
+    assert "## Soft failures (fix lanes owed)" in lines and E.audit(root / E.EVIDENCE_DIR) == []

@@ -163,3 +163,42 @@ def test_no_torchvision_install_when_present_and_no_torch_python_without_torch(t
     runner.main()
     (cmd,) = [c[1] for c in calls if c[0] == "autograd_smoke.py"]
     assert "--torch-python" not in cmd and "ensure_torchvision" not in [c[0] for c in calls]
+
+
+def test_an_adapters_phase_that_mutates_the_environment_does_not_reach_the_autograd_run(tmp_path, monkeypatch):
+    import adapter_gate as AG
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/job/lib")
+    runner, calls, venv_py = _runner(tmp_path, monkeypatch)
+    prev = AG.run
+
+    def mutating(*a, **k):
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/adapters/mutated")
+        return prev(*a, **k)
+    monkeypatch.setattr(AG, "run", mutating)
+    seen, fake = {}, runner.run
+
+    def recording(cmd, **kw):
+        seen[pathlib.Path(cmd[1]).name] = kw
+        return fake(cmd, **kw)
+    runner.run = recording
+    assert runner.main() == 0
+    assert seen["autograd_smoke.py"]["env"]["LD_LIBRARY_PATH"] == "/job/lib"
+
+
+def test_the_torch_python_gets_the_adapters_env_file(tmp_path, monkeypatch):
+    import adapter_gate as AG
+    runner, calls, venv_py = _runner(tmp_path, monkeypatch)
+    prev = AG.run
+    monkeypatch.setattr(AG, "run", lambda *a, **k: dict(prev(*a, **k), env_overrides={"SMOKE_ONLY": "1"}))
+    runner.main()
+    (cmd,) = [c[1] for c in calls if c[0] == "autograd_smoke.py"]
+    path = pathlib.Path(cmd[cmd.index("--torch-env") + 1])
+    assert path == tmp_path / "units" / "adapters" / AG.TORCH_ENV
+    doc = json.loads(path.read_text())
+    assert doc["python"] == venv_py
+    assert doc["env"]["SMOKE_ONLY"] == "1" and doc["env"]["PYTORCH_ENABLE_MPS_FALLBACK"] == "0"
+    # no torch in the adapters venv: no torch python and no env file handed on
+    runner, calls, venv_py = _runner(tmp_path / "b", monkeypatch, torch_in_venv=False)
+    runner.main()
+    (cmd,) = [c[1] for c in calls if c[0] == "autograd_smoke.py"]
+    assert "--torch-env" not in cmd

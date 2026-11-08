@@ -281,6 +281,7 @@ import statistics
 import subprocess
 import sys
 import time
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -1292,10 +1293,53 @@ def samba_init(rng, name, shape):
     return np.ones(shape, dtype=np.float32)
 
 
+#: the pure shape/range definitions of mamba/corpus/gen_corpus.py that mamba_weight_spec reads
+_MAMBA_METADATA_FUNCTIONS = ("fan_in_scale", "default_ranges", "shapes_for", "m2_default_ranges", "m2_shapes_for",
+                             "m3_dims", "m3_default_ranges", "m3_shapes_for")
+_MAMBA_METADATA_CONSTANTS = ("M2_D_STATE", "M2_D_CONV", "M2_EXPAND", "M2_HEADDIM", "M2_NGROUPS",
+                             "M3_D_STATE", "M3_EXPAND", "M3_HEADDIM", "M3_NGROUPS", "M3_ROPE")
+_MAMBA_METADATA = []
+
+
+def mamba_corpus_metadata():
+    """mamba/corpus/gen_corpus.py's shape and range functions, without importing the module (it imports torch at
+    module top). Their exact source bodies and the literal constants they read are executed with `math` only, so
+    there is no second shape table to keep in step.
+
+    0.8.66 AMD measurement smoke (neural/mamba1/2/3-forward and -decode, shape=small: "preflight FAILED: no
+    parameter records; missing parameter/version probe: ours"): the measured venv has no torch (the smoke races
+    ours alone), so the conductor's input step died on `import torch` before any arm was constructed. The same
+    reason tools/identical_wave_prepare_neural.py reads Mamba3's metadata this way."""
+    if _MAMBA_METADATA:
+        return _MAMBA_METADATA[0]
+    import ast
+    import math
+    path = os.path.join(REPO, "mamba", "corpus", "gen_corpus.py")
+    with open(path) as fh:
+        tree = ast.parse(fh.read(), path)
+    wanted, found, body = set(_MAMBA_METADATA_FUNCTIONS) | set(_MAMBA_METADATA_CONSTANTS), set(), []
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name in _MAMBA_METADATA_FUNCTIONS:
+            body.append(node)
+            found.add(node.name)
+        elif (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+              and node.targets[0].id in _MAMBA_METADATA_CONSTANTS):
+            ast.literal_eval(node.value)       # a constant must stay a literal
+            body.append(node)
+            found.add(node.targets[0].id)
+    if found != wanted:
+        raise RuntimeError("mamba/corpus/gen_corpus.py metadata definitions changed: missing %s"
+                           % sorted(wanted - found))
+    namespace = {"math": math}
+    exec(compile(ast.Module(body=body, type_ignores=[]), path, "exec"), namespace)
+    _MAMBA_METADATA.append(types.SimpleNamespace(**{k: namespace[k] for k in wanted}))
+    return _MAMBA_METADATA[0]
+
+
 def mamba_weight_spec(model, d):
     """[(name, shape, (lo, hi))] from mamba/corpus/gen_corpus.py's shape and
     range functions, plus x's."""
-    corpus = _load_mamba_corpus()
+    corpus = mamba_corpus_metadata()
     dm, B, L = d["d_model"], d["batch"], d["length"]
     if model == "mamba1":
         di, r = 2 * dm, -(-dm // 16)
@@ -1507,7 +1551,17 @@ def _weights(data):
 
 
 def higgs_path():
-    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists)."""
+    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists); in the release
+    measurement smoke's synthetic mode, a synthetic file in HIGGS's schema generated on the box (tools/smoke_inputs.py
+    synthetic_path: SMOKE_TRAIN_ROWS head rows hold the `small` shape's train and held-out rows)."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") != "synthetic":
+        return _higgs_path()
+    got = os.environ.get(HIGGS_ENV, "").strip()
+    return _load("smoke_inputs").synthetic_path(os.path.expanduser(got) if got else
+                                                os.path.join("higgs", "higgs_speed.npz"))
+
+
+def _higgs_path():
     got = os.environ.get(HIGGS_ENV, "").strip()
     if got:
         return os.path.expanduser(got)

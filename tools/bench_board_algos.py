@@ -1011,7 +1011,11 @@ for _slug, _fn, _blk, _k in (("select-f-classif", "f_classif", "cls", 0.5),
     _add(_slug, xlane="prep", ours="SelectKBest", task="select", block=_blk, score_func=_fn,
          sub=({"X": SUB["mid"]} if _fn.startswith("mutual") else {}),
          sk="sklearn.feature_selection:SelectKBest", params=dict(k="half"),
-         notes=["k = d // 2; score_func = %s (ours: mojolearn.%s)" % (_fn, _fn)])
+         notes=["k = d // 2; score_func = %s (ours: mojolearn.%s)" % (_fn, _fn)],
+         mism=(["mutual information noise seed: ours runs mojolearn.%s at its defaults inside SelectKBest.fit "
+                "(random_state=None, a fixed native seed; a wrapped callable is refused), scikit-learn "
+                "random_state=%d; both add the same 1e-10-scale jitter to continuous features" % (_fn, SEED)]
+               if _fn.startswith("mutual") else []))
 _add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB["knn"]}, quality="select-exact",
      sk="sklearn.feature_selection:RFE",
      params=dict(estimator=_E("LogisticRegression", max_iter=200), n_features_to_select="half",
@@ -2383,7 +2387,11 @@ def r2_keys(lane, dataset):
 
 def corpus_path(key):
     """Where a staged corpus key lives on this box (tools/dataset_store.sh puts
-    keys outside $HOME under ~/r2-stage/<key>)."""
+    keys outside $HOME under ~/r2-stage/<key>). In the release measurement
+    smoke's synthetic mode, generated text of the corpus's kind written on
+    the box (tools/smoke_inputs.py synthetic_path); nothing is staged."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "synthetic":
+        return _tool("smoke_inputs").synthetic_path(key)
     home = os.path.expanduser("~")
     cands = []
     if os.environ.get("MOJOLEARN_CORPUS_ROOT"):
@@ -2712,14 +2720,22 @@ def prep(args):
     datasets = [d for d in args.datasets.split(",") if d]
     cap = int(args.max_rows) if args.max_rows else None
     os.makedirs(args.data, exist_ok=True)
+    # --inputs verify-fixtures (the release measurement smoke only): the tabular, series and zone blocks come from
+    # the identity verification's fixture `base` (tools/smoke_inputs.py prep_sources), never from the dataset files
+    inputs = getattr(args, "inputs", None) or "datasets"
+    SI = _tool("smoke_inputs")
+    fixtures = inputs == SI.FIXTURES_MODE
     if getattr(args, "full_tree_workload", False):
         raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
         return _aft_prepare_full_tree_blocks(args, lanes, datasets)
     base = {"rule": "tools/bench_board_algos.py prep", "smoke_max_rows": cap, "seed": SEED}
     need = set()
+    # --race-datasets (the release measurement smoke): exactly the datasets its races read, so a prep never builds
+    # a block from data its staging group did not stage (a taxi group's prep never reads the text corpora)
+    only = set(d for d in (getattr(args, "race_datasets", None) or "").split(",") if d) or None
     for l in lanes:
         for ds in datasets_of(l):
-            if ds in datasets or ds not in TAB:
+            if (ds in only) if only is not None else (ds in datasets or ds not in TAB):
                 need.add(("ts" if block_of(l) == "seqwin" else block_of(l), ds))
 
     def have(name):
@@ -2731,8 +2747,11 @@ def prep(args):
     mds = sorted({ds for b, ds in need if b in MORE_BLOCK and ds in TAB})
     if mlanes:
         more.prep(argparse.Namespace(data=args.data, lanes=",".join(mlanes), datasets=",".join(mds),
-                                     max_rows=args.max_rows))
+                                     max_rows=args.max_rows, inputs=inputs))
     harness = None
+
+    def tab_harness():
+        return SI.prep_sources(inputs, ctd._module("speed_gbdt_arm"), None)[0]
     for b, ds in sorted(need):
         t0 = time.perf_counter()
         name = None
@@ -2740,7 +2759,7 @@ def prep(args):
             name = "%s-%s" % ("raw" if b.startswith("raw") else b, ds)
             if have(name):
                 continue
-            harness = harness or ctd._module("speed_gbdt_arm")
+            harness = harness or tab_harness()
             xtr, xte, ytr, yte = _tab_loader(ctd, harness, ds, "cls" if b != "mc" else "mc")
             fi = ctd.stride_rows(xtr.shape[0], _cap(FIT_ROWS, cap, 256))
             ei = ctd.stride_rows(xte.shape[0], _cap(EVAL_ROWS, cap, 256))
@@ -2784,9 +2803,13 @@ def prep(args):
             name = "%s-%s" % (b, ds)
             if have(name):
                 continue
-            if ds == "taxi-hourly":
+            if ds == "taxi-hourly" and fixtures:
+                kind = {"tsi": "intermittent", "tsr": "garch"}.get(b, "seasonal")
+                Y = SI.series(kind, TS_SERIES, 60 * 24)
+                how = "verify fixture %s as %s series (tools/smoke_inputs.py series)" % (SI.FIXTURE, kind)
+            elif ds == "taxi-hourly":
                 harness = harness or ctd._module("speed_gbdt_arm")
-                raw = np.load(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz"))["x"]
+                raw = np.load(SI.loader_path(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz")))["x"]
                 C = taxi_hourly(raw)
                 vol = C.sum(axis=1)
                 if b == "tsi":
@@ -2828,9 +2851,14 @@ def prep(args):
                 arrays = {"X": X[~held], "y": y[~held], "Xq": X[held], "yq": y[held]}
                 how = "byte-bigram counts (mod %d) of %d-byte documents of enwik8 (0) and pile_github (1)" % (
                     TEXT_BINS, TEXT_DOC_BYTES)
+            elif fixtures:
+                M = SI.zone_matrix(max(cap * 20, 20000) if cap else 20000)
+                held = (np.arange(M.shape[0]) % 10) == 0
+                arrays = {"X": M[~held], "Xq": M[held]}
+                how = "verify fixture %s, positive part (tools/smoke_inputs.py zone_matrix)" % SI.FIXTURE
             else:
                 harness = harness or ctd._module("speed_gbdt_arm")
-                raw = np.load(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz"))["x"]
+                raw = np.load(SI.loader_path(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz")))["x"]
                 if cap:
                     raw = raw[:max(cap * 20, 20000)]
                 M = taxi_zone_matrix(raw)
@@ -3505,12 +3533,14 @@ def _est_factory(lane, arm, D):
             import mojolearn as ml
             if not hasattr(ml, s["score_func"]):
                 raise Skipped("SKIPPED: not built yet (mojolearn has no %s)" % s["score_func"])
-            f = getattr(ml, s["score_func"])
-            if s["score_func"].startswith("mutual"):
-                import functools            # the same noise seed as scikit-learn's arm below
-                f = functools.partial(f, random_state=SEED)
-                f.__name__ = s["score_func"]
-            params["score_func"] = f
+            # 0.8.66 AMD measurement smoke (select-mutual-info, select-mutual-info-reg on istella and taxi:
+            # "SelectKBest score_func must be f_classif, ...; a user callable is not supported"): ours' fit runs
+            # its score functions natively and refuses any other callable, a functools.partial of its own
+            # mutual_info_* included (bindings/prep_encode_native.mojo _select_fit; no Python runs in fit).
+            # Ours gets the function itself and runs it at its defaults (random_state=None, the native fixed
+            # seed); scikit-learn's arm keeps random_state=SEED. The two noise draws differ (a 1e-10-scale
+            # jitter on continuous features), named in the lane's mism.
+            params["score_func"] = getattr(ml, s["score_func"])
         return (lambda: cls(**params)), "mojolearn." + name, params
     if arm == "sklearn-cpu":
         try:
@@ -8860,6 +8890,11 @@ def build_parser():
     pr.add_argument("--lanes", default=",".join(LANE_ORDER))
     pr.add_argument("--datasets", default="taxi,istella")
     pr.add_argument("--max-rows", type=int, default=0)
+    pr.add_argument("--race-datasets", default=None,
+                    help="build only the blocks of these datasets (the races' own; the release measurement smoke)")
+    pr.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
+                    help="verify-fixtures: the release measurement smoke's blocks from the identity fixture "
+                         "(tools/smoke_inputs.py); never a timed run")
     pr.add_argument("--full-tree-workload", action="store_true",
                     help="tree-only: save all existing taxi/istella split rows in separate aft-full cls/reg blocks")
     r = sub.add_parser("race")

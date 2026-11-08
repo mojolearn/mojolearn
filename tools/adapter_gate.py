@@ -21,6 +21,7 @@ tools/gate_smoke_box.py (gate-nvidia, gate-amd, ON the held box) and tools/relea
 
 MOJOLEARN_RELEASE_ADAPTERS=0 turns it off, the same switch that drops the adapters from the legs and the pack.
 """
+import glob
 import json
 import os
 import subprocess
@@ -52,6 +53,52 @@ def enabled(environ=None):
 
 def venv_python(venv):
     return str(Path(venv) / "bin" / "python")
+
+
+#: the file beside the adapters unit that hands the torch entries their environment: {"python", "env"} where env
+#: holds only the variables that differ from the gate process's own (never a copy of the whole environment: the
+#: job's environment carries credentials, and this file is fetched home with the unit's results)
+TORCH_ENV = "torch-env.json"
+
+
+#: what tools/adapter_wheel_smoke.py adds to its own environment for every framework phase
+SMOKE_PHASE_ENV = {"PYTORCH_ENABLE_MPS_FALLBACK": "0"}
+
+
+def framework_env(vendor, venv, base=None):
+    """The environment a process that imports torch from VENV runs with (BASE, default os.environ, is copied, never
+    changed). On AMD, LD_LIBRARY_PATH is set to torch/lib FIRST, then the venv's */lib64 and exactly ONE ROCm lib
+    dir (2026-10-26, amd-torch-interop): whichever of torch and mojolearn is imported first, the MAX runtime's
+    bare-name dlopen then reaches torch's HIP/HSA copies instead of mapping second ones (python/mojolearn/
+    _rocm_runtime.py; two HSA runtimes in one process fail with "Failed to initialize HSA runtime"). torch/lib
+    exists only once torch is installed, so a caller that hands the environment on computes it after the
+    install. Other vendors: BASE unchanged."""
+    env = dict(os.environ if base is None else base)
+    if vendor == "amd":
+        site = str(Path(venv) / "lib" / "python*" / "site-packages")
+        env["LD_LIBRARY_PATH"] = ":".join(
+            sorted(glob.glob(site + "/torch/lib")) + sorted(glob.glob(site + "/*/lib64"))
+            + [next((d for d in ("/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib") if os.path.isdir(d)), "/opt/rocm/lib")])
+    return env
+
+
+def env_overrides(env, base=None):
+    """The variables of ENV that differ from BASE (default os.environ); a removed variable maps to None."""
+    base = os.environ if base is None else base
+    changed = {k: v for k, v in env.items() if base.get(k) != v}
+    changed.update({k: None for k in base if k not in env})
+    return changed
+
+
+def apply_overrides(overrides, base=None):
+    """BASE (default os.environ) copied, with OVERRIDES applied (None removes the variable)."""
+    env = dict(os.environ if base is None else base)
+    for k, v in (overrides or {}).items():
+        if v is None:
+            env.pop(k, None)
+        else:
+            env[k] = str(v)
+    return env
 
 
 def venv_commands(base_python, venv, installs):
@@ -123,7 +170,10 @@ def run(vendor, base_python, out, installs, env=None, launch=None):
         with open(log, "ab") as fh:
             return subprocess.run(argv, stdout=fh, stderr=subprocess.STDOUT, env=env).returncode
     launch = launch or default
-    rec = dict(enabled=True, vendor=vendor, device=DEVICE.get(vendor), report=str(out / RECEIPT))
+    # the smoke's interpreter and the variables it ran with beyond the caller's (env None: inherited unchanged):
+    # what tools/release_check_units.py hands the autograd torch entries
+    rec = dict(enabled=True, vendor=vendor, device=DEVICE.get(vendor), report=str(out / RECEIPT),
+               python=venv_python(venv), env_overrides=env_overrides(env) if env is not None else {})
     started = time.monotonic()
     for argv in venv_commands(base_python, venv, installs):
         rc = launch(argv, str(out / "adapter-venv.log"))

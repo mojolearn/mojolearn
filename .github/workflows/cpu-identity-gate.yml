@@ -299,6 +299,8 @@ jobs:
         env:
           WHEEL_NAME: ${{ inputs.wheel_name }}
           WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+          # each record's run.box (tools/identity_break.py box_identity): this run, attempt and shard job
+          IDENTITY_RECORD_BOX: github:${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.shard }}
         run: |
           echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)"
           python3 tools/identity_wheel_record.py --columns cpu \

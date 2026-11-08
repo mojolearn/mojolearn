@@ -32,15 +32,30 @@ def test_the_smoke_plan_is_the_whole_measurement_plan_at_its_smoke_shape(vendor)
         assert r["id"].endswith("/shape=small" if r["family"] == "neural" else "/rows=%d" % B.SMOKE_ROWS)
 
 
-def test_every_recipe_is_in_exactly_one_batch_and_the_neural_recipes_share_one():
-    ids = [r["id"] for r in MS.plan("nvidia")]
-    for workers in (1, 5, 12, 20, 200):
-        groups = MS.split(ids, workers)
-        flat = [i for g in groups for i in g]
-        assert sorted(flat) == sorted(ids) and len(flat) == len(set(flat))
-        neural = [g for g in groups if any(i.startswith("neural/") for i in g)]
-        assert len(neural) == 1 and all(i.startswith("neural/") for i in neural[0])
-    assert MS.split([], 4) == []
+def test_every_recipe_is_in_exactly_one_group_and_batch_and_the_neural_recipes_share_one():
+    import bench_board as B
+    races = MS.plan("nvidia")
+    ids = [r["id"] for r in races]
+    groups = MS.staging_groups(races, B)
+    flat = [i for g in groups for i in g["ids"]]
+    assert sorted(flat) == sorted(ids) and len(flat) == len(set(flat))
+    neural = [g for g in groups if g["name"] == "neural"]
+    assert len(neural) == 1 and sorted(neural[0]["ids"]) == sorted(i for i in ids if i.startswith("neural/"))
+    assert all(len(g["ids"]) <= MS.GROUP_MAX_RECIPES for g in groups if g["name"] != "neural")
+    by_id = {r["id"]: r for r in races}
+    for g in groups:      # a group stages exactly the files its recipes read, never the whole plan's
+        assert set(g["keys"]) == set().union(*[set(MS.race_keys(by_id[i], B)) for i in g["ids"]])
+        assert len({by_id[i]["dataset"] for i in g["ids"]}) == 1 or g["name"] == "neural"
+    assert sum(len(g["keys"]) for g in groups) > len(MS.data_keys("nvidia"))   # shared files: staged per group
+    for size in (1, 7, 42, 1000):
+        for g in groups:
+            batches = MS.group_batches(g, size)
+            got = [i for b in batches for i in b]
+            assert sorted(got) == sorted(g["ids"]) and len(got) == len(set(got))
+            if g["name"] == "neural":
+                assert len(batches) == 1
+            else:
+                assert max(len(b) for b in batches) <= size
 
 
 def test_the_worker_count_comes_from_cores_and_memory_and_names_its_bound():
@@ -197,7 +212,7 @@ def test_a_full_pass_is_accepted_and_carries_no_timing():
 def test_any_failure_or_gap_fails_the_release():
     assert MS.summary_errors(None) == [MS.NO_SUMMARY]
     # the refusal says plainly what to do: it comes only from a box job, never from --reuse-unchanged on the Mac
-    assert "--job measuresmoke" in MS.NO_SUMMARY and "--reuse-unchanged" in MS.NO_SUMMARY
+    assert "phase measuresmoke" in MS.NO_SUMMARY and "--reuse-unchanged" in MS.NO_SUMMARY
     assert "rerun the gate-<vendor> step" in MS.NO_SUMMARY
     one = summary({IDS[0]: dict(verdict=MS.FAIL, reason="status failed", batch=0),
                    IDS[1]: dict(verdict=MS.PASS, reason="", batch=0), IDS[2]: dict(verdict=MS.PASS, reason="", batch=0)})
@@ -230,6 +245,11 @@ def test_each_batch_is_the_boards_own_smoke_with_our_arm_only(tmp_path):
     for flag in ("--with-opponents", "--retime-opponents", "--opponent-store", "--opponents-only", "--rows",
                  "--neural-shape", "--retime-cpu-opponents"):
         assert flag not in cmd
+    assert "--inputs" not in cmd                                       # no input map: the datasets
+    args.inputs_map = tmp_path / "smoke_inputs.json"
+    cmd = MS.board_command(args, tmp_path / "b000", ["--race-ids", "@ids.json"])
+    assert cmd[cmd.index("--inputs") + 1] == "synthetic" and cmd[cmd.index("--inputs-map") + 1] == str(
+        tmp_path / "smoke_inputs.json")
     env = MS.batch_env(args)
     assert env["MOJOLEARN_NUMERIC_MODE"] == "identical" and "no-run-summary" in env["MOJOLEARN_SUMMARY_REPO"]
     assert env["MOJOLEARN_NEURAL_FIXTURES"].startswith(str(tmp_path))
@@ -248,141 +268,224 @@ def test_every_file_the_plan_reads_is_pinned_and_staged_where_the_board_looks(tm
     import bench_board as B
     pins = MS.pins()
     for vendor in VENDORS:
-        keys = MS.data_keys(vendor)
+        keys = MS.data_keys(vendor, inputs=MS.DATASETS_INPUTS)
         assert set(keys) >= {B.R2_KEYS[d] for d in ("taxi", "istella", "istella-rank", "higgs")}
         assert all(k in pins for k in keys)
         for k, rel in keys.items():
             assert rel == ("r2-stage/" + k if k.startswith("corpus/") else "datasets/" + k), k
-    entries = MS.write_data_plan("nvidia", tmp_path / "d.json", presign=lambda k, s: "https://r2/%s" % k)
+    entries = MS.write_data_plan("nvidia", tmp_path / "d.json", presign=lambda k, s: "https://r2/%s" % k,
+                                 inputs=MS.DATASETS_INPUTS)
     doc = json.loads((tmp_path / "d.json").read_text())
     assert doc["files"] == entries and all(e["url"].startswith("https://") for e in entries)
+    assert doc["inputs"] == MS.DATASETS_INPUTS
     assert (tmp_path / "d.json").stat().st_mode & 0o077 == 0
     with pytest.raises(SystemExit):
-        MS.write_data_plan("nvidia", tmp_path / "e.json", presign=lambda k, s: "")
+        MS.write_data_plan("nvidia", tmp_path / "e.json", presign=lambda k, s: "", inputs=MS.DATASETS_INPUTS)
 
 
-def test_staging_keeps_a_file_at_its_pin_and_refuses_one_without(tmp_path):
-    data = b"pinned bytes"
-    (tmp_path / "datasets").mkdir()
-    (tmp_path / "datasets" / "f.npz").write_bytes(data)
-    entry = dict(key="k", path="datasets/f.npz", bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), url=None)
-    assert MS.stage_one(entry, tmp_path) == "present"
-    assert MS.stage_one(dict(entry, sha256="0" * 64), tmp_path) == "missing and no URL"
+def test_the_smoke_stages_no_data_and_its_data_plan_is_empty(tmp_path):
+    import bench_board as B
+    assert MS.board_takes_inputs()
+    for vendor in VENDORS:
+        races = MS.plan(vendor, B)
+        imap = MS.smoke_inputs(races, B)
+        assert MS.data_keys(vendor, B, MS.SYNTHETIC_INPUTS, imap) == {}
+        assert all(MS.race_keys(r, B, imap[r["id"]]) == {} for r in races)
+        assert all(g["keys"] == [] for g in MS.staging_groups(races, B, imap=imap))
+    entries = MS.write_data_plan("nvidia", tmp_path / "d.json", presign=lambda k, s: pytest.fail("no GET"))
+    doc = json.loads((tmp_path / "d.json").read_text())
+    assert entries == [] and doc["files"] == [] and doc["inputs"] == MS.SYNTHETIC_INPUTS
+
+
+@pytest.mark.parametrize("vendor", VENDORS)
+def test_the_work_dir_is_within_budget_from_the_plan(vendor):
+    import bench_board as B
+    races = MS.plan(vendor, B)
+    bud = MS.budget(races, MS.smoke_inputs(races, B), B, MS.MAX_BOX_WORKERS)
+    assert sum(bud["counts"].values()) == len(races) and bud["staged_bytes"] == 0
+    assert 0 < bud["work_bound_bytes"] < MS.WORK_MAX_BYTES
+    assert bud["parts"]["workers"] == MS.MAX_BOX_WORKERS and bud["parts"]["synthetic"] > 0
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("t_gate_disk_plan", str(ROOT / "tools/ops/gate_disk_plan.py"))
+    D = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(D)
+    assert round(D.SMOKE_CAP_GB * 1e9) == MS.WORK_MAX_BYTES          # the gate's cap is the budget
 
 
 # ------------------------------------------------------------------ the wiring: unconditional, in order, judged
 JOB = (ROOT / "tools" / "ops" / "release_gate_job.sh").read_text()
 
 
-def test_only_the_smokes_own_job_runs_it_and_that_job_runs_nothing_else():
+def test_the_smoke_is_the_last_phase_of_the_one_gate_job():
     lines = JOB.splitlines()
-    overlay, measure, shard, gate = (lines.index("PHASE=" + p) for p in ("overlay", "measuresmoke", "shardcheck", "gate"))
-    assert overlay < measure < shard < gate          # after the overlay: the box runs the Mac's copy of the tool
-    block = JOB[JOB.index("\nPHASE=measuresmoke"):JOB.index("\nPHASE=shardcheck")]
-    code = block[block.index('if [ "$GATE_JOB" = measuresmoke ]; then'):]
-    for word in ("GATE_REUSE", "GATE_UNITS", "changed", "selector", "GATE_IDENTITY_COLUMNS"):
-        assert word not in code, word                # no change detection decides whether it runs
+    order = ["measuresmoke-setup", "identity", "pixi", "build", "overlay", "shardcheck", "gate", "runtime-qualify",
+             "hard-done", "measuresmoke", "complete"]
+    at = [lines.index("PHASE=" + p) for p in order]
+    assert at == sorted(at)                        # after the verification, last; its setup in the background first
+    assert "GATE_JOB=" not in JOB and "$GATE_JOB\"" not in JOB   # no second job: one submit, one sync, one copy
+    setup = JOB[JOB.index("\nPHASE=measuresmoke-setup"):JOB.index("\nPHASE=identity")]
+    assert setup.count("> \"$J/") >= 2 and "MS_VPID=$!" in setup and "MS_FPID=$!" in setup   # backgrounded
+    assert "release_measurement_smoke.py stage" not in JOB          # the smoke stages its data per group itself
+    code = JOB[JOB.index("\nPHASE=measuresmoke\n"):JOB.index("\nPHASE=complete")]
+    run = code[code.index("if [ \"$mrc\" = 0 ]; then\n    # run by"):]
+    for word in ("GATE_REUSE", "GATE_UNITS", "selector", "GATE_IDENTITY_COLUMNS"):
+        assert word not in run, word               # no change detection decides whether it runs
     assert "tools/release_measurement_smoke.py run" in code and '--work "$GATE_WORK/measuresmoke-work"' in code
-    assert code.rstrip().endswith('exit "$mrc"\nfi')   # the smoke's job ends there: no shardcheck, gate or qualifier
-    assert "grc=$mrc" not in JOB                     # the gate job's exit no longer carries it
-    # the smoke's job builds nothing: pixi and the autograd build run in the gate job only
-    pixi = JOB[JOB.index("\nPHASE=pixi"):JOB.index("\nPHASE=overlay")]
-    assert pixi.split("\n")[3].startswith('if [ "$GATE_JOB" = gate ]; then')
-    assert '[[ "$GATE_JOB" =~ ^(gate|measuresmoke)$ ]]' in JOB
-    # its setup steps run at once, and its busy-cores lines reach the job log as they happen
-    assert code.count("> \"$J/") >= 3 and 'wait "$vpid"' in code and 'wait "$fpid"' in code
-    assert "MEASURESMOKE (plan|busy|vendor=)" in code and "${PIPESTATUS[0]}" in code
+    assert 'wait "$MS_VPID"' in code and 'wait "$MS_FPID"' in code and "MS_DPID" not in JOB
+    assert '--data-plan "$IN/measuresmoke-data.json"' in code and "--max-work-gb" in code
+    assert "MEASURESMOKE (plan|busy|disk|vendor=)" in code and "${PIPESTATUS[0]}" in code
+    # SOFT: the smoke never changes the job's exit, which hard-done settled before it
+    assert JOB.rstrip().endswith('PHASE=complete\nexit "$grc"') and "grc=$mrc" not in JOB
+    hard = JOB[JOB.index("\nPHASE=hard-done"):JOB.index("\nPHASE=measuresmoke\n")]
+    assert "[ \"$grc\" != 0 ] || grc=$irc" in hard and "[ \"$grc\" != 0 ] || grc=$src" in hard
+    assert "gate-hard.json" in hard and 'copy_reports "$GATE_WORK/out" "$RES/out"' in hard
+    assert '--snapshot "$json" "$RES" hard' in hard  # uploaded at once, ahead of the smoke
+    # the capped qualifier leaves the smoke its ceiling
+    assert "- 10 - MS_RESERVE" in JOB and "MS_RESERVE=${GATE_MEASURE_SMOKE_MINUTES:-90}" in JOB
 
 
-def test_the_smoke_is_its_own_persisted_job_with_its_own_cap(tmp_path):
+def test_the_one_gate_job_carries_the_smoke_data_and_no_second_job(tmp_path):
     sys.path.insert(0, str(ROOT / "tools" / "ops"))
     import release_gate as RG
     out = tmp_path / "abc-release-light-v1"
     gate = RG.Plan("nvidia", "0.8.67", "a" * 40, tmp_path, out, [tmp_path / "w.whl"], "t1")
-    smoke = RG.Plan("nvidia", "0.8.67", "a" * 40, tmp_path, out / "measuresmoke-job", [tmp_path / "w.whl"], "t2",
-                    job="measuresmoke", identity_columns=["nvidia"], label_device="l40s")
     assert gate.launch()[gate.launch().index("--cap") + 1] == str(RG.NV_CAP_MIN) == "240"
-    assert smoke.launch()[smoke.launch().index("--cap") + 1] == str(RG.MEASURE_SMOKE_CAP_MIN)
-    assert RG.MEASURE_SMOKE_CAP_MIN >= RG.MEASURE_SMOKE_MINUTES + 30 and RG.MEASURE_SMOKE_CAP_MIN <= 240
-    assert smoke.launch()[:3] == ["bash", "tools/nvidia_central.sh", "submit"]   # the persisted-job entry point
-    assert smoke.indir != gate.indir and smoke.work != gate.work and "abc-release-light-v1-measuresmoke" in smoke.indir
-    env = smoke.env_text()
-    assert "GATE_JOB=measuresmoke" in env and "GATE_IDENTITY_COLUMNS=\n" in env and "GATE_BUILD_AUTOGRAD=0" in env
-    assert "GATE_JOB=gate" in gate.env_text() and "GATE_RUNTIME_CPU=0" in env
-    assert "MEASURE_SMOKE_PIP=(" in env and "MEASURE_SMOKE_FIXTURE_PIP=(" in env
+    env = gate.env_text()
+    assert "GATE_JOB=" not in env and "MEASURE_SMOKE_PIP=(" in env and "MEASURE_SMOKE_FIXTURE_PIP=(" in env
     assert "GATE_MEASURE_SMOKE_MINUTES=%d" % RG.MEASURE_SMOKE_MINUTES in env
-    assert any(r.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for _, r, _ in smoke.uploads())
-    assert not any(r.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for _, r, _ in gate.uploads())
-    amd = RG.Plan("amd", "0.8.67", "a" * 40, tmp_path, out / "measuresmoke-job", [tmp_path / "w.whl"], "t3",
-                  job="measuresmoke")
-    assert amd.launch()[:3] == ["bash", "tools/do_amd_steward.sh", "run"]
+    assert any(r.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for _, r, _ in gate.uploads())
+    assert not hasattr(RG, "JOBS") and not hasattr(RG, "MEASURE_SMOKE_CAP_MIN")
+    with pytest.raises(TypeError):
+        RG.Plan("amd", "0.8.67", "a" * 40, tmp_path, out, [], "t4", job="measuresmoke")
     with pytest.raises(SystemExit):
-        RG.Plan("amd", "0.8.67", "a" * 40, tmp_path, out, [], "t4", job="other")
+        RG.parse(["amd", "0.8.67", "--source-commit", "a" * 40, "--source-tree", ".", "--out", "o",
+                  "--candidate-wheel", "w", "--job", "measuresmoke"])
     assert RG.parse(["amd", "0.8.67", "--source-commit", "a" * 40, "--source-tree", ".", "--out", "o",
-                     "--candidate-wheel", "w", "--job", "measuresmoke"]).job == "measuresmoke"
+                     "--candidate-wheel", "w"]).until == "hard"
+    assert RG.HARD_MARKER in RG.GATE_FETCH
 
 
-def test_release_runs_the_smoke_job_after_the_gate_job_and_only_what_is_missing(tmp_path, monkeypatch):
+def fake_release(tmp_path, monkeypatch, strict=False):
     import release as R
-    calls = []
     r = R.Release.__new__(R.Release)
-    r.dry = False
+    r.dry, r.lines = False, []
+    r.say = r.lines.append
+    r.args = type("A", (), dict(strict=strict, identity_on_wheels=True))()
     out = tmp_path / "gate"
-    state = {"gate": False, "smoke": False}
     monkeypatch.setattr(r, "readiness_status", lambda write: None, raising=False)
-    monkeypatch.setattr(r, "readiness", lambda: type("X", (), dict(begin=lambda s, k: "id", record=lambda s, *a, **k: None))(),
-                        raising=False)
+    monkeypatch.setattr(r, "readiness", lambda: type("X", (), dict(begin=lambda s, k: "id",
+                                                                   record=lambda s, *a, **k: None))(), raising=False)
     monkeypatch.setattr(r, "record_candidate_requirement", lambda *a, **k: None, raising=False)
     monkeypatch.setattr(R.Release, "rel", tmp_path, raising=False)
     monkeypatch.setattr(r, "gate_out", lambda vendor: out, raising=False)
+    monkeypatch.setattr(r, "soft_fail", lambda vendor, name, reason, log=None: r.lines.append(
+        f"SOFT FAIL {vendor} {name}: {reason[:60]}"), raising=False)
+    return r, out
 
-    def gate_ok(vendor, measure=True):
-        if not state["gate"]:
-            return False, "no gate report"
-        if measure and not state["smoke"]:
-            return False, "measuresmoke: no summary"
-        return True, "PASS"
+
+def write_smoke(out, ok):
+    ids = ["algos/a/taxi/rows=2000"]
+    (out / "measuresmoke").mkdir(parents=True, exist_ok=True)
+    (out / "measuresmoke" / MS.SUMMARY).write_text(json.dumps(MS.summarize("nvidia", ids, {ids[0]: dict(
+        verdict=MS.PASS if ok else MS.FAIL, reason="x", batch=0)}, {})))
+
+
+def test_the_gate_step_completes_on_its_hard_parts_and_the_smoke_lands_later(tmp_path, monkeypatch):
+    r, out = fake_release(tmp_path, monkeypatch)
+    state = {"hard": False}
+    seen = []
+
+    def gate_ok(vendor, measure=None):
+        seen.append(measure)
+        return (True, "PASS job") if state["hard"] else (False, "no gate report")
 
     def gate_job(vendor, run_id, work, output):
-        calls.append("gate")
-        state["gate"] = True
-
-    def smoke_job(vendor, work, output):
-        assert state["gate"], "the smoke job starts only after the gate job has ended"
-        calls.append("smoke")
-        state["smoke"] = True
+        # release_gate.py --until hard returned: the HARD reports and the job's state are home, the smoke is not
+        state["hard"] = True
+        work.mkdir(parents=True, exist_ok=True)
+        (work / f"nvidia-{output.name}.job.json").write_text(json.dumps(dict(tag="t", vendor="nvidia")))
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "gate-hard.json").write_text("{}")
+    spawned = []
     monkeypatch.setattr(r, "gate_ok", gate_ok, raising=False)
     monkeypatch.setattr(r, "launch_gate_job", gate_job, raising=False)
-    monkeypatch.setattr(r, "launch_measure_smoke_job", smoke_job, raising=False)
-    assert r.run_gate("nvidia") == "PASS" and calls == ["gate", "smoke"]
-    calls.clear()
-    state["smoke"] = False                       # a gate job that already passed is not launched again
-    assert r.run_gate("nvidia") == "PASS" and calls == ["smoke"]
-    calls.clear()
-    assert r.run_gate("nvidia") == "PASS" and calls == []
-    state.update(gate=True, smoke=False)
-    monkeypatch.setattr(r, "launch_measure_smoke_job", lambda *a: calls.append("smoke"), raising=False)
+    monkeypatch.setattr(r, "spawn", lambda cmd, env: spawned.append((cmd, env)) or 4242, raising=False)
+    why = r.run_gate("nvidia")
+    # the verdict is final without the smoke: identity-admit (AFTER the gate steps) proceeds now
+    assert why.startswith("PASS job; measurement smoke running on the box") and seen == [None, False, False]
+    assert len(spawned) == 1 and spawned[0][0][-5:-3] == ["await-final", "--state"]
+    assert spawned[0][1]["MOJOLEARN_SMOKE_FETCH_DONE"].endswith("measuresmoke-fetch-nvidia.done")
+    assert (tmp_path / "gates" / "measuresmoke-fetch-nvidia.pid").read_text().strip() == "4242"
+    import release as R
+    assert R.AFTER["boxes-down"] and {"gate-nvidia", "gate-amd"} <= set(R.AFTER["boxes-down"])
+    # the fetch brought the summary home (its done file written): settle records the failure SOFT, once per call
+    write_smoke(out, ok=False)
+    (tmp_path / "gates" / "measuresmoke-fetch-nvidia.done").write_text("0\n")
+    monkeypatch.setattr(R, "GATE_VENDORS", ("nvidia",))
+    lines = r.settle_measure_smoke("record")
+    assert lines and "SOFT FAIL" in lines[0] and any(l.startswith("SOFT FAIL nvidia measuresmoke") for l in r.lines)
+    write_smoke(out, ok=True)
+    assert r.settle_measure_smoke("boxes-down")[0].endswith("PASS")
+
+
+def test_a_running_smoke_holds_its_box_and_settle_waits_for_it(tmp_path, monkeypatch):
+    import os
+    import release as R
+    r, out = fake_release(tmp_path, monkeypatch)
+    monkeypatch.setattr(R, "GATE_VENDORS", ("nvidia",))
+    gates = tmp_path / "gates"
+    gates.mkdir()
+    (gates / "measuresmoke-fetch-nvidia.pid").write_text(str(os.getpid()))   # a live process
+    (gates / "nvidia-gate.job.json").write_text("{}")
+    assert r.smoke_pending_vendors() == {"nvidia"}       # the keeper holds it; the watchdog counts it busy
+    monkeypatch.setattr(r, "selected_steps", lambda: set(), raising=False)
+    assert r.boxes_pending() == {"nvidia"}
+    ticks = []
+
+    def sleep(seconds):
+        ticks.append(seconds)
+        if len(ticks) == 3:                               # the fetch ends: summary home, done file written
+            write_smoke(out, ok=True)
+            (gates / "measuresmoke-fetch-nvidia.done").write_text("0\n")
+    monkeypatch.setattr(R.time, "sleep", sleep)
+    lines = r.settle_measure_smoke("boxes-down")
+    assert len(ticks) == 3 and lines[0].endswith("PASS") and r.smoke_pending_vendors() == set()
+
+
+def test_strict_waits_for_the_smoke_and_stops_on_it(tmp_path, monkeypatch):
+    import release as R
+    r, out = fake_release(tmp_path, monkeypatch, strict=True)
+    state = {"hard": False}
+
+    def gate_ok(vendor, measure=None):
+        if not state["hard"]:
+            return False, "no gate report"
+        if measure is False:
+            return True, "PASS job"
+        errors = __import__("release_identity_wheels").measure_smoke_errors(out)
+        return (False, "; ".join(errors)) if errors else (True, "PASS")
+    cmds = []
+
+    def gate_job(vendor, run_id, work, output):
+        state["hard"] = True                              # --until final: the final upload is home
+        write_smoke(out, ok=False)
+    monkeypatch.setattr(r, "gate_ok", gate_ok, raising=False)
+    monkeypatch.setattr(r, "launch_gate_job", gate_job, raising=False)
+    monkeypatch.setattr(r, "spawn", lambda cmd, env: cmds.append(cmd), raising=False)
     with pytest.raises(R.StepFailed, match="measuresmoke"):
-        r.run_gate("nvidia")                     # a smoke that did not pass fails the step (and so the release)
+        r.run_gate("nvidia")
+    assert cmds == []                                     # nothing in the background under --strict
+    write_smoke(out, ok=True)
+    assert r.run_gate("nvidia") == "PASS"
 
 
-def test_the_smoke_job_command(tmp_path, monkeypatch):
+def test_identity_admit_never_waits_on_the_smoke():
     import release as R
-    r = R.Release.__new__(R.Release)
-    r.dry = True
-    monkeypatch.setattr(R.Release, "commit", "a" * 40, raising=False)
-    monkeypatch.setattr(R.Release, "version", "0.8.67", raising=False)
-    monkeypatch.setattr(r, "source_checkout", lambda create=True: tmp_path, raising=False)
-    monkeypatch.setattr(r, "candidate_gate_wheels", lambda vendor: [tmp_path / "w.whl"], raising=False)
-    cmd = r.measure_smoke_cmd("amd", tmp_path / "gates", tmp_path / "x-release-light-v1")
-    assert cmd[cmd.index("--job") + 1] == "measuresmoke"
-    assert cmd[cmd.index("--out") + 1] == str(tmp_path / "x-release-light-v1" / "measuresmoke-job")
-    assert "--identity-columns" not in cmd and "--units-plan" not in cmd and "--autograd-prior" not in cmd
-
-
-def test_boxes_down_waits_for_the_gate_steps_that_hold_both_jobs():
-    import release as R
-    assert {"gate-nvidia", "gate-amd"} <= set(R.AFTER["boxes-down"])
+    # identity-admit settles after the gate steps (whose verdict no longer includes the smoke); no smoke step exists
+    for table in (R.AFTER, R.NEEDS):
+        assert not any("smoke" in step and step.startswith(("measure", "gate-")) for step in table)
+    assert not any(name.startswith("measure") for name, *_ in R.STEP_TABLE)
+    assert "record" in R.AFTER and set(R.AFTER["record"]) >= {"gate-nvidia", "gate-amd"}
 
 
 def test_the_busy_cores_figure():
@@ -419,16 +522,21 @@ def test_jl_min_dim_gets_its_untimed_sklearn_reference_when_ours_races_alone():
                if A.quality_kind(l) == "outlier")
 
 
-def test_the_release_verdict_requires_it_in_both_gate_paths():
+def test_the_release_verdict_judges_it_in_both_gate_paths(tmp_path):
     riw = (ROOT / "tools" / "release_identity_wheels.py").read_text()
     single = riw[riw.index("def single_gate_ok"):riw.index("def gate_identity_errors")]
-    assert "measure_smoke_errors(output)" in single
+    assert "measure_smoke_errors(output)" in single and "measure = self.strict()" in single
     rel = (ROOT / "tools" / "release.py").read_text()
-    light = rel[rel.index("    def gate_ok(self, vendor, measure=True):"):rel.index("RUNTIME_GATE_FAILED = ")]
-    assert "measure_smoke_errors(output)" in light
+    light = rel[rel.index("    def gate_ok(self, vendor, measure=None):"):rel.index("RUNTIME_GATE_FAILED = ")]
+    assert "measure_smoke_errors(output)" in light and "measure = self.strict()" in light
     import release_identity_wheels as RIW
     assert RIW.measure_smoke_errors(pathlib.Path("/nonexistent")) == ["measuresmoke: " + MS.NO_SUMMARY]
-    assert str(RIW.measure_smoke_summary(pathlib.Path("/g"))) == "/g/measuresmoke-job/measuresmoke/" + MS.SUMMARY
+    assert str(RIW.measure_smoke_summary(pathlib.Path("/g"))) == "/g/measuresmoke/" + MS.SUMMARY
+    # a gate of an earlier freeze (the smoke's own job) is still read
+    legacy = tmp_path / RIW.MEASURE_JOB_DIR / "measuresmoke"
+    legacy.mkdir(parents=True)
+    (legacy / MS.SUMMARY).write_text("{}")
+    assert RIW.measure_smoke_summary(tmp_path) == legacy / MS.SUMMARY
 
 
 def test_the_tool_is_overlaid_and_its_summary_comes_home():
@@ -437,9 +545,243 @@ def test_the_tool_is_overlaid_and_its_summary_comes_home():
     assert "tools/release_measurement_smoke.py" in RG.GATE_OVERLAY
     assert "measuresmoke/" + MS.SUMMARY in RG.GATE_FETCH
     assert not any(f.startswith("measuresmoke") and ("work" in f or "batches" in f) for f in RG.GATE_FETCH)
-    # harness packages only: no opponent library is installed for the smoke
+    # harness packages only: no opponent library is installed for the smoke. CatBoost is the one exception, the
+    # untimed border oracle of our pre-binned trees arms (tools/speed_gbdt_arm.py prebinned_data), in the measured
+    # venv only, pinned as the trees board pins it.
     for pkg in RG.MEASURE_SMOKE_PIP + RG.MEASURE_SMOKE_FIXTURE_PIP:
         name = pkg.split("=")[0].split(">")[0].lower()
+        if name == "catboost" and pkg in RG.MEASURE_SMOKE_PIP:
+            assert pkg == "catboost==1.2.10", pkg
+            continue
         assert name not in ("cuml", "cupy", "xgboost", "lightgbm", "catboost", "transformers", "mamba-ssm",
                             "faiss-cpu", "implicit", "cuvs", "cugraph", "gpytorch"), pkg
     assert "torch" not in [p.split("=")[0] for p in RG.MEASURE_SMOKE_PIP]   # torch only in the fixture venv
+
+
+# ------------------------------------------------------------------ the disk: stage per group, clean after it, cap
+class FakeBoard:
+    """The bench_board surface the smoke reads, over three tiny datasets (no device, no data, no board run)."""
+    SMOKE_ROWS = 2000
+    SMOKE_STEP_S = 5
+    QUALITY_EXEMPT = ()
+    DATASETS = ("d1", "d2", "d3")
+    R2_KEYS = {"d1": "gbm-bench/d1/d1.npz", "d2": "gbm-bench/d2/d2.npz", "d3": "gbm-bench/d3/d3.npz"}
+    DATA_FILES = {"d1": "d1/d1.npz", "d2": "d2/d2.npz", "d3": "d3/d3.npz"}
+    ALGOS = None
+
+    @staticmethod
+    def data_needs(races, datasets):
+        return sorted({r["dataset"] for r in races if r["dataset"] in datasets}), []
+
+    @staticmethod
+    def load_result(path):
+        return json.loads(pathlib.Path(path).read_text())
+
+    @staticmethod
+    def smoke_key(race):
+        return race["id"]
+
+    @staticmethod
+    def smoke_verdict(race, rec, vendor):
+        return []
+
+    @staticmethod
+    def unsupported_our_arms(race):
+        return {}
+
+    @staticmethod
+    def repo_commit():
+        return "c" * 40
+
+
+def fake_races():
+    out = []
+    for ds, lanes in (("d1", ("a", "b")), ("d2", ("a", "b", "c")), ("d3", ("a",))):
+        for lane in lanes:
+            out.append(dict(id="classical/%s/%s/rows=2000" % (lane, ds), family="classical", lane=lane, dataset=ds,
+                            rows=2000, our_arms={"ours": "identical"}, opponents=[], arms=["ours"]))
+    # the neural recipe reads d1 too: d1 stays until the neural group closes
+    out.append(dict(id="neural/mlp-fit/d1/shape=small", family="neural", lane="mlp-fit", dataset="d1", rows=None,
+                    our_arms={"ours": "identical"}, opponents=[], arms=["ours"]))
+    return out
+
+
+def fake_box(tmp_path, monkeypatch, bytes_per_file=100, inputs=False):
+    """The smoke's run over the fake plan: staging writes the file, prep writes a block, a batch writes its board.
+    Returns the observation log ([(event, group, sorted data files present)]) and the run's argv."""
+    import release_gate_profiles as P
+    races = fake_races()
+    home = tmp_path / "home"
+    monkeypatch.setattr(MS, "_bb", lambda: FakeBoard)
+    monkeypatch.setattr(MS, "plan", lambda vendor, B=None: races)
+    monkeypatch.setattr(MS, "device_memory_mb", lambda vendor, field: None)
+    monkeypatch.setattr(MS, "board_drops_scratch", lambda: True)
+    monkeypatch.setattr(MS, "board_takes_inputs", lambda here=None: inputs)
+    if inputs:
+        # d2's recipes on the verify fixture; d1, d3 and the neural recipe on synthetic inputs (nothing staged)
+        monkeypatch.setattr(MS, "smoke_inputs", lambda rs, B=None, index=None: {
+            r["id"]: dict(input=MS.INPUT_VERIFY if r["dataset"] == "d2" else MS.INPUT_NONE, verify_lanes=[],
+                          files=[FakeBoard.R2_KEYS[r["dataset"]]]) for r in rs})
+        monkeypatch.setattr(MS, "budget", lambda *a, **k: dict(
+            counts={MS.INPUT_VERIFY: 3, MS.INPUT_FILE: 0, MS.INPUT_NONE: 4}, staged_bytes=0,
+            work_bound_bytes=10 ** 6, parts={}))
+    seen = []
+
+    def present():
+        return sorted(str(p.relative_to(home)) for p in home.rglob("*.npz")) if home.exists() else []
+
+    def stage_one(entry, root):
+        dest = pathlib.Path(root) / entry["path"]
+        if dest.is_file() and dest.stat().st_size == entry["bytes"]:
+            return "present"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"x" * entry["bytes"])
+        return "fetched"
+
+    def bounded_run(cmd, log, timeout, env=None, cwd=None):
+        pathlib.Path(log).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(log).write_text("fake\n")
+        ids = json.loads(pathlib.Path(cmd[cmd.index("--race-ids") + 1][1:]).read_text())
+        cache = pathlib.Path(cmd[cmd.index("--cache") + 1])
+        group = cache.parent.name
+        if "--prep-only" in cmd:
+            (cache / "blocks").mkdir(parents=True, exist_ok=True)
+            (cache / "blocks" / "blk.npz.bin").write_bytes(b"b" * 50)
+            seen.append(("prep", group, present()))
+        else:
+            assert "--drop-race-scratch" in cmd
+            assert (cache / "blocks" / "blk.npz.bin").exists()          # its group's prep ran first
+            out = pathlib.Path(cmd[cmd.index("--out") + 1] + "-smoke")
+            (out / "raw").mkdir(parents=True, exist_ok=True)
+            (out / "raw" / "scratch.json").write_text("{}")
+            cell = dict(arm="ours", status="ok", quality={"auc": 0.9}, hash="h", mode="identical",
+                        library_version="0.8.67", device="gpu0")
+            (out / "board.json").write_text(json.dumps(dict(races={i: dict(cells=[cell]) for i in ids})))
+            seen.append(("batch", group, present()))
+        return dict(exit_code=0, timed_out=False, elapsed_seconds=0.0)
+
+    monkeypatch.setattr(MS, "stage_one", stage_one)
+    monkeypatch.setattr(P, "bounded_run", bounded_run)
+    entries = [dict(key=FakeBoard.R2_KEYS[d], path="datasets/gbm-bench/" + FakeBoard.DATA_FILES[d],
+                    bytes=bytes_per_file, sha256="0" * 64, url="https://r2/" + d) for d in FakeBoard.DATASETS]
+    plan = tmp_path / "data.json"
+    plan.write_text(json.dumps(dict(files=entries)))
+    argv = ["run", "--vendor", "nvidia", "--python", "/v/bin/python", "--out", str(tmp_path / "out"),
+            "--work", str(tmp_path / "work"), "--data-plan", str(plan), "--home", str(home), "--jobs", "1",
+            "--data-root", str(home / "datasets" / "gbm-bench")]
+    return seen, argv, home
+
+
+def test_a_fake_plan_stages_and_cleans_per_group(tmp_path, monkeypatch, capsys):
+    seen, argv, home = fake_box(tmp_path, monkeypatch)
+    # d3 is already on the box at its pin (another job's file): used, never counted, never deleted
+    (home / "datasets/gbm-bench/d3").mkdir(parents=True)
+    (home / "datasets/gbm-bench/d3/d3.npz").write_bytes(b"x" * 100)
+    assert MS.main(argv) == 0
+    d1, d2, d3 = ("datasets/gbm-bench/%s/%s.npz" % (d, d) for d in ("d1", "d2", "d3"))
+    by_group = {}
+    for event, group, files in seen:
+        by_group.setdefault(group, []).append((event, files))
+    # each group's data is there before its prep and its batches; d2 is not staged before its own group
+    assert all(d1 in f for _, f in by_group["ds-d1"]) and all(d2 not in f for _, f in by_group["ds-d1"])
+    assert all(d2 in f for _, f in by_group["ds-d2"])
+    # d2 is deleted as soon as its only group closed: the later groups never see it
+    assert all(d2 not in f for _, f in by_group["ds-d3"] + by_group["neural"])
+    # d1 stays for the neural group, which reads it too
+    assert all(d1 in f for _, f in by_group["neural"])
+    # after the run: every file this run fetched is gone, the pre-existing one is kept
+    assert not (home / d1).exists() and not (home / d2).exists() and (home / d3).exists()
+    # every group's cache and every passing batch's scratch is gone
+    work = tmp_path / "work"
+    assert not list(work.rglob("blk.npz.bin")) and not list(work.rglob("scratch.json"))
+    assert not list(work.rglob("board.json"))
+    doc = json.loads((tmp_path / "out" / MS.SUMMARY).read_text())
+    assert doc["ok"] and doc["counts"]["PASS"] == len(fake_races())
+    assert [g["name"] for g in doc["disk"]["groups"]] == ["ds-d1", "ds-d2", "ds-d3", "neural"]
+    assert doc["disk"]["cap_bytes"] == int(MS.MAX_WORK_GB * 1e9) and doc["disk"]["peak_footprint_bytes"] > 0
+    printed = capsys.readouterr().out
+    assert "MEASURESMOKE disk free=" in printed and "after group ds-d2" in printed and "after staging ds-d1" in printed
+
+
+def test_on_the_synthetic_inputs_nothing_is_staged_and_every_batch_reads_the_map(tmp_path, monkeypatch, capsys):
+    seen, argv, home = fake_box(tmp_path, monkeypatch, inputs=True)
+    monkeypatch.setattr(MS, "stage_one", lambda e, h: pytest.fail("the smoke staged %s" % e["key"]))
+    assert MS.main(argv) == 0                                  # a data plan given is not read
+    assert seen and all(files == [] for _, _, files in seen)   # no data file on the box at any point
+    imap = json.loads((tmp_path / "work" / "smoke_inputs.json").read_text())
+    assert imap["classical/a/d2/rows=2000"]["input"] == MS.INPUT_VERIFY
+    doc = json.loads((tmp_path / "out" / MS.SUMMARY).read_text())
+    assert doc["ok"] and doc["inputs"]["mode"] == MS.SYNTHETIC_INPUTS and doc["inputs"]["staged_bytes"] == 0
+    assert doc["disk"]["cap_bytes"] == MS.WORK_MAX_BYTES                     # the budget is the cap
+    out = capsys.readouterr().out
+    assert "\nSMOKE inputs: generated on the box, 0 bytes staged\n" in out
+    assert "MEASURESMOKE inputs verify-fixture=3 synthetic-file=0 NO-VERIFY-LANE=4 staged=0 work_bound=" in out
+
+
+def test_the_cap_refuses_a_group_by_name_and_never_stages_it(tmp_path, monkeypatch, capsys):
+    seen, argv, home = fake_box(tmp_path, monkeypatch, bytes_per_file=2 * 10 ** 6)
+    assert MS.main(argv + ["--max-work-gb", "0.001"]) == 1           # 1 MB: every 2 MB file is past it
+    assert not list(home.rglob("*.npz"))                              # nothing was staged
+    assert all(event != "prep" for event, _, _ in seen)
+    doc = json.loads((tmp_path / "out" / MS.SUMMARY).read_text())
+    assert not doc["ok"] and doc["counts"]["FAIL"] == len(fake_races())
+    reasons = {f["reason"] for f in doc["failures"]}
+    assert all("--max-work-gb" in r and "refused, never staged" in r for r in reasons)
+    assert any("staging group ds-d2 (3 recipes) needs 0.00 GB" in r for r in reasons)
+    assert "MEASURESMOKE measuresmoke: staging group" in capsys.readouterr().out
+
+
+def test_the_stager_counts_and_deletes_only_what_this_run_fetched(tmp_path):
+    groups = [dict(name="g1", ids=["r1"], keys=["k1"]), dict(name="g2", ids=["r2"], keys=["k2"])]
+    entries = [dict(key="k1", path="a/k1", bytes=600), dict(key="k2", path="a/k2", bytes=600)]
+    st = MS.DataStager(entries, tmp_path, groups)
+    assert st.need_bytes(groups[0]) == 600 and st.owned_bytes() == 0
+    assert st.stage(groups[0], stage_fn=lambda e, h: "fetched") == [] and st.owned_bytes() == 600
+    assert st.need_bytes(groups[0]) == 0                       # held by this run: nothing more to stage
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "k1").write_bytes(b"x" * 600)
+    assert st.release(groups[0]) == 600 and not (tmp_path / "a" / "k1").exists() and st.owned_bytes() == 0
+    assert "--max-work-gb" in MS.cap_refusal(groups[1], 600, 600, 1000)
+
+
+def test_a_race_scratch_is_gone_once_its_record_is_written(tmp_path):
+    import bench_board as B
+    out = tmp_path / "b000-smoke"
+    (out / "work").mkdir(parents=True)
+    (out / "work" / "r1-ours.npz").write_bytes(b"x" * 10)
+    (out / "evidence" / "r1").mkdir(parents=True)
+    (out / "evidence" / "r1" / "raw.tar.gz").write_bytes(b"y" * 20)
+    (out / "raw").mkdir()
+    (out / "raw" / "r1.json").write_text("{}")
+    (tmp_path / "outside").mkdir()
+    assert B.drop_race_scratch(str(out), dict(evidence_directory="evidence/r1")) == 30
+    assert not (out / "work").exists() and not (out / "evidence" / "r1").exists() and (out / "raw" / "r1.json").exists()
+    assert B.drop_race_scratch(str(out), dict(evidence_directory="../outside")) == 0 and (tmp_path / "outside").exists()
+    src = (ROOT / "tools" / "bench_board.py").read_text()
+    loop = src[src.index("        rec = run_race(ctx, r)"):src.index('    print("bench_board: board %s"')]
+    assert loop.index("save_result(rpath, result)") < loop.index("drop_race_scratch(out, rec)")
+    assert MS.board_drops_scratch()
+
+
+# ------------------------------------------------------------------ the inputs: one fixture set for verify and smoke
+def test_the_smoke_input_map_names_verify_lanes_from_names_only_and_is_committed():
+    import bench_board as B
+    import identity_break as I
+    races = MS.plan("nvidia", B)
+    got = MS.smoke_inputs(races, B)
+    assert set(got) == {r["id"] for r in races}
+    for r in races:
+        rec = got[r["id"]]
+        assert all(l in I.LANES for l in rec["verify_lanes"])          # never an invented lane
+        if rec["input"] == MS.INPUT_FILE:
+            assert rec["files"] and (r["family"] in MS.FILE_LOADER_FAMILIES
+                                     or any(f.startswith("corpus/") for f in rec["files"]))
+        elif rec["input"] == MS.INPUT_VERIFY:
+            assert rec["verify_lanes"]
+        else:
+            assert rec["input"] == MS.INPUT_NONE and not rec["verify_lanes"]
+        if r["lane"] in I.LANES:
+            assert rec["verify_lanes"] == [r["lane"]]
+    text, counts = MS.inputs_table()
+    assert (ROOT / "docs/measurements/SMOKE_INPUTS.md").read_text() == text   # regenerate with `inputs`
+    assert sum(counts.values()) == len({r["id"] for v in VENDORS for r in MS.plan(v, B)})

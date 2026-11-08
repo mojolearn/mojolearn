@@ -1044,10 +1044,13 @@ def _reaped(process, usage, block=False):
     return True
 
 
-def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, poll=1.0, usage=None):
+def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, poll=1.0, usage=None,
+                limits=None):
     """Run the worker; stop it when the whole run exceeds run_timeout or no test event has been
     written for test_timeout seconds (one test running too long). Returns (exit, stop, elapsed).
-    USAGE (a dict), when given, receives the worker's peak_rss_bytes."""
+    USAGE (a dict), when given, receives the worker's peak_rss_bytes. LIMITS, when given, is called
+    every poll and returns the current (run_timeout, test_timeout): a unit's bounds grow while more
+    units share its GPU (run_units)."""
     # poll was 5 s through 0.8.66: every unit's seconds were rounded up to the next 5 s step
     # (0.8.66 gate-apple: 73 units, 80.1 s, 250.3 s, ...), about 3 minutes of a serial run.
     started = time.monotonic()
@@ -1059,6 +1062,8 @@ def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, 
         current = Path(progress).stat().st_size if Path(progress).exists() else 0
         if current != size:
             size, last = current, now
+        if limits is not None:
+            run_timeout, test_timeout = limits()
         if now - started > run_timeout:
             stop = dict(kind="run", budget_s=run_timeout)
         elif now - last > test_timeout:
@@ -1102,6 +1107,67 @@ QUALIFY_JOBS_ENV = "MOJOLEARN_QUALIFY_JOBS"
 UNIT_MEMORY_BYTES = 3 * 2**29          # 1.5 GiB
 #: The busy-cores sample period (every report states busy cores of total).
 BUSY_EVERY_S = 60
+#: UNITS PER GPU (0.8.66 run t, NVIDIA gate on a 1x RTX 4090 pod with 48 cores): the core and memory
+#: bound let five units run at once; they all share the one GPU, so the GPU-bound tests serialized on the
+#: device, each unit ran about five times its serial seconds (busy cores 7 of 48, each worker ~50 % CPU),
+#: units that take 30-80 s alone blew their 120 s budgets, and after 15 min 6 of 73 units had passed. On
+#: a GPU host the units therefore run at most UNITS_PER_GPU per GPU: each unit holds its own CUDA/HIP
+#: context, and two keep the device busy while one of them is in host work (import, collection, Python
+#: set-up, result checks) without stacking contexts that only queue on the device. The Mac ran 6 at once
+#: on one Apple GPU in ~8 min, so the Apple GPU had headroom: raise it there with the override.
+#: MOJOLEARN_QUALIFY_UNITS_PER_GPU overrides; --jobs / MOJOLEARN_QUALIFY_JOBS still set the count outright.
+UNITS_PER_GPU = 2
+UNITS_PER_GPU_ENV = "MOJOLEARN_QUALIFY_UNITS_PER_GPU"
+#: A unit that took this long alone (its plan row's prior_s; unknown counts as heavy) runs with at most
+#: one sibling on its GPU, whatever UNITS_PER_GPU allows: the heavy units are the GPU-bound ones.
+HEAVY_UNIT_S = 60
+HEAVY_UNIT_SIBLINGS = 1
+#: the variable that pins one unit to one GPU on a multi-GPU host (HIP_VISIBLE_DEVICES counts within
+#: whatever ROCR_VISIBLE_DEVICES already left visible, so the ordinal is always right there)
+VISIBLE_DEVICES = {"cuda": "CUDA_VISIBLE_DEVICES", "hip": "HIP_VISIBLE_DEVICES"}
+
+
+def _listed(value):
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
+def host_gpus(vendor, *, env=None, run=subprocess.run):
+    """(ids, why): the GPUs the units share. ids is None for the cpu backend (no GPU to share), ['0'] on
+    Apple (one GPU), else the devices CUDA_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES / ROCR_VISIBLE_DEVICES
+    already leave visible, else one per `nvidia-smi -L` GPU line (cuda) or `rocm-smi --showid --csv` /
+    `amd-smi list` card (hip). An unreadable count is one GPU, said so in WHY."""
+    import re
+    env = os.environ if env is None else env
+    if vendor == "cpu":
+        return None, "cpu backend"
+    if vendor == "metal":
+        return ["0"], "Apple GPU"
+    names = ("CUDA_VISIBLE_DEVICES",) if vendor == "cuda" else ("HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES")
+    for name in names:
+        if env.get(name, "").strip():
+            ids = _listed(env[name])
+            return (ids if vendor == "cuda" else [str(k) for k in range(len(ids))]), name
+    probes = ([(["nvidia-smi", "-L"], r"^GPU \d+:")] if vendor == "cuda" else
+              [(["rocm-smi", "--showid", "--csv"], r"^card\d+,"), (["amd-smi", "list"], r"^GPU: *\d+")])
+    for command, pattern in probes:
+        try:
+            listing = run(command, capture_output=True, text=True, timeout=60).stdout or ""
+        except (OSError, subprocess.SubprocessError):
+            continue
+        count = sum(1 for line in listing.splitlines() if re.match(pattern, line.strip()))
+        if count:
+            return [str(k) for k in range(count)], command[0]
+    return ["0"], "GPU count unreadable, one assumed"
+
+
+def units_per_gpu(env=None):
+    """UNITS_PER_GPU, or MOJOLEARN_QUALIFY_UNITS_PER_GPU when set (a positive integer)."""
+    env = os.environ if env is None else env
+    chosen = (env.get(UNITS_PER_GPU_ENV) or "").strip()
+    if not chosen:
+        return UNITS_PER_GPU
+    require(chosen.isdigit() and int(chosen) >= 1, UNITS_PER_GPU_ENV + " must be a positive integer")
+    return int(chosen)
 
 
 def host_cores():
@@ -1126,9 +1192,11 @@ def free_memory_bytes():
     return free
 
 
-def unit_workers(count, *, jobs=None, env=None, cores=None, free=None, per_unit=UNIT_MEMORY_BYTES):
+def unit_workers(count, *, jobs=None, env=None, cores=None, free=None, per_unit=UNIT_MEMORY_BYTES,
+                 gpus=None, per_gpu=UNITS_PER_GPU):
     """(workers, why): how many of COUNT units run at once. JOBS (--jobs), else MOJOLEARN_QUALIFY_JOBS,
-    else CORES capped by FREE bytes // PER_UNIT; never more than COUNT, never under 1."""
+    else CORES capped by FREE bytes // PER_UNIT and, on a GPU host, by GPUS x PER_GPU; never more than
+    COUNT, never under 1."""
     env = os.environ if env is None else env
     chosen = jobs or (env.get(QUALIFY_JOBS_ENV) or "").strip()
     if chosen:
@@ -1139,6 +1207,9 @@ def unit_workers(count, *, jobs=None, env=None, cores=None, free=None, per_unit=
     if free is not None and free // per_unit < workers:
         workers = max(1, int(free // per_unit))
         why += ", capped by %.1f GiB free at %.1f GiB per unit" % (free / 2**30, per_unit / 2**30)
+    if gpus and gpus * per_gpu < workers:
+        workers = max(1, gpus * per_gpu)
+        why += ", capped by %d GPU(s) x %d unit(s) per GPU" % (gpus, per_gpu)
     return max(1, min(workers, count)), why
 
 
@@ -1179,14 +1250,22 @@ class BusySampler(threading.Thread):
 
 
 def run_units(args, selected, *, out, tests, python, env, payload, test_commit, clock=time.monotonic,
-              bounded=None, available=None, cores=None, sample=None, admit_poll=5.0):
+              bounded=None, available=None, cores=None, sample=None, admit_poll=5.0, gpus=None):
     """Run each selected whole file as its own bounded worker (qualify/runs/<stem>/), WORKERS at once
-    (unit_workers), heaviest budget first, and write its unit receipt as soon as it ends. A unit's budget
-    is the plan's (3x its last seconds, at least 120 s), clipped to what the outer --timeout leaves when it
-    starts; a unit over its budget, or never started because the outer cap ran out, is a FAILED receipt
-    naming the unit. A unit starts only while the free memory holds one more unit (the largest peak RSS
-    measured so far, else UNIT_MEMORY_BYTES) or when none is running. Returns
-    [{unit, status, seconds, reason}] in SELECTED order."""
+    (unit_workers), heaviest budget first, and write its unit receipt as soon as it ends.
+
+    On a GPU host the units are placed on the GPUS (host_gpus; a list of ids, [] for none) at most
+    UNITS_PER_GPU to a GPU, a heavy unit (HEAVY_UNIT_S) with at most HEAVY_UNIT_SIBLINGS beside it, and
+    on a multi-GPU host each unit sees only its GPU. An explicit --jobs / MOJOLEARN_QUALIFY_JOBS sets the
+    count outright and every unit shares the devices.
+
+    A unit's budget is the plan's serial bound (3x its last serial seconds, at least 120 s); while N units
+    share its GPU it runs under N x that bound (the run bound and the one-test stall bound both), the most
+    N seen while it ran is its receipt's concurrency and the scaled bound its scaled_budget_s. Both are
+    clipped to what the outer --timeout leaves when it starts; a unit over its bound, or never started
+    because the outer cap ran out, is a FAILED receipt naming the unit. A unit starts only while the free
+    memory holds one more unit (the largest peak RSS measured so far, else UNIT_MEMORY_BYTES) or when none
+    is running. Returns [{unit, status, seconds, reason}] in SELECTED order."""
     import runtime_qualifier_units as units
     bounded = bounded or run_bounded
     available = available or free_memory_bytes
@@ -1198,14 +1277,55 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
     # heaviest first (longest-processing-time order): the long units start at once, the short ones fill in
     order = sorted(selected, key=lambda name: -int(planned[name]["budget_s"]))
     total = cores or host_cores()
-    workers, why = unit_workers(len(order), jobs=getattr(args, "jobs", None), cores=total, free=available())
-    print("QUALIFY units=%d workers=%d of %d core(s) (%s); heaviest first, budget sum %d s" % (
-        len(order), workers, total, why, sum(int(planned[name]["budget_s"]) for name in order)), flush=True)
+    if gpus is None:
+        ids, gpu_why = host_gpus(args.vendor)
+    else:
+        ids, gpu_why = (list(gpus) or None), "given"
+    explicit = bool(getattr(args, "jobs", None) or (os.environ.get(QUALIFY_JOBS_ENV) or "").strip())
+    gated = ids is not None and not explicit
+    per_gpu = units_per_gpu()
+    workers, why = unit_workers(len(order), jobs=getattr(args, "jobs", None), cores=total, free=available(),
+                                gpus=len(ids) if gated else None, per_gpu=per_gpu)
+    print("QUALIFY units=%d workers=%d of %d core(s) (%s); heaviest first, budget sum %d s; gpus=%s (%s) "
+          "units-per-gpu=%s" % (
+              len(order), workers, total, why, sum(int(planned[name]["budget_s"]) for name in order),
+              len(ids) if ids is not None else 0, gpu_why,
+              ("%d, heavy (>= %d s alone) with at most %d sibling" % (per_gpu, HEAVY_UNIT_S, HEAVY_UNIT_SIBLINGS))
+              if gated else ("off (%s)" % ("explicit job count" if ids is not None else "no GPU"))), flush=True)
     lock = threading.Lock()
     pending, results, running, peaks, errors = list(order), {}, [0], [], []
+    # the units on each GPU now (gated: one slot per GPU id; explicit count on a GPU host: one shared
+    # slot; cpu backend: no slot, nothing shared) and the most units each unit has shared its GPU with
+    slots = {gpu: [] for gpu in ids} if gated else ({"shared": []} if ids is not None else {})
+    sharing = {}
     started = clock()
 
-    def one(name):
+    def heavy(name):
+        prior = planned[name].get("prior_s")
+        return prior is None or float(prior) >= HEAVY_UNIT_S
+
+    def place():
+        """(unit, slot) of the first pending unit (heaviest first) that fits a GPU, else None."""
+        if not gated:
+            return pending[0], ("shared" if slots else None)
+        for name in pending:
+            for gpu in sorted(slots, key=lambda key: len(slots[key])):
+                limit = per_gpu
+                if heavy(name) or any(heavy(other) for other in slots[gpu]):
+                    limit = min(limit, HEAVY_UNIT_SIBLINGS + 1)
+                if len(slots[gpu]) < limit:
+                    return name, gpu
+        return None
+
+    def join(name, slot):
+        if slot is None:
+            sharing[name] = 1
+            return
+        slots[slot].append(name)
+        for member in slots[slot]:
+            sharing[member] = max(sharing.get(member, 1), len(slots[slot]))
+
+    def one(name, slot):
         entry = planned[name]
         unit_out = out / units.RUNS_DIR / units.stem(name)
         (unit_out / "work").mkdir(parents=True)
@@ -1215,7 +1335,18 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
         (unit_out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
         with lock:
             remaining = int(args.timeout - (clock() - started))
-        budget = min(int(entry["budget_s"]), remaining)
+        serial = int(entry["budget_s"])
+        budget = min(serial, remaining)
+
+        def limits():
+            """(run bound, one-test bound) now: the serial bounds x the units sharing this unit's GPU."""
+            with lock:
+                shared = sharing.get(name, 1)
+            scaled = min(serial * shared, remaining)
+            return scaled, min(args.test_timeout * shared, scaled)
+        unit_env = env
+        if gated and len(ids) > 1 and args.vendor in VISIBLE_DEVICES:
+            unit_env = dict(env, **{VISIBLE_DEVICES[args.vendor]: slot})
         common = dict(unit=name, vendor=plan["vendor"], backend=args.vendor, device=plan["device_class"],
                       budget_s=budget, wheels=plan["wheels"], source_commit=plan["source_commit"],
                       test_commit=test_commit, closure=entry.get("closure"),
@@ -1224,14 +1355,19 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
         if budget < 1:
             receipt = units.unit_receipt(status="failed", seconds=0, scope=None, cases=0, stopped="not-started",
                                          reason=f"unit {name} not started: the whole-run budget of "
-                                                f"{args.timeout} s was spent", **common)
+                                                f"{args.timeout} s was spent", concurrency=0,
+                                         scaled_budget_s=0, **common)
             junit = b"<testsuite/>"
         else:
             with (unit_out / "tests.log").open("wb") as log:
                 worker_exit, stop, elapsed = bounded(
                     [str(python), str(out / "controller.py"), "--worker", str(unit_out / "request.json")],
-                    cwd=unit_out / "work", env=env, log=log, progress=unit_out / PROGRESS,
-                    run_timeout=budget, test_timeout=min(args.test_timeout, budget), usage=usage)
+                    cwd=unit_out / "work", env=unit_env, log=log, progress=unit_out / PROGRESS,
+                    run_timeout=budget, test_timeout=min(args.test_timeout, budget), usage=usage,
+                    limits=limits)
+            scaled, _ = limits()
+            with lock:
+                shared = sharing.get(name, 1)
             installed_path = unit_out / "installed-modules.json"
             installed = json.loads(installed_path.read_text()) if installed_path.is_file() else {}
             junit_path = unit_out / "tests.xml"
@@ -1248,8 +1384,10 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
             status = "failed" if stop is not None else unit_status(qualifier)
             reason = ""
             if stop is not None and stop["kind"] == "run":
-                reason = (f"unit {name} over its budget of {budget} s (stopped after {stop['elapsed_s']} s"
-                          + ("; clipped by the whole-run budget)" if budget < int(entry["budget_s"]) else ")"))
+                reason = (f"unit {name} over its budget of {scaled} s"
+                          + (f" ({serial} s serial x {shared} units sharing its GPU)" if shared > 1 else "")
+                          + f" (stopped after {stop['elapsed_s']} s"
+                          + ("; clipped by the whole-run budget)" if scaled < serial * shared else ")"))
             elif stop is not None:
                 reason = f"unit {name}: one test made no progress for {stop['budget_s']} s"
             elif status == "failed":
@@ -1259,14 +1397,17 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
             receipt = units.unit_receipt(status=status, seconds=elapsed, scope=scope["scopes"].get(name),
                                          cases=summary["total"], stopped=stop and stop["kind"], reason=reason,
                                          interpreter=installed.get("interpreter"),
-                                         natives=units.natives_of(installed), **common)
+                                         natives=units.natives_of(installed), concurrency=shared,
+                                         scaled_budget_s=scaled, **common)
             junit = junit_path.read_bytes()
         receipt = units.put_receipt(units_dir, receipt, junit)
         if store:
             units.store_receipt(store, receipt, junit)
         with lock:
-            print("UNIT %s %s %.1fs%s" % (name, receipt["status"], receipt["seconds"],
-                                          (" " + receipt["reason"]) if receipt["reason"] else ""), flush=True)
+            print("UNIT %s %s %.1fs%s%s" % (name, receipt["status"], receipt["seconds"],
+                                            (" shared-gpu=%d" % receipt["concurrency"])
+                                            if receipt["concurrency"] > 1 else "",
+                                            (" " + receipt["reason"]) if receipt["reason"] else ""), flush=True)
             if usage.get("peak_rss_bytes"):
                 peaks.append(usage["peak_rss_bytes"])
                 print("QUALIFY unit-memory %s peak_rss_mib=%d" % (name, usage["peak_rss_bytes"] // 2**20),
@@ -1275,31 +1416,37 @@ def run_units(args, selected, *, out, tests, python, env, payload, test_commit, 
                                  reason=receipt["reason"])
 
     def take():
-        """The next unit to start, or None when none is left (or a unit raised)."""
+        """The next (unit, slot) to start, or None when none is left (or a unit raised)."""
         while True:
             with lock:
                 if not pending or errors:
                     return None
                 need = max(peaks) if peaks else UNIT_MEMORY_BYTES
                 free = available() if running[0] else None
-                if free is None or free >= need:
+                picked = place() if free is None or free >= need else None
+                if picked is not None:
+                    pending.remove(picked[0])
                     running[0] += 1
-                    return pending.pop(0)
+                    join(*picked)
+                    return picked
             time.sleep(admit_poll)
 
     def lane():
         while True:
-            name = take()
-            if name is None:
+            picked = take()
+            if picked is None:
                 return
+            name, slot = picked
             try:
-                one(name)
+                one(name, slot)
             except BaseException as error:  # noqa: BLE001 - re-raised on the calling thread below
                 with lock:
                     errors.append(error)
             finally:
                 with lock:
                     running[0] -= 1
+                    if slot is not None:
+                        slots[slot].remove(name)
 
     busy = BusySampler(total, lambda: running[0], **(dict(sample=sample) if sample else {}))
     busy.start()
@@ -1404,7 +1551,7 @@ def main():
                              "closures, units dir, unit store); --timeout stays the outer cap")
     parser.add_argument("--jobs", type=int,
                         help="per-unit mode: units run at once (default: MOJOLEARN_QUALIFY_JOBS, else the "
-                             "host's cores, capped by free memory)")
+                             "host's cores, capped by free memory and by GPUs x MOJOLEARN_QUALIFY_UNITS_PER_GPU)")
     args = parser.parse_args()
     require(args.unit_plan is None or not args.test_node, "per-unit mode selects whole files")
     selected = selected_files(args.test_file, args.test_node)

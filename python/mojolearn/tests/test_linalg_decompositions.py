@@ -351,6 +351,37 @@ def test_svdvals_device_equals_host_byte_for_byte():
     assert d.tobytes() == h.tobytes()
 
 
+def _constant_columns(rows=64):
+    """Constant columns beside large-scale ones: numerically null directions
+    next to columns of squared norm ~1e10, the rank-deficient float32 shape
+    the one-sided Jacobi once refused."""
+    base = _matrix(rows, 4) * np.asarray([1e4, 1.0, 1e4, 1.0], np.float32)
+    const = np.broadcast_to(np.asarray([1.0, 3.0, 0.0, 250.0, 0.0, 7.5], np.float32), (rows, 6))
+    return np.ascontiguousarray(np.hstack([base, const]).astype(np.float32))
+
+
+@needs_host
+def test_svdvals_converges_on_constant_columns():
+    a = _constant_columns()
+    s = np.asarray(linalg.svdvals(a))
+    ref = np.linalg.svd(a.astype(np.float64), compute_uv=False)
+    assert np.all(np.diff(s) <= 0)
+    assert np.allclose(s[:5], ref[:5], rtol=1e-4, atol=1e-5 * float(ref[0])), f"{s[:5]} vs {ref[:5]}"
+    assert np.all(np.abs(s[5:]) <= 1e-3 * float(ref[0])), f"null directions must be ~0, got {s[5:]}"
+
+
+@needs_both
+def test_svdvals_constant_columns_device_equals_host_byte_for_byte():
+    a = _constant_columns()
+    cols = a.shape[1]
+    device, host = _both_routes()
+    d = np.zeros(cols, np.float32)
+    h = np.zeros(cols, np.float32)
+    device.svdvals([a.ctypes.data, d.ctypes.data], [a.shape[0], cols])
+    host.svdvals([a.ctypes.data, h.ctypes.data], [a.shape[0], cols])
+    assert d.tobytes() == h.tobytes()
+
+
 @needs_both
 def test_eigh_device_equals_host_byte_for_byte():
     """Includes the sign flip: without it two routes agreeing on every value

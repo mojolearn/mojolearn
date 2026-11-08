@@ -12,8 +12,12 @@
 #       THE DEAD-MAN HOOK: uploads final.tgz for every active job on this box, bounded by <seconds> (default
 #       120). The self-destruct paths (tools/runpod_guard.sh watchdog, the gpu_queue_box.sh lease delete,
 #       tools/do_amd_steward.sh's mojolearn-selfkill unit) call it before they delete the box.
-#   box_persist_run.sh --snapshot <persist.json> <results-dir> [periodic|final|flush]
-#       one upload now (flush-all uses it per job; the gpu_queue_box.sh idle delete uses it for the pod's queue dir)
+#   box_persist_run.sh --snapshot <persist.json> <results-dir> [periodic|hard|final|flush]
+#       one upload now (flush-all uses it per job; the gpu_queue_box.sh idle delete uses it for the pod's queue dir).
+#       hard: a ring-slot upload like periodic, labelled `hard` in the manifest (the job stays running): a job that
+#       has finished the part its caller waits for publishes it at once (tools/ops/release_gate_job.sh phase
+#       hard-done; tools/ops/release_gate.py brings that slot home and returns while the job runs on).
+#       A running job's command finds this script and its json in MOJOLEARN_PERSIST_RUNNER / MOJOLEARN_PERSIST_JSON.
 #
 # <persist.json> is minted on the Mac by tools/box_persist.py (`mint`/`prepare`) and reaches the box on ssh
 # stdin as a 0600 file. It holds presigned PUT/GET URLs for this job's keys only, which expire (at most 7
@@ -147,17 +151,18 @@ write_manifest() {  # <state> <exit> <why>
     } > "$ST/manifest.json"
 }
 
-# one upload: label periodic -> the next ring slot; final|flush -> final.tgz
+# one upload: label periodic|hard -> the next ring slot; final|flush -> final.tgz
 snapshot() {  # <label> [exit] [why]
-    local label=$1 rcv=${2:-} why=${3:-} seq pseq slot name pk sk gk tgz side c c2 sha bytes back state maxs
+    local label=$1 rcv=${2:-} why=${3:-} seq pseq slot name pk sk gk tgz side c c2 sha bytes back state maxs ring
     command -v curl > /dev/null 2>&1 || { plog "PERSIST-DISABLED no curl on this box"; return 1; }
     if expired; then
         [ -e "$ST/expired_logged" ] || { plog "EXPIRED the job's upload URLs expired at $EXPU; nothing more is sent"; : > "$ST/expired_logged"; }
         return 2
     fi
+    ring=0; case "$label" in periodic|hard) ring=1 ;; esac
     lock "$([ "$label" = periodic ] && echo 5 || echo 90)" || { plog "LOCK-BUSY label=$label (another upload of this job holds $ST/lock)"; return 1; }
     seq=$(( $(cat "$ST/seq" 2> /dev/null || echo 0) + 1 ))
-    if [ "$label" = periodic ]; then
+    if [ "$ring" = 1 ]; then
         pseq=$(cat "$ST/pseq" 2> /dev/null || echo 0)
         slot=$(printf '%02d' $(( pseq % SLOTS ))); name=$slot.tgz
         pk=slot.$slot.put; sk=slot.$slot.sha.put; gk=slot.$slot.get; maxs=$PUT_MAX
@@ -185,8 +190,8 @@ snapshot() {  # <label> [exit] [why]
     fi
     echo "$seq|$name|$sha|$bytes|$(now_utc)|$label" >> "$ST/entries"
     echo "$seq" > "$ST/seq"
-    [ "$label" != periodic ] || echo $(( pseq + 1 )) > "$ST/pseq"
-    case "$label" in periodic) state=running ;; flush) state=flushed ;; *) state=final ;; esac
+    [ "$ring" != 1 ] || echo $(( pseq + 1 )) > "$ST/pseq"
+    case "$label" in periodic|hard) state=running ;; flush) state=flushed ;; *) state=final ;; esac
     write_manifest "$state" "$rcv" "$why"
     c=$(http PUT "$(jget manifest.put)" "$ST/manifest.json" 120)
     case "$c" in 2*) ;; *) plog "FAILED name=manifest.json http=$c" ;; esac
@@ -275,6 +280,8 @@ run_job() {
     # so tools/bench_board.py may keep its evidence archives local under it (--evidence-local-only) with no
     # credential on the box
     export MOJOLEARN_RESULTS_DIR="$RES" MOJOLEARN_PERSIST_TAG="$TAG" MOJOLEARN_BOX_PERSIST=1
+    # the command may publish a finished part at once: bash "$MOJOLEARN_PERSIST_RUNNER" --snapshot "$MOJOLEARN_PERSIST_JSON" "$RES" hard
+    export MOJOLEARN_PERSIST_RUNNER="$SELF" MOJOLEARN_PERSIST_JSON="$JSON"
     command -v curl > /dev/null 2>&1 || plog "PERSIST-DISABLED no curl on this box: the command runs, nothing reaches R2"
     plog "START tag=$TAG prefix=$PREFIX pid=$$ every=${EVERY}s slots=$SLOTS expires=$EXPU cmd=$*"
     set -m
@@ -301,6 +308,6 @@ case "${1:-}" in
     --snapshot)
         shift; JSON="${1:?--snapshot <json> <results> [label]}"; RES="${2:?results dir}"; label=${3:-flush}
         load_job; snapshot "$label" "" "$label"; exit $? ;;
-    ''|-h|--help) sed -n 2,33p "$0"; exit 2 ;;
+    ''|-h|--help) sed -n 2,36p "$0"; exit 2 ;;
     *) run_job "$@" ;;
 esac

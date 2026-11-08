@@ -152,7 +152,7 @@ from core.column_stats import (
     shift_columns_kernel,
 )
 from core.householder_qr import fold_and_broadcast, qr_factor, qr_slice_count, QR_TPB, qr_reflector_u1, qr_reflector_tau
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, svd_rotation_significant
 from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
@@ -179,7 +179,9 @@ from decomposition.impl.linalg.detail.pca import (
 #: cannot be moved on one side only.
 comptime SVD_TPB = JACOBI_TPB
 
-def one_sided_jacobi_svd_kernel[wide_rotation: Bool = False](
+def one_sided_jacobi_svd_kernel[
+    wide_rotation: Bool = False, skip_insignificant: Bool = False
+](
     r: MutPointer[Float32, MutAnyOrigin],
     v_out: MutPointer[Float32, MutAnyOrigin],
     s_out: MutPointer[Float32, MutAnyOrigin],
@@ -271,6 +273,19 @@ def one_sided_jacobi_svd_kernel[wide_rotation: Bool = False](
                     # these columns as zero. A nonzero cross product cannot
                     # define a relative angle against a zero norm.
                     rotate = rotate and np_ != Float32(0.0) and nq_ != Float32(0.0)
+                comptime if skip_insignificant:
+                    # fix-svdvals-jacobi (2026-11-08): `linalg.svdvals` on a
+                    # rank-deficient float32 input (istella, 21 constant
+                    # columns) never converged at 15 sweeps and 1e-7, below
+                    # float32 epsilon: a rotation of a numerically null column
+                    # against a huge one re-fires every sweep. The x_decomp rule
+                    # (`svd_rotation_significant`, x_decomp/cells.mojo) skips a
+                    # rotation whose smaller column is below 2^-48 of its
+                    # partner. The host twin
+                    # (decomposition/host/pca_full_oracle.mojo::
+                    # host_one_sided_jacobi_svd) takes the same switch, so the
+                    # host column keeps the device's bits.
+                    rotate = rotate and svd_rotation_significant(app, aqq)
                 if rotate:
                     rots += 1
                     if tid == 0:
@@ -340,7 +355,9 @@ def one_sided_jacobi_svd_kernel[wide_rotation: Bool = False](
         info_out.unsafe_store(2, Float32(last_rots))
 
 
-def svd_of_r[wide_rotation: Bool = False](
+def svd_of_r[
+    wide_rotation: Bool = False, skip_insignificant: Bool = False
+](
     ctx: DeviceContext,
     mut r: DeviceBuffer[DType.float32],
     mut v: DeviceBuffer[DType.float32],
@@ -363,7 +380,9 @@ def svd_of_r[wide_rotation: Bool = False](
     """
     var info = ctx.enqueue_create_buffer[DType.float32](3)
     ctx.synchronize()
-    ctx.enqueue_function[one_sided_jacobi_svd_kernel[wide_rotation]](
+    ctx.enqueue_function[
+        one_sided_jacobi_svd_kernel[wide_rotation, skip_insignificant]
+    ](
         r.unsafe_ptr(),
         v.unsafe_ptr(),
         s.unsafe_ptr(),

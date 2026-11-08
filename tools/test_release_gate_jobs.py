@@ -182,25 +182,24 @@ def test_release_run_gate_builds_the_exact_job_command(tmp_path, monkeypatch, ve
     expected = [release.PY, "tools/ops/release_gate.py", vendor, VERSION, "--source-commit", COMMIT,
                 "--source-tree", str(tmp_path / "source"), "--out", str(out),
                 "--state", str(r.rel / "gates" / f"{vendor}-stamp-release-light-v1.job.json"),
-                "--profile", "release-light-v1", "--max-wait-hours", "72"]
+                "--profile", "release-light-v1", "--max-wait-hours", "72", "--until", "hard"]
     for w in wheel_files(tmp_path, vendor):
         expected += ["--candidate-wheel", str(w)]
-    # the gate job, then the measurement smoke's own job (same box, after the gate job; its own cap and out)
-    smoke = [release.PY, "tools/ops/release_gate.py", vendor, VERSION, "--job", "measuresmoke",
-             "--source-commit", COMMIT, "--source-tree", str(tmp_path / "source"),
-             "--out", str(out / "measuresmoke-job"),
-             "--state", str(r.rel / "gates" / f"{vendor}-stamp-release-light-v1-measuresmoke.job.json"),
-             "--profile", "release-light-v1", "--max-wait-hours", "72", "--no-adapters"]
-    for w in wheel_files(tmp_path, vendor):
-        smoke += ["--candidate-wheel", str(w)]
-    assert r.calls == [expected, smoke]
+    # ONE box job: the measurement smoke is its last phase (Andrew 2026-11-08), no second submit, sync or copy
+    assert r.calls == [expected]
     would = [line for line in r.said if line.startswith("    would: ")]
     launch = [line for line in would if (" submit release-gate " if vendor == "nvidia" else " run rel-") in line]
-    assert len(launch) == 2 and "-measuresmoke-" in launch[1] and "-gate-" in launch[0]
+    assert len(launch) == 1 and "-gate-" in launch[0] and not any("measuresmoke-job" in l for l in would)
+    assert any("release_measurement_smoke.py run" in l for l in would)
     wrapper = "tools/nvidia_central.sh" if vendor == "nvidia" else "tools/do_amd_steward.sh"
     assert all(l.startswith("    would: bash " + wrapper) for l in launch)
     if vendor == "nvidia":
-        assert "--cap 240 " in launch[0] and "--cap %d " % RG.MEASURE_SMOKE_CAP_MIN in launch[1]
+        assert "--cap 240 " in launch[0]
+    # --strict: the step waits for the final upload (the smoke included), as before
+    r.args.strict = True
+    r.calls.clear()
+    r.run_gate(vendor)
+    assert r.calls[0][r.calls[0].index("--until") + 1] == "final"
     assert not any("mojolearn-ops" in line or "release_lq_smoke" in line for line in r.said)
 
 
@@ -284,9 +283,8 @@ class FakeBox:
             (final / "out").mkdir(parents=True)
             (final / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
             if self.measure is not None:
-                # the measurement smoke's own job lands in <gate out>/measuresmoke-job (release.py run_gate launches
-                # it after this job); faked into this fetch so the verdict sees both
-                smoke = final / "out" / "measuresmoke-job" / "measuresmoke"
+                # the job's last phase lands in <gate out>/measuresmoke with the final upload
+                smoke = final / "out" / "measuresmoke"
                 smoke.mkdir(parents=True)
                 (smoke / "measuresmoke.json").write_text(json.dumps(self.measure))
             if self.runtime:
@@ -355,6 +353,101 @@ def test_a_rerun_resumes_the_queued_job_instead_of_submitting_again(tmp_path, mo
     submits = sum(1 for c in box.calls if c[2] == "submit")
     RG.Runner(args(tmp_path, "nvidia"), run=box.run, sleep=lambda s: None).main()
     assert sum(1 for c in box.calls if c[2] == "submit") == submits == 1
+
+
+# ------------------------------------------------------------------ the smoke runs last: HARD parts home first
+class HardBox(FakeBox):
+    """The job's phase hard-done upload lands first (a `hard` ring slot, the manifest still `running`, the box
+    running the measurement smoke); the final upload (out/measuresmoke/ included) once .final_ready."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.final_ready = False
+
+    def run(self, argv, cwd=None, stdin=None, timeout=None, capture_output=True, text=True):
+        if "box_persist.py" in str(argv[1]) and "--list" in argv:
+            self.calls.append(argv)
+            dest = Path(argv[argv.index("--dest") + 1])
+            dest.mkdir(parents=True, exist_ok=True)
+            state = "final" if self.final_ready else "running"
+            ups = [dict(seq=1, name="00.tgz", label="periodic"), dict(seq=2, name="01.tgz", label="hard")]
+            (dest / "manifest.json").write_text(json.dumps(dict(state=state, uploads=ups)))
+            return SimpleNamespace(returncode=0, stdout=f"MANIFEST state={state} exit=0 updated=x uploads=2\n",
+                                   stderr="")
+        if "box_persist.py" in str(argv[1]) and "--extract" in argv and not self.final_ready:
+            self.calls.append(argv)
+            dest = Path(argv[argv.index("--dest") + 1])
+            slot = dest / "01"
+            (slot / "out" / f"runtime-{self.vendor}").mkdir(parents=True)
+            (slot / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
+            (slot / "out" / f"runtime-{self.vendor}" / "runtime-report.json").write_text(json.dumps(self.runtime))
+            (slot / "out" / RG.HARD_MARKER).write_text(json.dumps(dict(
+                schema="mojolearn.release-gate-hard.v1", vendor=self.vendor, version=VERSION, source_commit=COMMIT,
+                tag="t", exit=0)))
+            return SimpleNamespace(returncode=0, stdout=f"VERIFIED 01.tgz -> {dest / '01.tgz'}\n"
+                                                        f"EXTRACTED 01.tgz -> {slot} (0 skipped)\n", stderr="")
+        return super().run(argv, cwd, stdin, timeout, capture_output, text)
+
+
+@pytest.mark.parametrize("vendor", ["nvidia", "amd"])
+def test_the_gate_returns_once_the_hard_parts_are_home_and_await_final_brings_the_smoke(tmp_path, monkeypatch,
+                                                                                         recorded, vendor):
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = HardBox(dict(recorded.gate, vendor=vendor, verdict="PASS"), vendor)
+    a = args(tmp_path, vendor)
+    assert a.until == "hard"
+    assert RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    # the HARD reports are home, the smoke is not (the box still runs it), and the job's state stays for await-final
+    assert (a.out / "gate-smoke.json").is_file() and (a.out / RG.HARD_MARKER).is_file()
+    assert not (a.out / "measuresmoke").exists()
+    state = json.loads(Path(a.state).read_text())
+    assert state["tag"] == box.ptag and state["hard_home_at"]
+    assert sum(1 for c in box.calls if c[2] in ("submit", "run")) == 1       # one job, never a second
+    # the smoke's data plan travelled with the one job
+    assert any(k.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for k in box.files)
+    # later: the final upload lands; await-final brings it home by tag and drops the state
+    box.final_ready = True
+    rc = RG.await_final(["--state", a.state, "--out", str(a.out), "--poll-seconds", "0"],
+                        runner=lambda aa: RG.Runner(aa, run=box.run, sleep=lambda s: None))
+    assert rc == 0 and (a.out / "measuresmoke" / "measuresmoke.json").is_file()
+    assert not Path(a.state).exists()
+    # nothing left to await: a second call says so and fails closed
+    assert RG.await_final(["--state", a.state, "--out", str(a.out)]) == 1
+
+
+def test_until_final_waits_for_the_smoke_as_before(tmp_path, monkeypatch, recorded):
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = HardBox(dict(recorded.gate, vendor="amd", verdict="PASS"), "amd")
+    a = args(tmp_path, "amd", **{"--until": "final"})
+    polls = []
+
+    def sleep(seconds):
+        polls.append(seconds)
+        box.final_ready = len(polls) >= 2
+
+    assert RG.Runner(a, run=box.run, sleep=sleep, popen=box.popen).main() == 0
+    assert (a.out / "measuresmoke" / "measuresmoke.json").is_file() and not Path(a.state).exists()
+
+
+def test_a_hard_snapshot_of_another_candidate_is_not_taken_for_this_one(tmp_path, monkeypatch, recorded):
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = HardBox(dict(recorded.gate, vendor="amd", verdict="PASS"), "amd")
+    a = args(tmp_path, "amd")
+    r = RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen)
+    plan = r.make_plan()[0]
+    a.source_commit = "b" * 40                    # the marker names commit a*40
+    assert r.bring_home_hard(plan, box.ptag) is None
+
+
+def test_the_hard_label_is_a_ring_slot_of_a_running_job():
+    text = (RG.ROOT / "tools" / "box_persist_run.sh").read_text()
+    assert 'case "$label" in periodic|hard) ring=1 ;; esac' in text
+    assert 'case "$label" in periodic|hard) state=running ;;' in text
+    assert 'export MOJOLEARN_PERSIST_RUNNER="$SELF" MOJOLEARN_PERSIST_JSON="$JSON"' in text
+    assert RG.hard_landed(Path("/nonexistent")) is False
 
 
 def test_an_amd_job_whose_connection_dropped_is_found_by_its_minted_tag(tmp_path, monkeypatch):
@@ -566,3 +659,67 @@ def test_a_gate_whose_runtime_qualifier_did_not_pass_fails_and_names_the_report(
     with pytest.raises(release.StepFailed, match="runtime qualifier"):
         r.run_gate(vendor)
     assert launched == []
+
+
+# ------------------------------------------------------------------ the disk (0.8.66 run t filled the 80 GB pod)
+def test_the_job_never_copies_a_venv_into_the_results(tmp_path):
+    import subprocess
+    out = tmp_path / "work" / "out"
+    venv = out / "runtime-nvidia" / "qualify" / "run" / "venv" / "lib"
+    venv.mkdir(parents=True)
+    (venv / "big.so").write_bytes(b"x" * 1024)
+    (out / "runtime-nvidia" / "runtime-report.json").write_text('{"passed":true}\n')
+    dst = tmp_path / "res" / "out"
+    dst.mkdir(parents=True)
+    script = ("set -euo pipefail\n" + "GATE_FETCH=(" + " ".join(shlex.quote(p) for p in RG.GATE_FETCH) + ")\n"
+              + job_function("copy_reports") + f"copy_reports {shlex.quote(str(out))} {shlex.quote(str(dst))}\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert (dst / "runtime-nvidia" / "runtime-report.json").exists()
+    assert not (dst / "runtime-nvidia" / "qualify" / "run" / "venv").exists()
+
+
+def test_the_job_logs_the_disk_free_after_every_phase(tmp_path):
+    import re
+    import subprocess
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    phases = re.findall(r"^PHASE=([a-z-]+)$", text, re.M)
+    for prev in phases[phases.index("tree"):]:
+        if prev == "complete":
+            continue
+        assert re.search(r"^disk_line %s$" % re.escape(prev), text, re.M), prev
+    assert re.search(r"^disk_line start$", text, re.M)
+    fns = "\n".join(l for l in text.splitlines() if l.startswith(("say() ", "disk_free_gb() ", "disk_line() ")))
+    script = "GATE_WORK=%s\n%s\ndisk_line hard-done\n" % (shlex.quote(str(tmp_path)), fns)
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert re.search(r"release-gate-job\] DISK free=[0-9]+\.[0-9]GB after hard-done$", r.stdout.strip()), r.stdout
+
+
+def test_the_job_refuses_a_box_with_less_free_than_the_plan_needs_and_drops_venvs_once_home(tmp_path):
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    start = text[text.index("disk_line start"):text.index("for ((i = 0; i < ${#GATE_ARGV[@]}")]
+    assert "GATE_DISK_NEED_GB" in start and "DISK REFUSED" in start and "exit 3" in start
+    hard = text[text.index("\nPHASE=hard-done"):text.index("\nPHASE=measuresmoke\n")]
+    assert 'if [ "$HARD_HOME" = 1 ]; then' in hard and "identity-venv" in hard and "qualify/run/venv" in hard
+    assert hard.index("persist_hard\n") < hard.index('if [ "$HARD_HOME" = 1 ]; then')
+    smoke = text[text.index("\nPHASE=measuresmoke\n"):text.index("\nPHASE=complete")]
+    assert '--data-plan "$IN/measuresmoke-data.json"' in smoke and '--max-work-gb "${GATE_MEASURE_SMOKE_MAX_GB:-8}"' in smoke
+    assert "release_measurement_smoke.py stage" not in text      # no whole-plan stage: the smoke stages per group
+    assert smoke.index("measuresmoke exited") < smoke.index('rm -rf "$GATE_WORK/measure-venv" "$GATE_WORK/fixture-venv"')
+
+
+def test_gate_env_carries_the_disk_plan(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gate_disk_plan", RG.ROOT / "tools/ops/gate_disk_plan.py")
+    D = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(D)
+    env = RG.Runner(args(tmp_path, "nvidia")).make_plan()[0].env_text()
+    assert f"GATE_DISK_NEED_GB={D.job_need_gb()}" in env and f"GATE_MEASURE_SMOKE_MAX_GB={D.SMOKE_CAP_GB:g}" in env
+    # the job's need is the measured items plus the smoke cap; the pod adds its base and 20 GB headroom
+    assert D.job_need_gb() >= sum(D.JOB_WRITES_GB.values()) + D.SMOKE_CAP_GB
+    assert D.pod_disk_gb() >= D.job_need_gb() + D.POD_BASE_GB + D.HEADROOM_GB and D.pod_disk_gb() % 10 == 0
+    assert D.pod_disk_gb(smoke_cap_gb=100) > D.pod_disk_gb()
+    dev_pod = (RG.ROOT / "tools/dev_pod.sh").read_text()
+    assert 'tools/ops/gate_disk_plan.py" pod-gb' in dev_pod
+    assert 'tools/ops/gate_disk_plan.py" pod-gb' in (RG.ROOT / "tools/nvidia_central.sh").read_text()
