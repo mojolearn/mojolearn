@@ -187,8 +187,9 @@ def test_the_ledger_judges_identity_at_a_source_equal_admission_only(tmp_path, m
 
 
 def test_the_one_box_job_is_judged_by_identity_units_and_runtime(tmp_path, monkeypatch):
+    # --strict: every part stops the box job (the SOFT verdicts: test_release_verdicts.py)
     import release_check_units as U
-    r = make(tmp_path, identity_on_wheels=True)
+    r = make(tmp_path, identity_on_wheels=True, strict=True)
     out = tmp_path / "gate"
     plan = dict(schema=U.PLAN_SCHEMA, units=[dict(unit="install-load", decision="run"), dict(unit="adapters", decision="reuse")])
     r.units_plan_path("amd").parent.mkdir(parents=True, exist_ok=True)
