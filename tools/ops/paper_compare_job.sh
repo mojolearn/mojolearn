@@ -179,14 +179,18 @@ if [ -n "${PC_IDS_FILE:-}" ]; then
         for f in "$PC_SMOKE_DIR"/smoke-s*-smoke/smoke.json; do [ -f "$f" ] && SJ+=(--smoke-json "$f"); done
         say "direct ids: $N races from $PC_IDS_FILE; smoke reused from $PC_SMOKE_DIR (${#SJ[@]} args)"
     else
-        # smoke exactly these races first (the board refuses a full race without its SMOKE PASS)
+        # smoke exactly these races first (the board refuses a full race without its SMOKE PASS); --smoke plans
+        # the smoke ids (rows=<smoke rows>, shape=small), so map the full ids the way paper_compare.smoke_id does
         phase smoke; mark smoke
+        SMOKE_ROWS=$(grep -oE 'rows=[0-9]+' "$RES/plan/dry-run.log" 2> /dev/null | head -n 1 | cut -d= -f2)
+        sed -e "s#/rows=full\$#/rows=${SMOKE_ROWS:-2000}#" -e "s#/shape=full\$#/shape=small#" \
+            "$RES/plan/race-ids-pass.txt" > "$RES/plan/race-ids-smoke.txt"
         S=${PC_SMOKE_SHARDS:-$(( $(nproc) / 8 ))}; [ -z "${PC_SMOKE_SHARDS:-}" ] && [ "$S" -gt 4 ] && S=4
         [ "$S" -gt "$N" ] && S=$N; [ "$S" -lt 1 ] && S=1
         say "direct ids: $N races from $PC_IDS_FILE; smoke in $S shards first"
         pids=()
         for i in $(seq 1 "$S"); do
-            $PY tools/bench_board.py "${COMMON[@]}" --cache "$CACHE_ROOT/c$i" --race-ids @"$RES/plan/race-ids-pass.txt" \
+            $PY tools/bench_board.py "${COMMON[@]}" --cache "$CACHE_ROOT/c$i" --race-ids @"$RES/plan/race-ids-smoke.txt" \
                 --smoke --shard "$i/$S" --out "$RES/smoke-s$i" > "$RES/logs/smoke-s$i.log" 2>&1 &
             pids+=($!)
         done
