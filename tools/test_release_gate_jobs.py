@@ -544,6 +544,15 @@ def test_a_gate_whose_runtime_qualifier_did_not_pass_fails_and_names_the_report(
     r.version, r.dry = VERSION, False
     r.candidate_gate_identity = lambda v: identity
     r.gate_out = lambda v: a.out
+    # fail soft (tools/release_verdicts.py): the runtime qualifier is SOFT, recorded, and the gate passes
+    r.rel, r.say = tmp_path / "rel" / "soft", (lambda msg: None)
+    r.args = SimpleNamespace(strict=False, state_dir=str(tmp_path / "state"))
+    ok, why = r.gate_ok(vendor)
+    assert ok and "SOFT FAIL (fix lanes owed): runtime" in why
+    import release_verdicts as RV
+    assert [f["name"] for f in RV.load(r.rel)] == ["runtime"]
+    # --strict: the old verdict
+    r.args = SimpleNamespace(strict=True)
     ok, why = r.gate_ok(vendor)
     path = a.out / f"runtime-{vendor}" / "runtime-report.json"
     assert not ok and why.startswith(release.Release.RUNTIME_GATE_FAILED) and str(path) in why
