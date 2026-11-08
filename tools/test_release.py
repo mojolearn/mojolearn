@@ -475,15 +475,30 @@ class RunTests(unittest.TestCase):
         self.assertLess(planned, out.stdout.index("-- macos-build"))
         return out
 
-    def test_dry_run_on_the_wheels_consults_no_ledger_after_identity_admit(self):
-        # THE IDENTITY ADMIT IS THE ONE CHECK (Andrew 2026-11-07): testpypi-rehearsal, publish-*, finish-line and
-        # record ship what identity-admit admitted (Release.publication_gate); none evaluates the ledger.
-        out = self.dry_run("--identity-on-wheels")
-        after = out.stdout.split("-- identity-admit", 1)[1]
-        self.assertNotIn(release.Release.DRY_READINESS, after)
-        self.assertNotIn("ledger evaluation", after)
-        self.assertNotIn("LEDGER EVALUATED", after)
-        self.assertNotIn("release requirements ledger", after)
+    def dry_run_raw(self, *extra):
+        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
+                   MOJOLEARN_AMD_PROVIDER="do")
+        out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
+                              "--state-dir", str(self.state), *extra],
+                             capture_output=True, text=True, timeout=600, env=env)
+        self.assertEqual(out.returncode, 0, out.stderr[-2000:])
+        return out.stdout
+
+    def test_dry_run_of_the_default_path_runs_no_reuse_machinery(self):
+        # EVERY RELEASE RUNS EVERYTHING ONCE (Andrew 2026-11-07): on the wheels without --reuse-unchanged no
+        # dependency workers run and no step evaluates the ledger, identity-admit and after included.
+        out = self.dry_run_raw("--identity-on-wheels")
+        self.assertIn("-- readiness", out)
+        self.assertIn(release.Release.LEDGER_OFF, out)
+        self.assertNotIn("would run the frozen dependency analysis", out)
+        self.assertNotIn(release.Release.DRY_READINESS, out)
+        self.assertNotIn("ledger evidence", out)
+        self.assertIn("-- identity-admit", out)
+
+    def test_dry_run_with_the_reuse_flag_still_plans_the_analysis(self):
+        out = self.dry_run_raw("--identity-on-wheels", "--reuse-unchanged")
+        self.assertIn("would run the frozen dependency analysis", out)
+        self.assertNotIn(release.Release.LEDGER_OFF, out)
 
     def test_dry_run_without_gpu_smoke_skips_every_gpu_column(self):
         # Andrew 2026-10-13 (8109d122d): identity and behavior are checked before merge;
