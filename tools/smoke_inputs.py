@@ -6,24 +6,24 @@
 
 The smoke judges completion and the fields the board ingests, never speed. Until this file every board driver built
 its blocks from the board DATASETS (istella / taxi / higgs .npz, the corpora), so even a smoke staged gigabytes. Under
-`bench_board.py --smoke --inputs verify-fixtures` (set by tools/release_measurement_smoke.py) every recipe takes one
-of three inputs (docs/measurements/SMOKE_INPUTS.md lists them recipe by recipe):
+`bench_board.py --smoke --inputs synthetic` (set by tools/release_measurement_smoke.py) THE SMOKE STAGES NO DATA AT
+ALL (Andrew 2026-11-08): every recipe's inputs are generated on the box (docs/measurements/SMOKE_INPUTS.md lists them
+recipe by recipe):
 
   verify fixture   the identity verification's own fixture `base` (tools/identity_break.py `fixture("base")`: the
                    20,000 x 16 float32 draw of seed 0, its two labels, and `heldout("base")`, the seed-1 draw the
                    lanes' infer column reads). A driver's prep takes its arrays from here (`prep_sources`) instead
-                   of the dataset; nothing is staged for it. A recipe with no data file keeps the driver's own
-                   seeded inputs (it stages nothing either).
-  sliced file      a recipe whose purpose is a dataset FILE loader (the trees family's speed_gbdt_arm loaders) or a
-                   corpus reader: the same loader code reads a SLICE of the pinned file (SLICE_TRAIN head rows +
-                   SLICE_TEST tail rows of a gbm-bench npz, CORPUS_HEAD_BYTES of a corpus), made once on the Mac
-                   from the full file (`release_measurement_smoke.py make-smoke-slices`) and pinned with its
-                   sha256 in bench/results/dataset_store/manifest.tsv like every other staged file.
-  NO VERIFY LANE   no identity lane verifies what the board measures: the recipe keeps its current inputs at the
-                   smoke size, and a file it reads is the slice (listed for Andrew's decision).
+                   of the dataset. A recipe with no data file keeps the driver's own seeded inputs.
+  synthetic        a recipe whose purpose is a dataset FILE loader (the trees family's speed_gbdt_arm loaders) or a
+                   corpus reader: the same loader code opens a SYNTHETIC FILE in the full file's own schema (the same
+                   keys, dtypes and layout) at the loader-side smoke size (SMOKE_TRAIN_ROWS head + SMOKE_TEST_ROWS
+                   tail rows; CORPUS_SYNTH_BYTES of generated text), written on the box when the loader opens it and
+                   deleted with the race's scratch.
+  NO VERIFY LANE   no identity lane verifies what the board measures: the recipe keeps its own inputs at the smoke
+                   size, and a file it reads is synthetic too (listed for Andrew's decision).
 
-The mode is the environment variable MODE_ENV, which bench_board's child_env sets for every driver in the smoke;
-without it (every timed run) nothing here is reached: the measured arms and their inputs are untouched.
+The mode is the environment variable MODE_ENV, which bench_board sets for every driver in the smoke; without it
+(every timed run) nothing here is reached: the measured arms and their inputs are untouched.
 
 Numbers here are bench-side input preparation before every clock (tools, never the runtime).
 """
@@ -35,32 +35,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 #: the variable that selects the smoke's inputs (bench_board.py --inputs sets it in every driver's environment)
 MODE_ENV = "MOJOLEARN_BOARD_INPUTS"
-DATASETS_MODE, FIXTURES_MODE = "datasets", "verify-fixtures"
-MODES = (DATASETS_MODE, FIXTURES_MODE)
+#: synthetic: the release measurement smoke (bench_board.py --smoke --inputs synthetic); verify-fixtures: the drivers'
+#: prep flag for the recipes on the verify fixture
+DATASETS_MODE, SYNTHETIC_MODE, FIXTURES_MODE = "datasets", "synthetic", "verify-fixtures"
+MODES = (DATASETS_MODE, SYNTHETIC_MODE)
 #: the identity verification's fixture the smoke runs on (identity_break.FIXTURES[0])
 FIXTURE = "base"
 
-#: THE SLICE SIZE (the loader-side smoke size). Head rows: the neural fit lanes' `small` shape reads 4,096 train +
-#: 1,024 held-out rows of HIGGS from the front of the file (bench_board_neural.FIT_ROWS["small"]), the trees smoke
-#: caps its train rows at bench_board.SMOKE_ROWS (2,000), so 5,120 head rows serve both. Tail rows: the loaders' test
-#: split is a fixed tail of the file (500,000 rows at full size); the slice keeps 1,024 of it, whole queries for the
-#: ranking file.
-SLICE_TRAIN = 5120
-SLICE_TEST = 1024
-#: a corpus slice: the first 2 MB (the text lanes read 2,048-byte documents; bench_board_extra reads up to 4 MiB of
-#: enwik8 and takes what the file holds)
-CORPUS_HEAD_BYTES = 2_000_000
-#: a taxi slice scans at most this many raw rows from each end for its card-paid rows (the classification task
-#: keeps card trips only; about 70 % of the trips): a file that does not hold them there is refused by name
-TAXI_SCAN_ROWS = 4 * SLICE_TRAIN
-#: the marker array a gbm-bench slice carries: True on the rows of the file's test tail (the loaders take their test
-#: rows from it, after their own row filter)
+#: THE LOADER-SIDE SMOKE SIZE (the synthetic files' rows). Head rows: the neural fit lanes' `small` shape reads 4,096
+#: train + 1,024 held-out rows of HIGGS from the front of the file (bench_board_neural.FIT_ROWS["small"]), the trees
+#: smoke caps its train rows at bench_board.SMOKE_ROWS (2,000), so 5,120 head rows serve both. Tail rows: the loaders'
+#: test split is a fixed tail of the file (500,000 rows at full size); the synthetic file has 1,024 (whole queries in
+#: the ranking file).
+SMOKE_TRAIN_ROWS = 5120
+SMOKE_TEST_ROWS = 1024
+#: the marker array a synthetic gbm-bench file carries where the loader's test rows are the file's tail: True on them
+#: (the loaders count their test rows from it, after their own row filter)
 TAIL = "smoke_tail"
-#: the infix of a slice's key and file name: gbm-bench/taxi/taxi_speed.npz -> gbm-bench/taxi/taxi_speed.smoke.npz
-SLICE_INFIX = ".smoke"
-#: where make-smoke-slices writes the slices on the Mac (tools/dataset_store.sh catalog); on a box they land where the
-#: loaders look: datasets/<key> for gbm-bench files, r2-stage/<key> for corpora
-SLICE_HOME = os.path.join("datasets", "smoke-slices")
 
 
 def mode(env=None):
@@ -71,23 +62,9 @@ def mode(env=None):
     return got
 
 
-def slices_on(env=None):
-    """True in the smoke's verify-fixtures mode: every dataset file a loader opens is its slice."""
-    return mode(env) == FIXTURES_MODE
-
-
-def slice_name(name):
-    """'taxi_speed.npz' -> 'taxi_speed.smoke.npz' (a key, a relative path or an absolute path)."""
-    head, tail = os.path.split(name)
-    stem, ext = os.path.splitext(tail)
-    if stem.endswith(SLICE_INFIX):
-        return name
-    return os.path.join(head, stem + SLICE_INFIX + ext) if head else stem + SLICE_INFIX + ext
-
-
-def loader_path(path, env=None):
-    """The file a loader opens: `path`, or its slice beside it in the smoke's verify-fixtures mode."""
-    return slice_name(path) if slices_on(env) else path
+def synthetic_on(env=None):
+    """True in the smoke's synthetic mode: every dataset file a loader opens is generated on the box."""
+    return mode(env) == SYNTHETIC_MODE
 
 
 # ---------------------------------------------------------------------------------------------- the fixture
@@ -233,11 +210,12 @@ def _sha(a):
 
 def prep_sources(inputs, harness, knn):
     """THE ONE CALL a driver's prep makes: (harness, knn module) to read its blocks from. `inputs` is the prep's
-    --inputs value: 'datasets' returns the real ones unchanged; 'verify-fixtures' the fixture stand-ins."""
+    --inputs value: 'datasets' returns the real ones unchanged (in the smoke's synthetic mode their loaders open the
+    synthetic files); 'verify-fixtures' the fixture stand-ins."""
     if (inputs or DATASETS_MODE) == DATASETS_MODE:
         return harness, knn
     if inputs != FIXTURES_MODE:
-        raise SystemExit("smoke_inputs: --inputs %r; one of %s" % (inputs, ", ".join(MODES)))
+        raise SystemExit("smoke_inputs: prep --inputs %r; datasets or %s" % (inputs, FIXTURES_MODE))
     return FixtureHarness(), FixtureKnn()
 
 
@@ -269,102 +247,153 @@ def zone_matrix(rows):
     return np.ascontiguousarray(np.maximum(X[:max(1, min(int(rows), X.shape[0]))], np.float32(0)), dtype=np.float32)
 
 
-# ---------------------------------------------------------------------------------------------- the slices
-#: the gbm-bench files a slice is made of: key -> (form, the arrays it holds). 'tail': one array set whose test rows
-#: are the file's last rows (higgs x/y; taxi x/fare/tip/card), sliced to head + tail with the TAIL marker; 'split':
-#: separate train/test arrays (istella_speed x_train/r_train/x_test/r_test); 'rank': istella_rank's train qids for the
-#: head rows and whole queries of its test split.
-SLICE_FORMS = {"gbm-bench/higgs/higgs_speed.npz": "tail", "gbm-bench/taxi/taxi_speed.npz": "taxi",
-               "gbm-bench/istella/istella_speed.npz": "split", "gbm-bench/istella/istella_rank.npz": "rank"}
-#: the declared width of each file's feature matrix (for the plan-time byte bound only; the slice records its own)
-SLICE_WIDTH = {"gbm-bench/higgs/higgs_speed.npz": 28, "gbm-bench/taxi/taxi_speed.npz": 16,
-               "gbm-bench/istella/istella_speed.npz": 220, "gbm-bench/istella/istella_rank.npz": 220}
+# ---------------------------------------------------------------------------------------------- the synthetic files
+# A loader or corpus recipe (and a NO VERIFY LANE recipe that reads a file) runs on a SYNTHETIC FILE in the loader's
+# own schema: the same keys, dtypes and layout the full file has, at the loader-side smoke size, generated on the box
+# the moment the loader opens it (synthetic_path), into SYNTH_DIR_ENV (bench_board puts it under the race's work/,
+# which --drop-race-scratch deletes once the record is written; a prep-only process's under its own out, which the
+# smoke deletes with its group). Nothing is staged, downloaded or pinned. Deterministic: seeded by the schema name.
+#: the directory the synthetic files are written to (bench_board.set_inputs sets it); required in synthetic mode
+SYNTH_DIR_ENV = "MOJOLEARN_SMOKE_SYNTH_DIR"
+#: the files a synthetic schema stands for, by the last two components of the path the loader opens
+SCHEMAS = {"higgs/higgs_speed.npz": "higgs", "taxi/taxi_speed.npz": "taxi", "istella/istella_speed.npz": "istella",
+           "istella/istella_rank.npz": "istella-rank", "enwik8/input.txt": "enwik8",
+           "pile_github/input.txt": "pile_github"}
+#: the feature width of each npz schema (the full files': HIGGS 28, taxi 16, Istella-S 220)
+SCHEMA_WIDTH = {"higgs": 28, "taxi": 16, "istella": 220, "istella-rank": 220}
+#: a synthetic corpus: 64 KiB, 32 documents of the text lanes' 2,048 bytes, so their 1-in-10 held-out split holds
+#: rows of both corpora (a few KB would leave it empty)
+CORPUS_SYNTH_BYTES = 64 * 1024
+#: Istella-S ranking queries in the synthetic file: this many rows per query
+RANK_QUERY_ROWS = 32
+_WORDS = {"enwik8": ("the", "of", "and", "in", "was", "history", "city", "[[", "]]", "language", "century", "war",
+                     "river", "known", "first", "{{", "}}", "people", "north", "music"),
+          "pile_github": ("def", "return", "if", "else", "for", "in", "import", "self", "(", ")", ":", "{", "}",
+                          ";", "int", "const", "=", "==", "#include", "void")}
 
 
-def slice_key(key):
-    return slice_name(key)
+def _schema_of(path):
+    rel = "/".join(os.path.normpath(str(path)).split(os.sep)[-2:])
+    if rel not in SCHEMAS:
+        raise SystemExit("smoke_inputs: no synthetic schema for %s (known: %s)" % (path, ", ".join(sorted(SCHEMAS))))
+    return rel
 
 
-def sliceable(key):
-    return key in SLICE_FORMS or key.startswith("corpus/")
+def synthetic_dir(env=None):
+    env = os.environ if env is None else env
+    d = (env.get(SYNTH_DIR_ENV) or "").strip()
+    if not d:
+        raise SystemExit("smoke_inputs: synthetic inputs need %s (bench_board.py --inputs synthetic sets it)"
+                         % SYNTH_DIR_ENV)
+    return d
 
 
-def slice_bound_bytes(key):
-    """An upper bound of the slice's bytes from its declared shape (plan time, before any slice exists): every row
-    it can hold x (width + 4 side columns) x 4 bytes, plus the npz framing; a corpus slice is CORPUS_HEAD_BYTES."""
-    if key.startswith("corpus/"):
-        return CORPUS_HEAD_BYTES
-    rows = 2 * TAXI_SCAN_ROWS if SLICE_FORMS[key] == "taxi" else SLICE_TRAIN + 2 * SLICE_TEST
-    return rows * (SLICE_WIDTH[key] + 4) * 4 + 64 * 1024
+def synthetic_path(path, env=None):
+    """The synthetic file standing for `path` (written now when it is not there yet); idempotent on its own result."""
+    rel = _schema_of(path)
+    dst = os.path.join(synthetic_dir(env), rel)
+    if not os.path.isfile(dst):
+        write_synthetic(rel, dst)
+    return dst
 
 
-def _take_tail(arrays, head, tail):
+def loader_path(path, env=None):
+    """The file a loader opens: `path`, or its synthetic stand-in in the smoke's synthetic mode."""
+    return synthetic_path(path, env) if synthetic_on(env) else path
+
+
+def _rng(rel):
+    import hashlib
+    return _np().random.default_rng(int.from_bytes(hashlib.sha256(rel.encode()).digest()[:8], "little"))
+
+
+def synthetic_arrays(rel):
+    """{key: array} of the synthetic npz for schema `rel`: the full file's keys and dtypes, SMOKE_TRAIN_ROWS head
+    rows and SMOKE_TEST_ROWS tail rows (TAIL marks the tail where the loader's test split is the file's end)."""
     np = _np()
-    n = next(iter(arrays.values())).shape[0]
-    if head + tail > n:
-        raise SystemExit("smoke_inputs: the file has %d rows; the slice needs %d head + %d tail" % (n, head, tail))
-    out = {k: np.ascontiguousarray(np.concatenate([v[:head], v[n - tail:]])) for k, v in arrays.items()}
-    out[TAIL] = np.concatenate([np.zeros(head, dtype=bool), np.ones(tail, dtype=bool)])
-    return out
+    rng = _rng(rel)
+    name = SCHEMAS[rel]
+    w = SCHEMA_WIDTH[name]
+    n, m = SMOKE_TRAIN_ROWS, SMOKE_TEST_ROWS
+    if name == "higgs":
+        x = rng.standard_normal((n + m, w)).astype(np.float32)
+        return {"x": x, "y": (x[:, 0] + 0.5 * x[:, 1] > 0).astype(np.float32), TAIL: _tail(n, m)}
+    if name == "taxi":
+        # the decode's 16 columns (speed_gbdt_arm.TAXI_FEATURES): integer ids and small counts where the real file
+        # has them (vendor, ratecode, store_fwd, zones, hour, weekday, day), positives elsewhere; fare > 0, a tip on
+        # every trip, about 70 % card-paid. The card rows of the head and the tail hold at least the smoke size.
+        k = 2 * (n + m)
+        x = np.abs(rng.standard_normal((k, w))).astype(np.float32)
+        ids = {0: 3, 3: 6, 4: 2, 5: 264, 6: 264, 7: 24, 8: 7, 9: 29}
+        for j, hi in ids.items():
+            x[:, j] = rng.integers(0, hi, k).astype(np.float32)
+        fare = (rng.random(k) * 40 + 3).astype(np.float32)
+        tip = (fare * rng.random(k) * 0.4).astype(np.float32)
+        card = rng.random(k) < 0.7
+        card[: n] = True                              # every task's head rows reach the smoke size
+        card[-m:] = True                              # the classification tail holds SMOKE_TEST_ROWS card trips
+        return {"x": x, "fare": fare, "tip": tip, "card": card, TAIL: _tail(k - m, m)}
+    if name == "istella":
+        xt = rng.standard_normal((n, w)).astype(np.float32)
+        xe = rng.standard_normal((m, w)).astype(np.float32)
+        grade = lambda X: np.clip(np.floor(X[:, 0] + X[:, 1] + 2), 0, 4).astype(np.float32)  # noqa: E731
+        return {"x_train": xt, "r_train": grade(xt), "x_test": xe, "r_test": grade(xe)}
+    if name == "istella-rank":
+        q = RANK_QUERY_ROWS
+        mt = (m // q) * q
+        xe = rng.standard_normal((mt, w)).astype(np.float32)
+        return {"qid_train": np.repeat(np.arange(n // q + 1, dtype=np.int64), q)[:n],
+                "qid_test": np.repeat(np.arange(mt // q, dtype=np.int64), q), "x_test": xe,
+                "r_test": np.clip(np.floor(xe[:, 0] + 2), 0, 4).astype(np.float32)}
+    raise ValueError(rel)
 
 
-def _count_rows(mask, want):
-    """The fewest leading rows of `mask` holding `want` True rows (refused when it holds fewer)."""
+def synthetic_text(rel, nbytes=CORPUS_SYNTH_BYTES):
+    """Generated text of the corpus's kind (prose for enwik8, code for pile_github), `nbytes` bytes."""
+    rng = _rng(rel)
+    words = _WORDS[SCHEMAS[rel]]
+    out = bytearray()
+    while len(out) < nbytes:
+        line = " ".join(words[i] for i in rng.integers(0, len(words), 12))
+        out += (line + "\n").encode()
+    return bytes(out[:nbytes])
+
+
+def _tail(head, tail):
     np = _np()
-    c = np.cumsum(mask)
-    if c.shape[0] == 0 or c[-1] < want:
-        raise SystemExit("smoke_inputs: %d rows hold %d card trips; the slice needs %d"
-                         % (mask.shape[0], int(c[-1]) if c.shape[0] else 0, want))
-    return int(np.searchsorted(c, want) + 1)
+    return np.concatenate([np.zeros(head, dtype=bool), np.ones(tail, dtype=bool)])
 
 
-def make_slice(key, src, dst):
-    """Write the slice of the full file `src` (R2 key `key`) to `dst`. Returns a record of what it holds."""
+def write_synthetic(rel, dst):
+    """Write schema `rel`'s synthetic file to `dst` (atomically: another process of the race may open it)."""
     np = _np()
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
-    tmp = dst + ".part"
-    if key.startswith("corpus/"):
-        with open(src, "rb") as fh:
-            head = fh.read(CORPUS_HEAD_BYTES)
-        with open(tmp, "wb") as fh:
-            fh.write(head)
-        os.replace(tmp, dst)
-        return dict(key=slice_key(key), source=key, head_bytes=len(head))
-    form = SLICE_FORMS[key]
-    with np.load(src) as z:
-        if form == "tail":
-            out = _take_tail({k: z[k] for k in ("x", "y")}, SLICE_TRAIN, SLICE_TEST)
-        elif form == "taxi":
-            card = np.asarray(z["card"])
-            n = card.shape[0]
-            # head: enough raw rows for SLICE_TRAIN rows of every task (the card-paid ones are the fewer); tail: the
-            # raw rows holding the file's last SLICE_TEST card trips (the classification test rows)
-            head = max(SLICE_TRAIN, _count_rows(card[:TAXI_SCAN_ROWS], SLICE_TRAIN))
-            tail = max(SLICE_TEST, _count_rows(card[::-1][:TAXI_SCAN_ROWS], SLICE_TEST))
-            if head + tail > n:
-                raise SystemExit("smoke_inputs: %s has %d rows; the slice needs %d head + %d tail" % (key, n, head, tail))
-            out = _take_tail({k: z[k] for k in ("x", "fare", "tip", "card")}, head, tail)
-        elif form == "split":
-            out = {"x_train": z["x_train"][:SLICE_TRAIN], "r_train": z["r_train"][:SLICE_TRAIN],
-                   "x_test": z["x_test"][:SLICE_TEST], "r_test": z["r_test"][:SLICE_TEST]}
-        else:
-            qid = np.asarray(z["qid_test"])
-            starts = np.flatnonzero(np.diff(qid) != 0) + 1
-            cut = starts[starts <= SLICE_TEST]
-            m = int(cut[-1]) if cut.size else min(SLICE_TEST, qid.shape[0])
-            out = {"qid_train": z["qid_train"][:SLICE_TRAIN], "x_test": z["x_test"][:m],
-                   "r_test": z["r_test"][:m], "qid_test": qid[:m]}
-            for k in z.files:
-                if k not in out:
-                    raise SystemExit("smoke_inputs: %s holds %r, which the slice does not know" % (key, k))
+    tmp = "%s.%d.part" % (dst, os.getpid())
     with open(tmp, "wb") as fh:
-        np.savez(fh, **{k: np.ascontiguousarray(v) for k, v in out.items()})
+        if rel.endswith(".txt"):
+            fh.write(synthetic_text(rel))
+        else:
+            np.savez(fh, **synthetic_arrays(rel))
     os.replace(tmp, dst)
-    return dict(key=slice_key(key), source=key, arrays={k: list(v.shape) for k, v in out.items()})
+    return dst
+
+
+def synthetic_bound_bytes(rel):
+    """An upper bound of a synthetic file's bytes (plan time): rows x (width + 4 side columns) x 4, plus framing."""
+    if rel.endswith(".txt"):
+        return CORPUS_SYNTH_BYTES
+    rows = 2 * (SMOKE_TRAIN_ROWS + SMOKE_TEST_ROWS)
+    return rows * (SCHEMA_WIDTH[SCHEMAS[rel]] + 4) * 4 + 64 * 1024
+
+
+def schema_of_key(key):
+    """The synthetic schema an R2 key's file is generated in ('taxi/taxi_speed.npz'), or None."""
+    rel = "/".join(key.split("/")[-2:])
+    return rel if rel in SCHEMAS else None
 
 
 def tail_rows(cached, keep=None):
-    """A slice's test rows after the loader's own row filter `keep` (None: every row)."""
+    """A synthetic file's test-tail rows after the loader's own row filter `keep` (None: every row)."""
     np = _np()
     tail = np.asarray(cached[TAIL])
     return int(tail[keep].sum() if keep is not None else tail.sum())
