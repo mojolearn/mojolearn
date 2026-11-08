@@ -199,3 +199,54 @@ def test_real_model_without_torch_is_skipped_only_on_the_cpu_column(monkeypatch,
         monkeypatch.setenv("MOJOLEARN_REQUIRE_TORCH", require)
     assert smoke.probe_real_model() == rc
     assert marker in capsys.readouterr().out
+
+
+def _torch_world(monkeypatch, with_torch):
+    """has_module answers True for torch/torchvision only for the interpreters in WITH_TORCH; no install runs."""
+    monkeypatch.setattr(smoke, "has_module", lambda python, module: str(python) in with_torch)
+    installs = []
+    monkeypatch.setattr(smoke, "ensure_torchvision", lambda python, log: installs.append(str(python)) or True)
+    monkeypatch.delenv("MOJOLEARN_AUTOGRAD_TORCH_PYTHON", raising=False)
+    return installs
+
+
+def test_the_explicit_torch_python_is_tried_before_the_identity_venv_and_the_glob(tmp_path, monkeypatch):
+    adapters_py = tmp_path / "adapters" / "venv" / "bin" / "python"
+    adapters_py.parent.mkdir(parents=True)
+    adapters_py.write_text("")
+    logs = tmp_path / "units" / "autograd" / "autograd-smoke"
+    logs.mkdir(parents=True)
+    assert not _torch_world(monkeypatch, {str(adapters_py)})
+    assert smoke.torch_python_for("/identity/python", logs, str(adapters_py)) == str(adapters_py)
+    # a torch_python without torch falls back to the identity venv (or the env var and the glob)
+    _torch_world(monkeypatch, {"/identity/python"})
+    assert smoke.torch_python_for("/identity/python", logs, str(adapters_py)) == "/identity/python"
+    # a missing path is never chosen; with no python holding torch the probes keep their SKIPPED
+    _torch_world(monkeypatch, {str(tmp_path / "gone")})
+    assert smoke.torch_python_for("/identity/python", logs, str(tmp_path / "gone")) is None
+
+
+def test_the_env_var_and_the_glob_remain_fallbacks(tmp_path, monkeypatch):
+    units = tmp_path / "units"
+    glob_py = units / "adapters" / "venv" / "bin" / "python"
+    glob_py.parent.mkdir(parents=True)
+    glob_py.write_text("")
+    logs = units / "autograd" / "autograd-smoke"
+    logs.mkdir(parents=True)
+    _torch_world(monkeypatch, {str(glob_py.resolve())})
+    assert smoke.torch_python_for("/identity/python", logs) == str(glob_py.resolve())
+    env_py = tmp_path / "env-python"
+    env_py.write_text("")
+    _torch_world(monkeypatch, {str(env_py)})
+    monkeypatch.setenv("MOJOLEARN_AUTOGRAD_TORCH_PYTHON", str(env_py))
+    assert smoke.torch_python_for("/identity/python", logs) == str(env_py)
+
+
+def test_run_cli_hands_the_torch_python_to_run(monkeypatch, tmp_path):
+    seen = {}
+    monkeypatch.setattr(smoke, "run", lambda *a, **k: seen.update(k) or 0)
+    assert smoke.main(["run", "--vendor", "nvidia", "--bin-dir", str(tmp_path), "--python", "/id/python",
+                       "--out", str(tmp_path / "o.json"), "--torch-python", "/adapters/venv/bin/python"]) == 0
+    assert seen["torch_python"] == "/adapters/venv/bin/python"
+    smoke.main(["run", "--vendor", "nvidia", "--bin-dir", str(tmp_path), "--out", str(tmp_path / "o.json")])
+    assert seen["torch_python"] is None
