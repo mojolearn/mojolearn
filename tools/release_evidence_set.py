@@ -149,7 +149,15 @@ ITEMS = (
     ("publish/testpypi-rehearsal.json", "testpypi-rehearsal", "always", "rel:testpypi-rehearsal/rehearsal.json"),
     ("publish/published-{pvendor}.json", "published-{pvendor}", "always", "rel:published-{pvendor}/published-report.json"),
     ("publish/finish-line.json", "finish-line", "always", "derived:finish-line"),
+    # fail soft (tools/release_verdicts.py): every SOFT failure the release continued past, and the summary that
+    # lists them under "Soft failures (fix lanes owed)"
+    ("soft-failures.json", "record", "optional", "rel:soft-failures.json"),
+    ("SUMMARY.md", "record", "optional", "derived:summary"),
 )
+#: required items a SOFT check produces: when the check soft-failed (soft-failures.json names it) and left no
+#: report, the item is listed as absent instead of failing the set (dest -> the CHECK_CLASS name)
+SOFT_ITEMS = {"gates/{vendor}/measuresmoke.json": "measuresmoke", "gates/{vendor}/runtime-report.json": "runtime",
+              "gates/apple/adapter-smoke.json": "apple/adapters"}
 #: Items another tool verifies by hash or reads as recorded: a secret in one fails the set, it is never edited
 VERBATIM_PREFIXES = ("alpha-manifest-", "file-admission-", "release-provenance.json", "binding-identities.json",
                      "ptx-proof/")
@@ -322,7 +330,7 @@ def derived_admitted(ctx):
     doc = ctx.identity_admitted
     if not isinstance(doc, dict) or doc.get("source_commit") not in (None, ctx.commit):
         return None
-    keep = ("source_commit", "commit", "branch", "recorded", "table_sha256", "at")
+    keep = ("source_commit", "commit", "branch", "recorded", "table_sha256", "at", "soft_failures")
     out = {k: doc.get(k) for k in keep if k in doc}
     out["repacked"] = sorted((doc.get("repacked") or {}).keys()) if isinstance(doc.get("repacked"), dict) \
         else doc.get("repacked")
@@ -478,7 +486,40 @@ def derived_box_facts(ctx, vendor):
                 busy_samples=samples[:2000])
 
 
-DERIVED = {"steps": derived_steps, "finish-line": derived_finish_line, "admitted": derived_admitted,
+def soft_failures(ctx):
+    try:
+        doc = json.loads((Path(ctx.rel) / "soft-failures.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return []
+    return list(doc.get("failures") or []) if isinstance(doc, dict) else []
+
+
+def derived_summary(ctx):
+    """SUMMARY.md: the release in a few lines and its "Soft failures (fix lanes owed)" (text, not JSON)."""
+    lines = ["# Release %s" % ctx.version, "", "- source commit: `%s`" % ctx.commit,
+             "- tooling commit: `%s`" % ctx.tooling_commit, "- published: %s" % (", ".join(ctx.published) or "none"),
+             "", "## Soft failures (fix lanes owed)", ""]
+    failures = soft_failures(ctx)
+    if not failures:
+        lines.append("None.")
+    else:
+        lines += ["| vendor | unit | reason |", "|---|---|---|"]
+        for f in failures:
+            lines.append("| %s | %s | %s |" % (f.get("vendor"), f.get("name"),
+                                              str(f.get("reason", "")).replace("|", "/").replace("\n", " ")[:300]))
+    return "\n".join(lines) + "\n"
+
+
+def soft_missing(ctx, dest):
+    """True when the missing required item DEST is the report of a check that soft-failed."""
+    names = {f.get("name") for f in soft_failures(ctx)}
+    for pattern, name in SOFT_ITEMS.items():
+        if re.fullmatch(re.escape(pattern).replace(re.escape("{vendor}"), r"(nvidia|amd)"), dest) and name in names:
+            return True
+    return False
+
+
+DERIVED = {"summary": derived_summary, "steps": derived_steps, "finish-line": derived_finish_line, "admitted": derived_admitted,
            "table": derived_table, "cpu-identity": derived_cpu_identity, "rehearsal": derived_rehearsal,
            "cross-compile": derived_cross_compile, "bindings": derived_bindings}
 
@@ -535,7 +576,8 @@ def collect(ctx, root=ROOT):
     for dest, producer, required, source, wheels in expand(ctx):
         kind, value = resolve(ctx, dest, source)
         if kind == "missing":
-            (missing if required else absent).append(dict(path=dest, producer=producer, looked_for=value))
+            soft = required and soft_missing(ctx, dest)
+            (missing if required and not soft else absent).append(dict(path=dest, producer=producer, looked_for=value))
             continue
         verbatim = dest.startswith(VERBATIM_PREFIXES)
         if kind == "file":
@@ -551,6 +593,8 @@ def collect(ctx, root=ROOT):
                 if why:
                     problems.append("%s (from %s) is stale: %s" % (dest, src, why))
                     continue
+        elif isinstance(value, str):   # a derived text item (SUMMARY.md)
+            data, src, src_sha = value.encode(), "derived", None
         else:
             data = (json.dumps(value, indent=1, sort_keys=True, default=str) + "\n").encode()
             src, src_sha = "derived", None
