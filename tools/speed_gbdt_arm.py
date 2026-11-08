@@ -469,6 +469,30 @@ def _smoke_staging():
     return smoke_inproc if smoke_inproc.in_process() else None
 
 
+def _smoke_slice(npz_path):
+    """The file a loader opens: `npz_path`, or, in the release measurement smoke's verify-fixtures mode
+    (MOJOLEARN_BOARD_INPUTS, set by bench_board.py --smoke --inputs verify-fixtures), its pinned slice beside it
+    (tools/smoke_inputs.py: SLICE_TRAIN head rows + SLICE_TEST tail rows, marked by its `smoke_tail` array). A timed
+    run never sets the variable and returns `npz_path` without importing anything. Returns (path, sliced)."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") != "verify-fixtures":
+        return npz_path, False
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import smoke_inputs
+    path = smoke_inputs.loader_path(npz_path)
+    if not (os.path.exists(path) and os.path.getsize(path) > 0):
+        raise RuntimeError("speed_gbdt_arm: the smoke slice %s is missing (stage it from the data plan: "
+                           "tools/release_measurement_smoke.py make-smoke-slices pins it)" % path)
+    return path, True
+
+
+def _slice_test_rows(cached, keep=None):
+    """A slice's test-tail rows after the loader's row filter `keep` (tools/smoke_inputs.py tail_rows)."""
+    import smoke_inputs
+    return smoke_inputs.tail_rows(cached, keep)
+
+
 def _open_npz(path):
     """np.load(path), as every loader here reads its decoded cache. Inside the smoke worker (smoke-fixes r14,
     2026-10-14; the trees recipes on istella/taxi STARTED at 5 s in zipfile crc32 / read_array inside these
@@ -752,7 +776,7 @@ def load_higgs(size, rows_cap=None):
     """
     folder = os.path.join(data_root(), "higgs")
     gz_path = os.path.join(folder, "HIGGS.csv.gz")
-    npz_path = os.path.join(folder, "higgs_speed.npz")
+    npz_path, sliced = _smoke_slice(os.path.join(folder, "higgs_speed.npz"))
     # A CACHE ENTRY THAT EXISTS IS NOT A CACHE ENTRY THAT LOADS.
     #
     # `os.path.exists` stood here and it sent a ZERO-BYTE stub down the
@@ -801,7 +825,7 @@ def load_higgs(size, rows_cap=None):
         y = np.ascontiguousarray(np.concatenate(ys))
         del xs, ys
         np.savez(npz_path, x=x, y=y)
-    n_test = 500000
+    n_test = _slice_test_rows(cached) if sliced else 500000
     n_train = x.shape[0] - n_test
     if size == "smoke":
         rows_cap = min(rows_cap or 50000, 50000)
@@ -885,7 +909,8 @@ def load_istella(size, rows_cap=None, regression=False, multiclass=False):
     THE DOWNLOAD IS 472 MB and is a SEPARATE, EXPLICITLY NAMED STEP
     (`--download istella`); the decode is minutes and is done there too."""
     folder = os.path.join(data_root(), "istella")
-    npz_path = os.path.join(folder, "istella_speed.npz")
+    # the smoke slice holds the train head and test head at their full-file names (x_train ... r_test)
+    npz_path, _ = _smoke_slice(os.path.join(folder, "istella_speed.npz"))
     cached = None
     if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
         try:
@@ -955,8 +980,8 @@ def load_istella_rank(rows_cap=None):
     cuts at the last query boundary at or below the cap. Grades stay 0..4,
     the target of every ranking loss here."""
     folder = os.path.join(data_root(), "istella")
-    speed = _open_npz(os.path.join(folder, "istella_speed.npz"))
-    rank = _open_npz(os.path.join(folder, "istella_rank.npz"))
+    speed = _open_npz(_smoke_slice(os.path.join(folder, "istella_speed.npz"))[0])
+    rank = _open_npz(_smoke_slice(os.path.join(folder, "istella_rank.npz"))[0])
     x_tr, r_tr = speed["x_train"], speed["r_train"]
     qid_tr = rank["qid_train"]
     if qid_tr.shape[0] != r_tr.shape[0]:
@@ -1117,7 +1142,7 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
     NAMED STEP (`--download taxi`, needs pyarrow); timed runs load the
     NumPy cache only."""
     folder = os.path.join(data_root(), "taxi")
-    npz_path = os.path.join(folder, "taxi_speed.npz")
+    npz_path, sliced = _smoke_slice(os.path.join(folder, "taxi_speed.npz"))
     cached = None
     if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
         try:
@@ -1144,6 +1169,10 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
         tip = np.concatenate([p[2] for p in parts])
         card = np.concatenate([p[3] for p in parts])
         np.savez(npz_path, x=x, fare=fare, tip=tip, card=card)
+    # the smoke slice's test tail, counted after this task's own row filter (card trips for the tip tasks)
+    n_test = TAXI_N_TEST
+    if sliced:
+        n_test = _slice_test_rows(cached, None if regression else card)
     if regression:
         y = fare
         name = "taxireg"
@@ -1157,7 +1186,6 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
         x, fare, tip = x[card], fare[card], tip[card]
         y = (tip >= 0.2 * fare).astype(np.float32)
         name = "taxicat" if categorical else "taxi"
-    n_test = TAXI_N_TEST
     n_train = x.shape[0] - n_test
     if size == "smoke":
         rows_cap = min(rows_cap or 50000, 50000)
