@@ -64,11 +64,18 @@ def _routed_host_bindings():
 
 
 def failure_line(log_path, width=300):
-    """The last non-empty line of a failed reference's host.log (its exception), for the quality error text."""
+    """The failure of a failed reference's host.log for the quality error text: the `Fatal Python error:` line
+    when the child died in native code, else the last non-empty line (its exception).
+
+    0.8.66 AMD measurement smoke: 13 CNN lanes reported only "(<no Python frame>)", the last line of a fatal
+    error's thread dump, and the cause (the error line itself) stayed on the box."""
     try:
         lines = [x.strip() for x in Path(log_path).read_text(errors='replace').splitlines() if x.strip()]
     except OSError:
         return 'host.log unreadable'
+    fatal = [x for x in lines if x.startswith('Fatal Python error')]
+    if fatal:
+        return fatal[-1][:width]
     return (lines[-1] if lines else 'host.log empty')[:width]
 
 
