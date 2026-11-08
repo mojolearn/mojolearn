@@ -5874,13 +5874,27 @@ def _(ml, X, yc, yr, Xh=None):
     deficient (a duplicated column), so its smallest singular value is an
     exact zero and the sort has a tie at the bottom; the third is scaled by
     a power of two, which changes every exponent and no mantissa, so the
-    values must scale exactly and the ORDER must not move at all."""
+    values must scale exactly and the ORDER must not move at all. The
+    fourth has constant columns next to large-scale ones (istella's 21
+    constant features): numerically null directions beside a huge one, the
+    input the one-sided Jacobi refused before fix-svdvals-jacobi."""
     a = np.ascontiguousarray(X[:48, :5]).astype(np.float32)
     dup = np.ascontiguousarray(X[:48, [0, 1, 1, 2]]).astype(np.float32)
     scaled = np.ascontiguousarray(a * np.float32(0.125))
     return _fit(dict(generic=_h(ml.linalg.svdvals(a)),
                      rank_deficient=_h(ml.linalg.svdvals(dup)),
-                     scaled=_h(ml.linalg.svdvals(scaled))))
+                     scaled=_h(ml.linalg.svdvals(scaled)),
+                     constant_columns=_h(ml.linalg.svdvals(_svdvals_constant_columns(X)))))
+
+
+def _svdvals_constant_columns(X):
+    """64 x 10 float32: four data columns, two of them scaled by 1e4, and
+    six constant columns (four parallel nonzero ones and two zero ones), so
+    R carries null directions beside columns of squared norm ~1e10."""
+    base = np.asarray(X[:64, :4], dtype=np.float32)
+    big = base * np.asarray([1e4, 1.0, 1e4, 1.0], dtype=np.float32)
+    const = np.asarray([1.0, 3.0, 0.0, 250.0, 0.0, 7.5], dtype=np.float32)
+    return np.ascontiguousarray(np.hstack([big, np.broadcast_to(const, (64, 6))]).astype(np.float32))
 
 
 @lane("metrics-classification")
