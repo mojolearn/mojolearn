@@ -34,6 +34,7 @@ Tests: tools/test_release_identity_wheels.py (no box, no network, no GitHub).
 import datetime as dt
 import hashlib
 import json
+import shutil
 import os
 from pathlib import Path
 import re
@@ -571,6 +572,10 @@ class IdentityOnWheels:
         self.say("  %s run %s: %s" % (CPU_WORKFLOW, run_id, link))
         conclusion = self.cpu_wait(run_id)
         art = out / "artifacts"
+        # a fresh dir: `gh run download` into the previous run's extraction fails on existing files and leaves the
+        # stale checks.json in place (0.8.66 run g, 2026-11-07: the job PASSED, the release read run f's failures)
+        if art.exists():
+            shutil.rmtree(art)
         art.mkdir(parents=True, exist_ok=True)
         self.gh("run", "download", run_id, "-D", str(art), log=self.rel / "identity-cpu.log")
         out.mkdir(parents=True, exist_ok=True)
