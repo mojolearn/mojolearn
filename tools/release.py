@@ -4973,7 +4973,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         why = self.gate_waiver(vendor)
         return (True, why) if why else self.gate_ok(vendor)
 
-    def publication_gate(self, stage=None, vendors=GATE_VENDORS, platform=None, wheel=None):
+    def publication_gate(self, stage=None, vendors=None, platform=None, wheel=None):
         """The gate of the steps after identity-admit (testpypi-rehearsal, publish-*, record).
 
         THE IDENTITY ADMIT IS THE ONE CHECK OF A RELEASE (Andrew 2026-11-07, "never-ending verification"): with
@@ -4982,7 +4982,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
         the admitted commit and table sha256 and the sha256 of every wheel it admitted) and the candidate gates'
         PASS reports. PLATFORM's WHEEL must be the admitted bytes. Without the option, release_gate as before."""
         if not self.single():
-            return self.release_gate(stage=stage, vendors=vendors)
+            given = dict(stage=stage) if stage is not None else {}
+            if vendors is not None:
+                given["vendors"] = vendors
+            return self.release_gate(**given)
+        vendors = GATE_VENDORS if vendors is None else vendors
         reasons = [f"candidate gate {vendor}: {why}" for vendor in vendors
                    for ok, why in [self.candidate_verdict(vendor)] if not ok]
         admitted = self.admitted()
