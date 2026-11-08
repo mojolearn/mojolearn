@@ -243,6 +243,13 @@ class Runner:
         #: the adapters unit's venv interpreter once that unit ran and its venv imports torch: the autograd torch
         #: entries run under it (one torch per gate: the identity venv holds the wheels and numpy only)
         self.torch_python = None
+        #: the tools/adapter_gate.py TORCH_ENV file the adapters unit wrote for that interpreter, or None
+        self.torch_env = None
+        #: this process's environment as the job started it, taken before any unit runs: every unit's subprocess
+        #: gets this copy explicitly, so nothing a unit changes in this process reaches a later one (0.8.66 run t,
+        #: AMD gate: after the check-order change the compiled autograd checks lost the Mojo runtime; the cause was
+        #: the reused binaries' RUNPATH, autograd_smoke.compiled_env, but no unit inherits another's mutation either)
+        self.base_env = dict(os.environ)
 
     def record(self, row, status, digest_=None, detail=""):
         rec = dict(schema=SCHEMA, unit=row["unit"], device_class=self.plan["device_class"], vendor=self.plan["vendor"],
@@ -279,7 +286,9 @@ class Runner:
                "--entries", ",".join(names)]
         if self.torch_python:
             cmd += ["--torch-python", self.torch_python]
-        self.run(cmd, capture_output=True, text=True)
+        if self.torch_python and self.torch_env:
+            cmd += ["--torch-env", self.torch_env]
+        self.run(cmd, capture_output=True, text=True, env=dict(self.base_env))
         try:
             got = {r["name"]: r for r in json.loads(out.read_text()).get("rows", [])}
         except (OSError, ValueError, AttributeError):
@@ -295,9 +304,10 @@ class Runner:
     def adapters(self, row):
         import adapter_gate as AG
         out = self.out / "adapters"
-        rec = AG.run(self.plan["vendor"], sys.executable, out, self.a.wheel)
+        rec = AG.run(self.plan["vendor"], sys.executable, out, self.a.wheel, env=dict(self.base_env))
         ok = bool(rec.get("ok"))
         self.torch_python = self.adapters_torch_python(out)
+        self.torch_env = self.write_torch_env(out, rec) if self.torch_python else None
         phases = {}
         for name in AG.PHASES:
             for p in sorted(out.glob(name + "*/*.json")) + sorted(out.glob(name + ".json")):
@@ -307,6 +317,21 @@ class Runner:
                     pass
         return self.record(row, "passed" if ok else "failed", digest(phases) if ok and phases else None,
                            "" if ok else str(rec.get("why", "")))
+
+    def write_torch_env(self, out, rec):
+        """<out>/TORCH_ENV: the adapters venv's interpreter and the environment the torch entries run with, as
+        overrides of the job's environment: the smoke's own (REC env_overrides, adapter_wheel_smoke's phase
+        variables) with adapter_gate.framework_env computed NOW, after torch is installed (on AMD torch/lib first:
+        the probes import mojolearn before torch, and without it the ROCm torch import failed, 0.8.66 run t)."""
+        import adapter_gate as AG
+        venv = Path(out) / "venv"
+        smoke = AG.apply_overrides(rec.get("env_overrides") or {}, self.base_env)
+        smoke.update(AG.SMOKE_PHASE_ENV)
+        env = AG.framework_env(self.plan["vendor"], venv, smoke)
+        path = Path(out) / AG.TORCH_ENV
+        path.write_text(json.dumps(dict(python=self.torch_python, env=AG.env_overrides(env, self.base_env)),
+                                   indent=1, sort_keys=True) + "\n")
+        return str(path)
 
     def adapters_torch_python(self, out):
         """The adapters venv's interpreter when it imports torch (the wheel's own `[torch]` extra, installed by the

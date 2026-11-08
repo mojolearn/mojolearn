@@ -250,3 +250,68 @@ def test_run_cli_hands_the_torch_python_to_run(monkeypatch, tmp_path):
     assert seen["torch_python"] == "/adapters/venv/bin/python"
     smoke.main(["run", "--vendor", "nvidia", "--bin-dir", str(tmp_path), "--out", str(tmp_path / "o.json")])
     assert seen["torch_python"] is None
+
+
+def _wheel_venv(tmp_path):
+    py = tmp_path / "identity" / "bin" / "python"
+    py.parent.mkdir(parents=True)
+    py.write_text("")
+    libs = tmp_path / "identity" / "lib" / "python3.12" / "site-packages" / "mojolearn" / ".libs"
+    libs.mkdir(parents=True)
+    return py, libs
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin"])
+def test_compiled_checks_run_with_the_wheel_runtime_first_never_only_the_inherited_path(monkeypatch, tmp_path,
+                                                                                        platform):
+    # 0.8.66 run t: reused executables' RUNPATH named another checkout's pixi lib; the wheel's own Mojo runtime
+    # (mojolearn/.libs) leads LD_LIBRARY_PATH whatever this process inherited
+    py, libs = _wheel_venv(tmp_path)
+    bins = tmp_path / "bin"
+    bins.mkdir()
+    (bins / "autograd-gradients-amd").write_text("")
+    monkeypatch.setattr(smoke.sys, "platform", platform)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/inherited/lib")
+    seen = {}
+    monkeypatch.setattr(smoke, "start", lambda cmd, log, timeout, env, cwd: seen.update(env=env) or ("ok", 0, 0.1))
+    smoke.run("amd", bins, str(py), tmp_path / "r.json", entries=["autograd-gradients"])
+    want = (str(libs) + ":/inherited/lib") if platform == "linux" else "/inherited/lib"
+    assert seen["env"] is not None and seen["env"]["LD_LIBRARY_PATH"] == want
+
+
+def test_the_torch_entries_get_the_adapters_env_and_pytest_in_their_own_python(monkeypatch, tmp_path):
+    identity = str(tmp_path / "identity-python")
+    adapters = tmp_path / "adapters" / "venv" / "bin" / "python"
+    adapters.parent.mkdir(parents=True)
+    adapters.write_text("")
+    env_file = tmp_path / "torch-env.json"
+    env_file.write_text(json.dumps(dict(python=str(adapters),
+                                        env={"LD_LIBRARY_PATH": "/torch/lib:/opt/rocm/lib", "GONE": None})))
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/job/lib")
+    monkeypatch.setenv("GONE", "x")
+    monkeypatch.setattr(smoke, "has_module", lambda python, module: str(python) == str(adapters))
+    pytests = []
+    monkeypatch.setattr(smoke, "ensure_pytest", lambda python, log: pytests.append(str(python)))
+    seen = {}
+
+    def start(cmd, log, timeout, env, cwd):
+        seen[cmd[4]] = (cmd[0], env)
+        return _completed_entry(cmd, log, timeout, env, cwd)
+    monkeypatch.setattr(smoke, "start", start)
+    # no --torch-python: the env file's python stands in for it
+    smoke.run("amd", tmp_path, identity, tmp_path / "r.json",
+              entries=["autograd-public", "autograd-usability", "import-torch-smoke"], torch_env=str(env_file))
+    assert sorted(pytests) == sorted([identity, str(adapters)])
+    for name in ("autograd-public", "import-torch-smoke"):
+        python, env = seen[name]
+        assert python == str(adapters) and env["LD_LIBRARY_PATH"] == "/torch/lib:/opt/rocm/lib" and "GONE" not in env
+    python, env = seen["autograd-usability"]
+    assert python == identity and env["LD_LIBRARY_PATH"] == "/job/lib" and env["GONE"] == "x"
+
+
+def test_run_cli_hands_the_torch_env_to_run(monkeypatch, tmp_path):
+    seen = {}
+    monkeypatch.setattr(smoke, "run", lambda *a, **k: seen.update(k) or 0)
+    smoke.main(["run", "--vendor", "amd", "--bin-dir", str(tmp_path), "--out", str(tmp_path / "o.json"),
+                "--torch-env", "/units/adapters/torch-env.json"])
+    assert seen["torch_env"] == "/units/adapters/torch-env.json"
