@@ -419,6 +419,106 @@ def test_gate_boxes_rents_records_and_holds_then_boxes_down_pulls_results_and_ta
     assert r.have("boxes-down", r.recorded("boxes-down"))
 
 
+def held_release(tmp_path, monkeypatch):
+    """A release that brought both boxes up and has both gates pending, its keeper driven by hand."""
+    monkeypatch.setenv("MOJOLEARN_ORCHESTRATOR", "1")
+    r, boxes = box_release(tmp_path, monkeypatch)
+    r.selected = ["gate-boxes", "gate-nvidia", "gate-amd", "boxes-down"]
+    r._status = {"gate-nvidia": "pending", "gate-amd": "pending"}
+    monkeypatch.setattr(r, "keep_boxes", lambda: None)
+    r.step_gate_boxes()
+    record(r, "gate-boxes")
+    clock = [r.clock()]
+    r.clock = lambda: clock[0]
+    return r, boxes, clock
+
+
+def test_the_keeper_holds_both_boxes_through_a_three_hour_mac_side_stretch(tmp_path, monkeypatch):
+    # 0.8.66 run h: the Mac spent about two hours before the first box job; the held boxes must outlive that
+    r, boxes, clock = held_release(tmp_path, monkeypatch)
+    keeper = release.BoxKeeper(r)
+    renewals = []
+    for minute in range(0, 3 * 60 + 1):
+        clock[0] = r.state["boxes"]["amd"]["lease_extended_at"] if minute == 0 else clock[0] + 60
+        if minute % 50 == 49 and boxes.holds:
+            boxes.holds[-1].rc = 0                       # a hold that ran out is started again
+        assert keeper.tick() == {"nvidia", "amd"}
+        n = boxes.verbs().count("fake/do_amd_steward.sh extend")
+        if n > len(renewals):
+            renewals.append(minute)
+    # the NVIDIA hold is an `nvidia_central.sh sh` (nvq hold: the pod's lease counts it busy) for the whole stretch
+    assert all(h.cmd[2:4] == ["sh", "release-gate"] for h in boxes.holds) and len(boxes.holds) >= 3
+    assert sum(1 for h in boxes.holds if h.rc is None) == 1
+    # the droplet's lease (now + AMD_RENEW_MIN at each extend) never comes within reach of running out
+    assert renewals and renewals[0] <= r.AMD_RENEW_EVERY_S // 60 + 1
+    marks = [0] + renewals + [3 * 60]
+    assert max(b - a for a, b in zip(marks, marks[1:])) * 60 < r.AMD_RENEW_MIN * 60
+    assert not any("BOX LOST" in line for line in r.lines)
+
+
+def test_a_failed_amd_renewal_is_retried_within_five_minutes(tmp_path, monkeypatch):
+    r, boxes, clock = held_release(tmp_path, monkeypatch)
+    keeper = release.BoxKeeper(r)
+    real = boxes.runner
+    rcs = [1]
+    monkeypatch.setattr(r, "runner", lambda cmd, env, log, detach=False:
+                        rcs.pop(0) if ("extend" in [str(c) for c in cmd] and rcs) else real(cmd, env, log, detach))
+    clock[0] += r.AMD_RENEW_EVERY_S + 1
+    keeper.tick()                                        # the extend fails
+    clock[0] += 301
+    keeper.tick()                                        # and is tried again five minutes later
+    assert boxes.verbs().count("fake/do_amd_steward.sh extend") >= 1 and rcs == []
+
+
+def test_a_held_pod_that_dies_is_reported_box_lost_and_resume_rents_a_live_one(tmp_path, monkeypatch):
+    r, boxes, clock = held_release(tmp_path, monkeypatch)
+    keeper = release.BoxKeeper(r)
+    assert keeper.tick() == {"nvidia", "amd"} and len(boxes.holds) == 1
+    # the pod is deleted: its ssh hold ends rc 255 and the watcher retires its state
+    boxes.holds[0].rc = 255
+    (boxes.nvc_state / "nvc1" / "state.env").unlink()
+    assert keeper.tick() == {"amd"}
+    lost = [line for line in r.lines if "BOX LOST" in line]
+    assert len(lost) == 1 and lost[0].lstrip().startswith("BOX LOST nvidia nvc1 at 20")
+    assert len(boxes.holds) == 1                         # no hold started on a dead pod
+    assert "nvidia" not in r.held_boxes() and r.state["boxes"]["nvidia"]["lost"]
+    keeper.tick()
+    assert len([line for line in r.lines if "BOX LOST" in line]) == 1   # reported once
+    # resume: gate-boxes no longer counts as had, and its run rents a live pod (the AMD droplet is kept)
+    assert r.have("gate-boxes", r.recorded("gate-boxes")) is None
+    ups = boxes.verbs().count("fake/nvidia_central.sh up")
+    r.step_gate_boxes()
+    assert boxes.verbs().count("fake/nvidia_central.sh up") == ups + 1
+    assert "fake/do_amd_steward.sh up" not in boxes.verbs()[-3:]
+    assert r.held_boxes()["nvidia"]["pod"] == "nvc1" and not r.held_boxes()["nvidia"].get("lost")
+    assert r.have("gate-boxes", r.recorded("gate-boxes")).startswith("have ")
+
+
+def test_a_held_droplet_whose_state_is_gone_is_reported_box_lost(tmp_path, monkeypatch):
+    r, boxes, clock = held_release(tmp_path, monkeypatch)
+    keeper = release.BoxKeeper(r)
+    (boxes.do_state / "state.env").unlink()
+    assert keeper.tick() == {"nvidia"}
+    assert any(line.lstrip().startswith("BOX LOST amd 555 at ") for line in r.lines)
+    assert "fake/do_amd_steward.sh extend" not in boxes.verbs()[-1:]
+
+
+def test_a_keeper_pass_that_raises_is_logged_and_the_keeper_keeps_going(tmp_path, monkeypatch):
+    r, boxes, clock = held_release(tmp_path, monkeypatch)
+    r.KEEPER_TICK_S = 0
+    keeper = release.BoxKeeper(r)
+    passes = []
+
+    def tick():
+        passes.append(1)
+        if len(passes) == 1:
+            raise OSError("ssh: connect timed out")
+        return set() if len(passes) >= 3 else {"amd"}
+    keeper.tick = tick
+    keeper.loop()
+    assert len(passes) == 3 and any("a pass failed" in line and "connect timed out" in line for line in r.lines)
+
+
 def test_adopted_boxes_are_used_renewed_and_released_never_taken_down(tmp_path, monkeypatch):
     monkeypatch.setenv("MOJOLEARN_ORCHESTRATOR", "1")
     r, boxes = box_release(tmp_path, monkeypatch)
