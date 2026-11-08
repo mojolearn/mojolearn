@@ -1507,7 +1507,16 @@ def _weights(data):
 
 
 def higgs_path():
-    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists)."""
+    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists); in the release
+    measurement smoke's verify-fixtures mode, its pinned slice (tools/smoke_inputs.py loader_path: the first
+    SLICE_TRAIN rows, which hold the `small` shape's train and held-out rows)."""
+    path = _higgs_path()
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") != "verify-fixtures":
+        return path
+    return _load("smoke_inputs").loader_path(path)
+
+
+def _higgs_path():
     got = os.environ.get(HIGGS_ENV, "").strip()
     if got:
         return os.path.expanduser(got)
