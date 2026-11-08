@@ -152,6 +152,15 @@ if ! "$PY" -m venv "$CACHE_ROOT/venv-probe" > /dev/null 2>&1; then
     "$PY" -m venv "$CACHE_ROOT/venv-probe" > /dev/null 2>&1 || { say "no working venv module; see logs/apt-venv.log"; exit 4; }
 fi
 rm -rf "$CACHE_ROOT/venv-probe"
+# the driver python itself needs numpy (tools/bench_board_evidence.py imports it in the shard process; the DO image's
+# system python has none: AMD run c of 2026-11-08 ran every smoke race and then crashed at the evidence step)
+if ! "$PY" -c 'import numpy' > /dev/null 2>&1; then
+    say "driver python has no numpy; installing"
+    "$PY" -m pip install -q --break-system-packages numpy > "$RES/logs/pip-numpy.log" 2>&1 || \
+        "$PY" -m pip install -q numpy >> "$RES/logs/pip-numpy.log" 2>&1 || \
+        { DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-numpy >> "$RES/logs/pip-numpy.log" 2>&1; }
+    "$PY" -c 'import numpy' > /dev/null 2>&1 || { say "driver python still has no numpy; see logs/pip-numpy.log"; exit 4; }
+fi
 
 # ---- plan ------------------------------------------------------------------------------------------------------
 phase plan; mark plan
