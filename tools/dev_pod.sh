@@ -593,6 +593,10 @@ up)
     bx 600 'command -v curl > /dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get update -qq > /dev/null && apt-get install -y -qq curl ca-certificates > /dev/null; }
 [ -x /root/.pixi/bin/pixi ] || command -v pixi > /dev/null || curl -fsSL https://pixi.sh/install.sh | bash; mkdir -p /root/mojolearn' < /dev/null > "$D/bootstrap.log" 2>&1 \
         || say "pixi bootstrap failed; see $D/bootstrap.log"
+    # an NVIDIA pod takes torch and its CUDA wheels from the PyTorch CDN (runpod_pod_lib.sh pod_pip_conf_script:
+    # the extra index only adds a source; PyPI stays the index and every pin is unchanged; no nvidia-smi, no file)
+    bx 60 "$(pod_pip_conf_script)" < /dev/null >> "$D/bootstrap.log" 2>&1 \
+        || say "pip.conf not written; see $D/bootstrap.log"
     seed_git "$BASE_SHA"
     say "git tree seeded at $(git -C "$ROOT" rev-parse --short "$BASE_SHA") (sync moves it to the worktree's merge base)"
     say "ready: $0 sync $KEY <worktree>"
