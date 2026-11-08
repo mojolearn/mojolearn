@@ -218,3 +218,12 @@ Slowest build groups (compile cache provenance; the longest build of each bindin
 Linux leg wall seconds: cuda-sm_80 5217 (0.8.65 2712); cuda-sm_89 5253 (0.8.65 3263); hip-gfx942 5513 (0.8.65 3892)
 
 Identity columns, total lane seconds and the 5 slowest lanes:
+
+
+## Addendum (2026-11-08 20:58Z): the Apple published check passed
+
+The set at tag `v0.8.66` recorded `publish/published-apple.json` as failed. That run of the check happened minutes after the
+upload, while PyPI's index did not yet list the macOS file (index-resolution 2/3, nothing resolved; the gate evidence was 6/6).
+The check was rerun once the file was listed, with no change to any wheel: status passed, index-resolution 4/4,
+published-artifact-hashes 1/1, wheel-integrity 2/2, gate-evidence 7/7. `publish/published-apple.json` now holds that passed
+report. The release tag is never moved, so this correction follows it on `main`.

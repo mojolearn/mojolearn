@@ -6,43 +6,45 @@
   "backend": "metal",
   "index_url": "https://pypi.org/simple",
   "source_revision": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
-  "published": {},
+  "published": {
+    "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945"
+  },
   "mismatch": [],
   "gate_verdict": "Apple identity column recorded from this wheel (gate-apple); adapters PASSED (torch-compile, torch-training, max-training)",
   "coverage": [
     {
       "id": "index-resolution",
-      "status": "failed",
-      "exit_code": 1,
-      "expected": 3,
-      "completed": 2,
-      "failed": 1,
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 4,
+      "completed": 4,
+      "failed": 0,
       "skipped": 0
     },
     {
       "id": "published-artifact-hashes",
-      "status": "failed",
-      "exit_code": 1,
+      "status": "passed",
+      "exit_code": 0,
       "expected": 1,
-      "completed": 0,
-      "failed": 1,
+      "completed": 1,
+      "failed": 0,
       "skipped": 0
     },
     {
       "id": "wheel-integrity",
-      "status": "failed",
-      "exit_code": 1,
-      "expected": 1,
-      "completed": 0,
-      "failed": 1,
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 2,
+      "completed": 2,
+      "failed": 0,
       "skipped": 0
     },
     {
       "id": "gate-evidence",
       "status": "passed",
       "exit_code": 0,
-      "expected": 6,
-      "completed": 6,
+      "expected": 7,
+      "completed": 7,
       "failed": 0,
       "skipped": 0
     }
@@ -66,24 +68,43 @@
       },
       {
         "name": "resolved:mojolearn",
-        "passed": false,
-        "file": null,
-        "files": [],
-        "pip_exit": 1
+        "passed": true,
+        "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+        "files": [
+          "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl"
+        ],
+        "pip_exit": 0
+      },
+      {
+        "name": "index-digest:mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+        "passed": true,
+        "index_sha256": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945",
+        "sha256": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945"
       }
     ],
     "published-artifact-hashes": [
       {
-        "name": "resolved-files",
-        "passed": false,
-        "why": "nothing was resolved"
+        "name": "candidate:mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+        "passed": true,
+        "published_sha256": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945",
+        "candidate": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+        "candidate_sha256": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945"
       }
     ],
     "wheel-integrity": [
       {
-        "name": "resolved-files",
-        "passed": false,
-        "why": "nothing was resolved"
+        "name": "record:mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+        "passed": true,
+        "members": 453,
+        "problems": []
+      },
+      {
+        "name": "packaged-commit",
+        "passed": true,
+        "packaged": [
+          "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+        ],
+        "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
       }
     ],
     "gate-evidence": [
@@ -122,15 +143,24 @@
         "passed": true,
         "source": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/repacked/macos/mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl.repack.json",
         "sha256": "f3a735d8e52483cde3f35fa51be893fcf6916e0f3c519b732530a2739fb8bd7e"
+      },
+      {
+        "name": "gated-bytes:mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+        "passed": true,
+        "sha256": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945"
       }
     ]
   },
-  "status": "failed",
-  "exit_code": 1,
+  "status": "passed",
+  "exit_code": 0,
   "evidence": [
     {
       "path": "request.json",
-      "sha256": "b23ea1082670c324418c16b0c06cecf5b2a2536e90d27dd94c27d5854fd8d79d"
+      "sha256": "4b475a5dd599c682c733592e4440c7ed87d27aba4b5b3cc5a1597a1240ef6f33"
+    },
+    {
+      "path": "wheels/mojolearn/mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+      "sha256": "93815eb6bb90d2efc941409cd992c879b1718d5b4ced436cd08d820d370d7945"
     },
     {
       "path": "gate-evidence/fbd648be28a62bbd-identity-wheels.json",
