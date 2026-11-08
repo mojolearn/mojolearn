@@ -263,6 +263,7 @@ if _ssl.get_default_verify_paths().cafile is None and not os.environ.get("SSL_CE
             os.environ["SSL_CERT_FILE"] = _candidate
             break
 
+import contextlib
 import datetime as dt
 import hashlib
 import json
@@ -315,6 +316,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import release_ledger  # noqa: E402
 import release_reuse  # noqa: E402
 import release_requirements  # noqa: E402
+import release_ledger_once  # noqa: E402
 import release_tooling  # noqa: E402
 import release_github_build  # noqa: E402
 import runpy
@@ -1410,6 +1412,10 @@ class BoxKeeper:
             self.end_hold()
         if "amd" in need and "amd" in held:
             self.renew_amd(held["amd"])
+        try:
+            self.r.watch_idle_boxes()
+        except Exception as exc:  # noqa: BLE001 - the watchdog reports; it never stops the keeper
+            self.r.say(f"  idle-box watchdog: {type(exc).__name__}: {exc}")
         return need & set(held)
 
     def loop(self):
@@ -1870,17 +1876,75 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return not kept, kept
 
     def readiness(self):
-        """One persistent readiness ledger across freezes of this version."""
-        return release_requirements.RequirementsLedger(self.base / "requirements.json")
+        """One persistent readiness ledger across freezes of this version. Its evaluation reads and writes
+        this freeze's row memo (evaluation_memo), so a row is computed once per inputs."""
+        return release_requirements.RequirementsLedger(self.base / "requirements.json", memo=self.evaluation_memo())
+
+    # ------------------------------------------------------------ the ledger, evaluated once (post-ledger-once)
+    def evaluation_store(self):
+        """<release dir>/requirements-eval/: one evaluation document per key (release_ledger_once)."""
+        return release_ledger_once.EvaluationStore(self.rel / release_ledger_once.DIRNAME)
+
+    def evaluation_memo(self):
+        """The rows computed so far at this freeze, seeded once from the newest stored document; None for a
+        partial Release (tests, a publisher called directly) with no release dir."""
+        memo = getattr(self, "_evaluation_memo", None)
+        if memo is None:
+            try:
+                seed = self.evaluation_store().latest()
+            except (AttributeError, TypeError, OSError):
+                return None
+            memo = self._evaluation_memo = release_requirements.EvaluationMemo(release_ledger_once.memo_rows(seed))
+        return memo
+
+    def evaluation_lock(self):
+        lock = getattr(self, "_evaluation_lock", None)
+        if lock is None:
+            with self._lock:
+                lock = self.__dict__.setdefault("_evaluation_lock", threading.RLock())
+        return lock
+
+    def ledger_document(self):
+        """(key, stored document or None) for the inputs that exist now; computes no analysis."""
+        key = self.readiness_configuration()[4]
+        return key, self.evaluation_store().load(key)
 
     DRY_READINESS = "not evaluated in a dry run: the readiness analysis runs dependency workers"
 
     def readiness_manifest(self):
+        return self.readiness_manifest_keyed()[0]
+
+    def readiness_manifest_keyed(self):
+        """(manifest, evaluation key, key inputs). The manifest of a key already evaluated at this freeze is
+        read from its document (requirements-eval/<key>.json): the dependency rounds ran once, in the step
+        that made the key's inputs exist."""
         # A dry run is read-only and prints the plan: the frozen dependency analysis (release_requirements ->
         # release_requirement_dependencies.expand_catalog) clones the tracked tree and runs snapshot workers,
         # which took the two dry-run tests in tools/test_release.py past their 600 s timeout. Never run it here.
         if self.dry:
             raise StepFailed(self.DRY_READINESS)
+        configuration, context, catalog, key, evaluation_key, inputs = self.readiness_configuration()
+        cached = getattr(self, '_readiness_manifest_cache', None)
+        if cached is None or cached[0] != key:
+            stored = (self.evaluation_store().load(evaluation_key) or {}).get("manifest")
+            if stored:
+                manifest = stored
+            else:
+                manifest = release_requirements.requirements(ROOT, self.commit, self.version,
+                                                            configuration=configuration)
+                presence = self.optional_native_presence(manifest, context)
+                if presence:
+                    # Re-expand with the derived layout contract; the frozen
+                    # analyzer accepts it only for source-proven optional loaders.
+                    configuration["dependency_context"] = dict(context, optional_native_files=presence)
+                    manifest = release_requirements.requirements(ROOT, self.commit, self.version,
+                                                                configuration=configuration)
+            self._readiness_manifest_cache = (key, manifest)
+        return json.loads(json.dumps(self._readiness_manifest_cache[1])), evaluation_key, inputs
+
+    def readiness_configuration(self):
+        """(configuration, dependency context, catalog sha256, manifest cache key, evaluation key, key inputs)
+        for the inputs that exist now: cheap (the candidate wheels' hashes are cached), no analysis runs."""
         configuration = dict(self.readiness().read().get("configuration", {}))
         configuration_path = getattr(self.args, "requirements_configuration", None)
         if configuration_path:
@@ -1917,21 +1981,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # One publication controller checks the same frozen inputs for every
         # split wheel. Reuse that source analysis; any candidate wheel hash,
         # configuration, freeze, tooling commit or catalog change invalidates it.
-        key = (self.commit, self.tooling_commit, sha256(ROOT / 'tools/release_requirements.json'),
-               json.dumps(configuration, sort_keys=True))
-        cached = getattr(self, '_readiness_manifest_cache', None)
-        if cached is None or cached[0] != key:
-            manifest = release_requirements.requirements(ROOT, self.commit, self.version,
-                                                        configuration=configuration)
-            presence = self.optional_native_presence(manifest, context)
-            if presence:
-                # Re-expand with the derived layout contract; the frozen
-                # analyzer accepts it only for source-proven optional loaders.
-                configuration["dependency_context"] = dict(context, optional_native_files=presence)
-                manifest = release_requirements.requirements(ROOT, self.commit, self.version,
-                                                            configuration=configuration)
-            self._readiness_manifest_cache = (key, manifest)
-        return json.loads(json.dumps(self._readiness_manifest_cache[1]))
+        catalog = sha256(ROOT / 'tools/release_requirements.json')
+        key = (self.commit, self.tooling_commit, catalog, json.dumps(configuration, sort_keys=True))
+        evaluation_key, inputs = release_ledger_once.evaluation_key(
+            self.commit, self.tooling_commit, catalog, configuration,
+            admission=release_ledger_once.admission_commit(self.commit), version=self.version)
+        return configuration, context, catalog, key, evaluation_key, inputs
 
     UNMAPPED_BINDING = "no native binding context mapped for binding: "
 
@@ -2089,33 +2144,105 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 found.append(leg)
         return found
 
-    def readiness_status(self, write=False):
-        manifest = self.readiness_manifest()
-        ledger = self.readiness()
+    def readiness_status(self, write=False, *, reports=None, box_step=None):
+        """{requirement: row}: the ledger evaluated for the inputs that exist now, ONCE per key.
+
+        The evaluation document of the key (requirements-eval/<key>.json, release_ledger_once) is read and
+        nothing is computed when the ledger's history and the retained producers are unchanged since it was
+        written. Otherwise only the rows whose own inputs changed are computed (the row memo) and, when
+        WRITE, the ledger is synchronized, the existing evidence admitted (when a producer changed) and the
+        document written. Read-only callers (--status, --report, a dry run) never write: their retained
+        reports are prepared in scratch, or in REPORTS (the producing steps' prefetch rounds keep them in
+        this freeze's evidence root, where the writing call finds them). BOX_STEP names a box step (the
+        gates): it should only ever read; computing there is reported (the step that made the key owed it)."""
         import release_requirements_retained as retained
-        if write:
-            ledger.sync(manifest)
-            # Evidence that already exists (the committed identity table
-            # admission) is admitted before any gate reads the ledger, so
-            # verified work is never rerun or waived (Andrew, 2026-10-31).
-            _, notes = retained.admit_existing_evidence(ROOT, ledger, self.commit, self.evidence_root(),
-                                                        producers=self.retained_producers(), say=self.say)
-            for note in notes:
-                self.say("  ledger evidence: " + note)
-            return ledger.sync(manifest)
-        # Read-only (--status, --dry-run, the gate's plan): nothing persistent
-        # is written. Reports already kept for this freeze are reused; the rest
-        # are prepared in scratch and evaluated in memory with the ledger.
-        doc = ledger.read()
-        doc.update(json.loads(json.dumps(manifest)))
-        with retained.scratch_root() as scratch:
-            reports, notes = retained.retained_reports(ROOT, doc, self.commit, Path(scratch),
-                                                       prepared=self.evidence_root(),
-                                                       producers=self.retained_producers(), say=self.say)
-            attempts = retained.retained_attempts(reports, notes)
-            for note in notes:
-                self.say("   ledger evidence: " + note)
-            return ledger._evaluate(retained.with_attempts(doc, attempts))
+        with self.evaluation_lock():
+            started = time.monotonic()
+            manifest, key, inputs = self.readiness_manifest_keyed()
+            store = self.evaluation_store()
+            stored = store.load(key)
+            ledger = self.readiness()
+            producers = self.retained_producers()
+            signature = release_ledger_once.producer_signature(producers)
+            history = release_ledger_once.history_digest(ledger.read())
+            if stored and stored.get("ledger_history") == history and stored.get("producers") == signature:
+                self.say(f"  ledger evaluation: read {store.path(key)} (computed by {stored.get('computed_by')}, "
+                         f"{(stored.get('stats') or {}).get('seconds')} s; nothing computed)")
+                return stored["status"]
+            if box_step:
+                self.say(f"  LEDGER EVALUATED IN BOX STEP {box_step}: key {key} "
+                         + ("has no document: the step that made its inputs owed it" if not stored
+                            else "changed since its document (ledger history or retained producers)"))
+            stats = dict(seconds=0.0, units=0, records=0, computed=0, reused=0, jobs=1, evaluations=0)
+
+            def count(ledger):
+                last = ledger.last_stats or {}
+                stats["evaluations"] += 1
+                for name in ("computed", "reused"):
+                    stats[name] += last.get(name, 0)
+                stats.update(units=last.get("units", 0), records=last.get("records", 0),
+                             jobs=max(stats["jobs"], last.get("jobs", 1)))
+                if last.get("pool_error"):
+                    stats["pool_error"] = last["pool_error"]
+            if write:
+                rows = ledger.sync(manifest)
+                count(ledger)
+                notes = []
+                admitted = (stored or {}).get("producers") == signature and stored.get("admitted")
+                if not admitted:
+                    # Evidence that already exists (the committed identity table
+                    # admission) is admitted before any gate reads the ledger, so
+                    # verified work is never rerun or waived (Andrew, 2026-10-31).
+                    found, notes = retained.admit_existing_evidence(ROOT, ledger, self.commit, self.evidence_root(),
+                                                                    producers=producers, say=self.say)
+                    for note in notes:
+                        self.say("  ledger evidence: " + note)
+                    if found:
+                        rows = ledger.sync(manifest)
+                        count(ledger)
+                stats["seconds"] = round(time.monotonic() - started, 1)
+                document = ledger.read()
+                memo = self.evaluation_memo()
+                digests = {}
+                if memo is not None:
+                    entries = memo.snapshot()
+                    digests = {name: entries[name]["digest"] for name in rows if name in entries}
+                saved = release_ledger_once.document(
+                    key, inputs, manifest, rows, digests, ledger_history=release_ledger_once.history_digest(document),
+                    producers=signature, stats=stats, computed_by=box_step or self.evaluation_owner(),
+                    notes=notes, admitted=True)
+                path = store.save(saved)
+                # The ledger now holds the manifest's configuration (with a derived optional-file contract, if
+                # any), which is where the next key is read from: the same evaluation under that key too, so
+                # the next reader finds it instead of computing the same manifest and rows again.
+                after_key, after_inputs = self.readiness_configuration()[4:]
+                if after_key != key:
+                    store.save(dict(saved, key=after_key, inputs=after_inputs))
+                self.say(f"  ledger evaluation: {stats['computed']} row(s) computed, {stats['reused']} reused, "
+                         f"{stats['records']} record(s), {stats['jobs']} worker(s), {stats['seconds']} s -> {path}")
+                return rows
+            # Read-only: nothing persistent is written. Reports already kept for this
+            # freeze are reused; the rest are prepared in scratch (or REPORTS) and
+            # evaluated in memory with the ledger.
+            doc = ledger.read()
+            doc.update(json.loads(json.dumps(manifest)))
+
+            def evaluate(out_root):
+                found, notes = retained.retained_reports(ROOT, doc, self.commit, Path(out_root),
+                                                         prepared=self.evidence_root(),
+                                                         producers=producers, say=self.say)
+                attempts = retained.retained_attempts(found, notes)
+                for note in notes:
+                    self.say("   ledger evidence: " + note)
+                return ledger._evaluate(retained.with_attempts(doc, attempts))
+            if reports is not None:
+                return evaluate(reports)
+            with retained.scratch_root() as scratch:
+                return evaluate(scratch)
+
+    def evaluation_owner(self):
+        """The step this thread runs (the document's computed_by), or the controller."""
+        return getattr(getattr(self, "_tl", None), "step", None) or "controller"
 
     def record_candidate_requirement(self, vendor, run_id, executed=False):
         if run_id is None:
@@ -3168,23 +3295,35 @@ class Release(release_identity_wheels.IdentityOnWheels):
     LEDGER_PREFETCH_AFTER = ("linux-pack", "macos-build", "identity-admit")
 
     def prefetch_ledger_rounds(self, after):
-        """Every frozen snapshot the ledger's read-only evaluation asks for now (readiness_status(write=False):
-        the manifest, the retained producers' reconstructions, the reference closures, the equivalence
-        proofs), run at once through release_requirement_dependencies.prefetch into the snapshot cache, so the
-        writing read of a later step finds them cached. Read-only: nothing is written to the ledger. A failure
-        is reported, never fatal: the later step evaluates (and fails) exactly as it would have."""
+        """THE LEDGER, EVALUATED ONCE FOR THE INPUTS THIS STEP MADE (lane post-ledger-once, 2026-11-07).
+
+        First every frozen snapshot the ledger's evaluation asks for now (the manifest, the retained
+        producers' reconstructions, the reference closures, the equivalence proofs) runs at once through
+        release_requirement_dependencies.prefetch into the snapshot cache; the reconstructions land in this
+        freeze's evidence root. Then the one writing evaluation (readiness_status(write=True)) synchronizes
+        the ledger and writes the key's document (requirements-eval/<key>.json), computing only the rows
+        whose inputs changed. Every later reader of the same key (linux-builds, the gates, the publish
+        preflight, the record, --status) reads that document. A failure is reported, never fatal: the later
+        step evaluates (and fails) exactly as it would have."""
         import release_requirement_dependencies as dependencies
         ran, started = [], time.monotonic()
+        evaluation = {}
         try:
-            dependencies.prefetch(lambda: self.readiness_status(write=False), ran=ran,
-                                  say=lambda line: self.say("  " + line))
+            dependencies.prefetch(lambda: self.readiness_status(write=False, reports=self.evidence_root()),
+                                  ran=ran, say=lambda line: self.say("  " + line))
+            if not self.dry and not getattr(self, "readonly", False):
+                self.readiness_status(write=True)
+                key, stored = self.ledger_document()
+                evaluation = dict(key=key, document=str(self.evaluation_store().path(key)),
+                                  stats=(stored or {}).get("stats"))
             error = None
         except Exception as problem:  # noqa: BLE001 - the step that needs the ledger reports it
             error = f"{type(problem).__name__}: {str(problem)[:300]}"
         doc = dict(after=after, snapshots=len(ran), failed=sum(1 for row in ran if not row.get("ok")),
-                   seconds=round(time.monotonic() - started, 1), error=error)
+                   seconds=round(time.monotonic() - started, 1), error=error, **evaluation)
         doc["summary"] = (f"{doc['snapshots']} ledger snapshot(s) prefetched after {after} in {doc['seconds']} s"
                           + (f" ({doc['failed']} failed)" if doc["failed"] else "")
+                          + (f"; evaluated once: {evaluation['document']}" if evaluation else "")
                           + (f"; the evaluation stopped: {error}" if error else ""))
         self.say("  " + doc["summary"])
         return doc
@@ -4762,7 +4901,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
         part already passed is not launched again; the smoke has no reuse beyond its own landed result."""
         run_id = None
         if not self.dry:
-            self.readiness_status(write=True)
+            # SUBMIT-ONLY (post-ledger-once): the key's document was written by the step that made its inputs
+            # (LEDGER_PREFETCH_AFTER) and checked by gate-boxes (ready_to_rent); this reads it. begin() then
+            # evaluates from the row memo: only this gate's own row is new.
+            self.readiness_status(write=True, box_step="gate-" + vendor)
             run_id = self.readiness().begin("candidate-" + vendor)
         ok, why = self.gate_ok(vendor)
         if ok:
@@ -4825,7 +4967,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
         try:
-            self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate box job")
+            with self.box_job(vendor):
+                self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate box job")
         except StepFailed as error:
             reports = [p for p in (output / "gate-smoke.json", work / f"gate-{vendor}.log") if p.is_file()]
             if run_id and reports:
@@ -4855,7 +4998,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
         try:
-            self.must(cmd, log=work / f"measuresmoke-{vendor}.log", what=f"the {vendor} measurement smoke box job")
+            with self.box_job(vendor):
+                self.must(cmd, log=work / f"measuresmoke-{vendor}.log", what=f"the {vendor} measurement smoke box job")
         except StepFailed as error:
             self.say(f"the {vendor} measurement smoke job: {error}")   # the verdict that follows names why
         if self.dry:
@@ -5146,7 +5290,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
                              + ": restore the evidence it names or rerun --plan; gate-boxes rents nothing")
         for line in self.box_plan(needs):
             self.say("  " + line)
+        # BEFORE THE BILL (post-ledger-once): every input the box steps read is there, so they only submit
+        missing = self.ready_to_rent(needs)
         if self.dry:
+            for line in missing:
+                self.say("  a real run refuses to rent: " + line)
             if not self.orchestrator():
                 self.say("  a real run refuses this step without MOJOLEARN_ORCHESTRATOR=1 (only the orchestrator rents)")
             return "would bring up: " + ", ".join(sorted(needs))
@@ -5154,6 +5302,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
             raise StepFailed("gate-boxes rents or holds the " + " and ".join(sorted(needs)) + " box(es) for "
                              + "; ".join(n for v in sorted(needs) for n in needs[v])
                              + ": ORCHESTRATOR ONLY, rerun with MOJOLEARN_ORCHESTRATOR=1")
+        if missing:
+            raise StepFailed("gate-boxes rents nothing: the box steps would wait on this machine for "
+                             + "; ".join(missing))
         done = []
         if "nvidia" in needs:
             done.append(self.nvidia_box_up())
@@ -5161,6 +5312,67 @@ class Release(release_identity_wheels.IdentityOnWheels):
             done.append(self.amd_box_up())
         self.keep_boxes()
         return "; ".join(done), dict(boxes={v: dict(b) for v, b in self.held_boxes().items()})
+
+    def ready_to_rent(self, needs):
+        """Every input the box steps of NEEDS read, there before anything is rented (release_ledger_once):
+        the saved plan of this commit, the ledger's evaluation document for the inputs that exist now, each
+        vendor's packed candidate wheels and its payload (the frozen source tree the box job syncs). A line
+        per missing input; [] when the boxes may be rented. A box step only submits its jobs."""
+        def plan():
+            # the reuse plan (step reuse-plan) the gate's priors and the legs it ships are read from
+            return None if self.dry or Path(self.plan_path).is_file() else f"no reuse plan at {self.plan_path}"
+
+        def ledger():
+            if self.dry:
+                return None   # a dry run never evaluates the ledger (readiness_manifest)
+            key, stored = self.ledger_document()
+            return None if stored else (f"no evaluation document {self.evaluation_store().path(key)} for the "
+                                        "inputs that exist now (linux-pack, macos-build and identity-admit write it)")
+
+        def wheels(vendor):
+            absent = [str(w) for w in self.candidate_gate_wheels(vendor) if not Path(w).is_file()]
+            return ("absent " + ", ".join(absent)) if absent and not self.dry else None
+
+        def payload(vendor):
+            tree = self.source_checkout(create=not self.dry)
+            if not self.dry and not (Path(tree) / "tools" / "ops" / "release_gate.py").is_file():
+                return f"the frozen source {tree} has no tools/ops/release_gate.py"
+            return None
+        return release_ledger_once.ready_to_rent(needs, wheels=wheels, payload=payload, plan=plan, ledger=ledger)
+
+    # the idle-box watchdog: a held box with no box job running is money spent on nothing
+    @contextlib.contextmanager
+    def box_job(self, vendor):
+        """While a box job of VENDOR runs (the gate job, the measurement smoke): the watchdog counts it busy."""
+        lock = self.__dict__.setdefault("_box_lock", threading.Lock())
+        with lock:
+            busy = self.__dict__.setdefault("_box_busy", {})
+            busy[vendor] = busy.get(vendor, 0) + 1
+        try:
+            yield
+        finally:
+            with lock:
+                busy[vendor] -= 1
+
+    def box_rate(self, vendor):
+        held = self.held_boxes().get(vendor) or {}
+        env = (self.nvc_state_root() / held["pod"] / "state.env" if vendor == "nvidia" and held.get("pod")
+               else self.do_state() / "state.env" if vendor == "amd" else None)
+        return release_ledger_once.hourly_rate(vendor, env)
+
+    def idle_watch(self):
+        watch = getattr(self, "_idle_watch", None)
+        if watch is None:
+            with self._lock:
+                watch = self.__dict__.setdefault("_idle_watch", release_ledger_once.IdleBoxWatch(
+                    say=self.say, clock=self.clock, rate=self.box_rate, state=self.state, save=self.save))
+        return watch
+
+    def watch_idle_boxes(self):
+        """One watchdog pass (the box keeper's tick): IDLE BOX lines and the state's idle totals."""
+        with self.__dict__.setdefault("_box_lock", threading.Lock()):
+            busy = {v for v, n in (getattr(self, "_box_busy", None) or {}).items() if n > 0}
+        return self.idle_watch().tick(self.held_boxes(), busy)
 
     def have_gate_boxes(self, rec):
         needs = self.box_needs()
@@ -5730,6 +5942,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
 
         def worker(step):
             self._tl.tag = self.PIPELINE_OF[step] if self.PIPELINE_OF[step] in self.PIPELINES else ""
+            self._tl.step = step   # the ledger evaluation document's computed_by
             try:
                 events.put((step, self.run_step(step)))
             except BaseException as exc:  # run_step never raises; this is a last resort
@@ -6167,6 +6380,16 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 counts = {s: sum(row["status"] == s for row in rows.values())
                           for s in ("passed", "failed", "untested")}
                 say(f"   requirements ledger {self.readiness().path}: {counts}")
+                if c:
+                    try:
+                        key, stored = self.ledger_document()
+                        stats = (stored or {}).get("stats") or {}
+                        say(f"   ledger evaluation {key}: " + (
+                            f"{self.evaluation_store().path(key)} (computed by {stored.get('computed_by')}, "
+                            f"{stats.get('computed')} row(s) computed, {stats.get('seconds')} s)" if stored
+                            else "no document yet (computed in memory for this status)"))
+                    except Exception as exc:  # noqa: BLE001 - a status line, never a failure
+                        say(f"   ledger evaluation: unknown ({type(exc).__name__})")
                 assessed = sorted({row["source_revision"] for row in rows.values()})
                 say("   assessed source: " + ", ".join(assessed))
                 if not c and head not in assessed:
@@ -6259,6 +6482,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 summary.append(f"{name}: owed")
         say("== " + ", ".join(summary))
         say(f"   ledger: {self.ledger().where}")
+        idle = release_ledger_once.summary_line(self.state)
+        if idle:
+            say("   " + idle)
         if actions:
             say("   a rerun would: " + "; ".join(actions[:12]) + (" ..." if len(actions) > 12 else ""))
         else:
