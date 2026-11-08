@@ -642,14 +642,19 @@ def has_module(python, module):
     return subprocess.run([str(python), "-c", "import " + module], capture_output=True).returncode == 0
 
 
-def torch_python_for(python, logs):
+def torch_python_for(python, logs, torch_python=None):
     """The python the torch entries run under. PYTHON itself when it imports torch; else the adapters unit's venv
     beside this run (tools/release_check_units.py: <units>/adapters/venv, the installed wheel's own `[torch]`
     extra: the gate's identity venv holds the wheels and numpy only, 0.8.66 run i 2026-11-08: import-torch-smoke
     SKIPPED, real-model-smoke failed and autograd-public read PARTIAL there) or MOJOLEARN_AUTOGRAD_TORCH_PYTHON;
-    None when no python has torch (the probes then print SKIPPED no torch, as before). torchvision, which
-    real-model-smoke needs, is installed into that venv from the index its torch build came from when missing."""
-    if has_module(python, "torch"):
+    None when no python has torch (the probes then print SKIPPED no torch, as before). TORCH_PYTHON (`run
+    --torch-python`, what release_check_units passes: the adapters unit runs first and its venv holds torch) is
+    tried first; the env var and the glob stay as fallbacks. torchvision, which real-model-smoke needs, is
+    installed into that venv from the index its torch build came from when missing (release_check_units installs
+    it once after the adapters unit, so this finds it present and installs nothing)."""
+    if torch_python and Path(torch_python).is_file() and has_module(torch_python, "torch"):
+        chosen = str(torch_python)
+    elif has_module(python, "torch"):
         chosen = str(python)
     else:
         candidates = [os.environ.get("MOJOLEARN_AUTOGRAD_TORCH_PYTHON", "")]
@@ -674,7 +679,8 @@ def ensure_torchvision(python, log):
     return has_module(python, "torchvision")
 
 
-def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None, deadline=None):
+def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None, deadline=None,
+        torch_python=None):
     pool = [e for e in ENTRIES if vendor != "cpu" or "source" not in e]
     if vendor == "cpu" and entries is not None and set(entries) - {e["name"] for e in pool}:
         raise ValueError("compiled device checks need a GPU: %s" % sorted(set(entries) - {e["name"] for e in pool}))
@@ -687,7 +693,8 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
     (logs / "tmp").mkdir(exist_ok=True)
     if any("pytest" in e for e in selected):
         ensure_pytest(python, logs / "ensure-pytest.log")
-    torch_python = torch_python_for(python, logs) if any(e.get("torch") for e in selected) else None
+    torch_python = (torch_python_for(python, logs, torch_python) if any(e.get("torch") for e in selected)
+                    else None)
     rows = []
     for e in selected:
         log = logs / ("%s-%s.log" % (e["name"], vendor))
@@ -784,6 +791,8 @@ def main(argv=None):
     r.add_argument("--timeout", type=float, default=TIMEOUT_S)
     r.add_argument("--entries", help="comma-separated subset; omitted means the whole registry")
     r.add_argument("--source-package", help="explicit source package parent (e.g. repo/python); default: installed")
+    r.add_argument("--torch-python", default=None,
+                   help="the interpreter the torch entries run under when it imports torch (the adapters venv)")
     sub.add_parser("list", help="the entries, one line each")
     pr = sub.add_parser("probe", help="one installed-bindings probe (what the probe entries start)")
     pr.add_argument("kind", choices=sorted(PROBES))
@@ -808,7 +817,8 @@ def main(argv=None):
             print(" ".join(cmd))
         return 0
     return run(a.vendor, a.bin_dir, a.python, a.out, a.timeout,
-               entries=a.entries.split(",") if a.entries is not None else None, source_package=a.source_package)
+               entries=a.entries.split(",") if a.entries is not None else None, source_package=a.source_package,
+               torch_python=a.torch_python)
 
 
 if __name__ == "__main__":
