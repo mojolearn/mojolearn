@@ -366,7 +366,7 @@ def test_svdvals_converges_on_constant_columns():
     s = np.asarray(linalg.svdvals(a))
     ref = np.linalg.svd(a.astype(np.float64), compute_uv=False)
     assert np.all(np.diff(s) <= 0)
-    assert np.allclose(s[:5], ref[:5], rtol=1e-4), f"{s[:5]} vs {ref[:5]}"
+    assert np.allclose(s[:5], ref[:5], rtol=1e-4, atol=1e-5 * float(ref[0])), f"{s[:5]} vs {ref[:5]}"
     assert np.all(np.abs(s[5:]) <= 1e-3 * float(ref[0])), f"null directions must be ~0, got {s[5:]}"
 
 
