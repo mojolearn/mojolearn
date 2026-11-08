@@ -212,6 +212,11 @@ THE STEPS
                          No opponent/performance campaign or native compilation is part of publication.
                          Validated unchanged autograd artifact inputs reuse their original binaries.
                          Reports come home to <version>/<commit12>/gate-<vendor>/<artifact-id>/.
+                         The one gate job runs the measurement smoke LAST: the step's verdict is HARD-only
+                         and final once the HARD parts are home (identity-admit does not wait for the
+                         smoke); a background `release_gate.py await-final` brings the smoke's summary
+                         home and boxes-down and record wait for it and record it SOFT. --strict: the
+                         step waits for the smoke and a failed smoke stops it.
   published-apple    } after publish-<platform>, with --publish pypi: tools/release_published_install.py
   published-nvidia   }   check, on this Mac, no device, no box, nothing installed: pip resolves each
   published-amd      }   published package for the candidate's platform tags and downloads it; its
@@ -4856,9 +4861,13 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # A new profile must not overwrite an earlier full-campaign outcome.
         return self.rel / f"gate-{vendor}" / (stamp + "-release-light-v1")
 
-    def gate_ok(self, vendor, measure=True):
+    def gate_ok(self, vendor, measure=None):
         """(ok, why): the gate report that came home for this version and vendor says PASS, and (measure) the
-        measurement smoke's own box job's summary passes. measure=False judges the gate job's part alone."""
+        measurement smoke's summary passes. measure=None (default): the smoke only under --strict; otherwise the
+        verdict is HARD-only and the smoke, which the one gate job runs last, is recorded when it lands
+        (judge_measure_smoke). measure=False judges the gate job's HARD part alone."""
+        if measure is None:
+            measure = self.strict()
         try:
             identity = self.candidate_gate_identity(vendor)
             output = self.gate_out(vendor)
@@ -4903,7 +4912,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             once = self.gate_identity_errors(vendor, output, doc.get("correctness"))
             if once:
                 return False, "; ".join(once)
-            # the measurement smoke runs in every box job (release_gate_job.sh phase measuresmoke, unconditional)
+            # the measurement smoke runs last in every gate job (release_gate_job.sh phase measuresmoke, unconditional)
             from release_identity_wheels import measure_smoke_errors, measure_smoke_summary
             smoke = measure_smoke_errors(output) if measure else []
             soft = [("measuresmoke", "; ".join(smoke), measure_smoke_summary(output))] if smoke else []
@@ -4945,10 +4954,14 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return None, report.get("cases")
 
     def run_gate(self, vendor):
-        """THE TWO BOX JOBS OF A VENDOR, in order on the same box: the gate job (identity record, device checks,
-        runtime qualifier; tools/ops/release_gate.py), then, once it has ended, the measurement smoke's own job
-        (--job measuresmoke). They never share the GPU, and boxes-down waits for this step, so for both. A job whose
-        part already passed is not launched again; the smoke has no reuse beyond its own landed result."""
+        """THE ONE BOX JOB OF A VENDOR (tools/ops/release_gate.py): identity record, device checks, runtime
+        qualifier, then LAST the measurement smoke (Andrew 2026-11-08: "run immediately after the verification and
+        not be something separate"). The step's verdict is HARD-only and final as soon as the job's HARD parts are
+        home (release_gate.py --until hard returns at the job's hard-done upload, the box still running the
+        smoke), so identity-admit never waits on the smoke; its summary is recorded SOFT whenever it lands
+        (follow_measure_smoke: a background `release_gate.py await-final`; boxes-down and record wait for it).
+        --strict: the step waits for the final upload and a failed smoke stops it, as before. A job whose HARD
+        part already passed is not launched again."""
         run_id = None
         if not self.dry and ledger_on(self):
             # SUBMIT-ONLY by default (post-ledger-once): without --reuse-unchanged the gate consults no ledger
@@ -4958,6 +4971,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if ok:
             if not self.dry:
                 self.record_candidate_requirement(vendor, run_id)
+                if not self.strict():
+                    why += self.follow_measure_smoke(vendor)
             return why
         job_ok, job_why = self.gate_ok(vendor, measure=False)
         if job_why.startswith(self.RUNTIME_GATE_FAILED):
@@ -4969,7 +4984,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if not job_ok:
             self.launch_gate_job(vendor, run_id, work, output)
             if self.dry:
-                self.launch_measure_smoke_job(vendor, work, output)
                 return None
             job_ok, job_why = self.gate_ok(vendor, measure=False)
             if not job_ok:
@@ -4980,20 +4994,135 @@ class Release(release_identity_wheels.IdentityOnWheels):
             exited = getattr(self, "_box_exit", {}).pop(vendor, None)
             if exited:
                 self.soft_fail(vendor, "box-exit", exited + " (its HARD parts passed)", work / f"gate-{vendor}.log")
-        # the gate job has ended and passed: now the measurement smoke's own job on the same box
-        self.launch_measure_smoke_job(vendor, work, output)
         if self.dry:
             return None
-        ok, why = self.gate_ok(vendor)
+        if not self.strict():
+            # THE VERDICT IS FINAL: the smoke's summary is recorded when it lands, before boxes-down and record
+            self.record_candidate_requirement(vendor, run_id, executed=True)
+            return job_why + self.follow_measure_smoke(vendor)
+        # --strict: the smoke is part of the verdict (the final upload is home: --until final, or await it here)
+        self.await_measure_smoke(vendor)
+        ok, why = self.gate_ok(vendor, measure=True)
         if not ok:
             if run_id:
                 from release_identity_wheels import measure_smoke_summary
-                reports = [p for p in (measure_smoke_summary(output), work / f"measuresmoke-{vendor}.log") if p.is_file()]
+                reports = [p for p in (measure_smoke_summary(output), work / f"gate-{vendor}.log") if p.is_file()]
                 if reports:
                     self.readiness().record(run_id, "failed", reports, why, 1, 5, 0, failed=1)
             raise StepFailed(f"the {vendor} release gate did not pass: {why}")
         self.record_candidate_requirement(vendor, run_id, executed=True)
         return why
+
+    # ------------------------------------------------------------ the measurement smoke, after the verdict
+    def smoke_fetch_paths(self, vendor):
+        """(gate job --state, pid file, done file, log) of VENDOR's background await-final."""
+        work = self.rel / "gates"
+        output = self.gate_out(vendor)
+        return (work / f"{vendor}-{output.name}.job.json", work / f"measuresmoke-fetch-{vendor}.pid",
+                work / f"measuresmoke-fetch-{vendor}.done", work / f"measuresmoke-fetch-{vendor}.log")
+
+    def smoke_fetch_cmd(self, vendor):
+        state, _, _, _ = self.smoke_fetch_paths(vendor)
+        return [PY, "tools/ops/release_gate.py", "await-final", "--state", str(state),
+                "--out", str(self.gate_out(vendor))]
+
+    def smoke_fetch_alive(self, vendor):
+        """True while VENDOR's background await-final runs (its pid lives and its done file is not written)."""
+        try:
+            _, pid, done, _ = self.smoke_fetch_paths(vendor)
+            if done.is_file() or not pid.is_file():
+                return False
+            os.kill(int(pid.read_text().strip()), 0)
+            return True
+        except (OSError, ValueError, StepFailed, KeyError, zipfile.BadZipFile):
+            return False
+
+    def smoke_pending_vendors(self):
+        """The vendors whose box still runs the measurement smoke for this release (the keeper holds them)."""
+        if getattr(self, "dry", False):
+            return set()
+        return {v for v in GATE_VENDORS if self.smoke_fetch_alive(v)}
+
+    def start_smoke_fetch(self, vendor):
+        """The background `release_gate.py await-final` of VENDOR's gate job (detached; it outlives this process,
+        its rc lands in the done file, so a resumed release sees whether it ended)."""
+        state, pid, done, log = self.smoke_fetch_paths(vendor)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        done.unlink(missing_ok=True)
+        cmd = ["/bin/sh", "-c", '"$@" >> "$MOJOLEARN_SMOKE_FETCH_LOG" 2>&1; echo $? > "$MOJOLEARN_SMOKE_FETCH_DONE"',
+               "sh", *[str(c) for c in self.smoke_fetch_cmd(vendor)]]
+        self.say(f"  the {vendor} measurement smoke runs on the box after the verdict: brought home in the "
+                 f"background ({' '.join(shlex.quote(str(c)) for c in self.smoke_fetch_cmd(vendor))}; log {log})")
+        child = self.spawn(cmd, dict(os.environ, MOJOLEARN_SMOKE_FETCH_LOG=str(log),
+                                     MOJOLEARN_SMOKE_FETCH_DONE=str(done)))
+        pid.write_text(str(child) + "\n")
+
+    def follow_measure_smoke(self, vendor):
+        """After the gate step's HARD verdict: the smoke's summary judged now when it is home, else (its box job
+        still running it) the background fetch started; the step line's '; measurement smoke ...' tail."""
+        from release_identity_wheels import measure_smoke_summary
+        state, _, _, log = self.smoke_fetch_paths(vendor)
+        if measure_smoke_summary(self.gate_out(vendor)).is_file() or not state.is_file():
+            # home, or no job left to bring it (a gate adopted from a landed final): judged now (SOFT)
+            return "; measurement smoke " + self.judge_measure_smoke(vendor)
+        if not self.smoke_fetch_alive(vendor):
+            self.start_smoke_fetch(vendor)
+        return f"; measurement smoke running on the box (recorded when it lands; {log.name})"
+
+    def judge_measure_smoke(self, vendor):
+        """The smoke's summary under VENDOR's gate out: 'N/M recipes PASS', or recorded as a SOFT failure in
+        soft-failures.json (and so in the evidence set); under --strict a failure raises StepFailed."""
+        from release_identity_wheels import measure_smoke_errors, measure_smoke_note, measure_smoke_summary
+        output = self.gate_out(vendor)
+        errors = measure_smoke_errors(output)
+        if not errors:
+            return measure_smoke_note(output) + " PASS"
+        hard, _ = self.soft_judge(vendor, [], [("measuresmoke", "; ".join(errors), measure_smoke_summary(output))])
+        if hard:
+            raise StepFailed(f"the {vendor} measurement smoke did not pass: " + "; ".join(hard))
+        return "SOFT FAIL (recorded in soft-failures.json): " + "; ".join(errors)[:300]
+
+    def await_measure_smoke(self, vendor):
+        """Block until VENDOR's smoke summary is home: a running background fetch is waited for; a gate job
+        whose --state remains (its final not yet home) is awaited in the foreground."""
+        from release_identity_wheels import measure_smoke_summary
+        state, _, _, log = self.smoke_fetch_paths(vendor)
+        if self.dry or measure_smoke_summary(self.gate_out(vendor)).is_file():
+            return
+        waited = 0
+        while self.smoke_fetch_alive(vendor):
+            if waited % 600 == 0:
+                self.say(f"  waiting for the {vendor} measurement smoke to come home ({log})")
+            time.sleep(self.SMOKE_POLL_S)
+            waited += self.SMOKE_POLL_S
+        if not measure_smoke_summary(self.gate_out(vendor)).is_file() and state.is_file():
+            rc = self.run(self.smoke_fetch_cmd(vendor), log=log.with_suffix(".foreground.log"))
+            if rc != 0:
+                self.say(f"  the {vendor} gate job's final upload: await-final exited {rc}")
+
+    #: how often a step that waits for a background smoke fetch looks at it
+    SMOKE_POLL_S = 30
+
+    def settle_measure_smoke(self, step):
+        """Before STEP (boxes-down: the box may still run it; record: the evidence set carries it): every vendor's
+        smoke whose gate job ran here is home and judged (SOFT), waiting for its background fetch."""
+        if self.dry:
+            return []
+        done = []
+        for vendor in GATE_VENDORS:
+            try:
+                state, pid, _, _ = self.smoke_fetch_paths(vendor)
+                output = self.gate_out(vendor)
+            except (StepFailed, OSError, ValueError, KeyError, zipfile.BadZipFile):
+                continue
+            # the one gate job ran here (its hard-done marker came home) or its fetch was started
+            if not ((output / "gate-hard.json").is_file() or state.is_file() or pid.is_file()):
+                continue
+            self.await_measure_smoke(vendor)
+            done.append(f"{vendor} measurement smoke " + self.judge_measure_smoke(vendor))
+        for line in done:
+            self.say(f"  {step}: {line}")
+        return done
 
     def launch_gate_job(self, vendor, run_id, work, output):
         # plan item 4 (docs/plans/POST_0863_RELEASE_TOOLING.md): one persisted box job per vendor through the
@@ -5002,7 +5131,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         cmd = [PY, "tools/ops/release_gate.py", vendor, self.version, "--source-commit", self.commit,
                "--source-tree", str(self.source_checkout(create=not self.dry)),
                "--out", str(output), "--state", str(work / f"{vendor}-{output.name}.job.json"),
-               "--profile", "release-light-v1", "--max-wait-hours", "72"]
+               "--profile", "release-light-v1", "--max-wait-hours", "72",
+               # the job runs the measurement smoke last: return once its HARD parts are home, unless --strict
+               "--until", "final" if self.strict() else "hard"]
         for wheel in self.candidate_gate_wheels(vendor):
             cmd += ['--candidate-wheel', str(wheel)]
         prior = self.gate_autograd_prior(vendor)
@@ -5033,33 +5164,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
             raise
         if self.dry:
             # the job submission the command makes, wrapper by wrapper (nothing runs)
-            for line in release_gate_module().Runner(release_gate_module().parse(cmd[2:])).dry_lines():
-                self.say("    would: " + line)
-
-    def measure_smoke_cmd(self, vendor, work, output):
-        """tools/ops/release_gate.py --job measuresmoke: the measurement smoke's own persisted box job (its own
-        NVIDIA cap, MEASURE_SMOKE_CAP_MIN), landing in <gate out>/measuresmoke-job."""
-        from release_identity_wheels import MEASURE_JOB_DIR
-        cmd = [PY, "tools/ops/release_gate.py", vendor, self.version, "--job", "measuresmoke",
-               "--source-commit", self.commit, "--source-tree", str(self.source_checkout(create=not self.dry)),
-               "--out", str(output / MEASURE_JOB_DIR),
-               "--state", str(work / f"{vendor}-{output.name}-measuresmoke.job.json"),
-               "--profile", "release-light-v1", "--max-wait-hours", "72", "--no-adapters"]
-        for wheel in self.candidate_gate_wheels(vendor):
-            cmd += ['--candidate-wheel', str(wheel)]
-        return cmd
-
-    def launch_measure_smoke_job(self, vendor, work, output):
-        cmd = self.measure_smoke_cmd(vendor, work, output)
-        self.refuse_device_lanes_after_publish("gate-" + vendor)
-        if not self.dry:
-            work.mkdir(parents=True, exist_ok=True)
-        try:
-            with self.box_job(vendor):
-                self.must(cmd, log=work / f"measuresmoke-{vendor}.log", what=f"the {vendor} measurement smoke box job")
-        except StepFailed as error:
-            self.say(f"the {vendor} measurement smoke job: {error}")   # the verdict that follows names why
-        if self.dry:
             for line in release_gate_module().Runner(release_gate_module().parse(cmd[2:])).dry_lines():
                 self.say("    would: " + line)
 
@@ -5307,6 +5411,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
                     out.add(vendor)
             elif not self.recorded(step):
                 out.add(vendor)
+        # a box still running the measurement smoke after its gate step's verdict (the background fetch lives)
+        out |= self.smoke_pending_vendors()
         return out
 
     def box_plan(self, needs):
@@ -5445,7 +5551,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
     # the idle-box watchdog: a held box with no box job running is money spent on nothing
     @contextlib.contextmanager
     def box_job(self, vendor):
-        """While a box job of VENDOR runs (the gate job, the measurement smoke): the watchdog counts it busy."""
+        """While a box job of VENDOR runs (the gate job; its smoke after the verdict: smoke_pending_vendors): the
+        watchdog counts it busy."""
         lock = self.__dict__.setdefault("_box_lock", threading.Lock())
         with lock:
             busy = self.__dict__.setdefault("_box_busy", {})
@@ -5474,6 +5581,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         """One watchdog pass (the box keeper's tick): IDLE BOX lines and the state's idle totals."""
         with self.__dict__.setdefault("_box_lock", threading.Lock()):
             busy = {v for v, n in (getattr(self, "_box_busy", None) or {}).items() if n > 0}
+        busy |= self.smoke_pending_vendors()   # the gate job still runs its measurement smoke
         return self.idle_watch().tick(self.held_boxes(), busy)
 
     def have_gate_boxes(self, rec):
@@ -5527,6 +5635,10 @@ class Release(release_identity_wheels.IdentityOnWheels):
         """BOXES-DOWN: every box job's results home first (tools/box_persist.py fetch --tag), then what
         gate-boxes rented taken down; an adopted box is released, never taken down."""
         held = self.held_boxes()
+        # NEVER WHILE A BOX RUNS THE MEASUREMENT SMOKE (2026-11-08): it runs last in the gate job, after the gate
+        # step's verdict; its final results come home first (the keeper holds the box meanwhile)
+        if held:
+            self.settle_measure_smoke("boxes-down")
         self.stop_keeper()
         if not held:
             return "nothing to take down: this release holds no box"
@@ -5740,6 +5852,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         published = self.published_platforms()
         if not published:
             return "nothing published yet", dict(platforms=[])
+        # the measurement smoke's summaries home and recorded (SOFT) first: the evidence set carries them
+        self.settle_measure_smoke("record")
         # THE RELEASE GATE cannot be skipped: every published Linux vendor needs its gate PASS
         # (or the owner's --owner-waiver), and every pre- and post-publication row (release_gate)
         if not self.dry:
