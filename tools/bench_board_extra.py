@@ -1283,10 +1283,13 @@ def quality(lane, D, outs, A):
                 X64 = np.asarray(_X, dtype=np.float64)
                 hits = 0
                 k = s["params"]["k"]
+                # 0.8.66 AMD measurement smoke (algos/ann-refine, istella and taxi: "quality scorer:
+                # AttributeError('numpy.ndarray' object has no attribute 'get')"): the query slice was named `q`,
+                # the per-arm result dict this function returns, so quality() returned the last query block.
                 for st in range(0, Q.shape[0], 1000):   # untimed float64 reference, 1,000 queries at a time
-                    q = Q[st:st + 1000].astype(np.float64)
+                    qblock = Q[st:st + 1000].astype(np.float64)
                     c = C[st:st + 1000]
-                    d = ((X64[c] - q[:, None, :]) ** 2).sum(-1)
+                    d = ((X64[c] - qblock[:, None, :]) ** 2).sum(-1)
                     best = np.take_along_axis(c, np.argsort(d, axis=1, kind="stable")[:, :k], 1)
                     got = o["indices"][st:st + 1000]
                     hits += sum(len(set(a) & set(b)) for a, b in zip(best.tolist(), got.tolist()))
