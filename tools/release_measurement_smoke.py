@@ -84,10 +84,11 @@ OWN_FIELDS = ("hash", "mode", "library_version", "device")
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
 #: the refusal when no summary came home. It comes only from a box: --reuse-unchanged (a vendor composed on the Mac
 #: with no box job) never has one, by design (the smoke is unconditional).
-NO_SUMMARY = ("no measurement-smoke summary: it is produced only by the measurement smoke's own box job "
-              "(tools/ops/release_gate.py <vendor> <version> --job measuresmoke, launched by the gate-<vendor> step); "
-              "a vendor composed on the Mac under --reuse-unchanged has none. To pass, rerun the gate-<vendor> step "
-              "so that box job runs (with or without --reuse-unchanged); nothing on the Mac can stand in for it")
+NO_SUMMARY = ("no measurement-smoke summary: it is produced only by the release gate box job, which runs it last "
+              "(tools/ops/release_gate_job.sh phase measuresmoke, launched by the gate-<vendor> step; its final upload "
+              "brings it home); a vendor composed on the Mac under --reuse-unchanged has none. To pass, rerun the "
+              "gate-<vendor> step so that box job runs (with or without --reuse-unchanged); nothing on the Mac can "
+              "stand in for it")
 
 
 def _bb():
