@@ -661,7 +661,18 @@ def test_published_bytes_that_differ_fail_naming_both_hashes(tmp_path):
     mismatch = [dict(file=w["amd"].name, published_sha256="a" * 64, candidate_sha256="b" * 64)]
     report(r.published_out("amd"), "amd", [w["linux"], w["amd"]], status="failed", mismatch=mismatch)
     ok, why = r.published_ok("amd")
-    assert not ok and "a" * 64 in why and "b" * 64 in why
+    assert not ok and "a" * 64 in why and "b" * 64 in why and "HASH MISMATCH" in why
+
+
+def test_an_index_lag_report_is_named_apart_from_a_hash_mismatch(tmp_path):
+    # 0.8.66 run v (2026-11-08): PyPI had not listed the macOS file yet; pip resolved nothing
+    r = make(tmp_path, publish="pypi")
+    w = finals(r)
+    report(r.published_out("apple"), "apple", [w["macos"]], status="failed", mismatch=[], failure="index-lag",
+           failure_why="the index did not list %s after 900s (46 polls)" % w["macos"].name)
+    ok, why = r.published_ok("apple")
+    assert not ok and "INDEX LAG (not a hash mismatch)" in why and w["macos"].name in why
+    assert "run published-apple again" in why and r.have_published("apple") is None
 
 
 def test_published_step_runs_the_bytes_check_locally_with_the_gate_receipts(tmp_path, monkeypatch):
