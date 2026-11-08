@@ -140,6 +140,19 @@ for f in taxi/taxi_speed.npz istella/istella_speed.npz; do
         exit 4; }
 done
 
+# ---- the box can make a venv (a fresh DO MI300X image lacks python3-venv: the AMD run of 2026-11-08 failed at once)
+if ! "$PY" -m venv "$CACHE_ROOT/venv-probe" > /dev/null 2>&1; then
+    say "python3 -m venv failed; installing python3-venv"
+    v=$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+    # the image's package lists are stale (404s on security.ubuntu.com): update first
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq > "$RES/logs/apt-venv.log" 2>&1
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "python${v}-venv" >> "$RES/logs/apt-venv.log" 2>&1 || \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >> "$RES/logs/apt-venv.log" 2>&1
+    rm -rf "$CACHE_ROOT"/c*/venv   # a venv made without ensurepip has no pip; never reuse it
+    "$PY" -m venv "$CACHE_ROOT/venv-probe" > /dev/null 2>&1 || { say "no working venv module; see logs/apt-venv.log"; exit 4; }
+fi
+rm -rf "$CACHE_ROOT/venv-probe"
+
 # ---- plan ------------------------------------------------------------------------------------------------------
 phase plan; mark plan
 $PY tools/paper_compare.py ids --recipes "$RECIPES" --planner tools/bench_board.py --out-dir "$RES/plan" \
