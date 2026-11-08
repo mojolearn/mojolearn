@@ -2767,6 +2767,9 @@ def ensure_algos_prep(ctx, races):
             cmd += ["--max-rows", str(int(rows))]
         if fixture:
             cmd += ["--inputs", "verify-fixtures"]
+        if INPUT_MAP:
+            # the smoke's inputs: exactly the races' datasets, so no block is built from data its group did not stage
+            cmd += ["--race-datasets", ",".join(sorted({p[1] for p in pairs}))]
         log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: algos prep rows=%s lanes=%d datasets=%s"
               % (rows_tag(rows), len(lanes), ",".join(dss)), flush=True)
