@@ -248,7 +248,7 @@ def test_each_batch_is_the_boards_own_smoke_with_our_arm_only(tmp_path):
     assert "--inputs" not in cmd                                       # no input map: the datasets
     args.inputs_map = tmp_path / "smoke_inputs.json"
     cmd = MS.board_command(args, tmp_path / "b000", ["--race-ids", "@ids.json"])
-    assert cmd[cmd.index("--inputs") + 1] == "verify-fixtures" and cmd[cmd.index("--inputs-map") + 1] == str(
+    assert cmd[cmd.index("--inputs") + 1] == "synthetic" and cmd[cmd.index("--inputs-map") + 1] == str(
         tmp_path / "smoke_inputs.json")
     env = MS.batch_env(args)
     assert env["MOJOLEARN_NUMERIC_MODE"] == "identical" and "no-run-summary" in env["MOJOLEARN_SUMMARY_REPO"]
@@ -283,71 +283,33 @@ def test_every_file_the_plan_reads_is_pinned_and_staged_where_the_board_looks(tm
         MS.write_data_plan("nvidia", tmp_path / "e.json", presign=lambda k, s: "", inputs=MS.DATASETS_INPUTS)
 
 
-def test_the_smoke_stages_only_the_slices_and_none_for_a_recipe_on_the_verify_fixture():
+def test_the_smoke_stages_no_data_and_its_data_plan_is_empty(tmp_path):
     import bench_board as B
-    import smoke_inputs as SI
     assert MS.board_takes_inputs()
     for vendor in VENDORS:
         races = MS.plan(vendor, B)
         imap = MS.smoke_inputs(races, B)
-        keys = MS.data_keys(vendor, B, MS.FIXTURES_INPUTS, imap)
-        full = MS.data_keys(vendor, B, MS.DATASETS_INPUTS)
-        assert keys and all(SI.SLICE_INFIX + "." in k for k in keys)          # nothing but slices
-        assert set(keys) <= {SI.slice_key(k) for k in full if SI.sliceable(k)}
-        for k, rel in keys.items():                                            # where the loaders look for them
-            assert rel == (SI.slice_name("r2-stage/" + k.replace(SI.SLICE_INFIX, "")) if k.startswith("corpus/")
-                           else SI.slice_name("datasets/" + k.replace(SI.SLICE_INFIX, "")))
-        for r in races:
-            if MS._on_fixture(imap[r["id"]]):
-                assert MS.race_keys(r, B, imap[r["id"]]) == {}
-        assert set(MS.slice_sources([vendor], B).values()) == set(keys)
-
-
-def test_every_slice_the_smoke_stages_is_pinned(tmp_path):
-    # RED UNTIL RUN: `python3 tools/release_measurement_smoke.py make-smoke-slices --push` on the Mac that holds the
-    # full files, then commit the manifest rows it writes (until then data-plan refuses the smoke by name)
-    pins = MS.pins()
-    for vendor in VENDORS:
-        missing = [k for k in MS.data_keys(vendor, inputs=MS.FIXTURES_INPUTS) if k not in pins]
-        assert not missing, "unpinned smoke slices (run make-smoke-slices --push): %s" % ", ".join(missing)
-    MS.write_data_plan("amd", tmp_path / "d.json", presign=None, inputs=MS.FIXTURES_INPUTS)
-    assert json.loads((tmp_path / "d.json").read_text())["inputs"] == MS.FIXTURES_INPUTS
-
-
-def test_the_data_plan_refuses_an_unpinned_slice_by_name(tmp_path, monkeypatch):
-    monkeypatch.setattr(MS, "pins", lambda root=MS.ROOT: {})
-    with pytest.raises(SystemExit, match="make-smoke-slices --push"):
-        MS.write_data_plan("nvidia", tmp_path / "d.json", presign=None, inputs=MS.FIXTURES_INPUTS)
+        assert MS.data_keys(vendor, B, MS.SYNTHETIC_INPUTS, imap) == {}
+        assert all(MS.race_keys(r, B, imap[r["id"]]) == {} for r in races)
+        assert all(g["keys"] == [] for g in MS.staging_groups(races, B, imap=imap))
+    entries = MS.write_data_plan("nvidia", tmp_path / "d.json", presign=lambda k, s: pytest.fail("no GET"))
+    doc = json.loads((tmp_path / "d.json").read_text())
+    assert entries == [] and doc["files"] == [] and doc["inputs"] == MS.SYNTHETIC_INPUTS
 
 
 @pytest.mark.parametrize("vendor", VENDORS)
-def test_the_staged_data_and_the_work_dir_are_within_budget_from_the_plan(vendor):
+def test_the_work_dir_is_within_budget_from_the_plan(vendor):
     import bench_board as B
     races = MS.plan(vendor, B)
     bud = MS.budget(races, MS.smoke_inputs(races, B), B, MS.MAX_BOX_WORKERS)
-    assert sum(bud["counts"].values()) == len(races)
-    assert 0 < bud["staged_bound_bytes"] < MS.STAGED_MAX_BYTES and bud["staged_files"] >= 4
+    assert sum(bud["counts"].values()) == len(races) and bud["staged_bytes"] == 0
     assert 0 < bud["work_bound_bytes"] < MS.WORK_MAX_BYTES
-    assert bud["parts"]["workers"] == MS.MAX_BOX_WORKERS and bud["parts"]["checkpoints"] > 0
-    # the pinned bytes, once the slices exist, are what the header prints and what the budget holds
-    pins = MS.pins()
-    keys = MS.data_keys(vendor, B, MS.FIXTURES_INPUTS)
-    if all(k in pins for k in keys):
-        assert sum(pins[k][0] for k in keys) < MS.STAGED_MAX_BYTES
+    assert bud["parts"]["workers"] == MS.MAX_BOX_WORKERS and bud["parts"]["synthetic"] > 0
     import importlib.util
     spec = importlib.util.spec_from_file_location("t_gate_disk_plan", str(ROOT / "tools/ops/gate_disk_plan.py"))
     D = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(D)
-    assert round(D.SMOKE_CAP_GB * 1e9) == MS.STAGED_MAX_BYTES + MS.WORK_MAX_BYTES   # the gate's cap is the budgets
-
-
-def test_staging_keeps_a_file_at_its_pin_and_refuses_one_without(tmp_path):
-    data = b"pinned bytes"
-    (tmp_path / "datasets").mkdir()
-    (tmp_path / "datasets" / "f.npz").write_bytes(data)
-    entry = dict(key="k", path="datasets/f.npz", bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), url=None)
-    assert MS.stage_one(entry, tmp_path) == "present"
-    assert MS.stage_one(dict(entry, sha256="0" * 64), tmp_path) == "missing and no URL"
+    assert round(D.SMOKE_CAP_GB * 1e9) == MS.WORK_MAX_BYTES          # the gate's cap is the budget
 
 
 # ------------------------------------------------------------------ the wiring: unconditional, in order, judged
@@ -651,13 +613,13 @@ def fake_box(tmp_path, monkeypatch, bytes_per_file=100, inputs=False):
     monkeypatch.setattr(MS, "board_drops_scratch", lambda: True)
     monkeypatch.setattr(MS, "board_takes_inputs", lambda here=None: inputs)
     if inputs:
-        # d2's recipes on the verify fixture (nothing staged); d1, d3 and the neural recipe read their slices
+        # d2's recipes on the verify fixture; d1, d3 and the neural recipe on synthetic inputs (nothing staged)
         monkeypatch.setattr(MS, "smoke_inputs", lambda rs, B=None, index=None: {
             r["id"]: dict(input=MS.INPUT_VERIFY if r["dataset"] == "d2" else MS.INPUT_NONE, verify_lanes=[],
                           files=[FakeBoard.R2_KEYS[r["dataset"]]]) for r in rs})
         monkeypatch.setattr(MS, "budget", lambda *a, **k: dict(
-            counts={MS.INPUT_VERIFY: 3, MS.INPUT_FILE: 0, MS.INPUT_NONE: 4}, staged_bytes=300,
-            staged_bound_bytes=400, staged_files=2, work_bound_bytes=10 ** 6, parts={}))
+            counts={MS.INPUT_VERIFY: 3, MS.INPUT_FILE: 0, MS.INPUT_NONE: 4}, staged_bytes=0,
+            work_bound_bytes=10 ** 6, parts={}))
     seen = []
 
     def present():
@@ -695,13 +657,10 @@ def fake_box(tmp_path, monkeypatch, bytes_per_file=100, inputs=False):
 
     monkeypatch.setattr(MS, "stage_one", stage_one)
     monkeypatch.setattr(P, "bounded_run", bounded_run)
-    import smoke_inputs as SI
-    name = SI.slice_name if inputs else (lambda k: k)
-    entries = [dict(key=name(FakeBoard.R2_KEYS[d]), path=name("datasets/gbm-bench/" + FakeBoard.DATA_FILES[d]),
-                    bytes=bytes_per_file, sha256="0" * 64, url="https://r2/" + d) for d in FakeBoard.DATASETS
-               if not (inputs and d == "d2")]
+    entries = [dict(key=FakeBoard.R2_KEYS[d], path="datasets/gbm-bench/" + FakeBoard.DATA_FILES[d],
+                    bytes=bytes_per_file, sha256="0" * 64, url="https://r2/" + d) for d in FakeBoard.DATASETS]
     plan = tmp_path / "data.json"
-    plan.write_text(json.dumps(dict(files=entries, **({"inputs": MS.FIXTURES_INPUTS} if inputs else {}))))
+    plan.write_text(json.dumps(dict(files=entries)))
     argv = ["run", "--vendor", "nvidia", "--python", "/v/bin/python", "--out", str(tmp_path / "out"),
             "--work", str(tmp_path / "work"), "--data-plan", str(plan), "--home", str(home), "--jobs", "1",
             "--data-root", str(home / "datasets" / "gbm-bench")]
@@ -739,29 +698,19 @@ def test_a_fake_plan_stages_and_cleans_per_group(tmp_path, monkeypatch, capsys):
     assert "MEASURESMOKE disk free=" in printed and "after group ds-d2" in printed and "after staging ds-d1" in printed
 
 
-def test_on_the_verify_fixtures_a_fixture_group_stages_nothing_and_every_batch_reads_the_map(tmp_path, monkeypatch,
-                                                                                             capsys):
+def test_on_the_synthetic_inputs_nothing_is_staged_and_every_batch_reads_the_map(tmp_path, monkeypatch, capsys):
     seen, argv, home = fake_box(tmp_path, monkeypatch, inputs=True)
-    assert MS.main(argv) == 0
-    by_group = {}
-    for event, group, files in seen:
-        by_group.setdefault(group, []).append(files)
-    d1, d3 = "datasets/gbm-bench/d1/d1.smoke.npz", "datasets/gbm-bench/d3/d3.smoke.npz"
-    # only slices are ever on the box, and the fixture group's data (d2) never is
-    assert all(set(f) <= {d1, d3} for fs in by_group.values() for f in fs) and by_group["ds-d2"]
-    assert all(d1 in f for f in by_group["ds-d1"]) and all(d3 in f for f in by_group["ds-d3"])
+    monkeypatch.setattr(MS, "stage_one", lambda e, h: pytest.fail("the smoke staged %s" % e["key"]))
+    assert MS.main(argv) == 0                                  # a data plan given is not read
+    assert seen and all(files == [] for _, _, files in seen)   # no data file on the box at any point
     imap = json.loads((tmp_path / "work" / "smoke_inputs.json").read_text())
     assert imap["classical/a/d2/rows=2000"]["input"] == MS.INPUT_VERIFY
     doc = json.loads((tmp_path / "out" / MS.SUMMARY).read_text())
-    assert doc["ok"] and doc["inputs"]["mode"] == MS.FIXTURES_INPUTS
-    assert doc["disk"]["cap_bytes"] == MS.STAGED_MAX_BYTES + MS.WORK_MAX_BYTES        # the budgets are the cap
+    assert doc["ok"] and doc["inputs"]["mode"] == MS.SYNTHETIC_INPUTS and doc["inputs"]["staged_bytes"] == 0
+    assert doc["disk"]["cap_bytes"] == MS.WORK_MAX_BYTES                     # the budget is the cap
     out = capsys.readouterr().out
-    assert "(group ds-d2)" not in out                                         # it staged nothing
-    assert "MEASURESMOKE inputs verify-fixture=3 sliced-file=0 NO-VERIFY-LANE=4 staged=" in out and "work_bound=" in out
-    # a data plan written for the other inputs is refused by name, before anything is staged
-    plan = pathlib.Path(argv[argv.index("--data-plan") + 1])
-    plan.write_text(json.dumps(dict(json.loads(plan.read_text()), inputs=MS.DATASETS_INPUTS)))
-    assert MS.main(argv) == 1 and "rewrite it with data-plan" in capsys.readouterr().out
+    assert "\nSMOKE inputs: generated on the box, 0 bytes staged\n" in out
+    assert "MEASURESMOKE inputs verify-fixture=3 synthetic-file=0 NO-VERIFY-LANE=4 staged=0 work_bound=" in out
 
 
 def test_the_cap_refuses_a_group_by_name_and_never_stages_it(tmp_path, monkeypatch, capsys):
