@@ -310,6 +310,11 @@ up)
     awk -v b="$bal" -v m="$NVC_MIN_BALANCE" 'BEGIN{exit !(b >= m)}' \
         || die "RunPod balance is \$$bal, under \$$NVC_MIN_BALANCE (NVC_MIN_BALANCE); nothing rented. Fund the account first."
     say "RunPod balance \$$bal; bringing the shared set from $have to $want pod(s)"
+    # the container disk is sized from the release gate's disk plan (dev_pod.sh DISK_GB, tools/ops/gate_disk_plan.py:
+    # the gate job's measured footprint + 20 GB headroom; 0.8.66 run t filled an 80 GB pod); the release gate job
+    # itself refuses a pod with less free than its GATE_DISK_NEED_GB
+    export MOJOLEARN_DEVPOD_DISK_GB="${MOJOLEARN_DEVPOD_DISK_GB:-$(python3 "$ROOT/tools/ops/gate_disk_plan.py" pod-gb 2>/dev/null || echo 80)}"
+    say "container disk ${MOJOLEARN_DEVPOD_DISK_GB} GB per pod (tools/ops/gate_disk_plan.py pod-gb)"
     for k in $(pod_keys); do
         [ "$(live_pods | grep -c . || true)" -lt "$want" ] || break
         [ ! -f "$STATE_ROOT/$k/state.env" ] || continue

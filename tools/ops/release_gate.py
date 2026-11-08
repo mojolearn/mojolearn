@@ -233,6 +233,15 @@ def write_runtime_prior(source, staged):
     return target, sha256(target)
 
 
+def gate_disk_plan():
+    """tools/ops/gate_disk_plan.py (beside this file)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gate_disk_plan", Path(__file__).resolve().parent / "gate_disk_plan.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def bash_array(name, items):
     return f"{name}=(" + " ".join(shlex.quote(str(i)) for i in items) + ")"
 
@@ -334,7 +343,11 @@ class Plan:
                  f"GATE_REUSE_UNCHANGED={1 if self.reuse_unchanged else 0}",
                  bash_array("MEASURE_SMOKE_PIP", MEASURE_SMOKE_PIP),
                  bash_array("MEASURE_SMOKE_FIXTURE_PIP", MEASURE_SMOKE_FIXTURE_PIP),
-                 f"GATE_MEASURE_SMOKE_MINUTES={MEASURE_SMOKE_MINUTES}"]
+                 f"GATE_MEASURE_SMOKE_MINUTES={MEASURE_SMOKE_MINUTES}",
+                 # the free disk the job refuses to start without (tools/ops/gate_disk_plan.py; 0.8.66 run t filled
+                 # the 80 GB pod) and the measurement smoke's footprint cap inside it
+                 f"GATE_DISK_NEED_GB={gate_disk_plan().job_need_gb()}",
+                 f"GATE_MEASURE_SMOKE_MAX_GB={gate_disk_plan().SMOKE_CAP_GB:g}"]
         return "\n".join(lines) + "\n"
 
     def uploads(self):

@@ -659,3 +659,67 @@ def test_a_gate_whose_runtime_qualifier_did_not_pass_fails_and_names_the_report(
     with pytest.raises(release.StepFailed, match="runtime qualifier"):
         r.run_gate(vendor)
     assert launched == []
+
+
+# ------------------------------------------------------------------ the disk (0.8.66 run t filled the 80 GB pod)
+def test_the_job_never_copies_a_venv_into_the_results(tmp_path):
+    import subprocess
+    out = tmp_path / "work" / "out"
+    venv = out / "runtime-nvidia" / "qualify" / "run" / "venv" / "lib"
+    venv.mkdir(parents=True)
+    (venv / "big.so").write_bytes(b"x" * 1024)
+    (out / "runtime-nvidia" / "runtime-report.json").write_text('{"passed":true}\n')
+    dst = tmp_path / "res" / "out"
+    dst.mkdir(parents=True)
+    script = ("set -euo pipefail\n" + "GATE_FETCH=(" + " ".join(shlex.quote(p) for p in RG.GATE_FETCH) + ")\n"
+              + job_function("copy_reports") + f"copy_reports {shlex.quote(str(out))} {shlex.quote(str(dst))}\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert (dst / "runtime-nvidia" / "runtime-report.json").exists()
+    assert not (dst / "runtime-nvidia" / "qualify" / "run" / "venv").exists()
+
+
+def test_the_job_logs_the_disk_free_after_every_phase(tmp_path):
+    import re
+    import subprocess
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    phases = re.findall(r"^PHASE=([a-z-]+)$", text, re.M)
+    for prev in phases[phases.index("tree"):]:
+        if prev == "complete":
+            continue
+        assert re.search(r"^disk_line %s$" % re.escape(prev), text, re.M), prev
+    assert re.search(r"^disk_line start$", text, re.M)
+    fns = "\n".join(l for l in text.splitlines() if l.startswith(("say() ", "disk_free_gb() ", "disk_line() ")))
+    script = "GATE_WORK=%s\n%s\ndisk_line hard-done\n" % (shlex.quote(str(tmp_path)), fns)
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert re.search(r"release-gate-job\] DISK free=[0-9]+\.[0-9]GB after hard-done$", r.stdout.strip()), r.stdout
+
+
+def test_the_job_refuses_a_box_with_less_free_than_the_plan_needs_and_drops_venvs_once_home(tmp_path):
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    start = text[text.index("disk_line start"):text.index("for ((i = 0; i < ${#GATE_ARGV[@]}")]
+    assert "GATE_DISK_NEED_GB" in start and "DISK REFUSED" in start and "exit 3" in start
+    hard = text[text.index("\nPHASE=hard-done"):text.index("\nPHASE=measuresmoke\n")]
+    assert 'if [ "$HARD_HOME" = 1 ]; then' in hard and "identity-venv" in hard and "qualify/run/venv" in hard
+    assert hard.index("persist_hard\n") < hard.index('if [ "$HARD_HOME" = 1 ]; then')
+    smoke = text[text.index("\nPHASE=measuresmoke\n"):text.index("\nPHASE=complete")]
+    assert '--data-plan "$IN/measuresmoke-data.json"' in smoke and '--max-work-gb "${GATE_MEASURE_SMOKE_MAX_GB:-8}"' in smoke
+    assert "release_measurement_smoke.py stage" not in text      # no whole-plan stage: the smoke stages per group
+    assert smoke.index("measuresmoke exited") < smoke.index('rm -rf "$GATE_WORK/measure-venv" "$GATE_WORK/fixture-venv"')
+
+
+def test_gate_env_carries_the_disk_plan(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gate_disk_plan", RG.ROOT / "tools/ops/gate_disk_plan.py")
+    D = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(D)
+    env = RG.Runner(args(tmp_path, "nvidia")).make_plan()[0].env_text()
+    assert f"GATE_DISK_NEED_GB={D.job_need_gb()}" in env and f"GATE_MEASURE_SMOKE_MAX_GB={D.SMOKE_CAP_GB:g}" in env
+    # the job's need is the measured items plus the smoke cap; the pod adds its base and 20 GB headroom
+    assert D.job_need_gb() >= sum(D.JOB_WRITES_GB.values()) + D.SMOKE_CAP_GB
+    assert D.pod_disk_gb() >= D.job_need_gb() + D.POD_BASE_GB + D.HEADROOM_GB and D.pod_disk_gb() % 10 == 0
+    assert D.pod_disk_gb(smoke_cap_gb=100) > D.pod_disk_gb()
+    dev_pod = (RG.ROOT / "tools/dev_pod.sh").read_text()
+    assert 'tools/ops/gate_disk_plan.py" pod-gb' in dev_pod
+    assert 'tools/ops/gate_disk_plan.py" pod-gb' in (RG.ROOT / "tools/nvidia_central.sh").read_text()

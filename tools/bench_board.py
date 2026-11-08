@@ -4884,6 +4884,31 @@ def smoke_verdict(race, rec, vendor):
     return fails
 
 
+def drop_race_scratch(out, rec):
+    """--drop-race-scratch (the release measurement smoke, 2026-11-08: its scratch filled an 80 GB pod): once a race's
+    record is in board.json, its driver scratch (out/work, the scored arrays the drivers write there) and its local
+    evidence directory (the per-race archives of those arrays) are deleted. The record, the logs and raw/ (the
+    drivers' small JSON results) stay. Nothing outside `out` is touched. Returns the bytes freed."""
+    import shutil
+    root = os.path.realpath(out)
+    targets = [os.path.join(root, "work")]
+    if rec.get("evidence_directory"):
+        targets.append(os.path.join(root, str(rec["evidence_directory"])))
+    freed = 0
+    for t in targets:
+        t = os.path.realpath(t)
+        if t == root or not t.startswith(root + os.sep) or not os.path.isdir(t):
+            continue
+        for dirpath, _, files in os.walk(t):
+            for f in files:
+                try:
+                    freed += os.lstat(os.path.join(dirpath, f)).st_size
+                except OSError:
+                    pass
+        shutil.rmtree(t, ignore_errors=True)
+    return freed
+
+
 def write_smoke(out, races, result, vendor, shard):
     """smoke.json and the SMOKE PASS/FAIL lines; returns the number failing."""
     verdicts = {}
@@ -5048,6 +5073,9 @@ def build_parser():
     p.add_argument("--measurement-source", default=None, metavar="JSON",
                    help="with --preflight-only: reuse this retained source snapshot {source, inventory} "
                         "(tools/gpu_gap_campaign.py --smoke writes it once)")
+    p.add_argument("--drop-race-scratch", action="store_true",
+                   help="with --smoke: delete each race's driver scratch (work/) and its local evidence directory "
+                        "once its record is written to board.json (the smoke judges the record only)")
     p.add_argument("--race-ids", default=None, metavar="IDS|@FILE",
                    help="keep exactly these planned race ids (comma list or @file); unknown ids are refused")
     p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
@@ -5398,6 +5426,8 @@ def main(argv=None):
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     if getattr(args, "prep_only", False) and not args.preflight_only:
         raise SystemExit("bench_board: --prep-only is for --preflight-only runs")
+    if getattr(args, "drop_race_scratch", False) and not args.smoke:
+        raise SystemExit("bench_board: --drop-race-scratch is for --smoke runs (a timed board keeps its evidence)")
     box_checked = bool(getattr(args, "box_checked", None)) and args.preflight_only
     if getattr(args, "box_checked", None) and not args.preflight_only:
         raise SystemExit("bench_board: --box-checked is for --preflight-only runs")
@@ -5592,6 +5622,8 @@ def main(argv=None):
         _load_tool('retain_run_summary').try_retain(
             _load_tool('retain_run_summary').retain_board, out, result, smoke=args.smoke)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
+        if getattr(args, "drop_race_scratch", False):
+            drop_race_scratch(out, rec)
         if _load_tool("bench_board_evidence").blocks_campaign(rec):
             print("bench_board: stopped after retaining local evidence: " + rec["evidence_failure"], flush=True)
             return 1
