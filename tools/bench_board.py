@@ -4811,6 +4811,26 @@ def _planned_refusal(vendor, key, arm):
     return None
 
 
+def _evidence_failure_text(rec):
+    """Why the evidence seal failed this record (tools/bench_board_evidence.py seal sets `evidence_failure`, not
+    `failure`), with the first missing items of each incomplete own cell, or None.
+
+    0.8.66 AMD measurement smoke: classical2/ets, classical2/ivf (istella, taxi) and trees/gbdt-categorical/taxi
+    reported only "status failed" (rc 0): the seal's "incomplete worker evidence" and its missing list stayed on
+    the box."""
+    why = rec.get("evidence_failure")
+    if not why:
+        return None
+    gaps = []
+    for field in ("cells", "infer_cells"):
+        for c in rec.get(field) or []:
+            missing = (c.get("measurement") or {}).get("missing") or []
+            if c.get("status") == "ok" and missing:
+                gaps.append("%s %s: %s" % (c.get("arm"), "infer" if field == "infer_cells" else "fit",
+                                           ", ".join(str(m) for m in missing[:4])))
+    return why + ("; missing " + " | ".join(gaps[:3]) if gaps else "")
+
+
 def smoke_verdict(race, rec, vendor):
     """[(arm, reason)] of what keeps this race from passing ([] = PASS)."""
     import fnmatch
@@ -4830,8 +4850,8 @@ def smoke_verdict(race, rec, vendor):
             return [("-", "missing explicit unsupported capability record")]
         return []
     if rec.get("status") != "done":
-        fails.append(("-", "status %s%s" % (rec.get("status"), (": " + str(rec.get("failure")))
-                                            if rec.get("failure") else "")))
+        why = rec.get("failure") or _evidence_failure_text(rec)
+        fails.append(("-", "status %s%s" % (rec.get("status"), (": " + str(why)) if why else "")))
     if rec.get("params_check") != "MATCHED":
         fails.append(("-", "BOARD-PARAMS %s" % rec.get("params_check")))
     key = smoke_key(race)
