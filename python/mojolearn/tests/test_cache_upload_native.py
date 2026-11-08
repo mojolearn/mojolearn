@@ -5,6 +5,7 @@ import gc
 import struct
 import sys
 import threading
+import time
 from types import SimpleNamespace
 import weakref
 
@@ -273,6 +274,14 @@ def test_cache_id_of_real_upload_uses_connected_store_entries(prefix, monkeypatc
     assert cache.live() == base and touched == []
 
 
+#: Attempts of the concurrent-publication scenario before the test reports that the
+#: controller never ran inside the native put's GIL release. The installed-runtime
+#: qualifier runs units side by side on every core, so the controller thread can miss
+#: one short upload window waiting for a core; a put that never releases the GIL
+#: misses every attempt and still fails.
+CONCURRENT_PUBLICATION_ATTEMPTS = 20
+
+
 @pytest.mark.parametrize("prefix", ["x_prep"])
 @pytest.mark.parametrize("change", ["replace_dictionary", "publish_competitor", "change_route",
                                     "delete_counter_slot", "foreign_dictionary"])
@@ -280,6 +289,19 @@ def test_cache_id_of_real_concurrent_publication_cleanup(prefix, change):
     # This is a behavioral concurrency diagnostic, not a no-thread profiling
     # audit. A separate controller mutates cache metadata during the existing
     # native put's GIL release; no Python callback is installed in the product.
+    # Each attempt is self-contained (fresh caches, every slot freed); an attempt
+    # whose controller ran only after the upload returned checks nothing and is
+    # retried, because the interleaving is scheduled by the OS, not by the test.
+    for _ in range(CONCURRENT_PUBLICATION_ATTEMPTS):
+        if _concurrent_publication_attempt(prefix, change):
+            return
+    pytest.fail("controller did not run during the public upload in %d attempts"
+                % CONCURRENT_PUBLICATION_ATTEMPTS)
+
+
+def _concurrent_publication_attempt(prefix, change):
+    """True when the controller ran inside the native put and every outcome
+    assertion held; False (state cleaned up) when it ran only afterwards."""
     class Cache(arena.DeviceCache):
         __slots__ = ("uploads",)
     cache, binding = _real_cache(prefix, Cache)
@@ -330,21 +352,30 @@ def test_cache_id_of_real_concurrent_publication_cleanup(prefix, change):
     worker = threading.Thread(target=mutate, name="cache-publication-controller")
     previous_interval = sys.getswitchinterval()
     result = error = None
+    interleaved = False
     try:
         worker.start()
         assert ready.wait(5)
         try:
             # Once the gate opens, the ready thread first obtains the GIL
-            # when native put releases it. Missing interleaving fails visibly.
+            # when native put releases it. A missed interleaving is retried.
             sys.setswitchinterval(1000)
             gate.release()
+            # The controller takes the gate without the GIL; once it holds it,
+            # it only waits for the GIL, which this thread keeps until the put.
+            deadline = time.monotonic() + 5
+            while not gate.locked() and time.monotonic() < deadline:
+                pass
             try: result = cache.id_of(source)
             except Exception as failure: error = failure
-            assert done.is_set(), "controller did not run during the public upload"
+            interleaved = done.is_set()
         finally:
             sys.setswitchinterval(previous_interval)
             worker.join(10)
         assert not worker.is_alive() and not worker_errors
+        if not interleaved:
+            # The controller ran after the upload returned: nothing to check.
+            return False
         if change == "replace_dictionary":
             assert error is None, repr(error)
             assert cache._entries[key] == (result, source)
@@ -363,6 +394,7 @@ def test_cache_id_of_real_concurrent_publication_cleanup(prefix, change):
             if change == "delete_counter_slot":
                 assert "uploads" in str(error)
             assert touched == []
+        return True
     finally:
         sys.setswitchinterval(previous_interval)
         if worker.is_alive():
