@@ -116,7 +116,13 @@ GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/rel
 #: pins them, tools/opponent_wheels.sh and bench_board_algos.PINS_COMMON): scikit-learn (the algos preprocessing
 #: oracle, rfe, the hdbscan scorer), scipy (the als input split, the NB count matrix), statsmodels (select-d). They
 #: are never raced: the smoke runs no opponent arm.
-MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub", "scikit-learn==1.7.2", "scipy==1.17.1", "statsmodels==0.15.0")
+#: CatBoost (pinned as the trees board pins it, tools/opponent_wheels.sh) is the untimed border oracle of our own
+#: pre-binned arms, never an arm: trees/gbdt-depthwise `ours-prebinned` and trees/gbdt-lossguide `ours-gain0` fit on
+#: the GreedyLogSum bin ids that tools/speed_gbdt_arm.py prebinned_data builds with CatBoost's Pool.quantize. Without
+#: it both arms were refused at construction and the 0.8.66 AMD smoke failed those four recipes on "missing
+#: parameter/version probe: ours-prebinned / ours-gain0".
+MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub", "scikit-learn==1.7.2", "scipy==1.17.1", "statsmodels==0.15.0",
+                     "catboost==1.2.10")
 #: the fixture generator's own venv (tools/neural_fixtures_box.sh NF_TORCH / NF_PYG, CPU index): it writes the layer
 #: lanes' inputs once before the batches; never the measured venv, never raced
 MEASURE_SMOKE_FIXTURE_PIP = ("numpy", "torch==2.13.0", "torch-geometric==2.8.0.post1")

@@ -193,3 +193,12 @@ def test_binding_refuses_a_mismatched_loss_by_name():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_qn_regressor_public_predict_returns_values():
+    """0.8.66 AMD measurement smoke: a public predict raised ValueError('labels_helpers')
+    because the QN native owner's context had no label context for its result cast."""
+    X, _, yr = _data()
+    pred = QNRegressor().fit(X, yr).predict(X)
+    assert np.asarray(pred).shape == (X.shape[0],)
+    assert np.isfinite(np.asarray(pred, dtype=np.float64)).all()

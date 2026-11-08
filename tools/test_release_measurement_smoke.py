@@ -437,9 +437,14 @@ def test_the_tool_is_overlaid_and_its_summary_comes_home():
     assert "tools/release_measurement_smoke.py" in RG.GATE_OVERLAY
     assert "measuresmoke/" + MS.SUMMARY in RG.GATE_FETCH
     assert not any(f.startswith("measuresmoke") and ("work" in f or "batches" in f) for f in RG.GATE_FETCH)
-    # harness packages only: no opponent library is installed for the smoke
+    # harness packages only: no opponent library is installed for the smoke. CatBoost is the one exception, the
+    # untimed border oracle of our pre-binned trees arms (tools/speed_gbdt_arm.py prebinned_data), in the measured
+    # venv only, pinned as the trees board pins it.
     for pkg in RG.MEASURE_SMOKE_PIP + RG.MEASURE_SMOKE_FIXTURE_PIP:
         name = pkg.split("=")[0].split(">")[0].lower()
+        if name == "catboost" and pkg in RG.MEASURE_SMOKE_PIP:
+            assert pkg == "catboost==1.2.10", pkg
+            continue
         assert name not in ("cuml", "cupy", "xgboost", "lightgbm", "catboost", "transformers", "mamba-ssm",
                             "faiss-cpu", "implicit", "cuvs", "cugraph", "gpytorch"), pkg
     assert "torch" not in [p.split("=")[0] for p in RG.MEASURE_SMOKE_PIP]   # torch only in the fixture venv

@@ -84,3 +84,13 @@ def test_stateful_reference_matches_warmup_and_sample_history():
 def test_invalid_reference_history_refused(count):
     with pytest.raises(ValueError, match='positive integer'):
         quality.run_reference(None, count)
+
+
+def test_failure_line_names_a_fatal_native_error(tmp_path):
+    log = tmp_path / 'host.log'
+    log.write_text('Fatal Python error: get_modules_dict: interpreter has no modules dictionary\n'
+                   'Python runtime state: finalizing\n\nCurrent thread 0x1 (most recent call first):\n'
+                   '  <no Python frame>\n')
+    assert quality.failure_line(log).startswith('Fatal Python error: get_modules_dict')
+    log.write_text('Traceback (most recent call last):\nValueError: bad\n')
+    assert quality.failure_line(log) == 'ValueError: bad'

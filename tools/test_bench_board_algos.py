@@ -688,3 +688,23 @@ def test_span_names_the_timed_call_and_our_input_copy():
     assert span["inside_clock"].startswith("fit_transform(X)")
     assert span["input_copy"].startswith("inside the timed call")
     assert span["upload_ms_separate"] == 2.0 and span["upload_bytes_separate"] == 96
+
+
+@pytest.mark.parametrize("lane,fn", [("select-mutual-info", "mutual_info_classif"),
+                                     ("select-mutual-info-reg", "mutual_info_regression")])
+def test_select_mutual_info_hands_ours_the_function_itself(monkeypatch, lane, fn):
+    """0.8.66 AMD smoke: ours' SelectKBest refuses any callable but its own score functions, so a
+    functools.partial(mutual_info_*, random_state=SEED) was refused on every race."""
+    def score(X, y):
+        return np.ones(X.shape[1])
+
+    class SelectKBest:
+        def __init__(self, **kw):
+            self.kw = kw
+    fake = types.SimpleNamespace(SelectKBest=SelectKBest, __version__="0")
+    setattr(fake, fn, score)
+    monkeypatch.setitem(sys.modules, "mojolearn", fake)
+    D = {"X": np.zeros((8, 6), np.float32), "y": np.zeros(8), "Xq": np.zeros((4, 6), np.float32)}
+    make, _, params = A._est_factory(lane, "ours", D)
+    assert params["score_func"] is score
+    assert make().kw["score_func"] is score

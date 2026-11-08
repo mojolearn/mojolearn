@@ -97,3 +97,19 @@ def test_tensor_lanes_without_staged_arrays_record_inputs_on_every_arm():
     docs = X._text_arrays(np, ["ab", "cé"])
     assert [n for n, _ in docs] == ["docs_utf8", "doc_bytes"]
     assert docs[1][1].tolist() == [2, 3]
+
+
+def test_refine_quality_returns_the_per_arm_dict():
+    """0.8.66 AMD smoke: the refine scorer's query block shadowed the result dict, so quality() returned an
+    ndarray and the race recorded "'numpy.ndarray' object has no attribute 'get'" for ours."""
+    rng = np.random.default_rng(3)
+    D = {"X": rng.random((300, 6), dtype=np.float32), "Xq": rng.random((25, 6), dtype=np.float32)}
+    _, Q, C = (a for _, a in X.refine_inputs(np, D, A.SEED))
+    X64 = np.asarray(D["X"], dtype=np.float64)
+    d = ((X64[C] - Q.astype(np.float64)[:, None, :]) ** 2).sum(-1)
+    k = A.LANES["ann-refine"]["params"]["k"]
+    exact = np.take_along_axis(C, np.argsort(d, axis=1, kind="stable")[:, :k], 1)
+    q = X.quality("ann-refine", D, {"ours": {"distances": np.zeros(exact.shape), "indices": exact}}, vars(A))
+    assert isinstance(q, dict) and set(q) == {"ours"}
+    assert "quality_error" not in q["ours"]
+    assert q["ours"]["recall_vs_exact_refine"] == 1.0
