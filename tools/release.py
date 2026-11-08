@@ -4470,7 +4470,14 @@ class Release(release_identity_wheels.IdentityOnWheels):
         out = self.apple_runtime_out()
         if out.exists() and not self.dry:
             out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        cmd = [PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+        # EVERY CORE (2026-11-07): the qualifier runs its units side by side, one per core capped by free
+        # memory (qualify_native_runtime_installed.py unit_workers; 0.8.66 ran 73 units one at a time, one
+        # process on a 10-core Mac at 25 % busy). It holds the Metal lock once, so no other Metal job shares
+        # the GPU, and every Mac slot (the ceiling is half the cores), so the CPU jobs see its real load.
+        sys.path.insert(0, str(ROOT / "tools"))
+        import mac_slot
+        cmd = [PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600",
+               "--slots", str(mac_slot.slot_count()), "metal", "--",
                PY, str(ROOT / "tools" / "release_runtime_installed.py"), "run", "--vendor", "apple",
                "--source-root", str(self.source_checkout(create=not self.dry)), "--source-commit", self.commit,
                "--wheel", str(w or "<macos wheel>"),

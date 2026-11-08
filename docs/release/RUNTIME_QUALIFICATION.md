@@ -15,6 +15,13 @@ unit ends, writes one receipt:
 
 - `qualify/units/<file>.json` and its raw junit `qualify/units/<stem>.tests.xml` in the run's output;
 - the same pair appended to the unit store (`--unit-store`): `<store>/<stem>/<finished_at>-<sha12>.json`.
+
+The units run side by side, heaviest budget first: one per core of the host (affinity and cgroup
+quota), at most one per 1.5 GiB of free memory, and a unit starts only while the free memory holds the
+largest peak RSS measured so far. `--jobs` or `MOJOLEARN_QUALIFY_JOBS` sets the count. Each unit keeps
+its own budget and stall bound. The log opens with `QUALIFY units=<n> workers=<w> of <cores> core(s)`
+and prints `QUALIFY busy cores=<b> of <total>` every 60 s. On the Mac, `runtime-apple` holds the Metal
+lock once and every Mac slot (`mac_slot.py --slots <n> metal`).
   The store is never overwritten or pruned.
 
 A receipt (`mojolearn.runtime-qualifier-unit.v1`) holds: status (`passed`, `not-applicable`,

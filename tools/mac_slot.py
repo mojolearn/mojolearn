@@ -190,48 +190,39 @@ class Scheduler:
         return True
 
     def attempt(self, metal, command, slots=1):
-        """Take one slot (and the Metal lock when `metal`), or `slots` CPU
-        slots at once for a job that runs that many single-threaded workers
-        (the macOS release build, `--slots`). All or nothing: a partial take
-        is released before returning False. Under the slot count the job
-        also needs room (`room`)."""
+        """Take `slots` slots at once (and the Metal lock when `metal`) for a
+        job that runs that many single-threaded workers (the macOS release
+        build, `--slots`; the Apple installed-runtime gate, `--slots N metal`,
+        whose N unit processes share the one GPU job). All or nothing: a
+        partial take is released before returning False. Under the slot count
+        the job also needs room (`room`)."""
+        # METAL WITH SEVERAL SLOTS (2026-11-07). The Metal lock keeps every
+        # other Metal job off the GPU while this one runs (concurrent Metal
+        # from unrelated jobs is the NaN hazard in mark_env); the slots meter
+        # the Mac's CPU load. A Metal job whose own workers are N processes
+        # (the 0.8.66 gate-apple ran its 73 units one at a time in one slot)
+        # holds the lock once and N slots, so the CPU jobs see its real load.
         with self.guard():
             self.reap()
             if not self.room(metal, slots):
-                return False
-            if slots > 1:
-                if metal:
-                    raise ValueError("a Metal job takes one slot")
-                free = [p for p in self.slots if not p.exists()][:slots]
-                if len(free) < slots:
-                    return False
-                for path in free:
-                    if not self.publish(path, command):
-                        for taken in self.held:
-                            if read(taken / "token") == self.token:
-                                shutil.rmtree(taken)
-                        self.held = []
-                        return False
-                    self.held.append(path)
-                return True
-            free = next((p for p in self.slots if not p.exists()), None)
-            if free is None:
                 return False
             if metal:
                 tickets = sorted((int(p.name[1:]), p) for p in self.queue.glob("t[0-9]*")
                                  if p.name[1:].isdigit())
                 if not tickets or tickets[0][1] != self.ticket or self.metal.exists():
                     return False
-            if not self.publish(free, command):
+            free = [p for p in self.slots if not p.exists()][:slots]
+            if len(free) < slots:
                 return False
-            self.held.append(free)
-            if metal:
-                if not self.publish(self.metal, command):
-                    if read(free / "token") == self.token:
-                        shutil.rmtree(free)
-                    self.held.remove(free)
+            for path in free + ([self.metal] if metal else []):
+                if not self.publish(path, command):
+                    for taken in self.held:
+                        if read(taken / "token") == self.token:
+                            shutil.rmtree(taken)
+                    self.held = []
                     return False
-                self.held.append(self.metal)
+                self.held.append(path)
+            if metal:
                 shutil.rmtree(self.ticket)
                 self.ticket = None
             return True
@@ -304,8 +295,8 @@ def main(argv=None):
     ap.add_argument("--poll", type=float, default=0.25)
     ap.add_argument("--timing-json")
     ap.add_argument("--slots", type=int, default=1,
-                    help="run mode only: hold this many CPU slots and let the child run that many "
-                         "single-threaded build jobs (MOJOLEARN_BUILD_JOBS); every other pin stays 1")
+                    help="run or metal mode: hold this many slots and let the child run that many "
+                         "single-threaded jobs (MOJOLEARN_BUILD_JOBS); every other pin stays 1")
     ap.add_argument("mode", choices=("run", "metal", "cuda", "hip", "status"))
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
@@ -313,8 +304,8 @@ def main(argv=None):
             or args.timeout < 0 or args.wait_timeout < 0 or args.deadline < 0 or args.poll <= 0):
         ap.error("timeouts must be finite and nonnegative and poll must be finite and positive")
     scheduler = Scheduler()
-    if args.slots < 1 or (args.slots > 1 and args.mode != "run"):
-        ap.error("--slots must be positive, and above 1 only in run mode")
+    if args.slots < 1 or (args.slots > 1 and args.mode not in ("run", "metal")):
+        ap.error("--slots must be positive, and above 1 only in run or metal mode")
     if args.slots > scheduler.count:
         ap.error(f"--slots {args.slots} exceeds the {scheduler.count} Mac slots")
     if args.mode == "status":

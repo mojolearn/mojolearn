@@ -445,12 +445,18 @@ run_runtime() {
     fi
     # The qualifier's own outer cap sits 10 minutes inside the outer bound (venv, install, report), so it stops
     # itself and writes runtime-report.json and the unit receipts instead of being killed.
+    # EVERY CORE (2026-11-07): the qualifier runs its units side by side, one per core of this pod (affinity and
+    # cgroup quota) capped by free memory, and logs "QUALIFY ... workers=" and busy cores of total every 60 s.
+    # Nothing here pins it: no MOJOLEARN_QUALIFY_JOBS, no taskset, no thread caps.
     timeout "${rt_min}m" python3 tools/release_runtime_installed.py run --vendor "$vendor" \
         --source-root "$GATE_TREE" --source-commit "$GATE_SOURCE_COMMIT" "${wheel_args[@]}" \
         --timeout $(( (rt_min - 10) * 60 )) ${extra[@]+"${extra[@]}"} \
         --out "$GATE_WORK/out/runtime-$vendor" > "$J/runtime-qualify-$vendor.log" 2>&1 || rrc=$?
     say "runtime qualifier ($vendor, $class) exited $rrc in ${rt_min}m bound (recorded under out/runtime-$vendor)"
     grep -m 3 -E '^RUNTIME (units|vendor)' "$J/runtime-qualify-$vendor.log" || tail -n 3 "$J/runtime-qualify-$vendor.log"
+    # the workers it ran and its last busy-cores sample (every report states busy cores of total)
+    local ql="$GATE_WORK/out/runtime-$vendor/qualify.log"
+    if [ -f "$ql" ]; then grep -m 1 '^QUALIFY units=' "$ql" || true; grep '^QUALIFY busy' "$ql" | tail -n 1 || true; fi
 }
 if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
     wheel_args=(); for w in "${GATE_WHEELS[@]}"; do wheel_args+=(--wheel "$w"); done

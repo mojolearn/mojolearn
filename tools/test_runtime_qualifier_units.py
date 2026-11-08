@@ -216,7 +216,7 @@ def test_a_unit_over_its_budget_and_one_never_started_are_failed_by_name(tmp_pat
                        dict(unit=second, decision="run", budget_s=150, closure={})])
     put(tmp_path / "plan.json", plan)
     args = SimpleNamespace(timeout=1000, test_timeout=900, vendor="cuda", numeric_mode="identical",
-                           unit_plan=tmp_path / "plan.json")
+                           unit_plan=tmp_path / "plan.json", jobs=1)
     times = iter([0, 0, 1000, 1000])
     seen = []
 
@@ -227,7 +227,7 @@ def test_a_unit_over_its_budget_and_one_never_started_are_failed_by_name(tmp_pat
     out.mkdir(parents=True)
     results = q.run_units(args, [first, second], out=out, tests=tmp_path / "frozen", python="python3",
                           env={"MOJOLEARN_GENERATION_DEVICE": "gpu"}, payload={}, test_commit="c" * 40,
-                          clock=lambda: next(times), bounded=bounded)
+                          clock=lambda: next(times), bounded=bounded, available=lambda: 64 * 2**30, cores=8)
     assert seen == [150]
     assert [r["status"] for r in results] == ["failed", "failed"]
     assert results[0]["reason"].startswith(f"unit {first} over its budget of 150 s")
@@ -236,6 +236,135 @@ def test_a_unit_over_its_budget_and_one_never_started_are_failed_by_name(tmp_pat
         receipt, _ = units.load_receipt(units.receipt_path(tmp_path / "qualify/units", name))
         assert receipt["status"] == "failed" and name in receipt["reason"]
     assert len(list((tmp_path / "store").rglob("*.json"))) == 2  # both persisted for the next run's budget
+
+
+# ---------------------------------------------------------------- parallel units
+def unit_plan(tmp_path, budgets):
+    names = SELECTED[:len(budgets)]
+    plan = dict(schema=units.PLAN_SCHEMA, vendor="nvidia", backend="cuda", device_class="nvidia-sm_89",
+                wheels={"core.whl": "a" * 64}, source_commit="c" * 40, test_commit="c" * 40,
+                units_dir=str(tmp_path / "qualify/units"), store=str(tmp_path / "store"),
+                units=[dict(unit=name, decision="run", budget_s=b, closure={}) for name, b in zip(names, budgets)])
+    put(tmp_path / "plan.json", plan)
+    out = tmp_path / "qualify/run"
+    out.mkdir(parents=True)
+    return names, out
+
+
+class TimedUnits:
+    """A fake bounded worker: holds each unit for SECONDS and records when it started and ended."""
+    def __init__(self, seconds=0.4, rss=None):
+        import threading
+        self.seconds, self.rss, self.lock, self.spans, self.budgets = seconds, rss, threading.Lock(), {}, {}
+
+    def __call__(self, command, **kw):
+        import time
+        name = Path(kw["cwd"]).parent.name
+        begin = time.monotonic()
+        time.sleep(self.seconds)
+        with self.lock:
+            self.spans[name] = (begin, time.monotonic())
+            self.budgets[name] = (kw["run_timeout"], kw["test_timeout"])
+        if self.rss is not None and kw.get("usage") is not None:
+            kw["usage"]["peak_rss_bytes"] = self.rss
+        return 0, None, round(self.seconds, 1)
+
+
+def run_parallel(tmp_path, budgets, jobs, fake, *, available=lambda: 64 * 2**30, test_timeout=200):
+    names, out = unit_plan(tmp_path, budgets)
+    args = SimpleNamespace(timeout=10000, test_timeout=test_timeout, vendor="cuda", numeric_mode="identical",
+                           unit_plan=tmp_path / "plan.json", jobs=jobs)
+    results = q.run_units(args, list(names), out=out, tests=tmp_path / "frozen", python="python3",
+                          env={"MOJOLEARN_GENERATION_DEVICE": "gpu"}, payload={}, test_commit="c" * 40,
+                          bounded=fake, available=available, cores=8, admit_poll=0.01)
+    return names, results
+
+
+def overlapping(spans):
+    spans = sorted(spans.values())
+    return sum(1 for (_, end), (begin, _) in zip(spans, spans[1:]) if begin < end)
+
+
+def test_units_run_side_by_side_with_their_own_budgets_and_receipts(tmp_path, capsys):
+    budgets = [150, 600, 300, 120]
+    fake = TimedUnits()
+    names, results = run_parallel(tmp_path, budgets, 4, fake)
+    printed = capsys.readouterr().out
+    assert "QUALIFY units=4 workers=4 of 8 core(s) (--jobs 4)" in printed
+    assert overlapping(fake.spans) == 3                       # all four were running at once
+    for name, budget in zip(names, budgets):                  # each unit under its own budget and stall bound
+        assert fake.budgets[units.stem(name)] == (budget, min(200, budget))
+    assert [r["unit"] for r in results] == names              # results in selection order, as before
+    assert sum(line.startswith("UNIT ") for line in printed.splitlines()) == 4
+    # the receipts have exactly the shape a one-at-a-time run writes
+    serial_root = tmp_path / "serial"
+    serial_root.mkdir()
+    run_parallel(serial_root, budgets, 1, TimedUnits(seconds=0.01))
+    for name in names:
+        parallel, _ = units.load_receipt(units.receipt_path(tmp_path / "qualify/units", name))
+        serial, _ = units.load_receipt(units.receipt_path(serial_root / "qualify/units", name))
+        assert sorted(parallel) == sorted(serial) and parallel["budget_s"] == serial["budget_s"]
+    assert len(list((tmp_path / "store").rglob("*.json"))) == 4
+
+
+def test_one_job_runs_one_at_a_time_heaviest_first(tmp_path):
+    fake = TimedUnits(seconds=0.05)
+    names, _ = run_parallel(tmp_path, [120, 900, 300], 1, fake)
+    assert overlapping(fake.spans) == 0
+    order = [stem for stem, _ in sorted(fake.spans.items(), key=lambda row: row[1][0])]
+    assert order == [units.stem(names[1]), units.stem(names[2]), units.stem(names[0])]
+
+
+def test_a_unit_starts_only_while_free_memory_holds_one_more(tmp_path, capsys):
+    # three workers asked for, but the free memory holds no second unit: they run one after another
+    fake = TimedUnits(seconds=0.1, rss=2 * 2**30)
+    run_parallel(tmp_path, [150, 150, 150], 3, fake, available=lambda: 2**30)
+    assert overlapping(fake.spans) == 0
+    assert "QUALIFY unit-memory" in capsys.readouterr().out
+
+
+def test_worker_count_is_cores_capped_by_memory_and_units(monkeypatch):
+    monkeypatch.delenv(q.QUALIFY_JOBS_ENV, raising=False)
+    assert q.unit_workers(73, cores=10, free=None)[0] == 10
+    assert q.unit_workers(3, cores=10, free=None)[0] == 3
+    workers, why = q.unit_workers(73, cores=10, free=6 * 2**30)
+    assert workers == 4 and "1.5 GiB per unit" in why
+    assert q.unit_workers(73, cores=10, free=2**20)[0] == 1
+    assert q.unit_workers(73, cores=10, free=None, env={q.QUALIFY_JOBS_ENV: "6"}) == (6, "MOJOLEARN_QUALIFY_JOBS=6")
+    assert q.unit_workers(73, jobs=2, cores=10, free=None, env={q.QUALIFY_JOBS_ENV: "6"})[0] == 2
+    with pytest.raises(ValueError):
+        q.unit_workers(73, cores=10, env={q.QUALIFY_JOBS_ENV: "0"})
+
+
+def test_free_memory_is_the_cgroup_headroom_when_lower(monkeypatch):
+    import build_sizing
+    import mac_slot
+    monkeypatch.setattr(mac_slot, "available_bytes", lambda: 64 * 2**30)
+    monkeypatch.setattr(build_sizing, "cgroup_memory_headroom", lambda: 8 * 2**30)
+    assert q.free_memory_bytes() == 8 * 2**30
+    monkeypatch.setattr(build_sizing, "cgroup_memory_headroom", lambda: None)
+    assert q.free_memory_bytes() == 64 * 2**30
+
+
+def test_busy_cores_of_total_are_printed_every_period():
+    lines = []
+    sampler = q.BusySampler(10, lambda: 7, every=0.02, sample=lambda: 9.5,
+                            say=lambda text, flush=False: lines.append(text))
+    sampler.start()
+    import time
+    time.sleep(0.15)
+    sampler.stop()
+    assert lines and lines[0].startswith("QUALIFY busy cores=9.5 of 10 running=7 at ")
+    assert sampler.samples[0]["of"] == 10
+
+
+def test_run_bounded_measures_the_worker_peak_rss(tmp_path):
+    usage = {}
+    with (tmp_path / "log").open("wb") as log:
+        code, stop, _ = q.run_bounded([sys.executable, "-c", "x = bytearray(64 * 2**20)"], cwd=tmp_path, env=None,
+                                      log=log, progress=tmp_path / "progress", run_timeout=60, test_timeout=60,
+                                      poll=0.05, usage=usage)
+    assert (code, stop) == (0, None) and usage["peak_rss_bytes"] >= 64 * 2**20
 
 
 # ---------------------------------------------------------------- whole runs
