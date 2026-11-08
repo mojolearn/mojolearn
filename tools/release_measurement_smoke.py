@@ -1005,7 +1005,23 @@ def inputs_table(vendors=VENDORS, B=None):
             "Andrew's to decide)." % VERIFY_FIXTURE, "",
             "| input | recipes |", "|---|---:|"]
     text += ["| %s | %d |" % (k, n) for k, n in counts.items()]
-    text += ["| total | %d |" % len(rows), "", "| recipe | input | verify lane (fixture %s) | files | vendors |"
+    text += ["| total | %d |" % len(rows), ""]
+    # what a smoke run stages and writes under these inputs (budget(), from the plan; the run prints the same)
+    races = plan(vendors[0], B)
+    bud = budget(races, smoke_inputs(races, B, index), B)
+    SI = _si()
+    text += ["Under `--inputs verify-fixtures` (every smoke run over a tree whose board takes it) a recipe on the "
+             "verify fixture stages nothing; every file another recipe reads is its slice (`tools/smoke_inputs.py`: "
+             "the first %d rows and %d tail rows of a gbm-bench file, the first %d bytes of a corpus; made and "
+             "pinned once with `make-smoke-slices`). From the %s plan: %d slice files, at most %.1f MB staged "
+             "(budget %.0f MB); the work dir at most %.2f GB at %d workers (budget %.1f GB): %d distinct prep "
+             "blocks %.1f MB, race scratch %.1f MB, LM checkpoints %.1f MB, layer fixtures %.1f MB."
+             % (SI.SLICE_TRAIN, SI.SLICE_TEST, SI.CORPUS_HEAD_BYTES, vendors[0], bud["staged_files"],
+                bud["staged_bound_bytes"] / 1e6, STAGED_MAX_BYTES / 1e6, bud["work_bound_bytes"] / 1e9,
+                bud["parts"]["workers"], WORK_MAX_BYTES / 1e9, bud["parts"]["distinct_blocks"],
+                bud["parts"]["blocks"] / 1e6, bud["parts"]["scratch"] / 1e6, bud["parts"]["checkpoints"] / 1e6,
+                bud["parts"]["layer_fixtures"] / 1e6), ""]
+    text += ["| recipe | input | verify lane (fixture %s) | files | vendors |"
              % VERIFY_FIXTURE, "|---|---|---|---|---|"]
     for rid in sorted(rows):
         r = rows[rid]
