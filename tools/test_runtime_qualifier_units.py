@@ -336,6 +336,175 @@ def test_worker_count_is_cores_capped_by_memory_and_units(monkeypatch):
         q.unit_workers(73, cores=10, env={q.QUALIFY_JOBS_ENV: "0"})
 
 
+# ---------------------------------------------------------------- units per GPU
+class DeviceUnits(TimedUnits):
+    """TimedUnits that also records each unit's visible-devices variable and its live bounds at the end."""
+    def __init__(self, seconds=0.3):
+        super().__init__(seconds=seconds)
+        self.devices, self.final = {}, {}
+
+    def __call__(self, command, **kw):
+        result = super().__call__(command, **kw)
+        name = Path(kw["cwd"]).parent.name
+        with self.lock:
+            self.devices[name] = (kw["env"] or {}).get("CUDA_VISIBLE_DEVICES")
+            self.final[name] = kw["limits"]()
+        return result
+
+
+def most_at_once(spans):
+    events = sorted([(begin, 1) for begin, _ in spans.values()] + [(end, -1) for _, end in spans.values()],
+                    key=lambda row: (row[0], row[1]))
+    now = most = 0
+    for _, step in events:
+        now += step
+        most = max(most, now)
+    return most
+
+
+def run_on_gpus(tmp_path, monkeypatch, gpus, rows, fake, *, per_gpu=None, test_timeout=200):
+    monkeypatch.delenv(q.QUALIFY_JOBS_ENV, raising=False)
+    if per_gpu is None:
+        monkeypatch.delenv(q.UNITS_PER_GPU_ENV, raising=False)
+    else:
+        monkeypatch.setenv(q.UNITS_PER_GPU_ENV, str(per_gpu))
+    names = SELECTED[:len(rows)]
+    plan = dict(schema=units.PLAN_SCHEMA, vendor="nvidia", backend="cuda", device_class="nvidia-sm_89",
+                wheels={"core.whl": "a" * 64}, source_commit="c" * 40, test_commit="c" * 40,
+                units_dir=str(tmp_path / "qualify/units"), store=str(tmp_path / "store"),
+                units=[dict(unit=name, decision="run", budget_s=budget, prior_s=prior, closure={})
+                       for name, (budget, prior) in zip(names, rows)])
+    put(tmp_path / "plan.json", plan)
+    out = tmp_path / "qualify/run"
+    out.mkdir(parents=True)
+    args = SimpleNamespace(timeout=10000, test_timeout=test_timeout, vendor="cuda", numeric_mode="identical",
+                           unit_plan=tmp_path / "plan.json", jobs=None)
+    results = q.run_units(args, list(names), out=out, tests=tmp_path / "frozen", python="python3",
+                          env={"MOJOLEARN_GENERATION_DEVICE": "gpu"}, payload={}, test_commit="c" * 40,
+                          bounded=fake, available=lambda: 64 * 2**30, cores=48, admit_poll=0.01, gpus=gpus)
+    return names, results
+
+
+def test_a_one_gpu_host_runs_at_most_two_units_and_scales_their_budgets(tmp_path, monkeypatch, capsys):
+    # 0.8.66 run t: 48 cores, one RTX 4090; five units at once blew their serial budgets
+    fake = DeviceUnits()
+    names, results = run_on_gpus(tmp_path, monkeypatch, ["0"], [(120, 40.0)] * 6, fake)
+    printed = capsys.readouterr().out
+    assert "QUALIFY units=6 workers=2 of 48 core(s) (48 core(s), " in printed
+    assert ", capped by 1 GPU(s) x 2 unit(s) per GPU)" in printed
+    assert "gpus=1 (given) units-per-gpu=2" in printed
+    assert most_at_once(fake.spans) == 2
+    assert all(device is None for device in fake.devices.values())  # one GPU: the environment is left alone
+    for name in names:
+        receipt, _ = units.load_receipt(units.receipt_path(tmp_path / "qualify/units", name))
+        assert receipt["budget_s"] == 120                          # the serial bound, unchanged
+        assert receipt["concurrency"] == 2 and receipt["scaled_budget_s"] == 240
+        assert fake.final[units.stem(name)] == (240, 240)          # run bound and one-test bound, both x2
+    assert len(results) == 6 and "shared-gpu=2" in printed
+
+
+def test_a_four_gpu_host_runs_eight_units_two_to_each_gpu(tmp_path, monkeypatch, capsys):
+    fake = DeviceUnits(seconds=0.4)
+    names, _ = run_on_gpus(tmp_path, monkeypatch, ["0", "1", "2", "3"], [(120, 30.0)] * 12, fake)
+    assert "workers=8 of 48 core(s)" in capsys.readouterr().out
+    assert most_at_once(fake.spans) == 8
+    assert set(fake.devices.values()) == {"0", "1", "2", "3"}      # each unit sees only its own GPU
+    for gpu in "0123":
+        assert most_at_once({k: v for k, v in fake.spans.items() if fake.devices[k] == gpu}) <= 2
+
+
+def test_a_heavy_unit_runs_with_at_most_one_sibling(tmp_path, monkeypatch):
+    # four units per GPU allowed, but a unit of 60 s or more alone (or no history) keeps its GPU to two
+    fake = DeviceUnits(seconds=0.2)
+    rows = [(600, 200.0), (300, None)] + [(120, 10.0)] * 6
+    names, _ = run_on_gpus(tmp_path, monkeypatch, ["0"], rows, fake, per_gpu=4)
+    spans = fake.spans
+    for heavy in (units.stem(names[0]), units.stem(names[1])):
+        begin, end = spans[heavy]
+        beside = [k for k, (b, e) in spans.items() if k != heavy and b < end and begin < e]
+        alive = most_at_once({k: (max(b, begin), min(e, end)) for k, (b, e) in spans.items()
+                              if k == heavy or k in beside})
+        assert alive <= 2
+    assert most_at_once({k: v for k, v in spans.items() if k not in (units.stem(n) for n in names[:2])}) == 4
+
+
+def test_an_explicit_job_count_lifts_the_gpu_bound_but_still_scales(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv(q.QUALIFY_JOBS_ENV, "4")
+    monkeypatch.delenv(q.UNITS_PER_GPU_ENV, raising=False)
+    fake = DeviceUnits()
+    names, out = unit_plan(tmp_path, [150] * 4)
+    args = SimpleNamespace(timeout=10000, test_timeout=200, vendor="cuda", numeric_mode="identical",
+                           unit_plan=tmp_path / "plan.json", jobs=None)
+    q.run_units(args, list(names), out=out, tests=tmp_path / "frozen", python="python3",
+                env={"MOJOLEARN_GENERATION_DEVICE": "gpu"}, payload={}, test_commit="c" * 40,
+                bounded=fake, available=lambda: 64 * 2**30, cores=48, admit_poll=0.01, gpus=["0"])
+    assert "units-per-gpu=off (explicit job count)" in capsys.readouterr().out
+    assert most_at_once(fake.spans) == 4
+    receipt, _ = units.load_receipt(units.receipt_path(tmp_path / "qualify/units", names[0]))
+    assert receipt["concurrency"] == 4 and receipt["scaled_budget_s"] == 600
+
+
+def test_the_cpu_backend_shares_no_gpu(tmp_path, monkeypatch):
+    monkeypatch.delenv(q.QUALIFY_JOBS_ENV, raising=False)
+    fake = DeviceUnits(seconds=0.1)
+    names, out = unit_plan(tmp_path, [150] * 3)
+    args = SimpleNamespace(timeout=10000, test_timeout=200, vendor="cpu", numeric_mode="identical",
+                           unit_plan=tmp_path / "plan.json", jobs=None)
+    q.run_units(args, list(names), out=out, tests=tmp_path / "frozen", python="python3",
+                env={"MOJOLEARN_GENERATION_DEVICE": "cpu"}, payload={}, test_commit="c" * 40,
+                bounded=fake, available=lambda: 64 * 2**30, cores=8, admit_poll=0.01, gpus=[])
+    assert most_at_once(fake.spans) == 3
+    receipt, _ = units.load_receipt(units.receipt_path(tmp_path / "qualify/units", names[0]))
+    assert receipt["concurrency"] == 1 and receipt["scaled_budget_s"] == 150
+
+
+def test_an_over_budget_reason_names_the_scaled_bound(tmp_path, monkeypatch):
+    def bounded(command, **kw):
+        import time
+        time.sleep(0.2)
+        run_limit, _ = kw["limits"]()
+        return -9, dict(kind="run", budget_s=run_limit, elapsed_s=241.0), 241.0
+    names, results = run_on_gpus(tmp_path, monkeypatch, ["0"], [(120, 40.0)] * 2, bounded)
+    assert results[0]["reason"].startswith(
+        f"unit {names[0]} over its budget of 240 s (120 s serial x 2 units sharing its GPU) (stopped after 241.0 s)")
+
+
+def test_worker_count_is_capped_by_gpus_times_units_per_gpu(monkeypatch):
+    monkeypatch.delenv(q.QUALIFY_JOBS_ENV, raising=False)
+    assert q.unit_workers(73, cores=48, free=None, gpus=1, per_gpu=2)[0] == 2
+    assert q.unit_workers(73, cores=48, free=None, gpus=4, per_gpu=2)[0] == 8
+    assert q.unit_workers(73, cores=6, free=None, gpus=4, per_gpu=2)[0] == 6
+    assert q.unit_workers(73, cores=48, free=None, gpus=1, per_gpu=2, env={q.QUALIFY_JOBS_ENV: "5"})[0] == 5
+    assert q.units_per_gpu({}) == 2 and q.units_per_gpu({q.UNITS_PER_GPU_ENV: "6"}) == 6
+    with pytest.raises(ValueError):
+        q.units_per_gpu({q.UNITS_PER_GPU_ENV: "0"})
+
+
+def test_host_gpus_counts_the_visible_devices():
+    def smi(listing):
+        return lambda command, **kw: SimpleNamespace(stdout=listing.get(command[0], ""))
+
+    def missing(command, **kw):
+        raise FileNotFoundError(command[0])
+    nvidia = "GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-x)\nGPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-y)\n"
+    assert q.host_gpus("cuda", env={}, run=smi({"nvidia-smi": nvidia})) == (["0", "1"], "nvidia-smi")
+    assert q.host_gpus("cuda", env={"CUDA_VISIBLE_DEVICES": "2,3"}, run=missing) == (["2", "3"],
+                                                                                    "CUDA_VISIBLE_DEVICES")
+    rocm = "device,GPU ID\ncard0,0x74a1\ncard1,0x74a1\ncard2,0x74a1\n"
+    assert q.host_gpus("hip", env={}, run=smi({"rocm-smi": rocm})) == (["0", "1", "2"], "rocm-smi")
+    assert q.host_gpus("hip", env={}, run=smi({"amd-smi": "GPU: 0\n  BDF: x\nGPU: 1\n"}))[0] == ["0", "1"]
+    assert q.host_gpus("hip", env={"ROCR_VISIBLE_DEVICES": "5"}, run=missing) == (["0"], "ROCR_VISIBLE_DEVICES")
+    assert q.host_gpus("cuda", env={}, run=missing) == (["0"], "GPU count unreadable, one assumed")
+    assert q.host_gpus("metal", env={}, run=missing) == (["0"], "Apple GPU")
+    assert q.host_gpus("cpu", env={}, run=missing) == (None, "cpu backend")
+
+
+def test_last_seconds_of_a_shared_gpu_run_is_a_serial_bound():
+    shared = dict(seconds=90.0, stopped=None, concurrency=3)
+    assert units.last_seconds([(shared, None)]) == 30.0
+    assert units.last_seconds([(dict(seconds=90.0, stopped=None), None)]) == 90.0  # older receipts: serial
+
+
 def test_free_memory_is_the_cgroup_headroom_when_lower(monkeypatch):
     import build_sizing
     import mac_slot

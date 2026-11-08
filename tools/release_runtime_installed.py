@@ -186,8 +186,11 @@ def plan_units(args, out, selected, wheels, *, closure_of=None, payload=None, in
                                         payload=payload, interpreter=interpreter,
                                         redo=getattr(args, "redo", False),
                                         inert=units.inert_changes if closure.get("available") else None)
+        # prior_s: the unit's last serial seconds (None: no history); the qualifier keeps a unit of 60 s
+        # or more (or unknown) to at most one sibling on its GPU (HEAVY_UNIT_S)
+        prior_s = units.last_seconds(history)
         row = dict(unit=unit, tier="qualify", decision=decision, closure=closure,
-                   budget_s=units.budget(units.last_seconds(history)))
+                   budget_s=units.budget(prior_s), prior_s=prior_s)
         if decision == "reuse":
             row.update(rule=detail["rule"], origin=detail["receipt"].get("origin"),
                        inert=detail.get("inert") or {}, natives_match=detail["rule"] == "closure")
