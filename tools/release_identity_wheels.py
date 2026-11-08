@@ -225,6 +225,11 @@ class IdentityOnWheels:
         """[lanes] the recorder would record for COLUMN at the frozen source: identity_columns.py changed-lanes
         with the recorder's own reuse arguments (record_identity_column.sh auto-reuse), static, on this Mac.
         An unreadable selection owes every lane of the column (None means: not decidable, so owed)."""
+        if self.dry:
+            # A DRY RUN HASHES NO CLOSURES (2026-11-08): changed-lanes over every retained record took 20+ min per
+            # column on the Mac (test_release's --reuse-unchanged dry run hit its 600 s bound in gate-apple). The
+            # dry plan treats the selection as undecided, so it prints the commands the real run would decide by.
+            return None
         cache = self.__dict__.setdefault("_lanes_owed", {})
         if column in cache:
             return cache[column]
@@ -752,6 +757,8 @@ class IdentityOnWheels:
             # every column reused every lane: the table at the freeze already holds this release's bits
             doc = dict(source_commit=self.commit, commit=self.commit, recorded=0, at=dt.datetime.now(dt.timezone.utc).isoformat(),
                        soft_failures=self.soft_failures())
+            # the facts the steps after this one ship by (Release.publication_gate): never a ledger evaluation
+            doc["wheels"] = self.admitted_wheels() if hasattr(self, "admitted_wheels") else {}
             self.state["identity_admitted"] = doc
             self.save()
             os.environ[REFERENCE_ENV] = "%s:%s" % (self.commit, self.commit)
@@ -767,6 +774,8 @@ class IdentityOnWheels:
         doc = dict(source_commit=self.commit, commit=commit, branch="ref/" + self.commit[:12], recorded=len(dirs),
                    table_sha256=sha256(table), repacked=receipts, at=dt.datetime.now(dt.timezone.utc).isoformat(),
                    soft_failures=self.soft_failures())
+        # the wheels as repacked: what the steps after this one ship and compare to (Release.publication_gate)
+        doc["wheels"] = self.admitted_wheels() if hasattr(self, "admitted_wheels") else {}
         self.state["identity_admitted"] = doc
         self.save()
         write_json(self.identity_dir() / "admitted.json", doc)

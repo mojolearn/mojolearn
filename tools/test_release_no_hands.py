@@ -369,6 +369,8 @@ def box_release(tmp_path, monkeypatch, gates_ok=False, **kw):
     r.box_popen = boxes.popen
     monkeypatch.setattr(r, "gate_ok", lambda vendor: (True, "PASS") if gates_ok else (False, "no gate report"))
     monkeypatch.setattr(r, "source_checkout", lambda create=True: tmp_path / "src")
+    # the rental mechanics; what gate-boxes checks before it rents: test_release_ledger_once.py
+    monkeypatch.setattr(r, "ready_to_rent", lambda needs: [])
     return r, boxes
 
 

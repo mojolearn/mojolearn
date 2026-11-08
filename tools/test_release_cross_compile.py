@@ -151,7 +151,8 @@ class CrossCompileStep(unittest.TestCase):
 
     def test_it_runs_beside_the_linux_builds_and_gates_linux_wait(self):
         # 2026-11-07: linux-builds on github compiles the same sources for the same targets; it no longer waits
-        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan"])
+        # (it waits only for reuse-plan and the readiness analysis, lane post-readiness-off-mac)
+        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "readiness"])
         self.assertIn("cross-compile", release.NEEDS["linux-wait"])
         self.assertIn("linux-builds", release.NEEDS["linux-wait"])
         # identity-at-freeze (Andrew 2026-11-05) settles identity at the freeze before anything is built
@@ -184,8 +185,8 @@ class CrossCompileStep(unittest.TestCase):
     def test_a_rented_backend_still_waits_for_it_before_renting(self):
         for backend in release.RENTED_BUILD_BACKENDS:
             r = self.release(build_backend=backend)
-            self.assertEqual(r.NEEDS["linux-builds"], ["reuse-plan", "cross-compile"], backend)
-        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan"], "the module table is not mutated")
+            self.assertEqual(r.NEEDS["linux-builds"], ["reuse-plan", "readiness", "cross-compile"], backend)
+        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "readiness"], "the module table is not mutated")
         self.assertEqual(set(release.RENTED_BUILD_BACKENDS), set(release.BUILD_BACKENDS) - {"github"})
 
     def test_the_workflow_is_dispatch_only(self):

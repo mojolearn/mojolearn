@@ -226,3 +226,20 @@ def test_a_round_that_needs_nothing_is_the_result_without_another_pass(repo, mon
     passes.clear()
     assert deps.prefetch(compute, jobs=2, say=lambda line: None) == first
     assert len(passes) == 1           # everything cached: one ordinary run
+
+
+def test_the_source_snapshot_request_is_the_same_before_and_after_the_wheels_exist():
+    # 0.8.66 run e: the candidate wheel hashes and the derived optional-file contract entered the request, so
+    # each gate re-ran the freeze's source scan (lane post-readiness-off-mac, 2026-11-07). The worker reads only
+    # dependency_context.apple_toolchain; everything else it is given still keys the request.
+    early = dict(release_modes=["identical"], build_flags={"F": "1"}, runtime_test_source_revision="r",
+                 dependency_context=dict(apple_toolchain={"mojo": "1"}, cpu_target="osx-arm64"))
+    late = json.loads(json.dumps(early))
+    late.update({"artifacts:nvidia": {"w.whl": "a" * 64}, "artifacts:amd": {"x.whl": "b" * 64},
+                 "artifacts:apple": {"m.whl": "c" * 64}})
+    late["dependency_context"]["optional_native_files"] = {"osx-arm64": {"_x.so": True}}
+    assert deps._snapshot_configuration(late) == deps._snapshot_configuration(early) == early
+    assert "artifacts:nvidia" in late    # the caller's configuration is not changed
+    moved = json.loads(json.dumps(early))
+    moved["dependency_context"]["apple_toolchain"] = {"mojo": "2"}
+    assert deps._snapshot_configuration(moved) != deps._snapshot_configuration(early)

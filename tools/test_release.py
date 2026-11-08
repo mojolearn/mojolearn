@@ -302,6 +302,103 @@ class AmdRouteTests(unittest.TestCase):
         self.assertEqual(len(list(hip.workdir.glob("hip-gfx942.log.failed-*"))), 1)
 
 
+class StepTableTests(unittest.TestCase):
+    """The step graph around the readiness analysis (lane post-readiness-off-mac, 2026-11-07)."""
+
+    def test_readiness_needs_only_the_freeze_and_gates_both_builds(self):
+        self.assertIn("readiness", release.Release.STEPS)
+        self.assertEqual(release.NEEDS["readiness"], ["freeze-commit"])
+        self.assertEqual(release.PIPELINE_OF["readiness"], "common")
+        # no resource: it runs beside cross-compile (GitHub), and before the Mac build by NEEDS
+        self.assertIsNone(release.RESOURCE["readiness"])
+        self.assertNotIn("readiness", release.NEEDS["cross-compile"])
+        # cross-compile runs beside the Linux builds on github (lane post-cross-compile-redundant); linux-wait needs it
+        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "readiness"])
+        self.assertIn("cross-compile", release.NEEDS["linux-wait"])
+        self.assertEqual(release.NEEDS["macos-build"], ["reuse-plan", "readiness"])
+        steps = release.Release.STEPS
+        self.assertLess(steps.index("freeze-commit"), steps.index("readiness"))
+        self.assertLess(steps.index("readiness"), steps.index("linux-builds"))
+        self.assertLess(steps.index("readiness"), steps.index("macos-build"))
+        self.assertIn("readiness", release.Release.PLAN_STEP_KINDS)
+
+    def test_linux_pack_takes_a_mac_slot_not_the_mac_token(self):
+        # the token is exclusive: with it, linux-pack waited behind the whole macOS pipeline
+        self.assertIsNone(release.RESOURCE["linux-pack"])
+        self.assertEqual(release.RESOURCE["macos-build"], "mac")
+        source = pathlib.Path(release.__file__).read_text()
+        body = source.split("    def step_linux_pack(self):", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn('"mac_slot.py"), "run", "--"] + args', body)
+
+    def test_readiness_runs_the_analysis_through_prefetch_on_every_core(self):
+        import release_requirement_dependencies as dependencies
+        from types import SimpleNamespace
+        seen = {}
+
+        def prefetch(compute, *, jobs, worker, say, ran):
+            seen.update(jobs=jobs, worker=worker, compute=compute)
+            ran.append(dict(token="t", seconds=1.0, ok=True))
+            return dict(requirements={"a": {}, "b": {}})
+        from unittest import mock
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("MOJOLEARN_ADMISSION_JOBS", "MOJOLEARN_ADMISSION_WORKER")}
+        ctx = SimpleNamespace(dry=False, say=lambda line: None, readiness_manifest=lambda: None,
+                              prefetch_ledger_rounds=lambda after: seen.update(ledger=after) or dict(summary="ok"))
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(dependencies, "prefetch", prefetch):
+            result, data = release.Release.step_readiness(ctx)
+        self.assertEqual(seen["jobs"], os.cpu_count() or 1)
+        self.assertEqual(seen["worker"], "local")
+        self.assertIs(seen["compute"], ctx.readiness_manifest)
+        self.assertIn("2 requirement unit(s)", result)
+        self.assertEqual(data["snapshots"], 1)
+        self.assertEqual(data["snapshot_jobs"], os.cpu_count() or 1)
+        # the ledger's rounds at the freeze too (linux-builds reads the ledger before it dispatches)
+        self.assertEqual(seen["ledger"], "readiness")
+
+    def test_the_steps_that_make_ledger_rounds_knowable_prefetch_them_before_done(self):
+        # linux-pack and macos-build produce the candidate wheels the gates' ledger reads depend on (before
+        # gate-boxes rents); identity-admit moves the identity reference commit (before the publish preflight)
+        # identity-admit is not one: no step after it consults the ledger (publication_gate, post-ledger-once)
+        self.assertEqual(release.Release.LEDGER_PREFETCH_AFTER, ("linux-pack", "macos-build"))
+        self.assertIn("linux-pack", release.NEEDS["gate-boxes"])
+        for gate in ("gate-nvidia", "gate-amd"):
+            self.assertIn("gate-boxes", release.NEEDS[gate])
+        for step in release.Release.LEDGER_PREFETCH_AFTER:
+            self.assertTrue(hasattr(release.Release, "step_" + step.replace("-", "_")), step)
+
+    def test_run_step_prefetches_after_its_own_producing_step_only(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as directory:
+            r = release.Release(args(state_dir=str(pathlib.Path(directory) / "state")),
+                                runner=lambda cmd, env, log, detach=False: 0)
+            r.state["commit"] = COMMIT
+            r.say = lambda msg: None
+            asked = []
+            r.prefetch_ledger_rounds = lambda after: asked.append(after) or dict(summary="ok")
+            # the release's own step (its body stubbed at the class): prefetched before it is marked done
+            with mock.patch.object(release.Release, "step_linux_pack", lambda self: "packed"), \
+                    mock.patch.object(release.Release, "have_linux_pack", lambda self, rec: None, create=True):
+                self.assertEqual(r.run_step("linux-pack"), "done")
+            self.assertEqual(asked, ["linux-pack"])
+            self.assertEqual(r.recorded("linux-pack")["ledger_prefetch"], dict(summary="ok"))
+            # a step replaced on the instance (the staged pipeline tests) prefetches nothing
+            r.step_macos_build = lambda: "built"
+            with mock.patch.object(release.Release, "have_macos_build", lambda self, rec: None):
+                self.assertEqual(r.run_step("macos-build"), "done")
+            # a skipped producing step prefetches nothing
+            with mock.patch.object(release.Release, "step_identity_admit", lambda self: "skipped (no option)"):
+                self.assertEqual(r.run_step("identity-admit"), "done")
+            self.assertEqual(asked, ["linux-pack"])
+
+    def test_dry_readiness_runs_nothing(self):
+        from types import SimpleNamespace
+
+        def never():
+            raise AssertionError("a dry run never runs the analysis")
+        ctx = SimpleNamespace(dry=True, say=lambda line: None, readiness_manifest=never)
+        self.assertIn("would run the frozen dependency analysis", release.Release.step_readiness(ctx))
+
+
 class ReceiptTests(unittest.TestCase):
     def test_smoke_receipt_must_be_about_this_wheel(self):
         with tempfile.TemporaryDirectory() as d:
@@ -372,7 +469,38 @@ class RunTests(unittest.TestCase):
             else:
                 self.assertIn("-- " + step, out.stdout)
         self.assertFalse(self.state.exists())
+        # THE READINESS ANALYSIS GOES FIRST (lane post-readiness-off-mac, 2026-11-07): the step runs, and is
+        # reported done, before linux-builds or macos-build starts, so neither waits on it beside the Mac build.
+        planned = out.stdout.index("would run the frozen dependency analysis")
+        self.assertLess(out.stdout.index("-- readiness"), planned)
+        self.assertLess(planned, out.stdout.index("-- linux-builds"))
+        self.assertLess(planned, out.stdout.index("-- macos-build"))
         return out
+
+    def dry_run_raw(self, *extra):
+        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
+                   MOJOLEARN_AMD_PROVIDER="do")
+        out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
+                              "--state-dir", str(self.state), *extra],
+                             capture_output=True, text=True, timeout=600, env=env)
+        self.assertEqual(out.returncode, 0, out.stderr[-2000:])
+        return out.stdout
+
+    def test_dry_run_of_the_default_path_runs_no_reuse_machinery(self):
+        # EVERY RELEASE RUNS EVERYTHING ONCE (Andrew 2026-11-07): on the wheels without --reuse-unchanged no
+        # dependency workers run and no step evaluates the ledger, identity-admit and after included.
+        out = self.dry_run_raw("--identity-on-wheels")
+        self.assertIn("-- readiness", out)
+        self.assertIn(release.Release.LEDGER_OFF, out)
+        self.assertNotIn("would run the frozen dependency analysis", out)
+        self.assertNotIn(release.Release.DRY_READINESS, out)
+        self.assertNotIn("ledger evidence", out)
+        self.assertIn("-- identity-admit", out)
+
+    def test_dry_run_with_the_reuse_flag_still_plans_the_analysis(self):
+        out = self.dry_run_raw("--identity-on-wheels", "--reuse-unchanged")
+        self.assertIn("would run the frozen dependency analysis", out)
+        self.assertNotIn(release.Release.LEDGER_OFF, out)
 
     def test_dry_run_without_gpu_smoke_skips_every_gpu_column(self):
         # Andrew 2026-10-13 (8109d122d): identity and behavior are checked before merge;
