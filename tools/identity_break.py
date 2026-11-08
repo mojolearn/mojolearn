@@ -1266,7 +1266,7 @@ LANE_REVISIONS = {
     "trees-stacking-clf": "light-fixture-20261105-1",
     "trees-voting-clf": "light-fixture-20261105-1",
     "gbdt-symmetric": "light-fixture-20261105-1",
-    "gbdt-symmetric-eval": "light-fixture-20261105-1",
+    "gbdt-symmetric-eval": "noisy-eval-labels-20261108-1",
     "gbdt-class-weights": "light-fixture-20261105-1",
     "gbdt-multiclass-offgrid": "light-fixture-20261105-1",
     "gbdt-ordered": "light-fixture-20261105-1",
@@ -1477,7 +1477,10 @@ NON_SIZE_REVISIONS = {
         "borders254 arm, Logloss, depth 6 and both parts kept"),
     "gbdt-symmetric-eval": (
         "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 4000, m's trees 20 -> 8 "
-        "to stay gbdt-symmetric's fit; the overfitting od/sh shape and both asserts unchanged"),
+        "to stay gbdt-symmetric's fit; the overfitting od/sh shape and both asserts unchanged. "
+        "2026-11-08, lane/fix-gbdt-symmetric-eval-detector: od and sh score the held-out labels with "
+        "every fifth label flipped (ties never fired and denormal never cut at 4000 rows); m, the rows "
+        "and the tree counts unchanged"),
     "gbdt-class-weights": (
         "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8 per policy; "
         "SymmetricTree, Depthwise, Lossguide and the off-grid class weight kept"),
@@ -1790,6 +1793,20 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
+#: every GBDT_EVAL_FLIP_EVERY-th held-out label is flipped for the
+#: gbdt-symmetric-eval detector and shrink fits (see that lane)
+GBDT_EVAL_FLIP_EVERY = 5
+
+
+def gbdt_eval_noisy_labels(y):
+    """`y` (0/1 int labels) with rows 0, 5, 10, ... flipped: the same bytes on
+    every column, no RNG. Label noise the trees cannot learn from the
+    features, so the held-out loss turns once the margins overshoot."""
+    out = np.asarray(y).copy()
+    out[::GBDT_EVAL_FLIP_EVERY] = 1 - out[::GBDT_EVAL_FLIP_EVERY]
+    return out
+
+
 @lane("gbdt-symmetric-eval")
 def _(ml, X, yc, yr, Xh=None):
     """The symmetric Logloss fit WITH A HELD-OUT SET: their test cursor, the
@@ -1822,7 +1839,17 @@ def _(ml, X, yc, yr, Xh=None):
     `shrunk_proba` did not move at all. The shape below overfits on purpose,
     and the two asserts are what keep it overfitting: a change that makes
     the curve monotone again reads REFUSED on this lane rather than passing
-    with nothing measured."""
+    with nothing measured.
+
+    `od` and `sh` score a NOISY copy of the held-out labels: every fifth
+    label flipped (`gbdt_eval_noisy_labels`). The fixture labels are a
+    deterministic rule of columns 3 and 4, so a fit that learns the rule
+    generalizes and the held-out curve has no reason to turn; on `ties`
+    (a 6 x 6 grid of cells shared by both draws) it never does. With a
+    fifth of the held-out labels wrong, every tree that grows the margins
+    past the best calibrated value raises the held-out loss, so the curve
+    has a minimum before the last tree on every fixture by construction,
+    not by the learning rate's luck. `m` keeps the clean labels."""
     # 2026-11-05 (lane/slow-verification-lanes): 20000 training and 20000 eval
     # rows -> 4000 and 4000, `m` at gbdt-symmetric's 8 trees (the two lanes must
     # stay one fit). The overfitting shape below is kept as measured; fewer rows
@@ -1835,13 +1862,20 @@ def _(ml, X, yc, yr, Xh=None):
     base = dict(n_estimators=8, max_depth=6, loss="Logloss")
     m = _gbdt(ml.GradientBoosting, use_best_model=False, **base).fit(
         X, yc, eval_set=(Xe, ych))
-    # the overfitting shape (measured: fires and cuts on all nine fixtures)
+    # The overfitting shape. Measured at 20000 rows to fire and cut on all
+    # nine fixtures with the clean held-out labels; at 4000 rows (the
+    # 2026-11-05 shrink, never measured at that size before the 0.8.66
+    # freeze bc4ecd4518) `ties` never fired and `denormal` never cut, on
+    # NVIDIA, AMD, Apple and the CPU alike. The noisy held-out labels make
+    # the turn structural (docstring above). 2026-11-08,
+    # lane/fix-gbdt-symmetric-eval-detector.
     stop = dict(n_estimators=30, max_depth=7, loss="Logloss",
                 learning_rate=1.8, l2_leaf_reg=3.0)
+    ycn = gbdt_eval_noisy_labels(ych)
     od = _gbdt(ml.GradientBoosting, od_type="Iter", od_wait=2,
-               use_best_model=False, **stop).fit(X, yc, eval_set=(Xe, ych))
+               use_best_model=False, **stop).fit(X, yc, eval_set=(Xe, ycn))
     sh = _gbdt(ml.GradientBoosting, use_best_model=True,
-               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xe, ych))
+               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xe, ycn))
     if not od.stopped_early_ or len(od.test_loss_curve_) >= stop["n_estimators"]:
         raise RuntimeError(
             "gbdt-symmetric-eval: the Iter detector did not fire (trees="
