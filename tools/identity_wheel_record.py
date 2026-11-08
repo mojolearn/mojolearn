@@ -24,6 +24,11 @@ columns name: the NVIDIA box (nvidia, ptx), the AMD box (amd), the Mac (apple) o
             records written (with their admissible= line) and the rc; exit 0 only when every chunk recorded
             admissibly. The records go to admission (tools/admit_identity_columns.sh) with every other column.
 
+The box: IDENTITY_RECORD_BOX=<provider>:<id> (runpod:<pod id>, digitalocean:<droplet id>, github:<run id>/<job>) is
+passed through to every recorder unchanged, so each record's run block names the machine (tools/identity_break.py
+box_identity derives it when unset), and the summary carries it as `box`. The wheel list reaches each record as
+IDENTITY_RECORD_WHEELS through record_identity_column.sh.
+
 Nothing here builds, rents or publishes. Tests: tools/test_identity_wheel_record.py (fake recorder, no device).
 """
 import argparse
@@ -236,6 +241,7 @@ class Run:
         slots = plan_slots(columns, devices, workers)
         selected, report = {}, dict(schema=SCHEMA, columns={}, nproc=nproc, gpus=len(devices), shard=self.a.shard,
                                     workers_per_device=workers, gpu_free_gib=free,
+                                    box=os.environ.get("IDENTITY_RECORD_BOX") or None,
                                     wheels=listed.read_text().split("\n")[:-1])
         shard_i, shard_n = (int(x) for x in self.a.shard.split("/"))
         for c in columns:
