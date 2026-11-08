@@ -158,12 +158,33 @@ rc=$?; phase_end $rc
 # back to the full id (taxi classical lanes, int8 gemm, mamba1/samba/transformer-decode, lossguide/pairlogit,
 # iforest); the smoke itself PASSED every race it planned. A follow-up job times the missing ids directly.
 if [ -n "${PC_IDS_FILE:-}" ]; then
-    SJ=()
     cp "$PC_IDS_FILE" "$RES/plan/race-ids-pass.txt"
-    say "direct ids: $(grep -c . "$RES/plan/race-ids-pass.txt") races from $PC_IDS_FILE (smoke skipped)"
+    N=$(grep -c . "$RES/plan/race-ids-pass.txt")
+    SJ=()
+    if [ -n "${PC_SMOKE_DIR:-}" ]; then
+        # reuse an earlier run's smoke results (same board and driver files): the board needs a SMOKE PASS per race
+        for f in "$PC_SMOKE_DIR"/smoke-s*-smoke/smoke.json; do [ -f "$f" ] && SJ+=(--smoke-json "$f"); done
+        say "direct ids: $N races from $PC_IDS_FILE; smoke reused from $PC_SMOKE_DIR (${#SJ[@]} args)"
+    else
+        # smoke exactly these races first (the board refuses a full race without its SMOKE PASS)
+        phase smoke; mark smoke
+        S=${PC_SMOKE_SHARDS:-$(( $(nproc) / 8 ))}; [ -z "${PC_SMOKE_SHARDS:-}" ] && [ "$S" -gt 4 ] && S=4
+        [ "$S" -gt "$N" ] && S=$N; [ "$S" -lt 1 ] && S=1
+        say "direct ids: $N races from $PC_IDS_FILE; smoke in $S shards first"
+        pids=()
+        for i in $(seq 1 "$S"); do
+            $PY tools/bench_board.py "${COMMON[@]}" --cache "$CACHE_ROOT/c$i" --race-ids @"$RES/plan/race-ids-pass.txt" \
+                --smoke --shard "$i/$S" --out "$RES/smoke-s$i" > "$RES/logs/smoke-s$i.log" 2>&1 &
+            pids+=($!)
+        done
+        src=0; for p in "${pids[@]}"; do wait "$p"; r=$?; [ $r -gt $src ] && src=$r; done
+        grep -h -E '^SMOKE (PASS|FAIL)' "$RES"/logs/smoke-s*.log | head -n 8
+        phase_end $src
+        for f in "$RES"/smoke-s*-smoke/smoke.json; do [ -f "$f" ] && SJ+=(--smoke-json "$f"); done
+    fi
     phase board; mark board
     $PY tools/bench_board.py "${COMMON[@]}" --cache "$CACHE_ROOT/c1" --race-ids @"$RES/plan/race-ids-pass.txt" \
-        --out "$RES/board" > "$RES/logs/board.log" 2>&1
+        "${SJ[@]}" --out "$RES/board" > "$RES/logs/board.log" 2>&1
     rc=$?; tail -n 3 "$RES/logs/board.log"; phase_end $rc
     phase compare; mark compare
     $PY tools/paper_compare.py compare --recipes "$RECIPES" --board "$RES/board/board.json" \
