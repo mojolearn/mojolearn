@@ -28,7 +28,10 @@
 # CHECKS (comma list of correctness, runtime, autograd, adapters; default all) names the groups whose units are
 # owed (tools/release_check_units.py plan on the Mac); AUTOGRAD_ENTRIES the owed autograd entries (empty: every CPU
 # entry). install always runs: every other check uses its venv. A group not named is reused, not run.
-# Exit 0 only when every check run passed. Every named check runs even after one failed (one pass, all reports).
+# FAIL SOFT (Andrew 2026-11-08; tools/release_verdicts.py CHECK_CLASS): install and correctness are HARD, runtime,
+# autograd and adapters SOFT. Exit 0 when every HARD check passed (STRICT=1, release.py --strict: when every check
+# run passed); checks.json keeps every group's rc and names the hard ones, and the release records each SOFT rc.
+# Every named check runs even after one failed (one pass, all reports).
 set -uo pipefail
 [ $# -ge 4 ] || { echo "usage: cpu_wheel_checks.sh WHEEL SHA256 SOURCE_COMMIT OUT [RUNTIME_PRIOR_DIR]" >&2; exit 2; }
 WHEEL=$1; WANT=$2; COMMIT=$3; OUT=$4; PRIOR=${5:-}
@@ -77,11 +80,16 @@ want adapters && check adapters "$PY" -c 'import sys; sys.path.insert(0, "tools"
 rec = AG.cpu_refusal(AG.run("cpu", sys.argv[1], sys.argv[2], [sys.argv[3]]))
 print(rec.get("status"), rec.get("why", "")); sys.exit(0 if rec.get("ok") else 1)' "$PY" "$OUT/adapters/smoke" "$WHEEL"
 
-ok=1
-{ printf '{"schema":"mojolearn.cpu-wheel-checks.v1","source_commit":"%s","wheel_sha256":"%s","checks":{' "$COMMIT" "$WANT"
+ok=1; all=1
+{ printf '{"schema":"mojolearn.cpu-wheel-checks.v1","source_commit":"%s","wheel_sha256":"%s","hard":["install","correctness"],"checks":{' "$COMMIT" "$WANT"
   sep=""; for n in install correctness runtime autograd adapters; do [ -n "${RC[$n]+x}" ] || continue
       printf '%s"%s":%d' "$sep" "$n" "${RC[$n]}"; sep=,
-      [ "${RC[$n]}" = 0 ] || ok=0; done
+      [ "${RC[$n]}" = 0 ] && continue
+      all=0
+      case "$n" in install|correctness) ok=0 ;; *) echo "cpu-checks: SOFT FAIL cpu $n rc=${RC[$n]}" >&2 ;; esac; done
   printf '}}\n'; } > "$OUT/checks.json"
-[ "$ok" = 1 ] && echo "cpu-checks: PASSED" || echo "cpu-checks: FAILED (see $OUT/checks.json)"
+[ "${STRICT:-0}" = 1 ] && ok=$all
+if [ "$all" = 1 ]; then echo "cpu-checks: PASSED"
+elif [ "$ok" = 1 ]; then echo "cpu-checks: HARD checks PASSED, SOFT failures recorded (see $OUT/checks.json)"
+else echo "cpu-checks: FAILED (see $OUT/checks.json)"; fi
 [ "$ok" = 1 ]
