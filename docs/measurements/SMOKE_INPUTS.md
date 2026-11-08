@@ -11,6 +11,8 @@ Each board recipe's smoke input: the identity verification's own fixture (`base`
 | NO VERIFY LANE | 30 |
 | total | 653 |
 
+Under `--inputs verify-fixtures` (every smoke run over a tree whose board takes it) a recipe on the verify fixture stages nothing; every file another recipe reads is its slice (`tools/smoke_inputs.py`: the first 5120 rows and 1024 tail rows of a gbm-bench file, the first 2000000 bytes of a corpus; made and pinned once with `make-smoke-slices`). From the nvidia plan: 6 slice files, at most 21.3 MB staged (budget 100 MB); the work dir at most 1.32 GB at 64 workers (budget 2.0 GB): 54 distinct prep blocks 127.7 MB, race scratch 136.8 MB, LM checkpoints 918.0 MB, layer fixtures 136.0 MB.
+
 | recipe | input | verify lane (fixture base) | files | vendors |
 |---|---|---|---|---|
 | `algos/adaboost-clf/istella/rows=2000` | verify fixture | trees-adaboost-clf | gbm-bench/istella/istella_speed.npz | nvidia,amd |
