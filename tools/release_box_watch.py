@@ -1,153 +1,26 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""The requirements ledger evaluated once per freeze and inputs, the gate boxes' rent check and the idle-box
-watchdog (tools/release.py).
+"""The gate boxes' rent check and the idle-box watchdog (tools/release.py).
 
 0.8.66 run h (2026-11-07): gate-nvidia and gate-amd spent 55+ minutes on the Mac with both rented boxes idle,
-running the ledger's dependency rounds, the retained-producer reconstructions and a serial evaluation that
-linux-builds had already run and the publish preflight and the record would run again. Now:
+running the requirements ledger's reuse analysis before any job was submitted. The ledger is now off by default
+(Release.ledger_on), the box steps only submit, and:
 
-* EvaluationStore keeps one evaluation document per key under <release dir>/requirements-eval/<key>.json.
-  The key (evaluation_key) is the source commit, the tooling commit, the requirements catalog, the sha256 of
-  every candidate wheel known, the identity admission commit and the rest of the qualification configuration.
-  A caller whose key matches, with an unchanged ledger history and unchanged retained producers, reads the
-  document and computes nothing. A new key (a wheel after linux-pack or macos-build, the admission commit
-  after identity-admit) is computed by the step that produced it, and only for the rows whose inputs changed:
-  the document's rows seed release_requirements.EvaluationMemo, whose rows are keyed by their own digest.
-* ready_to_rent lists every input the box steps need before gate-boxes rents.
+* ready_to_rent lists every input the box steps need before gate-boxes rents, so a missing one stops the
+  release before the bill;
 * IdleBoxWatch reports and totals the minutes a held box runs no box job.
 """
-import hashlib
-import json
 import os
 import re
 import threading
-from datetime import datetime, timezone
 from pathlib import Path
-
-SCHEMA = "mojolearn.release-requirements-eval.v1"
-#: where a release keeps its evaluation documents, under its release dir
-DIRNAME = "requirements-eval"
-
-
-def _digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-
-
-def stamp():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def admission_commit(commit, environ=None):
-    """The identity admission commit MOJOLEARN_IDENTITY_REFERENCE_AT names for the freeze COMMIT, or None."""
-    environ = os.environ if environ is None else environ
-    for pair in (environ.get("MOJOLEARN_IDENTITY_REFERENCE_AT") or "").split(","):
-        freeze, _, admitted = pair.partition(":")
-        if freeze == commit and re.fullmatch(r"[0-9a-f]{40}", admitted or ""):
-            return admitted
-    return None
-
-
-def wheel_hashes(configuration):
-    """The sha256 of every candidate wheel the configuration knows (its artifacts:<platform> entries)."""
-    return sorted({sha for key, wheels in configuration.items() if key.startswith("artifacts:")
-                   and isinstance(wheels, dict) for sha in wheels.values() if isinstance(sha, str)})
-
-
-def evaluation_key(commit, tooling_commit, catalog_sha256, configuration, admission=None, version=None):
-    """(key, inputs): the key of one evaluation of the ledger. INPUTS are recorded in the document."""
-    inputs = dict(source_commit=commit, tooling_commit=tooling_commit, catalog_sha256=catalog_sha256,
-                  wheels=wheel_hashes(configuration), admission_commit=admission, version=version,
-                  configuration_digest=_digest(configuration))
-    return _digest(inputs)[:24], inputs
-
-
-def history_digest(ledger_doc):
-    """What a stored evaluation was computed against besides its key: the declared requirements' fingerprints
-    and the ids of every attempt, run and interruption (the history is append-only)."""
-    return _digest(dict(version=ledger_doc.get("version"),
-                        requirements={k: (v or {}).get("fingerprint")
-                                      for k, v in (ledger_doc.get("requirements") or {}).items()},
-                        attempts=[a.get("id") for a in ledger_doc.get("attempts", [])],
-                        runs=[r.get("id") for r in ledger_doc.get("runs", [])],
-                        interruptions=[i.get("id") for i in ledger_doc.get("interruptions", [])]))
-
-
-def producer_signature(producers):
-    """The retained producers (release.retained_producers) by path, size and mtime: a changed or new
-    producer artifact admits its evidence again; an unchanged one is not re-read."""
-    out = []
-    for name, paths in producers:
-        row = {}
-        for key, value in sorted(paths.items()):
-            try:
-                st = Path(value).stat()
-                row[key] = [str(value), st.st_size, st.st_mtime_ns]
-            except OSError:
-                row[key] = [str(value), None, None]
-        out.append([name, row])
-    return out
-
-
-class EvaluationStore:
-    """<release dir>/requirements-eval/<key>.json, written atomically; the newest one seeds the memo."""
-
-    def __init__(self, directory):
-        self.directory = Path(directory)
-        self._lock = threading.Lock()
-
-    def path(self, key):
-        return self.directory / (key + ".json")
-
-    def load(self, key):
-        try:
-            doc = json.loads(self.path(key).read_text())
-        except (OSError, ValueError):
-            return None
-        return doc if doc.get("schema") == SCHEMA and doc.get("key") == key else None
-
-    def latest(self):
-        found = []
-        for path in self.directory.glob("*.json"):
-            try:
-                found.append((path.stat().st_mtime_ns, path))
-            except OSError:
-                continue
-        for _, path in sorted(found, reverse=True):
-            doc = self.load(path.stem)
-            if doc is not None:
-                return doc
-        return None
-
-    def save(self, doc):
-        with self._lock:
-            self.directory.mkdir(parents=True, exist_ok=True)
-            path = self.path(doc["key"])
-            tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-            tmp.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
-            tmp.replace(path)
-        return path
-
-
-def memo_rows(doc):
-    """The EvaluationMemo rows of a stored document ({name: {digest, row}})."""
-    if not doc:
-        return {}
-    status, digests = doc.get("status") or {}, doc.get("digests") or {}
-    return {name: dict(digest=digests[name], row=row) for name, row in status.items() if name in digests}
-
-
-def document(key, inputs, manifest, rows, digests, *, ledger_history, producers, stats, computed_by, notes=()):
-    return dict(schema=SCHEMA, key=key, inputs=inputs, manifest=manifest, status=rows, digests=digests,
-                ledger_history=ledger_history, producers=producers, stats=stats, computed_by=computed_by,
-                notes=list(notes), updated_at=stamp())
 
 
 # ------------------------------------------------------------ before the bill
-def ready_to_rent(needs, *, wheels, payload, plan, ledger):
+def ready_to_rent(needs, *, wheels, payload, plan):
     """The inputs the box steps of NEEDS ({vendor: [why]}) lack, as one line each; [] when renting is safe.
 
-    WHEELS(vendor), PAYLOAD(vendor), PLAN() and LEDGER() each return None when their input is there, or a
+    WHEELS(vendor), PAYLOAD(vendor) and PLAN() each return None when their input is there, or a
     line naming what is missing; an exception counts as missing with its message."""
     missing = []
 
@@ -160,7 +33,6 @@ def ready_to_rent(needs, *, wheels, payload, plan, ledger):
             missing.append(f"{label}: {problem}")
 
     check("plan", plan)
-    check("ledger document", ledger)
     for vendor in sorted(needs):
         check(f"{vendor} wheels", lambda: wheels(vendor))
         check(f"{vendor} payload", lambda: payload(vendor))
