@@ -63,7 +63,8 @@ CHECK_CLASS = {
     "apple/runtime": SOFT,        # gate-apple's runtime-apple qualifier
     "box-exit": SOFT,             # a box job's non-zero exit when its HARD parts are present and passed
     "artifacts": SOFT,            # artifact uploads and sizes
-    "rehearsal/secondary": SOFT,  # the TestPyPI rehearsal's resolutions and macOS install/import from the index
+    "rehearsal/secondary": SOFT,  # the TestPyPI rehearsal's resolutions and macOS pip install from the index
+    #                               (the import of the installed bytes stays HARD)
 }
 
 
