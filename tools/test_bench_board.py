@@ -2115,3 +2115,15 @@ def test_evidenced_backfill_uses_actual_worker_and_input_receipts(tmp_path):
     m['hardware']['status'] = 'missing'
     path.write_text(json.dumps(board))
     assert bb.backfill_evidenced_store(path, store) == 0
+
+
+def test_smoke_verdict_names_the_evidence_seal_failure():
+    """0.8.66 AMD smoke: an evidence-seal failure (rc 0) read only "status failed"."""
+    race = _smoke_race()
+    cell = dict(_smoke_cell("ours"), measurement={"missing": ["worker receipt", "timing boundary"]})
+    rec = {"status": "failed", "params_check": "MATCHED", "cells": [cell, _smoke_cell("sklearn-cpu")],
+           "evidence_failure": "incomplete worker evidence; recipe excluded, raw evidence retained",
+           "evidence_failure_kind": "metadata"}
+    why = bb.smoke_verdict(race, rec, "apple")[0][1]
+    assert why.startswith("status failed: incomplete worker evidence")
+    assert "ours fit: worker receipt, timing boundary" in why
