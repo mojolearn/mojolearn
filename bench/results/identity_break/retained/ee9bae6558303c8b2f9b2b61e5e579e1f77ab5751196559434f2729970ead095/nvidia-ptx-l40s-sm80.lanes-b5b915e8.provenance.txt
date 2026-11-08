@@ -1,0 +1,10 @@
+commit=43b5f7c320e0942bdef8c212917b440d1ab1d513
+label=nvidia-ptx-l40s-sm80
+backend=cuda
+scope=all shard= lanes_override=yes lane_selection=full-chunk
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-138-generic x86_64 ad28302af50a
+date=2026-11-08T18:20:19Z
+dirty_tracked=none
+installed_wheels=mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl:c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c,mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl:9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725
+record_sha256=ee9bae6558303c8b2f9b2b61e5e579e1f77ab5751196559434f2729970ead095

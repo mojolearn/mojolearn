@@ -1,0 +1,10 @@
+commit=43b5f7c320e0942bdef8c212917b440d1ab1d513
+label=apple-m4
+backend=metal
+scope=all shard= lanes_override=yes lane_selection=full-chunk
+repeats=1 cpu_threads=3
+host=Darwin 25.5.0 arm64 Mac
+date=2026-11-08T13:50:29Z
+dirty_tracked=none
+installed_wheels=mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl:72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1
+record_sha256=f44e16128992b39c86d00418050040d01faceec5d6669acf2155ec38c12133ea

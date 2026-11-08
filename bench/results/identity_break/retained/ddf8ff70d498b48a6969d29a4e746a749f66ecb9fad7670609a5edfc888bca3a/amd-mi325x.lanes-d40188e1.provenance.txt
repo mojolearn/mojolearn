@@ -1,0 +1,10 @@
+commit=43b5f7c320e0942bdef8c212917b440d1ab1d513
+label=amd-mi325x
+backend=hip
+scope=all shard= lanes_override=yes lane_selection=full-chunk
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-59-generic x86_64 mojolearn-steward-do-amd
+date=2026-11-08T17:39:01Z
+dirty_tracked=none
+installed_wheels=mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl:c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c,mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl:1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed
+record_sha256=ddf8ff70d498b48a6969d29a4e746a749f66ecb9fad7670609a5edfc888bca3a

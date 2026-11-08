@@ -1,0 +1,10 @@
+commit=43b5f7c320e0942bdef8c212917b440d1ab1d513
+label=cpu
+backend=cpu
+scope=all shard= lanes_override=yes lane_selection=full-chunk
+repeats=1 cpu_threads=3
+host=Linux 7.0.0-1017-azure x86_64 runnervm7aw5e
+date=2026-11-08T15:59:49Z
+dirty_tracked=none
+installed_wheels=mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl:c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c
+record_sha256=7ed448bc6951ad4db2add8c8dfc37e9791e4889cbd5a3fb6bd0cbab7b69c9acc
