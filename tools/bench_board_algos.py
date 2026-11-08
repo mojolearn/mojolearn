@@ -1011,7 +1011,11 @@ for _slug, _fn, _blk, _k in (("select-f-classif", "f_classif", "cls", 0.5),
     _add(_slug, xlane="prep", ours="SelectKBest", task="select", block=_blk, score_func=_fn,
          sub=({"X": SUB["mid"]} if _fn.startswith("mutual") else {}),
          sk="sklearn.feature_selection:SelectKBest", params=dict(k="half"),
-         notes=["k = d // 2; score_func = %s (ours: mojolearn.%s)" % (_fn, _fn)])
+         notes=["k = d // 2; score_func = %s (ours: mojolearn.%s)" % (_fn, _fn)],
+         mism=(["mutual information noise seed: ours runs mojolearn.%s at its defaults inside SelectKBest.fit "
+                "(random_state=None, a fixed native seed; a wrapped callable is refused), scikit-learn "
+                "random_state=%d; both add the same 1e-10-scale jitter to continuous features" % (_fn, SEED)]
+               if _fn.startswith("mutual") else []))
 _add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB["knn"]}, quality="select-exact",
      sk="sklearn.feature_selection:RFE",
      params=dict(estimator=_E("LogisticRegression", max_iter=200), n_features_to_select="half",
@@ -3505,12 +3509,14 @@ def _est_factory(lane, arm, D):
             import mojolearn as ml
             if not hasattr(ml, s["score_func"]):
                 raise Skipped("SKIPPED: not built yet (mojolearn has no %s)" % s["score_func"])
-            f = getattr(ml, s["score_func"])
-            if s["score_func"].startswith("mutual"):
-                import functools            # the same noise seed as scikit-learn's arm below
-                f = functools.partial(f, random_state=SEED)
-                f.__name__ = s["score_func"]
-            params["score_func"] = f
+            # 0.8.66 AMD measurement smoke (select-mutual-info, select-mutual-info-reg on istella and taxi:
+            # "SelectKBest score_func must be f_classif, ...; a user callable is not supported"): ours' fit runs
+            # its score functions natively and refuses any other callable, a functools.partial of its own
+            # mutual_info_* included (bindings/prep_encode_native.mojo _select_fit; no Python runs in fit).
+            # Ours gets the function itself and runs it at its defaults (random_state=None, the native fixed
+            # seed); scikit-learn's arm keeps random_state=SEED. The two noise draws differ (a 1e-10-scale
+            # jitter on continuous features), named in the lane's mism.
+            params["score_func"] = getattr(ml, s["score_func"])
         return (lambda: cls(**params)), "mojolearn." + name, params
     if arm == "sklearn-cpu":
         try:
