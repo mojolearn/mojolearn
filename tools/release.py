@@ -2158,7 +2158,11 @@ class Release(release_identity_wheels.IdentityOnWheels):
         import release_requirements_retained as retained
         with self.evaluation_lock():
             started = time.monotonic()
-            manifest, key, inputs = self.readiness_manifest_keyed()
+            if "readiness_manifest" in vars(self) or type(self).readiness_manifest is not Release.readiness_manifest:
+                # a declaration supplied in place of the analysis (a partial release, the tests)
+                manifest, (key, inputs) = self.readiness_manifest(), self.readiness_configuration()[4:]
+            else:
+                manifest, key, inputs = self.readiness_manifest_keyed()
             store = self.evaluation_store()
             stored = store.load(key)
             ledger = self.readiness()
