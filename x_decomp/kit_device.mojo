@@ -11,7 +11,7 @@ enqueued launch, with no sync:
 
 - the launch sequences are DevExec's own (`launch_ew`, `launch_gemm`,
   `launch_colsum`, `launch_rowsum`, `launch_lu`, `rand_kernel`,
-  `gamma_kernel`, `lda_rows_kernel`, `DevExec._eigh_par_on`), so every value
+  `gamma_kernel`, `launch_lda_rows`, `DevExec._eigh_par_on`), so every value
   is the same bits as `Kit[DevExec]`, which is the same bits as the CPU
   column's kit (every x-decomp lane's GPU == CPU claim);
 - the host reads a value only where the search branches on it: a C-step's
@@ -59,7 +59,7 @@ from x_decomp.device import (
     absmax_scratch,
     launch_absmax,
     cd_rows_kernel,
-    lda_rows_kernel,
+    launch_lda_rows,
     rand_kernel,
     rowsum_scratch,
     xd_ctx,
@@ -897,10 +897,17 @@ struct DKit(Movable):
             return
         var sid = pool_alloc(n * (v + k))
         var iid = pool_alloc(n)
-        self.ctx.enqueue_function[lda_rows_kernel](
-            X.p(), EW.p(), Dt.p(), Et.p(), _ptr(sid, n * (v + k)), _ptr(iid, n),
-            Int32(n), Int32(k), Int32(v), Float32(prior), Int32(max_iter), Float32(tol),
-            grid_dim=_blocks(n), block_dim=TPB,
+        # lane fix-lda-text-time (2026-11-08): DevExec's own launch sequence,
+        # one block per document (`lda_block_kernel`, same bits as
+        # `lda_doc_row`), not `lda_rows_kernel` (ONE THREAD per document,
+        # scanning all v words for every topic on every inner iteration).
+        # The batch fit's E-step (`e_step_dev`) and the online pass reach this
+        # call; on the measurement smoke's text set (2000 x 4096, 16 topics,
+        # max_iter 20) the per-thread kernel ran past the 300 s step limit on
+        # gfx942 while transform, already on the block kernel, was quick.
+        launch_lda_rows(
+            self.ctx, X.p(), EW.p(), Dt.p(), Et.p(), _ptr(sid, n * (v + k)), _ptr(iid, n), n, k, v,
+            Float32(prior), max_iter, Float32(tol),
         )
         pool_free(sid)
         pool_free(iid)
