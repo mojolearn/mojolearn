@@ -58,6 +58,21 @@ def _exact_owner(binding):
     return type(entry) is BuiltinFunctionType and entry.__self__ is binding
 
 
+def _host_owner(binding):
+    # glue: on a CPU-only install `_backend.binding` returns the lazy
+    # `_HostBinding` facade. Its entries belong to the host extension module,
+    # so a `_capture` copy would not own `x_decomp_native_api_v1` and the
+    # manifold kit's provider admission
+    # (providers/python/neural_descriptor_pyapi.mojo `neural_descriptor_entry`)
+    # refuses it. Resolve the facade to its exact host module at import, as
+    # _native_family_bridge.connect_bindings does.
+    from . import _backend
+    if type(binding) is _backend._HostBinding and _backend._CPU_ONLY is not None:
+        basename = vars(binding)["_HostBinding__basename"]
+        return _backend.load_host_module(basename)  # cpu-route: import connection of an explicitly selected CPU-only binding
+    return binding
+
+
 def connect():
     global _CONNECTED
     if _CONNECTED is not None:
@@ -74,6 +89,8 @@ def connect():
                 continue
             try:
                 binding = _get_binding(mode) if group == "metrics" else _backend.binding(binding_name, mode)
+                if group == "decomp":
+                    binding = _host_owner(binding)
                 if group == "decomp" and _exact_owner(binding):
                     # The manifold kit connects the binding's kernel-call
                     # provider (x_decomp_native_api_v1), which is admitted
