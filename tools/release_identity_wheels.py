@@ -142,6 +142,45 @@ class IdentityOnWheels:
         # behaviour applies only when the option is explicitly on
         return bool(getattr(getattr(self, "args", None), "identity_on_wheels", False))
 
+    # ------------------------------------------------------------------ fail soft (tools/release_verdicts.py)
+    def strict(self):
+        """--strict: every SOFT check is HARD (the behavior before 2026-11-08). Read defensively like single()."""
+        return bool(getattr(getattr(self, "args", None), "strict", False))
+
+    def soft_fail(self, vendor, name, reason, log=None):
+        """Record one SOFT failure (soft-failures.json, the SOFT FAIL line, the notice); nothing in a dry run,
+        a --status read or a partial Release without a release dir."""
+        import release_verdicts as RV
+        if getattr(self, "dry", False) or getattr(self, "readonly", False):
+            return False
+        try:
+            rel = self.rel
+        except (AttributeError, KeyError, TypeError):
+            return False
+        return RV.record(rel, self.version, vendor, name, reason, log=log, say=self.say)
+
+    def soft_judge(self, vendor, hard, soft):
+        """(errors, soft_names): HARD errors stop the gate; each SOFT (name, reason, log) is recorded and lets it
+        pass, unless --strict, which makes it an error again."""
+        import release_verdicts as RV
+        errors = list(hard)
+        names = []
+        for name, reason, log in soft:
+            if RV.is_soft(name, self.strict()):
+                self.soft_fail(vendor, name, reason, log)
+                names.append(name)
+            else:
+                errors.append(reason)
+        return errors, names
+
+    def soft_failures(self):
+        """Every SOFT failure recorded for this freeze (soft-failures.json), [] when none."""
+        import release_verdicts as RV
+        try:
+            return RV.load(self.rel)
+        except (AttributeError, KeyError, TypeError):
+            return []
+
     def reuse(self):
         """--reuse-unchanged: opt in to reusing unchanged lanes, check units and runtime units. OFF by default
         (Andrew 2026-11-05: the selector cannot be trusted to narrow; the one run runs EVERYTHING)."""
@@ -370,10 +409,19 @@ class IdentityOnWheels:
         """(ok, why) of the one box job under --identity-on-wheels: the identity summary of its columns, every owed
         device-check unit passed (the rest reused), and the installed-runtime qualifier's report."""
         import release_check_units as U
-        errors = ["identity: " + e for e in summary_errors(read_json(Path(output) / "identity" / SUMMARY),
+        output = Path(output)
+        # HARD (identity, install-load, shardcheck) stop the gate; SOFT (autograd/*, adapters, the measurement
+        # smoke, the runtime qualifier) are recorded and notified (tools/release_verdicts.py CHECK_CLASS)
+        errors = ["identity: " + e for e in summary_errors(read_json(output / "identity" / SUMMARY),
                                                            self.vendor_columns(vendor))]
+        soft = []
         plan = read_json(self.units_plan_path(vendor))
-        errors += ["units: " + e for e in U.summary_errors(read_json(Path(output) / "units" / U.SUMMARY), plan)]
+        for e in U.summary_errors(read_json(output / "units" / U.SUMMARY), plan):
+            m = re.fullmatch(r"unit (\S+) did not pass", e)
+            if m:
+                soft.append((m.group(1), "units: " + e, output / "units"))
+            else:
+                errors.append("units: " + e)
         # THE ONE-GPU MULTI-DEVICE GATE, UNCONDITIONAL (Andrew 2026-11-06): every box job runs
         # tools/logical_shard_identity.py on these wheel bytes whatever changed; no reuse or selector waives it.
         import logical_shard_identity as LS
@@ -381,17 +429,21 @@ class IdentityOnWheels:
         # THE MEASUREMENT SMOKE, UNCONDITIONAL (Andrew 2026-11-06): every box job runs every measurement recipe once at
         # its smoke shape, ours only, on these wheel bytes (tools/release_measurement_smoke.py); nothing waives it.
         # (measure=False: the gate job's own part, so run_gate knows which of the two box jobs still has to run)
-        if measure:
-            errors += measure_smoke_errors(output)
+        smoke = measure_smoke_errors(output) if measure else []
+        if smoke:
+            soft.append(("measuresmoke", "; ".join(smoke), measure_smoke_summary(output)))
         runtime, cases = self.gate_runtime_error(vendor, output)
         if runtime:
-            errors.append(runtime)
+            soft.append(("runtime", runtime, output / ("runtime-" + vendor) / "runtime-report.json"))
+        errors, softened = self.soft_judge(vendor, errors, soft)
         if errors:
             return False, "; ".join(errors)
-        self.keep_unit_records(Path(output) / "units")
+        self.keep_unit_records(output / "units")
         return True, ("PASS: identity recorded once from these wheels; device-check units passed or reused; "
-                      "logical-shard gate MATCH; measurement smoke %s; %s runtime cases"
-                      % (measure_smoke_note(output) if measure else "not judged here", cases))
+                      "logical-shard gate MATCH; measurement smoke %s; %s runtime cases%s"
+                      % ("SOFT FAIL" if "measuresmoke" in softened else measure_smoke_note(output) if measure
+                         else "not judged here", cases,
+                         ("; SOFT FAIL (fix lanes owed): " + ", ".join(softened)) if softened else ""))
 
     def gate_identity_errors(self, vendor, output, correctness):
         """Under --identity-on-wheels: the box job's column record must be complete (or nothing owed) and its gate
@@ -495,21 +547,39 @@ class IdentityOnWheels:
                 and (read_json(out / "runtime-cpu" / "runtime-report.json") or {}).get("status") == "passed"):
             return True, "cpu: REUSED %s lane(s) / RUN 0, units REUSED %s / RUN 0, runtime composed; no dispatch" % (
                 reused.get("lanes_reused"), reused.get("units_reused"))
+        import release_verdicts as RV
         doc = read_json(out / "run.json") or {}
-        if doc.get("conclusion") != "success" or doc.get("source_commit") != self.commit:
+        # a run that concluded "failure" is judged by its artifacts unless --strict: install, correctness and the
+        # column shards are HARD; the runtime, autograd and adapter groups SOFT (tools/release_verdicts.py)
+        if doc.get("source_commit") != self.commit or doc.get("conclusion") not in (
+                ("success",) if self.strict() else ("success", "failure")):
             return False, "no successful %s run for %s" % (CPU_WORKFLOW, self.commit[:12])
         core = self.split_final("linux")
         if not core or doc.get("wheel_sha256") != sha256(core):
             return False, "the CPU run checked another core wheel"
-        checks = read_json(out / "artifacts" / "cpu-wheel-checks" / "checks.json") or {}
-        bad = [k for k, v in (checks.get("checks") or {}).items() if v != 0]
-        if not checks.get("checks") or bad:
+        checks_path = out / "artifacts" / "cpu-wheel-checks" / "checks.json"
+        checks = read_json(checks_path) or {}
+        groups = checks.get("checks") or {}
+        bad = [k for k, v in groups.items() if v != 0]
+        if not groups or "install" not in groups:
             return False, "CPU checks failed or missing: %s" % (", ".join(bad) or "no checks.json")
+        hard = ["cpu %s rc %s" % (k, groups[k]) for k in bad if not RV.is_soft("cpu/" + k, self.strict())]
         for shard in range(doc.get("shards", 0)):
             errors = summary_errors(read_json(out / "artifacts" / ("cpu-wheel-identity-%d" % shard) / SUMMARY), ["cpu"])
             if errors:
-                return False, "cpu column shard %d: %s" % (shard, "; ".join(errors))
-        return True, "cpu column and CPU checks PASSED on GitHub (run %s)" % doc.get("run_id")
+                hard.append("cpu column shard %d: %s" % (shard, "; ".join(errors)))
+        if hard:
+            return False, "CPU checks failed: " + "; ".join(hard)
+        soft = [k for k in bad if RV.is_soft("cpu/" + k, self.strict())]
+        for k in soft:
+            self.soft_fail("cpu", "cpu/" + k, "CPU check group %s exited %s (run %s)" % (k, groups[k], doc.get("run_id")),
+                           out / "artifacts" / "cpu-wheel-checks" / k / "log.txt")
+        if doc.get("conclusion") != "success":
+            self.soft_fail("cpu", "cpu/job-exit", "%s run %s concluded %s; its HARD parts passed" % (
+                CPU_WORKFLOW, doc.get("run_id"), doc.get("conclusion")), checks_path)
+        self._cpu_soft_groups = set(soft)
+        return True, "cpu column and CPU checks PASSED on GitHub (run %s)%s" % (
+            doc.get("run_id"), ("; SOFT FAIL (fix lanes owed): " + ", ".join(soft)) if soft else "")
 
     def step_identity_cpu(self):
         """IDENTITY-CPU (--identity-on-wheels): the cpu column and every CPU check, once, on GitHub's free runners
@@ -588,8 +658,11 @@ class IdentityOnWheels:
         if plan is not None:
             import release_check_units as U
             at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            failed = getattr(self, "_cpu_soft_groups", set())
             for unit in plan["owed"]:
-                U.record_passed(self.unit_store(), plan, unit, self.commit, at)
+                group = "correctness" if unit == "install-load" else "adapters" if unit == "adapters" else "autograd"
+                if group not in failed:   # a SOFT-failed group's units stay owed for the next run
+                    U.record_passed(self.unit_store(), plan, unit, self.commit, at)
         return why
 
     def cpu_find_run(self, token, tries=24):
@@ -669,7 +742,8 @@ class IdentityOnWheels:
             return None
         if not dirs:
             # every column reused every lane: the table at the freeze already holds this release's bits
-            doc = dict(source_commit=self.commit, commit=self.commit, recorded=0, at=dt.datetime.now(dt.timezone.utc).isoformat())
+            doc = dict(source_commit=self.commit, commit=self.commit, recorded=0, at=dt.datetime.now(dt.timezone.utc).isoformat(),
+                       soft_failures=self.soft_failures())
             self.state["identity_admitted"] = doc
             self.save()
             os.environ[REFERENCE_ENV] = "%s:%s" % (self.commit, self.commit)
@@ -683,7 +757,8 @@ class IdentityOnWheels:
                                          capture_output=True, check=True).stdout)
         receipts = self.repack(table)
         doc = dict(source_commit=self.commit, commit=commit, branch="ref/" + self.commit[:12], recorded=len(dirs),
-                   table_sha256=sha256(table), repacked=receipts, at=dt.datetime.now(dt.timezone.utc).isoformat())
+                   table_sha256=sha256(table), repacked=receipts, at=dt.datetime.now(dt.timezone.utc).isoformat(),
+                   soft_failures=self.soft_failures())
         self.state["identity_admitted"] = doc
         self.save()
         write_json(self.identity_dir() / "admitted.json", doc)
