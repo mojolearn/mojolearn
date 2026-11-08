@@ -157,7 +157,9 @@ ITEMS = (
     # fail soft (tools/release_verdicts.py): every SOFT failure the release continued past, and the summary that
     # lists them under "Soft failures (fix lanes owed)"
     ("soft-failures.json", "record", "optional", "rel:soft-failures.json"),
-    ("SUMMARY.md", "record", "optional", "derived:summary"),
+    # SUMMARY.md is NOT an item: write_set writes the one SUMMARY.md (summary_markdown), and the soft failures are a
+    # section of it. As an item it was written over the human summary and listed twice in the manifest with two
+    # different sha256 values, so the set's own audit failed (lane post-record-device-time, 2026-11-08).
 )
 #: required items a SOFT check produces: when the check soft-failed (soft-failures.json names it) and left no
 #: report, the item is listed as absent instead of failing the set (dest -> the CHECK_CLASS name)
@@ -499,11 +501,9 @@ def soft_failures(ctx):
     return list(doc.get("failures") or []) if isinstance(doc, dict) else []
 
 
-def derived_summary(ctx):
-    """SUMMARY.md: the release in a few lines and its "Soft failures (fix lanes owed)" (text, not JSON)."""
-    lines = ["# Release %s" % ctx.version, "", "- source commit: `%s`" % ctx.commit,
-             "- tooling commit: `%s`" % ctx.tooling_commit, "- published: %s" % (", ".join(ctx.published) or "none"),
-             "", "## Soft failures (fix lanes owed)", ""]
+def soft_failure_lines(ctx):
+    """The "Soft failures (fix lanes owed)" section of SUMMARY.md: every SOFT failure the release continued past."""
+    lines = ["## Soft failures (fix lanes owed)", ""]
     failures = soft_failures(ctx)
     if not failures:
         lines.append("None.")
@@ -512,6 +512,15 @@ def derived_summary(ctx):
         for f in failures:
             lines.append("| %s | %s | %s |" % (f.get("vendor"), f.get("name"),
                                               str(f.get("reason", "")).replace("|", "/").replace("\n", " ")[:300]))
+    return lines
+
+
+def derived_summary(ctx):
+    """The release in a few lines and its soft failures (text): what tools/release_verdicts.py shows on its own;
+    the evidence set's SUMMARY.md carries the same section (summary_markdown)."""
+    lines = ["# Release %s" % ctx.version, "", "- source commit: `%s`" % ctx.commit,
+             "- tooling commit: `%s`" % ctx.tooling_commit, "- published: %s" % (", ".join(ctx.published) or "none"),
+             ""] + soft_failure_lines(ctx)
     return "\n".join(lines) + "\n"
 
 
@@ -1009,6 +1018,7 @@ def summary_markdown(ctx, entries, wheels, refs, root=ROOT):
            "| version | %s |" % ctx.version, "| tag | `%s` |" % tag, "| frozen source commit | `%s` |" % ctx.commit,
            "| release tooling commit | `%s` |" % ctx.tooling_commit, "| date | %s |" % ctx.date,
            "| published platforms | %s |" % (", ".join(ctx.published) or "none"), ""]
+    out += soft_failure_lines(ctx) + [""]
     # --- identity columns
     out += ["## Identity columns", ""]
     rows = identity_column_rows(ctx, docs)
