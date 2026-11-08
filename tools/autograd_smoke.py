@@ -615,6 +615,25 @@ def start(cmd, log, timeout, env=None, cwd=None):
     return ("ok" if rc == 0 else "failed"), rc, seconds
 
 
+#: the pytest the Python entries run under, in the TARGET venv (the gate's identity venv on a box installs the
+#: wheels and numpy only: 0.8.66 run h, 2026-11-07, every pytest entry failed "No module named 'pytest'" on the AMD
+#: gate and in the CPU checks). The same pin tools/cpu_wheel_checks.sh and light-checks.yml use.
+PYTEST_PIN = "pytest==8.3.5"
+
+
+def ensure_pytest(python, log):
+    """Install PYTEST_PIN into PYTHON's environment when `import pytest` fails there; a harness package, never the runtime."""
+    probe = subprocess.run([str(python), "-c", "import pytest"], capture_output=True, text=True)
+    if probe.returncode == 0:
+        return False
+    with open(log, "w") as stream:
+        done = subprocess.run([str(python), "-m", "pip", "install", "-q", "--no-cache-dir", PYTEST_PIN],
+                              stdout=stream, stderr=subprocess.STDOUT, text=True)
+    if done.returncode != 0:
+        raise RuntimeError("could not install %s into %s (see %s)" % (PYTEST_PIN, python, log))
+    return True
+
+
 def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None, deadline=None):
     pool = [e for e in ENTRIES if vendor != "cpu" or "source" not in e]
     if vendor == "cpu" and entries is not None and set(entries) - {e["name"] for e in pool}:
@@ -626,6 +645,8 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
     logs = Path(out).resolve().with_suffix("")
     logs.mkdir(parents=True, exist_ok=True)
     (logs / "tmp").mkdir(exist_ok=True)
+    if any("pytest" in e for e in selected):
+        ensure_pytest(python, logs / "ensure-pytest.log")
     rows = []
     for e in selected:
         log = logs / ("%s-%s.log" % (e["name"], vendor))
