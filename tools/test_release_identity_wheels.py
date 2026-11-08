@@ -68,6 +68,15 @@ def test_the_option_orders_every_publish_after_the_one_run(tmp_path):
         make(tmp_path / "c", identity_on_wheels=True, nvidia_columns="nvidia,amd").nvidia_columns()
 
 
+def test_a_held_hopper_box_keeps_the_cpu_column_first(tmp_path):
+    # the publish-nvidia override for a held Hopper box builds on the per-run graph, not the module table
+    r = make(tmp_path, identity_on_wheels=True, gpu_smoke=True, hopper_box="hopper")
+    assert r.hopper_required()
+    assert "identity-cpu" in r.NEEDS["gate-boxes"]
+    assert "gpu-column-nvidia-hopper" in r.NEEDS["publish-nvidia"]
+    assert "identity-cpu" not in release.NEEDS["gate-boxes"]
+
+
 def test_the_option_refuses_the_gpu_smoke_columns(tmp_path, monkeypatch):
     r = make(tmp_path, identity_on_wheels=True, gpu_smoke=True)
     monkeypatch.setattr(r, "schedule", lambda steps: pytest.fail("nothing may be scheduled"))
