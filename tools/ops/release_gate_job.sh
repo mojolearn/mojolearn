@@ -63,6 +63,7 @@ RES="${MOJOLEARN_RESULTS_DIR:?release_gate_job.sh runs under tools/box_persist_r
 [[ "${GATE_RUNTIME_CPU:-0}" =~ ^[01]$ ]] || { echo "release-gate-job: bad GATE_RUNTIME_CPU" >&2; exit 2; }
 [[ "$GATE_BUILD_MINUTES" =~ ^[1-9][0-9]*$ ]] || { echo "release-gate-job: bad GATE_BUILD_MINUTES" >&2; exit 2; }
 [[ "${GATE_MEASURE_SMOKE_MINUTES:-90}" =~ ^[0-9]+$ ]] || { echo "release-gate-job: bad GATE_MEASURE_SMOKE_MINUTES" >&2; exit 2; }
+[[ "${GATE_MEASURE_SMOKE_MAX_GB:-8}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "release-gate-job: bad GATE_MEASURE_SMOKE_MAX_GB" >&2; exit 2; }
 [[ "${GATE_JOB_CAP_MINUTES:-0}" =~ ^[0-9]+$ ]] || { echo "release-gate-job: bad GATE_JOB_CAP_MINUTES" >&2; exit 2; }
 case "$GATE_VENDOR:$GATE_TARGET" in nvidia:sm_89|amd:gfx942) ;; *) echo "release-gate-job: unsupported vendor/target" >&2; exit 2 ;; esac
 J="$RES/job"
@@ -73,10 +74,16 @@ exec > "$J/job.log" 2>&1
 PHASE=inputs
 export PATH="/root/.pixi/bin:/usr/local/cuda/bin:/opt/rocm/bin:$PATH"
 say() { echo "[$(date -u +%H:%M:%S) release-gate-job] $*"; }
+# DISK LINES (0.8.66 run t: the 80 GB pod filled during the measurement smoke and nothing said how): the free space
+# of the work dir's filesystem after every phase, "DISK free=<GB> after <phase>" (tools/test_release_gate_jobs.py)
+disk_free_gb() { df -Pk "$GATE_WORK" 2>/dev/null | awk 'NR == 2 { printf "%.1f", $4 / 1048576 }'; }
+disk_line() { say "DISK free=$(disk_free_gb)GB after $1"; }
 # copy_reports SRC DST: the GATE_FETCH reports under SRC into DST. Only paths that exist enter the archive (a
 # pattern that matches nothing, such as smoke.log when no smoke ran, is skipped, never a tar error), and
 # autograd-smoke/tmp is excluded: pytest and comgr scratch that holds absolute symlinks, never a report
-# (0.8.64: those symlinks aborted the Mac-side extraction). tools/test_release_gate_jobs.py runs this function.
+# (0.8.64: those symlinks aborted the Mac-side extraction). Nor a venv: the runtime qualifier builds its fresh venv
+# under out/runtime-<vendor>/qualify/run/venv, and "runtime-*" used to copy it (6.3 GB at 0.8.66 run t) into the
+# results dir beside the original. tools/test_release_gate_jobs.py runs this function.
 copy_reports() {
     ( cd "$1" || exit 1
       shopt -s nullglob
@@ -86,7 +93,7 @@ copy_reports() {
               if [ -e "$f" ]; then have+=("$f"); fi
           done
       done
-      if [ ${#have[@]} -gt 0 ]; then tar cf - --exclude=autograd-smoke/tmp "${have[@]}"; fi ) | tar xf - -C "$2"
+      if [ ${#have[@]} -gt 0 ]; then tar cf - --exclude=autograd-smoke/tmp --exclude=venv --exclude='venv-*' --exclude=.venv "${have[@]}"; fi ) | tar xf - -C "$2"
 }
 OVERLAID=""
 finish() {
@@ -113,6 +120,18 @@ finish() {
 trap finish EXIT
 trap 'exit 124' TERM INT
 say "gate $GATE_VENDOR $GATE_VERSION at $GATE_SOURCE_COMMIT ($GATE_TAG); inputs $IN; work $GATE_WORK"
+disk_line start
+# THE PLAN'S DISK NEED (tools/ops/gate_disk_plan.py job-gb, written by tools/ops/release_gate.py): what this job writes
+# (venvs, reports and their results copy, the measurement smoke under its cap). A box with less free is refused
+# here, before anything is installed, never filled halfway (0.8.66 run t).
+[[ "${GATE_DISK_NEED_GB:-0}" =~ ^[0-9]+$ ]] || { say "bad GATE_DISK_NEED_GB"; exit 2; }
+if [ "${GATE_DISK_NEED_GB:-0}" -gt 0 ]; then
+    free_gb=$(disk_free_gb); free_gb=${free_gb%.*}
+    if [ -n "$free_gb" ] && [ "$free_gb" -lt "$GATE_DISK_NEED_GB" ]; then
+        say "DISK REFUSED: $GATE_WORK has ${free_gb} GB free; this gate job needs $GATE_DISK_NEED_GB GB (tools/ops/gate_disk_plan.py). Free the box (old /root/results-release-gate/* work dirs) or rent a bigger disk (tools/dev_pod.sh DISK_GB)"
+        exit 3
+    fi
+fi
 for ((i = 0; i < ${#GATE_ARGV[@]}; i++)); do
     if [ "${GATE_ARGV[$i]}" = --candidate-wheel ]; then
         w="${GATE_ARGV[$((i + 1))]}"; [ -f "$w" ] || { say "missing input $w"; exit 2; }
@@ -219,6 +238,7 @@ if [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
     say "measuresmoke-setup: the measured venv and the fixture venv install in the background"
 fi
 
+disk_line measuresmoke-setup
 PHASE=identity
 irc=0
 if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
@@ -241,6 +261,7 @@ if [ -n "${GATE_IDENTITY_COLUMNS:-}" ]; then
     say "identity record exited $irc"
 fi
 
+disk_line identity
 PHASE=pixi
 PIXI=$(command -v pixi || echo /root/.pixi/bin/pixi)
 [ -x "$PIXI" ] || { curl -fsSL https://pixi.sh/install.sh | bash > "$J/pixi-install.log" 2>&1; PIXI=/root/.pixi/bin/pixi; }
@@ -268,6 +289,7 @@ fi
 say "autograd executables built: $GATE_WORK/out/autograd-bin"
 fi
 
+disk_line build
 PHASE=overlay
 if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
     # the gate runner overlay (tools/ops/release_gate.py GATE_OVERLAY): checked, then applied over the tree
@@ -292,15 +314,14 @@ if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
     say "gate runner overlay applied: $(echo $files)"
 fi
 
-# the measurement smoke's data, in the background from here (the stager is a GATE_OVERLAY file, so the Mac's copy)
-if [ -f "$IN/measuresmoke-data.json" ]; then
-    python3 tools/release_measurement_smoke.py stage --data-plan "$IN/measuresmoke-data.json" --home "$HOME" \
-        > "$J/measuresmoke-data.log" 2>&1 &
-    MS_DPID=$!
-else
+# the measurement smoke's data is staged by the smoke itself, group by group, and deleted after the last group that
+# reads it (tools/release_measurement_smoke.py run --data-plan; 0.8.66 run t: the whole plan's data and scratch at
+# once filled the pod), never here in the background for the whole plan
+if [ ! -f "$IN/measuresmoke-data.json" ]; then
     say "measuresmoke-setup: no measuresmoke-data.json input; the plan's data must already be at its pins"
 fi
 
+disk_line overlay
 PHASE=shardcheck
 # THE ONE-GPU MULTI-DEVICE GATE (tools/logical_shard_identity.py, Andrew 2026-11-06). UNCONDITIONAL: it runs in
 # every release gate job, whatever changed; no change detection, selector or reuse decides whether it runs. The
@@ -338,6 +359,7 @@ if [ "$src" = 0 ]; then
 fi
 say "shardcheck exited $src"
 
+disk_line shardcheck
 PHASE=gate
 grc=0
 if [ "${GATE_UNITS:-0}" = 1 ]; then
@@ -355,6 +377,7 @@ else
     tail -n 5 "$J/gate.log"
 fi
 
+disk_line gate
 PHASE=runtime-qualify
 # runtime-<vendor> evidence for the ledger (tools/release_runtime_installed.py run: fresh venv, the exact
 # candidate wheels, the frozen source's own tests). Recorded and fetched (out/runtime-<vendor>/), bounded by
@@ -428,6 +451,7 @@ if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
         run_runtime cpu "cpu-linux-$(uname -m)"
     fi
 fi
+disk_line runtime-qualify
 PHASE=hard-done
 # the one box job's verdict: the device checks' (the gate) and the identity record's
 [ "$grc" != 0 ] || grc=$irc
@@ -454,13 +478,28 @@ persist_hard() {
     for i in 1 2 3; do
         if bash "$runner" --snapshot "$json" "$RES" hard; then
             say "hard-done: the reports are uploaded (exit $grc); the measurement smoke runs next"
+            HARD_HOME=1
             return 0
         fi
         sleep 20
     done
     say "hard-done: the immediate upload failed 3 times; the next periodic upload carries the reports"
 }
+HARD_HOME=0
 persist_hard
+disk_line hard-done
+# THE GATE'S VENVS GO ONCE ITS REPORTS ARE HOME (0.8.66 run t: identity, shard and runtime-qualifier venvs stayed on
+# the pod through the smoke, which then found no room). Only after the hard snapshot is confirmed uploaded; nothing
+# after this point uses them (the smoke has its own measured and fixture venvs).
+if [ "$HARD_HOME" = 1 ]; then
+    for v in "$GATE_WORK/identity-venv" "$GATE_WORK/shard-venv" "$GATE_WORK"/out/runtime-*/qualify/run/venv \
+             "$RES"/out/runtime-*/qualify/run/venv; do
+        if [ -d "$v" ] && [ ! -L "$v" ]; then rm -rf "$v"; fi
+    done
+    disk_line "dropping the gate's venvs (reports home)"
+else
+    say "hard-done: the reports are not confirmed home; the gate's venvs stay until the job ends"
+fi
 
 PHASE=measuresmoke
 # THE MEASUREMENT SMOKE (tools/release_measurement_smoke.py, Andrew 2026-11-06: "make the smoke on the measurements a
@@ -503,6 +542,8 @@ else
     fi
     MS_VPID=""; MS_FPID=""; MS_DPID=""
 fi
+msdata=()
+if [ -f "$IN/measuresmoke-data.json" ]; then msdata=(--data-plan "$IN/measuresmoke-data.json" --home "$HOME"); fi
 if [ "$mrc" = 0 ]; then
     # run by the measured venv's python (the plan imports the board harness, which reads NumPy); its plan line
     # (workers and the bound that set them) and its busy-cores samples (cores busy of total, the first after two
@@ -510,13 +551,19 @@ if [ "$mrc" = 0 ]; then
     set +e
     "$MS_PY" tools/release_measurement_smoke.py run --vendor "$GATE_VENDOR" --python "$MS_PY" \
         --data-root "$HOME/datasets/gbm-bench" --ceiling $(( ms_min * 60 )) \
-        --out "$mout" --work "$GATE_WORK/measuresmoke-work" ${fpy[@]+"${fpy[@]}"} 2>&1 \
-        | tee "$J/measuresmoke.log" | grep --line-buffered -E '^MEASURESMOKE (plan|busy|vendor=)'
+        --out "$mout" --work "$GATE_WORK/measuresmoke-work" ${fpy[@]+"${fpy[@]}"} ${msdata[@]+"${msdata[@]}"} \
+        --max-work-gb "${GATE_MEASURE_SMOKE_MAX_GB:-8}" 2>&1 \
+        | tee "$J/measuresmoke.log" | grep --line-buffered -E '^MEASURESMOKE (plan|busy|disk|vendor=)'
     mrc=${PIPESTATUS[0]}
     set -e
-    grep -E '^MEASURESMOKE ' "$J/measuresmoke.log" | grep -v -E '^MEASURESMOKE (plan|busy|vendor=)' | head -n 20 || true
+    grep -E '^MEASURESMOKE ' "$J/measuresmoke.log" | grep -v -E '^MEASURESMOKE (plan|busy|disk|data|vendor=)' | head -n 20 || true
 fi
 say "measuresmoke exited $mrc (SOFT: the job's exit stays $grc)"
+disk_line measuresmoke
+# the smoke's own venvs and scratch: its summary and logs are in out/ and the job dir; the next job on this pod
+# (a new tag, a new work dir) finds the room
+rm -rf "$GATE_WORK/measure-venv" "$GATE_WORK/fixture-venv" "$GATE_WORK/measuresmoke-work"
+disk_line "dropping the smoke's venvs and scratch"
 
 PHASE=complete
 exit "$grc"
