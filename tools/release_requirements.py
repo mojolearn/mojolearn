@@ -14,7 +14,10 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
+import threading
+import time
 from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -219,10 +222,15 @@ def evidence_errors(evidence):
 
 
 class RequirementsLedger:
-    def __init__(self, path, *, source_root=None, evidence_log_dir=None, explain=False):
+    def __init__(self, path, *, source_root=None, evidence_log_dir=None, explain=False, memo=None, jobs=None):
         self.path = Path(path)
         self.source_root = source_root
         self.evidence_log_dir = evidence_log_dir
+        # memo: an EvaluationMemo the rows are read from and written to (tools/release.py keeps one per
+        # freeze in <release dir>/requirements-eval/); jobs: evaluate's worker processes (ledger_jobs()).
+        self.memo = memo
+        self.jobs = jobs
+        self.last_stats = {}
         # --explain: also run the cross-commit selector on identity rows, as a diagnostic only.
         self.explain = explain
 
@@ -546,8 +554,12 @@ class RequirementsLedger:
         return revision
 
     @staticmethod
-    def _reference_batch(doc, root, log_dir):
-        """A lazy {row id: (verdict, error)} lookup: the frozen reference is read once, on first use."""
+    def _reference_batch(doc, root, log_dir, found=None):
+        """A lazy {row id: (verdict, error)} lookup: the frozen reference is read once, on first use.
+
+        ``lookup.found`` holds the verdicts read so far ({revision: ...}); FOUND preloads them (the worker
+        processes of evaluate get the parent's, so the reference of a revision is read once in all).
+        ``lookup.group_digest(revision)`` digests what a revision's verdicts depend on in the document."""
         from release_identity_reference import unit_of
         units = {}
         for name, wanted in doc["requirements"].items():
@@ -558,7 +570,7 @@ class RequirementsLedger:
         for attempt in doc.get("attempts", []):
             if attempt.get("status") == "failed" and isinstance(attempt.get("source_revision"), str):
                 failures.setdefault(attempt["requirement"], set()).add(attempt["source_revision"])
-        found = {}
+        found = {} if found is None else dict(found)
 
         def lookup(name):
             wanted = doc["requirements"][name]
@@ -584,88 +596,176 @@ class RequirementsLedger:
             if name not in verdicts_:
                 return None, "requirement inputs are unresolved"
             return verdicts_[name], None
+
+        def group_digest(revision):
+            group = units.get(revision, {})
+            return digest(dict(units={k: v.get("fingerprint") for k, v in sorted(group.items())},
+                               failures={k: sorted(failures.get(k, ())) for k in sorted(group)}))
+
+        def warm(names):
+            """Read the reference of every revision NAMES are judged at (before the rows fan out)."""
+            for name in names:
+                wanted = doc["requirements"][name]
+                if name in units.get(wanted.get("source_revision"), {}):
+                    lookup(name)
+        lookup.found, lookup.group_digest, lookup.warm = found, group_digest, warm
         return lookup
 
     @staticmethod
-    def evaluate(doc, *, root=None, log_dir=None, explain=False):
-        rows = {}
+    def _evaluate_row(doc, name, wanted, attempts, runs, finished, interruptions, batch, *, root=None,
+                      log_dir=None, explain=False):
+        """One requirement's row: ATTEMPTS (begin order) and RUNS are this requirement's own."""
         from release_identity_reference import unit_of
-        batch = RequirementsLedger._reference_batch(doc, root, log_dir)
+        latest = attempts[-1] if attempts else None
+        matching = [a for a in attempts if a["fingerprint"] == wanted["fingerprint"]]
+        candidate = matching[-1] if matching else latest
+        row = dict(status="untested", source_revision=wanted["source_revision"],
+                   input_fingerprint=wanted["fingerprint"], evidence=[], reasons=[],
+                   action="run", required=wanted["required"], stage=wanted.get("stage", "pre"))
+        for key in ("parent_requirement", "dependency_limitations", "provenance_sources", "dependency_provenance", "recipe_discovery"):
+            if key in wanted:
+                row[key] = copy.deepcopy(wanted[key])
+        if runs and runs[-1]["id"] not in finished:
+            active = runs[-1]
+            row.update(action="resume", active_run=active["id"], active_revision=active["source_revision"],
+                       active_input_fingerprint=active["fingerprint"],
+                       reasons=[("unfinished recorded run for current inputs: " if active["fingerprint"] == wanted["fingerprint"]
+                                 else "unfinished recorded run for different inputs at " + active["source_revision"] + ": ")
+                                + active["id"], *active["reasons"]])
+        elif wanted.get("fingerprint") != digest(wanted.get("inputs")):
+            row.update(action="complete-provenance", reasons=["requirement fingerprint does not match its inputs"])
+        elif wanted.get("missing_inputs"):
+            row.update(action="complete-provenance", reasons=["missing input: " + k for k in wanted["missing_inputs"]])
+        elif runs and runs[-1]["id"] in interruptions:
+            interrupted = interruptions[runs[-1]["id"]]
+            errors = evidence_errors(interrupted["evidence"])
+            row.update(interruption=interrupted["id"],
+                       evidence=copy.deepcopy(interrupted["evidence"]),
+                       reasons=["previous launch interrupted without qualification: " + interrupted["reason"]])
+            # An interrupted required rerun cannot revive an older PASS.
+            # There is no algorithm verdict or fabricated coverage here.
+            if errors:
+                row.update(action="restore-evidence", reasons=errors)
+        elif unit_of(name, wanted) is not None:
+            RequirementsLedger._reference_row(doc, name, wanted, attempts, row, batch,
+                                              root=root, log_dir=log_dir, explain=explain)
+        elif candidate is not None:
+            later_failures = [a for a in attempts[attempts.index(candidate) + 1:] if a["status"] == "failed"]
+            conflicting = (candidate["status"] == "passed" and RequirementsLedger._conflicting_failure(
+                doc, name, later_failures, wanted, row, root=root, log_dir=log_dir))
+            if not conflicting:
+                old = RequirementsLedger._retained_attempt(name, candidate, row)
+                if old is not None:
+                    if candidate["fingerprint"] == wanted["fingerprint"]:
+                        row.update(status=candidate["status"], action="reuse" if candidate["status"] == "passed" else "repair",
+                            reasons=["same declared inputs and verified retained evidence"] if candidate["status"] == "passed"
+                            else ["previous attempt failed: " + candidate["summary"]])
+                    else:
+                        row["reasons"] = changes(old["inputs"], wanted["inputs"])
+                        if candidate["status"] != "passed":
+                            row["reasons"].append("previous attempt failed: " + candidate["summary"])
+                        elif wanted.get("kind") in ("identity", "performance"):
+                            RequirementsLedger._equivalence(doc, name, old, wanted, row, root=root, log_dir=log_dir)
+        else:
+            row["reasons"] = ["no qualification evidence recorded for this requirement"]
+        if not producer_admission_available(wanted) and row["status"] != "passed":
+            if row["action"] in ("run", "repair"):
+                row["action"] = "complete-provenance"
+            row["producer_admission"] = "unsupported"
+            row["reasons"].append("producer report adapter unavailable: reconcile retained evidence before scheduling new execution")
+        return row
+
+    @staticmethod
+    def _indexes(doc):
+        """(attempts by requirement in begin order, runs by requirement, finished run ids, interruptions):
+        one pass over the history, not one per requirement (the per-row scans made evaluate quadratic)."""
         positions = {run["id"]: index for index, run in enumerate(doc.get("runs", []))}
         finished = {a["run_id"] for a in doc.get("attempts", [])}
         interruptions = {item["run_id"]: item for item in doc.get("interruptions", [])}
         finished.update(interruptions)
-        for name, wanted in doc["requirements"].items():
+        attempts, runs = {}, {}
+        for index, attempt in enumerate(doc.get("attempts", [])):
+            attempts.setdefault(attempt["requirement"], []).append((index, attempt))
+        for name, pairs in attempts.items():
             # Begin order wins over finish order: an older in-flight result
             # cannot replace the result of a newer source freeze/run.
-            attempts = [(index, a) for index, a in enumerate(doc.get("attempts", [])) if a["requirement"] == name]
-            attempts.sort(key=lambda pair: (positions.get(pair[1]["run_id"], -1), pair[0]))
-            attempts = [a for _, a in attempts]
-            runs = [run for run in doc.get("runs", []) if run["requirement"] == name]
-            latest = attempts[-1] if attempts else None
-            matching = [a for a in attempts if a["fingerprint"] == wanted["fingerprint"]]
-            candidate = matching[-1] if matching else latest
-            row = dict(status="untested", source_revision=wanted["source_revision"],
-                       input_fingerprint=wanted["fingerprint"], evidence=[], reasons=[],
-                       action="run", required=wanted["required"], stage=wanted.get("stage", "pre"))
-            for key in ("parent_requirement", "dependency_limitations", "provenance_sources", "dependency_provenance", "recipe_discovery"):
-                if key in wanted:
-                    row[key] = copy.deepcopy(wanted[key])
-            if runs and runs[-1]["id"] not in finished:
-                active = runs[-1]
-                row.update(action="resume", active_run=active["id"], active_revision=active["source_revision"],
-                           active_input_fingerprint=active["fingerprint"],
-                           reasons=[("unfinished recorded run for current inputs: " if active["fingerprint"] == wanted["fingerprint"]
-                                     else "unfinished recorded run for different inputs at " + active["source_revision"] + ": ")
-                                    + active["id"], *active["reasons"]])
-            elif wanted.get("fingerprint") != digest(wanted.get("inputs")):
-                row.update(action="complete-provenance", reasons=["requirement fingerprint does not match its inputs"])
-            elif wanted.get("missing_inputs"):
-                row.update(action="complete-provenance", reasons=["missing input: " + k for k in wanted["missing_inputs"]])
-            elif runs and runs[-1]["id"] in interruptions:
-                interrupted = interruptions[runs[-1]["id"]]
-                errors = evidence_errors(interrupted["evidence"])
-                row.update(interruption=interrupted["id"],
-                           evidence=copy.deepcopy(interrupted["evidence"]),
-                           reasons=["previous launch interrupted without qualification: " + interrupted["reason"]])
-                # An interrupted required rerun cannot revive an older PASS.
-                # There is no algorithm verdict or fabricated coverage here.
-                if errors:
-                    row.update(action="restore-evidence", reasons=errors)
-            elif unit_of(name, wanted) is not None:
-                RequirementsLedger._reference_row(doc, name, wanted, attempts, row, batch,
-                                                  root=root, log_dir=log_dir, explain=explain)
-            elif candidate is not None:
-                later_failures = [a for a in attempts[attempts.index(candidate) + 1:] if a["status"] == "failed"]
-                conflicting = (candidate["status"] == "passed" and RequirementsLedger._conflicting_failure(
-                    doc, name, later_failures, wanted, row, root=root, log_dir=log_dir))
-                if not conflicting:
-                    old = RequirementsLedger._retained_attempt(name, candidate, row)
-                    if old is not None:
-                        if candidate["fingerprint"] == wanted["fingerprint"]:
-                            row.update(status=candidate["status"], action="reuse" if candidate["status"] == "passed" else "repair",
-                                reasons=["same declared inputs and verified retained evidence"] if candidate["status"] == "passed"
-                                else ["previous attempt failed: " + candidate["summary"]])
-                        else:
-                            row["reasons"] = changes(old["inputs"], wanted["inputs"])
-                            if candidate["status"] != "passed":
-                                row["reasons"].append("previous attempt failed: " + candidate["summary"])
-                            elif wanted.get("kind") in ("identity", "performance"):
-                                RequirementsLedger._equivalence(doc, name, old, wanted, row, root=root, log_dir=log_dir)
-            else:
-                row["reasons"] = ["no qualification evidence recorded for this requirement"]
-            if not producer_admission_available(wanted) and row["status"] != "passed":
-                if row["action"] in ("run", "repair"):
-                    row["action"] = "complete-provenance"
-                row["producer_admission"] = "unsupported"
-                row["reasons"].append("producer report adapter unavailable: reconcile retained evidence before scheduling new execution")
-            rows[name] = row
+            pairs.sort(key=lambda pair: (positions.get(pair[1]["run_id"], -1), pair[0]))
+            attempts[name] = [a for _, a in pairs]
+        for run in doc.get("runs", []):
+            runs.setdefault(run["requirement"], []).append(run)
+        return attempts, runs, finished, interruptions
+
+    @staticmethod
+    def evaluate(doc, *, root=None, log_dir=None, explain=False, memo=None, jobs=None, stats=None):
+        """{requirement: row}. Each row depends only on its own inputs, history and evidence, so rows are
+        independent: a row whose digest (row_digest) is in MEMO is read from it, the rest are computed, on
+        ``jobs`` worker processes when there are many (ledger_jobs()). STATS (a dict) receives seconds,
+        units, records, computed, reused and jobs."""
+        started = time.monotonic()
+        from release_identity_reference import unit_of
+        batch = RequirementsLedger._reference_batch(doc, root, log_dir)
+        attempts, runs, finished, interruptions = RequirementsLedger._indexes(doc)
+        settings = evaluation_settings(root, explain)
+        groups = {}
+        rows, pending, keys = {}, [], {}
+        for name, wanted in doc["requirements"].items():
+            if memo is not None:
+                group = None
+                if unit_of(name, wanted) is not None:
+                    revision = wanted.get("source_revision")
+                    if revision not in groups:
+                        groups[revision] = batch.group_digest(revision)
+                    group = groups[revision]
+                keys[name] = row_digest(doc, name, wanted, attempts.get(name, []), runs.get(name, []),
+                                        finished, interruptions, settings, group)
+                found = memo.get(name, keys[name])
+                if found is not None:
+                    rows[name] = found
+                    continue
+            pending.append(name)
+        jobs = ledger_jobs() if jobs is None else max(1, int(jobs))
+        discovering = _discovery_pending() is not None
+        used = 1
+        computed = {}
+        if jobs > 1 and len(pending) >= POOL_MIN_ROWS and not discovering:
+            # The dependency prefetch's discovery mode (release_requirement_dependencies) records snapshot
+            # requests in this process's context, so its rounds evaluate here, never in a worker.
+            try:
+                computed = _pool_rows(doc, pending, batch, root=root, log_dir=log_dir, explain=explain, jobs=jobs)
+                used = min(jobs, len(pending))
+            except (OSError, RuntimeError, ImportError, AttributeError, TypeError) as problem:
+                # A pool that cannot start (pickling, process limits) leaves the evaluation correct, serially.
+                if stats is not None:
+                    stats["pool_error"] = f"{type(problem).__name__}: {str(problem)[:200]}"
+                computed = {}
+        for name in pending:
+            if name in computed:
+                continue
+            asked = len(_discovery_pending() or ())
+            computed[name] = RequirementsLedger._evaluate_row(
+                doc, name, doc["requirements"][name], attempts.get(name, []), runs.get(name, []), finished,
+                interruptions, batch, root=root, log_dir=log_dir, explain=explain)
+            if discovering and len(_discovery_pending() or ()) != asked:
+                keys.pop(name, None)  # computed without a snapshot it asked for: never remembered
+        for name in pending:
+            if memo is not None and name in keys:
+                memo.put(name, keys[name], computed[name])
+            rows[name] = computed[name]
+        rows = {name: rows[name] for name in doc["requirements"]}
+        if stats is not None:
+            stats.update(seconds=round(time.monotonic() - started, 3), units=len(rows),
+                         records=len(doc.get("attempts", [])) + len(doc.get("runs", []))
+                         + len(doc.get("interruptions", [])),
+                         computed=len(pending), reused=len(rows) - len(pending), jobs=used)
         return rows
 
     def _evaluate(self, doc):
-        return self.evaluate(doc, root=self.source_root or doc.get("source_root"),
+        stats = {}
+        rows = self.evaluate(doc, root=self.source_root or doc.get("source_root"),
                              log_dir=self.evidence_log_dir or doc.get("dependency_log_dir"),
-                             explain=self.explain)
+                             explain=self.explain, memo=self.memo, jobs=self.jobs, stats=stats)
+        self.last_stats = stats
+        return rows
 
     def plan(self, manifest=None):
         doc = self.read()
@@ -873,6 +973,147 @@ class RequirementsLedger:
 
     def gate(self, manifest=None, stage=None):
         return gate_rows(self.plan(manifest), stage)
+
+
+# ------------------------------------------------------------ evaluating once (lane post-ledger-once, 2026-11-07)
+# 0.8.66 run h: the gates evaluated the whole ledger serially on the Mac (10+ min at 96 % of one core) with both
+# rented boxes idle, and linux-builds, the publish preflight and the record evaluated the same ledger again.
+# A row is a function of its own inputs, its own history, its evidence files and the evaluator code, so it is
+# keyed by row_digest and computed once; the rest of the rows are read from the memo.
+
+#: the evaluator's own code: a change to any of these computes every row again
+EVALUATOR_FILES = ("release_requirements.py", "release_identity_reference.py", "release_requirement_receipts.py",
+                   "release_requirement_dependencies.py", "release_requirement_routes.py", "identity_at_freeze.py")
+#: rows below which the evaluation stays in this process (a spawned worker costs about a second to start)
+POOL_MIN_ROWS = 64
+
+
+def ledger_jobs():
+    """Worker processes for the evaluation: every core unless MOJOLEARN_LEDGER_EVAL_JOBS says otherwise."""
+    try:
+        return max(1, int(os.environ.get("MOJOLEARN_LEDGER_EVAL_JOBS") or os.cpu_count() or 1))
+    except ValueError:
+        return os.cpu_count() or 1
+
+
+_EVALUATOR = {}
+
+
+def evaluator_digest():
+    here = Path(__file__).resolve().parent
+    if "digest" not in _EVALUATOR:
+        _EVALUATOR["digest"] = digest({name: hashlib.sha256((here / name).read_bytes()).hexdigest()
+                                       for name in EVALUATOR_FILES if (here / name).is_file()})
+    return _EVALUATOR["digest"]
+
+
+def evaluation_settings(root, explain):
+    """What every row depends on besides its own record: the evaluator, the source root, --explain and the
+    identity admission the identity rows are judged at (MOJOLEARN_IDENTITY_REFERENCE_AT)."""
+    return dict(evaluator=evaluator_digest(), root=str(root) if root else None, explain=bool(explain),
+                identity_reference_at=os.environ.get("MOJOLEARN_IDENTITY_REFERENCE_AT") or "")
+
+
+def _evidence_stat(item):
+    try:
+        path = Path(item["path"])
+        st = path.stat()
+        return [str(path), item.get("sha256"), st.st_size, st.st_mtime_ns]
+    except (OSError, KeyError, TypeError, ValueError):
+        return [str(item.get("path")) if isinstance(item, dict) else None, None]
+
+
+def row_digest(doc, name, wanted, attempts, runs, finished, interruptions, settings, group=None):
+    """The digest of everything evaluate's row NAME reads: the declared requirement, its attempts and runs
+    (with which runs are finished and how interrupted), the size and mtime of every evidence file they cite
+    (evidence_errors hashes those files), the previous status fields the equivalence check reuses, the
+    identity group's digest (reference verdicts are read per revision) and SETTINGS."""
+    own = [interruptions[run["id"]] for run in runs if run["id"] in interruptions]
+    evidence = [_evidence_stat(item) for record in list(attempts) + own for item in record.get("evidence", []) or []
+                if isinstance(item, dict)]
+    # Only the equivalence check (non-identity-unit identity/performance rows) reads the previous status, for
+    # its proof; any other row would recompute once after every sync for nothing.
+    previous = (doc.get("status", {}).get(name, {}) or {}) if (
+        group is None and wanted.get("kind") in ("identity", "performance")) else {}
+    return digest(dict(settings=settings, wanted=wanted, attempts=attempts, runs=runs,
+                       finished=[run["id"] in finished for run in runs], interruptions=own, evidence=evidence,
+                       previous={k: previous.get(k) for k in ("source_revision", "input_fingerprint", "attempt",
+                                                              "equivalence_proof")},
+                       group=group))
+
+
+class EvaluationMemo:
+    """{requirement: {digest, row}}: the rows already computed, read back when their digest matches.
+    Shared by the threads of one release (the two gates), so it is locked."""
+
+    def __init__(self, rows=None):
+        self.rows = dict(rows or {})
+        self.lock = threading.Lock()
+        self.dirty = False
+
+    def get(self, name, key):
+        with self.lock:
+            entry = self.rows.get(name)
+            return copy.deepcopy(entry["row"]) if entry and entry.get("digest") == key else None
+
+    def put(self, name, key, row):
+        with self.lock:
+            self.rows[name] = dict(digest=key, row=copy.deepcopy(row))
+            self.dirty = True
+
+    def snapshot(self):
+        with self.lock:
+            return copy.deepcopy(self.rows)
+
+
+def _discovery_pending():
+    """The snapshot requests of the dependency prefetch's discovery round in progress, or None."""
+    module = sys.modules.get("release_requirement_dependencies")
+    variable = getattr(module, "_DISCOVERY", None)
+    return variable.get() if variable is not None else None
+
+
+_WORKER = {}
+
+
+def _pool_init(doc, root, log_dir, explain, found):
+    _WORKER.clear()
+    _WORKER.update(doc=doc, root=root, log_dir=log_dir, explain=explain,
+                   batch=RequirementsLedger._reference_batch(doc, root, log_dir, found=found),
+                   indexes=RequirementsLedger._indexes(doc))
+
+
+def _pool_chunk(names):
+    doc, batch = _WORKER["doc"], _WORKER["batch"]
+    attempts, runs, finished, interruptions = _WORKER["indexes"]
+    return {name: RequirementsLedger._evaluate_row(doc, name, doc["requirements"][name], attempts.get(name, []),
+                                                   runs.get(name, []), finished, interruptions, batch,
+                                                   root=_WORKER["root"], log_dir=_WORKER["log_dir"],
+                                                   explain=_WORKER["explain"])
+            for name in names}
+
+
+def _pool_rows(doc, names, batch, *, root, log_dir, explain, jobs):
+    """{name: row} of NAMES on JOBS spawned worker processes. The document reaches each worker once (its
+    initializer), the reference verdicts are read here first and handed over, and the rows go out in
+    chunks of about four per worker so a slow row does not hold the rest."""
+    import multiprocessing
+    import pickle
+    from concurrent.futures import ProcessPoolExecutor
+    batch.warm(names)
+    workers = max(1, min(jobs, len(names)))
+    size = max(1, -(-len(names) // (workers * 4)))
+    chunks = [names[i:i + size] for i in range(0, len(names), size)]
+    try:
+        with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"),
+                                 initializer=_pool_init,
+                                 initargs=(doc, root, log_dir, explain, batch.found)) as pool:
+            out = {}
+            for part in pool.map(_pool_chunk, chunks):
+                out.update(part)
+            return out
+    except pickle.PicklingError as problem:
+        raise TypeError(str(problem)) from problem
 
 
 def gate_rows(rows, stage=None):
