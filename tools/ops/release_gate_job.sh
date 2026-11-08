@@ -195,6 +195,7 @@ if [ "${GATE_REUSE:-0}" = 1 ]; then
     fi
 fi
 
+disk_line tree
 PHASE=gpu
 if [ "$GATE_VENDOR" = nvidia ]; then
     cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d ' .')
@@ -205,6 +206,7 @@ fi
 [ "$gpu" = "$GATE_TARGET" ] || { say "this box's GPU is $gpu, not $GATE_TARGET"; exit 3; }
 say "GPU $gpu"
 
+disk_line gpu
 PHASE=runtime
 if [ "$GATE_VENDOR" = amd ] && [ "$GATE_ADAPTERS" = 1 ] && [ ! -d /opt/rocm-7.2.3/lib ]; then
     say "installing the ROCm 7.2.3 runtime (tools/amd_box_runtime_setup.sh)"
@@ -217,6 +219,7 @@ if ! python3 -c 'import ensurepip, venv' 2>/dev/null; then
     { apt-get -o DPkg::Lock::Timeout=300 update -qq && apt-get -o DPkg::Lock::Timeout=300 install -y -qq "python$pyv-venv"; } > "$J/apt.log" 2>&1
 fi
 
+disk_line runtime
 PHASE=measuresmoke-setup
 # THE MEASUREMENT SMOKE'S SETUP, IN THE BACKGROUND (network and disk bound, 20-45 min in all at 0.8.66): its two
 # venvs install while identity, the build, shardcheck, the device checks and the runtime qualifier run, so the smoke
@@ -273,6 +276,7 @@ PIXI=$(command -v pixi || echo /root/.pixi/bin/pixi)
 PYTHON=$GATE_TREE/.pixi/envs/default/bin/python3
 { "$PIXI" --version; "$GATE_TREE/.pixi/envs/default/bin/mojo" --version; } > "$J/compiler.txt" 2>&1
 
+disk_line pixi
 PHASE=build
 mkdir -p "$GATE_WORK/out"
 if [ "${GATE_BUILD_AUTOGRAD:-1}" = 0 ]; then
