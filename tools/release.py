@@ -5640,14 +5640,21 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 receipts += [p for p in (out / "wheel.json", out / adapter_gate_module().RECEIPT, out / "reuse.json")
                              if p.is_file()]
                 why.append("adapters " + adapters)
-            return receipts, "; ".join(why)
+            return receipts + self.repack_receipts(), "; ".join(why)
         ok, why = self.gate_ok(vendor)
         if not ok:
             raise StepFailed(f"published-{vendor}: gate-{vendor} has not passed for these candidate bytes: {why}")
         out = self.gate_out(vendor)
         receipts = [p for p in (out / "gate-smoke.json", out / "adapter-smoke" / adapter_gate_module().RECEIPT,
                                 out / f"runtime-{vendor}" / "runtime-report.json") if p.is_file()]
-        return receipts, f"gate-{vendor} " + why
+        return receipts + self.repack_receipts(), f"gate-{vendor} " + why
+
+    def repack_receipts(self):
+        """identity-admit's repack receipts (input = the gated bytes, output = the shipped bytes, the admitted
+        table): gate evidence for the published check, which asks that every published wheel's sha256 appear in
+        the retained evidence (0.8.66 run u, 2026-11-08: the repacked core wheel's hash was in no gate receipt)."""
+        done = self.admitted() if self.single() else None
+        return [Path(p) for p in ((done or {}).get("repacked") or {}).values() if isinstance(p, str) and Path(p).is_file()]
 
     def published_ok(self, vendor):
         """(ok, why): a passed published-<vendor> bytes report for this version, vendor and these candidates."""
