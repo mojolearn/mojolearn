@@ -240,11 +240,27 @@ def test_gate_apple_passes_on_passed(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("status", ["NO_FRAMEWORK", "FAILED"])
 def test_gate_apple_fails_on_anything_but_passed(tmp_path, monkeypatch, status):
+    # --strict: the adapter smoke stops gate-apple (the behavior before 2026-11-08)
     monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
     r = apple_runner(tmp_path, status)
+    r.args.strict = True
     with pytest.raises(release.StepFailed):
         r.step_gate_apple()
-    assert not r.apple_adapters_ok()[0]
+    assert not r.apple_adapters_ok()[0] and not r.apple_adapters_soft_failed()
+
+
+@pytest.mark.parametrize("status", ["NO_FRAMEWORK", "FAILED"])
+def test_gate_apple_records_a_failed_adapter_smoke_as_soft(tmp_path, monkeypatch, status):
+    # fail soft (tools/release_verdicts.py apple/adapters): recorded, notified, gate-apple continues
+    import release_verdicts as RV
+    monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
+    r = apple_runner(tmp_path, status)
+    lines = []
+    r.say = lines.append
+    assert "SOFT FAIL apple/adapters" in r.step_gate_apple()
+    assert [f["name"] for f in RV.load(r.rel)] == ["apple/adapters"] and r.apple_adapters_soft_failed()
+    assert any(l.startswith("SOFT FAIL apple apple/adapters: ") for l in lines)
+    assert (r.base / RV.rel_name(r.version) / "SOFT-FAILURES.md").is_file()   # the notice stays under the fake state
 
 
 def test_gate_apple_is_skipped_when_no_adapters_ship(tmp_path, monkeypatch):
@@ -257,7 +273,7 @@ def test_publish_macos_needs_a_passed_apple_adapter_smoke(tmp_path, monkeypatch)
     monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
     r = apple_runner(tmp_path, "NO_FRAMEWORK")
     with pytest.raises(release.StepFailed, match="run gate-apple"):
-        r.step_publish_macos()
+        r.step_publish_macos()   # no adapter smoke at all, recorded neither as passed nor as a SOFT failure
 
 
 def test_cpu_column_records_the_adapter_refusal_as_its_expected_outcome():
