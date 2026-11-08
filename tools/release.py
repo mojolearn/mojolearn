@@ -3149,8 +3149,45 @@ class Release(release_identity_wheels.IdentityOnWheels):
                                          say=lambda line: self.say("  " + line), ran=ran)
         units = len(manifest.get("requirements", {}))
         failed = sum(1 for row in ran if not row.get("ok"))
+        ledger = self.prefetch_ledger_rounds("readiness")
         return (f"{units} requirement unit(s); {len(ran)} frozen snapshot(s) run ({failed} failed), "
-                f"{jobs} at once on {worker}", dict(snapshots=len(ran), snapshot_jobs=jobs, snapshot_worker=worker))
+                f"{jobs} at once on {worker}; ledger: {ledger['summary']}",
+                dict(snapshots=len(ran), snapshot_jobs=jobs, snapshot_worker=worker, ledger_prefetch=ledger))
+
+    #: THE LEDGER'S ROUNDS, PREFETCHED BY THE STEP THAT MAKES THEM KNOWABLE (2026-11-07). Each step that reads the
+    #: ledger (linux-builds: find_requirement_leg / begin_compile_requirements; gate-<vendor>: run_gate's
+    #: readiness_status(write=True); the publish preflight and record: release_gate) asks for frozen snapshots
+    #: whose requests depend on what exists then: the candidate wheel hashes (artifacts:<platform>) resolve the
+    #: identity, candidate and runtime-<vendor> units, which decide the reference_closures bases and the retained
+    #: producers' reconstructions; the identity admission commit (--identity-on-wheels,
+    #: MOJOLEARN_IDENTITY_REFERENCE_AT) moves the revision the identity rows are judged at. So the producing step
+    #: runs them, on every core, before it reports done: readiness for the freeze (linux-builds' rounds),
+    #: linux-pack for the NVIDIA/AMD candidate wheels and macos-build for the Apple one (before gate-boxes
+    #: rents: 0.8.66 run e, both gates ran the analysis serially on the Mac for 20+ min with the NVIDIA pod and
+    #: the AMD droplet held), identity-admit for its admission commit (the publish preflight's rounds).
+    LEDGER_PREFETCH_AFTER = ("linux-pack", "macos-build", "identity-admit")
+
+    def prefetch_ledger_rounds(self, after):
+        """Every frozen snapshot the ledger's read-only evaluation asks for now (readiness_status(write=False):
+        the manifest, the retained producers' reconstructions, the reference closures, the equivalence
+        proofs), run at once through release_requirement_dependencies.prefetch into the snapshot cache, so the
+        writing read of a later step finds them cached. Read-only: nothing is written to the ledger. A failure
+        is reported, never fatal: the later step evaluates (and fails) exactly as it would have."""
+        import release_requirement_dependencies as dependencies
+        ran, started = [], time.monotonic()
+        try:
+            dependencies.prefetch(lambda: self.readiness_status(write=False), ran=ran,
+                                  say=lambda line: self.say("  " + line))
+            error = None
+        except Exception as problem:  # noqa: BLE001 - the step that needs the ledger reports it
+            error = f"{type(problem).__name__}: {str(problem)[:300]}"
+        doc = dict(after=after, snapshots=len(ran), failed=sum(1 for row in ran if not row.get("ok")),
+                   seconds=round(time.monotonic() - started, 1), error=error)
+        doc["summary"] = (f"{doc['snapshots']} ledger snapshot(s) prefetched after {after} in {doc['seconds']} s"
+                          + (f" ({doc['failed']} failed)" if doc["failed"] else "")
+                          + (f"; the evaluation stopped: {error}" if error else ""))
+        self.say("  " + doc["summary"])
+        return doc
 
     def have_readiness(self, rec):
         # Done at this freeze by this tooling: the snapshot cache it filled is keyed by revision, request and
@@ -5672,6 +5709,13 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if not self.dry:
             data = dict(data)
             data.setdefault("seconds", round(time.monotonic() - started, 1))
+            name = "step_" + step.replace("-", "_")
+            # only the release's own step (a test that replaces the step on the instance prefetches nothing)
+            own = getattr(getattr(self, name), "__func__", None) is getattr(type(self), name, None)
+            if (step in self.LEDGER_PREFETCH_AFTER and own and not getattr(self, "readonly", False)
+                    and not str(result).startswith("skipped")):
+                # before the step reports done, so the gate boxes are rented only after it (LEDGER_PREFETCH_AFTER)
+                data["ledger_prefetch"] = self.prefetch_ledger_rounds(step)
             self.mark(step, result=result, **data)
         return "done"
 
