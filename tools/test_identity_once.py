@@ -231,7 +231,7 @@ def test_a_gate_refuses_to_launch_after_a_publish(tmp_path, monkeypatch):
 
         def record(self, *a, **k):
             pass
-    monkeypatch.setattr(r, "readiness_status", lambda write=False: {})
+    monkeypatch.setattr(r, "readiness_status", lambda write=False, **kw: {})
     monkeypatch.setattr(r, "readiness", lambda: Ledger())
     monkeypatch.setattr(r, "gate_ok", lambda vendor, measure=True: (False, "no gate report"))
     monkeypatch.setattr(r, "gate_out", lambda vendor: tmp_path / "gate-amd" / "x-release-light-v1")
