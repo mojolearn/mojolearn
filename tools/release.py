@@ -5627,6 +5627,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
             elif smoke_passed(self.rel / "smoke-macos" / "results.json", w):
                 receipts.append(self.rel / "smoke-macos" / "results.json")
                 why.append("macOS smoke PASSED")
+            elif self.single() and self.apple_identity_ok()[0]:
+                # --identity-on-wheels: macos-smoke is SKIPPED and the Apple column is recorded from this very
+                # wheel in gate-apple (installed, imported, every lane run): that record is the passed gate
+                # (0.8.66 run u, 2026-11-08: published-apple asked for the skipped smoke)
+                receipts.append(self.apple_identity_out() / "identity-wheels.json")
+                why.append("Apple identity column recorded from this wheel (gate-apple)")
             else:
                 raise StepFailed("published-apple: the macOS wheel's smoke has not passed for these bytes "
                                  "(macos-smoke); the published bytes are judged against a passed gate only")
