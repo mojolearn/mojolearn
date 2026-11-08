@@ -93,7 +93,13 @@ qlock() { exec 8>$Q/.lock; flock 8; }
 qunlock() { flock -u 8; exec 8>&-; }
 st() { cat "$Q/$1/status" 2>/dev/null || echo missing; }
 setst() { echo "$2" > "$Q/$1/status.tmp" && mv -f "$Q/$1/status.tmp" "$Q/$1/status"; }
-putf() { echo "$2" > "$1.tmp" && mv -f "$1.tmp" "$1"; }
+# Lease files are written whole (a per-writer temp, then rename) and read through numf. The 0.8.66 release's
+# NVIDIA pod was deleted under a live hold (2026-11-08T02:53:30Z, lease.deadline=3600): an `nvq hold` start
+# truncated lease.last_busy (`date +%s > file`) at the moment the dispatcher read it, the empty read made the
+# deadline 0 + IDLE_SEC, and the pod was judged idle since 1970. A missing or torn value now means "busy now".
+putf() { echo "$2" > "$1.tmp.$$" && mv -f "$1.tmp.$$" "$1"; }
+numf() { local v; v=$(cat "$1" 2>/dev/null) || v=''; [[ "$v" =~ ^[0-9]+$ ]] && printf '%s' "$v" || printf '%s' "$2"; }  # <file> <fallback>
+mark_busy() { ! leased || putf $Q/lease.last_busy "$(date +%s)"; }
 ids() { ls -1 $Q 2>/dev/null | grep -E '^[0-9]{4,}$' | sort; }
 field() { (. "$Q/$1/job.env"; eval "printf '%s' \"\${$2:-}\""); }
 slot_free() { flock -n "$LOCKD/gpu$1.lock" true 2>/dev/null; }
@@ -117,7 +123,7 @@ lease_conf() { IDLE_MIN=60; GRACE_MIN=15; POD_ID=''; CURLRC=/tmp/mojolearn-lease
 # DELETE this pod through the RunPod API (lease.conf's key file); 0 when the API took it
 lease_delete() {  # <who>
     lease_conf
-    echo "$(now) $1: DELETING pod $POD_ID (idle since $(date -u -d @"$(cat $Q/lease.last_busy 2>/dev/null || echo 0)" +%FT%TZ 2>/dev/null))" >> $Q/lease.log
+    echo "$(now) $1: DELETING pod $POD_ID (idle since $(date -u -d @"$(numf $Q/lease.last_busy 0)" +%FT%TZ 2>/dev/null))" >> $Q/lease.log
     # every box-persisted job's results to R2 first (tools/box_persist_run.sh; bounded at 120 s)
     local bp=${BOX_PERSIST_ROOT:-/root/box-persist}/bin/box_persist_run.sh
     [ ! -f "$bp" ] || bash "$bp" --flush-all 120 >> $Q/lease.log 2>&1 || true
@@ -170,7 +176,7 @@ submit)
     } > "$d/job.env"
     [ "${GQ_FRONT:-0}" != 1 ] || : > "$d/front"
     : > "$d/log"; setst $id queued
-    ! leased || date +%s > $Q/lease.last_busy
+    mark_busy
     qunlock
     echo "$id"
     ;;
@@ -194,7 +200,7 @@ queue)
     done
     dispatcher_active && echo "dispatcher: active" || echo "dispatcher: NOT RUNNING"
     if leased; then
-        dl=$(cat $Q/lease.deadline 2>/dev/null || echo 0)
+        dl=$(numf $Q/lease.deadline 0)
         echo "lease: idle deadline $(date -u -d @"$dl" +%FT%TZ) ($(( (dl - $(date +%s)) / 60 )) min; pushed forward while busy)$( [ -e $Q/closing ] && echo '; CLOSING')"
     fi
     ;;
@@ -230,15 +236,15 @@ hold)
     [ $# -gt 0 ] || die "hold needs a command"
     [ ! -e $Q/closing ] || die "this pod is going down (idle past its lease: $(cat $Q/closing))"
     exec 9>$Q/activity.lock; flock -s 9
-    ! leased || date +%s > $Q/lease.last_busy
+    mark_busy
     bash -c "$*" 9>&-; rc=$?
-    ! leased || date +%s > $Q/lease.last_busy
+    mark_busy
     exit $rc
     ;;
 lease-check)
     leased || { echo "LEASE BAD no lease.conf (not a leased queue)"; exit 0; }
     lease_conf
-    dl=$(cat $Q/lease.deadline 2>/dev/null || echo 0); t=$(date +%s)
+    t=$(date +%s); dl=$(numf $Q/lease.deadline $t)   # torn or missing: not past due (the dispatcher rewrites it)
     bs=dead; lock_free $Q/backstop.lock || bs=alive
     dp=dead; lock_free $Q/daemon.lock || dp=alive
     ok=OK; [ $bs = alive ] || ok=BAD; [ "$t" -le $(( dl + GRACE_SEC )) ] || ok=BAD
@@ -250,7 +256,7 @@ backstop)
     echo "$(now) backstop up: deletes pod $POD_ID ${GRACE_MIN} min past the idle deadline if the dispatcher has not"
     while :; do
         lease_conf
-        dl=$(cat $Q/lease.deadline 2>/dev/null || echo $(( t0 + IDLE_SEC )))
+        dl=$(numf $Q/lease.deadline $(( t0 + IDLE_SEC )))
         if [ "$(date +%s)" -ge $(( dl + GRACE_SEC )) ]; then
             echo "$(now) backstop: $GRACE_MIN min past the deadline $(date -u -d @"$dl" +%FT%TZ) and the pod is still here"
             touch $Q/closing
@@ -350,7 +356,7 @@ daemon)
         esac
     done
     qunlock
-    if leased; then lease_conf; [ -s $Q/lease.last_busy ] || date +%s > $Q/lease.last_busy; fi
+    if leased; then lease_conf; [ -n "$(numf $Q/lease.last_busy '')" ] || mark_busy; fi
     starting_since=0
     while :; do
         qlock
@@ -398,8 +404,9 @@ daemon)
             t=$(date +%s)
             held=0; for g in $(seq 0 $((SLOTS - 1))); do slot_free $g || held=1; done
             lock_free $Q/activity.lock || held=1
-            if [ $npend -gt 0 ] || [ $active = 1 ] || [ $held = 1 ]; then echo $t > $Q/lease.last_busy; fi
-            dl=$(( $(cat $Q/lease.last_busy 2>/dev/null || echo $t) + IDLE_SEC ))
+            if [ $npend -gt 0 ] || [ $active = 1 ] || [ $held = 1 ]; then putf $Q/lease.last_busy $t; lb=$t
+            else lb=$(numf $Q/lease.last_busy $t); fi   # busy: now, never a re-read another writer can tear
+            dl=$(( lb + IDLE_SEC ))
             putf $Q/lease.deadline $dl
             if [ "$t" -ge "$dl" ] && [ ! -e $Q/closing ]; then
                 echo "$(now) idle $((IDLE_SEC / 60)) min: nothing queued, running or holding a slot" > $Q/closing

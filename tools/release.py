@@ -1335,7 +1335,12 @@ class BoxKeeper:
     `nvidia_central.sh sh` command runs, so one hold runs there (`sh <lane> <wait for the release file>`, at
     most Release.HOLD_MAX_S, started again while still needed), never a hand `sleep` on the Mac. It ends when
     nothing is pending: the release file is touched through the same wrapper and the hold exits.
-    AMD: the droplet's lease is renewed (`do_amd_steward.sh extend AMD_RENEW_MIN`) every AMD_RENEW_EVERY_S."""
+    AMD: the droplet's lease is renewed (`do_amd_steward.sh extend AMD_RENEW_MIN`) every AMD_RENEW_EVERY_S.
+    A held box whose state is gone (Release.box_alive false: the pod's watcher retired it, the droplet's state
+    was removed) is logged at once as "BOX LOST <vendor> <box> at <time>" and dropped from the held boxes, so
+    the next box step's gate-boxes rents (or adopts) a live one instead of copying to a dead box. A tick that
+    raises is logged and retried: the keeper never dies quietly while the release waits (the AMD lease would
+    then run out under a long Mac-side stretch)."""
 
     def __init__(self, release):
         self.r = release
@@ -1381,12 +1386,30 @@ class BoxKeeper:
             rec["lease_extended_at"] = self.r.clock() - (0 if rc == 0 else self.r.AMD_RENEW_EVERY_S - 300)
             self.r.save()
 
+    def box_lost(self, vendor, rec):
+        box = rec.get("pod") or rec.get("droplet") or "?"
+        at = now()
+        self.r.say(f"  BOX LOST {vendor} {box} at {at}: its state is gone while this release holds it; "
+                   f"the next box step's gate-boxes brings up a live one")
+        with self.r._lock:
+            rec["lost"] = at
+            self.r.save()
+        if vendor == "nvidia":
+            self.hold = None   # its ssh ends with the pod
+
     def tick(self):
         """One pass; the vendors still needed."""
         need = self.r.boxes_pending()
         held = self.r.held_boxes()
+        for vendor in sorted(need & set(held)):
+            if not self.r.box_alive(vendor, held[vendor]):
+                self.box_lost(vendor, held.pop(vendor))
         if "nvidia" in need and "nvidia" in held:
-            if self.hold is None or self.hold.poll() is not None:
+            rc = None if self.hold is None else self.hold.poll()
+            if rc not in (None, 0):
+                self.r.say(f"  box keeper: the NVIDIA hold on {held['nvidia'].get('pod')} ended rc {rc} at {now()}; "
+                           f"started again (a lost pod is reported BOX LOST once its state is retired)")
+            if self.hold is None or rc is not None:
                 self.start_hold()
         else:
             self.end_hold()
@@ -1396,7 +1419,14 @@ class BoxKeeper:
 
     def loop(self):
         try:
-            while not self._stop.is_set() and self.tick():
+            while not self._stop.is_set():
+                try:
+                    left = self.tick()
+                except Exception as exc:   # noqa: BLE001 -- the keeper outlives one bad pass
+                    self.r.say(f"  box keeper: a pass failed ({exc!r}); retried in {self.r.KEEPER_TICK_S} s")
+                    left = True
+                if not left:
+                    break
                 self._stop.wait(self.r.KEEPER_TICK_S)
         finally:
             self.end_hold()
@@ -4942,9 +4972,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return needs
 
     def held_boxes(self):
-        """{vendor: record} of the boxes this release holds (not taken down, not released)."""
+        """{vendor: record} of the boxes this release holds (not taken down, not released, not lost)."""
         return {v: b for v, b in (self.state.get("boxes") or {}).items()
-                if not b.get("down") and not b.get("released")}
+                if not b.get("down") and not b.get("released") and not b.get("lost")}
 
     def box_alive(self, vendor, rec):
         if vendor == "nvidia":
@@ -4993,7 +5023,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         prev = boxes.get("nvidia") or {}
         logs = self.rel / "boxes"
         orch = dict(MOJOLEARN_ORCHESTRATOR="1")
-        if prev and not prev.get("down") and not prev.get("released") and self.box_alive("nvidia", prev):
+        if prev and not prev.get("down") and not prev.get("released") and not prev.get("lost") \
+                and self.box_alive("nvidia", prev):
             rec = prev
         elif self.nvc_live():
             # a shared pod is already up (another release run's or a lane's): adopted, nothing rented
