@@ -251,6 +251,10 @@ install_pod() {  # <key>
     n=$(BOX_TIMEOUT=120 box "nvidia-smi -L 2>/dev/null | grep -c '^GPU '" < /dev/null | tr -dc 0-9)
     [ -n "$n" ] && [ "$n" -ge 1 ] || die "$k: nvidia-smi shows no GPU"
     [ "$n" = "$GPU_COUNT" ] || say "$k: nvidia-smi shows $n GPUs (state says $GPU_COUNT); the queue uses $n"
+    # torch and its CUDA wheels from the PyTorch CDN (runpod_pod_lib.sh pod_pip_conf_script: the extra index only
+    # adds a source; PyPI stays the index and every pin is unchanged)
+    out=$(BOX_TIMEOUT=60 box "$(pod_pip_conf_script)" < /dev/null 2>&1 | tail -1) || true
+    say "$k: ${out:-POD_PIP_CONF not written (no answer)}"
     BOX_TIMEOUT=120 box "set -e; command -v flock setsid > /dev/null
 [ -s /tmp/mojolearn-lease.curlrc ] || { echo 'no RunPod key on the pod (/tmp/mojolearn-lease.curlrc); the queue lease could not delete it' >&2; exit 3; }
 mkdir -p $QD/bin $LOCKD && cat > $NVQ.new && chmod 755 $NVQ.new && mv -f $NVQ.new $NVQ
