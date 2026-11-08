@@ -749,7 +749,10 @@ def prep(args):
         if d not in DATASETS:
             raise SystemExit("unknown dataset %r; choose from %s" % (d, DATASETS))
     os.makedirs(args.data, exist_ok=True)
-    harness = _module("speed_gbdt_arm")
+    # --inputs verify-fixtures (the release measurement smoke only): every block from the identity verification's
+    # fixture `base` through the one helper (tools/smoke_inputs.py prep_sources), never from the dataset files
+    harness, knn_src = _module("smoke_inputs").prep_sources(getattr(args, "inputs", None) or "datasets",
+                                                            _module("speed_gbdt_arm"), None)
     blocks = sorted({BLOCK_OF[l] for l in lanes})
     # --max-rows: the SMOKE shape (a harness bug costs minutes, not a lease).
     # Every block is capped; a smoke block is never a timing row.
@@ -874,7 +877,7 @@ def prep(args):
                             "tol": SVC_TOL})
             _write_block(args.data, "svc-" + ds, {"X": Xf, "y": y, "Xq": Xq, "yq": yq}, rec)
         if "knn" in blocks:
-            knn_ds = _module("knn_datasets")
+            knn_ds = knn_src or _module("knn_datasets")
             blk = knn_ds.real_block(ds, n_index=knn_index, n_queries=knn_queries)
             index, bad_i = clean_sentinel(blk["index"])
             queries, bad_q = clean_sentinel(blk["queries"])
@@ -3544,6 +3547,9 @@ def build_parser():
     p.add_argument("--datasets", default=",".join(DATASETS))
     p.add_argument("--max-rows", type=int, default=0,
                    help="SMOKE shape: cap every block near this many rows (0 = the lane shapes)")
+    p.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
+                   help="verify-fixtures: the release measurement smoke's blocks from the identity fixture "
+                        "(tools/smoke_inputs.py); never a timed run")
     w = sub.add_parser("worker")
     w.add_argument("--arm", required=True)
     w.add_argument("--lane", required=True, choices=LANES)

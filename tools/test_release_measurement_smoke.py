@@ -245,6 +245,11 @@ def test_each_batch_is_the_boards_own_smoke_with_our_arm_only(tmp_path):
     for flag in ("--with-opponents", "--retime-opponents", "--opponent-store", "--opponents-only", "--rows",
                  "--neural-shape", "--retime-cpu-opponents"):
         assert flag not in cmd
+    assert "--inputs" not in cmd                                       # no input map: the datasets
+    args.inputs_map = tmp_path / "smoke_inputs.json"
+    cmd = MS.board_command(args, tmp_path / "b000", ["--race-ids", "@ids.json"])
+    assert cmd[cmd.index("--inputs") + 1] == "synthetic" and cmd[cmd.index("--inputs-map") + 1] == str(
+        tmp_path / "smoke_inputs.json")
     env = MS.batch_env(args)
     assert env["MOJOLEARN_NUMERIC_MODE"] == "identical" and "no-run-summary" in env["MOJOLEARN_SUMMARY_REPO"]
     assert env["MOJOLEARN_NEURAL_FIXTURES"].startswith(str(tmp_path))
@@ -263,26 +268,48 @@ def test_every_file_the_plan_reads_is_pinned_and_staged_where_the_board_looks(tm
     import bench_board as B
     pins = MS.pins()
     for vendor in VENDORS:
-        keys = MS.data_keys(vendor)
+        keys = MS.data_keys(vendor, inputs=MS.DATASETS_INPUTS)
         assert set(keys) >= {B.R2_KEYS[d] for d in ("taxi", "istella", "istella-rank", "higgs")}
         assert all(k in pins for k in keys)
         for k, rel in keys.items():
             assert rel == ("r2-stage/" + k if k.startswith("corpus/") else "datasets/" + k), k
-    entries = MS.write_data_plan("nvidia", tmp_path / "d.json", presign=lambda k, s: "https://r2/%s" % k)
+    entries = MS.write_data_plan("nvidia", tmp_path / "d.json", presign=lambda k, s: "https://r2/%s" % k,
+                                 inputs=MS.DATASETS_INPUTS)
     doc = json.loads((tmp_path / "d.json").read_text())
     assert doc["files"] == entries and all(e["url"].startswith("https://") for e in entries)
+    assert doc["inputs"] == MS.DATASETS_INPUTS
     assert (tmp_path / "d.json").stat().st_mode & 0o077 == 0
     with pytest.raises(SystemExit):
-        MS.write_data_plan("nvidia", tmp_path / "e.json", presign=lambda k, s: "")
+        MS.write_data_plan("nvidia", tmp_path / "e.json", presign=lambda k, s: "", inputs=MS.DATASETS_INPUTS)
 
 
-def test_staging_keeps_a_file_at_its_pin_and_refuses_one_without(tmp_path):
-    data = b"pinned bytes"
-    (tmp_path / "datasets").mkdir()
-    (tmp_path / "datasets" / "f.npz").write_bytes(data)
-    entry = dict(key="k", path="datasets/f.npz", bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), url=None)
-    assert MS.stage_one(entry, tmp_path) == "present"
-    assert MS.stage_one(dict(entry, sha256="0" * 64), tmp_path) == "missing and no URL"
+def test_the_smoke_stages_no_data_and_its_data_plan_is_empty(tmp_path):
+    import bench_board as B
+    assert MS.board_takes_inputs()
+    for vendor in VENDORS:
+        races = MS.plan(vendor, B)
+        imap = MS.smoke_inputs(races, B)
+        assert MS.data_keys(vendor, B, MS.SYNTHETIC_INPUTS, imap) == {}
+        assert all(MS.race_keys(r, B, imap[r["id"]]) == {} for r in races)
+        assert all(g["keys"] == [] for g in MS.staging_groups(races, B, imap=imap))
+    entries = MS.write_data_plan("nvidia", tmp_path / "d.json", presign=lambda k, s: pytest.fail("no GET"))
+    doc = json.loads((tmp_path / "d.json").read_text())
+    assert entries == [] and doc["files"] == [] and doc["inputs"] == MS.SYNTHETIC_INPUTS
+
+
+@pytest.mark.parametrize("vendor", VENDORS)
+def test_the_work_dir_is_within_budget_from_the_plan(vendor):
+    import bench_board as B
+    races = MS.plan(vendor, B)
+    bud = MS.budget(races, MS.smoke_inputs(races, B), B, MS.MAX_BOX_WORKERS)
+    assert sum(bud["counts"].values()) == len(races) and bud["staged_bytes"] == 0
+    assert 0 < bud["work_bound_bytes"] < MS.WORK_MAX_BYTES
+    assert bud["parts"]["workers"] == MS.MAX_BOX_WORKERS and bud["parts"]["synthetic"] > 0
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("t_gate_disk_plan", str(ROOT / "tools/ops/gate_disk_plan.py"))
+    D = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(D)
+    assert round(D.SMOKE_CAP_GB * 1e9) == MS.WORK_MAX_BYTES          # the gate's cap is the budget
 
 
 # ------------------------------------------------------------------ the wiring: unconditional, in order, judged
@@ -579,7 +606,7 @@ def fake_races():
     return out
 
 
-def fake_box(tmp_path, monkeypatch, bytes_per_file=100):
+def fake_box(tmp_path, monkeypatch, bytes_per_file=100, inputs=False):
     """The smoke's run over the fake plan: staging writes the file, prep writes a block, a batch writes its board.
     Returns the observation log ([(event, group, sorted data files present)]) and the run's argv."""
     import release_gate_profiles as P
@@ -589,6 +616,15 @@ def fake_box(tmp_path, monkeypatch, bytes_per_file=100):
     monkeypatch.setattr(MS, "plan", lambda vendor, B=None: races)
     monkeypatch.setattr(MS, "device_memory_mb", lambda vendor, field: None)
     monkeypatch.setattr(MS, "board_drops_scratch", lambda: True)
+    monkeypatch.setattr(MS, "board_takes_inputs", lambda here=None: inputs)
+    if inputs:
+        # d2's recipes on the verify fixture; d1, d3 and the neural recipe on synthetic inputs (nothing staged)
+        monkeypatch.setattr(MS, "smoke_inputs", lambda rs, B=None, index=None: {
+            r["id"]: dict(input=MS.INPUT_VERIFY if r["dataset"] == "d2" else MS.INPUT_NONE, verify_lanes=[],
+                          files=[FakeBoard.R2_KEYS[r["dataset"]]]) for r in rs})
+        monkeypatch.setattr(MS, "budget", lambda *a, **k: dict(
+            counts={MS.INPUT_VERIFY: 3, MS.INPUT_FILE: 0, MS.INPUT_NONE: 4}, staged_bytes=0,
+            work_bound_bytes=10 ** 6, parts={}))
     seen = []
 
     def present():
@@ -665,6 +701,21 @@ def test_a_fake_plan_stages_and_cleans_per_group(tmp_path, monkeypatch, capsys):
     assert doc["disk"]["cap_bytes"] == int(MS.MAX_WORK_GB * 1e9) and doc["disk"]["peak_footprint_bytes"] > 0
     printed = capsys.readouterr().out
     assert "MEASURESMOKE disk free=" in printed and "after group ds-d2" in printed and "after staging ds-d1" in printed
+
+
+def test_on_the_synthetic_inputs_nothing_is_staged_and_every_batch_reads_the_map(tmp_path, monkeypatch, capsys):
+    seen, argv, home = fake_box(tmp_path, monkeypatch, inputs=True)
+    monkeypatch.setattr(MS, "stage_one", lambda e, h: pytest.fail("the smoke staged %s" % e["key"]))
+    assert MS.main(argv) == 0                                  # a data plan given is not read
+    assert seen and all(files == [] for _, _, files in seen)   # no data file on the box at any point
+    imap = json.loads((tmp_path / "work" / "smoke_inputs.json").read_text())
+    assert imap["classical/a/d2/rows=2000"]["input"] == MS.INPUT_VERIFY
+    doc = json.loads((tmp_path / "out" / MS.SUMMARY).read_text())
+    assert doc["ok"] and doc["inputs"]["mode"] == MS.SYNTHETIC_INPUTS and doc["inputs"]["staged_bytes"] == 0
+    assert doc["disk"]["cap_bytes"] == MS.WORK_MAX_BYTES                     # the budget is the cap
+    out = capsys.readouterr().out
+    assert "\nSMOKE inputs: generated on the box, 0 bytes staged\n" in out
+    assert "MEASURESMOKE inputs verify-fixture=3 synthetic-file=0 NO-VERIFY-LANE=4 staged=0 work_bound=" in out
 
 
 def test_the_cap_refuses_a_group_by_name_and_never_stages_it(tmp_path, monkeypatch, capsys):

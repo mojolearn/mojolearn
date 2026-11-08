@@ -2560,9 +2560,72 @@ def strip_our_cpu(result):
 # Classical: prep once, race per (lane, dataset); read the race JSON
 # ---------------------------------------------------------------------------
 
-def classical_data_dir(ctx, rows):
+# ---------------------------------------------------------------------------
+# --inputs synthetic: the release measurement smoke's inputs, generated on the box (tools/smoke_inputs.py)
+# ---------------------------------------------------------------------------
+
+#: {race id: {input, verify_lanes, files}} from --inputs-map (tools/release_measurement_smoke.py smoke_inputs); empty
+#: outside the smoke's synthetic mode
+INPUT_MAP = {}
+INPUT_VERIFY = "verify fixture"
+#: a fixture race's data directories carry this after their rows tag, so its fixture blocks never meet the blocks a
+#: sliced-file or no-verify-lane race of the same (block, dataset) reads
+FIXTURE_DIR_TAG = "-verify-fixtures"
+
+
+def fixture_race(race):
+    """True for a race whose prep takes fixture `base` instead of its dataset: on the verify fixture in the map
+    and reading a data file (a race reading no file keeps the driver's own seeded inputs)."""
+    rec = INPUT_MAP.get(race.get("id")) if INPUT_MAP else None
+    return bool(rec and rec.get("input") == INPUT_VERIFY and rec.get("files"))
+
+
+def set_inputs(args):
+    """--inputs: 'datasets' (every timed run) or 'synthetic' (--smoke only, with --inputs-map): THE SMOKE STAGES NO
+    DATA. A race on the verify fixture preps from fixture `base`; every dataset file another race's loader opens is
+    generated on the box in its own schema (tools/smoke_inputs.py), under <out>/work/, which --drop-race-scratch
+    deletes once the race's record is written. The mode reaches every driver through this process's environment
+    (child_env copies it)."""
+    mode = getattr(args, "inputs", None) or "datasets"
+    if mode == "datasets":
+        if getattr(args, "inputs_map", None):
+            raise SystemExit("bench_board: --inputs-map is for --inputs synthetic")
+        return mode
+    if not args.smoke:
+        raise SystemExit("bench_board: --inputs synthetic is for --smoke runs (a timed board reads its datasets)")
+    if not getattr(args, "inputs_map", None):
+        raise SystemExit("bench_board: --inputs synthetic needs --inputs-map (release_measurement_smoke.py writes it)")
+    with open(args.inputs_map) as fh:
+        doc = json.load(fh)
+    INPUT_MAP.clear()
+    INPUT_MAP.update(doc.get("recipes", doc))
+    SI = _smoke_inputs()
+    os.environ[SI.MODE_ENV] = mode
+    os.environ[SI.SYNTH_DIR_ENV] = os.path.join(os.path.abspath(os.path.expanduser(args.out)), "work",
+                                                "smoke-synthetic")
+    return mode
+
+
+_SMOKE_INPUTS = []
+
+
+def _smoke_inputs():
+    if not _SMOKE_INPUTS:
+        _SMOKE_INPUTS.append(_load_tool("smoke_inputs"))
+    return _SMOKE_INPUTS[0]
+
+
+def _synthetic_on():
+    return os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "synthetic"
+
+
+def _fixture_tag(race):
+    return FIXTURE_DIR_TAG if race is not None and fixture_race(race) else ""
+
+
+def classical_data_dir(ctx, rows, race=None):
     base = ctx["ctd_data"] or os.path.join(ctx["out"], "ctd-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_classical_prep(ctx, races):
@@ -2571,9 +2634,9 @@ def ensure_classical_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "classical":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
-        d = classical_data_dir(ctx, rows)
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
+        d = classical_data_dir(ctx, rows, r0)
         missing = sorted(p for p in pairs if not os.path.exists(
             os.path.join(d, "%s-%s.json" % (CLASSICAL_BLOCK[p[0]], p[1]))))
         if not missing:
@@ -2584,7 +2647,9 @@ def ensure_classical_prep(ctx, races):
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "classical-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        log = os.path.join(ctx["out"], "logs", "classical-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: classical prep rows=%s lanes=%s datasets=%s"
               % (rows_tag(rows), ",".join(lanes), ",".join(dss)), flush=True)
         rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
@@ -2598,7 +2663,7 @@ def classical_cmd(ctx, race):
     rsec = ctx["round_seconds"] or classical_round_seconds(lane, ds, ctx["vendor"])
     cmd = [ctx["python"], "-u", ctx["classical_driver"], "race",
            "--lane", lane, "--dataset", ds,
-           "--data", classical_data_dir(ctx, race["rows"]),
+           "--data", classical_data_dir(ctx, race["rows"], race),
            "--out", os.path.join(ctx["out"], "raw", "classical", "rows-" + rows_tag(race["rows"])),
            "--work", os.path.join(ctx["out"], "work"),
            "--root", REPO,
@@ -2615,9 +2680,9 @@ def classical_cmd(ctx, race):
     return cmd, env, ceiling
 
 
-def more_data_dir(ctx, rows):
+def more_data_dir(ctx, rows, race=None):
     base = ctx.get("more_data") or os.path.join(ctx["out"], "more-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_more_prep(ctx, races):
@@ -2626,9 +2691,9 @@ def ensure_more_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "classical2":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
-        d = more_data_dir(ctx, rows)
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
+        d = more_data_dir(ctx, rows, r0)
         missing = sorted(p for p in pairs if not os.path.exists(
             os.path.join(d, "%s-%s.json" % (MORE.block_of(p[0]), p[1]))))
         if not missing:
@@ -2639,7 +2704,9 @@ def ensure_more_prep(ctx, races):
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "classical2-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        log = os.path.join(ctx["out"], "logs", "classical2-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: classical2 prep rows=%s lanes=%s datasets=%s"
               % (rows_tag(rows), ",".join(lanes), ",".join(dss)), flush=True)
         rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
@@ -2657,7 +2724,7 @@ def more_cmd(ctx, race):
     rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
     cmd = [ctx["python"], "-u", ctx["more_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
-           "--data", more_data_dir(ctx, race["rows"]),
+           "--data", more_data_dir(ctx, race["rows"], race),
            "--arms", ",".join(race["arms"]),
            "--rounds", str(ctx["rounds"]),
            "--out", os.path.join(ctx["out"], "raw", "classical2", "rows-" + rows_tag(race["rows"])),
@@ -2676,9 +2743,9 @@ def more_json_path(ctx, race):
                         "%s-%s.json" % (race["lane"], race["dataset"]))
 
 
-def algos_data_dir(ctx, rows):
+def algos_data_dir(ctx, rows, race=None):
     base = ctx.get("algos_data") or os.path.join(ctx["out"], "algos-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_algos_prep(ctx, races):
@@ -2687,15 +2754,20 @@ def ensure_algos_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "algos":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
         lanes = sorted({p[0] for p in pairs})
         dss = sorted({p[1] for p in pairs if p[1] in DATASETS}) or ["taxi"]
-        cmd = [ctx["python"], "-u", ctx["algos_driver"], "prep", "--data", algos_data_dir(ctx, rows),
+        cmd = [ctx["python"], "-u", ctx["algos_driver"], "prep", "--data", algos_data_dir(ctx, rows, r0),
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        if INPUT_MAP:
+            # the smoke's inputs: exactly the races' datasets, so no block is built from data its group did not stage
+            cmd += ["--race-datasets", ",".join(sorted({p[1] for p in pairs}))]
+        log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: algos prep rows=%s lanes=%d datasets=%s"
               % (rows_tag(rows), len(lanes), ",".join(dss)), flush=True)
         if _in_smoke_worker():
@@ -2717,7 +2789,7 @@ def algos_cmd(ctx, race):
     rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
     cmd = [ctx["python"], "-u", ctx["algos_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
-           "--data", algos_data_dir(ctx, race["rows"]),
+           "--data", algos_data_dir(ctx, race["rows"], race),
            "--arms", ",".join(race["arms"]),
            "--rounds", str(ctx["rounds"]),
            "--out", os.path.join(ctx["out"], "raw", "algos", "rows-" + rows_tag(race["rows"])),
@@ -3213,7 +3285,17 @@ _R2_TO_DATA = {v: k for k, v in R2_KEYS.items()}
 
 
 def race_data_files(ctx, race):
-    """[(name, path)] of the data files a race reads; [] for seeded data."""
+    """[(name, path)] of the data files a race reads; [] for seeded data. In the smoke's synthetic mode: [] for a race
+    on the verify fixture, and each file's synthetic stand-in (written on the box when the race's loader opens it)."""
+    if fixture_race(race):
+        return []
+    if _synthetic_on():
+        SI = _smoke_inputs()
+        return [(n, os.path.join(SI.synthetic_dir(), SI._schema_of(p))) for n, p in _race_data_files(ctx, race)]
+    return _race_data_files(ctx, race)
+
+
+def _race_data_files(ctx, race):
     fam, lane, ds = race["family"], race["lane"], race["dataset"]
     if fam == "neural":
         # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27: HIGGS fit
@@ -3251,6 +3333,11 @@ def race_data_sha(ctx, race, box):
             return "mojolearn-sources:git %s" % (c[:-len("-dirty")] + "+dirty" if c.endswith("-dirty") else c)
         return None
     files = race_data_files(ctx, race)
+    if not files and fixture_race(race):
+        return "identity fixture %s (tools/identity_break.py)" % _smoke_inputs().FIXTURE
+    if files and _synthetic_on():
+        return "synthetic smoke inputs (tools/smoke_inputs.py: %s)" % ", ".join(
+            _smoke_inputs()._schema_of(p) for _, p in files)
     if not files:
         return "synthetic (seed %d)" % SEED
     cache = ctx.setdefault("data_sha", {})
@@ -5073,6 +5160,14 @@ def build_parser():
     p.add_argument("--measurement-source", default=None, metavar="JSON",
                    help="with --preflight-only: reuse this retained source snapshot {source, inventory} "
                         "(tools/gpu_gap_campaign.py --smoke writes it once)")
+    p.add_argument("--inputs", default="datasets", choices=("datasets", "synthetic"),
+                   help="with --smoke: synthetic stages no data: every race named on the verify fixture in "
+                        "--inputs-map runs on the identity verification's fixture `base`, every dataset loader on a "
+                        "file generated on the box in its own schema (tools/smoke_inputs.py); the timed board always "
+                        "reads its datasets")
+    p.add_argument("--inputs-map", default=None, metavar="JSON",
+                   help="with --inputs synthetic: {race id: {input, verify_lanes, files}} "
+                        "(tools/release_measurement_smoke.py smoke_inputs)")
     p.add_argument("--drop-race-scratch", action="store_true",
                    help="with --smoke: delete each race's driver scratch (work/) and its local evidence directory "
                         "once its record is written to board.json (the smoke judges the record only)")
@@ -5365,7 +5460,8 @@ def main(argv=None):
         races = select_opponent_arms(races, args.opponent_arms)
     if args.shard:
         races = shard_races(races, args.shard)
-    needed, corpus_missing = data_needs(races, datasets)
+    # the smoke's synthetic inputs need no dataset on the box: nothing is checked, nothing is staged
+    needed, corpus_missing = data_needs(races, datasets) if set_inputs(args) == "datasets" else ([], [])
     data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:
@@ -5580,6 +5676,10 @@ def main(argv=None):
         ensure_algos_prep(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
+    if _synthetic_on():
+        # the prep's synthetic files are read into its blocks now: they go at once (a race's loader writes its own)
+        import shutil
+        shutil.rmtree(_smoke_inputs().synthetic_dir(), ignore_errors=True)
     if getattr(args, "prep_only", False):
         # smoke-fixes (2026-10-14): the campaign smoke stages every recipe's untimed block prep ONCE before its
         # per-recipe loop, so no recipe's 5 s check is spent preparing data

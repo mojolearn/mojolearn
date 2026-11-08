@@ -1551,7 +1551,17 @@ def _weights(data):
 
 
 def higgs_path():
-    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists)."""
+    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists); in the release
+    measurement smoke's synthetic mode, a synthetic file in HIGGS's schema generated on the box (tools/smoke_inputs.py
+    synthetic_path: SMOKE_TRAIN_ROWS head rows hold the `small` shape's train and held-out rows)."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") != "synthetic":
+        return _higgs_path()
+    got = os.environ.get(HIGGS_ENV, "").strip()
+    return _load("smoke_inputs").synthetic_path(os.path.expanduser(got) if got else
+                                                os.path.join("higgs", "higgs_speed.npz"))
+
+
+def _higgs_path():
     got = os.environ.get(HIGGS_ENV, "").strip()
     if got:
         return os.path.expanduser(got)

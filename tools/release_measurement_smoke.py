@@ -48,7 +48,18 @@ Usage:
   release_measurement_smoke.py data-plan --vendor nvidia --out data.json # on the Mac: presigned GETs (no secret leaves)
   release_measurement_smoke.py stage --data-plan data.json               # on the box: fetch missing, verify pins
   release_measurement_smoke.py run --vendor nvidia --python VENV/bin/python --out DIR --work DIR \
-      --data-plan data.json [--max-work-gb 8]                            # stages per group, cleans after it
+      --data-plan data.json [--max-work-gb 2.1]                          # stages per group, cleans after it
+  release_measurement_smoke.py budget --vendor nvidia                    # the work-dir bound (0 bytes staged)
+
+THE INPUTS (Andrew 2026-11-08: "the smoke should be light"; "maybe the smoke fixtures should be the same as the
+verify, for those algos"; then: the smoke stages NO data at all). Over a tree whose board takes `--inputs`
+(bench_board.py, tools/smoke_inputs.py), every batch runs `--inputs synthetic --inputs-map <work>/smoke_inputs.json`:
+a recipe the map puts on the verify fixture preps from the identity verification's fixture `base`; a loader or corpus
+recipe, and a NO VERIFY LANE recipe that reads a file, opens a synthetic file in that file's own schema at the
+loader-side smoke size, generated on the box and deleted with the race's scratch. No data plan entry is read, no
+stager is called, nothing is downloaded: the header prints SMOKE_INPUTS_LINE, and the work dir stays under
+WORK_MAX_BYTES (budget(), printed too). Over an older tree the run keeps the datasets, the data plan and the 8 GB cap
+(the staging code stays for that and for the real measurement runs).
 """
 import argparse
 import hashlib
@@ -335,9 +346,11 @@ class BusyCores(threading.Thread):
 
 
 def board_command(args, out, extra, cache=None):
+    inputs = (["--inputs", "synthetic", "--inputs-map", str(args.inputs_map)]
+              if getattr(args, "inputs_map", None) else [])
     return [args.python, str(HERE / "bench_board.py"), "--smoke", "--vendor", args.vendor, "--modes", MODE,
             "--python-env", args.python, "--skip-install", "--cache", str(cache or Path(args.work) / "cache"),
-            "--data-root", args.data_root, "--evidence-local-only", "--out", str(out)] + extra
+            "--data-root", args.data_root, "--evidence-local-only", "--out", str(out)] + inputs + extra
 
 
 def run_batch(args, k, ids, deadline, recipe_timeout, group=None):
@@ -365,6 +378,16 @@ def run_batch(args, k, ids, deadline, recipe_timeout, group=None):
                   ceiling_hit=left <= budget and result.get("timed_out"), started_late=left <= 0,
                   started_at=started, group=group["name"] if group else None)
     return result
+
+
+def board_takes_inputs(here=HERE):
+    """Whether this tree's board and drivers take the smoke's synthetic inputs (this tool is a gate overlay file and
+    may run over a frozen tree that predates them; then the run keeps the datasets)."""
+    try:
+        return ("--inputs-map" in (Path(here) / "bench_board.py").read_text()
+                and "def synthetic_path" in (Path(here) / "smoke_inputs.py").read_text())
+    except OSError:
+        return False
 
 
 def board_drops_scratch():
@@ -420,7 +443,11 @@ def fixtures(args, races, out, deadline, group=None):
         return dict(lanes=0)
     if not args.fixture_python:
         return dict(lanes=len(lanes), exit_code=None, why="no --fixture-python: the layer recipes refuse")
-    data = group_cache(args, group) / "algos-data" / ("rows-%d" % B.SMOKE_ROWS)
+    # a layer lane on the verify fixture (the graph layers on taxi/istella) preps into the fixture data dir
+    imap = getattr(args, "input_map", None) or {}
+    tag = "-verify-fixtures" if any(_on_fixture(imap.get(r["id"])) for r in races if r["lane"] in lanes
+                                    and r["family"] == "algos") else ""
+    data = group_cache(args, group) / "algos-data" / ("rows-%d%s" % (B.SMOKE_ROWS, tag))
     log = out / "logs" / ("fixtures%s.log" % ("-" + group["name"] if group else ""))
     env = batch_env(args, group)
     env["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
@@ -471,8 +498,27 @@ def disk_free_gb(path):
         return None
 
 
-def race_keys(race, B=None):
-    """{R2 key: box path relative to $HOME} ONE recipe reads (data_keys is their union over the plan)."""
+def _on_fixture(rec):
+    """A recipe whose prep takes fixture `base` (bench_board.fixture_race's rule): on the verify fixture and reading
+    a data file."""
+    return bool(rec and rec.get("input") == INPUT_VERIFY and rec.get("files"))
+
+
+def race_keys(race, B=None, rec=None):
+    """{R2 key: box path relative to $HOME} ONE recipe reads (data_keys is their union over the plan). With its
+    smoke input record `rec` (the synthetic inputs): nothing at all, every recipe's inputs are generated on the box."""
+    if rec is not None:
+        return {}
+    return _race_keys(race, B)
+
+
+def _si():
+    sys.path.insert(0, str(HERE))
+    import smoke_inputs
+    return smoke_inputs
+
+
+def _race_keys(race, B=None):
     B = B or _bb()
     needed, _ = B.data_needs([race], B.DATASETS)
     keys = {B.R2_KEYS[d]: "datasets/gbm-bench/" + B.DATA_FILES[d] for d in needed}
@@ -497,9 +543,9 @@ def group_name(race):
 GROUP_MAX_RECIPES = 64
 
 
-def staging_groups(races, B=None, max_recipes=GROUP_MAX_RECIPES):
+def staging_groups(races, B=None, max_recipes=GROUP_MAX_RECIPES, imap=None):
     """[{name, ids, keys}] in name order: one group per board dataset (split into parts of at most `max_recipes`),
-    the neural recipes in one."""
+    the neural recipes in one. With the smoke input map `imap`, each recipe's keys are its smoke inputs' (race_keys)."""
     B = B or _bb()
     by_name = {}
     for r in races:
@@ -513,7 +559,7 @@ def staging_groups(races, B=None, max_recipes=GROUP_MAX_RECIPES):
             chunk = rs[part * step:(part + 1) * step]
             keys = set()
             for r in chunk:
-                keys |= set(race_keys(r, B))
+                keys |= set(race_keys(r, B, imap.get(r["id"]) if imap is not None else None))
             out.append(dict(name=name if n == 1 else "%s-%d" % (name, part + 1), ids=[r["id"] for r in chunk],
                             keys=sorted(keys)))
     return out
@@ -704,17 +750,39 @@ def cmd_run(args):
     workers, limit = worker_count(cores, host_gb, total_mb / 1024 if total_mb else None, len(ids))
     if args.jobs:
         workers, limit = args.jobs, "--jobs %d" % args.jobs
-    groups = staging_groups(races, B)
+    # the inputs: the verify fixture / synthetic file / no verify lane map, once for the run (every batch reads it)
+    imap = None
+    args.inputs_map = args.input_map = None
+    if board_takes_inputs():
+        imap = smoke_inputs(races, B)
+        args.input_map = imap
+        args.inputs_map = work / "smoke_inputs.json"
+        args.inputs_map.write_text(json.dumps(imap, indent=1, sort_keys=True) + "\n")
+    # the synthetic inputs read no data plan and never call the stager: nothing is staged
+    plan_doc = json.loads(Path(args.data_plan).read_text()) if args.data_plan and not imap else {}
+    if args.max_work_gb is None:
+        args.max_work_gb = WORK_MAX_BYTES / 1e9 if imap else MAX_WORK_GB
+    groups = staging_groups(races, B, imap=imap)
     rest = sum(len(g["ids"]) for g in groups if g["name"] != "neural")
     size = max(1, -(-rest // max(1, workers * BATCHES_PER_WORKER)))
     for g in groups:
         g.update(dir=str(work / "groups" / g["name"]), batches=[])
-    entries = json.loads(Path(args.data_plan).read_text())["files"] if args.data_plan else []
+    entries = plan_doc.get("files", [])
     stager = DataStager(entries, args.home, groups)
     cap = int(args.max_work_gb * 1e9)
     recipe_timeout = B.SMOKE_STEP_S * 4    # bench_board --smoke's own per-race deadline (4 x SMOKE_STEP_S)
     print("MEASURESMOKE plan vendor=%s recipes=%d groups=%d batch_size=%d workers=%d limit=%s ceiling=%ds cap=%.1fGB"
           % (args.vendor, len(ids), len(groups), size, workers, limit, args.ceiling, args.max_work_gb), flush=True)
+    if imap:
+        bud = budget(races, imap, B, workers)
+        print(SMOKE_INPUTS_LINE, flush=True)
+        print("MEASURESMOKE inputs %s staged=0 work_bound=%.2fGB (budget %.1fGB)%s"
+              % (" ".join("%s=%d" % (k.replace(" ", "-"), n) for k, n in bud["counts"].items()),
+                 bud["work_bound_bytes"] / 1e9, WORK_MAX_BYTES / 1e9,
+                 " (the data plan given is not read)" if args.data_plan else ""), flush=True)
+    else:
+        bud = None
+        print("MEASURESMOKE inputs datasets (this tree's board predates --inputs verify-fixtures)", flush=True)
 
     def footprint():
         return stager.owned_bytes() + dir_bytes(work)
@@ -829,6 +897,8 @@ def cmd_run(args):
                 measured_peak_device_mb=peak.peak, busy_cores=busy.samples, ceiling_seconds=args.ceiling,
                 recipe_timeout_seconds=recipe_timeout, elapsed_seconds=round(time.time() - started, 1),
                 prep={g["name"]: g.get("prep") for g in groups}, fixtures=fixture_recs,
+                inputs=dict(mode=SYNTHETIC_INPUTS if imap else DATASETS_INPUTS,
+                            **({k: v for k, v in bud.items() if k != "parts"} if bud else {})),
                 disk=dict(cap_bytes=cap, peak_footprint_bytes=peak_footprint[0], groups=group_recs),
                 batches=[{k: b.get(k) for k in ("batch", "group", "recipes", "exit_code", "timed_out", "ceiling_hit",
                                                  "started_late", "elapsed_seconds", "log")} for b in batches])
@@ -859,7 +929,7 @@ def cmd_run(args):
 VERIFY_FIXTURE = "base"
 #: families whose recipes exercise a dataset FILE loader (tools/speed_gbdt_arm.py load_dataset reads the npz itself)
 FILE_LOADER_FAMILIES = ("trees",)
-INPUT_VERIFY, INPUT_FILE, INPUT_NONE = "verify fixture", "sliced file", "NO VERIFY LANE"
+INPUT_VERIFY, INPUT_FILE, INPUT_NONE = "verify fixture", "synthetic file", "NO VERIFY LANE"
 
 
 def verify_lane_index():
@@ -924,21 +994,41 @@ def inputs_table(vendors=VENDORS, B=None):
             "Generated by `python3 tools/release_measurement_smoke.py inputs` from the board plan "
             "(`bench_board.plan_races`, identical, smoke shape) and the identity lanes (`tools/identity_break.py` "
             "LANES). Do not edit by hand.", "",
-            "Each board recipe's smoke input: the identity verification's own fixture (`%s`) of the verify lane "
-            "named, a sliced file for a recipe whose purpose is a dataset file loader or a corpus reader, or "
-            "NO VERIFY LANE when the identity table verifies no lane for what the board measures (that list is "
-            "Andrew's to decide)." % VERIFY_FIXTURE, "",
+            "Each board recipe's smoke input, all of it generated on the box (the smoke stages no data): the "
+            "identity verification's own fixture (`%s`) of the verify lane named; a synthetic file in the loader's "
+            "own schema for a recipe whose purpose is a dataset file loader or a corpus reader; or NO VERIFY LANE "
+            "when the identity table verifies no lane for what the board measures (that list is Andrew's to "
+            "decide; those recipes run on synthetic inputs of the smoke size too)." % VERIFY_FIXTURE, "",
             "| input | recipes |", "|---|---:|"]
     text += ["| %s | %d |" % (k, n) for k, n in counts.items()]
-    text += ["| total | %d |" % len(rows), "", "| recipe | input | verify lane (fixture %s) | files | vendors |"
-             % VERIFY_FIXTURE, "|---|---|---|---|---|"]
+    text += ["| total | %d |" % len(rows), ""]
+    # what a smoke run writes under these inputs (budget(), from the plan; the run prints the same)
+    races = plan(vendors[0], B)
+    bud = budget(races, smoke_inputs(races, B, index), B)
+    SI = _si()
+    text += ["Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0 bytes staged. A "
+             "synthetic file holds the full file's keys and dtypes with %d head rows and %d tail rows "
+             "(`tools/smoke_inputs.py`; a corpus: %d bytes of generated text) and is deleted with the race's "
+             "scratch. From the %s plan, the work dir at most %.2f GB at %d workers (budget %.1f GB): %d distinct "
+             "prep blocks %.1f MB, race scratch %.1f MB, synthetic files %.1f MB, LM checkpoints %.1f MB, layer "
+             "fixtures %.1f MB."
+             % (SI.SMOKE_TRAIN_ROWS, SI.SMOKE_TEST_ROWS, SI.CORPUS_SYNTH_BYTES, vendors[0],
+                bud["work_bound_bytes"] / 1e9, bud["parts"]["workers"], WORK_MAX_BYTES / 1e9,
+                bud["parts"]["distinct_blocks"], bud["parts"]["blocks"] / 1e6, bud["parts"]["scratch"] / 1e6,
+                bud["parts"]["synthetic"] / 1e6, bud["parts"]["checkpoints"] / 1e6,
+                bud["parts"]["layer_fixtures"] / 1e6), ""]
+    text += ["| recipe | input | smoke input | full-size files | vendors |", "|---|---|---|---|---|"]
     for rid in sorted(rows):
         r = rows[rid]
         lanes = r["verify_lanes"]
-        lane = (lanes[0] + (" (+%d)" % (len(lanes) - 1) if len(lanes) > 1 else "")) if lanes else "-"
-        what = "sliced file: " + ", ".join(f.split("/")[-2] + "/" + f.split("/")[-1] for f in r["files"]) \
-            if r["input"] == INPUT_FILE else r["input"]
-        text.append("| `%s` | %s | %s | %s | %s |" % (rid, what, lane, ", ".join(r["files"]) or "-",
+        schemas = sorted({SI.schema_of_key(f) for f in r["files"]} - {None})
+        if r["input"] == INPUT_VERIFY:
+            what = "verify fixture `%s`%s" % (lanes[0], " (+%d)" % (len(lanes) - 1) if len(lanes) > 1 else "")
+        elif schemas:
+            what = "synthetic " + ", ".join("`%s`" % x for x in schemas)
+        else:
+            what = "synthetic (the driver's seeded inputs)"
+        text.append("| `%s` | %s | %s | %s | %s |" % (rid, r["input"], what, ", ".join(r["files"]) or "-",
                                                         ",".join(on[rid])))
     return "\n".join(text) + "\n", counts
 
@@ -951,12 +1041,133 @@ def cmd_inputs(args):
     return 0
 
 
+# --------------------------------------------------------------------------------------------- the budgets
+#: Andrew (2026-11-08): the smoke stages NO data; its work dir stays under 2 GB
+WORK_MAX_BYTES = 2 * 10 ** 9
+DATASETS_INPUTS, SYNTHETIC_INPUTS = "datasets", "synthetic"
+#: the header line of a smoke on the synthetic inputs (a test asserts it)
+SMOKE_INPUTS_LINE = "SMOKE inputs: generated on the box, 0 bytes staged"
+#: the arrays one prep block holds at most (X, Xq, y, yq and their derived copies: init rows, the graph's two CSR
+#: pairs); each the block's rows x its width x 4 bytes
+BLOCK_ARRAYS = 8
+#: the width of a block no file feeds (the drivers' seeded series blocks: TS_SERIES = 64 series)
+SYNTH_WIDTH = 64
+#: a race's own scratch (work/ and its evidence archive, deleted once its record is written): the scored arrays on
+#: the held-out rows, at most two arrays of its block's rows x width
+SCRATCH_ARRAYS = 2
+#: the two causal-LM recipes' public checkpoints (bench_board_neural.LM_CHECKPOINTS), fetched into the neural group's
+#: work dir: parameters x bytes per parameter as published (SmolLM2-135M ships bfloat16; mojolearn-162m float32)
+CHECKPOINT_BYTES = {"smollm2-135m": 135 * 10 ** 6 * 2, "mojolearn-162m": 162 * 10 ** 6 * 4}
+#: one layer lane's fixture (tools/neural_fixtures.py generate at the smoke size: inputs, weights, outputs), declared
+#: until a run records it (the summary's disk.peak_footprint_bytes sets the next figure)
+LAYER_FIXTURE_BYTES = 8 * 10 ** 6
+#: the largest worker count a gate box reaches (an MI325X's 256 GB / DEVICE_GB_PER_WORKER): the plan-time bound
+MAX_BOX_WORKERS = 64
+
+
+def prep_block(race, B):
+    """(driver, block name) of the prep block a recipe reads, or None (trees and neural read in their race)."""
+    fam, lane, ds = race["family"], race["lane"], race["dataset"]
+    if fam == "classical":
+        return ("classical", "%s-%s" % (B.CLASSICAL_BLOCK[lane], ds))
+    if fam == "classical2":
+        return ("classical2", "%s-%s" % (B.MORE.block_of(lane), ds))
+    if fam == "algos":
+        name = B.ALGOS.block_file(lane, ds)
+        return ("algos", name) if name else None
+    return None
+
+
+def block_bound_bytes(race, rec, B):
+    """Bytes one recipe's prep block holds at most, from the plan: rows (the smoke rows) x width x 4 x BLOCK_ARRAYS;
+    width 16 on the verify fixture, the schema's width on a synthetic file, SYNTH_WIDTH with no file; a corpus block
+    is the byte-bigram counts of the synthetic text's documents (bench_board_algos.text_counts: docs x TEXT_BINS)."""
+    SI = _si()
+    files = rec.get("files") or []
+    if _on_fixture(rec):
+        width = len(SI.FIXTURE_COLUMNS)
+    elif any(f.startswith("corpus/") for f in files):
+        docs = SI.CORPUS_SYNTH_BYTES // B.ALGOS.TEXT_DOC_BYTES
+        return sum(docs * B.ALGOS.TEXT_BINS * 4 for f in files if f.startswith("corpus/"))
+    elif files:
+        width = max(SI.SCHEMA_WIDTH.get(SI.SCHEMAS.get(SI.schema_of_key(f) or ""), 16) for f in files)
+    else:
+        width = SYNTH_WIDTH
+    return BLOCK_ARRAYS * B.SMOKE_ROWS * width * 4
+
+
+_SYNTH_BYTES = {}
+
+
+def synthetic_bytes(rel):
+    """A synthetic file's bytes (its arrays generated once here, never written)."""
+    if rel not in _SYNTH_BYTES:
+        SI = _si()
+        if rel.endswith(".txt"):
+            _SYNTH_BYTES[rel] = SI.CORPUS_SYNTH_BYTES
+        else:
+            _SYNTH_BYTES[rel] = sum(a.nbytes for a in SI.synthetic_arrays(rel).values()) + 4096
+    return _SYNTH_BYTES[rel]
+
+
+def budget(races, imap, B=None, workers=MAX_BOX_WORKERS):
+    """The smoke's disk budget from the plan (synthetic inputs; 0 bytes staged):
+      blocks      every distinct prep block at its bound, as if every group were open at once (the run closes them);
+      scratch     `workers` races' scratch at once (the largest);
+      synthetic   `workers` races' synthetic files at once (the largest sets; deleted with each race's scratch) + one
+                  group's prep (the groups open one at a time; a prep's files go when it ends);
+      checkpoints the LM checkpoints; layer_fixtures the layer lanes' fixtures.
+    Returns {counts, staged_bytes (0), work_bound_bytes, parts}."""
+    B = B or _bb()
+    SI = _si()
+    blocks, scratch, synth, by_group = {}, [], [], {}
+    for r in races:
+        rec = imap[r["id"]]
+        b = block_bound_bytes(r, rec, B)
+        pb = prep_block(r, B)
+        if pb:
+            blocks[pb + (_on_fixture(rec),)] = b
+        scratch.append(b * SCRATCH_ARRAYS // BLOCK_ARRAYS)
+        rels = set() if _on_fixture(rec) else {SI.schema_of_key(f) for f in rec.get("files") or []} - {None}
+        synth.append(sum(synthetic_bytes(x) for x in rels))
+        by_group.setdefault(group_name(r), set()).update(rels)
+    w = max(1, int(workers))
+    lm = sum(v for k, v in CHECKPOINT_BYTES.items() if any(r["family"] == "neural" and r["dataset"] == k
+                                                            for r in races))
+    layers = len({r["lane"] for r in races if r["family"] == "algos" and B.ALGOS.LANES[r["lane"]]["kind"] == "layer"})
+    parts = dict(blocks=sum(blocks.values()), distinct_blocks=len(blocks),
+                 scratch=sum(sorted(scratch, reverse=True)[:w]), workers=w,
+                 synthetic=sum(sorted(synth, reverse=True)[:w])
+                 + max([sum(synthetic_bytes(x) for x in g) for g in by_group.values()] or [0]),
+                 checkpoints=lm, layer_fixtures=layers * LAYER_FIXTURE_BYTES)
+    work = sum(v for k, v in parts.items() if k not in ("workers", "distinct_blocks"))
+    counts = {k: sum(1 for r in races if imap[r["id"]]["input"] == k) for k in (INPUT_VERIFY, INPUT_FILE, INPUT_NONE)}
+    return dict(counts=counts, staged_bytes=0, work_bound_bytes=work, parts=parts)
+
+
+def cmd_budget(args):
+    B = _bb()
+    races = plan(args.vendor, B)
+    bud = budget(races, smoke_inputs(races, B), B, args.workers)
+    print("MEASURESMOKE budget vendor=%s %s" % (args.vendor, " ".join(
+        "%s=%d" % (k.replace(" ", "-"), n) for k, n in bud["counts"].items())))
+    print("MEASURESMOKE budget staged=0 work_bound=%.2fGB budget=%.1fGB %s" % (
+        bud["work_bound_bytes"] / 1e9, WORK_MAX_BYTES / 1e9,
+        " ".join("%s=%s" % (k, ("%.1fMB" % (v / 1e6)) if k not in ("workers", "distinct_blocks") else v)
+                 for k, v in sorted(bud["parts"].items()))))
+    return 0 if bud["work_bound_bytes"] < WORK_MAX_BYTES else 1
+
+
 # --------------------------------------------------------------------------------------------- data
-def data_keys(vendor, B=None):
+def data_keys(vendor, B=None, inputs=None, imap=None):
     """{R2 key: box path relative to $HOME} the smoke plan reads: the board's datasets (bench_board.data_needs) under
     datasets/gbm-bench, and the algos corpus keys under r2-stage/<key> (bench_board_algos.corpus_path looks there).
-    The union of race_keys over the plan: the run stages them group by group (DataStager)."""
+    The union of race_keys over the plan: the run stages them group by group (DataStager). With the synthetic inputs
+    (the default over a tree whose board takes them): none, the smoke stages no data."""
     B = B or _bb()
+    inputs = inputs or (SYNTHETIC_INPUTS if board_takes_inputs() else DATASETS_INPUTS)
+    if inputs == SYNTHETIC_INPUTS:
+        return {}
     keys = {}
     for r in plan(vendor, B):
         keys.update(race_keys(r, B))
@@ -979,12 +1190,14 @@ def presign_get(key, seconds):
     return got.stdout.strip() if got.returncode == 0 else ""
 
 
-def write_data_plan(vendor, out, presign=presign_get, seconds=86400):
+def write_data_plan(vendor, out, presign=presign_get, seconds=86400, inputs=None):
     """The data plan the box stages: each file the smoke plan reads, its pin and one presigned GET (presign=None: keys
-    and pins only). Written 0600: the URLs are short-lived read grants. Returns the entries."""
+    and pins only), and the inputs it was written for (the run refuses a plan of the other kind). Written 0600: the
+    URLs are short-lived read grants. Returns the entries."""
     pinned = pins()
     entries = []
-    for key, rel in data_keys(vendor).items():
+    inputs = inputs or (SYNTHETIC_INPUTS if board_takes_inputs() else DATASETS_INPUTS)
+    for key, rel in data_keys(vendor, None, inputs).items():
         if key not in pinned:
             raise SystemExit("measuresmoke: %s has no pin in bench/results/dataset_store/manifest.tsv" % key)
         url = None
@@ -994,7 +1207,8 @@ def write_data_plan(vendor, out, presign=presign_get, seconds=86400):
                 raise SystemExit("measuresmoke: presigning %s failed" % key)
         entries.append(dict(key=key, path=rel, bytes=pinned[key][0], sha256=pinned[key][1], url=url))
     out = Path(out)
-    out.write_text(json.dumps(dict(schema=SCHEMA + "/data", vendor=vendor, files=entries), indent=1) + "\n")
+    out.write_text(json.dumps(dict(schema=SCHEMA + "/data", vendor=vendor, inputs=inputs, files=entries), indent=1)
+                   + "\n")
     os.chmod(out, 0o600)
     return entries
 
@@ -1068,6 +1282,9 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--seconds", type=int, default=86400, help="presigned GET lifetime (the job may queue)")
     p.add_argument("--no-urls", action="store_true", help="keys and pins only (tests, dry runs)")
+    p = sub.add_parser("budget")
+    p.add_argument("--vendor", required=True, choices=VENDORS)
+    p.add_argument("--workers", type=int, default=MAX_BOX_WORKERS)
     p = sub.add_parser("inputs")
     p.add_argument("--out", default=str(ROOT / "docs/measurements/SMOKE_INPUTS.md"))
     p = sub.add_parser("stage")
@@ -1087,13 +1304,16 @@ def main(argv=None):
                    help="the data plan (data-plan): its files are staged per group and deleted after the last group "
                         "that reads them; without it the plan's data must already be at its pins")
     p.add_argument("--home", default=os.path.expanduser("~"), help="where the data plan's paths are rooted")
-    p.add_argument("--max-work-gb", type=float, default=MAX_WORK_GB,
+    p.add_argument("--max-work-gb", type=float, default=None,
                    help="cap on the smoke's footprint (data it fetched + its work dir), GB; a group that would pass "
-                        "it waits for a running group to close, or is refused by name when nothing else runs")
+                        "it waits for a running group to close, or is refused by name when nothing else runs "
+                        "(default: the work budget, %.1f GB, with the synthetic inputs; %.0f GB over a tree whose "
+                        "board reads the datasets)" % (WORK_MAX_BYTES / 1e9, MAX_WORK_GB))
     p.add_argument("--keep-scratch", action="store_true",
                    help="keep every group's prep cache and batch directories (diagnosis on a box with room)")
     args = ap.parse_args(argv)
-    return {"plan": cmd_plan, "data-plan": cmd_data_plan, "stage": cmd_stage, "run": cmd_run, "inputs": cmd_inputs}[args.cmd](args)
+    return {"plan": cmd_plan, "data-plan": cmd_data_plan, "stage": cmd_stage, "run": cmd_run, "inputs": cmd_inputs,
+            "budget": cmd_budget}[args.cmd](args)
 
 
 if __name__ == "__main__":

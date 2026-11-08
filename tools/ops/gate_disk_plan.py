@@ -30,9 +30,10 @@ JOB_WRITES_GB = {
     "reports, work out dir": 14.0,
     "reports, results copy (persisted to R2)": 14.0,
 }
-#: the measurement smoke's footprint cap (tools/release_measurement_smoke.py MAX_WORK_GB; the job passes
-#: GATE_MEASURE_SMOKE_MAX_GB when set)
-SMOKE_CAP_GB = 8.0
+#: the measurement smoke's footprint cap (the job passes it as GATE_MEASURE_SMOKE_MAX_GB): its work-dir budget
+#: (tools/release_measurement_smoke.py WORK_MAX_BYTES, 2 GB) since the smoke stages no data and generates its inputs
+#: on the box (Andrew 2026-11-08); it was 8 GB (MAX_WORK_GB) while the smoke staged the board datasets
+SMOKE_CAP_GB = 2.0
 #: what is on a pod before the job: the image's writable layer, the tree and its pixi environment (bounded with the
 #: identity venv above by run t's full disk)
 POD_BASE_GB = 5.0
