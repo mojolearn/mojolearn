@@ -4226,15 +4226,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
     def rehearsal_hard_problems(self, rows, problems, report):
         """The rehearsal's problems that stop it. HARD: the bytes TestPyPI served differ from the gated sha256
         (and any resolution that came back with another set or hash). SOFT unless --strict
-        (tools/release_verdicts.py rehearsal/secondary): a resolution pip could not complete, and the macOS
-        install/import from the index (the exact bytes were installed and imported in gate-apple)."""
+        (tools/release_verdicts.py rehearsal/secondary): a resolution pip could not complete, and a macOS pip
+        install from the index that did not complete. The import of the installed bytes stays HARD."""
         if self.strict():
             return problems
         hard = []
         for row in rows:
             label = row.get("check", "")
             for p in row.get("problems") or []:
-                secondary = (label.endswith("into a fresh venv and import")
+                secondary = ((label.endswith("into a fresh venv and import") and p.startswith("pip install exited"))
                              or (label.startswith("pip install ") and p.startswith("pip could not resolve it")))
                 if secondary:
                     self.soft_fail("testpypi", "rehearsal/secondary", f"{label}: {p}", report)
