@@ -219,7 +219,8 @@ THE STEPS
   record             THE RELEASE EVIDENCE SET (tools/release_evidence_set.py): deletes the previous content of the ONE
                      fixed directory bench/results/release_evidence/ and writes this release's evidence there
                      (manifest.json: version, frozen commit, wheel names and sha256, tools, every item's sha256,
-                     producing step and the wheel bytes it checked; README.md), commits it as "Release evidence for
+                     producing step and the wheel bytes it checked; README.md; SUMMARY.md, the human-readable
+                     account), commits it as "Release evidence for
                      <version>", pushes, and tags that commit v<version>. A missing required item fails the step by
                      name. An older release's evidence: `git show v<version>:bench/results/release_evidence/
                      manifest.json`. Waits for both gates and the published-* producers

@@ -27,6 +27,11 @@ from the previous set (sources under EVIDENCE_DIR are refused). SCRUBBED: tokens
 and e-mail addresses are redacted from text items; in a VERBATIM item (one another tool verifies by hash, such
 as binding-identities.json or the PTX proof) a hit fails instead, because editing it would break its hash.
 
+SUMMARY.md (2026-11-07): the human-readable account at the top of the set, written by write_set from the items
+it collected and the references (summary_markdown; nothing is run for it): the release, the five identity
+columns (machine, lanes, the exact wheel bytes, times, lane seconds), the admission verdict, the wheels, the
+multi-GPU and measurement checks, how to verify on your own machine, and where the full logs are.
+
 Tests: tools/test_release_evidence_set.py (no network, no box).
 """
 import dataclasses
@@ -312,7 +317,7 @@ def derived_steps(ctx):
     for step, rec in sorted((ctx.steps or {}).items()):
         if not isinstance(rec, dict) or not rec.get("done") or rec.get("commit") not in (None, ctx.commit):
             continue
-        rows[step] = {k: rec.get(k) for k in ("at", "result", "tooling_commit", "platforms") if k in rec}
+        rows[step] = {k: rec.get(k) for k in ("at", "seconds", "result", "tooling_commit", "platforms") if k in rec}
     if not rows:
         return None
     return dict(schema="mojolearn.release-steps.v1", version=ctx.version, source_commit=ctx.commit, steps=rows)
@@ -664,8 +669,13 @@ README = """# Release evidence
 This directory holds the evidence of the checks run for one Mojolearn release: the release named in
 `manifest.json`. Each release replaces the whole directory, so it only ever holds one release's evidence.
 
+Start with `SUMMARY.md`: what was released, which wheel bytes each identity column was recorded from, whether
+the columns agree, the multi-GPU and measurement checks, how to run the same check on your own machine, and
+where the full logs are.
+
 What is here:
 
+- `SUMMARY.md`: the human-readable account of this release's evidence, written from the files below.
 - `manifest.json`: the release version, the source commit the wheels were built from, every wheel's file name
   and sha256, the tools used, and for every file below its sha256, the release step that produced it and the
   wheels it was checked against. It also lists what was not copied here (logs, the wheels, the full identity
@@ -690,6 +700,426 @@ commit that removed them; read them at its parent).
 """
 
 
+# ------------------------------------------------------------------------------------------- SUMMARY.md
+# THE HUMAN-READABLE ACCOUNT (Andrew 2026-11-07: "how do people know it works from that?"). Written by the record
+# step from the data the release already holds (the items above, the column records next to each identity summary,
+# the references); nothing is run for it. Links to the JSON, never pastes it. At most SUMMARY_MAX_LINES lines.
+SUMMARY_MAX_LINES = 220
+#: the five identity columns, in reading order: (column, where its identity-wheels.json enters the set)
+IDENTITY_COLUMNS = (("nvidia", "identity/nvidia-identity-wheels.json"), ("ptx", "identity/nvidia-identity-wheels.json"),
+                    ("amd", "identity/amd-identity-wheels.json"), ("apple", "identity/apple-identity-wheels.json"),
+                    ("cpu", "identity/cpu-identity-wheels.json"))
+COLUMN_TITLE = {"nvidia": "NVIDIA native", "ptx": "NVIDIA PTX", "amd": "AMD", "apple": "Apple", "cpu": "CPU"}
+#: the gate vendor whose box job holds each column (its box-facts.json names the machine)
+COLUMN_BOX = {"nvidia": "nvidia", "ptx": "nvidia", "amd": "amd"}
+PROVENANCE_DATE = re.compile(r"^date=(\S+)$", re.M)
+
+
+def identity_record_dirs(ctx, column):
+    """[directories] under which this column's record files (<name>.identical.json) were written on this machine:
+    the gate report tree (NVIDIA, PTX, AMD), the Apple step's output, every fetched CPU shard."""
+    if column in COLUMN_BOX:
+        base = ctx.gate_dirs.get(COLUMN_BOX[column])
+        return [Path(base) / "identity"] if base else []
+    if column == "apple":
+        return [Path(ctx.rel) / "identity-wheels" / "apple"]
+    return sorted(Path(ctx.rel).glob("identity-wheels/cpu/artifacts/cpu-wheel-identity-*"))
+
+
+def column_record_facts(dirs, label):
+    """What the column's own record files say: lanes, cells, total lane seconds (sum of every cell's timing),
+    first start and last end (UTC), the machine's CPU model and platform. None when no record file is found."""
+    files = []
+    for d in dirs:
+        files += sorted(Path(d).glob("%s/**/*.identical.json" % label)) if label else []
+    if not files:
+        return None
+    lanes, cells, seconds, starts, ends, cpus, platforms = {}, 0, 0.0, [], [], set(), set()
+    for f in files:
+        doc = read_json(f)
+        if not isinstance(doc, dict):
+            continue
+        for key, cell in (doc.get("cells") or {}).items():
+            cells += 1
+            lane = str(key).partition("/")[0]
+            lanes.setdefault(lane, 0.0)
+            t = ((cell or {}).get("timing") or {}).get("total_seconds") if isinstance(cell, dict) else None
+            if isinstance(t, (int, float)):
+                seconds += float(t)
+                lanes[lane] += float(t)
+        for env in [doc.get("timing_env")] + list(doc.get("timing_env_attempts") or []):
+            if isinstance(env, dict):
+                if env.get("started_utc"):
+                    starts.append(str(env["started_utc"]))
+                if env.get("cpu_model"):
+                    cpus.add(str(env["cpu_model"]))
+        if doc.get("platform"):
+            platforms.add(str(doc["platform"]))
+        prov = f.with_name(f.name[:-len(".identical.json")] + ".provenance.txt")
+        try:
+            ends += PROVENANCE_DATE.findall(prov.read_text(errors="replace"))
+        except OSError:
+            ends.append(dt.datetime.fromtimestamp(f.stat().st_mtime, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return dict(records=len(files), lanes=len(lanes), cells=cells, lane_seconds=seconds,
+                start=min(starts) if starts else None, end=max(ends) if ends else None,
+                cpu=", ".join(sorted(cpus)) or None, platform=", ".join(sorted(platforms)) or None,
+                lane_top=sorted(lanes.items(), key=lambda x: (-x[1], x[0]))[:SLOWEST_LANES])
+
+
+def identity_column_rows(ctx, docs):
+    """One row per identity column this release recorded: its label, machine, lanes, wheel bytes, times, verdict."""
+    rows = []
+    for column, dest in IDENTITY_COLUMNS:
+        doc = docs.get(dest)
+        if not isinstance(doc, dict):
+            continue
+        reports = list((doc.get("shards") or {}).values()) if column == "cpu" else [doc]
+        cols = [r.get("columns", {}).get(column) for r in reports if isinstance(r, dict)]
+        cols = [c for c in cols if isinstance(c, dict)]
+        if not cols:
+            continue
+        label = cols[0].get("label") or column
+        wheels = sorted({w for r in reports if isinstance(r, dict) for w in (r.get("wheels") or [])})
+        facts = column_record_facts(identity_record_dirs(ctx, column), label)
+        box = docs.get("gates/%s/box-facts.json" % COLUMN_BOX.get(column, "-")) or {}
+        machine = "; ".join(x for x in (", ".join(box.get("gpus") or []), box.get("cpu_model"),
+                                        "%s cores" % box["cores"] if box.get("cores") else None) if x) \
+            or (facts or {}).get("cpu") or "not recorded"
+        owed = sum(int(c.get("owed") or 0) for c in cols)
+        reused = [c.get("reused") for c in cols]
+        rc_ok = all(c.get("rc") == 0 for c in cols) and all(r.get("ok") is True for r in reports if isinstance(r, dict))
+        rows.append(dict(column=column, title=COLUMN_TITLE[column], label=label, machine=machine, owed=owed,
+                         reused=None if any(x is None for x in reused) else sum(int(x) for x in reused),
+                         shards=len(reports), wheels=wheels, facts=facts, ok=rc_ok))
+    return rows
+
+
+def _seconds(s):
+    s = int(round(s))
+    return "%dh %02dm %02ds" % (s // 3600, s % 3600 // 60, s % 60) if s >= 3600 else "%dm %02ds" % (s // 60, s % 60)
+
+
+# ------------------------------------------------------------------------------------------- where the time went
+# Andrew 2026-11-07: "are we timing everything? we should be, so we can improve CI/CD next time". Every number
+# here was already recorded by the unit that spent the time (step records, the compile caches' provenance.tsv,
+# the identity records' cell timings); this only reads them side by side with the previous release's.
+STAMP = "%Y-%m-%dT%H:%M:%SZ"
+#: two steps whose gap is under this many seconds are treated as one waiting on the other (the controller's own
+#: bookkeeping between steps takes a few seconds)
+CRITICAL_SLACK_S = 60
+SLOWEST_GROUPS = 8
+SLOWEST_LANES = 5
+
+
+def _stamp(text):
+    try:
+        return dt.datetime.strptime(str(text), STAMP).replace(tzinfo=dt.timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def previous_release(ctx):
+    """(version, source_commit, its release directory or None) of the release this one reuses from (the reuse
+    plan's `previous`), or (None, None, None)."""
+    plan = read_json(Path(ctx.rel) / "reuse" / "plan.json")
+    prev = (plan or {}).get("previous") if isinstance(plan, dict) else None
+    if not isinstance(prev, dict) or not prev.get("version"):
+        return None, None, None
+    version, commit = str(prev["version"]), str(prev.get("source_commit") or "")
+    base = Path(ctx.rel).parent.parent / version
+    d = base / commit[:12] if commit else None
+    return version, commit or None, d if d is not None and d.is_dir() else None
+
+
+def step_seconds_of(ctx, root):
+    """{step: seconds} of the previous release: its state.json, then its committed steps.json (at its tag), then
+    a step_seconds map in its release-provenance.json, whichever records seconds first."""
+    version, _commit, _d = previous_release(ctx)
+    if not version:
+        return None, {}
+    out = {}
+    state = read_json(Path(ctx.rel).parent.parent / version / "state.json")
+    for step, rec in ((state or {}).get("steps") or {}).items() if isinstance(state, dict) else ():
+        if isinstance(rec, dict) and isinstance(rec.get("seconds"), (int, float)):
+            out[step] = float(rec["seconds"])
+    if not out:
+        tag = TAG_FORMAT.format(version=version)
+        for name, key in (("steps.json", "steps"), ("release-provenance.json", "step_seconds")):
+            p = subprocess.run(["git", "-C", str(root), "show", "%s:%s/%s" % (tag, EVIDENCE_DIR, name)],
+                               capture_output=True, text=True)
+            try:
+                doc = json.loads(p.stdout) if p.returncode == 0 else None
+            except ValueError:
+                doc = None
+            for step, rec in ((doc or {}).get(key) or {}).items() if isinstance(doc, dict) else ():
+                sec = rec.get("seconds") if isinstance(rec, dict) else rec
+                if isinstance(sec, (int, float)):
+                    out[step] = float(sec)
+            if out:
+                break
+    return version, out
+
+
+def build_groups(rel):
+    """{(where, binding path): seconds} from every compile cache provenance.tsv of a release directory: the macOS
+    build (macos-bincache) and each fetched Linux leg (legs/<leg>/...). Column 5 is the build seconds, column 6 the
+    binding built (path=sha256); a group built more than once keeps its longest build."""
+    groups = {}
+    if rel is None:
+        return groups
+    sources = [("macOS", Path(rel) / "macos-bincache" / "provenance" / "provenance.tsv")]
+    legs = Path(rel) / "legs"
+    if legs.is_dir():
+        for leg in sorted(p for p in legs.iterdir() if p.is_dir()):
+            sources += [(leg.name, f) for f in sorted(leg.rglob("provenance.tsv"))]
+    for where, f in sources:
+        try:
+            lines = f.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            cols = line.split("\t")
+            if len(cols) < 6:
+                continue
+            try:
+                sec = float(cols[4])
+            except ValueError:
+                continue
+            key = (where, cols[5].partition("=")[0])
+            groups[key] = max(groups.get(key, 0.0), sec)
+    return groups
+
+
+def leg_walls(rel):
+    """{leg: wall seconds} from each Linux leg's wall.txt (wall_seconds=<n>)."""
+    out = {}
+    for f in sorted(Path(rel).glob("legs/*/wall.txt")) if rel else ():
+        m = re.search(r"wall_seconds=(\d+(?:\.\d+)?)", f.read_text(errors="replace"))
+        if m:
+            out[f.parent.name] = float(m.group(1))
+    return out
+
+
+def critical_path(steps):
+    """[(step, start, end, seconds, wait_before_s)] earliest first: from the step that ended last, back through the
+    step that ended latest at or before each one's start (within CRITICAL_SLACK_S). A step's start is its recorded
+    end (`at`) minus its seconds."""
+    frames = []
+    for step, rec in (steps or {}).items():
+        if not isinstance(rec, dict) or not isinstance(rec.get("seconds"), (int, float)):
+            continue
+        end = _stamp(rec.get("at"))
+        if end is None or rec["seconds"] < 1:
+            continue
+        frames.append((step, end - dt.timedelta(seconds=float(rec["seconds"])), end, float(rec["seconds"])))
+    if not frames:
+        return []
+    chain = [max(frames, key=lambda f: (f[2], f[3]))]
+    while True:
+        start = chain[-1][1]
+        before = [f for f in frames if f not in chain and f[2] <= start + dt.timedelta(seconds=CRITICAL_SLACK_S)]
+        if not before:
+            break
+        chain.append(max(before, key=lambda f: (f[2], f[3])))
+    chain.reverse()
+    out = []
+    for i, (step, start, end, sec) in enumerate(chain):
+        wait = max((start - chain[i - 1][2]).total_seconds(), 0.0) if i else 0.0
+        out.append((step, start, end, sec, wait))
+    return out
+
+
+def _delta(now, before):
+    if before is None or now is None:
+        return "-"
+    d = now - before
+    pct = " (%+d%%)" % round(100.0 * d / before) if before else ""
+    return "%+.1f%s" % (d, pct)
+
+
+def time_section(ctx, rows, root):
+    """The 'Where the time went' lines of SUMMARY.md."""
+    out = ["## Where the time went", "",
+           "Seconds each unit recorded for itself; the previous release's for the same unit next to it.", ""]
+    prev_version, prev_steps = step_seconds_of(ctx, root)
+    prev_label = prev_version or "previous"
+    steps = {s: float(r["seconds"]) for s, r in (ctx.steps or {}).items()
+             if isinstance(r, dict) and isinstance(r.get("seconds"), (int, float))}
+    if steps:
+        out += ["Release steps, longest first (%.0f s in all):" % sum(steps.values()), "",
+                "| step | seconds | %s | change |" % prev_label, "|---|---|---|---|"]
+        for s, sec in sorted(steps.items(), key=lambda x: (-x[1], x[0])):
+            p = prev_steps.get(s)
+            out.append("| %s | %.1f | %s | %s |" % (s, sec, "-" if p is None else "%.1f" % p, _delta(sec, p)))
+        out.append("")
+    else:
+        out += ["No step recorded its seconds.", ""]
+    path = critical_path(ctx.steps)
+    if path:
+        total = (path[-1][2] - path[0][1]).total_seconds()
+        out += ["Longest path (each step started when the one before it on the path ended; start = end - seconds), "
+                "%s from first start to last end:" % _seconds(total), ""]
+        for step, start, end, sec, wait in path:
+            out.append("- %s: %s to %s, %s%s" % (step, start.strftime(STAMP), end.strftime(STAMP), _seconds(sec),
+                                                  ", after %s idle" % _seconds(wait) if wait >= CRITICAL_SLACK_S else ""))
+        out.append("")
+    _v, _c, prev_rel = previous_release(ctx)
+    now_groups, prev_groups = build_groups(ctx.rel), build_groups(prev_rel)
+    if now_groups:
+        out += ["Slowest build groups (compile cache provenance; the longest build of each binding):", "",
+                "| where | binding | seconds | %s | change |" % prev_label, "|---|---|---|---|---|"]
+        for (where, so), sec in sorted(now_groups.items(), key=lambda x: (-x[1], x[0]))[:SLOWEST_GROUPS]:
+            p = prev_groups.get((where, so))
+            out.append("| %s | `%s` | %.1f | %s | %s |" % (where, so.rpartition("/")[2], sec,
+                                                          "new" if p is None else "%.1f" % p, _delta(sec, p)))
+        walls, prev_walls = leg_walls(ctx.rel), leg_walls(prev_rel)
+        if walls:
+            out += ["", "Linux leg wall seconds: " + "; ".join(
+                "%s %.0f (%s %s)" % (leg, w, prev_label, "-" if prev_walls.get(leg) is None else "%.0f" % prev_walls[leg])
+                for leg, w in sorted(walls.items()))]
+        out.append("")
+    lanes = [r for r in rows if (r["facts"] or {}).get("lane_top")]
+    if lanes:
+        out += ["Identity columns, total lane seconds and the %d slowest lanes:" % SLOWEST_LANES, ""]
+        for r in lanes:
+            f = r["facts"]
+            out.append("- %s (%s): %s" % (r["title"], _seconds(f["lane_seconds"]), ", ".join(
+                "%s %.0f s" % (lane, sec) for lane, sec in f["lane_top"])))
+        out.append("")
+    return out
+
+
+def summary_markdown(ctx, entries, wheels, refs, root=ROOT):
+    """SUMMARY.md of this release's evidence set (text). ENTRIES are the collected items, WHEELS the manifest's
+    wheel rows, REFS the manifest's references."""
+    docs = {}
+    for e in entries:
+        if e["dest"].endswith(".json"):
+            try:
+                docs[e["dest"]] = json.loads(e["data"])
+            except ValueError:
+                pass
+    have = {e["dest"] for e in entries}
+    link = lambda dest: "[`%s`](%s)" % (dest, dest)
+    tag = TAG_FORMAT.format(version=ctx.version)
+    out = ["# Mojolearn %s: release evidence summary" % ctx.version, "",
+           "Written by the release's record step from the files in this directory; nothing was run to write it. "
+           "Every number below links to the file it comes from.", "",
+           "| | |", "|---|---|",
+           "| version | %s |" % ctx.version, "| tag | `%s` |" % tag, "| frozen source commit | `%s` |" % ctx.commit,
+           "| release tooling commit | `%s` |" % ctx.tooling_commit, "| date | %s |" % ctx.date,
+           "| published platforms | %s |" % (", ".join(ctx.published) or "none"), ""]
+    # --- identity columns
+    out += ["## Identity columns", ""]
+    rows = identity_column_rows(ctx, docs)
+    if rows:
+        out += ["Each column installed the exact wheel files below (sha256 checked before install) and recorded the "
+                "identity lanes whose code changed since the last good record; the other lanes' rows are reused.", "",
+                "| column | label | machine | lanes run / reused | lane seconds | start (UTC) | end (UTC) | run |",
+                "|---|---|---|---|---|---|---|---|"]
+        for r in rows:
+            f = r["facts"] or {}
+            out.append("| %s | `%s` | %s | %s / %s | %s | %s | %s | %s |" % (
+                r["title"], r["label"], r["machine"], r["owed"], "?" if r["reused"] is None else r["reused"],
+                _seconds(f["lane_seconds"]) if f else "no record files here", f.get("start") or "-",
+                f.get("end") or "-", "ok" if r["ok"] else "FAILED"))
+        out += ["", "Recorded from (wheel file and sha256, as each column installed it):", ""]
+        for r in rows:
+            out.append("- %s: %s" % (r["title"], "; ".join("`%s`" % w for w in r["wheels"]) or "not recorded"))
+        out += ["", "Sources: %s." % ", ".join(sorted({link(d) for _, d in IDENTITY_COLUMNS if d in have}))]
+    else:
+        out.append("This release recorded no identity column on its wheels (default mode); the identity table it "
+                   "ships was checked at the frozen source: %s." % (link("identity/at-freeze.json")
+                                                                    if "identity/at-freeze.json" in have else "absent"))
+    out.append("")
+    # --- admission
+    out += ["## Admission", ""]
+    table = docs.get("identity/table-summary.json") or {}
+    admitted = docs.get("identity/admitted.json")
+    reasons = []
+    if ctx.single and not isinstance(admitted, dict):
+        reasons.append("no admission record")
+    if any(not r["ok"] for r in rows):
+        reasons.append("failed column run(s): " + ", ".join(r["title"] for r in rows if not r["ok"]))
+    if table.get("parts_not_on_every_column"):
+        reasons.append("%s part(s) not on every column" % table["parts_not_on_every_column"])
+    if not table:
+        reasons.append("no table summary")
+    out.append("All columns agree: **%s**%s" % ("yes" if not reasons else "no", "" if not reasons else
+                                                 " (" + "; ".join(reasons) + ")"))
+    out.append("")
+    if isinstance(admitted, dict):
+        out.append("- admitted at commit `%s`, table sha256 `%s` (%s)" % (
+            admitted.get("commit") or "?", admitted.get("table_sha256") or "?", link("identity/admitted.json")))
+    if table:
+        t = table.get("table") or {}
+        out.append("- shipped table `%s`, sha256 `%s`: %s parts, %s equal on every column, %s PTX-divergent (%s)" % (
+            t.get("ref") or "?", t.get("sha256") or "?", table.get("parts"), table.get("parts_equal_on_every_column"),
+            table.get("ptx_divergent", 0), link("identity/table-summary.json")))
+        cols = table.get("columns") or {}
+        if cols:
+            out.append("- table columns: " + "; ".join("`%s` %s lanes, %s parts" % (c, v.get("lanes"), v.get("parts"))
+                                                       for c, v in sorted(cols.items())))
+    out.append("")
+    # --- wheels
+    out += ["## Wheels", "", "| platform | file | sha256 | published |", "|---|---|---|---|"]
+    for w in wheels:
+        out.append("| %s | `%s` | `%s` | %s |" % (w["platform"], w["file"], w["sha256"], "yes" if w["published"] else "no"))
+    out += ["", "Per-platform manifests and file admissions: %s." % ", ".join(
+        link(d) for d in sorted(have) if d.startswith(("alpha-manifest-", "file-admission-"))), ""]
+    # --- device checks
+    out += ["## Device checks", ""]
+    for vendor in sorted(GPU_VENDOR_OF.values()):
+        shard = "gates/%s/shardcheck.json" % vendor
+        if shard in docs:
+            d = docs[shard]
+            lanes = d.get("lanes") or {}
+            match = sum(1 for x in lanes.values() if (x or {}).get("verdict") == "MATCH")
+            out.append("- %s multi-GPU check: **%s**, %d of %d lanes MATCH across device counts %s (%s)" % (
+                vendor, "PASS" if d.get("ok") is True and match == len(lanes) and lanes else "FAIL", match,
+                len(lanes), d.get("counts"), link(shard)))
+        measure = "gates/%s/measuresmoke.json" % vendor
+        if measure in docs:
+            d = docs[measure]
+            c = d.get("counts") or {}
+            out.append("- %s measurement smoke: **%s**, %s passed, %s unsupported, %s failed of %s recipes (%s)" % (
+                vendor, "PASS" if d.get("ok") is True else "FAIL", c.get("PASS", 0), c.get("UNSUPPORTED", 0),
+                c.get("FAIL", 0), d.get("plan_count"), link(measure)))
+        smoke = "gates/%s/gate-smoke.json" % vendor
+        if smoke in docs:
+            out.append("- %s gate smoke: **%s** (%s)" % (vendor, docs[smoke].get("verdict") or "?", link(smoke)))
+    other = sorted(d for d in have if d.startswith(("gates/", "self-test-", "light-smoke-", "publish/", "checks/",
+                                                    "compile/"))
+                   and not d.endswith(("/shardcheck.json", "/measuresmoke.json", "/gate-smoke.json")))
+    if other:
+        out.append("- every other check's verdict: " + ", ".join(link(d) for d in other))
+    out.append("")
+    # --- reproduce
+    out += ["## Check it on your own machine", "",
+            "    pip install \"mojolearn[verify]==%s\"" % ctx.version,
+            "    python -m mojolearn verify", "",
+            "The wheel ships the admitted reference table above; `verify` runs every applicable routine lane on "
+            "your machine in `identical` mode and checks its output hashes against that table "
+            "(`--quick` for representative checks in seconds to minutes; see the user guide, Verify on your "
+            "hardware).", ""]
+    out += time_section(ctx, rows, root)
+    # --- where the full logs are
+    head = ["## Full logs and records", "",
+            "Kept outside git; `manifest.json` lists each by path or R2 key with its sha256.", ""]
+    lines = []
+    for r in refs:
+        if r.get("r2_tag"):
+            lines.append("- %s: R2 `%s/<date>/%s/` (`%s`)" % (r["what"], r.get("r2_key_root"), r["r2_tag"], r["fetch"]))
+        elif r.get("path"):
+            lines.append("- %s: `%s`" % (r["what"], r["path"]))
+    budget = SUMMARY_MAX_LINES - len(out) - len(head) - 1
+    if len(lines) > budget:
+        keep = max(budget - 1, 0)
+        lines = lines[:keep] + ["- %d more in `manifest.json` (references)" % (len(lines) - keep)]
+    out += head + lines
+    return "\n".join(out[:SUMMARY_MAX_LINES]) + "\n"
+
+
 def write_set(ctx, root=ROOT):
     """Delete the previous set and write this release's. Returns the manifest. Raises EvidenceError naming every
     missing required item, every cap or secret problem, before anything is deleted."""
@@ -708,7 +1138,11 @@ def write_set(ctx, root=ROOT):
                                published=platform in ctx.published))
     by_platform = {w["platform"]: w for w in wheels}
     readme = README.encode()
+    refs = references(ctx)
+    summary = scrub_text(summary_markdown(ctx, entries, wheels, refs, root))[0].encode()
     items = [dict(path="README.md", sha256=sha256_bytes(readme), bytes=len(readme), producer="record",
+                  required=True, source="tools/release_evidence_set.py", against=[]),
+             dict(path="SUMMARY.md", sha256=sha256_bytes(summary), bytes=len(summary), producer="record",
                   required=True, source="tools/release_evidence_set.py", against=[])]
     for e in entries:
         items.append(dict(path=e["dest"], sha256=sha256_bytes(e["data"]), bytes=len(e["data"]), producer=e["producer"],
@@ -723,12 +1157,12 @@ def write_set(ctx, root=ROOT):
                                                 written_at=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                                                 tag=TAG_FORMAT.format(version=ctx.version)),
                     wheels=wheels, tools=tools, caps=dict(file_bytes=FILE_CAP, total_bytes=TOTAL_CAP),
-                    items=items, absent_optional=absent, references=references(ctx))
+                    items=items, absent_optional=absent, references=refs)
     mdata = (json.dumps(manifest, indent=1, sort_keys=True) + "\n").encode()
     mtext, found = scrub_text(mdata.decode())
     if found:
         mdata = mtext.encode()
-    if len(mdata) > FILE_CAP or total + len(mdata) + len(readme) > TOTAL_CAP:
+    if len(mdata) > FILE_CAP or total + len(mdata) + len(readme) + len(summary) > TOTAL_CAP:
         raise EvidenceError("release evidence for %s not written: the manifest takes the set over its caps" % ctx.version)
     fixed = Path(root) / EVIDENCE_DIR
     tmp = fixed.parent / (".release_evidence.new-%d" % os.getpid())
@@ -737,6 +1171,7 @@ def write_set(ctx, root=ROOT):
     tmp.mkdir(parents=True)
     try:
         (tmp / "README.md").write_bytes(readme)
+        (tmp / "SUMMARY.md").write_bytes(summary)
         for e in entries:
             out = tmp / e["dest"]
             out.parent.mkdir(parents=True, exist_ok=True)

@@ -270,3 +270,160 @@ def test_the_coverage_evidence_reads_the_set_through_git(tmp_path):
     run("commit", "-qam", "0.9.1")
     assert C.published_base(root, "HEAD", "0.9.2") == ("0.9.1", "2" * 40)
     assert C.published_base(root, "HEAD", "0.9.1") == ("0.9.0", "1" * 40)      # from the set's git history
+
+
+def identity_column(out, column, label, wheels, lanes, seconds, start, end):
+    """A fake tools/identity_wheel_record.py output for one column: its record file and provenance next to it."""
+    rec = out / label / "w0"
+    cells = {"%s/base" % lane: dict(timing=dict(total_seconds=seconds, stages={})) for lane in lanes}
+    put(rec / ("%s.lanes-1.identical.json" % label),
+        dict(commit=COMMIT, vendor=label, platform="Linux-x86_64", cells=cells, complete=True,
+             timing_env=dict(started_utc=start, cpu_model="Some CPU")))
+    put(rec / ("%s.lanes-1.provenance.txt" % label), "commit=%s\nlabel=%s\ndate=%s\n" % (COMMIT, label, end))
+    return dict(label=label, owed=len(lanes), reused=7, rc=0,
+                chunks=[dict(worker=0, device=0, lanes=len(lanes), rc=0, records=[])])
+
+
+def test_summary_md_is_written_from_a_fixture_evidence_dir(tmp_path):
+    ctx = make_release(tmp_path, "0.9.3", single=True)
+    rel = ctx.rel
+    wheel_lines = ["%s %s" % (Path(w).name, E.sha256_file(w)) for w in ctx.wheels.values()]
+    for vendor, columns in (("nvidia", (("nvidia", "nvidia-l40s"), ("ptx", "nvidia-ptx-l40s-sm80"))),
+                            ("amd", (("amd", "amd-mi325x"),))):
+        out = rel / "gates" / vendor / "identity"
+        doc = dict(schema="mojolearn.identity-wheels.v1", ok=True, wheels=wheel_lines, columns={
+            c: identity_column(out, c, label, wheel_lines, ["knn", "pca"], 30.0, "2026-11-06T10:00:00Z",
+                               "2026-11-06T10:05:00Z") for c, label in columns})
+        put(out / "identity-wheels.json", doc)
+        put(rel / "gates" / vendor / "units" / "check-units.json", dict(ok=True))
+        put(rel / "gates" / vendor / "shardcheck" / "shardcheck.json",
+            dict(schema="mojolearn.logical-shard-identity.v1", vendor=vendor, counts=[1, 2],
+                 lanes={"knn": dict(verdict="MATCH"), "pca": dict(verdict="MATCH")}, ok=True))
+        put(rel / "gates" / vendor / "measuresmoke" / "measuresmoke.json",
+            dict(vendor=vendor, ok=True, plan_count=5, counts=dict(PASS=4, UNSUPPORTED=1, FAIL=0)))
+    apple = rel / "identity-wheels" / "apple"
+    put(apple / "identity-wheels.json", dict(ok=True, wheels=wheel_lines[-1:], columns={
+        "apple": identity_column(apple, "apple", "apple-m2pro", wheel_lines, ["knn"], 12.5, "2026-11-06T09:00:00Z",
+                                 "2026-11-06T09:01:00Z")}))
+    for i in range(2):
+        shard = rel / "identity-wheels" / "cpu" / "artifacts" / ("cpu-wheel-identity-%d" % i)
+        put(shard / "identity-wheels.json", dict(ok=True, wheels=wheel_lines[:1], columns={
+            "cpu": identity_column(shard, "cpu", "cpu", wheel_lines, ["knn%d" % i], 100.0, "2026-11-06T08:0%d:00Z" % i,
+                                   "2026-11-06T08:3%d:00Z" % i)}))
+    put(rel / "identity-wheels" / "cpu" / "artifacts" / "cpu-wheel-checks" / "checks.json", dict(ok=True))
+    ctx.identity_admitted = dict(source_commit=COMMIT, commit="c" * 40, table_sha256="d" * 64)
+    root = tmp_path / "repo"
+    manifest = E.write_set(ctx, root)
+    d = root / E.EVIDENCE_DIR
+    text = (d / "SUMMARY.md").read_text()
+    lines = text.splitlines()
+    assert len(lines) <= E.SUMMARY_MAX_LINES
+    assert "SUMMARY.md" in {i["path"] for i in manifest["items"]} and E.audit(d) == []
+    assert "SUMMARY.md" in (d / "README.md").read_text()
+    assert lines[0] == "# Mojolearn 0.9.3: release evidence summary"
+    assert "`v0.9.3`" in text and COMMIT in text and "2026-11-06" in text
+    # the five columns, each with its label, lanes run / reused, lane seconds, start and end
+    for title, label in (("NVIDIA native", "nvidia-l40s"), ("NVIDIA PTX", "nvidia-ptx-l40s-sm80"), ("AMD", "amd-mi325x"),
+                         ("Apple", "apple-m2pro"), ("CPU", "cpu")):
+        row = next(x for x in lines if x.startswith("| %s | `%s` |" % (title, label)))
+        assert row.endswith("| ok |"), row
+    nv = next(x for x in lines if x.startswith("| NVIDIA native |"))
+    assert "Some GPU, 48 GB, 1.0" in nv and "2 / 7" in nv and "1m 00s" in nv
+    assert "2026-11-06T10:00:00Z | 2026-11-06T10:05:00Z" in nv
+    cpu = next(x for x in lines if x.startswith("| CPU |"))
+    assert "2 / 14" in cpu and "3m 20s" in cpu and "2026-11-06T08:00:00Z | 2026-11-06T08:31:00Z" in cpu
+    # the exact wheel bytes each column recorded from, and the published wheels with their sha256
+    for w in ctx.wheels.values():
+        assert E.sha256_file(w) in text and Path(w).name in text
+    assert "All columns agree: **yes**" in text
+    assert "`" + "d" * 64 + "`" in text and "c" * 40 in text
+    assert "nvidia multi-GPU check: **PASS**, 2 of 2 lanes MATCH" in text
+    assert "amd measurement smoke: **PASS**, 4 passed, 1 unsupported, 0 failed of 5 recipes" in text
+    assert 'pip install "mojolearn[verify]==0.9.3"' in text and "python -m mojolearn verify" in text
+    assert "rel-gate-nv-1" in text and "python3 tools/box_persist.py fetch --tag rel-gate-nv-1" in text
+    assert "[`identity/table-summary.json`](identity/table-summary.json)" in text
+    assert "{" not in text.split("## Check it")[0].split("## Identity columns")[1]    # links, never pasted JSON
+
+
+def test_summary_md_says_no_when_a_column_failed_or_a_part_is_missing(tmp_path):
+    ctx = make_release(tmp_path, "0.9.4")
+    ctx.table.write_text(json.dumps(dict(cells={"knn/base": {"fit": dict(ref="a", cols={"nvidia": 1, "amd": 2}),
+                                                             "predict": dict(ref="b", cols={"nvidia": 1})}})))
+    E.write_set(ctx, tmp_path / "repo")
+    text = (tmp_path / "repo" / E.EVIDENCE_DIR / "SUMMARY.md").read_text()
+    assert "All columns agree: **no** (1 part(s) not on every column)" in text
+    assert "recorded no identity column on its wheels" in text
+
+
+def bincache_rows(rows):
+    return "".join("2026-11-07T20:00:00Z\tbindings/merged_build.sh\tmiss+built-cached\t%s\t%s\tpython/mojolearn/%s=%s\n"
+                   % ("k" * 64, sec, so, "e" * 64) for so, sec in rows)
+
+
+def test_summary_md_says_where_the_time_went(tmp_path):
+    ctx = make_release(tmp_path, "0.8.66", single=False)
+    prev_commit = "f" * 40
+    put(ctx.rel / "reuse" / "plan.json", dict(commit=COMMIT, rows=[], previous=dict(version="0.8.65",
+                                                                                    source_commit=prev_commit)))
+    # this release's step records (end stamp + seconds): rehearsal, then cross-compile, then linux-builds on the
+    # path; macos-build ran beside them and ended last
+    ctx.steps = {
+        "rehearsal": dict(done=True, commit=COMMIT, at="2026-11-07T17:58:40Z", seconds=10.0, result="PASS"),
+        "cross-compile": dict(done=True, commit=COMMIT, at="2026-11-07T18:33:59Z", seconds=2128.3, result="PASS"),
+        "linux-builds": dict(done=True, commit=COMMIT, at="2026-11-07T19:37:45Z", seconds=3826.7, result="PASS"),
+        "macos-build": dict(done=True, commit=COMMIT, at="2026-11-07T20:22:55Z", seconds=8582.3, result="PASS"),
+        "freeze-version": dict(done=True, commit=COMMIT, at="2026-11-07T17:58:29Z", seconds=0.0, result="x"),
+        "finish-line": dict(done=True, commit=COMMIT, at="t", result="PASS finish-line"),
+    }
+    put(ctx.rel / "macos-bincache" / "provenance" / "provenance.tsv", bincache_rows([
+        ("host/_mojolearn_native_classical_host.so", 8163.0), ("host/_mojolearn_native_tokenizer_host.so", 8119.0),
+        ("host/_mojolearn_native_x_host.so", 2539.7), ("identical/_mojolearn_native.so", 1.0)]))
+    put(ctx.rel / "legs" / "cuda-sm_80" / "GHA" / "shards" / "0" / "bincache" / "provenance.tsv", bincache_rows([
+        ("host/_mojolearn_native_tokenizer_host.so", 1504.3)]))
+    put(ctx.rel / "legs" / "cuda-sm_80" / "wall.txt", "wall_seconds=2553 run=1 conclusion=success\n")
+    prev = tmp_path / "0.8.65"
+    put(prev / "state.json", dict(steps={"linux-builds": dict(seconds=3000.0), "cross-compile": dict(seconds=None)}))
+    put(prev / prev_commit[:12] / "macos-bincache" / "provenance" / "provenance.tsv", bincache_rows([
+        ("host/_mojolearn_native_tokenizer_host.so", 4282.3), ("host/_mojolearn_native_tokenizer_host.so", 108.4),
+        ("host/_mojolearn_native_host.so", 4213.6)]))
+    put(prev / prev_commit[:12] / "legs" / "cuda-sm_80" / "wall.txt", "wall_seconds=2712\n")
+    root = tmp_path / "repo"
+    E.write_set(ctx, root)
+    d = root / E.EVIDENCE_DIR
+    text = (d / "SUMMARY.md").read_text()
+    assert len(text.splitlines()) <= E.SUMMARY_MAX_LINES == 220
+    section = text.split("## Where the time went")[1].split("## Full logs")[0]
+    lines = section.splitlines()
+    # every step with seconds, longest first, with the previous release's seconds and the change
+    rows = [x for x in lines if x.startswith("| ") and not x.startswith(("| step", "| where"))
+            and "`" not in x]
+    assert [x.split(" | ")[0][2:] for x in rows] == ["macos-build", "linux-builds", "cross-compile", "rehearsal",
+                                                     "freeze-version"]
+    assert "| linux-builds | 3826.7 | 3000.0 | +826.7 (+28%) |" in lines
+    assert "| cross-compile | 2128.3 | - | - |" in lines
+    # the slowest build groups, with the previous release's longest build of the same binding
+    assert "| macOS | `_mojolearn_native_classical_host.so` | 8163.0 | new | - |" in lines
+    assert "| macOS | `_mojolearn_native_tokenizer_host.so` | 8119.0 | 4282.3 | +3836.7 (+90%) |" in lines
+    assert "| cuda-sm_80 | `_mojolearn_native_tokenizer_host.so` | 1504.3 | new | - |" in lines
+    assert "Linux leg wall seconds: cuda-sm_80 2553 (0.8.65 2712)" in section
+    # the longest path: rehearsal -> cross-compile -> linux-builds; macos-build overlaps and is the last to end
+    path = [x for x in lines if x.startswith("- ") and " to 2026-" in x]
+    assert [x.split(":")[0][2:] for x in path] == ["rehearsal", "macos-build"]
+    assert "- macos-build: 2026-11-07T17:59:52Z to 2026-11-07T20:22:55Z, 2h 23m 02s, after 1m 13s idle" in lines
+    without_macos = {k: v for k, v in ctx.steps.items() if k != "macos-build"}
+    assert [c[0] for c in E.critical_path(without_macos)] == ["rehearsal", "cross-compile", "linux-builds"]
+    assert json.loads((d / "steps.json").read_text())["steps"]["linux-builds"]["seconds"] == 3826.7
+
+
+def test_summary_md_lists_the_slowest_identity_lanes(tmp_path):
+    out = tmp_path / "ident"
+    identity_column(out, "amd", "amd-mi325x", [], ["knn", "pca", "svm", "gp", "rf", "lr"], 10.0, "2026-11-06T10:00:00Z",
+                    "2026-11-06T10:05:00Z")
+    rec = next(out.rglob("*.identical.json"))
+    doc = json.loads(rec.read_text())
+    doc["cells"]["gp/base"]["timing"]["total_seconds"] = 400.0
+    doc["cells"]["svm/other"] = dict(timing=dict(total_seconds=95.0))
+    rec.write_text(json.dumps(doc))
+    facts = E.column_record_facts([out], "amd-mi325x")
+    assert facts["lane_top"][:2] == [("gp", 400.0), ("svm", 105.0)] and len(facts["lane_top"]) == 5
+    assert facts["lane_seconds"] == 545.0
