@@ -36,14 +36,19 @@ belongs to the M3 Ultra's own tools), so none is added there.
 PARALLEL. Batches are independent bench_board processes sharing the one GPU. Workers =
 min(cores, host GB available / HOST_GB_PER_WORKER, device GB / DEVICE_GB_PER_WORKER, batches); the summary records the
 bound that limited it and the measured peak device memory, so the next release can set the per-worker figures from
-this run. Each batch first finds the untimed data prep done (one `--prep-only` pass over the whole plan runs before
-the pool, so no two batches write the same block).
+this run. The plan runs in STAGING GROUPS (one per board dataset, the neural recipes in one): a group's data is staged,
+its untimed block prep runs once into the group's own cache (bench_board `--prep-only`, so no two batches write the
+same block), its batches run, then its cache, its passing batches' scratch and the data no later group reads are
+deleted. Groups overlap while the footprint (data this run fetched + its work dir) stays under --max-work-gb; each
+race's own scratch goes as soon as its record is written (bench_board --drop-race-scratch). Disk lines:
+`MEASURESMOKE disk free=<GB> footprint=<GB> after <what>`.
 
 Usage:
   release_measurement_smoke.py plan --vendor nvidia                      # the recipe count and plan digest
   release_measurement_smoke.py data-plan --vendor nvidia --out data.json # on the Mac: presigned GETs (no secret leaves)
   release_measurement_smoke.py stage --data-plan data.json               # on the box: fetch missing, verify pins
-  release_measurement_smoke.py run --vendor nvidia --python VENV/bin/python --out DIR
+  release_measurement_smoke.py run --vendor nvidia --python VENV/bin/python --out DIR --work DIR \
+      --data-plan data.json [--max-work-gb 8]                            # stages per group, cleans after it
 """
 import argparse
 import hashlib
@@ -108,17 +113,6 @@ def plan(vendor, B=None):
 
 def plan_sha256(ids):
     return hashlib.sha256("\n".join(sorted(ids)).encode()).hexdigest()
-
-
-def split(ids, workers, per_worker=BATCHES_PER_WORKER):
-    """The batches: the neural recipes together in one (they stage shared inputs and fetch the two LM checkpoints
-    lazily, so no two processes write the same file), every other recipe in round-robin batches of the sorted ids
-    (families interleave, so no batch holds only the slow lanes; their data prep ran once before the pool)."""
-    ids = sorted(ids)
-    serial = [i for i in ids if i.startswith(SERIAL_PREFIXES)]
-    rest = [i for i in ids if not i.startswith(SERIAL_PREFIXES)]
-    n = max(1, min(len(rest), workers * per_worker - (1 if serial else 0)))
-    return ([serial] if serial else []) + ([rest[k::n] for k in range(n)] if rest else [])
 
 
 def worker_count(cores, host_gb, device_gb, batches):
@@ -340,16 +334,19 @@ class BusyCores(threading.Thread):
             wait = self.every
 
 
-def board_command(args, out, extra):
+def board_command(args, out, extra, cache=None):
     return [args.python, str(HERE / "bench_board.py"), "--smoke", "--vendor", args.vendor, "--modes", MODE,
-            "--python-env", args.python, "--skip-install", "--cache", str(Path(args.work) / "cache"),
+            "--python-env", args.python, "--skip-install", "--cache", str(cache or Path(args.work) / "cache"),
             "--data-root", args.data_root, "--evidence-local-only", "--out", str(out)] + extra
 
 
-def run_batch(args, k, ids, deadline, recipe_timeout):
-    """One bench_board --smoke process over `ids`, bounded by its own budget and the phase deadline."""
+def run_batch(args, k, ids, deadline, recipe_timeout, group=None):
+    """One bench_board --smoke process over `ids`, bounded by its own budget and the phase deadline. With a staging
+    group, the batch reads that group's prep cache and writes under that group's directory, and every race's scratch
+    is deleted as soon as its record is written (bench_board --drop-race-scratch)."""
     import release_gate_profiles as P
-    bdir = Path(args.work) / "batches"
+    gdir = Path(group["dir"]) if group else Path(args.work)
+    bdir = gdir / "batches"
     bdir.mkdir(parents=True, exist_ok=True)
     (Path(args.out) / "logs").mkdir(parents=True, exist_ok=True)
     idfile = bdir / ("b%03d.ids.json" % k)
@@ -359,15 +356,23 @@ def run_batch(args, k, ids, deadline, recipe_timeout):
     budget = BATCH_SETUP_S + recipe_timeout * len(ids)
     left = deadline - time.time()
     started = time.time()
-    result = P.bounded_run(board_command(args, out, ["--race-ids", "@" + str(idfile)]), log, min(budget, left),
-                           env=batch_env(args), cwd=str(ROOT))
+    extra = ["--race-ids", "@" + str(idfile)]
+    if not getattr(args, "keep_scratch", False):
+        extra.append("--drop-race-scratch")
+    result = P.bounded_run(board_command(args, out, extra, group_cache(args, group)), log, min(budget, left),
+                           env=batch_env(args, group), cwd=str(ROOT))
     result.update(batch=k, recipes=len(ids), dir=str(out) + "-smoke", log=str(log),
                   ceiling_hit=left <= budget and result.get("timed_out"), started_late=left <= 0,
-                  started_at=started)
+                  started_at=started, group=group["name"] if group else None)
     return result
 
 
-def batch_env(args):
+def group_cache(args, group):
+    """The prep cache a batch reads: its staging group's own (deleted with the group), else the run's one cache."""
+    return Path(group["dir"]) / "cache" if group else Path(args.work) / "cache"
+
+
+def batch_env(args, group=None):
     """The installed wheel's shipped defaults: every MOJOLEARN_* variable of the box is dropped (a job-level knob, a
     vendor override or a fault switch would change a route: a FAIL that is not a product defect, as in
     tools/logical_shard_identity.py worker_env), then only what the harness needs is set."""
@@ -375,11 +380,13 @@ def batch_env(args):
            if k not in ("PYTHONPATH", "PYTHONHOME") and not k.startswith("MOJOLEARN_")}
     env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_NUMERIC_MODE"] = MODE
-    # the two causal-LM recipes' public checkpoints (bench_board_neural.lm_checkpoint fetches them once)
-    env["MOJOLEARN_BOARD_LM_CHECKPOINTS"] = str(Path(args.work) / "hf-checkpoints")
+    base = Path(group["dir"]) if group else Path(args.work)
+    # the two causal-LM recipes' public checkpoints (bench_board_neural.lm_checkpoint fetches them once); per staging
+    # group, so they are deleted with the neural group
+    env["MOJOLEARN_BOARD_LM_CHECKPOINTS"] = str(base / "hf-checkpoints")
     env.setdefault("GBM_BENCH_DATA", args.data_root)
-    # the layer lanes' fixtures, generated once before the batches (fixtures() below)
-    env["MOJOLEARN_NEURAL_FIXTURES"] = str(fixture_dir(args))
+    # the layer lanes' fixtures, generated before the group's batches (fixtures() below)
+    env["MOJOLEARN_NEURAL_FIXTURES"] = str(fixture_dir(args, group))
     # no run summary into the gate tree: retain_run_summary.retain_board (smoke=True) would write a timing summary
     # under docs/measurements/latest/auto/ of the source tree, from every batch at once. An absent repository makes
     # it print RETENTION FAILED and keep the run's own exit code (tools/retain_run_summary.py try_retain).
@@ -387,11 +394,11 @@ def batch_env(args):
     return env
 
 
-def fixture_dir(args):
-    return Path(args.work) / "cache" / "algos-data" / "neural-fixtures"
+def fixture_dir(args, group=None):
+    return group_cache(args, group) / "algos-data" / "neural-fixtures"
 
 
-def fixtures(args, races, out, deadline):
+def fixtures(args, races, out, deadline, group=None):
     """The algos layer lanes' input fixtures (tools/neural_fixtures.py generate over the smoke-size blocks the prep
     wrote, then verify), with --fixture-python: a separate venv holding the CPU torch / torch-geometric the fixture
     generator pins (tools/neural_fixtures_box.sh), never the measured venv; torch only writes inputs here, it is not
@@ -404,17 +411,210 @@ def fixtures(args, races, out, deadline):
         return dict(lanes=0)
     if not args.fixture_python:
         return dict(lanes=len(lanes), exit_code=None, why="no --fixture-python: the layer recipes refuse")
-    data = Path(args.work) / "cache" / "algos-data" / ("rows-%d" % B.SMOKE_ROWS)
-    log = out / "logs" / "fixtures.log"
-    env = batch_env(args)
+    data = group_cache(args, group) / "algos-data" / ("rows-%d" % B.SMOKE_ROWS)
+    log = out / "logs" / ("fixtures%s.log" % ("-" + group["name"] if group else ""))
+    env = batch_env(args, group)
     env["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
     rec = P.bounded_run([args.fixture_python, str(HERE / "neural_fixtures.py"), "generate", "--out",
-                         str(fixture_dir(args)), "--data", str(data), "--lanes", ",".join(lanes)], log,
+                         str(fixture_dir(args, group)), "--data", str(data), "--lanes", ",".join(lanes)], log,
                         max(0.0, deadline - time.time()), env=env, cwd=str(ROOT))
     if rec["exit_code"] == 0:
-        rec = P.bounded_run([args.python, str(HERE / "neural_fixtures.py"), "verify", "--dir", str(fixture_dir(args))],
+        rec = P.bounded_run([args.python, str(HERE / "neural_fixtures.py"), "verify", "--dir",
+                             str(fixture_dir(args, group))],
                             log, max(0.0, deadline - time.time()), env=env, cwd=str(ROOT))
     return dict(lanes=len(lanes), exit_code=rec["exit_code"], timed_out=rec["timed_out"])
+
+
+# --------------------------------------------------------------------------------------------- the disk
+# 0.8.66 run t (1x RTX 4090 pod, 80 GB overlay disk): one --prep-only pass over the whole 653-recipe plan, then every
+# batch's scratch kept to the end, grew the work dir to 35 GB; with the gate's venvs and reports the disk hit 100 %,
+# the smoke died, its final upload and the pod's lease writes failed. The run is therefore split into STAGING GROUPS
+# (one per board dataset; the neural recipes are one group, as they are one batch): a group's data is staged, its
+# block prep runs into the group's own cache, its batches run (each race's scratch is dropped once its record is
+# written), its recipes are judged, then its cache, its batch dirs and the data files no later group reads are
+# deleted. Groups run side by side while the footprint (the data this run fetched + the work dir) stays under the
+# cap; a group that alone would exceed it is refused by name, never staged.
+#: the default cap on the smoke's footprint (the data it fetched + its work dir), GB (--max-work-gb)
+MAX_WORK_GB = 8.0
+
+
+def dir_bytes(path):
+    """Bytes of the regular files under `path` (links not followed); 0 when it does not exist."""
+    total = 0
+    for dirpath, _, files in os.walk(str(path)):
+        for f in files:
+            try:
+                st = os.lstat(os.path.join(dirpath, f))
+            except OSError:
+                continue
+            total += st.st_size
+    return total
+
+
+def disk_free_gb(path):
+    import shutil
+    p = Path(path)
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    try:
+        return shutil.disk_usage(str(p)).free / 1e9
+    except OSError:
+        return None
+
+
+def race_keys(race, B=None):
+    """{R2 key: box path relative to $HOME} ONE recipe reads (data_keys is their union over the plan)."""
+    B = B or _bb()
+    needed, _ = B.data_needs([race], B.DATASETS)
+    keys = {B.R2_KEYS[d]: "datasets/gbm-bench/" + B.DATA_FILES[d] for d in needed}
+    if race["family"] == "algos":
+        for k in B.ALGOS.r2_keys(race["lane"], race["dataset"]):
+            if k.startswith("corpus/"):
+                keys[k] = "r2-stage/" + k
+            elif k not in keys:
+                keys[k] = "datasets/" + k
+    return keys
+
+
+def group_name(race):
+    return "neural" if race["id"].startswith(SERIAL_PREFIXES) else "ds-" + "".join(
+        c if c.isalnum() or c in "-_." else "_" for c in str(race["dataset"]))
+
+
+#: recipes per staging group at most (the neural group excepted): a dataset with more recipes is split into parts of
+#: consecutive sorted ids (family/lane/dataset order, so the lanes sharing a prep block stay together), each with its
+#: own prep cache, so one part's blocks, not the whole dataset's 250-odd lanes', are on disk at once. Its data file is
+#: staged once and kept until the last part that reads it closes (DataStager counts the readers).
+GROUP_MAX_RECIPES = 64
+
+
+def staging_groups(races, B=None, max_recipes=GROUP_MAX_RECIPES):
+    """[{name, ids, keys}] in name order: one group per board dataset (split into parts of at most `max_recipes`),
+    the neural recipes in one."""
+    B = B or _bb()
+    by_name = {}
+    for r in races:
+        by_name.setdefault(group_name(r), []).append(r)
+    out = []
+    for name, rs in sorted(by_name.items()):
+        rs = sorted(rs, key=lambda r: r["id"])
+        n = 1 if name == "neural" else max(1, -(-len(rs) // max(1, max_recipes)))
+        step = -(-len(rs) // n)
+        for part in range(n):
+            chunk = rs[part * step:(part + 1) * step]
+            keys = set()
+            for r in chunk:
+                keys |= set(race_keys(r, B))
+            out.append(dict(name=name if n == 1 else "%s-%d" % (name, part + 1), ids=[r["id"] for r in chunk],
+                            keys=sorted(keys)))
+    return out
+
+
+def group_batches(group, size):
+    """A group's batches: the neural group whole (shared inputs, lazy checkpoint fetch), every other group in
+    round-robin batches of at most `size` recipes (lanes interleave, so no batch holds only the slow ones)."""
+    ids = list(group["ids"])
+    if not ids:
+        return []
+    if group["name"] == "neural":
+        return [ids]
+    n = max(1, -(-len(ids) // max(1, size)))
+    return [ids[k::n] for k in range(n)]
+
+
+class DataStager:
+    """The data plan's files, staged per group and deleted when no remaining group reads them. Only files this run
+    fetched are counted and deleted; a file already at its pin on the box (another job's) is used and left."""
+
+    def __init__(self, entries, home, groups):
+        self.entries = {e["key"]: e for e in entries}
+        self.home = Path(home)
+        self.owned = {}                     # key -> bytes this run fetched and still holds
+        self.readers = {}                   # key -> groups not yet closed that read it
+        for g in groups:
+            for k in g["keys"]:
+                self.readers[k] = self.readers.get(k, 0) + 1
+
+    def owned_bytes(self):
+        return sum(self.owned.values())
+
+    def need_bytes(self, group):
+        """Bytes staging `group` would add: its files neither held by this run nor already at their size."""
+        need = 0
+        for k in group["keys"]:
+            e = self.entries.get(k)
+            if e is None or k in self.owned:
+                continue
+            dest = self.home / e["path"]
+            if not (dest.is_file() and dest.stat().st_size == e["bytes"]):
+                need += int(e["bytes"])
+        return need
+
+    def stage(self, group, stage_fn=None):
+        """[] or ["<key>: <why>"] for the group's files that did not stage."""
+        stage_fn = stage_fn or stage_one
+        bad = []
+        for k in group["keys"]:
+            e = self.entries.get(k)
+            if e is None:
+                bad.append("%s: not in the data plan" % k)
+                continue
+            if k in self.owned:
+                continue
+            got = stage_fn(e, self.home)
+            print("MEASURESMOKE data %s %s (group %s)" % (k, got, group["name"]), flush=True)
+            if got == "fetched":
+                self.owned[k] = int(e["bytes"])
+            elif got != "present":
+                bad.append("%s: %s" % (k, got))
+        return bad
+
+    def release(self, group):
+        """The group is done: delete the files this run fetched that no open or pending group reads. Returns bytes."""
+        freed = 0
+        for k in group["keys"]:
+            self.readers[k] = self.readers.get(k, 1) - 1
+            if self.readers[k] <= 0 and k in self.owned:
+                (self.home / self.entries[k]["path"]).unlink(missing_ok=True)
+                freed += self.owned.pop(k)
+        return freed
+
+
+def cap_refusal(group, need, in_use, cap):
+    return ("measuresmoke: staging group %s (%d recipes) needs %.2f GB on top of %.2f GB in use; the smoke's work "
+            "cap is %.2f GB (--max-work-gb): refused, never staged. Raise --max-work-gb (the pod's disk must hold it) "
+            "or split the group's data" % (group["name"], len(group["ids"]), need / 1e9, in_use / 1e9, cap / 1e9))
+
+
+def clean_group(args, group, verdicts):
+    """After a group is judged: its prep cache, fixtures and checkpoints are deleted, and every batch directory whose
+    recipes all passed (or are declared unsupported); a batch with a failure keeps board.json and logs/ only (the
+    reason is in the summary). --keep-scratch keeps everything (diagnosis on a box with room)."""
+    import shutil
+    if getattr(args, "keep_scratch", False):
+        return
+    gdir = Path(group["dir"])
+    for sub in ("cache", "hf-checkpoints", "prep", "prep-smoke"):
+        shutil.rmtree(gdir / sub, ignore_errors=True)
+    for idfile in (gdir / "batches").glob("b*.ids.json"):
+        idfile.unlink(missing_ok=True)
+    for b in group.get("batches") or []:
+        ok = all((verdicts.get(rid) or {}).get("verdict") in (PASS, UNSUPPORTED) for rid in b["ids"])
+        smoke_dir = Path(b["dir"]) if b.get("dir") else None
+        dirs = [d for d in (smoke_dir, Path(str(smoke_dir)[:-len("-smoke")]) if smoke_dir else None) if d]
+        for d in dirs:
+            if not d.is_dir():
+                continue
+            if ok:
+                shutil.rmtree(d, ignore_errors=True)
+                continue
+            for child in d.iterdir():
+                if child.name in ("board.json", "logs"):
+                    continue
+                if child.is_dir() and not child.is_symlink():
+                    shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
 
 
 def _tail(path, n=1):
@@ -474,60 +674,154 @@ def judge(args, races, batches):
     return verdicts
 
 
+def disk_line(work, footprint, what):
+    free = disk_free_gb(work)
+    print("MEASURESMOKE disk free=%s footprint=%.2fGB after %s" % ("%.1fGB" % free if free is not None else "?",
+                                                                  footprint / 1e9, what), flush=True)
+
+
 def cmd_run(args):
     out, work = Path(args.out), Path(args.work)
     (out / "logs").mkdir(parents=True, exist_ok=True)
     work.mkdir(parents=True, exist_ok=True)
     started = time.time()
     deadline = started + args.ceiling
-    races = plan(args.vendor)
+    B = _bb()
+    races = plan(args.vendor, B)
     ids = [r["id"] for r in races]
+    by_id = {r["id"]: r for r in races}
     cores, host_gb = box_cores(), host_available_gb()
     total_mb = device_memory_mb(args.vendor, "total")
     workers, limit = worker_count(cores, host_gb, total_mb / 1024 if total_mb else None, len(ids))
     if args.jobs:
         workers, limit = args.jobs, "--jobs %d" % args.jobs
-    groups = split(ids, workers)
-    import bench_board as B
+    groups = staging_groups(races, B)
+    rest = sum(len(g["ids"]) for g in groups if g["name"] != "neural")
+    size = max(1, -(-rest // max(1, workers * BATCHES_PER_WORKER)))
+    for g in groups:
+        g.update(dir=str(work / "groups" / g["name"]), batches=[])
+    entries = json.loads(Path(args.data_plan).read_text())["files"] if args.data_plan else []
+    stager = DataStager(entries, args.home, groups)
+    cap = int(args.max_work_gb * 1e9)
     recipe_timeout = B.SMOKE_STEP_S * 4    # bench_board --smoke's own per-race deadline (4 x SMOKE_STEP_S)
-    print("MEASURESMOKE plan vendor=%s recipes=%d batches=%d workers=%d limit=%s ceiling=%ds" % (
-        args.vendor, len(ids), len(groups), workers, limit, args.ceiling), flush=True)
+    print("MEASURESMOKE plan vendor=%s recipes=%d groups=%d batch_size=%d workers=%d limit=%s ceiling=%ds cap=%.1fGB"
+          % (args.vendor, len(ids), len(groups), size, workers, limit, args.ceiling, args.max_work_gb), flush=True)
+
+    def footprint():
+        return stager.owned_bytes() + dir_bytes(work)
+
+    disk_line(work, footprint(), "start")
     peak = DevicePeak(args.vendor)
     peak.start()
     busy = BusyCores(cores)
-    # the untimed block prep, once for the whole plan, before any batch (bench_board --prep-only)
     import release_gate_profiles as P
-    prep = P.bounded_run(board_command(args, work / "prep", ["--preflight-only", "--prep-only"]), out / "logs/prep.log",
-                         max(0.0, deadline - time.time()), env=batch_env(args), cwd=str(ROOT))
-    fixture_rec = fixtures(args, races, out, deadline) if prep["exit_code"] == 0 else dict(exit_code=None)
-    batches = []
-    if prep["exit_code"] != 0:
-        reason = "the untimed data prep exited %s: %s" % (prep["exit_code"], _tail(out / "logs/prep.log"))
-        batches = [dict(batch=k, ids=g, dir="", exit_code=None, started_late=False, ceiling_hit=False,
-                        timed_out=False, log=str(out / "logs/prep.log"), recipes=len(g), prep_failed=reason)
-                   for k, g in enumerate(groups)]
-    else:
-        from concurrent.futures import ThreadPoolExecutor
-        busy.start()
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [pool.submit(run_batch, args, k, g, deadline, recipe_timeout) for k, g in enumerate(groups)]
-            for k, f in enumerate(futures):
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+    verdicts, batches, group_recs, fixture_recs = {}, [], [], {}
+    peak_footprint = [0]
+
+    def fail_group(g, reason):
+        for rid in g["ids"]:
+            verdicts[rid] = dict(verdict=FAIL, reason=reason, batch=None)
+
+    def open_group(g):
+        """Stage, prep and generate fixtures for one group: None, or the reason its recipes FAIL."""
+        gdir = Path(g["dir"])
+        (gdir / "batches").mkdir(parents=True, exist_ok=True)
+        bad = stager.stage(g) if entries else []
+        if bad:
+            return "staging the group's data failed: " + "; ".join(bad)[:300]
+        idfile = gdir / "batches" / "prep.ids.json"
+        idfile.write_text(json.dumps(g["ids"]))
+        log = out / "logs" / ("prep-%s.log" % g["name"])
+        # the untimed block prep, once per group, before its batches (bench_board --prep-only), into its own cache
+        prep = P.bounded_run(board_command(args, gdir / "prep", ["--preflight-only", "--prep-only", "--race-ids",
+                                                                 "@" + str(idfile)], group_cache(args, g)),
+                             log, max(0.0, deadline - time.time()), env=batch_env(args, g), cwd=str(ROOT))
+        g["prep"] = dict(exit_code=prep["exit_code"], timed_out=prep["timed_out"])
+        if prep["exit_code"] != 0:
+            return "the untimed data prep exited %s: %s" % (prep["exit_code"], _tail(log))
+        fixture_recs[g["name"]] = fixtures(args, [by_id[i] for i in g["ids"]], out, deadline, g)
+        return None
+
+    def close_group(g):
+        got = judge(args, [by_id[i] for i in g["ids"]], g["batches"])
+        verdicts.update(got)
+        held = footprint()
+        peak_footprint[0] = max(peak_footprint[0], held)
+        clean_group(args, g, verdicts)
+        freed = stager.release(g)
+        group_recs.append(dict(name=g["name"], recipes=len(g["ids"]), data_keys=g["keys"],
+                               batches=len(g["batches"]), prep=g.get("prep"), footprint_before_clean=held,
+                               data_freed=freed))
+        disk_line(work, footprint(), "group %s" % g["name"])
+
+    pending, queue, futures, live = list(groups), [], {}, {}
+    k = 0
+    busy.start()
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        while pending or queue or futures:
+            # open the next group only when no batch waits for a worker, so the footprint holds only what runs
+            while pending and not queue and len(futures) < workers:
+                g = pending.pop(0)
+                if time.time() >= deadline:
+                    fail_group(g, "phase ceiling reached before its group was staged")
+                    stager.release(g)
+                    continue
+                in_use, need = footprint(), stager.need_bytes(g)
+                if in_use + need > cap:
+                    if live:
+                        pending.insert(0, g)     # wait for a running group to close and free its share
+                        break
+                    reason = cap_refusal(g, need, in_use, cap)
+                    print("MEASURESMOKE " + reason, flush=True)
+                    fail_group(g, reason)
+                    stager.release(g)
+                    group_recs.append(dict(name=g["name"], recipes=len(g["ids"]), data_keys=g["keys"],
+                                           refused=reason))
+                    continue
+                why = open_group(g)
+                held = footprint()
+                peak_footprint[0] = max(peak_footprint[0], held)
+                disk_line(work, held, "staging %s" % g["name"])
+                if why:
+                    fail_group(g, why)
+                    clean_group(args, g, verdicts)
+                    stager.release(g)
+                    group_recs.append(dict(name=g["name"], recipes=len(g["ids"]), data_keys=g["keys"],
+                                           prep=g.get("prep"), failed=why))
+                    continue
+                todo = group_batches(g, size)
+                live[g["name"]] = len(todo)
+                for bids in todo:
+                    queue.append((k, bids, g))
+                    k += 1
+            while queue and len(futures) < workers:
+                kk, bids, g = queue.pop(0)
+                futures[pool.submit(run_batch, args, kk, bids, deadline, recipe_timeout, g)] = (bids, g)
+            if not futures:
+                continue
+            done, _ = wait(list(futures), return_when=FIRST_COMPLETED)
+            for f in done:
+                bids, g = futures.pop(f)
                 rec = f.result()
-                rec["ids"] = groups[k]
+                rec["ids"] = bids
+                g["batches"].append(rec)
                 batches.append(rec)
+                peak_footprint[0] = max(peak_footprint[0], footprint())
+                live[g["name"]] -= 1
+                if live[g["name"]] == 0:
+                    del live[g["name"]]
+                    close_group(g)
     peak.stopped.set()
     busy.stopped.set()
-    if prep["exit_code"] != 0:
-        verdicts = {rid: dict(verdict=FAIL, reason=b["prep_failed"], batch=b["batch"]) for b in batches for rid in b["ids"]}
-    else:
-        verdicts = judge(args, races, batches)
-    meta = dict(rows=_bb().SMOKE_ROWS, neural_shape="small", runner="tools/bench_board.py --smoke",
+    meta = dict(rows=B.SMOKE_ROWS, neural_shape="small", runner="tools/bench_board.py --smoke",
                 cores=cores, host_available_gb=host_gb, device_total_mb=total_mb, workers=workers, limit=limit,
                 device_gb_per_worker=DEVICE_GB_PER_WORKER, host_gb_per_worker=HOST_GB_PER_WORKER,
                 measured_peak_device_mb=peak.peak, busy_cores=busy.samples, ceiling_seconds=args.ceiling,
                 recipe_timeout_seconds=recipe_timeout, elapsed_seconds=round(time.time() - started, 1),
-                prep=dict(exit_code=prep["exit_code"], timed_out=prep["timed_out"]), fixtures=fixture_rec,
-                batches=[{k: b.get(k) for k in ("batch", "recipes", "exit_code", "timed_out", "ceiling_hit",
+                prep={g["name"]: g.get("prep") for g in groups}, fixtures=fixture_recs,
+                disk=dict(cap_bytes=cap, peak_footprint_bytes=peak_footprint[0], groups=group_recs),
+                batches=[{k: b.get(k) for k in ("batch", "group", "recipes", "exit_code", "timed_out", "ceiling_hit",
                                                  "started_late", "elapsed_seconds", "log")} for b in batches])
     doc = summarize(args.vendor, ids, verdicts, meta)
     (out / SUMMARY).write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
@@ -537,27 +831,22 @@ def cmd_run(args):
     for row in text[:40]:
         print(row, flush=True)
     c = doc["counts"]
-    print("MEASURESMOKE vendor=%s recipes=%d PASS=%d UNSUPPORTED=%d FAIL=%d workers=%d elapsed=%.0fs peak_device_mb=%s %s"
+    print("MEASURESMOKE vendor=%s recipes=%d PASS=%d UNSUPPORTED=%d FAIL=%d workers=%d elapsed=%.0fs peak_device_mb=%s "
+          "peak_footprint=%.2fGB %s"
           % (args.vendor, len(ids), c[PASS], c[UNSUPPORTED], c[FAIL] + len(set(ids) - set(verdicts)), workers,
-             doc["elapsed_seconds"], peak.peak, "ok" if doc["ok"] else "FAILED"), flush=True)
+             doc["elapsed_seconds"], peak.peak, peak_footprint[0] / 1e9, "ok" if doc["ok"] else "FAILED"), flush=True)
     return 0 if not summary_errors(doc) else 1
 
 
 # --------------------------------------------------------------------------------------------- data
 def data_keys(vendor, B=None):
     """{R2 key: box path relative to $HOME} the smoke plan reads: the board's datasets (bench_board.data_needs) under
-    datasets/gbm-bench, and the algos corpus keys under r2-stage/<key> (bench_board_algos.corpus_path looks there)."""
+    datasets/gbm-bench, and the algos corpus keys under r2-stage/<key> (bench_board_algos.corpus_path looks there).
+    The union of race_keys over the plan: the run stages them group by group (DataStager)."""
     B = B or _bb()
-    races = plan(vendor, B)
-    needed, _ = B.data_needs(races, B.DATASETS)
-    keys = {B.R2_KEYS[d]: "datasets/gbm-bench/" + B.DATA_FILES[d] for d in needed}
-    for r in races:
-        if r["family"] == "algos":
-            for k in B.ALGOS.r2_keys(r["lane"], r["dataset"]):
-                if k.startswith("corpus/"):
-                    keys[k] = "r2-stage/" + k
-                elif k not in keys:
-                    keys[k] = "datasets/" + k
+    keys = {}
+    for r in plan(vendor, B):
+        keys.update(race_keys(r, B))
     return dict(sorted(keys.items()))
 
 
@@ -679,6 +968,15 @@ def main(argv=None):
                    help="a venv with the fixture generator's CPU torch + torch-geometric (the layer lanes' inputs)")
     p.add_argument("--jobs", type=int, default=0, help="override the worker count (default: cores and memory)")
     p.add_argument("--ceiling", type=int, default=PHASE_CEILING_S, help="the phase ceiling, seconds")
+    p.add_argument("--data-plan", default=None,
+                   help="the data plan (data-plan): its files are staged per group and deleted after the last group "
+                        "that reads them; without it the plan's data must already be at its pins")
+    p.add_argument("--home", default=os.path.expanduser("~"), help="where the data plan's paths are rooted")
+    p.add_argument("--max-work-gb", type=float, default=MAX_WORK_GB,
+                   help="cap on the smoke's footprint (data it fetched + its work dir), GB; a group that would pass "
+                        "it waits for a running group to close, or is refused by name when nothing else runs")
+    p.add_argument("--keep-scratch", action="store_true",
+                   help="keep every group's prep cache and batch directories (diagnosis on a box with room)")
     args = ap.parse_args(argv)
     return {"plan": cmd_plan, "data-plan": cmd_data_plan, "stage": cmd_stage, "run": cmd_run}[args.cmd](args)
 
