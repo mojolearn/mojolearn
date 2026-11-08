@@ -157,7 +157,11 @@ class IdentityOnWheels:
             rel = self.rel
         except (AttributeError, KeyError, TypeError):
             return False
-        return RV.record(rel, self.version, vendor, name, reason, log=log, say=self.say)
+        # the notice goes to ~/mojolearn-evidence/rel<ver>/ (MOJOLEARN_EVIDENCE_ROOT); a run with its own
+        # --state-dir (the tests' fakes) keeps it under that dir
+        state_dir = getattr(getattr(self, "args", None), "state_dir", "") or ""
+        return RV.record(rel, self.version, vendor, name, reason, log=log, say=self.say,
+                         evidence_root=state_dir or None)
 
     def soft_judge(self, vendor, hard, soft):
         """(errors, soft_names): HARD errors stop the gate; each SOFT (name, reason, log) is recorded and lets it
