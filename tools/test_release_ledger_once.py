@@ -288,3 +288,49 @@ def test_the_hourly_rate_comes_from_the_provider_state(tmp_path):
     assert once.hourly_rate("amd", env, environ={}) == 1.99
     assert once.hourly_rate("amd", env, environ={"MOJOLEARN_BOX_HOURLY_AMD": "2.5"}) == 2.5
     assert once.hourly_rate("amd", tmp_path / "absent", environ={}) is None
+
+
+# ------------------------------------------------------------ after identity-admit: no ledger at all
+@pytest.fixture
+def no_ledger(monkeypatch):
+    """Any ledger consultation fails the test (readiness_status, the manifest, release_gate, a row)."""
+    def never(*a, **k):
+        raise AssertionError("a step after identity-admit consulted the requirements ledger")
+    for name in ("readiness_status", "readiness_manifest_keyed", "readiness_configuration", "release_gate",
+                 "readiness"):
+        monkeypatch.setattr(release.Release, name, never)
+    monkeypatch.setattr(rr.RequirementsLedger, "_evaluate_row", staticmethod(never))
+
+
+def admitted_release(tmp_path, monkeypatch, wheels=None, **kw):
+    r = release.Release(args(tmp_path / "state", identity_on_wheels=True, **kw), runner=lambda *a, **k: 0)
+    r.state["commit"] = COMMIT
+    r.say = lambda line: None
+    monkeypatch.setattr(r, "candidate_verdict", lambda vendor: (True, "PASS"))
+    if wheels is not None:
+        r.state["identity_admitted"] = dict(source_commit=COMMIT, commit="e" * 40, wheels=wheels)
+    return r
+
+
+def test_the_publication_gate_after_identity_admit_reads_its_record_only(tmp_path, monkeypatch, no_ledger):
+    wheel = tmp_path / "mojolearn_core.whl"
+    wheel.write_bytes(b"admitted bytes")
+    r = admitted_release(tmp_path, monkeypatch, wheels={"linux": release.sha256(wheel)})
+    assert r.publication_gate(stage="pre", platform="linux", wheel=wheel) == (True, [])
+    wheel.write_bytes(b"other bytes")
+    ready, reasons = r.publication_gate(stage="pre", platform="linux", wheel=wheel)
+    assert not ready and "is not the wheel identity-admit admitted for linux" in reasons[0]
+    r.state.pop("identity_admitted")
+    ready, reasons = r.publication_gate(vendors=["nvidia"])
+    assert not ready and reasons == [f"identity-admit has no admission of {COMMIT[:12]}: run identity-admit"]
+
+
+def test_the_record_after_identity_admit_consults_no_ledger(tmp_path, monkeypatch, no_ledger):
+    r = admitted_release(tmp_path, monkeypatch, publish="pypi")
+    monkeypatch.setattr(r, "published_platforms", lambda: ["linux", "nvidia"])
+    with pytest.raises(release.StepFailed, match="identity-admit's admission: identity-admit has no admission"):
+        r.step_record()
+
+
+def test_identity_admit_is_not_followed_by_a_ledger_prefetch():
+    assert "identity-admit" not in release.Release.LEDGER_PREFETCH_AFTER
