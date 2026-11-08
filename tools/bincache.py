@@ -1487,6 +1487,90 @@ def claim_slot(map_path, puts):
 #   MOJOLEARN_BINCACHE_KEEP=<n>         archives kept, newest first (default 400)
 LOCAL_KEEP = 400
 
+# THE ONE MAC CACHE (2026-11-07, lane/post-one-mac-cache). On 2026-11-07 the
+# Mac compiled the frozen 0.8.66 commit twice: once as the development build
+# (tools/development_build.py, development layout, its own key and cache) and
+# again inside the release as the macOS wheel (8582 s wall, every one of 15
+# merged groups "miss+built-cached" in a release-scoped cache). Andrew's rule
+# is one compile per freeze. So the development build on macOS compiles the
+# release layout through this cache with this environment
+# (tools/development_build.py --layout release, the macOS default), writing
+# every group into ONE Mac cache, and tools/release.py step_macos_build seeds
+# its release-scoped cache from that same directory and copies what it built
+# back into it. A group the development build compiled in the release's source
+# checkout then carries the release's closure-v2 key and is placed, not
+# compiled. MOJOLEARN_BINCACHE_DIR names another directory.
+MAC_CACHE_DEFAULT = Path.home() / "mojolearn-evidence" / "bincache-mac"
+#: The compile environment of the macOS release build that reaches a key
+#: (build_env): tools/release.py step_macos_build passes both, and
+#: tools/mac_slot.py run pins MOJOLEARN_COMPILE_JOBS=1. A compile with another
+#: job count is keyed apart (a codegen split is not shown byte-neutral).
+MACOS_RELEASE_COMPILE_ENV = {"MOJOLEARN_PACKAGE_BYTE_LM": "1", "MOJOLEARN_COMPILE_JOBS": "1"}
+
+
+def mac_cache_dir(environ=None):
+    """The one Mac cache: MOJOLEARN_BINCACHE_DIR, else MAC_CACHE_DEFAULT."""
+    environ = os.environ if environ is None else environ
+    return Path(environ.get("MOJOLEARN_BINCACHE_DIR") or MAC_CACHE_DEFAULT).expanduser()
+
+
+def macos_merged_group(base, directory, stem):
+    """(kind, output, environment) of one merged macOS group exactly as
+    packaging/macos/build_release_wheel.sh runs it through
+    `bincache.py build ./bindings/merged_build.sh <kind> --group <stem>`:
+    host groups compile the CPU column with no accelerator target and no
+    output directory override; GPU groups take the directory's numeric mode.
+    The declared output is a key field (local.outputs), so it is the package
+    path the wheel build writes."""
+    env = dict(base)
+    if directory == "host":
+        kind, output = "host", "python/mojolearn/host/%s.so" % stem
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+        env.pop("MOJOLEARN_HOST_OUTDIR", None)
+        env.update(MOJOLEARN_NUMERIC_MODE="identical", MOJOLEARN_TARGET_COLUMN="cpu")
+    else:
+        kind = "gpu"
+        output = ("python/mojolearn/%s.so" % stem if directory == "fast"
+                  else "python/mojolearn/%s/%s.so" % (directory, stem))
+        env["MOJOLEARN_NUMERIC_MODE"] = directory
+    env.update(MOJOLEARN_BINCACHE_OUTPUTS=output, MOJOLEARN_BINCACHE_SHELL="sh")
+    return kind, output, env
+
+
+def copy_archives(source_dir, dest_dir):
+    """Copy every verified archive of SOURCE_DIR that DEST_DIR lacks into
+    DEST_DIR (the release's write-back into the one Mac cache). An archive is
+    verified against its own manifest before and after the copy; a key DEST_DIR
+    already holds with other bytes is a BINCACHE CONFLICT and is never
+    replaced. Returns {"copied": n, "present": n, "conflicts": [key],
+    "rejected": [key]}. Never raises for one archive."""
+    out = dict(copied=0, present=0, conflicts=[], rejected=[])
+    source_dir, dest_dir = Path(source_dir), Path(dest_dir)
+    if not source_dir.is_dir() or source_dir.resolve() == dest_dir.resolve():
+        return out
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    for arc in sorted(source_dir.glob("*.tar.gz")):  # driver-loop: over cache archives, file copies only
+        key = arc.name[:-len(".tar.gz")]
+        dst = dest_dir / arc.name
+        try:
+            manifest = _manifest_of(arc) or {}
+            verify_archive(str(arc), key, manifest.get("fields") or {})
+            verdict, _line = keep_or_refuse(dst, arc, key, "one Mac cache")
+            if verdict == "same":
+                out["present"] += 1
+                continue
+            if verdict == "conflict":
+                out["conflicts"].append(key)
+                continue
+            tmp = dest_dir / (".copy-%d-%s.tar.gz" % (os.getpid(), key))
+            shutil.copyfile(arc, tmp)
+            verify_archive(str(tmp), key, manifest.get("fields") or {})
+            os.replace(tmp, dst)
+            out["copied"] += 1
+        except (Reject, OSError, ValueError):
+            out["rejected"].append(key)
+    return out
+
 
 def darwin_toolchain():
     """The Mac's own compilers, which the Metal half of a binding is built

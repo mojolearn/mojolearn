@@ -9,9 +9,22 @@ On the Mac the orchestrator wraps build with the existing semaphore:
     bash ~/mojolearn-evidence/compile_slot.sh python3 tools/development_build.py build
 
 This is build tooling, never product runtime. Only identical and host are
-supported. Each physical development group has a content-addressed artifact
-and receipt. Unchanged groups reuse their exact bytes. An unresolved local
-import widens the key to every project Mojo source and records that fallback.
+supported.
+
+Two layouts (--layout). On macOS the default is `release`: the development
+build of a commit IS the macOS wheel's compile. It builds the merged groups of
+bindings/merged_groups.json exactly as packaging/macos/build_release_wheel.sh
+does (tools/bincache.py build ./bindings/merged_build.sh <kind> --group <stem>,
+the wheel's environment, MOJOLEARN_COMPILE_JOBS=1, MOJOLEARN_PACKAGE_BYTE_LM=1)
+into ONE Mac cache (--mac-cache, else MOJOLEARN_BINCACHE_DIR, else
+~/mojolearn-evidence/bincache-mac); tools/release.py's macOS build seeds from
+that cache, so a release of the same commit in the same checkout places every
+group instead of compiling it. The section "--layout release" below has the
+key-field comparison. On Linux the default is `development`: one group per
+binding (bindings/development_groups.json), each with a content-addressed
+artifact and receipt in --cache. Unchanged groups reuse their exact bytes. An
+unresolved local import widens the key to every project Mojo source and
+records that fallback.
 
 Development builds use the standard optimized compiler defaults. Do not pass
 -O0 or --optimization-level 0: an unoptimized image returned zero where the
@@ -26,9 +39,10 @@ by a selected set must be current before its loader index is replaced. A
 set; use a fresh Python process afterwards. Existing per-binding overrides are
 refused, since they would silently shadow the selected development binaries.
 
-Release commands do not call this tool. A development index deliberately fails
-the release layout check; final release qualification still builds/checks the
-compact release layout. No compile-time or numerical equivalence claim follows
+Release commands do not call this tool. A development-layout index
+deliberately fails the release layout check; final release qualification still
+builds/checks the compact release layout (from the one Mac cache when this tool
+already compiled it with --layout release). No compile-time or numerical equivalence claim follows
 from a successful cache/planning test.
 
 Groups compile in parallel by default (--parallel auto). Each group's need is
@@ -1198,6 +1212,341 @@ def activate(plan, repo, cache, lock_seconds=None):
     return {"state": "activated", "missing": [], "activated": modes, "support": installed}
 
 
+# ---------------------------------------------------------------------------
+# --layout release: the macOS wheel's compile, through the one Mac cache
+# ---------------------------------------------------------------------------
+#
+# WHY (2026-11-07). The Mac compiled the frozen 0.8.66 commit twice: this tool
+# built its 79 development groups (development layout, its own cache and key)
+# and then tools/release.py built the 15 merged release groups of the same
+# commit again inside the macOS wheel (8582 s wall, 25,700+ compiler seconds,
+# every group a miss). No key could match, whatever the cache directory:
+#
+#   key field            development layout             macOS wheel (release)
+#   key system           KEY_SCHEMA (this file), cache  tools/bincache.py closure-v2,
+#                        ~/.cache/mojolearn-development release-scoped macos-bincache/
+#   groups               bindings/development_groups    bindings/merged_groups.json:
+#                        .json: 79 `_mojolearn_dev_*`   15 `_mojolearn_native*` files
+#                        files, one member each         of 1..10 members
+#   merged root text     one member's PyInit            every member's PyInit
+#   merged_build.sh args gpu|host --layout development  gpu|host --group <stem>
+#                        --group S --outdir --rootdir
+#   declared output      <cache>/work/<key>/output      python/mojolearn/<set>/<stem>.so
+#   MOJOLEARN_COMPILE_   chosen by the scheduler (free  1 (tools/mac_slot.py run pins
+#   JOBS (keyed)         cores at launch)               it; step_macos_build passes it)
+#   repository path      where the build ran            the release's source checkout
+#   (rpath, keyed)       (e.g. ~/mojolearn-wt/...)      (the main checkout at the commit)
+#   build_env            v1 sweep: also keys            closure-v2: only what a keyed
+#                        MOJOLEARN_MERGED_PYTHON and    input reads (COMPILE_JOBS,
+#                        MOJOLEARN_RUNPOD_KEY_FILE      NUMERIC_MODE, PACKAGE_BYTE_LM)
+#   toolchain            compiler binary sha256,        pixi.lock packages, installed
+#                        version, packages, Xcode       toolchain check, Xcode
+#
+# Equal in both: MOJOLEARN_PACKAGE_BYTE_LM=1, MOJOLEARN_NUMERIC_MODE=identical,
+# the host column (cpu, no accelerator), the Metal flags per flags class.
+# The groups, root text, args, output and job count change the compile itself
+# (or are keyed because they might), so the fix is not a looser key: on macOS
+# this tool now runs the release compile itself. Every release group of the
+# selected sets runs `tools/bincache.py build ./bindings/merged_build.sh
+# <kind> --group <stem>` with the environment packaging/macos/
+# build_release_wheel.sh gives it (bincache.macos_merged_group) and the
+# release's keyed compile settings (bincache.MACOS_RELEASE_COMPILE_ENV),
+# writing into the one Mac cache (bincache.mac_cache_dir). The release's
+# macOS build seeds from that cache, so when it runs in the same checkout its
+# keys are these keys and every group is placed, not compiled.
+# The memory-packed scheduler above runs the compiles (one compiler thread
+# each, groups in parallel up to the cores and 80% of available memory);
+# groups already in the cache are placed in parallel first.
+RELEASE_SCHEMA = "mojolearn.development-build.release-layout.v1"
+RELEASE_KEY_SCHEMA = "mojolearn.development-group.release-layout.v1"
+LAYOUTS = ("development", "release")
+MERGED_SCRIPT = "./bindings/merged_build.sh"
+
+
+def default_layout(plat=None):
+    """macOS builds the release layout (the wheel's compile); Linux keeps the
+    development groups, since the Linux release legs compile on their own
+    boxes with their own accelerator targets."""
+    return "release" if (plat or merged.default_platform()) == "darwin" else "development"
+
+
+def release_environment(mode, env, plat="darwin"):
+    """The environment one release-layout group of `mode` starts from: the
+    caller's, with the macOS release build's keyed compile settings, through
+    build_environment's refusals. A caller value that differs from the
+    release's would key another compile, so it is refused, not overridden."""
+    env = dict(env)
+    for name, value in bincache.MACOS_RELEASE_COMPILE_ENV.items():
+        have = env.get(name)
+        if have not in (None, value):
+            raise BuildError(f"--layout release compiles exactly as the macOS wheel does ({name}={value}); "
+                             f"{name}={have} would key another compile (use --layout development)")
+        env[name] = value
+    return build_environment(mode, env, plat)
+
+
+def release_group_environment(row, env):
+    """The exact environment `bincache.py build` sees for this release row."""
+    _kind, _output, genv = bincache.macos_merged_group(
+        release_environment(row["mode"], env, row["fields"]["platform"]), row["mode"], row["stem"])
+    genv["MOJOLEARN_BINCACHE_DIR"] = row["mac_cache"]
+    return genv
+
+
+def release_archive(mac_cache, key, fields, env):
+    """The verified archive of KEY in the one Mac cache or a seed directory, or None."""
+    for directory in [Path(mac_cache)] + bincache.seed_dirs(env):
+        candidate = directory / (key + ".tar.gz")
+        if candidate.is_file():
+            try:
+                bincache.verify_archive(str(candidate), key, fields)
+                return candidate
+            except bincache.Reject:
+                continue
+    return None
+
+
+def release_plan(repo, cache, mac_cache, modes, env, selection=(), facts=None, plat=None, c_facts=None):
+    """The release-layout plan: one row per merged release group of each set,
+    keyed by tools/bincache.py exactly as the macOS wheel build keys it."""
+    repo, cache, mac_cache = Path(repo).resolve(), Path(cache).resolve(), Path(mac_cache).expanduser().resolve()
+    plat = plat or merged.default_platform()
+    if plat != "darwin":
+        raise BuildError("--layout release is the macOS wheel's compile; Linux release groups compile on the "
+                         "release legs (use --layout development here)")
+    if mac_cache.is_relative_to(repo) or cache.is_relative_to(repo):
+        raise BuildError("keep the caches outside the source tree")
+    facts = facts if facts is not None else toolchain_facts(repo)
+    script = repo / MERGED_SCRIPT
+    rows = []
+    for mode in modes:
+        if mode not in ("identical", "host"):
+            raise BuildError("development builds support identical and host only")
+        effective = release_environment(mode, env, plat)
+        byte_lm = effective["MOJOLEARN_PACKAGE_BYTE_LM"] == "1"
+        for stem, flags_class, members in merged.plan(mode, plat, byte_lm, "release"):
+            kind, output, genv = bincache.macos_merged_group(effective, mode, stem)
+            genv["MOJOLEARN_BINCACHE_DIR"] = str(mac_cache)
+            args = [kind, "--group", stem]
+            try:
+                bfields, closure = bincache.build_fields(repo, script, args, genv, "local", [output], "sh",
+                                                         local=True, plat=plat)
+            except bincache.UnkeyableBuild as error:
+                raise BuildError(f"{mode}:{stem} cannot be keyed: {error}") from error
+            key = bincache.key_of(bfields)
+            fields = {"schema": RELEASE_KEY_SCHEMA, "repo": str(repo), "platform": plat, "layout": "release",
+                      "mode": mode, "stem": stem, "flags_class": flags_class, "members": members,
+                      "source": {"scope": "closure", "files": sorted(closure or {})},
+                      "environment": dict(bfields["build_env"],
+                                          MOJOLEARN_COMPILE_JOBS=genv["MOJOLEARN_COMPILE_JOBS"]),
+                      "bincache": bfields}
+            row = {"mode": mode, "stem": stem, "members": members, "flags_class": flags_class,
+                   "kind": kind, "output": output, "command": [sys.executable, "tools/bincache.py", "build",
+                                                               MERGED_SCRIPT, *args],
+                   "mac_cache": str(mac_cache), "key": key, "fields": fields,
+                   "selected": selected_group(mode, stem, selection),
+                   "auto_compile_jobs": False, "compile_jobs": int(genv["MOJOLEARN_COMPILE_JOBS"])}
+            row["action"] = ("reuse" if facts.get("available") and release_archive(mac_cache, key, bfields, genv)
+                             else "build")
+            row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
+            row["recorded_seconds"] = recorded_seconds(cache, mode, stem)
+            rows.append(row)
+    for group in selection:
+        if not any(selected_group(r["mode"], r["stem"], [group]) for r in rows):
+            raise BuildError(f"group selection matches nothing: {group}")
+    support = support_rows(repo, cache, plat, c_facts if c_facts is not None else c_toolchain_facts(env, plat))
+    return {"schema": RELEASE_SCHEMA, "layout": "release", "platform": plat, "repo": str(repo),
+            "cache": str(cache), "mac_cache": str(mac_cache),
+            "toolchain_available": facts.get("available", False), "groups": rows, "support": support,
+            "counts": {"groups": len(rows), "reuse": sum(r["action"] == "reuse" for r in rows),
+                       "build_selected": sum(r["action"] == "build" and r["selected"] for r in rows),
+                       "build_unselected": sum(r["action"] == "build" and not r["selected"] for r in rows)}}
+
+
+def provenance_row(directory):
+    """(outcome, key) of the last tools/bincache.py provenance row in DIRECTORY, or ("", "")."""
+    try:
+        lines = (Path(directory) / "provenance.tsv").read_text().splitlines()
+    except OSError:
+        return "", ""
+    parts = lines[-1].split("\t") if lines else []
+    return (parts[2], parts[3]) if len(parts) >= 4 else ("", "")
+
+
+def compile_release_group(row, repo, cache, env, evidence, toolchain=None, launch=None):
+    """Place or compile one release group through the one Mac cache.
+
+    The same call signature as compile_group (the schedulers take either).
+    tools/bincache.py keys the group in the child; that key must equal the
+    plan's, or the group fails (its environment or inputs moved). A placement
+    is not a compile attempt (no `command` in the result) and records no
+    peak; a compile records its peak for the next plan's packing."""
+    started = time.monotonic()
+    result = {"mode": row["mode"], "stem": row["stem"], "key": row["key"], "layout": "release",
+              "output": row["output"], "state": "failed", "exit_code": 1}
+    if launch:
+        result.update({k: v for k, v in launch.items() if k != "submitted"})
+        if launch.get("submitted") is not None:
+            result["queue_wait_seconds"] = max(0.0, started - launch["submitted"])
+    limits = json.loads(env.get(GUARD_ENV, "{}"))
+    try:
+        with lock(Path(cache) / "locks" / (row["key"] + ".lock"), limits.get("lock_seconds")):
+            name = row["mode"] + "-" + row["stem"]
+            log = evidence / (name + ".log")
+            execution = log.with_suffix(log.suffix + ".execution.json")
+            provenance = evidence / "bincache" / name
+            execution.unlink(missing_ok=True)
+            shutil.rmtree(provenance, ignore_errors=True)
+            output = Path(repo) / row["output"]
+            # The cache never replaces an existing file; build_release_wheel.sh
+            # removes the declared output first for the same reason.
+            output.unlink(missing_ok=True)
+            genv = release_group_environment(row, env)
+            genv["MOJOLEARN_BINCACHE_OUT"] = str(provenance)
+            result.update(log=str(log), execution_receipt=str(execution), workers_at_launch=row["compile_jobs"])
+            code = run_logged(row["command"], repo, genv, log)
+            outcome, key = provenance_row(provenance)
+            compiled = outcome.startswith(("miss", "rejected", "bypass"))
+            result.update(exit_code=code, bincache_outcome=outcome, bincache_key=key)
+            if compiled:
+                result["command"] = row["command"]
+            if execution.is_file():
+                result["execution"] = json.loads(execution.read_text())
+                if compiled:
+                    record_peak(cache, row, result["execution"], row["compile_jobs"])
+                    result["peak_rss_bytes"] = result["execution"].get("peak_rss_bytes")
+                if code and result["execution"].get("reason"):
+                    result["reason"] = result["execution"]["reason"]
+            if build_process.cancelled():
+                raise KeyboardInterrupt("development build cancelled during a release group")
+            if code == 0:
+                if key != row["key"]:
+                    result.update(exit_code=1, reason=(
+                        f"tools/bincache.py keyed this group {key[:16] or '-'}, the plan {row['key'][:16]}: "
+                        "its environment or inputs changed since the plan"))
+                elif not output.is_file() or output.stat().st_size == 0:
+                    result.update(exit_code=1, reason="build returned success without the declared output")
+                else:
+                    result.update(state="reused" if outcome == "hit" else "built",
+                                  sha256=bincache.sha256_file(output),
+                                  cached=outcome == "hit" or outcome.endswith("+built-cached"))
+    except KeyboardInterrupt as error:
+        result.update(state="interrupted", exit_code=130, reason=str(error))
+    except (BuildError, ValueError, OSError, subprocess.SubprocessError) as error:
+        result.update(state="failed", exit_code=1, reason=str(error))
+    result["seconds"] = time.monotonic() - started
+    atomic_json(evidence / (row["mode"] + "-" + row["stem"] + ".json"), result)
+    return result
+
+
+def place_release_groups(rows, cache, env, evidence, limits, report, futures):
+    """Place the groups the one Mac cache already holds, all at once (no
+    compiler runs; each is an archive verify and a file write)."""
+    if not rows:
+        return
+    cores = os.cpu_count() or 1
+    place_env = dict(env, **{GUARD_ENV: json.dumps(dict(resource_budget(1, 1, None), **limits))})
+    with ThreadPoolExecutor(max_workers=max(1, min(len(rows), cores))) as pool:
+        submitted = [pool.submit(compile_release_group, row, REPO, cache, place_env, evidence) for row in rows]
+        futures.extend(submitted)
+        for future in as_completed(submitted):  # driver-loop: over placed release groups
+            collect(report, future.result(), evidence)
+
+
+def current_release_output(row, repo):
+    """True when the package file of ROW holds the bytes of its key's archive."""
+    output = Path(repo) / row["output"]
+    archive = Path(row["mac_cache"]) / (row["key"] + ".tar.gz")
+    try:
+        _manifest, blobs = bincache.verify_archive(str(archive), row["key"], row["fields"]["bincache"])
+        data = blobs.get(row["output"])
+        return data is not None and output.is_file() and bincache.sha256_file(output) == \
+            hashlib.sha256(data).hexdigest()
+    except (bincache.Reject, OSError):
+        return False
+
+
+def activate_release(plan, repo, cache, lock_seconds=None):
+    """Index every complete set exactly as the macOS wheel build indexes it.
+
+    The release layout cannot stage outside the package tree (the declared
+    output is a key field), so the group files are already in place; this
+    checks each holds its key's archive bytes (a file the cache did not keep
+    is refused), installs the support artifacts and rewrites each set's
+    `_mojolearn_merged.json` from the plan, one atomic replacement per set."""
+    rows = plan["groups"]
+    support = plan.get("support")
+    if support is None:
+        raise BuildError("plan has no support artifacts; recompute it with this tool")
+    sources = {row["key"]: cached_artifact(cache, row) for row in support}
+    missing = [row["mode"] + ":" + row["stem"] for row in rows if not current_release_output(row, repo)]
+    missing += ["support:" + row["name"] for row in support if sources[row["key"]] is None]
+    if missing:
+        return {"state": "incomplete", "missing": missing, "activated": []}
+    modes = sorted({row["mode"] for row in rows})
+    for row in rows:
+        out = Path(repo) / "python/mojolearn" / row["mode"]
+        shadows = [str(out / (n + ".so")) for n in row["members"] if (out / (n + ".so")).exists()]
+        if shadows:
+            raise BuildError("per-binding files would shadow the merged index: " + ", ".join(shadows))
+    installed = {row["name"]: install_support(row, sources[row["key"]], repo) for row in support}
+    with contextlib.ExitStack() as stack:
+        outs = {mode: Path(repo) / "python/mojolearn" / mode for mode in modes}
+        for mode in modes:
+            key = hashlib.sha256(os.path.realpath(outs[mode]).encode()).hexdigest()[:16]
+            stack.enter_context(lock(Path(tempfile.gettempdir()) / f"mojolearn-merged-index-{key}.lock",
+                                     lock_seconds))
+        if build_process.cancelled():
+            raise KeyboardInterrupt("development build cancelled before index activation")
+        for mode in modes:
+            files = {row["stem"] + ".so": row["members"] for row in rows if row["mode"] == mode}
+            atomic_json(outs[mode] / "_mojolearn_merged.json", {"format": merged.INDEX_FORMAT, "files": files})
+    return {"state": "activated", "missing": [], "activated": modes, "support": installed}
+
+
+def release_build(args, modes, env, cache, mac_cache, evidence, limits, report, cap, futures):
+    """`build --layout release`: place what the one Mac cache holds, compile
+    the rest with the memory-packed scheduler, then index the sets."""
+    report.update(schema=RELEASE_SCHEMA, layout="release", mac_cache=str(mac_cache))
+    plan = release_plan(REPO, cache, mac_cache, modes, env, args.group)
+    atomic_json(evidence / "plan.json", plan)
+    summary(plan)
+    if not plan["toolchain_available"]:
+        raise BuildError("install the pinned default pixi environment before building")
+    selected = [r for r in plan["groups"] if r["selected"]]
+    wanted = build_submission_order(r for r in selected if r["action"] == "build")
+    report.update(plan=plan, jobs=0, state="building", compile_attempts=0)
+    place_release_groups([r for r in selected if r["action"] == "reuse"], cache, env, evidence, limits,
+                         report, futures)
+    if wanted and cap == 1:
+        serial_build(plan, wanted, args, env, cache, evidence, limits, report, compile_release_group)
+    elif wanted:
+        parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap, futures,
+                       compile_release_group)
+    if any(r["exit_code"] for r in report["results"]):
+        raise BuildError("one or more release groups failed; the merged indexes were not rewritten")
+    uncached = [r["mode"] + ":" + r["stem"] for r in report["results"] if r.get("cached") is False]
+    if uncached:
+        print("release layout: NOT CACHED (the release will compile these): " + ", ".join(uncached))
+    build_support_rows(plan, env, cache, evidence, limits, report)
+    final_plan = release_plan(REPO, cache, mac_cache, modes, env, args.group)
+    if [r["key"] for r in final_plan["groups"] + final_plan["support"]] != \
+            [r["key"] for r in plan["groups"] + plan["support"]]:
+        before = {r.get("mode", "support") + ":" + r["stem"]: r["fields"] for r in plan["groups"] + plan["support"]}
+        after = {r.get("mode", "support") + ":" + r["stem"]: r["fields"]
+                 for r in final_plan["groups"] + final_plan["support"]}
+        raise BuildError(input_change_reason(
+            "build inputs changed; refusing to index mixed-source outputs", before, after))
+    if build_process.cancelled():
+        raise KeyboardInterrupt("development build cancelled before activation")
+    report.update(activate_release(final_plan, REPO, cache, limits["lock_seconds"]))
+    atomic_json(evidence / "result.json", report)
+    if args.json:
+        atomic_json(args.json, report)
+    print(f"{report['state']}: evidence {evidence}")
+    return 0 if report["state"] == "activated" else 3
+
+
 def summary(plan):
     for row in plan["groups"]:
         selection = "selected" if row["selected"] else "unselected"
@@ -1222,8 +1571,12 @@ def host_facts(report, resources=None):
     return cores, available
 
 
-def serial_build(plan, wanted, args, env, cache, evidence, limits, report):
-    """--parallel 1: one compiler at a time under the serial budget."""
+def serial_build(plan, wanted, args, env, cache, evidence, limits, report, compile=None):
+    """--parallel 1: one compiler at a time under the serial budget.
+
+    compile: the group compiler (default compile_group; the release layout
+    passes compile_release_group)."""
+    compile = compile or compile_group
     workers = planned_compiler_workers(plan)
     recorded = max(r["recorded_need_bytes"] for r in wanted)
     floor = GROUP_FLOOR_BYTES.get(plan["platform"], 0)
@@ -1237,18 +1590,21 @@ def serial_build(plan, wanted, args, env, cache, evidence, limits, report):
     for row in wanted:  # driver-loop: over development groups, one compiler at a time
         launch = {"groups_running_at_launch": 1, "threads_running_at_launch": row["compile_jobs"],
                   "cores": budget["cores"], "submitted": time.monotonic()}
-        result = compile_group(row, REPO, cache, env, evidence, toolchain, launch)
+        result = compile(row, REPO, cache, env, evidence, toolchain, launch)
         collect(report, result, evidence)
 
 
-def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap, futures):
+def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap, futures, compile=None):
     """A sliding window over the groups: start one whenever memory and a core are free.
 
     Longest estimated compile first. Each start re-plans compiler threads so
     the running groups' threads sum to the core count (launch_threads); a
     group that finishes returns its memory and cores to the next start at
     once. Every launched future is appended to `futures` so the caller keeps
-    the verdicts of started workers when the run stops."""
+    the verdicts of started workers when the run stops. compile: the group
+    compiler (default compile_group; the release layout passes
+    compile_release_group)."""
+    compile = compile or compile_group
     cores, available_at_start = host_facts(report)
     total = report["host_memory_bytes"]
     baseline = int(MEMORY_FRACTION * available_at_start)
@@ -1315,7 +1671,7 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
                         launch = {"groups_running_at_launch": len(running) + 1,
                                   "threads_running_at_launch": sum(threads_now), "cores": cores,
                                   "submitted": time.monotonic()}
-                        future = pool.submit(compile_group, row, REPO, cache, group_env, evidence,
+                        future = pool.submit(compile, row, REPO, cache, group_env, evidence,
                                              toolchain, launch)
                         futures.append(future)
                         running[future] = (row, need, launch)
@@ -1351,12 +1707,35 @@ def parallel_build(plan, wanted, args, env, cache, evidence, limits, report, cap
             raise
 
 
+def build_support_rows(plan, env, cache, evidence, limits, report):
+    """Support artifacts (portable math): small C builds, reused from the
+    cache when their inputs are unchanged. Serial by nature: one C file."""
+    support_env = dict(env, **{GUARD_ENV: json.dumps(dict(resource_budget(1, 1, None), **limits))}) \
+        if any(r["action"] == "build" for r in plan["support"]) else env
+    for row in plan["support"]:  # driver-loop: over support artifacts
+        if row["action"] != "build":
+            continue
+        result = build_support(row, REPO, cache, support_env, evidence)
+        report["results"].append(result)
+        report["compile_attempts"] += int("command" in result)
+        atomic_json(evidence / "result.json", report)
+        print(f"support {result['stem']} {result['state']} rc={result['exit_code']}")
+        if result["exit_code"]:
+            raise BuildError(f"support build {row['name']} failed; existing loader indexes were preserved")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("plan", "build"))
     parser.add_argument("--sets", default="identical,host")
     parser.add_argument("--group", action="append", default=[], help="logical name, physical stem or set:name")
     parser.add_argument("--cache", type=Path, default=Path.home() / ".cache/mojolearn-development")
+    parser.add_argument("--layout", choices=LAYOUTS,
+                        help="release (the macOS default): the macOS wheel's merged groups through the one "
+                             "Mac cache; development (the Linux default): one group per binding")
+    parser.add_argument("--mac-cache", type=Path,
+                        help="the one Mac cache of --layout release (default: MOJOLEARN_BINCACHE_DIR, "
+                             "else ~/mojolearn-evidence/bincache-mac)")
     parser.add_argument("--json", type=Path, help="write complete plan/provenance")
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--parallel", default="auto",
@@ -1374,6 +1753,8 @@ def main(argv=None):
     modes = list(dict.fromkeys(args.sets.split(",")))
     env, cache = dict(os.environ), args.cache.resolve()
     env.pop(GUARD_ENV, None)  # Private settings are made here, never inherited.
+    layout = args.layout or default_layout()
+    mac_cache = (args.mac_cache.expanduser() if args.mac_cache else bincache.mac_cache_dir(env)).resolve()
     group_workers_env = env.pop(GROUP_WORKERS_ENV, None)  # scheduling only
     evidence = args.evidence or (Path.home() / "mojolearn-evidence/development-builds" /
         (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + str(os.getpid())))
@@ -1382,7 +1763,8 @@ def main(argv=None):
     futures = []
     try:
         if args.command == "plan":
-            plan = make_plan(REPO, cache, modes, env, args.group)
+            plan = (release_plan(REPO, cache, mac_cache, modes, env, args.group) if layout == "release"
+                    else make_plan(REPO, cache, modes, env, args.group))
             if args.json:
                 atomic_json(args.json, plan)
             summary(plan)
@@ -1407,6 +1789,8 @@ def main(argv=None):
                                   evidence / "generate-unicode.log")
                 if code:
                     raise BuildError(f"Unicode generator exited {code}; see {evidence / 'generate-unicode.log'}")
+            if layout == "release":
+                return release_build(args, modes, env, cache, mac_cache, evidence, limits, report, cap, futures)
             plan = make_plan(REPO, cache, modes, env, args.group)
             atomic_json(evidence / "plan.json", plan)
             summary(plan)
@@ -1424,20 +1808,7 @@ def main(argv=None):
             atomic_json(evidence / "plan.json", plan)  # keys as built (scheduler thread counts)
             if any(r["exit_code"] for r in report["results"]):
                 raise BuildError("one or more group builds failed; existing loader indexes were preserved")
-            # Support artifacts (portable math) are small serial C builds,
-            # reused from the cache when their inputs are unchanged.
-            support_env = dict(env, **{GUARD_ENV: json.dumps(dict(resource_budget(1, 1, None), **limits))}) \
-                if any(r["action"] == "build" for r in plan["support"]) else env
-            for row in plan["support"]:  # driver-loop: over support artifacts
-                if row["action"] != "build":
-                    continue
-                result = build_support(row, REPO, cache, support_env, evidence)
-                report["results"].append(result)
-                report["compile_attempts"] += int("command" in result)
-                atomic_json(evidence / "result.json", report)
-                print(f"support {result['stem']} {result['state']} rc={result['exit_code']}")
-                if result["exit_code"]:
-                    raise BuildError(f"support build {row['name']} failed; existing loader indexes were preserved")
+            build_support_rows(plan, env, cache, evidence, limits, report)
             final_plan = make_plan(REPO, cache, modes, env, args.group)
             if ([r["key"] for r in final_plan["groups"] + final_plan["support"]]
                     != [r["key"] for r in plan["groups"] + plan["support"]]):

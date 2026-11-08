@@ -1261,3 +1261,199 @@ def test_one_toolchain_read_serves_groups_that_finished_before_it(monkeypatch, t
     assert out == [FACTS] * 4 and len(reads) == 1
     # A group that finished after that read began needs a new read.
     assert probe.facts_after(dev.time.monotonic()) == FACTS and len(reads) == 2
+
+
+# ---------------------------------------------------------------------------
+# --layout release: the macOS wheel's compile through the one Mac cache
+# ---------------------------------------------------------------------------
+
+RELEASE_GROUPS = {("identical", "_mojolearn_native"), ("identical", "_mojolearn_native_m1"),
+                  ("host", "_mojolearn_native_host")}
+# A synthetic merged_build.sh that writes the declared output, as the real one does.
+FAKE_MERGED_BUILD = """#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+: "${MOJOLEARN_COMPILE_JOBS:-2}${MOJOLEARN_PACKAGE_BYTE_LM:-0}${MOJOLEARN_NUMERIC_MODE:-}${MOJOLEARN_BUILD_DEFINES:-}"
+mkdir -p "$(dirname "$MOJOLEARN_BINCACHE_OUTPUTS")"
+printf 'compiled %s\\n' "$*" > "$MOJOLEARN_BINCACHE_OUTPUTS"
+"""
+
+
+@pytest.fixture
+def mac(repo, monkeypatch):
+    """The fixture repo seen as a Mac: fixed OS and Xcode facts, no GPU probe."""
+    monkeypatch.setattr(bincache, "os_fields", lambda: {"id": "darwin", "version_id": "26", "machine": "arm64"})
+    monkeypatch.setattr(bincache, "darwin_toolchain", lambda: {"xcode": "Xcode test"})
+    monkeypatch.setattr(bincache, "device_arch", lambda: "")
+    monkeypatch.setattr(bincache, "build_platform", lambda: "darwin")
+    write(repo, "bindings/merged_build.sh", FAKE_MERGED_BUILD)
+    return repo
+
+
+def release_plan(repo, tmp_path, env=None, **kwargs):
+    return dev.release_plan(repo, tmp_path / "cache", tmp_path / "mac", ["identical", "host"],
+                            {} if env is None else env, facts=FACTS, plat="darwin", c_facts=C_FACTS, **kwargs)
+
+
+def wheel_key(repo, tmp_path, mode, stem, **release_env):
+    """The key packaging/macos/build_release_wheel.sh computes for one group under
+    tools/release.py step_macos_build and tools/mac_slot.py run, spelled out here
+    independently of bincache.macos_merged_group."""
+    env = dict({"MOJOLEARN_BINCACHE_DIR": str(tmp_path / "release/macos-bincache"),
+                "MOJOLEARN_PACKAGE_BYTE_LM": "1", "MOJOLEARN_COMPILE_JOBS": "1", "MOJOLEARN_BUILD_JOBS": "4",
+                "MOJOLEARN_RELEASE_MODES": "identical", "MOJOLEARN_MERGED_BINDINGS": "1",
+                "MOJOLEARN_MERGED_KEY": "f" * 64, "MOJOLEARN_SLOT_TOKEN": "slot-token",
+                "MOJOLEARN_BINCACHE_SEED_DIRS": str(tmp_path / "mac")}, **release_env)
+    if mode == "host":
+        kind, output = "host", f"python/mojolearn/host/{stem}.so"
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+        env.pop("MOJOLEARN_HOST_OUTDIR", None)
+        env.update(MOJOLEARN_NUMERIC_MODE="identical", MOJOLEARN_TARGET_COLUMN="cpu")
+    else:
+        kind, output = "gpu", f"python/mojolearn/{mode}/{stem}.so"
+        env["MOJOLEARN_NUMERIC_MODE"] = mode
+    env.update(MOJOLEARN_BINCACHE_OUTPUTS=output, MOJOLEARN_BINCACHE_SHELL="sh")
+    return bincache.key_of(bincache.local_fields(repo, repo / "bindings/merged_build.sh",
+                                                 [kind, "--group", stem], env, [output], "sh"))
+
+
+def test_default_layout_is_the_release_compile_on_macos_only():
+    assert dev.default_layout("darwin") == "release"
+    assert dev.default_layout("linux") == "development"
+
+
+def test_release_environment_takes_the_release_compile_settings_and_refuses_another_job_count():
+    env = dev.release_environment("identical", {}, "darwin")
+    assert (env["MOJOLEARN_COMPILE_JOBS"], env["MOJOLEARN_PACKAGE_BYTE_LM"]) == ("1", "1")
+    assert dev.release_environment("identical", {"MOJOLEARN_COMPILE_JOBS": "1"}, "darwin")
+    with pytest.raises(dev.BuildError, match="MOJOLEARN_COMPILE_JOBS=4 would key another compile"):
+        dev.release_environment("identical", {"MOJOLEARN_COMPILE_JOBS": "4"}, "darwin")
+    with pytest.raises(dev.BuildError, match="MOJOLEARN_PACKAGE_BYTE_LM=0 would key another compile"):
+        dev.release_environment("host", {"MOJOLEARN_PACKAGE_BYTE_LM": "0"}, "darwin")
+    host = dev.release_environment("host", {"MOJOLEARN_GPU_ARCHS": "x"}, "darwin")
+    assert "MOJOLEARN_GPU_ARCHS" not in host and host["MOJOLEARN_TARGET_COLUMN"] == "cpu"
+
+
+def test_release_layout_is_refused_off_macos(mac, tmp_path):
+    with pytest.raises(dev.BuildError, match="macOS wheel's compile"):
+        dev.release_plan(mac, tmp_path / "cache", tmp_path / "mac", ["identical"], {}, facts=FACTS,
+                         plat="linux", c_facts=C_FACTS)
+
+
+def test_release_plan_keys_are_the_macos_wheel_keys(mac, tmp_path):
+    # The development shell carries variables the release never sets and no
+    # keyed input reads; the release carries its own runner switches.
+    value = release_plan(mac, tmp_path, env={"MOJOLEARN_RUNPOD_KEY_FILE": "/k", dev.GROUP_WORKERS_ENV: "3",
+                                             "MOJOLEARN_MERGED_PYTHON": "/some/python"})
+    assert value["schema"] == dev.RELEASE_SCHEMA and value["layout"] == "release"
+    assert {(r["mode"], r["stem"]) for r in value["groups"]} == RELEASE_GROUPS
+    native = next(r for r in value["groups"] if r["stem"] == "_mojolearn_native")
+    assert native["members"] == [A, BYTE]
+    for row in value["groups"]:
+        assert row["key"] == wheel_key(mac, tmp_path, row["mode"], row["stem"])
+        assert row["action"] == "build" and row["compile_jobs"] == 1 and not row["auto_compile_jobs"]
+        assert row["command"][1:] == ["tools/bincache.py", "build", "./bindings/merged_build.sh",
+                                      "host" if row["mode"] == "host" else "gpu", "--group", row["stem"]]
+    # The keys still separate a different compile: another job count, another checkout.
+    assert native["key"] != wheel_key(mac, tmp_path, "identical", "_mojolearn_native", MOJOLEARN_COMPILE_JOBS="2")
+    assert native["key"] != wheel_key(mac, tmp_path, "identical", "_mojolearn_native",
+                                      MOJOLEARN_BUILD_DEFINES="-D X=1")
+
+
+def release_outputs(repo, value, data=b"release-bytes"):
+    """Write each group's package file and archive it in the one Mac cache under its key."""
+    for row in value["groups"]:
+        write(repo, row["output"], data.decode() + row["stem"])
+        mac_cache = Path(row["mac_cache"])
+        mac_cache.mkdir(parents=True, exist_ok=True)
+        bincache.pack(mac_cache / (row["key"] + ".tar.gz"), row["key"], row["fields"]["bincache"], repo,
+                      [row["output"]], {})
+
+
+def test_cached_release_groups_plan_as_reuse_and_activation_indexes_each_set(mac, tmp_path):
+    value = release_plan(mac, tmp_path)
+    release_outputs(mac, value)
+    again = release_plan(mac, tmp_path)
+    assert {r["action"] for r in again["groups"]} == {"reuse"}
+    assert again["counts"]["reuse"] == 3
+    for row in again["support"]:
+        cache_row(tmp_path / "cache", row)
+    stale = write(mac, "python/mojolearn/identical/_mojolearn_native.so", "other bytes")
+    assert dev.activate_release(again, mac, tmp_path / "cache")["missing"] == ["identical:_mojolearn_native"]
+    release_outputs(mac, value)
+    assert stale.read_text() == "release-bytes_mojolearn_native"
+    result = dev.activate_release(again, mac, tmp_path / "cache")
+    assert result["state"] == "activated" and result["activated"] == ["host", "identical"]
+    index = json.loads((mac / "python/mojolearn/identical/_mojolearn_merged.json").read_text())
+    assert index == {"format": merged.INDEX_FORMAT,
+                     "files": {"_mojolearn_native.so": [A, BYTE], "_mojolearn_native_m1.so": [B]}}
+    host = json.loads((mac / "python/mojolearn/host/_mojolearn_merged.json").read_text())
+    assert host["files"] == {"_mojolearn_native_host.so": [HOST]}
+    write(mac, f"python/mojolearn/identical/{A}.so", "a shadowing per-binding file")
+    with pytest.raises(dev.BuildError, match="shadow"):
+        dev.activate_release(again, mac, tmp_path / "cache")
+
+
+def fake_bincache_child(record):
+    def run(argv, root, env, log):
+        record.append((list(argv), {k: v for k, v in env.items() if k.startswith("MOJOLEARN_")}))
+        if argv[:2] == ["sh", "tokenizer/tools/gen_unicode_table.sh"]:
+            return 0
+        assert argv[1:3] == ["tools/bincache.py", "build"]
+        child = {k: v for k, v in env.items() if k != dev.GUARD_ENV}
+        return bincache.cmd_build_local(str(Path(root) / argv[3]), argv[4:], child, child["MOJOLEARN_BINCACHE_DIR"])
+    return run
+
+
+def test_compile_release_group_requires_the_plan_key_and_counts_only_compiles(mac, tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(dev, "run_logged", fake_bincache_child(calls))
+    value = release_plan(mac, tmp_path)
+    row = next(r for r in value["groups"] if r["mode"] == "host")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    built = dev.compile_release_group(row, mac, tmp_path / "cache", {}, evidence)
+    assert built["state"] == "built" and built["cached"] and built["command"] == row["command"]
+    assert built["bincache_key"] == row["key"]
+    env = calls[-1][1]
+    assert env["MOJOLEARN_BINCACHE_DIR"] == str((tmp_path / "mac").resolve())
+    assert (env["MOJOLEARN_COMPILE_JOBS"], env["MOJOLEARN_PACKAGE_BYTE_LM"]) == ("1", "1")
+    assert (env["MOJOLEARN_TARGET_COLUMN"], env["MOJOLEARN_BINCACHE_OUTPUTS"]) == ("cpu", row["output"])
+    assert "MOJOLEARN_GPU_ARCHS" not in env
+    placed = dev.compile_release_group(row, mac, tmp_path / "cache", {}, evidence)
+    assert placed["state"] == "reused" and "command" not in placed, "a placement is not a compile attempt"
+    assert not dev.peak_path(tmp_path / "cache", "host", row["stem"]).exists() or \
+        json.loads(dev.peak_path(tmp_path / "cache", "host", row["stem"]).read_text())["key"] == row["key"]
+    moved = dict(row, key="0" * 64)
+    failed = dev.compile_release_group(moved, mac, tmp_path / "cache", {}, evidence)
+    assert failed["exit_code"] == 1 and "keyed this group" in failed["reason"]
+
+
+def test_main_release_layout_compiles_once_into_the_one_mac_cache_and_the_release_keys_hit(
+        mac, tmp_path, monkeypatch):
+    monkeypatch.setattr(dev.os, "environ", {})
+    monkeypatch.setattr(merged, "default_platform", lambda: "darwin")
+    monkeypatch.setattr(bincache, "first_line", lambda *_: "synthetic-source-commit")
+    monkeypatch.setattr(dev, "physical_memory", lambda: 100 * 2 ** 30)
+    calls = []
+    monkeypatch.setattr(dev, "run_logged", fake_bincache_child(calls))
+    for row in release_plan(mac, tmp_path)["support"]:
+        cache_row(tmp_path / "cache", row)
+    argv = ["build", "--sets", "identical,host", "--cache", str(tmp_path / "cache"),
+            "--mac-cache", str(tmp_path / "mac")]
+    assert dev.main(argv + ["--evidence", str(tmp_path / "first")]) == 0
+    first = json.loads((tmp_path / "first/result.json").read_text())
+    assert first["schema"] == dev.RELEASE_SCHEMA and first["state"] == "activated"
+    assert first["compile_attempts"] == 3
+    assert {(r["mode"], r["stem"], r["state"]) for r in first["results"]} == \
+        {(m, s, "built") for m, s in RELEASE_GROUPS}
+    # The release's macOS build of the same commit in the same checkout: every key is in the one cache.
+    for mode, stem in RELEASE_GROUPS:
+        assert (tmp_path / "mac" / (wheel_key(mac, tmp_path, mode, stem) + ".tar.gz")).is_file()
+    assert dev.main(argv + ["--evidence", str(tmp_path / "second")]) == 0
+    second = json.loads((tmp_path / "second/result.json").read_text())
+    assert second["compile_attempts"] == 0
+    assert {r["state"] for r in second["results"]} == {"reused"}
+    # --layout development keeps the per-binding groups and their own cache.
+    assert dev.main(["plan", "--layout", "development", "--sets", "identical", "--cache",
+                     str(tmp_path / "cache")]) == 0
