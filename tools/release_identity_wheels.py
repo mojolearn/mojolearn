@@ -662,6 +662,8 @@ class IdentityOnWheels:
         if not dirs:
             # every column reused every lane: the table at the freeze already holds this release's bits
             doc = dict(source_commit=self.commit, commit=self.commit, recorded=0, at=dt.datetime.now(dt.timezone.utc).isoformat())
+            # the facts the steps after this one ship by (Release.publication_gate): never a ledger evaluation
+            doc["wheels"] = self.admitted_wheels() if hasattr(self, "admitted_wheels") else {}
             self.state["identity_admitted"] = doc
             self.save()
             os.environ[REFERENCE_ENV] = "%s:%s" % (self.commit, self.commit)
@@ -676,6 +678,8 @@ class IdentityOnWheels:
         receipts = self.repack(table)
         doc = dict(source_commit=self.commit, commit=commit, branch="ref/" + self.commit[:12], recorded=len(dirs),
                    table_sha256=sha256(table), repacked=receipts, at=dt.datetime.now(dt.timezone.utc).isoformat())
+        # the wheels as repacked: what the steps after this one ship and compare to (Release.publication_gate)
+        doc["wheels"] = self.admitted_wheels() if hasattr(self, "admitted_wheels") else {}
         self.state["identity_admitted"] = doc
         self.save()
         write_json(self.identity_dir() / "admitted.json", doc)
