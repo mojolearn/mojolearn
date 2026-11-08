@@ -28,12 +28,17 @@ Nothing here rents, releases or extends a box: the orchestrator brings the box u
    prior binaries), then runs tools/gate_smoke_box.py ... all (release-light-v1: eleven installed
    correctness records, 24 autograd entries, three adapter phases, 30-minute ceiling), all from the
    candidate commit's tree. Reports and the built autograd set land in <res>.
-4. `tools/box_persist.py fetch --tag <tag> --extract` brings the final results home; <res>/out is
-   copied into --out (gate-smoke.json and the reports the old lq transport brought home).
+4. `tools/box_persist.py fetch --tag <tag> --extract` brings the results home; <res>/out is copied into
+   --out (gate-smoke.json and the reports the old lq transport brought home). The job runs the measurement
+   smoke LAST, after its verdict is settled, and uploads its reports at once before it (phase hard-done, a
+   `hard` snapshot holding out/gate-hard.json): with --until hard (the default) this tool brings that
+   snapshot home and returns while the box runs the smoke, keeping --state; `release_gate.py await-final
+   --state FILE --out DIR` (tools/release.py starts it in the background) then waits for the final upload
+   and brings it home, out/measuresmoke/ included. --until final waits for the final upload (--strict).
 
 Exit: 0 when the gate-smoke.json that came home says PASS for this vendor and version, the job's rc
-(or 1) otherwise, 3 when no final result landed within --max-wait-hours (a rerun with the same
---state resumes the same job instead of submitting another).
+(or 1) otherwise, 3 when no result landed within --max-wait-hours (a rerun with the same --state resumes
+the same job instead of submitting another).
 """
 import argparse
 import contextlib
@@ -76,6 +81,8 @@ VENDORS = {
 #: script clips the qualifier to the minutes this cap leaves (GATE_JOB_CAP_MINUTES).
 NV_CAP_MIN = 240
 BUILD_MINUTES = 120
+#: phase hard-done's marker under out/: the job's HARD verdict is settled and its reports are uploaded
+HARD_MARKER = "gate-hard.json"
 #: what the job copies from the gate's out root into <res>/out (reports only; the venv and caches stay
 #: on the box). The same list the lq transport fetched, plus the whole built autograd set.
 GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-smoke.json", "autograd-smoke", "runtime-*",
@@ -96,7 +103,9 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
               "shardcheck",
               # the measurement smoke (tools/release_measurement_smoke.py), run unconditionally by every job: the
               # summary, the failure list and the batch logs (the batch smoke boards and caches stay on the box)
-              "measuresmoke/measuresmoke.json", "measuresmoke/measuresmoke.txt", "measuresmoke/logs")
+              "measuresmoke/measuresmoke.json", "measuresmoke/measuresmoke.txt", "measuresmoke/logs",
+              # phase hard-done: the job's verdict is settled and its reports were uploaded ahead of the smoke
+              HARD_MARKER)
 #: THE GATE RUNNER OVERLAY: the tooling checkout's copy of each of these files whose bytes differ from the
 #: source commit's ships with the job (route-overlay.tgz, tools/release_tooling.py write_overlay) and is
 #: applied over the source tree AFTER the autograd build (the build and its reuse proof read the clean tree)
@@ -106,7 +115,7 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
 #: its own LANES / COUNTS / SCHEMA (tools/release_identity_wheels.py `single_gate_ok`), so the box must run the same
 #: copy; release_gate_job.sh runs its phase right after the overlay.
 #: tools/release_measurement_smoke.py (the measurement smoke) likewise: the Mac judges its summary with its own
-#: SCHEMA / summary_errors, and release_gate_job.sh runs its phase right after shardcheck.
+#: SCHEMA / summary_errors; release_gate_job.sh stages its data after the overlay and runs it last.
 GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/release_gate_profiles.py",
                 "tools/logical_shard_identity.py", "tools/release_measurement_smoke.py")
 #: the measurement smoke's venv (release_gate_job.sh phase measuresmoke): the exact wheels plus these harness packages
@@ -120,17 +129,15 @@ MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub", "scikit-learn==1.7.2", 
 #: the fixture generator's own venv (tools/neural_fixtures_box.sh NF_TORCH / NF_PYG, CPU index): it writes the layer
 #: lanes' inputs once before the batches; never the measured venv, never raced
 MEASURE_SMOKE_FIXTURE_PIP = ("numpy", "torch==2.13.0", "torch-geometric==2.8.0.post1")
-#: the measurement smoke's ceiling (minutes); see tools/release_measurement_smoke.py for the expected duration
+#: the measurement smoke's ceiling (minutes); see tools/release_measurement_smoke.py for the expected duration.
+#: THE SMOKE IS THE LAST PHASE OF THE ONE GATE JOB (Andrew 2026-11-08: "run immediately after the verification and
+#: not be something separate"; the second box job, --job measuresmoke, is gone). Its setup (two venvs, 4.8 GB of data
+#: from R2; 20-45 min at 0.8.66) runs in the background during the earlier phases. On the capped NVIDIA job the
+#: qualifier's bound leaves this ceiling to the smoke, which is clipped to what the cap leaves.
 MEASURE_SMOKE_MINUTES = 90
-#: THE MEASUREMENT SMOKE'S OWN BOX JOB (--job measuresmoke; the same job script with GATE_JOB=measuresmoke). The gate
-#: job already uses the wrapper's whole 240-minute cap (identity, build, device checks, ~125 min of runtime qualifier),
-#: so the smoke never shares that job or its GPU time: tools/release.py launches this job on the same pod / droplet
-#: after the gate job has ended. Its NVIDIA cap: the 90-minute ceiling of the run, up to 30 minutes of setup (two
-#: venvs, 4.8 GB of data from R2, the untimed prep and fixtures; estimate 20-45 min in all, see
-#: tools/release_measurement_smoke.py) and 10 minutes to copy and persist the reports.
-MEASURE_SMOKE_CAP_MIN = MEASURE_SMOKE_MINUTES + 30 + 10
-#: --job: what one launch of this tool runs on the box
-JOBS = ("gate", "measuresmoke")
+#: --until: when this tool returns. hard: once the job's HARD parts are home (phase hard-done's upload), the job
+#: still running its smoke; final: once the final upload is home (the smoke included; tools/release.py --strict)
+UNTIL = ("hard", "final")
 #: the presigned-GET data plan the measurement smoke stages from R2 (tools/release_measurement_smoke.py data-plan)
 MEASURE_SMOKE_DATA = "measuresmoke-data.json"
 TERMINAL_NV = ("done", "failed", "cancelled", "timeout", "interrupted")
@@ -229,25 +236,18 @@ class Plan:
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
                  profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None,
-                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, reuse_unchanged=False,
-                 job="gate"):
+                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, reuse_unchanged=False):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
             raise SystemExit("release-gate: --source-commit must be a full sha")
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", tag):
             raise SystemExit("release-gate: the tag must be [A-Za-z0-9_.-]")
-        if job not in JOBS:
-            raise SystemExit(f"release-gate: --job is one of {', '.join(JOBS)}")
-        self.job = job
         self.vendor, self.version, self.commit, self.tag = vendor, version, source_commit, tag
         self.v = VENDORS[vendor]
         self.wrapper = self.v["wrapper"]
         self.source_tree, self.out = str(source_tree), Path(out)
         stem = self.out.name
-        if job == "measuresmoke":
-            # its out is <gate out>/measuresmoke-job: the box paths take the gate out's own (candidate-unique) name
-            stem = self.out.parent.name + "-measuresmoke"
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", stem):
             raise SystemExit(f"release-gate: the out directory's name {stem!r} must be [A-Za-z0-9_.-]")
         self.indir = f"{IN_BASE}/{version}/{vendor}/{stem}/in"
@@ -293,11 +293,7 @@ class Plan:
             and any(f.endswith(".mojo") for f in r["key"]["files"]) for r in plan_doc.get("units", []))
         #: runtime-cpu (the same producer, --vendor cpu) runs on the NVIDIA job after runtime-nvidia; with
         #: --identity-columns every CPU check runs on GitHub's free runners instead (cpu-identity-gate.yml)
-        self.runtime_cpu = vendor == "nvidia" and not self.identity_columns and job == "gate"
-        if job == "measuresmoke":
-            # the smoke's job records no identity, builds nothing and runs no qualifier
-            self.identity_columns, self.units_plan, self.build_autograd = [], None, False
-            self.prior, self.prior_files, self.runtime_prior = None, [], None
+        self.runtime_cpu = vendor == "nvidia" and not self.identity_columns
         gate_out = f"{self.work}/out"
         manifest = f"{gate_out}/autograd-bin/build-manifest.json"
         box_wheels = [f"{self.indir}/{w.name}" for w in self.wheels]
@@ -318,7 +314,6 @@ class Plan:
                  f"GATE_ADAPTERS={1 if self.adapters else 0}", f"GATE_PROFILE={self.profile}",
                  f"GATE_REUSE={1 if self.prior else 0}", f"GATE_RUNTIME_MINUTES={RUNTIME_MINUTES}",
                  f"GATE_JOB_CAP_MINUTES={self.cap_minutes() if self.vendor == 'nvidia' else 0}",
-                 f"GATE_JOB={self.job}",
                  f"GATE_RUNTIME_CPU={1 if self.runtime_cpu else 0}",
                  f"GATE_RUNTIME_PRIOR_SHA256={self.runtime_prior_sha256 or ''}",
                  bash_array("GATE_WHEELS", [f"{self.indir}/{w.name}" for w in self.wheels]),
@@ -349,9 +344,8 @@ class Plan:
             out.append((self.staged / RUNTIME_PRIOR_TGZ, f"{self.indir}/{RUNTIME_PRIOR_TGZ}", False))
         if self.units_plan:
             out.append((self.units_plan, f"{self.indir}/units-plan.json", False))
-        if self.job == "measuresmoke":
-            # the measurement smoke's data: presigned GETs minted on the Mac (Runner.main writes it before gate.env)
-            out.append((self.staged / MEASURE_SMOKE_DATA, f"{self.indir}/{MEASURE_SMOKE_DATA}", False))
+        # the measurement smoke's data: presigned GETs minted on the Mac (Runner.main writes it before gate.env)
+        out.append((self.staged / MEASURE_SMOKE_DATA, f"{self.indir}/{MEASURE_SMOKE_DATA}", False))
         out.append((self.staged / "gate.env", f"{self.indir}/gate.env", False))
         names = [r for _, r, _ in out]
         if len(set(names)) != len(names):
@@ -391,8 +385,8 @@ class Plan:
         return ["bash", self.wrapper, "run", self.tag, self.res, "bash", script]
 
     def cap_minutes(self):
-        """nvidia_central.sh submit --cap: the gate job the wrapper's maximum, the smoke's job its own estimate."""
-        return MEASURE_SMOKE_CAP_MIN if self.job == "measuresmoke" else NV_CAP_MIN
+        """nvidia_central.sh submit --cap: the wrapper's maximum (the job script clips the qualifier and the smoke)."""
+        return NV_CAP_MIN
 
     def fetch(self, tag, dest, listing=False):
         return [sys.executable, "tools/box_persist.py", "fetch", "--tag", tag, "--dest", str(dest)] + (
@@ -413,16 +407,14 @@ class Plan:
             lines.append(q(self.upload(remote)) + " < " + shlex.quote(str(local)))
         lines.append(q(self.verify([r for _, r, _ in ups], [r for _, r, x in ups if x])) + "  # == local sha256")
         lines.append(q(self.launch()))
-        if self.job == "measuresmoke":
-            lines.append("  on the box, in " + self.tree + " at " + self.commit[:12]
-                         + ": GATE_JOB=measuresmoke: python3 tools/release_measurement_smoke.py stage / run")
-        else:
-            lines.append("  on the box, in " + self.tree + " at " + self.commit[:12] + ": pixi run -e default python3 "
-                         + q(self.build))
-            lines.append("  on the box, then: python3 " + q(self.gate))
+        lines.append("  on the box, in " + self.tree + " at " + self.commit[:12] + ": pixi run -e default python3 "
+                     + q(self.build))
+        lines.append("  on the box, then: python3 " + q(self.gate))
+        lines.append("  on the box, then: phase hard-done uploads the reports (a `hard` snapshot), then LAST: "
+                     "python3 tools/release_measurement_smoke.py run (out/measuresmoke/)")
         tag = "<the R2 tag the wrapper prints>"
         lines.append(q(self.fetch(tag, self.staged.parent / "fetch-<tag>"))
-                     + f"  # then <fetch>/final/out -> {self.out}")
+                     + f"  # the `hard` slot (--until hard) or the final -> {self.out}")
         return lines
 
 
@@ -574,16 +566,23 @@ class Runner:
             raise SystemExit(f"release-gate: sha256 differs on the box for {bad}")
         say(f"{len(want)} input(s) on the box, sha256 verified")
 
-    def wait_final(self, plan, tag, job=None):
-        """(state, exit) of the job's R2 manifest once final, or None at the deadline."""
+    def fetch_dir(self, tag):
+        return (Path(self.a.state).parent if self.a.state else self.a.out.parent) / f"fetch-{tag}"
+
+    def wait_final(self, plan, tag, job=None, until="final"):
+        """(state, exit) of the job's R2 manifest once final, ("hard", None) once (UNTIL hard) the job's phase
+        hard-done upload landed while it runs on, ("lost", None) for a job that ended without a final upload,
+        or None at the deadline."""
         deadline = self.clock() + self.a.max_wait_hours * 3600
-        dest = Path(self.a.state).parent / f"fetch-{tag}" if self.a.state else self.a.out.parent / f"fetch-{tag}"
+        dest = self.fetch_dir(tag)
         polls, ended = 0, 0
         while self.clock() < deadline:
             got = self.call(plan.fetch(tag, dest, listing=True), timeout=600)
             state, rc = manifest_state(got.stdout)
             if state == "final":
                 return state, rc
+            if until == "hard" and hard_landed(dest / "manifest.json"):
+                return "hard", None
             if job:
                 st = self.call(plan.status(job), timeout=300)
                 m = re.search(r"^job \S+: (\S+)", st.stdout or "", re.M)
@@ -600,12 +599,32 @@ class Runner:
         return None
 
     def bring_home(self, plan, tag):
-        dest = (Path(self.a.state).parent if self.a.state else self.a.out.parent) / f"fetch-{tag}"
+        dest = self.fetch_dir(tag)
         got = self.call(plan.fetch(tag, dest), timeout=3600)
         if got.returncode != 0:
             say(f"fetch of {tag} exited {got.returncode}: {(got.stdout or '')[-300:]}")
             return False
         return self.copy_home(dest / "final", tag)
+
+    def bring_home_hard(self, plan, tag):
+        """The newest ring slot of a running job (box_persist fetch without a final takes it) into --out, when
+        it holds the job's phase hard-done marker for TAG: the HARD exit it records, else None."""
+        dest = self.fetch_dir(tag)
+        got = self.call(plan.fetch(tag, dest), timeout=3600)
+        m = re.findall(r"^EXTRACTED (\S+) -> (\S+)", got.stdout or "", re.M)
+        if got.returncode != 0 or not m:
+            say(f"fetch of {tag}'s hard-done snapshot exited {got.returncode}: {(got.stdout or '')[-300:]}")
+            return None
+        slot = Path(m[-1][1])
+        marker = read_summary(slot / "out" / HARD_MARKER) or {}
+        a = self.a
+        if (marker.get("vendor"), marker.get("version"), marker.get("source_commit")) != (
+                a.vendor, a.version, a.source_commit) or not isinstance(marker.get("exit"), int):
+            say(f"{tag}: the snapshot {slot.name} holds no {HARD_MARKER}; waiting for the final upload")
+            return None
+        if not self.copy_home(slot, tag):
+            return None
+        return marker["exit"]
 
     def copy_home(self, final, tag):
         """FINAL/out (and FINAL/job) of one fetched job into --out."""
@@ -676,8 +695,7 @@ class Runner:
         """(plan, key, state path, state): the launch's plan, its input key and a resumable earlier launch."""
         a = self.a
         prior = prior_files(a.autograd_prior, a.vendor)
-        job = getattr(a, "job", "gate")
-        tag = f"rel-{a.version}-{'gate' if job == 'gate' else 'measuresmoke'}-{a.vendor}-{dt.datetime.fromtimestamp(self.clock(), dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        tag = f"rel-{a.version}-gate-{a.vendor}-{dt.datetime.fromtimestamp(self.clock(), dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
         state_path = Path(a.state) if a.state else None
         st = {}
         if state_path and state_path.is_file():
@@ -686,8 +704,7 @@ class Runner:
             except ValueError:
                 st = {}
         overlay = gate_overlay(a.source_commit)
-        key_inputs = [job] if job != "gate" else []
-        key_inputs += [a.vendor, a.version, a.source_commit, a.profile, not a.no_adapters,
+        key_inputs = [a.vendor, a.version, a.source_commit, a.profile, not a.no_adapters,
                       [sha256(w) if Path(w).is_file() else str(w) for w in a.candidate_wheel],
                       sha256(ROOT / JOB_SCRIPT) if (ROOT / JOB_SCRIPT).is_file() else None]
         if overlay["files"]:
@@ -711,7 +728,7 @@ class Runner:
                     identity_columns=[c for c in (getattr(a, "identity_columns", "") or "").split(",") if c],
                     label_device=getattr(a, "label_device", "") or "",
                     units_plan=getattr(a, "units_plan", None),
-                    reuse_unchanged=getattr(a, "reuse_unchanged", False), job=job)
+                    reuse_unchanged=getattr(a, "reuse_unchanged", False))
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -725,7 +742,7 @@ class Runner:
             for line in plan.describe():
                 print("  would: " + line)
             return 0
-        if plan.job == "gate" and self.adopt_landed():
+        if self.adopt_landed():
             if state_path and state_path.is_file():
                 state_path.unlink()   # a landed PASS for this candidate settles any earlier launch
             ok, why = gate_verdict_home(a.out, a.vendor, a.version)
@@ -754,13 +771,12 @@ class Runner:
                 _, plan.runtime_prior_sha256 = write_runtime_prior(plan.runtime_prior, plan.staged)
                 say(f"runtime unit receipts to reuse: {sum(1 for _ in plan.runtime_prior.rglob('*.json'))} "
                     f"from {plan.runtime_prior}")
-            if plan.job == "measuresmoke":
-                # the measurement smoke's data plan: one presigned GET per file the plan reads (the R2 secret stays)
-                import release_measurement_smoke as MS
-                files = MS.write_data_plan(a.vendor, plan.staged / MEASURE_SMOKE_DATA, presign=lambda key, secs: (
-                    self.call(["sh", ROOT / "tools/dataset_store.sh", "presign", key, secs]).stdout or "").strip())
-                say(f"measurement smoke data plan: {len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.2f} GB "
-                    f"(presigned GETs; files already at their pins on the box are kept)")
+            # the measurement smoke's data plan: one presigned GET per file the plan reads (the R2 secret stays)
+            import release_measurement_smoke as MS
+            files = MS.write_data_plan(a.vendor, plan.staged / MEASURE_SMOKE_DATA, presign=lambda key, secs: (
+                self.call(["sh", ROOT / "tools/dataset_store.sh", "presign", key, secs]).stdout or "").strip())
+            say(f"measurement smoke data plan: {len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.2f} GB "
+                f"(presigned GETs; files already at their pins on the box are kept)")
             (plan.staged / "gate.env").write_text(plan.env_text())
             self.stage(plan)
             record = dict(key=key, plan_tag=tag, vendor=a.vendor, launched_at=dt.datetime.now(
@@ -795,7 +811,22 @@ class Runner:
                 if not record.get("tag"):
                     raise SystemExit(f"release-gate: the AMD run (rc {rc}) named no R2 tag; nothing to fetch")
             st = record
-        final = self.wait_final(plan, st["tag"], st.get("job"))
+        until = getattr(a, "until", "final")
+        final = self.wait_final(plan, st["tag"], st.get("job"), until=until)
+        if final is not None and final[0] == "hard":
+            # THE HARD PARTS ARE HOME, THE BOX RUNS THE SMOKE ON: return now and keep --state, so
+            # `release_gate.py await-final --state` brings the final (the smoke's summary) home later
+            hard_rc = self.bring_home_hard(plan, st["tag"])
+            if hard_rc is not None:
+                if state_path:
+                    st["hard_home_at"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+                    state_path.parent.mkdir(parents=True, exist_ok=True)
+                    state_path.write_text(json.dumps(st, indent=2) + "\n")
+                ok, why = gate_verdict_home(a.out, a.vendor, a.version)
+                say(f"gate {a.vendor} {a.version}: HARD parts home (job exit {hard_rc} so far), {why}; the box runs "
+                    f"the measurement smoke, `release_gate.py await-final --state {state_path}` brings it home")
+                return 0 if ok else (hard_rc or 1)
+            final = self.wait_final(plan, st["tag"], st.get("job"))
         if final is None:
             say(f"no final result for {st['tag']} within {a.max_wait_hours} h; a rerun with this --state resumes it")
             return 3
@@ -812,11 +843,6 @@ class Runner:
             state_path.unlink()
         if not home:
             return job_rc or 1
-        if plan.job == "measuresmoke":
-            import release_measurement_smoke as MS
-            errors = MS.summary_errors(read_summary(a.out / "measuresmoke" / MS.SUMMARY))
-            say(f"measurement smoke {a.vendor} {a.version}: " + ("; ".join(errors) if errors else "PASS"))
-            return 1 if errors else (job_rc or 0)
         ok, why = gate_verdict_home(a.out, a.vendor, a.version)
         say(f"gate {a.vendor} {a.version}: {why}")
         return 0 if ok else (job_rc or 1)
@@ -846,14 +872,68 @@ def parse(argv):
                     help="tools/release_check_units.py plan: the job runs exactly its owed device-check units")
     ap.add_argument("--runtime-prior", default=None,
                     help="earlier gates' runtime unit receipts (<class>/<unit>/...) the job's qualifier may reuse")
-    ap.add_argument("--job", choices=JOBS, default="gate",
-                    help="gate: the release gate job; measuresmoke: the measurement smoke's own job (launched after "
-                         "the gate job, on the same box; --out is <gate out>/measuresmoke-job)")
+    ap.add_argument("--until", choices=UNTIL, default="hard",
+                    help="hard (default): return once the job's HARD parts are home, the box still running the "
+                         "measurement smoke (await-final brings it home); final: wait for the final upload")
     ap.add_argument("--poll-seconds", type=int, default=60)
     ap.add_argument("--max-wait-hours", type=float, default=72.0)
     ap.add_argument("--dry-run", action="store_true", help="print the wrapper commands; run nothing")
     return ap.parse_args(argv)
 
 
+class JobRef:
+    """The wrapper commands await-final needs of a launched job (Plan.fetch / Plan.status), from its vendor."""
+
+    def __init__(self, vendor):
+        if vendor not in VENDORS:
+            raise SystemExit(f"release-gate: the state names vendor {vendor!r}")
+        self.wrapper = VENDORS[vendor]["wrapper"]
+
+    fetch = Plan.fetch
+    status = Plan.status
+
+
+def await_final(argv, runner=None):
+    """`release_gate.py await-final --state FILE --out DIR`: the final upload of the job --state names (a gate
+    whose HARD parts came home with --until hard) brought home into --out, the measurement smoke's summary
+    (out/measuresmoke/) with it; then --state is removed. 0 home, 1 lost or not home, 3 none within the wait."""
+    ap = argparse.ArgumentParser(prog="release_gate.py await-final")
+    ap.add_argument("--state", required=True)
+    ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--poll-seconds", type=int, default=60)
+    ap.add_argument("--max-wait-hours", type=float, default=12.0)
+    a = ap.parse_args(argv)
+    state_path = Path(a.state)
+    st = read_summary(state_path) or {}
+    if not st.get("tag"):
+        say(f"await-final: {state_path} names no launched job; nothing to bring home")
+        return 1
+    r = runner(a) if runner else Runner(a)
+    plan = JobRef(st.get("vendor") or "")
+    final = r.wait_final(plan, st["tag"], st.get("job"))
+    if final is None:
+        say(f"await-final: no final result for {st['tag']} within {a.max_wait_hours} h; rerun to resume")
+        return 3
+    if final[0] == "lost":
+        say(f"await-final: {st['tag']} ended without a final upload")
+        return 1
+    home = r.bring_home(plan, st["tag"])
+    if home and state_path.is_file():
+        state_path.unlink()
+    import release_measurement_smoke as MS
+    errors = MS.summary_errors(read_summary(a.out / "measuresmoke" / MS.SUMMARY))
+    say(f"await-final {st['tag']}: final home={bool(home)}, measurement smoke "
+        + ("; ".join(errors) if errors else "PASS"))
+    return 0 if home else 1
+
+
+def hard_landed(manifest):
+    """True when the job's R2 manifest (a fetch --list wrote it) records its phase hard-done upload."""
+    doc = read_summary(manifest) or {}
+    return any((u or {}).get("label") == "hard" for u in doc.get("uploads") or [])
+
+
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["await-final"]:
+        sys.exit(await_final(sys.argv[2:]))
     sys.exit(Runner(parse(sys.argv[1:])).main())

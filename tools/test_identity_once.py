@@ -166,8 +166,7 @@ def test_every_post_publish_step_is_a_read():
 
 
 @pytest.mark.parametrize("method,launch", [("step_macos_smoke", "self.must("), ("run_columns", "launch_detached("),
-                                           ("launch_gate_job", "self.must(cmd"),
-                                           ("launch_measure_smoke_job", "self.must(cmd")])
+                                           ("launch_gate_job", "self.must(cmd")])
 def test_each_device_lane_launch_is_guarded_before_it_launches(method, launch):
     source = inspect.getsource(getattr(release.Release, method))
     guard = source.find("self.refuse_device_lanes_after_publish(")
