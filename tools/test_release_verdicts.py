@@ -205,7 +205,7 @@ def test_rehearsal_secondary_checks_are_soft_and_the_sha256_hard(tmp_path):
     r = make(tmp_path, identity_on_wheels=True)
     rows = [dict(check="pip install mojolearn==0.8.66 on manylinux py3.12", problems=["pip could not resolve it (exit 1)"]),
             dict(check="pip install mojolearn-x.whl from TestPyPI into a fresh venv and import",
-                 problems=["import mojolearn exited 1"]),
+                 problems=["pip install exited 1 (macos-install.log)"]),
             dict(check="TestPyPI bytes of mojolearn-x.whl", problems=[])]
     problems = ["%s: %s" % (row["check"], p) for row in rows for p in row["problems"]]
     assert r.rehearsal_hard_problems(rows, problems, tmp_path / "rehearsal.json") == []
@@ -213,5 +213,7 @@ def test_rehearsal_secondary_checks_are_soft_and_the_sha256_hard(tmp_path):
     rows[2]["problems"] = ["TestPyPI served x sha256 a, gated b"]
     assert r.rehearsal_hard_problems(rows, problems, tmp_path / "rehearsal.json") == [
         "TestPyPI bytes of mojolearn-x.whl: TestPyPI served x sha256 a, gated b"]
+    rows[1]["problems"] = ["import mojolearn exited 1 (macos-import.log)"]   # the import stays HARD
+    assert len(r.rehearsal_hard_problems(rows, problems, tmp_path / "rehearsal.json")) == 2
     r.args.strict = True
     assert r.rehearsal_hard_problems(rows, problems, tmp_path / "rehearsal.json") == problems
