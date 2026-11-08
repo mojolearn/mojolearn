@@ -120,7 +120,21 @@ missing=()
 # Use the runtime's path-selection rules without bootstrapping the package.
 # This accepts compact release and nested development files only when the
 # actual indexed artifact exists, and preserves per-binding precedence.
-if [ -n "${ADMIT_PYTHON:-}" ]; then
+# ADMIT_WHEEL_PACKAGE (tools/release_identity_wheels.py admit_records, 2026-11-08): the installed release wheel's
+# package dir (the Apple column's venv). Its compiled artifacts (host/, identical/, .dylibs/: the merged bindings
+# and their index, the math library) are placed into this tree's python/mojolearn/, so the verifier runs from the
+# frozen SOURCE (emit-reference needs the checkout root) with the RELEASE's bindings, the exact bytes the gates
+# recorded. Nothing is compiled; the copies are never committed (only the NEXT paths are). 0.8.66 run k: the bare
+# tree's import needed the tokenizer host binding, which the two-binding host preflight never built.
+if [ -n "${ADMIT_WHEEL_PACKAGE:-}" ]; then
+    [ -f "$ADMIT_WHEEL_PACKAGE/__init__.py" ] || die "ADMIT_WHEEL_PACKAGE is not a mojolearn package dir: $ADMIT_WHEEL_PACKAGE"
+    for d in host identical .dylibs .libs cuda_native hip_native; do
+        [ -d "$ADMIT_WHEEL_PACKAGE/$d" ] || continue
+        rm -rf "$ROOT/python/mojolearn/$d" && cp -R "$ADMIT_WHEEL_PACKAGE/$d" "$ROOT/python/mojolearn/$d"
+        echo "placed $d from the installed wheel ($(find "$ROOT/python/mojolearn/$d" -type f | wc -l | tr -d " ") files)"
+    done
+    : > "$EVID/host-missing.txt"
+elif [ -n "${ADMIT_PYTHON:-}" ]; then
     : > "$EVID/host-missing.txt"   # the installed wheel carries every host binding and the math library
 else
 "${PY[@]}" tools/identity_host_preflight.py --package python/mojolearn \
@@ -131,7 +145,7 @@ fi
 while IFS= read -r fam; do
     [ -z "$fam" ] || missing+=("$fam")
 done < "$EVID/host-missing.txt"
-if [ -z "${ADMIT_PYTHON:-}" ] && { [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; }; then
+if [ -z "${ADMIT_PYTHON:-}" ] && [ -z "${ADMIT_WHEEL_PACKAGE:-}" ] && { [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; }; then
     if [ $BUILD_HOST = 1 ]; then
         SLOT=(); [ -x "$HOME/mojolearn-evidence/compile_slot.sh" ] && SLOT=(bash "$HOME/mojolearn-evidence/compile_slot.sh")
         if [ ! -f "$MATH" ]; then
@@ -151,13 +165,9 @@ if [ -z "${ADMIT_PYTHON:-}" ] && { [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ];
     fi
 fi
 
-cli() {  # the verifier: from source (PYTHONPATH) or from the installed wheel (ADMIT_PYTHON); host column, identical tier
-    if [ -n "${ADMIT_PYTHON:-}" ]; then
-        env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical "${PY[@]}" -m mojolearn verify "$@"
-    else
-        env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" \
-            "${PY[@]}" -m mojolearn verify "$@"
-    fi
+cli() {  # the verifier from source (its emit-reference needs the checkout root), host column, identical tier
+    env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" \
+        "${PY[@]}" -m mojolearn verify "$@"
 }
 
 checks() {  # $1 = table; self-test then coverage; sets ST_RC, COV_RC

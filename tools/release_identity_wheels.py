@@ -787,9 +787,11 @@ class IdentityOnWheels:
                    REF_TAG="ref-" + self.commit[:12])
         # the verifier runs from the installed macOS wheel (the Apple column's venv) when it exists: every binding,
         # the exact bytes; the source tree alone needs host bindings this script never built (0.8.66 run k)
-        apple_python = self.identity_dir() / "apple" / "venv" / "bin" / "python"
-        if apple_python.is_file():
-            env["ADMIT_PYTHON"] = str(apple_python)
+        # (the installed package itself cannot emit: _identity._checkout_root() walks up from the package dir for
+        # tools/identity_break.py, so the verifier runs from the frozen tree WITH the wheel's compiled artifacts placed in it)
+        packages = sorted((self.identity_dir() / "apple" / "venv" / "lib").glob("python3.*/site-packages/mojolearn/__init__.py"))
+        if packages:
+            env["ADMIT_WHEEL_PACKAGE"] = str(packages[-1].parent)
         # the script is the tooling's (HEAD), copied into the frozen tree and run there (it cds to its own root):
         # the source is frozen, the tooling runs from HEAD; the copy is never committed (only the NEXT paths are)
         shutil.copy2(ROOT / "tools" / "admit_identity_columns.sh", tree / "tools" / "admit_identity_columns.sh")
