@@ -164,7 +164,12 @@ if [ -n "$only" ]; then
     printf '%s\n' "$plan" | awk -v s="$only" '$1==s{f=1} END{exit !f}' \
         || { echo "merged_build: no group '$only' in the $dir plan:" >&2; printf '%s\n' "$plan" | awk '{print "  " $1}' >&2; exit 2; }
 fi
-if [ "$kind" = host ] && printf '%s\n' "$plan" | awk -v s="$only" '!s || $1==s' | grep -q '_mojolearn_tokenizer_host'; then
+# The generated Unicode table is part of the tokenizer closure, which more host groups than the tokenizer's own
+# reach since the host split (0.8.66, 2026-11-08: _mojolearn_native_catalog_host failed on every Linux leg with
+# "unable to locate module 'unicode_table_generated'" while the Mac's development build, which generates it up
+# front, built the same group). Generate it whenever it is missing, for any group; the generator is deterministic
+# and takes seconds.
+if [ ! -f tokenizer/impl/unicode_table_generated.mojo ] || { [ "$kind" = host ] && printf '%s\n' "$plan" | awk -v s="$only" '!s || $1==s' | grep -q '_mojolearn_tokenizer_host'; }; then
     sh tokenizer/tools/gen_unicode_table.sh < /dev/null
 fi
 
