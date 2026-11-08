@@ -61,6 +61,10 @@ def venv_python(venv):
 TORCH_ENV = "torch-env.json"
 
 
+#: what tools/adapter_wheel_smoke.py adds to its own environment for every framework phase
+SMOKE_PHASE_ENV = {"PYTORCH_ENABLE_MPS_FALLBACK": "0"}
+
+
 def framework_env(vendor, venv, base=None):
     """The environment a process that imports torch from VENV runs with (BASE, default os.environ, is copied, never
     changed). On AMD, LD_LIBRARY_PATH is set to torch/lib FIRST, then the venv's */lib64 and exactly ONE ROCm lib
