@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
-"""REUSE GOOD OLD RUNS, AUTOMATICALLY (Andrew 2026-10-31).
+"""REUSE OF OLD RUNS IS OPT-IN (Andrew 2026-11-05, decided 2026-11-09).
 
-`record_identity_column.sh` with no LANES/SHARD/ONLY_CHANGED/FULL records only
-the lanes whose closure changed since THIS device class's newest good evidence;
-unchanged lanes are reused, FULL=1 records every lane. Admission accepts older
+`record_identity_column.sh` with no LANES/SHARD/ONLY_CHANGED/REUSE records every
+lane of the scope. REUSE=1 records only the lanes whose closure changed since
+THIS device class's newest good evidence and reuses the rest; FULL=1 (the old
+opt-out of a reuse default) is refused. Admission accepts older
 incoming records whose lanes are superseded or whose closure is unchanged.
 Nothing here imports a binding or runs a fit: the harness, git and the recorder's
 interpreter are stand-ins.
@@ -325,14 +326,15 @@ def _run_recorder(tmp_path, changed, summary="REUSED 2 RECORD 1 KNOWN-BAD 0", **
     full_env = dict(os.environ, PYTHON=str(fake), FAKE_LOG=str(log), FAKE_CHANGED=changed,
                     FAKE_SUMMARY=summary, ALLOW_DIRTY="1",
                     FAKE_SUMMARY_JSON=json.dumps({"reused": {"lane-a": {"source": "table", "committed": True}}}))
-    for k in ("LANES", "SHARD", "ONLY_CHANGED", "FULL", "MOJOLEARN_IDENTITY_LAUNCH",
+    for k in ("LANES", "SHARD", "ONLY_CHANGED", "FULL", "REUSE", "MOJOLEARN_IDENTITY_LAUNCH",
               "MOJOLEARN_IDENTITY_REUSE_RECORDS"):
         full_env.pop(k, None)
     full_env.update(env)
     res = subprocess.run(["bash", os.path.join(ROOT, "tools", "record_identity_column.sh"), "cpu", str(out)],
                          env=full_env, capture_output=True, text=True, timeout=120)
     calls = log.read_text().splitlines() if log.exists() else []
-    harness = [c for c in calls if "identity_break.py" in c]
+    # the fits; the recorder's own `identity_break.py --provenance-lines` read of the record is not one
+    harness = [c for c in calls if "identity_break.py" in c and "--provenance-lines" not in c]
     return res, calls, harness
 
 
@@ -341,16 +343,24 @@ def _lanes_of(call):
     return words[words.index("--lanes") + 1]
 
 
-def test_recorder_default_records_only_changed_lanes(tmp_path):
+def test_recorder_default_records_every_lane(tmp_path):
     res, calls, harness = _run_recorder(tmp_path, "lane-b")
+    assert res.returncode == 0, res.stderr[-800:]
+    assert "FULL cpu: every routine lane is recorded" in res.stdout
+    assert not any("changed-lanes" in c for c in calls)
+    assert len(harness) == 1 and _lanes_of(harness[0]) == "lane-a,lane-b,lane-c"
+
+
+def test_recorder_reuse_records_only_changed_lanes(tmp_path):
+    res, calls, harness = _run_recorder(tmp_path, "lane-b", REUSE="1")
     assert res.returncode == 0, res.stderr[-800:]
     assert "REUSED 2 / RECORD 1 cpu" in res.stdout
     assert any("changed-lanes" in c and "--class cpu" in c for c in calls)
     assert len(harness) == 1 and _lanes_of(harness[0]) == "lane-b"
 
 
-def test_recorder_nothing_owed_runs_nothing(tmp_path):
-    res, calls, harness = _run_recorder(tmp_path, "", summary="REUSED 3 RECORD 0 KNOWN-BAD 0")
+def test_recorder_reuse_nothing_owed_runs_nothing(tmp_path):
+    res, calls, harness = _run_recorder(tmp_path, "", summary="REUSED 3 RECORD 0 KNOWN-BAD 0", REUSE="1")
     assert res.returncode == 0, res.stderr[-800:]
     assert "NOTHING-CHANGED cpu" in res.stdout
     assert harness == []
@@ -359,21 +369,24 @@ def test_recorder_nothing_owed_runs_nothing(tmp_path):
 def test_recorder_extra_reuse_dirs_reach_the_selection(tmp_path):
     extra = tmp_path / "old-records"
     extra.mkdir()
-    res, calls, _ = _run_recorder(tmp_path, "lane-b", MOJOLEARN_IDENTITY_REUSE_RECORDS=str(extra))
+    res, calls, _ = _run_recorder(tmp_path, "lane-b", REUSE="1", MOJOLEARN_IDENTITY_REUSE_RECORDS=str(extra))
     assert res.returncode == 0, res.stderr[-800:]
     assert any(f"--records {extra}" in c for c in calls if "changed-lanes" in c)
 
 
-def test_recorder_full_records_every_lane(tmp_path):
-    res, calls, harness = _run_recorder(tmp_path, "lane-b", FULL="1")
-    assert res.returncode == 0, res.stderr[-800:]
-    assert not any("changed-lanes" in c for c in calls)
-    assert len(harness) == 1 and _lanes_of(harness[0]) == "lane-a,lane-b,lane-c"
+def test_recorder_full_is_retired(tmp_path):
+    res, _, harness = _run_recorder(tmp_path, "lane-b", FULL="1")
+    assert res.returncode == 2 and "FULL=1 is retired" in res.stderr and harness == []
 
 
-def test_recorder_full_refuses_only_changed(tmp_path):
-    res, _, harness = _run_recorder(tmp_path, "lane-b", FULL="1", ONLY_CHANGED="table")
-    assert res.returncode == 2 and "FULL=1 excludes" in res.stderr and harness == []
+def test_recorder_reuse_refuses_only_changed(tmp_path):
+    res, _, harness = _run_recorder(tmp_path, "lane-b", REUSE="1", ONLY_CHANGED="table")
+    assert res.returncode == 2 and "REUSE=1 excludes" in res.stderr and harness == []
+
+
+def test_recorder_select_only_needs_reuse(tmp_path):
+    res, _, harness = _run_recorder(tmp_path, "lane-b", SELECT_ONLY="1")
+    assert res.returncode == 2 and "SELECT_ONLY=1 needs REUSE=1" in res.stderr and harness == []
 
 
 def test_recorder_only_changed_table_keeps_its_old_meaning(tmp_path):

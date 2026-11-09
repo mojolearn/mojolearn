@@ -172,7 +172,7 @@ class Run:
         return py, listed
 
     def env(self, py, listed, device, column, extra=None):
-        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "LANES", "SHARD", "ONLY_CHANGED", "FULL")}
+        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "LANES", "SHARD", "ONLY_CHANGED", "FULL", "REUSE")}
         env.update(RECORD_FROM_INSTALLED="1", PYTHON=str(py), INSTALLED_WHEELS=str(listed), REPEATS="1",
                    SCOPE="all", CPU_THREADS=str(CPU_THREADS))
         var = COLUMNS[column][1]
@@ -212,7 +212,7 @@ class Run:
         out = self.out / lab / "select"
         out.mkdir(parents=True, exist_ok=True)
         p = self.run(["bash", str(RECORDER), lab, str(out)], cwd=str(ROOT), capture_output=True, text=True,
-                     env=self.env(py, listed, 0 if COLUMNS[column][1] else None, column, dict(SELECT_ONLY="1")))
+                     env=self.env(py, listed, 0 if COLUMNS[column][1] else None, column, dict(SELECT_ONLY="1", REUSE="1")))
         (out / "select.log").write_text((p.stdout or "") + (p.stderr or ""))
         if p.returncode != 0:
             raise RuntimeError("selection for %s exited %s (%s)" % (lab, p.returncode, out / "select.log"))

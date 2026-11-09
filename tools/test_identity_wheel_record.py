@@ -18,6 +18,7 @@ label=$1; out=$2
 key=FAKE_OWED_$(echo "$label" | tr -c 'a-z0-9\n' '_')
 owed=${!key:-}
 if [ "${SELECT_ONLY:-0}" = 1 ]; then
+  [ "${REUSE:-0}" = 1 ] || { echo "SELECT_ONLY=1 needs REUSE=1 (the reuse selection)" >&2; exit 2; }
   if [ -z "$owed" ]; then echo "REUSED 9 / RECORD 0 $label"; echo "NOTHING-CHANGED $label"; exit 0; fi
   echo "REUSED 7 / RECORD 2 $label"; echo "LANES-SELECTED $owed"; exit 0
 fi
