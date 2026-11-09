@@ -44,12 +44,13 @@ LANES = ("transformer-forward", "mamba3-forward", "samba-forward",
 # off, speculative attention off, session fresh path on, shipped GEMM arm).
 EXPERIMENTS = {
     "baseline": {},
-    "no_retain_weights": {"MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": "0",
-                          "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS": "0"},
+    # lane x6-tape-retire: MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS and
+    # MOJOLEARN_TRANSFORMER_STAGE_RESET went with the forward tape's
+    # workspace body (the block runs on the attention step op).
+    "no_retain_weights": {"MOJOLEARN_MAMBA3_RETAIN_WEIGHTS": "0"},
     # lane x4: MOJOLEARN_TRANSFORMER_SESSION_FRESH / _LEGACY_SETUP removed
     # (the block always runs on its session); their arms went with them.
     "legacy_everything": {"MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
-    "no_stage_reset": {"MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
     "swiglu_fused": {"MOJOLEARN_SWIGLU_FUSED": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
@@ -72,7 +73,7 @@ EXPERIMENTS = {
     # (lane/neural-pass4): the before arm of the resident moments
     "opt_host": {"MOJOLEARN_OPTIMIZER_RESIDENT": "0"},
     "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1", "MOJOLEARN_SWIGLU_FUSED": "1",
-               "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0", "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
+               "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
 }
 SETS = {
     "priority": ["baseline", "mamba3_legacy", "mamba3_no_retain_stages", "norm_dw_own_ws"],
@@ -85,11 +86,11 @@ SETS = {
     # the resident optimizer moments on the training lanes (run with --lane
     # samba-train-step --lane lm-train-step)
     "optimizer": ["baseline", "opt_host"],
-    "default": ["baseline", "no_retain_weights", "no_stage_reset", "speculative_attn",
+    "default": ["baseline", "no_retain_weights", "speculative_attn",
                 "swiglu_fused", "no_layer_sync", "all_on"],
-    "nvidia": ["baseline", "no_retain_weights", "no_stage_reset",
+    "nvidia": ["baseline", "no_retain_weights",
                "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
-    "amd": ["baseline", "legacy_everything", "no_retain_weights", "no_stage_reset",
+    "amd": ["baseline", "legacy_everything", "no_retain_weights",
             "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
 }
 
