@@ -415,6 +415,17 @@ in the tables after the sections.
 | [`family_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [`p3nc_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Neighbor/cluster admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [trees_public_inputs array helpers copy (`trees_view`, `trees_f32`, `TreesView`, `TreesMatrix`)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Trees admission (TreesView/TreesMatrix copy of classical_labels) | removed (duplicate; the trees_* names import the one copy) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
+| [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
+| [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
+| [`_rsvd_core`, `_randomized_decompose`, `_lanczos_top`, `_prepare_folds` (dead Python loops)](#dead-native-entries-batch-3-2026-11) | Decomposition and model selection (Python glue the native owners replaced) | removed (dead Python: no caller) | 2026-11-08 | [dead_python_loops.patch](../experiments/removed/dead_python_loops.patch) |
+| [`MOJOLEARN_PT_COLBATCH`](#mojolearn_pt_colbatch) | Prep | DROP (quality); the opt-in name only | 2026-11-08 | [MOJOLEARN_PT_COLBATCH.patch](../experiments/removed/MOJOLEARN_PT_COLBATCH.patch) |
+| [`MOJOLEARN_MCD_BATCH_COMPAT`](#mojolearn_mcd_batch_compat) | Decomp | HOLD-quality; the opt-in name only | 2026-11-08 | [MOJOLEARN_MCD_BATCH_COMPAT.patch](../experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch) |
+| [`MOJOLEARN_CHOL_FAST_NB512`](#mojolearn_chol_fast_nb512) | Linear (Cholesky) | HOLD-speed | 2026-11-08 | [MOJOLEARN_CHOL_FAST_NB512.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch) |
+| [`MOJOLEARN_LLE_FAST_DEV_LU`](#mojolearn_lle_fast_dev_lu) | Decomp | HOLD-quality | 2026-11-08 | [MOJOLEARN_LLE_FAST_DEV_LU.patch](../experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch) |
+| [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
+| [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
+| [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3797,3 +3808,145 @@ wording. Kept, and why (no measurement separates copies that run the same code; 
 Restore: `git apply -3 experiments/removed/A0_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes from
 `ef4bce3a7e`; it restores every helper and its callers together). Run owed: one identity record of every lane at the
 release (the door is on every path) and the classical/trees/family test suites.
+## Dead native entries, batch 3 (2026-11)
+
+- Lane consol-k0-dead-code (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 5) re-checked each
+  entry with `rg -w` over the tree (Python, tools, bench, packaging, CI, bindings and providers, including Mojo-side
+  string callers) at `41ffcec665` and deleted the ones with no caller, one commit per group. Verdict: removed as dead
+  code, not an experiment, unless a row names a define verdict. No live path changed, so no identity bits move.
+
+### Byte LM parallel trainer entries
+
+| entries | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `byte_lm_parallel_open`, `_open_pooled`, `_close`, `_rollback`, `_shard_gradient`, `_apply_gradient`, `_reduction_pool_available`, `_fold_reset`, `_shard_gradient_fold`, `_fold_add` | `bindings/_mojolearn_byte_lm.mojo` (wrappers + registrations) | `f41ec913f2` | no Python, tool, test or Mojo string caller: `parallel_training.py` reaches the trainer through `parallel_shard_call` (`bindings/_mojolearn_runtime_parallel_host.mojo`); the only other mention was the stale September A/B patch `tools/byte_lm_export_fast/change.patch`. `ByteParallelTrainer` and its methods stay (the runtime parallel host and `training/checks/*` use them); `_create`, `_step`, `_export`, `_set_lr`, `_ownership`, `_fold_export` keep their tool callers | `experiments/removed/dead_entries_byte_lm_parallel.patch` |
+
+### Tokenizer host vocab exports
+
+| entries | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `vocab_encode_public`, `vocab_decode_public`, `vocab_pretrained_public`, `vocab_pretokenize_public`, `vocab_pattern_name` | `bindings/_mojolearn_tokenizer_host.mojo` (wrappers, the `_vocab_public_c` arms 3, 4, 5, 6 and 8, registrations) + the orphan `tokenizer_vocab_pretokenize` wrapper in `bindings/tokenizer_public_native.mojo` | `00a4418230` | `Tokenizer` reaches every operation through `tokenizer_public_call` (`vocab_encode`, `vocab_decode`, `vocab_pretrained`, `vocab_pretokenize`, `vocab_pattern`); no Python, tool, test or Mojo string caller named the five exports (the 2026-10-27 inventories under `experiments/` are records). The tokenizer host group is the largest compile, so every deletion there helps. `vocab_init_public`, `_spelled_public`, `_json_public`, `vocab_pretokenize_pattern` and `native_json_parse` keep their arms and indices | `experiments/removed/dead_entries_tokenizer_vocab_public.patch` |
+
+### Orphan functions
+
+| symbols | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `classical_host_weights` | `bindings/classical_arrays.mojo` (+ its now-unused `classical_check_weights` import) | `7b2e1d1d83` | no caller anywhere; the classical doors admit `sample_weight` through their own family paths | `experiments/removed/dead_entries_orphan_functions.patch` |
+| `pca_query_fields` | `providers/python/pca_model_pyapi.mojo` | `7b2e1d1d83` | no caller; the PCA owners call `_pca_query_fields_from` directly (kept) | same patch |
+| `prep_check_info`, `prep_scalar_dtype` | `providers/python/prep_metadata_pyapi.mojo` (+ its now-unused `sequence_dtype_native` import) | `7b2e1d1d83` | no caller anywhere | same patch |
+
+- Left (plan 5.2): `rankn_mean` / `rankn_softmax` (`autograd/rankn_fold.mojo`) are called by `autograd/checks/rankn_fold_cases.mojo`, which `tools/autograd_smoke.py` runs; deleting them edits a live check, and routing `OPS_MEAN_N` / `OPS_SOFTMAX_N` to them is executor work. The ALS `flags` buffer and the two bare `synchronize()` calls in `x_decomp/als_dev.mojo` belong to lane N0 `readmission-defects` (plan section 8), which owns that file.
+
+### Dead Python loops
+
+| symbols | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `_rsvd_core` (the `range(n_iter)` power iteration over `k.mm` / `k.orth`), `_randomized_decompose`, and their helpers `_seed_of`, `_orthonormal_cols`, `_flip_u` | `python/mojolearn/_expansion_decomp.py` | `bddde2ea2e` | public `randomized_svd` routes to the native linalg door; PCA / TruncatedSVD `algorithm='randomized'` run in `x_decomp/pca_randomized.mojo` / `x_decomp/tsvd_owner.mojo`; no caller was left. `test_pca_exact_native_owner.py` no longer patches the two names (it still forbids `_Kit`) | `experiments/removed/dead_python_loops.patch` |
+| `_lanczos_top`, `_lanczos_batch`, `_kdot`, `_LANCZOS_TOL`, `_LANCZOS_MAX_M`, `_LANCZOS_DEV_MAX_FLOATS` | `python/mojolearn/_expansion_decomp.py` | `bddde2ea2e` | the top-eigenpair route runs in `bindings/mani_decomp_native.mojo` and `x_decomp/kpca_owner.mojo`; the only caller was the one-off `tools/kernel_pca_gpu_trial.py`, deleted with it (`bench/decomp_fast_quality.py` uses the public estimators and stays) | same patch |
+| `_prepare_folds` and its helpers `_cv_fast_on`, `_native_default_cv`, `_CV_TRUST_FOLDS_BIT` | `python/mojolearn/model_selection.py` | `bddde2ea2e` | `cross_val_score` runs `family_msel_cross_val_score`; `bindings/msel_cv.mojo` (`msel_fast_on`, `msel_native_default_cv`) does the fold validation. `_cv_fast_defines` stays (the native context reads it) | same patch |
+
+### MOJOLEARN_PT_COLBATCH
+
+- What it tried: `-D MOJOLEARN_PT_COLBATCH` turned the FAST + Apple PowerTransformer (pt_map, pt_fold) pair into the
+  row-tiled `pt_tile_kernel` + `pt_tile_finish_kernel` (x_prep/fastpt.mojo).
+- Verdict: DROP (quality), EXPERIMENTS.md row 377 (lane/apple-fast-batchv @ 30aa43339): istella 2,262 -> 425 ms, taxi 305 ->
+  54.5 ms, but the lambdas move up to 9.5e-3 relative against define-off. Listed in "Owed deletions" above; lane
+  owed-deletions-D2 kept it because `PT_SCORE` (FAST + Apple default through `PT_SCORE_STABLE`) turns the same kernels on.
+- Deleted: the opt-in name only. `PT_COLBATCH` is now `_FAST_APPLE and PT_SCORE`, so every default build keeps its bits;
+  the only configuration that goes is the define on with `PT_SCORE` off. `tools/batchv_quality.sh` lost its `ptns` arm.
+- Deleted by `4da10a301b`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_PT_COLBATCH.patch`
+  (x_prep/fastpt.mojo). Refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_MCD_BATCH_COMPAT
+
+- What it tried: `-D MOJOLEARN_MCD_BATCH_COMPAT` ran MinCovDet's fast_mcd C-steps on the device with the compact-support,
+  FMA-cell and round-robin eigensolve repairs (x_decomp/mcd_fast.mojo), without the MMA route.
+- Verdict: HOLD-quality, EXPERIMENTS.md (lane/apple-fast-mcd-exact @ ab4265c9a, gap26-mcdrepair-small-ready): taxi cap3000
+  5595.80 -> 828.96 ms, covariance relative difference .0857, precision .9998, support Jaccard .941 (bar .99), final
+  covariance rank 7 -> 6.
+- Deleted: the opt-in name only. The same code is the accepted FAST + Apple `MCD_BATCH_MMA` default, so
+  `MCD_BATCH_COMPAT` is now `MCD_BATCH_MMA`; no default build changes. `tools/mcd_compat_ab.sh` now needs `MCD_DEFINE`.
+- Deleted by `ca0d1c0c53`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch`
+  (x_decomp/mcd_fast.mojo). Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_CHOL_FAST_NB512
+
+- What it tried: a 512-column FAST Cholesky panel (`CHOL_FAST_NB`, cholesky/checks/potrf.mojo) instead of 256.
+- Verdict: HOLD-speed, EXPERIMENTS.md (lane/apple-fast-w4-linalg 19bb1c7a1): quality PASS, w2-cholnb512-synthetic 260.4 ->
+  265.7 ms, no benefit.
+- Deleted by `c981cff480`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch`.
+  Refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry existed. NB64 / NB128 stay as they were.
+
+### MOJOLEARN_LLE_FAST_DEV_LU
+
+- What it tried: LocallyLinearEmbedding's shift-invert factor F0 factored where it lives (`dev_lu_aux_run` in
+  x_decomp/w4_fast.mojo: copy, `launch_lu`, the lu_aux launches), instead of the kit `lu` + `lu_aux` pair, FAST + Apple.
+- Verdict: HOLD-quality, EXPERIMENTS.md (lane/apple-fast-w4-decomp-harness-r1 e9d72edb5): lle taxi 1783.8 -> 1039.0 ms but
+  trustworthiness_k15 0.8662 -> 0.8410 against FAST main; the 2026-10-05 re-check with NULL_CANON (rab14) moved istella
+  0.8851 -> 0.8615 (-2.7%), and Andrew kept it off.
+- Deleted: the define, `w4_copy_kernel`, `dev_lu_aux_run`, the w4 `dev_lu_aux_py` door and its binding alias and
+  registration, bit 1 of `x_decomp_w4_flags`, the LLE arm in `bindings/mani_decomp_native.mojo`, and the two kit
+  `lu_dev_aux` methods (`bindings/mani_kit.mojo`, `_expansion_decomp._Kit`). The `x_decomp_dev_lu_aux` name stays the
+  IDENTICAL `IDN_LU_RESIDENT` entry (x_decomp/resident.mojo), which this did not touch.
+- Deleted by `ed9ba6e7a1`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch`.
+  Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_MCD_FAST_G1_GRAM
+
+- What it tried: MinCovDet / EllipticEnvelope's batched TN self-Gram (C = A^T A per candidate) through the non-split
+  `scoped_kernel[64, 64, False]` (`mcd_g1_gram_batched_kernel`, x_decomp/mcd_bmma.mojo) where the incumbent plan picks
+  one split, FAST + Apple. `MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT` counted its reach; `MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM`
+  restored the benchmark-tuned d 129..256 / K 128..1023 window (removed as dimension targeting on 2026-10-04).
+- Verdict: NEUTRAL, EXPERIMENTS.md (lane/apple-fast-mcd-g1-gram-remote; rab3-mcdg1, Verdicts batch 4): istella +0.1%, taxi
+  -1.2%; the later F02/mcd measurement (B/A 0.83-0.95, ab-20261006) was never admitted on fitted state.
+- Deleted: the three defines, the kernel, the audit struct and counters, the three witness exports `mcd_g1_gram_on`,
+  `mcd_g1_gram_count`, `mcd_g1_gram_last` (and their `coverage_declared.tsv` rows), and `tools/mcd_g1_quality.py`.
+- Deleted by `a2159de2cb`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch`
+  (x_decomp/mcd_bmma.mojo, bindings/_mojolearn_x_decomp.mojo); apply `MOJOLEARN_MCD_ORDERED_COV.patch` first (it was deleted
+  later in the same files). Refusal in `core/experiment_guards_decomposition.mojo`; no
+  `grid_controls` entry existed. The F02 manifests under `experiments/performance_ideas/F02/` are records and still name it.
+
+### MOJOLEARN_MCD_ORDERED_COV
+
+- What it tried: MinCovDet / EllipticEnvelope's raw C-step batched Gram and final masked covariance as split-K partials in
+  disjoint storage, folded per cell in split order with Neumaier compensation (`launch_mcd_cov_ordered`,
+  `mcd_cov_fold_kernel`, the `ORDERED` parameter of `mcd_bmma_kernel`, x_decomp/mcd_bmma.mojo), FAST + Apple.
+- Verdict: NEUTRAL, EXPERIMENTS.md (lane/apple-fast-mcd-ordered-quality-r3 @ f35a57bd4; rab3-mcdord, Verdicts batch 4): EE
+  istella -0.3%, MCD istella +0.4%, taxi -2.3%; quality HOLD (mcd-ordered-direct-q-r3). Batch 1 of the dead native entries
+  above kept its reach probe "until its experiment goes".
+- Deleted: the define and its kernels and helpers, `mcd_bmma_kernel`'s `ORDERED` parameter (the compact launches now pass
+  `[SPLIT, True]`), the reach counters and `x_decomp_mcd_cov_reach` (with `providers/python/x_decomp_mcd_bmma_pyapi.mojo`),
+  the Apple-only test seam `x_decomp_mcd_cov_probe`, `x_decomp_dev_mcd_cov` and its arm in `bindings/mcd_native.mojo`, the
+  `dev_mcd_cov` kit-bridge name, the three `coverage_declared.tsv` rows that named them, the `SABOTAGE_NA_ENTRIES` row,
+  `tools/mcd_ordered_quality.py` and `tools/mcd_ordered_pair.py`.
+- Deleted by `65b756872d`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch`
+  (eight code files, the deleted pyapi file included). Refusal in `core/experiment_guards_decomposition.mojo`; no
+  `grid_controls` entry existed.
+
+### MOJOLEARN_EIGH_FAST_PANEL_DF
+
+- What it tried: the FAST + Apple panel tridiagonalization of `eigh` with the trailing matrix kept as double-float (hi in A,
+  lo in an n x n buffer): the rank-2 tile update (`td_syr2k_kernel`), the column read (`_td_cell_df`) and the GEMV row dot
+  (`td_gemv_kernel`) in double-float (x_decomp/eigh_tridiag.mojo).
+- Verdict: DROPPED-slower, EXPERIMENTS.md (lane/apple-fast-eigh-panel-df @ 21eeacf90; rab3-eighdf, Verdicts batch 4):
+  693.09 -> 1107.60 ms (+59.8%), max_eigenvalue_error 4.27e-7 -> 1.71e-7.
+- Deleted: the define and its `_OFF`, `_td_cell_df` / `_td_cell_any`, the double-float arms, the low-word buffer and the
+  now-unused `alo` argument of `td_col_kernel`, `td_gemv_kernel` and `td_syr2k_kernel` (their other arithmetic is
+  unchanged, so the IDENTICAL `EIGH_TD_IDN` route keeps its bits), and `tools/eigh_panel_df_pair.py`.
+- Deleted by `27c5e3aff3`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch`.
+  Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### Orphan tools (no index row: tools are not experiments and leave no code site)
+
+- Lane consol-k0-dead-code scanned every top-level non-test file under `tools/` for its stem (`rg -w`) across the whole
+  repository (results trees left out), `~/mojolearn-ops`, the briefs under `~/mojolearn-evidence/briefs-2026*`, the
+  top-level evidence notes and scripts, crontab and the launchd agents. 86 had no reference outside their own file; nine
+  were kept (named by the session memory: `evidence_trim`, `treegen_box`, `amd_step_time2_leg1`,
+  `tokenizer_vocab_repro`; changed since 2026-10-25: `qualify_forest_host_component`, `s16_job`,
+  `verify_api_reference`, `identity_box_job_nvidia`; the general runner `run_source_tests`).
+- Deleted by `cba7b5c352` (one-off box legs, A/B bodies, probes and smokes from August to October); recoverable at
+  `41ffcec665` with `git checkout 41ffcec665 -- tools/<name>`: `amd_step_time2_cpu_check.sh`, `amd_step_time_leg1.sh`, `amd_step_time_leg2.sh`, `amd_step_time_leg3.sh`, `amd_step_time_leg4.sh`, `amd_step_time_leg5.sh`, `amd_step_time_leg6.sh`, `amd_step_time_leg7.sh`, `amd_step_time_leg8.sh`, `amd_step_time_leg_mi325x.sh`, `amd_step_time_xtarget_check.sh`, `amd_verify_job.sh`, `ann_apple3_cuda.sh`, `ann_apple3_local.sh`, `batchv_smoke.sh`, `cc_nv.sh`, `correctness_round.sh`, `decomp_nv.sh`, `direction_diag_job.sh`, `emb_moe_nv.sh`, `forest_ordered_amd_leg.sh`, `forest_ordered_apple_leg.sh`, `forest_ordered_nvidia_leg.sh`, `gap_linear_nv_probe.sh`, `garch_job.sh`, `gbdt_2661_nvidia_leg.sh`, `gnm_mac_job.sh`, `gpt3_pointwise_fusions_cv_leg.sh`, `hcid_nvidia_job.sh`, `hostgpu_job.sh`, `hostpr_job.sh`, `identical_callpath_gate.sh`, `kmeans_amd_perf_leg.sh`, `knn_amd_identity_leg.sh`, `knn_amd_smem_leg.sh`, `kpca_cross_vendor_probe_20261012.py`, `lm_t1_body.sh`, `lu_fast_mma_pair.py`, `m2_plain_trace_check.py`, `m2b1m3_smoke.sh`, `mamba_public_overhead_body.sh`, `mcd_wide_b_only.sh`, `metrics_shap_idcheck.py`, `miv_smoke.sh`, `mlp_fused_job.sh`, `ordall_smoke.sh`, `par_lm_xvendor_body.sh`, `pass4_job.sh`, `performance_full_collect.py`, `performance_full_knn.py`, `performance_ideas_gpu_watch.py`, `pr31_32_nv.sh`, `probe_gemm_host.py`, `probe_neural_lanes.py`, `prophet_diag.py`, `prophet_nv.sh`, `ptx_column_record_lq.sh`, `qr_nv.sh`, `rf_hist_columns_leg.sh`, `rmsnorm_backward_cv_leg.sh`, `seq_optimizer_resident_check.py`, `six_lane_build_ledger.py`, `six_lane_stage_regression.py`, `six_lane_stage_saved.py`, `sklearn_live_box.sh`, `sklearn_weight_equivalence.py`, `sm120_tree_identity_probe.sh`, `strides_job.sh`, `train_utils_probe.py`, `trees_apple3_cuda.sh`, `treeshap_identity.py`, `tshap_smoke.sh`, `verify_crash_loop.sh`, `w2_resample_probe.py`, `xcluster_post_idcheck.py`, `xdecomp_lle_idcheck.py`, `xlinear_weighted_idcheck.py`.
+- Also deleted: `tools/byte_lm_export_fast/` (the September byte LM export A/B leg; its `change.patch` named the deleted
+  `byte_lm_parallel_*` entries and no longer applies), and earlier in this batch `tools/kernel_pca_gpu_trial.py`,
+  `tools/mcd_g1_quality.py`, `tools/mcd_ordered_quality.py`, `tools/mcd_ordered_pair.py`, `tools/eigh_panel_df_pair.py`
+  with the code they drove.

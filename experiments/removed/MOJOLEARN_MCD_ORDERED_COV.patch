@@ -1,0 +1,546 @@
+diff --git b/bindings/_mojolearn_x_decomp.mojo a/bindings/_mojolearn_x_decomp.mojo
+index ce1fa3028f..6f7427bc06 100644
+--- b/bindings/_mojolearn_x_decomp.mojo
++++ a/bindings/_mojolearn_x_decomp.mojo
+@@ -20,6 +20,7 @@ from x_decomp.ipca_owner_dev import DevIpcaDev
+ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+ from x_decomp.decomp_owner_dev import DevDecomp
+ from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
++from std.sys.info import has_apple_gpu_accelerator
+ from x_decomp.mcd_experiments import mcd_experiment_count
+ from x_decomp.mcd_bmma import mcd_fast_batch_count
+ 
+@@ -53,10 +54,10 @@ from providers.python.x_decomp_select_dev_pyapi import (
+ from providers.python.x_decomp_graph_device_pyapi import (
+     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py, dev_graph_join_py, dev_graph_dijkstra_py,
+ )
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++from x_decomp.mcd_bmma import MCD_ORDERED_COV
++from providers.python.x_decomp_mcd_bmma_pyapi import mcd_cov_reach_py
+ from providers.python.x_decomp_resident_pyapi import (
+-    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
++    mcd_cov_probe_py, dev_mcd_cov_py, dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
+ )
+ from x_decomp.resident import GRP_CLS2_ANY
+ from providers.python.x_decomp_resident_pyapi import grp_cls2_py
+@@ -231,8 +232,13 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[dev_download_py]("x_decomp_dev_download")
+         m.def_function[dev_ew_py]("x_decomp_dev_ew")
+         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
+-        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++        m.def_function[mcd_cov_reach_py]("x_decomp_mcd_cov_reach")
++        # Apple simdgroup MMA probe (tools/mcd_ordered_quality.py): NVIDIA/AMD
++        # cannot link air.simdgroup_* (box-run-2 compile fix)
++        comptime if has_apple_gpu_accelerator():
++            m.def_function[mcd_cov_probe_py]("x_decomp_mcd_cov_probe")
++        comptime if MCD_ORDERED_COV:
++            m.def_function[dev_mcd_cov_py]("x_decomp_dev_mcd_cov")
+         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+diff --git b/bindings/mcd_native.mojo a/bindings/mcd_native.mojo
+index 1144a07969..f77ced0d57 100644
+--- b/bindings/mcd_native.mojo
++++ a/bindings/mcd_native.mojo
+@@ -137,9 +137,13 @@ def _masked_cov(mut kit: DecompKit, m: Int, mask: Int, assume_centered: Bool) ra
+         centered = kit.ew(XD_MUL, shifted, mask)
+     var rows = kit.nrows(centered)
+     var cols = kit.ncols(centered)
+-    # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the x_decomp_dev_mcd_cov final covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-    # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+-    var gram = kit.mm(centered, centered, ta=True)
++    var gram: Int
++    if kit.has("x_decomp_dev_mcd_cov") and kit.use(centered) and rows > 0 and cols > 0:
++        gram = kit.device_output(cols, cols)
++        var dc = kit.device(centered)
++        _ = py_call(kit.entries["x_decomp_dev_mcd_cov"], dc, kit.matrices[gram].device, Python.list(rows, cols))
++    else:
++        gram = kit.mm(centered, centered, ta=True)
+     return (loc, kit.ew(XD_SCALE, gram, scalar=1.0 / count))
+ 
+ 
+diff --git b/providers/python/x_decomp_resident_pyapi.mojo a/providers/python/x_decomp_resident_pyapi.mojo
+index bb084bd030..3f86f1f4a5 100644
+--- b/providers/python/x_decomp_resident_pyapi.mojo
++++ a/providers/python/x_decomp_resident_pyapi.mojo
+@@ -13,6 +13,7 @@ from x_decomp.resident import (
+     dev_upload_run,
+     dev_download_run,
+     dev_ew_run,
++    dev_mcd_cov_run,
+     dev_gemm_run,
+     dev_rand_run,
+     dev_trisolve_run,
+@@ -33,6 +34,7 @@ from x_decomp.resident import (
+     GRP_FAST_FUSED,
+     GRP_FAST_SRP_STRAT,
+     dev_move_run,
++    mcd_cov_probe_run,
+ )
+ 
+ 
+@@ -98,8 +100,9 @@ def dev_ew_py(
+     return PythonObject(dev_ew_run(_id(a), _id(b), _id(c), _id(dst), op, count, d, lb, bm, lc, cm, Float64(py=s)))
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its door dev_mcd_cov_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
++    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
++    return PythonObject(dev_mcd_cov_run(_id(a), _id(c), _n(p, 0), _n(p, 1)))
+ 
+ 
+ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+@@ -305,5 +308,13 @@ def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: Pyth
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its test seam door mcd_cov_probe_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++# Test-only direct batched covariance seam, identical API on both arms.
++def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
++                     p: PythonObject) raises -> PythonObject:
++    var nc = _n(p, 0)
++    var rows = _n(p, 1)
++    var d = _n(p, 2)
++    var px = F32Ptr(unsafe_from_address=Int(py=xaddr))
++    var pg = I32Ptr(unsafe_from_address=Int(py=gaddr))
++    var pout = F32Ptr(unsafe_from_address=Int(py=outaddr))
++    return PythonObject(mcd_cov_probe_run(px, pg, pout, nc, rows, d))
+diff --git b/python/mojolearn/_native_decomp_kit_bridge.py a/python/mojolearn/_native_decomp_kit_bridge.py
+index d263eba1e7..22d860c39b 100644
+--- b/python/mojolearn/_native_decomp_kit_bridge.py
++++ a/python/mojolearn/_native_decomp_kit_bridge.py
+@@ -13,7 +13,7 @@ _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "d
+              "dev_code_rows", "dev_lu", "pls_fit",
+              "eigh", "dev_eigh", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
+              "dev_select_smallest", "lu_aux", "dev_lu_aux", "mcd", "chi2_quantile", "consistency_factor",
+-             "als_fit", "topn_desc", "gather",
++             "dev_mcd_cov", "als_fit", "topn_desc", "gather",
+              "w4_flags", "s_flags", "qfix_flags", "idn_flags", "dev_upload_scan", "orth", "dev_orth",
+              "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "dev_lu_factor", "dev_lu_solve",
+              "lu_resid", "tsqr_r", "rank_above", "orth_diag", "dev_orth_diag", "geqrf", "orgqr")
+diff --git b/x_decomp/mcd_bmma.mojo a/x_decomp/mcd_bmma.mojo
+index 036bb4d5d2..e2e2bcc1b6 100644
+--- b/x_decomp/mcd_bmma.mojo
++++ a/x_decomp/mcd_bmma.mojo
+@@ -26,6 +26,7 @@ main zeroed its operands and discarded its output (guarded publication).
+ """
+ from std.ffi import _Global
+ from std.atomic import Atomic
++from std.sys import llvm_intrinsic
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+@@ -46,9 +47,22 @@ from gemm.afn_apple_fast import AFN_GEMM_KB, _M64, _afn_gload, _afn_load_t, _afn
+ from x_decomp.cells import F32Ptr, I32Ptr
+ from x_decomp.device import DFG_BLOCK_TARGET, DFG_MIN_SPLIT_STEPS
+ 
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (NEUTRAL: rab3-mcdord EE istella -0.3%, MCD istella +0.4%, taxi -2.3%) deleted
+-# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++#: FAST Apple candidate, default OFF: `-D MOJOLEARN_MCD_ORDERED_COV`.
++#: Source lane/apple-fast-mcd-ordered-quality-r3@f35a57bd4 (ported
++#: 2026-10-04, lane apple-fast-rec-misc). MinCovDet / EllipticEnvelope
++#: covariance (raw C-step batched Gram and final masked covariance): split-K
++#: partials to disjoint storage, then one GPU thread per cell folds them in
++#: split order with Neumaier compensation (no atomics). No SKIP_PINVH or
++#: DEFLATE change. Known: compiled (r3); M3 mcd-ordered-direct-q-r3 quality
++#: HOLD (strict per-key f64 B <= A on rel-L2 AND max-abs, no tolerance;
++#: repeat_identical true, so B was deterministic). Cause: B kept main's
++#: split count (2..9 at the direct shapes), so most error sat in each
++#: split's fp32 MMA chain, untouched by the compensated fold. Fixed here:
++#: splits of MCD_ORD_CHAIN rows (ordered_cov_shape). Quality before timing:
++#: tools/mcd_ordered_pair.py direct, then the fitted cases (MCD_ORDERED_COV.md).
++comptime MCD_ORDERED_COV = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_MCD_ORDERED_COV"]())
+ 
+ # Bound the queued candidate plane independently of features/datasets. This
+ # scheduling experiment preserves inactive-candidate gates and input strides;
+@@ -84,7 +98,7 @@ comptime MB_NT = MB_SGM * MB_SGN * 32
+ comptime MB_ZERO_TPB = 256
+ 
+ 
+-def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
++def mcd_bmma_kernel[SPLIT: Bool, ORDERED: Bool = False, COMPACT: Bool = False](
+     c_in: F32Ptr,
+     a_in: F32Ptr,
+     b_in: F32Ptr,
+@@ -138,6 +152,9 @@ def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
+     var m = Int(m_in)
+     var n = Int(n_in)
+     var k = Int(k_in)
++    comptime if ORDERED:
++        comptime assert SPLIT, "ordered partials require split windows"
++        c = c + Int(block_idx.y) * m * n
+     var a_si = Int(a_si_in)
+     var a_sp = Int(a_sp_in)
+     var b_sp = Int(b_sp_in)
+@@ -214,7 +231,7 @@ def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
+                 var gj = n0 + (sgn * FN + fq) * 8 + fcol + e
+                 if gi < m and gj < n:
+                     var v = acc[fm * FN + fq][e]
+-                    comptime if SPLIT:
++                    comptime if SPLIT and not ORDERED:
+                         _ = Atomic.fetch_add(c.unsafe_offset(gi * n + gj), v)
+                     else:
+                         c.unsafe_store(gi * n + gj, v)
+@@ -271,11 +288,11 @@ def launch_gemm_mma_batched(
+                 var per = ((k + splits - 1)//splits + AFN_GEMM_KB - 1)//AFN_GEMM_KB*AFN_GEMM_KB
+                 splits = (k + per - 1)//per
+                 ctx.enqueue_function[mcd_bmma_zero_kernel](c, gate, ga, Int32(nc), Int32(m*n), Int32(c_bs), grid_dim=max((nc*m*n+MB_ZERO_TPB-1)//MB_ZERO_TPB,1), block_dim=MB_ZERO_TPB)
+-                ctx.enqueue_function[mcd_bmma_kernel[True, True]](
++                ctx.enqueue_function[mcd_bmma_kernel[True, False, True]](
+                     c, a, b, gate, ga, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(a_bs), Int32(b_bs), Int32(c_bs), ids,
+                     grid_dim=(tiles,splits,live), block_dim=(MB_NT,1,1))
+             else:
+-                ctx.enqueue_function[mcd_bmma_kernel[False, True]](
++                ctx.enqueue_function[mcd_bmma_kernel[False, False, True]](
+                     c, a, b, gate, ga, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k), Int32(a_bs), Int32(b_bs), Int32(c_bs), ids,
+                     grid_dim=(tiles,1,live), block_dim=(MB_NT,1,1))
+             return
+@@ -314,7 +331,166 @@ def launch_gemm_mma_batched(
+         )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (_cov_add, ordered_cov_shape, ordered_cov_scratch, mcd_cov_fold_kernel,
+-# launch_mcd_cov_ordered, note_cov_route, mcd_cov_reach_run and the reach counters) deleted 2026-11-08 by 65b756872d; code
+-# recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++@always_inline
++def _cov_add(a: Float32, b: Float32) -> Float32:
++    # Explicit intrinsic without fast-math flags. Multiplication by one is
++    # exact; the remaining operation is one rounded addition. Ordinary FAST
++    # expressions must not reassociate the compensated fold into a plain sum.
++    return llvm_intrinsic["llvm.fma.f32", Float32, has_side_effect=False](Float32(1), a, b)
++
++
++#: Rows per ordered split: MCD_ORD_CHAIN_WINDOWS matrix-unit K windows
++#: (AFN_GEMM_KB rows each). The quality HOLD (mcd-ordered-direct-q-r3) came
++#: from keeping main's split count: with 2..9 splits per cell the error is
++#: the fp32 accumulation INSIDE each split's MMA chain (600 rows at
++#: 3000 x 220), not the cross-split fold the candidate compensated, so B and
++#: A differed by noise and the strict per-key B <= A max-abs gate became a
++#: coin flip. Short chains move the error into the compensated fold.
++comptime MCD_ORD_CHAIN_WINDOWS = 4
++comptime MCD_ORD_CHAIN = MCD_ORD_CHAIN_WINDOWS * AFN_GEMM_KB
++#: Partial-region cap (float words): the kernels' Int32 addressing bound
++#: (2^31) / 8 = 256M words (1 GiB). Past it the split count falls back
++#: toward main's (longer chains) instead of failing.
++comptime MCD_ORD_MAX_WORDS = 2147483647 // 8
++
++
++def ordered_cov_shape(nc: Int, rows: Int, d: Int) -> Tuple[Int, Int]:
++    """(splits, rows per split) of the ordered covariance: chains of
++    MCD_ORD_CHAIN rows (a multiple of AFN_GEMM_KB), at least main's split
++    count, at most what MCD_ORD_MAX_WORDS of partials hold."""
++    var tiles = ((d + MB_BM - 1) // MB_BM) * ((d + MB_BN - 1) // MB_BN)
++    var base = 1
++    if tiles < DFG_BLOCK_TARGET and rows >= 2 * DFG_MIN_SPLIT_STEPS:
++        base = min(DFG_BLOCK_TARGET // tiles, rows // DFG_MIN_SPLIT_STEPS)
++    var splits = max(base, (rows + MCD_ORD_CHAIN - 1) // MCD_ORD_CHAIN)
++    var cap = MCD_ORD_MAX_WORDS // max(max(nc, 1) * d * d, 1)
++    splits = max(min(splits, cap), 1)
++    var per = rows
++    if splits > 1:
++        per = (rows + splits - 1) // splits
++        per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
++        splits = (rows + per - 1) // per
++    return splits, per
++
++
++def ordered_cov_scratch(nc: Int, rows: Int, d: Int) raises -> Int:
++    if nc <= 0 or rows <= 0 or d <= 0:
++        return 1
++    var shape = ordered_cov_shape(nc, rows, d)
++    var words = nc * shape[0] * d * d if shape[0] > 1 else 1
++    if words > 2147483647:
++        raise Error("ordered covariance partials exceed Int32 addressing")
++    return words
++
++
++def mcd_cov_fold_kernel(part: F32Ptr, dst: F32Ptr, gate: I32Ptr, gate_all: Int32,
++                        nc_: Int32, d_: Int32, splits_: Int32, stride_: Int32):
++    # Independent thread per candidate/output cell; no atomics, global serial
++    # loop or cooperative single-block reduction. One ordered Neumaier chain
++    # over the cell's splits (ceil(rows / MCD_ORD_CHAIN), capped by
++    # MCD_ORD_MAX_WORDS).
++    var at = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    var dd = Int(d_)
++    var cells = dd * dd
++    var nc = Int(nc_)
++    if at >= nc * cells:
++        return
++    var candidate = at // cells
++    if gate_all == 0 and gate.unsafe_load(candidate) == 0:
++        return
++    var cell = at % cells
++    var splits = Int(splits_)
++    var base = candidate * splits * cells + cell
++    var total = Float32(0)
++    var correction = Float32(0)
++    for split in range(splits):
++        var value = part.unsafe_load(base + split * cells)
++        var next = _cov_add(total, value)
++        var error = Float32(0)
++        if abs(total) >= abs(value):
++            error = _cov_add(_cov_add(total, -next), value)
++        else:
++            error = _cov_add(_cov_add(value, -next), total)
++        correction = _cov_add(correction, error)
++        total = next
++    dst.unsafe_store(candidate * Int(stride_) + cell, _cov_add(total, correction))
++
++
++def launch_mcd_cov_ordered(ctx: DeviceContext, x: F32Ptr, dst: F32Ptr, part: F32Ptr,
++                           rows: Int, d: Int, nc: Int, x_stride: Int, out_stride: Int,
++                           gate: I32Ptr, gate_all: Bool) raises:
++    """Only X^T X; caller owns sufficient partial storage through completion.
++    Same MMA tile/window operands as main, changed cross-window accumulation.
++    Unsplit inputs retain the original kernel and arithmetic exactly."""
++    if nc <= 0 or rows <= 0 or d <= 0:
++        return
++    var shape = ordered_cov_shape(nc, rows, d)
++    var splits = shape[0]
++    if splits == 1:
++        launch_gemm_mma_batched(ctx, x, x, dst, d, rows, d, True, False,
++                                nc, x_stride, x_stride, out_stride, gate, gate_all)
++        return
++    _ = ordered_cov_scratch(nc, rows, d)  # validate before narrowing strides
++    var ga = Int32(1 if gate_all else 0)
++    var tiles = ((d + MB_BM - 1) // MB_BM) * ((d + MB_BN - 1) // MB_BN)
++    ctx.enqueue_function[mcd_bmma_kernel[True, True]](
++        part, x, x, gate, ga, Int32(d), Int32(d), Int32(rows),
++        Int32(1), Int32(d), Int32(d), Int32(1), Int32(shape[1]),
++        Int32(x_stride), Int32(x_stride), Int32(splits*d*d), gate,
++        grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1))
++    ctx.enqueue_function[mcd_cov_fold_kernel](
++        part, dst, gate, ga, Int32(nc), Int32(d), Int32(splits), Int32(out_stride),
++        grid_dim=(nc*d*d + MB_ZERO_TPB - 1) // MB_ZERO_TPB, block_dim=MB_ZERO_TPB)
++
++
++struct _CovReach(Defaultable, Movable):
++    var raw: Int
++    var final_count: Int
++    var raw_split: Int
++    var final_split: Int
++
++    def __init__(out self):
++        self.raw = 0
++        self.final_count = 0
++        self.raw_split = 0
++        self.final_split = 0
++
++
++comptime COV_REACH = _Global[StorageType=_CovReach, name="MojoMcdOrderedCovReach", init_fn=_CovReach.__init__]
++
++
++def note_cov_route(raw: Bool, rows: Int, d: Int) raises:
++    # Host metadata only; never consumes matrix values. Counts make no-op
++    # quality passes observable. No production dispatch outside the opt-in.
++    comptime if MCD_ORDERED_COV:
++        var r = COV_REACH.get_or_create_ptr()
++        var split = ordered_cov_shape(1, rows, d)[0] > 1
++        if raw:
++            r[].raw += 1
++            if split:
++                r[].raw_split += 1
++        else:
++            r[].final_count += 1
++            if split:
++                r[].final_split += 1
++
++
++def mcd_cov_reach_run(i: Int) raises -> Int:
++    var r = COV_REACH.get_or_create_ptr()
++    if i == -1:
++        r[].raw = 0
++        r[].final_count = 0
++        r[].raw_split = 0
++        r[].final_split = 0
++        return 0
++    if i == 0:
++        return 1 if MCD_ORDERED_COV else 0
++    if i == 1:
++        return r[].raw
++    if i == 2:
++        return r[].final_count
++    if i == 3:
++        return r[].raw_split
++    if i == 4:
++        return r[].final_split
++    raise Error("unknown ordered covariance reach counter")
+diff --git b/x_decomp/mcd_fast.mojo a/x_decomp/mcd_fast.mojo
+index 6f6f82c6e0..df5630732f 100644
+--- b/x_decomp/mcd_fast.mojo
++++ a/x_decomp/mcd_fast.mojo
+@@ -77,7 +77,7 @@ from x_decomp.mcd_mma import mc_center_kernel, mc_publish_matrix_kernel, mc_maha
+ from x_decomp.kit import Mat
+ from x_decomp.cells import FOLD_BLOCK
+ from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
+-from x_decomp.mcd_bmma import launch_gemm_mma_batched
++from x_decomp.mcd_bmma import launch_gemm_mma_batched, MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, note_cov_route
+ from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, MCD_FAST_COV_REUSE, MCD_EXPERIMENT_CANDIDATES, McdCompactWorkspace, McdCovReuseWorkspace, reuse_covariance_kernel, mcd_experiment_hit
+ from x_decomp.jacobi2 import dev_barrier
+ 
+@@ -998,8 +998,10 @@ struct MfPhase(Movable):
+             if d > MF_DMAX:
+                 pw = d  # the MMA route folds column sums only (npair = 24,310 at d = 220)
+         var part_words = max(nc * self.tiles * pw, 1)
+-        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its partials in this buffer) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++        comptime if MCD_ORDERED_COV and MCD_BMMA:
++            # Column moments have been consumed before covariance launches;
++            # reuse this phase-owned buffer without changing its lifetime.
++            part_words = max(part_words, ordered_cov_scratch(nc, h, d))
+         self.part = ctx.enqueue_create_buffer[DType.float32](part_words)
+         self.active = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
+         self.needp = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
+@@ -1061,14 +1063,17 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
+         )
+         var out = _f(ph.mm_out) + c0*d*d
+         comptime if MCD_BMMA:
+-            # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-            # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+-            if one:
+-                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+-                                        cn, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
++            comptime if MCD_ORDERED_COV:
++                note_cov_route(True, ph.h, d)
++                launch_mcd_cov_ordered(ctx, _f(ph.mm_x), out, _f(ph.part),
++                    ph.h, d, cn, ph.r*d, d*d, gate + c0, False)
+             else:
+-                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+-                                        cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
++                if one:
++                    launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
++                                            cn, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
++                else:
++                    launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
++                                            cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
+         else:
+             for c in range(cn):
+                 var x = _f(ph.mm_x)+c*ph.r*d
+diff --git b/x_decomp/resident.mojo a/x_decomp/resident.mojo
+index 2b83faada9..e9671d3342 100644
+--- b/x_decomp/resident.mojo
++++ a/x_decomp/resident.mojo
+@@ -24,6 +24,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+ from core.device_pool import pool_give, pool_take
+ from core.device_scan import device_first_nonfinite
+ 
++from x_decomp.mcd_bmma import MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, launch_gemm_mma_batched, note_cov_route
+ from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
+ from core.philox import philox4x32_10
+ from std.gpu import block_dim, block_idx, thread_idx
+@@ -226,9 +227,42 @@ def dev_ew_run(
+     return count
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (dev_mcd_cov_run and its persistent gate, the x_decomp_dev_mcd_cov body) deleted
+-# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++struct _CovGate(Defaultable, Movable):
++    """One persistent typed gate on xd_ctx; never released between enqueues."""
++    var bufs: List[DeviceBuffer[DType.int32]]
++
++    def __init__(out self):
++        self.bufs = List[DeviceBuffer[DType.int32]]()
++
++
++comptime MCD_COV_GATE = _Global[StorageType=_CovGate, name="MojoMCDOrderedCovGate", init_fn=_CovGate.__init__]
++
++
++def dev_mcd_cov_run(a: Int, c: Int, rows: Int, d: Int) raises -> Int:
++    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
++    comptime if not MCD_ORDERED_COV:
++        raise Error("ordered MCD covariance is disabled")
++    if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
++        raise Error("ordered covariance invalid shape or Int32 bound exceeded")
++    note_cov_route(False, rows, d)
++    var words = ordered_cov_scratch(1, rows, d)
++    var ctx = xd_ctx()
++    var state = MCD_COV_GATE.get_or_create_ptr()
++    if len(state[].bufs) == 0:
++        var initial_gate = ctx.enqueue_create_buffer[DType.int32](1)
++        ctx.enqueue_memset(initial_gate, Int32(1))
++        state[].bufs.append(initial_gate^)
++    # The global owner retains this typed allocation past every enqueue and
++    # subsequent download/synchronize. No null pointer, cast, or local-only
++    # allocation whose destruction could add an implicit synchronization.
++    var gate = state[].bufs[0]
++    var gate_ptr = gate.unsafe_ptr[MutAnyOrigin]()
++    var sid = pool_alloc(words)
++    launch_mcd_cov_ordered(ctx, _ptr(a, rows*d), _ptr(c, d*d),
++        _ptr(sid, words), rows, d, 1, rows*d, d*d, gate_ptr, True)
++    # Resident pool reuse is ordered on the same context, as dev_gemm_run.
++    pool_free(sid)
++    return d*d
+ 
+ 
+ def dev_gemm_run(a: Int, b: Int, c: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises -> Int:
+@@ -924,6 +958,40 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
+ # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (mcd_cov_probe_run, the x_decomp_mcd_cov_probe test seam of its quality tool) deleted
+-# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++# Test-only direct batched covariance seam, identical API on both arms.
++# Inactive outputs retain sentinel, partial storage is poisoned before B.
++def mcd_cov_probe_run(px: F32Ptr, pg: I32Ptr, pout: F32Ptr, nc: Int, rows: Int, d: Int) raises -> Int:
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_FAST or not has_apple_gpu_accelerator():
++        raise Error("covariance probe requires FAST Apple")
++    if nc <= 0 or rows <= 0 or d <= 0 or nc*rows*d > 2147483647 or nc*d*d > 2147483647:
++        raise Error("invalid ordered covariance probe shape")
++    var ctx = xd_ctx()
++    var dx = ctx.enqueue_create_buffer[DType.float32](nc*rows*d)
++    var dg = ctx.enqueue_create_buffer[DType.int32](nc)
++    var dc = ctx.enqueue_create_buffer[DType.float32](nc*d*d)
++    var scratch = ctx.enqueue_create_buffer[DType.float32](ordered_cov_scratch(nc, rows, d))
++    ctx.enqueue_copy(dst_buf=dx, src_ptr=px)
++    ctx.enqueue_copy(dst_buf=dg, src_ptr=pg)
++    ctx.enqueue_memset(dc, Float32(-123.5))
++    ctx.enqueue_memset(scratch, Float32(7654321))
++    # Explicit mutable borrows of owned buffers for the legacy launcher API.
++    # No integer-address reconstruction or const-removing pointer cast. Keep
++    # one x borrow and copy its pointer for X^T X, rather than borrow dx twice.
++    var xp = dx.unsafe_ptr[MutAnyOrigin]()
++    var cp = dc.unsafe_ptr[MutAnyOrigin]()
++    var sp = scratch.unsafe_ptr[MutAnyOrigin]()
++    var gp = dg.unsafe_ptr[MutAnyOrigin]()
++    comptime if MCD_ORDERED_COV:
++        note_cov_route(True, rows, d)
++        launch_mcd_cov_ordered(ctx, xp, cp, sp,
++            rows, d, nc, rows*d, d*d, gp, False)
++    else:
++        launch_gemm_mma_batched(ctx, xp, xp, cp,
++            d, rows, d, True, False, nc, rows*d, rows*d, d*d, gp, False)
++    ctx.enqueue_copy(dst_ptr=pout, src_buf=dc)
++    ctx.synchronize()
++    _ = dx^
++    _ = dg^
++    _ = dc^
++    _ = scratch^
++    return 1 if MCD_ORDERED_COV else 0
+diff --git b/providers/python/x_decomp_mcd_bmma_pyapi.mojo a/providers/python/x_decomp_mcd_bmma_pyapi.mojo
+new file mode 100644
+index 0000000000..090b13b0c6
+--- /dev/null
++++ a/providers/python/x_decomp_mcd_bmma_pyapi.mojo
+@@ -0,0 +1,12 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of x_decomp/mcd_bmma.mojo: the PythonObject <-> typed-value
++door that `bindings/_mojolearn_x_decomp.mojo` registers under the same name.
++It unpacks one integer and calls one typed entry; no data work happens here."""
++from std.python import PythonObject
++
++from x_decomp.mcd_bmma import mcd_cov_reach_run
++
++
++def mcd_cov_reach_py(which: PythonObject) raises -> PythonObject:
++    return PythonObject(mcd_cov_reach_run(Int(py=which)))

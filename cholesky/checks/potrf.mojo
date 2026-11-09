@@ -452,15 +452,12 @@ def chol_default_nb_hint() -> Int:
 
 
 comptime CHOL_FAST_CB = 2048
-# HOLD-speed, 2026-10-04, NB512 source19bb1c7a1:
-# w2-cholnb512-quality PASS; w2-cholnb512-synthetic260.4->265.7ms.
-# One run/arm showed no benefit; NB512 stays opt-in, default width unchanged.
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_NB512 (HOLD-speed: w2-cholnb512-synthetic 260.4 -> 265.7 ms, no benefit) deleted
+# 2026-11-08 by c981cff480; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch
 # NB64/NB128 have no admission implied by that NB512 result.
-# See docs/apple-fast/EXPERIMENTS.md (MOJOLEARN_CHOL_FAST_NB512).
 comptime CHOL_FAST_NB = 64 if is_defined["MOJOLEARN_CHOL_FAST_NB64"]() else (
-    128 if is_defined["MOJOLEARN_CHOL_FAST_NB128"]() else (
-        512 if is_defined["MOJOLEARN_CHOL_FAST_NB512"]() else 256
-    )
+    128 if is_defined["MOJOLEARN_CHOL_FAST_NB128"]() else 256
 )
 
 #: SCHEDULING. Threads in the single panel block. Free in both modes.

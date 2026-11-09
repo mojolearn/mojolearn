@@ -2490,15 +2490,14 @@ SABOTAGE_NA_ENTRIES.update({
 # dead-native-entries-0859 (2026-10-26) deleted the nine with no live caller
 # (adam_hyper_f64, lr_schedule_fill, gp_log64, gbdt_sigmoid,
 # forest_host_gbdt_sigmoid, the device x_decomp_knn_select, byte_lm_launch_probe,
-# x_neighbors_purity_flags, sched_exp_block; docs/TOMBSTONES.md). The two left
-# are A/B tools' reach probes of FAST switches still in the tree.
+# x_neighbors_purity_flags, sched_exp_block; docs/TOMBSTONES.md). The one left
+# is an A/B tool's reach probe of a FAST switch still in the tree (lane
+# consol-k0-dead-code deleted x_decomp_mcd_cov_reach with MCD_ORDERED_COV).
 _REACH_PROBE = "a quality/A-B tool's build or reach probe, no data value: "
 SABOTAGE_NA_ENTRIES.update({
     "km_rbf_staged": _REACH_PROBE + ("1 when KM_FAST_RBF_STAGED is compiled in (tools/kfeat_quality.py, "
                                      "tools/kfeat_pair.py REACH_EXTRA), registered only under "
                                      "KM_FAST_RBF_RESIDENT (FAST + Apple)"),
-    "x_decomp_mcd_cov_reach": _REACH_PROBE + ("MCD_ORDERED_COV's flag and reach counters "
-                                              "(tools/mcd_ordered_quality.py)"),
 })
 #: (entry, binding) -> reason, for one registration of an entry its twin covers.
 SABOTAGE_NA_BY_SRC = {

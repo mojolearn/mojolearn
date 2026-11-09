@@ -326,8 +326,8 @@ def test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs(
 
     from mojolearn import _expansion_decomp
     with monkeypatch.context() as patch:
-        patch.setattr(_expansion_decomp, "_randomized_decompose", forbidden)
-        patch.setattr(_expansion_decomp, "_rsvd_core", forbidden)
+        # _randomized_decompose and _rsvd_core are deleted (TOMBSTONES.md batch 3); the
+        # Python kit is the only orchestration left to forbid.
         patch.setattr(_expansion_decomp, "_Kit", forbidden)
         actual = clean(audit_native_call(native_fit_transform, model, x))
         inverse = clean(audit_native_call(native_inverse, model, actual))

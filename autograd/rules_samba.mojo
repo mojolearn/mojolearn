@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # The Samba whole-stack train-step backward on ONE tape
-# (TAPE_EVERYWHERE_PLAN.md path 2; the record loop is
+# (the tape plan's path 2, now docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md; the record loop is
 # training/samba_resident.mojo::_backward_tape, which imports this module;
 # this module never imports samba_resident).
 #
