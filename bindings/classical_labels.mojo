@@ -48,9 +48,11 @@ from bindings.cpython_table import cpython_table
 from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.label_input_sources import LABELS_LIST_INT
 from core.admitted_cast_elements import admitted_cast_elements
-from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
-from core.admitted_input import admitted_check_weights_f32
-from core.admitted_transpose import admitted_transpose_to_f32
+from bindings.admitted_input import (
+    AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, admit_c_view,
+    admitted_dtype,
+)
+from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.p3_labels_metrics_native import (
     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
     p3_integral_list, p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR)
@@ -175,14 +177,12 @@ def labels_env(name: String, default: String) -> String:
 # --------------------------------------------------------------- outputs
 
 
-# The one copy of the array admission helpers (lane consol-a0-admission,
-# 2026-11-08): bindings/trees_public_inputs.mojo kept a near-verbatim copy
-# of this block (81 of ~415 lines differed after renaming) and now imports
-# these names from here under its trees_* names. The merge keeps each
-# copy's later improvements: the trees copy's uninitialised scratch
-# destination (0.8.66 C3), forest layout and once-read shape tuples, and
-# this copy's native array stores (no array.array constructor call), type
-# names through the C descriptor and the one scalar-weight classification.
+# The array admission copy (lane consol-a0-admission merged the trees copy
+# into this one) is gone: X, targets and weights are admitted by
+# bindings/admitted_input.mojo (admit_x / admit_f32 / admit_weight_words /
+# admit_c_view / admit_ids, admitted_array / admitted_vector), the one path.
+# TOMBSTONE: labels_empty / labels_vector / LabelsView / labels_view / labels_check_rank / labels_shape_repr / _view_of_array / _view_of_buffer / _any_contiguous_address / LabelsMatrix / labels_f32 / labels_f32_view / labels_forest_layout / labels_all_finite / labels_check_sample_weight / labels_prepare_weights (the second admission path, and its trees_* aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 def labels_itemsize(typestr: String) raises -> Int:
     if typestr == "<f8" or typestr == "<i8":
         return 8
@@ -193,27 +193,6 @@ def labels_itemsize(typestr: String) raises -> Int:
     if typestr == "<u1" or typestr == "<i1":
         return 1
     raise Error("TypeError: " + typestr + " is not an Array dtype")
-
-
-def labels_empty(shape: PythonObject, typestr: String, context: PythonObject, order: String = "C") raises -> PythonObject:
-    """A new zero-filled mojolearn Array (`_buffer.empty`), assembled from
-    its slots; never an ndarray, whatever is installed."""
-    var count = 1
-    for k in range(len(shape)):  # driver-loop: over array rank metadata
-        count *= Int(py=shape[k])
-    # One zero-filled store: `array(code, [0]) * count` (p3-trees: a
-    # zero-filled bytes object of the full size was allocated first and then
-    # copied into the array, two allocations and two passes).
-    _ = labels_itemsize(typestr)  # refuses a non-Array dtype as before
-    # 0.8.66 regression C3: the shared native zero store (one allocation;
-    # a bulk fill on every supported CPython, where `seed * count` ran one
-    # memcpy per element before 3.12). The same zero bytes as before.
-    var store = native_array_zeros(_store_code(typestr), count)
-    return classical_wrap_array(store, shape, typestr, order, context)
-
-
-def labels_vector(count: Int, typestr: String, context: PythonObject) raises -> PythonObject:
-    return labels_empty(Python.tuple(count), typestr, context)
 
 
 def labels_full_f32(count: Int, value: Float64, context: PythonObject) raises -> PythonObject:
@@ -244,129 +223,6 @@ def labels_address(array: PythonObject) raises -> Int:
 # ----------------------------------------------------------------- inputs
 
 
-struct LabelsView(Copyable, Movable):
-    """One admitted input read in place: its owner (kept alive across the
-    kernel), data address, shape, byte strides and Array dtype."""
-    var keep: PythonObject
-    var addr: Int
-    var shape: List[Int]
-    var strides: List[Int]
-    var typestr: String
-    var item: Int
-
-    def __init__(out self, keep: PythonObject, addr: Int, var shape: List[Int], var strides: List[Int],
-                 typestr: String, item: Int):
-        self.keep = keep
-        self.addr = addr
-        self.shape = shape^
-        self.strides = strides^
-        self.typestr = typestr
-        self.item = item
-
-    def ndim(self) -> Int:
-        return len(self.shape)
-
-    def size(self) -> Int:
-        var n = 1
-        for k in range(len(self.shape)):  # driver-loop: over array rank metadata
-            n *= self.shape[k]
-        return n
-
-    def c_order(self) -> Bool:
-        var step = self.item
-        for k in range(len(self.shape)):  # driver-loop: over array rank metadata
-            var axis = len(self.shape) - 1 - k
-            if self.shape[axis] != 1 and self.strides[axis] != step:
-                return False
-            step *= self.shape[axis]
-        return True
-
-    def f_order(self) -> Bool:
-        var step = self.item
-        for axis in range(len(self.shape)):  # driver-loop: over array rank metadata
-            if self.shape[axis] != 1 and self.strides[axis] != step:
-                return False
-            step *= self.shape[axis]
-        return True
-
-    def both_orders(self) -> Bool:
-        """`Array._both_orders`: at most one dimension larger than 1."""
-        var big = 0
-        for k in range(len(self.shape)):  # driver-loop: over array rank metadata
-            if self.shape[k] != 1:
-                big += 1
-        return big <= 1
-
-
-def labels_shape_repr(view: LabelsView) raises -> String:
-    """The Python repr of the shape tuple, as `_as_typed` printed it."""
-    var b = labels_builtins()
-    var items = Python.list()
-    for k in range(len(view.shape)):  # driver-loop: over array rank metadata
-        _ = py_call(items.append, view.shape[k])
-    return String(py_call(b.repr, py_call(b.tuple, items)))
-
-
-def _view_of_array(value: PythonObject) raises -> LabelsView:
-    var shape = List[Int]()
-    var strides = List[Int]()
-    var rank = Int(py=value.ndim)
-    # Capture the immutable tuples once while admitting this Array. This is
-    # operation-local metadata; a later operation admits its current owner anew.
-    var pyshape = value.shape
-    var pystrides = value.strides
-    for k in range(rank):  # driver-loop: over array rank metadata
-        shape.append(Int(py=pyshape[k]))
-        strides.append(Int(py=pystrides[k]))
-    var typestr = String(value.dtype)
-    return LabelsView(value, Int(py=value._addr), shape^, strides^, typestr, Int(py=value.itemsize))
-
-
-def _any_contiguous_address(value: PythonObject) raises -> Int:
-    """The first element's address of a C- or F-contiguous export
-    (PyBUF_ANY_CONTIGUOUS | PyBUF_FORMAT); the export is released at once,
-    the caller keeps the owner alive."""
-    ref cpy = Python().cpython()
-    var storage = List[Int](length=10, fill=0)
-    var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    # The process-wide C-API table (no by-name symbol lookup per call).
-    var table = cpython_table()
-    if table[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0x9C)) != 0:
-        raise cpy.unsafe_get_error()
-    var address = storage[0]
-    table[].PyBuffer_Release(pointer)
-    _ = storage^
-    return address
-
-
-def _view_of_buffer(value: PythonObject, name: String, context: PythonObject) raises -> LabelsView:
-    var view = native_buffer_view(value)
-    var typestr = _buffer_typestr(view, name)
-    var item = Int(py=view.itemsize)
-    var rank = Int(py=view.ndim)
-    var shape = List[Int]()
-    var strides = List[Int]()
-    var buffer_shape = view.shape
-    var buffer_strides = view.strides
-    for k in range(rank):  # driver-loop: over array rank metadata
-        shape.append(Int(py=buffer_shape[k]))
-        strides.append(Int(py=buffer_strides[k]))
-    if rank == 0:
-        shape.append(1)
-        strides.append(item)
-    if not Bool(py=view.c_contiguous) and not Bool(py=view.f_contiguous):
-        # `_materialize`: a strided export is linearized in C order once
-        # (`memoryview.tobytes()`, in C) into an Array of its dtype.
-        var store = native_array_from_bytes(String(_store_code(typestr)), py_call(view.tobytes, "C"))
-        var pyshape = Python.list()
-        for k in range(len(shape)):  # driver-loop: over array rank metadata
-            _ = py_call(pyshape.append, shape[k])
-        return _view_of_array(classical_wrap_array(store, py_call(labels_builtins().tuple, pyshape), typestr, "C", context))
-    var _keep_ret_view = LabelsView(view, _any_contiguous_address(view), shape^, strides^, typestr, item)
-    _ = view  # keep the Python object alive through the native call above
-    return _keep_ret_view^
-
-
 def _pandas_values(source: PythonObject) raises -> PythonObject:
     """The storage array of an exact single-block pandas Series (what its
     `tolist()` lists), read through pandas' native slots."""
@@ -375,59 +231,6 @@ def _pandas_values(source: PythonObject) raises -> PythonObject:
     if py_type(blocks) is not labels_builtins().tuple or len(blocks) != 1:
         raise Error("TypeError: pandas Series requires native single-block storage")
     return _pd_get("pandas._libs.internals", "Block", "values", blocks[0])
-
-
-def labels_view(source: PythonObject, name: String, context: PythonObject) raises -> LabelsView:
-    """`_buffer._materialize(source, name)` read in place: an Array, any
-    buffer exporter (an ndarray, an `array.array`, a memoryview), a pandas
-    frame or series, a torch tensor, or a nested list or tuple of numbers.
-    The refusals keep `_materialize`'s classes and wording."""
-    var b = labels_builtins()
-    var cls = py_type(source)
-    if cls is context["array_class"]:
-        return _view_of_array(source)
-    if cls is b.str or cls is b.bytes:
-        raise Error("TypeError: mojolearn: " + name + " is a " + labels_type_name(cls) + ", not an array")
-    if native_pandas_exact(source):
-        return _view_of_buffer(native_pandas_f32(source, context, False, True), name, context)
-    if _ordinary_torch(cls, context):
-        return _view_of_buffer(native_torch_numpy(source), name, context)
-    if cls is b.list or cls is b.tuple:
-        var packed = sequential_sequence(source, context)
-        var kind = String(packed[1])
-        var typestr = String("<f8")
-        if kind == "i" or kind == "b":
-            typestr = "<i8"
-        elif kind != "f":
-            raise Error("TypeError: mojolearn: " + name + " holds a str, not a number")
-        var store = packed[3]
-        if kind == "b":
-            # A bool leaf is the int 0 or 1 (`_materialize` lists it as int64).
-            store = native_array_from_values(String("q"), store)
-        var array = classical_wrap_array(store, packed[0], typestr, "C", context)
-        return _view_of_array(array)
-    try:
-        return _view_of_buffer(source, name, context)
-    except error:
-        if String(error).startswith("TypeError: " + name):
-            raise error^
-        raise Error("TypeError: mojolearn: " + name + " holds a " + labels_type_name(cls) + ", not a number")
-
-
-def labels_check_rank(view: LabelsView, ndim: Int, name: String) raises:
-    """`_as_typed`'s rank and emptiness refusals."""
-    if ndim >= 0 and view.ndim() != ndim:
-        var hint = String("")
-        if ndim == 2 and view.ndim() < 2:
-            hint = (". Reshape your data either using array.reshape(-1, 1) if your data "
-                    + "has a single feature or array.reshape(1, -1) if it contains a single sample.")
-        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(view.ndim())
-                    + "-D shape " + labels_shape_repr(view) + hint)
-    if view.size() == 0:
-        var what = String("feature(s)") if view.ndim() == 2 and view.shape[0] != 0 else String("sample(s)")
-        var shown = labels_shape_repr(view)
-        raise Error("mojolearn: " + name + " is empty, shape " + shown + ": Found array with 0 " + what
-                    + " (shape=" + shown + ") while a minimum of 1 is required.")
 
 
 def _native_code(typestr: String) raises -> Int:
@@ -470,219 +273,6 @@ def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, 
         raise Error("TypeError: mojolearn: an element does not fit " + target)
 
 
-struct LabelsMatrix(Copyable, Movable):
-    """A float32 X as a kernel reads it: the owner of its storage, its
-    address, its shape and whether it is row-major (C order)."""
-    var keep: PythonObject
-    var addr: Int
-    var rows: Int
-    var cols: Int
-    var row_major: Bool
-
-    def __init__(out self, keep: PythonObject, addr: Int, rows: Int, cols: Int, row_major: Bool):
-        self.keep = keep
-        self.addr = addr
-        self.rows = rows
-        self.cols = cols
-        self.row_major = row_major
-
-
-def labels_f32(source: PythonObject, ndim: Int, order: String, name: String, context: PythonObject,
-              scratch: Bool = False) raises -> LabelsMatrix:
-    """`_buffer._as_typed(source, '<f4', order, ndim, name)`: the input
-    itself when it is already float32 in `order` (no copy), otherwise one
-    converted copy through the base binding's casts (a float64 or float32
-    source) or the classical element cast (integers and float16).
-
-    `scratch`: the caller only reads the result's address during this
-    operation and never keeps or returns its owner (a fit's transient X).
-    A converted copy is then written into an uninitialized private store
-    (`native_scratch_bytes`) instead of a zero-filled Array."""
-    var view = labels_view(source, name, context)
-    labels_check_rank(view, ndim, name)
-    return labels_f32_view(view^, order, context, scratch)
-
-
-def labels_f32_view(var view: LabelsView, order: String, context: PythonObject,
-                   scratch: Bool = False) raises -> LabelsMatrix:
-    var rows = view.shape[0]
-    var cols = view.shape[1] if view.ndim() == 2 else 1
-    var two = view.ndim() == 2
-    var want_f = order == "F"
-    var has_order = view.both_orders() or (view.f_order() if want_f else view.c_order())
-    if view.typestr == "<f4" and has_order:
-        var _keep_ret_view = LabelsMatrix(view.keep, view.addr, rows, cols, not want_f)
-        _ = view  # keep the Python object alive through the native call above
-        return _keep_ret_view^
-    var shape = Python.tuple(rows, cols) if two else Python.tuple(rows)
-    # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x, +405 ms on
-    # istella: the 1.8 GB transpose destination was zero-filled first).
-    # Every branch below writes all rows * cols words of `dst` before it
-    # returns, so a transient caller's destination needs no fill.
-    var out: PythonObject
-    var dst: Int
-    if scratch:
-        out = native_scratch_bytes(view.size() * 4)
-        dst = native_scratch_address(out)
-    else:
-        out = labels_empty(shape, "<f4", context, "F" if want_f and two else "C")
-        dst = labels_address(out)
-    _ = out  # keep the Python object alive through the native call above
-    var contiguous_c = view.c_order()
-    var contiguous_f = view.f_order()
-    # Lane A1 admit-trees-labels: every conversion below runs in process,
-    # across the host's cores: the cast through core `cast_elements` (it was
-    # a Python call into the base binding, one task; float64 sources went
-    # through the base `cast_f64_to_f32`, a device round trip) and the
-    # transpose through core/admitted_transpose.mojo (it was the base
-    # `transpose_f32` / `cast_colmajor_f64_to_f32`, a device round trip).
-    # Each element gets the same single conversion: no bit change.
-    # TOMBSTONE: labels_f32_view py_call casts and transposes (base cast_f64_to_f32, transpose_f32, cast_colmajor_f64_to_f32) deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
-    if (view.typestr == "<f8" or view.typestr == "<f4") and (contiguous_c or contiguous_f):
-        if two and not view.both_orders() and contiguous_f != want_f:
-            # The one fused cast-and-transpose (or the float32 transpose)
-            # over the source's [rows, cols] storage layout.
-            var r = rows
-            var c = cols
-            if contiguous_f:
-                r = cols
-                c = rows
-            if view.typestr == "<f8":
-                admitted_transpose_to_f32[DType.float64](view.addr, dst, r, c)
-            else:
-                admitted_transpose_to_f32[DType.float32](view.addr, dst, r, c)
-            _ = out  # keep the Python object alive through the native call above
-            _ = view  # keep the Python object alive through the native call above
-            return LabelsMatrix(out, dst, rows, cols, not want_f)
-    # `astype('<f4')` keeps the source's storage order; `_as_order` then
-    # transposes when the requested order differs (the float32 transpose).
-    if not two or view.both_orders() or contiguous_f == want_f:
-        labels_cast(view.addr, view.typestr, dst, "<f4", view.size(), context)
-        _ = out  # keep the Python object alive through the native call above
-        _ = view  # keep the Python object alive through the native call above
-        return LabelsMatrix(out, dst, rows, cols, not want_f)
-    # The staging store is written in full by the cast and read only by the
-    # transpose below; it never escapes, so it needs no fill either.
-    var staged = native_scratch_bytes(view.size() * 4)
-    var staged_addr = native_scratch_address(staged)
-    labels_cast(view.addr, view.typestr, staged_addr, "<f4", view.size(), context)
-    var r = cols if contiguous_f else rows
-    var c = rows if contiguous_f else cols
-    admitted_transpose_to_f32[DType.float32](staged_addr, dst, r, c)
-    _ = staged  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = view  # keep the Python object alive through the native call above
-    _ = staged^
-    return LabelsMatrix(out, dst, rows, cols, not want_f)
-
-
-def labels_forest_layout(source: PythonObject, name: String, context: PythonObject) raises -> LabelsMatrix:
-    """`_buffer.as_f32_forest_layout`: a 2-D float32 C-order input as is
-    (row-major, a borrow); every other input column-major
-    (`as_f32_colmajor`)."""
-    var view = labels_view(source, name, context)
-    if view.ndim() == 2 and view.typestr == "<f4" and view.size() > 0 and view.c_order() and not view.both_orders():
-        var _keep_ret_view = LabelsMatrix(view.keep, view.addr, view.shape[0], view.shape[1], True)
-        _ = view  # keep the Python object alive through the native call above
-        return _keep_ret_view^
-    labels_check_rank(view, 2, name)
-    return labels_f32_view(view^, "F", context)
-
-
-def labels_all_finite(addr: Int, count: Int, wide: Bool, context: PythonObject) raises -> Bool:
-    """`_buffer.all_finite`: the one host finiteness scan
-    (core/host_finite_scan.mojo), SIMD words in tasks across the host's
-    cores."""
-    # Lane A1 admit-trees-labels: this was a Python call into the base
-    # binding's `all_finite_f32/_f64`, which uploaded the words to the device
-    # to scan them there. A predicate: no bit changes.
-    # TOMBSTONE: labels_all_finite / trees_all_finite py_call into the base binding's device scan deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
-    if count <= 0:
-        return True
-    if wide:
-        return host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr), count)
-    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), count)
-
-
-# ---------------------------------------------------------------- weights
-
-
-def labels_check_sample_weight(source: PythonObject, n: Int, context: PythonObject) raises -> LabelsMatrix:
-    """`_sample_weight.check_sample_weight(source, n)` (float32): a Python
-    or 0-d scalar fills a vector; a vector must hold n entries; the
-    finiteness, sign and all-zero refusals are `prepare_targets`' with
-    scikit-learn's wording. The vector may borrow the caller's float32
-    buffer (the fit only reads it)."""
-    var b = labels_builtins()
-    if source is None:
-        var ones = labels_full_f32(n, 1.0, context)
-        var _keep_ret_ones = LabelsMatrix(ones, labels_address(ones), n, 1, True)
-        _ = ones  # keep the Python object alive through the native call above
-        return _keep_ret_ones^
-    var cls = py_type(source)
-    var scalar = False
-    var value = Float64(0)
-    # One classification (it was three: real, bool, integral): a real
-    # scalar that is neither bool nor integral is kind 4.
-    _labels_connect(context)
-    if cls is b.int or cls is b.float or labels_primitive_kind(cls, context) == 4:
-        scalar = True
-        value = Float64(py=py_call(b.float, source))
-    elif cls is not context["array_class"] and cls is not b.list and cls is not b.tuple:
-        var zero_d = False
-        try:
-            zero_d = Int(py=native_buffer_view(source).ndim) == 0
-        except:
-            zero_d = False
-        if zero_d:
-            scalar = True
-            value = Float64(py=py_call(b.float, source))
-    if not scalar:
-        var view = labels_view(source, "sample_weight", context)
-        if view.size() == 0:
-            if n != 0:
-                raise Error("sample_weight.shape == (0,), expected (" + String(n) + ",)!")
-            labels_check_rank(view, -1, "sample_weight")
-        if view.ndim() != 1:
-            raise Error("Sample weights must be 1D array or scalar")
-        if view.shape[0] != n:
-            raise Error("sample_weight.shape == " + labels_shape_repr(view) + ", expected (" + String(n) + ",)!")
-        var w = labels_f32_view(view^, "C", context)
-        if n:
-            labels_prepare_weights(w.addr, n, context)
-            _ = w  # keep the Python object alive through the native call above
-        return w^
-    var out = labels_full_f32(n, value, context)
-    if n:
-        labels_prepare_weights(labels_address(out), n, context)
-        _ = out  # keep the Python object alive through the native call above
-    var _keep_ret_out = LabelsMatrix(out, labels_address(out), n, 1, True)
-    _ = out  # keep the Python object alive through the native call above
-    return _keep_ret_out^
-
-
-def labels_prepare_weights(addr: Int, n: Int, context: PythonObject) raises:
-    """The finiteness, sign and all-zero tests of `n` float32 weights,
-    refused with scikit-learn's wording, in that order: the one weight
-    admitter's tests (core/admitted_input.mojo `admitted_check_weights_f32`
-    after the one host finiteness scan), tasks across the host's cores."""
-    # Lane A1 admit-trees-labels: this was a Python call into the base
-    # binding's `prepare_targets(None, w, n)` (one serial pass). Same
-    # verdicts in the same order (-3 non-finite, -4 negative, -5 all zero).
-    # TOMBSTONE: labels_prepare_weights / trees_prepare_weights py_call into the base binding's prepare_targets deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
-    if n <= 0:
-        return
-    var w = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-    if not host_all_finite_f32(w, n):
-        raise Error("Input sample_weight contains NaN or infinity.")
-    # A vector weight: `output` is not written.
-    if not admitted_check_weights_f32(w, w, n, False):
-        raise Error("Sample weights must contain at least one non-zero number.")
-
-
 # ----------------------------------------------------------------- labels
 
 
@@ -716,21 +306,26 @@ struct ClassicalLabels(Copyable, Movable):
         self.n = n
 
 
-def _native_labels(view: LabelsView, bool_source: Bool, context: PythonObject) raises -> ClassicalLabels:
-    """`_labels._encode_labels_native`: one `prepare_targets` call over a
-    numeric label vector, the k class values as Python numbers."""
-    var n = view.size()
-    var wide_float = view.typestr == "<f4" or view.typestr == "<f8"
-    var classes_store = labels_vector(n, "<f8" if wide_float else "<i8", context)
-    var codes = labels_vector(n, "<i4", context)
-    # Every view here is contiguous (`_view_of_buffer` linearizes a strided
-    # export; an Array is C or F), so a vector's storage is its logical order.
-    var y_addr = view.addr
-    var keep = view.keep
+def _native_labels(view: PythonObject, bool_source: Bool, context: PythonObject) raises -> ClassicalLabels:
+    """`_labels._encode_labels_native` over a C-ordered numeric label block
+    (admit_c_view's view, or a fresh Array)."""
+    return classical_encode_words(view, Int(py=classical_address(view)), Int(py=view.size),
+                                  admitted_dtype(view, context), bool_source, context)
+
+
+def classical_encode_words(keep: PythonObject, address: Int, n: Int, typestr: String, bool_source: Bool,
+                           context: PythonObject) raises -> ClassicalLabels:
+    """The one label encoder over `n` contiguous numeric labels of
+    `typestr` at `address` (`keep` owns them): one `prepare_targets` call,
+    the k class values as Python numbers (bools when `bool_source`)."""
+    var wide_float = typestr == "<f4" or typestr == "<f8"
+    var classes_store = admitted_vector(n, "<f8" if wide_float else "<i8", context)
+    var codes = admitted_vector(n, "<i4", context)
+    var y_addr = address
     var k = 0
     try:
         k = Int(py=py_call_typed(labels_helper(context, "prepare_targets"), PythonObject(y_addr),
-                                PythonObject(_encode_code(view.typestr)), PythonObject(n),
+                                PythonObject(_encode_code(typestr)), PythonObject(n),
                                 PythonObject(labels_address(classes_store)), PythonObject(labels_address(codes)),
                                 PythonObject(0), PythonObject(0), PythonObject(0)))
         _ = codes  # keep the Python object alive through the native call above
@@ -742,7 +337,7 @@ def _native_labels(view: LabelsView, bool_source: Bool, context: PythonObject) r
                 raise error^
             raise Error("ValueError: " + message)
         raise error^
-    _ = keep^
+    _ = keep
     var b = labels_builtins()
     var classes = Python.list()
     for i in range(k):  # driver-loop: over the k distinct classes
@@ -905,7 +500,7 @@ def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> C
     var index = Python.dict()
     for i in range(len(classes)):  # driver-loop: over class index table (classes-sized: distinct classes)
         py_setitem(index, classes[i], PythonObject(i))
-    var codes = labels_vector(n, "<i4", context)
+    var codes = admitted_vector(n, "<i4", context)
     # One borrowed read and one C dict probe per label (the label's own C
     # hash and equality, as `index[label]` ran them); every label is a key.
     p3_dict_codes(index, labels, labels_address(codes), -1)
@@ -913,60 +508,57 @@ def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> C
     return ClassicalLabels(classes, codes, n)
 
 
-def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[LabelsView]:
-    """The numeric label vector `_labels._encode_labels_native` encodes, or
-    None for what only the label input step reads (lists, str or object
-    buffers, a pandas Series, a matrix, an empty vector)."""
+def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[PythonObject]:
+    """The numeric label vector `_labels._encode_labels_native` encodes (a
+    C-ordered view of its own dtype, admit_c_view), or None for what only
+    the label input step reads (lists, str or object buffers, a pandas
+    Series, a matrix, an empty vector)."""
     classical_admit_value(y, context)
     var b = labels_builtins()
     var cls = py_type(y)
     if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or native_pandas_exact(y):
         return None
-    var found: Optional[LabelsView] = None
+    var view = PythonObject(None)
+    var typestr = String("")
     try:
-        if cls is context["array_class"]:
-            found = _view_of_array(y)
-        else:
-            var probe = native_buffer_view(y)
-            bool_source = String(probe.format) == "?"
-            found = _view_of_buffer(y, "y", context)
+        if cls is not context["array_class"]:
+            bool_source = String(native_buffer_view(y).format) == "?"
+        elif String(y.dtype).endswith("b1"):
+            return None  # a bool Array takes the label input step, as before
+        view = admit_c_view(y, "y", context, True)
+        typestr = admitted_dtype(view, context)
     except:
         return None
-    var view = found.value().copy()
-    var n = view.size()
+    var n = Int(py=view.size)
     var big = 0
-    for k in range(view.ndim()):  # driver-loop: over array rank metadata
-        if view.shape[k] > big:
-            big = view.shape[k]
-    if _encode_code(view.typestr) < 0 or n == 0 or n != big:
+    for k in range(Int(py=view.ndim)):  # driver-loop: over array rank metadata
+        if Int(py=view.shape[k]) > big:
+            big = Int(py=view.shape[k])
+    if _encode_code(typestr) < 0 or n == 0 or n != big:
         return None
-    return view^
+    return view
 
 
-def _encode_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[LabelsView]:
+def _encode_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[PythonObject]:
     """The numeric label block `classical_encode_labels` encodes with one
-    native `prepare_targets` call, or None for what only the label input
-    step reads. Admits `y` (`classical_admit_value`) exactly once, as
-    `_numeric_label_view` does.
+    native `prepare_targets` call (a C-ordered view or Array of a native
+    encode dtype), or None for what only the label input step reads. Admits
+    `y` (`classical_admit_value`) exactly once.
 
-    Takes everything `_numeric_label_view` takes, and also (perf2-labels,
-    2026-11-06), each with exactly the classes and codes the label input
-    step gives it: that step lists the same values in the same C order
-    (`tolist`, then the depth-first flatten) and encodes the flat list of
-    exact ints / floats natively (`_list_labels`) or by the ORDER RULE,
-    whose sorted distinct values and dense codes are the same:
-    - a numpy-backed pandas Series: its stored ndarray, what `tolist()`
-      lists (`labels_series_values`; a DataFrame or extension storage still
-      takes the label input step);
-    - a C-ordered matrix: its storage order is the flatten order (an
-      F-ordered one still takes the label input step);
-    - a bool Array: bytes 0/1 read as uint8, the classes returned as bools
-      (`bool_source`), as a bool buffer already is;
-    - one-byte '|' Array typestrs ('|u1', '|i1');
-    - int8 / uint16 / float16 storage, widened once to int64 / float64 by
-      the native cast: the exact Python ints / floats `tolist()` gives.
-    `_numeric_label_view` itself is unchanged (LabelEncoder's device route
-    reads it with its own dtype table)."""
+    Takes, each with exactly the classes and codes the label input step
+    gives it (that step lists the same values in the same C order, then
+    encodes the flat list natively or by the ORDER RULE, whose sorted
+    distinct values and dense codes are the same): a numeric buffer or
+    Array of any rank (read in C order: an F-ordered or strided one is one
+    C-order copy, admit_c_view), a numpy-backed pandas Series (its stored
+    ndarray, `labels_series_values`), a bool Array or buffer (bytes 0/1 read
+    as uint8, the classes returned as bools: `bool_source`), and int8 /
+    uint16 / float16 storage widened once to int64 / float64 by the native
+    cast (the exact Python ints / floats `tolist()` gives)."""
+    # Lane a1b-doors-opt-in-trees-linear: the block is read through
+    # admit_c_view (the LabelsView copy is gone); an F-ordered matrix,
+    # which took the label input step, is now its C-order copy: the same
+    # C-order values, so the same classes and codes.
     classical_admit_value(y, context)
     var b = labels_builtins()
     var cls = py_type(y)
@@ -978,50 +570,35 @@ def _encode_label_view(y: PythonObject, context: PythonObject, mut bool_source: 
         if source is None:
             return None
         cls = py_type(source)
-    var found: Optional[LabelsView] = None
+    var view = PythonObject(None)
+    var typestr = String("")
     try:
         if cls is context["array_class"]:
-            found = _view_of_array(source)
+            bool_source = String(source.dtype).endswith("b1")
         else:
-            var probe = native_buffer_view(source)
-            bool_source = String(probe.format) == "?"
-            found = _view_of_buffer(source, "y", context)
+            bool_source = String(native_buffer_view(source).format) == "?"
+        view = admit_c_view(source, "y", context, True)
+        typestr = admitted_dtype(view, context)
     except:
         bool_source = False
         return None
-    var view = found.value().copy()
-    var n = view.size()
-    var big = 0
-    for k in range(view.ndim()):  # driver-loop: over array rank metadata
-        if view.shape[k] > big:
-            big = view.shape[k]
-    if n == 0 or (n != big and not view.c_order()):
+    var n = Int(py=view.size)
+    if n == 0:
         bool_source = False
         return None
-    var typestr = view.typestr
-    if typestr.startswith("|"):
-        typestr = "<" + String(typestr[byte=1:typestr.byte_length()])
-    if typestr == "<b1":
-        # A bool's bytes are 0 and 1, read as uint8 (as `_buffer_typestr`
-        # reads a '?' buffer); the classes come back as bools.
-        bool_source = True
-        typestr = "<u1"
-    if typestr != view.typestr:
-        view = LabelsView(view.keep, view.addr, view.shape.copy(), view.strides.copy(), typestr, view.item)
-    if _encode_code(view.typestr) < 0:
-        if view.typestr != "<i1" and view.typestr != "<u2" and view.typestr != "<f2":
+    if _encode_code(typestr) < 0:
+        if typestr != "<i1" and typestr != "<u2" and typestr != "<f2":
             bool_source = False
             return None
-        # Every element of this contiguous block widens exactly; the copy
-        # runs in storage order, which is the C order checked above.
-        var target = String("<f8") if view.typestr == "<f2" else String("<i8")
-        var wide = labels_vector(n, target, context)
-        labels_cast(view.addr, view.typestr, labels_address(wide), target, n, context)
-        _ = view.keep  # keep the source owner alive through the native cast above
+        # Every element of this C-order block widens exactly.
+        var target = String("<f8") if typestr == "<f2" else String("<i8")
+        var wide = admitted_vector(n, target, context)
+        labels_cast(Int(py=classical_address(view)), typestr, labels_address(wide), target, n, context)
+        _ = view
         _ = source
-        view = _view_of_array(wide)
-    _ = source  # the Series' stored ndarray is kept alive by the view's owner
-    return view^
+        return wide
+    _ = source  # the Series' stored ndarray is kept alive by the view
+    return view
 
 
 def _flat_list_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
@@ -1050,7 +627,7 @@ def _flat_list_labels(y: PythonObject, context: PythonObject) raises -> Optional
     except:
         return None  # an int outside int64: a class only Python can hold
     var array = classical_wrap_array(store, Python.tuple(n), "<i8" if integral else "<f8", "C", context)
-    return _native_labels(_view_of_array(array), kind == LABELS_LIST_BOOL, context)
+    return _native_labels(array, kind == LABELS_LIST_BOOL, context)
 
 
 def _text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
@@ -1104,7 +681,7 @@ def _text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Option
     _ = y  # the caller's ndarray owns the buffer read above
     var order = _sorted(table, n)
     var classes = Python.list()
-    var codes = labels_vector(n, "<i4", context)
+    var codes = admitted_vector(n, "<i4", context)
     var out = _I32P(unsafe_from_address=labels_address(codes))
     var item = ndarray.item
     var current = -1
@@ -1137,7 +714,7 @@ def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optio
     if fast.status == P3_TEXT_NOT_STR:
         return None
     if fast.status == P3_TEXT_OK:
-        var fast_codes = labels_vector(n, "<i4", context)
+        var fast_codes = admitted_vector(n, "<i4", context)
         var target = _I32P(unsafe_from_address=labels_address(fast_codes))
         for i in range(n):  # driver-loop: native copy of the n codes
             target[i] = fast.codes[i]
@@ -1148,7 +725,7 @@ def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optio
         return None
     var order = _sorted(table, n)
     var classes = Python.list()
-    var codes = labels_vector(n, "<i4", context)
+    var codes = admitted_vector(n, "<i4", context)
     var out = _I32P(unsafe_from_address=labels_address(codes))
     var current = -1
     for t in range(n):  # driver-loop: over the sorted labels
@@ -1182,7 +759,7 @@ def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[Clas
     except:
         return None  # an int outside int64: a class only Python can hold
     var array = classical_wrap_array(store, Python.tuple(n), "<i8" if all_int else "<f8", "C", context)
-    return _native_labels(_view_of_array(array), False, context)
+    return _native_labels(array, False, context)
 
 
 def classical_encode_labels(var y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
@@ -1263,11 +840,11 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
             return listed
     var wide_codes = codes
     if code_dtype == "<i4":
-        wide_codes = labels_vector(n, "<i8", context)
+        wide_codes = admitted_vector(n, "<i8", context)
         labels_cast(labels_address(codes), "<i4", labels_address(wide_codes), "<i8", n, context)
         _ = wide_codes  # keep the Python object alive through the native call above
     if (kind == "int" or kind == "float") and k > 0:
-        var table = labels_vector(k, "<i8" if kind == "int" else "<f8", context)
+        var table = admitted_vector(k, "<i8" if kind == "int" else "<f8", context)
         var fits = True
         for i in range(k):  # driver-loop: over the k class values into the gather table
             if kind == "int":
@@ -1281,7 +858,7 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
                 _F64P(unsafe_from_address=labels_address(table))[i] = Float64(py=py_call(b.float, classes[i]))
                 _ = table  # keep the Python object alive through the native call above
         if fits:
-            var out = labels_vector(n, "<i8" if kind == "int" else "<f8", context)
+            var out = admitted_vector(n, "<i8" if kind == "int" else "<f8", context)
             var fn_obj = labels_helper(context, "gather_i64" if kind == "int" else "gather_f64")
             _ = py_call_typed(fn_obj, PythonObject(labels_address(table)), PythonObject(k),
                               PythonObject(labels_address(wide_codes)), PythonObject(n), PythonObject(labels_address(out)))
@@ -1307,7 +884,7 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
 def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, context: PythonObject) raises -> PythonObject:
     """`_labels.argmax_rows` of a C-order float32 or float64 block: the
     base binding's first-max scan, int64 codes."""
-    var out = labels_vector(rows, "<i8", context)
+    var out = admitted_vector(rows, "<i8", context)
     if rows == 0:
         return out
     if cols == 0:
@@ -1345,17 +922,17 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
     var n = labels.n
     var objects = Python.list()
     if py_type(class_weight) is b.str:
-        var counts = labels_vector(k, "<i4", context)
+        var counts = admitted_vector(k, "<i4", context)
         var count_entry = labels_need(xtrees, "x_trees_code_counts", "the x_trees binding has no x_trees_code_counts",
                                      "ImportError")
         _ = py_call_typed(count_entry, PythonObject(labels_address(labels.codes) if n else 0),
                           PythonObject(labels_address(counts)), Python.list(n, k))
         _ = counts  # keep the Python object alive through the native call above
-        var wide = labels_vector(k, "<i8", context)
+        var wide = admitted_vector(k, "<i8", context)
         labels_cast(labels_address(counts), "<i4", labels_address(wide), "<i8", k, context)
         _ = wide  # keep the Python object alive through the native call above
         _ = counts  # keep the Python object alive through the native call above
-        var w64 = labels_vector(k, "<f8", context)
+        var w64 = admitted_vector(k, "<f8", context)
         if k and Int(py=py_call_typed(labels_helper(context, "class_ratio_f64"), PythonObject(labels_address(wide)),
                                       PythonObject(k), PythonObject(n), PythonObject(0), PythonObject(labels_address(w64)))):
             raise Error("ZeroDivisionError: division by zero")
@@ -1394,7 +971,7 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
         all_one = all_one and Bool(py=v == PythonObject(1))
     if all_one:
         return PythonObject(None)
-    var narrowed = labels_vector(k, "<f4", context)
+    var narrowed = admitted_vector(k, "<f4", context)
     var q = _F32P(unsafe_from_address=labels_address(narrowed))
     _ = narrowed  # keep the Python object alive through the native call above
     var top = Float32(0)
@@ -1408,7 +985,7 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
             top = f32
     if top <= 0:
         raise Error("class weights must have positive total")
-    var out = labels_vector(n, "<f4", context)
+    var out = admitted_vector(n, "<f4", context)
     if n:
         var rows_entry = labels_need(xtrees, "x_trees_class_rows", "the x_trees binding has no x_trees_class_rows",
                                     "ImportError")
@@ -1420,38 +997,34 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
 
 
 def labels_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject, labels: ClassicalLabels,
-                        xtrees: PythonObject, context: PythonObject) raises -> LabelsMatrix:
+                        xtrees: PythonObject, context: PythonObject) raises -> AdmittedX:
     """`_expansion_trees._trees_weighted_rows`: the checked sample weights
     times the class_weight row weights, one correctly rounded float32
     product per row (`x_trees_mul_f32`); the sample weights alone when no
     class weight differs from 1."""
-    var sw = labels_check_sample_weight(sample_weight, labels.n, context)
+    var sw = admit_weight_words(sample_weight, labels.n, context)
     if class_weight is None:
         return sw^
     var rows = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if rows is None:
         return sw^
-    var out = labels_vector(labels.n, "<f4", context)
+    var out = admitted_vector(labels.n, "<f4", context)
     var mul = labels_need(xtrees, "x_trees_mul_f32", "the x_trees binding has no x_trees_mul_f32", "ImportError")
-    _ = py_call_typed(mul, PythonObject(sw.addr), PythonObject(labels_address(rows)), PythonObject(labels_address(out)),
+    _ = py_call_typed(mul, PythonObject(sw.address), PythonObject(labels_address(rows)), PythonObject(labels_address(out)),
                       Python.list(labels.n))
     _ = out  # keep the Python object alive through the native call above
     _ = rows  # keep the Python object alive through the native call above
     _ = sw^
-    var _keep_ret_out = LabelsMatrix(out, labels_address(out), labels.n, 1, True)
-    _ = out  # keep the Python object alive through the native call above
-    return _keep_ret_out^
+    return admitted_words(out, labels_address(out), labels.n, 1)
 
 
 def labels_class_rows_only(class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
-                          context: PythonObject) raises -> Optional[LabelsMatrix]:
+                          context: PythonObject) raises -> Optional[AdmittedX]:
     """The class_weight row weights without sample weights, or None."""
     var rows = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if rows is None:
         return None
-    var _keep_ret_rows = LabelsMatrix(rows, labels_address(rows), labels.n, 1, True)
-    _ = rows  # keep the Python object alive through the native call above
-    return _keep_ret_rows^
+    return admitted_words(rows, labels_address(rows), labels.n, 1)
 
 
 # x_metrics stage ops (`_expansion_metrics._OPS`) and cm_epi kinds.
@@ -1557,7 +1130,7 @@ def _has_float_leaf(value: PythonObject) raises -> Bool:
 # ------------------------------------------------------------ r2
 
 
-def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises -> LabelsMatrix:
+def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises -> AdmittedX:
     """`_metrics_impl._as_f32_1d`: a 1-D (or (n, 1) column) float32 vector,
     float64 refused by name, NaN or infinity refused."""
     var shape = labels_shape_of(source, context)
@@ -1573,13 +1146,16 @@ def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises
                     + "r2_score, kl_divergence and silhouette_score are NOT implemented "
                     + "(no float64 on this GPU). Cast to float32 yourself so the "
                     + "precision you run at is the one you chose.")
-    var out = labels_f32(source, len(shape), "C", name, context)
-    if not labels_all_finite(out.addr, out.rows * out.cols, False, context):
-        raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
-                    + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
-                    + "reach a kernel whose answer for it is a washed sentinel")
-    _ = out  # keep the Python object alive through the native calls above
-    return out^
+    # The one admission (admit_f32): the finite test rides in its cast or
+    # its one parallel scan; the metrics wording is kept.
+    try:
+        return admit_f32(source, len(shape), name, context)
+    except error:
+        if "contains NaN or infinity" in String(error):
+            raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
+                        + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
+                        + "reach a kernel whose answer for it is a washed sentinel")
+        raise error^
 
 
 def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
@@ -1588,7 +1164,7 @@ def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> P
                          PythonObject(count), PythonObject(what))
 
 
-def labels_sample_weight_f32(source: PythonObject, n: Int, caller: String, context: PythonObject) raises -> LabelsMatrix:
+def labels_sample_weight_f32(source: PythonObject, n: Int, caller: String, context: PythonObject) raises -> AdmittedX:
     """`_metrics_impl._sample_weight_f32`: one finite, non-negative float32
     weight per sample with a positive total."""
     var shape = labels_shape_of(source, context)
@@ -1597,11 +1173,18 @@ def labels_sample_weight_f32(source: PythonObject, n: Int, caller: String, conte
     if shape[0] != n:
         raise Error("mojolearn " + caller + ": sample_weight has " + String(shape[0]) + " entries for "
                     + String(n) + " samples")
-    var w = labels_f32(source, 1, "C", "sample_weight", context)
-    if not labels_all_finite(w.addr, n, False, context) or Bool(py=_reduce(w.addr, n, 0, context) < PythonObject(0)):
-        raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
+    var refusal = "mojolearn " + caller + ": sample_weight must have finite nonnegative entries"
+    var w = AdmittedX(PythonObject(None), PythonObject(None), 0, 0, 0, 1, False)
+    try:
+        w = admit_f32(source, 1, "sample_weight", context)
+    except error:
+        if "contains NaN or infinity" in String(error):
+            raise Error(refusal)
+        raise error^
+    if Bool(py=_reduce(w.address, n, 0, context) < PythonObject(0)):
+        raise Error(refusal)
     _ = w  # keep the Python object alive through the native calls above
-    if not Bool(py=_reduce(w.addr, n, 1, context) > PythonObject(0)):
+    if not Bool(py=_reduce(w.address, n, 1, context) > PythonObject(0)):
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")
     _ = w  # keep the Python object alive through the native calls above
     return w^
@@ -1645,14 +1228,14 @@ def labels_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyt
     var result = PythonObject(None)
     if sample_weight is not None:
         var w = labels_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
-        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.addr), PythonObject(yh.addr),
-                               PythonObject(w.addr), Python.list(PythonObject(y.rows)))
+        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.address), PythonObject(yh.address),
+                               PythonObject(w.address), Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = w^
     else:
-        result = py_call_typed(metrics["r2_score"], PythonObject(y.addr), PythonObject(yh.addr),
+        result = py_call_typed(metrics["r2_score"], PythonObject(y.address), PythonObject(yh.address),
                                Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
@@ -1694,8 +1277,7 @@ def _native_classification(var values: PythonObject, context: PythonObject) rais
     var cls = py_type(values)
     if cls is b.str or cls is b.bytes:
         return None
-    var view: LabelsView
-    var bool_source = False
+    var view = PythonObject(None)
     if cls is b.list or cls is b.tuple:
         var n = len(values)
         if n == 0:
@@ -1709,30 +1291,28 @@ def _native_classification(var values: PythonObject, context: PythonObject) rais
             store = native_array_from_values(String("q"), values)
         except:
             return None
-        view = _view_of_array(classical_wrap_array(store, Python.tuple(n), "<i8", "C", context))
+        view = classical_wrap_array(store, Python.tuple(n), "<i8", "C", context)
     else:
         if native_pandas_exact(values):
             return None
         if len(labels_shape_of(values, context)) != 1:
             return None
         try:
-            if cls is context["array_class"]:
-                view = _view_of_array(values)
-            else:
-                bool_source = String(py_call(b.memoryview, values).format) == "?"
-                view = _view_of_buffer(values, "input", context)
+            view = admit_c_view(values, "input", context, True)
+            _ = admitted_dtype(view, context)
         except:
             return None
-    if view.ndim() != 1 or view.size() < 1:
+    if Int(py=view.ndim) != 1 or Int(py=view.size) < 1:
         return None
-    var typestr = view.typestr
+    var typestr = admitted_dtype(view, context)
     if typestr == "<u2" or typestr == "<i1":
         # exact; the encoder has no 8- or 16-bit arm (`astype('<i4')`)
-        var wide = labels_vector(view.size(), "<i4", context)
-        labels_cast(view.addr, typestr, labels_address(wide), "<i4", view.size(), context)
-        _ = wide  # keep the Python object alive through the native call above
-        view = _view_of_array(wide)
-    if view.typestr != "<i4" and view.typestr != "<i8" and view.typestr != "<u4" and view.typestr != "<u1":
+        var count = Int(py=view.size)
+        var wide = admitted_vector(count, "<i4", context)
+        labels_cast(Int(py=classical_address(view)), typestr, labels_address(wide), "<i4", count, context)
+        view = wide
+        typestr = "<i4"
+    if typestr != "<i4" and typestr != "<i8" and typestr != "<u4" and typestr != "<u1":
         return None
     # A bool buffer's classes are read as the ints 0 and 1 (`int(c)`).
     var labels = _native_labels(view, False, context)
@@ -1798,10 +1378,10 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
     var index = Python.dict()
     for i in range(len(order)):  # driver-loop: over the distinct class labels
         py_setitem(index, order[i], PythonObject(i))
-    var out = labels_vector(labels.n, "<i4", context)
+    var out = admitted_vector(labels.n, "<i4", context)
     if labels.encoded:
         var k = len(labels.classes)
-        var table = labels_vector(k, "<i4", context)
+        var table = admitted_vector(k, "<i4", context)
         var t = _I32P(unsafe_from_address=labels_address(table))
         _ = table  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct class labels
@@ -1932,7 +1512,7 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
         raise Error("mojolearn " + caller + ": at most INT32_MAX rows")
     var n = true.n
     var weighted = sample_weight is not None
-    var w: Optional[LabelsMatrix] = None
+    var w: Optional[AdmittedX] = None
     if weighted:
         w = labels_sample_weight_f32(sample_weight, n, caller, context)
     var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
@@ -1942,7 +1522,7 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     return _accuracy_codes(yt, yp, n, L, w^, mode, context)
 
 
-def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: Optional[LabelsMatrix],
+def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: Optional[AdmittedX],
                     mode: PythonObject, context: PythonObject) raises -> Float64:
     """The (weighted) matched fraction of two int32 code vectors over `L`
     labels (a code outside [0, L) never matches), from the device COUNT
@@ -1962,7 +1542,7 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
     var W = _NONE
     var w_array = PythonObject(None)
     if weighted:
-        w_array = w.value().keep if py_type(w.value().keep) is context["array_class"] else _owned_f32(w.value(), context)
+        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
         W = prog.put(w_array, n)
     var g0 = prog.group(matched, n, L, W)
     var g1 = prog.group(a, n, L, W)
@@ -2132,29 +1712,28 @@ def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, cod
         raise Error("TypeError: mojolearn " + caller + ": y_true and y_pred must use the same label type")
     if n > _INT32_MAX:
         raise Error("mojolearn " + caller + ": at most INT32_MAX rows")
-    var w: Optional[LabelsMatrix] = None
+    var w: Optional[AdmittedX] = None
     if sample_weight is not None:
         w = labels_sample_weight_f32(sample_weight, n, caller, context)
     var yt = _codes(true, classes, context)
     var yp = codes
     if code_dtype == "<i8":
-        yp = labels_vector(n, "<i4", context)
+        yp = admitted_vector(n, "<i4", context)
         labels_cast(labels_address(codes), "<i8", labels_address(yp), "<i4", n, context)
         _ = codes  # keep the Python object alive through the native call above
         _ = yp  # keep the Python object alive through the native call above
     return _accuracy_codes(yt, yp, n, len(classes), w^, mode, context)
 
 
-def _owned_f32(w: LabelsMatrix, context: PythonObject) raises -> PythonObject:
+def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
     """A float32 Array copy of weights that borrow a foreign buffer (the
     program runner copies Arrays into its arena; `put` took `as_f32_c`'s
     Array). Copy the already-admitted contiguous float32 words natively."""
     var count = w.rows * w.cols
-    var out = labels_vector(count, "<f4", context)
-    # `keep` owns the admitted storage; it need not itself export bytes.
-    # Re-entering its buffer protocol is unnecessary after labels_f32.
+    var out = admitted_vector(count, "<f4", context)
+    # `array` owns the admitted storage; it need not itself export bytes.
     memcpy(dest=_F32P(unsafe_from_address=labels_address(out)),
-           src=_F32P(unsafe_from_address=w.addr), count=count)
+           src=_F32P(unsafe_from_address=w.address), count=count)
     _ = w  # retain the source export until the copy finishes
     return out
 
