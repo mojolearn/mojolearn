@@ -112,6 +112,16 @@ def unrelated(x: PythonObject) raises:
 '''
 
 
+class WorkersTest(unittest.TestCase):
+    def test_env_override_and_macos_cap(self):
+        import os
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"MOJOLEARN_HOOK_WORKERS": "2"}):
+            self.assertEqual(mds.default_workers(), 2)
+        with mock.patch.dict(os.environ, {"MOJOLEARN_HOOK_WORKERS": ""}), mock.patch.object(mds.sys, "platform", "darwin"):
+            self.assertEqual(mds.default_workers(), 4)
+
+
 class IndexTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()

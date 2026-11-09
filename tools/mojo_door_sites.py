@@ -156,6 +156,16 @@ LEVELS = ("native", "glue-heavy", "python-on-path")
 GLUE_OBJECT_LINES = 400   # object-layer lines on one reached path above which a door is glue-heavy
 
 
+def default_workers():
+    """Worker processes for one scan: MOJOLEARN_HOOK_WORKERS when set; otherwise 4 on macOS (the
+    pre-push hook runs this on Andrew's laptop, often several pushes at once) and every core on
+    a Linux runner or rented host."""
+    env = os.environ.get("MOJOLEARN_HOOK_WORKERS", "").strip()
+    if env.isdigit() and int(env) > 0:
+        return int(env)
+    return 4 if sys.platform == "darwin" else (os.cpu_count() or 1)
+
+
 def is_door(path):
     return any(fnmatch.fnmatchcase(path, p) for p in DOOR_PATTERNS) and not any(
         fnmatch.fnmatchcase(path, p) for p in TOOLING)
@@ -580,7 +590,7 @@ class DoorIndex:
                     rel = p.relative_to(self.root).as_posix()
                     if is_door(rel):
                         files[rel] = p.read_text(encoding="utf-8", errors="replace")
-        workers = workers or os.cpu_count() or 1
+        workers = workers or default_workers()
         pool = ProcessPoolExecutor(max_workers=workers) if workers > 1 and len(files) > 8 else None
         try:
             self._build(files, python_tables, pool)
