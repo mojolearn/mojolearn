@@ -22,8 +22,8 @@ range). Nothing is synchronised here: the entry reads `d_status` back with
 the result it downloads anyway (core/admitted_finite_status.mojo contract),
 and refuses through `door_rows_refuse` (bindings/device_rows_door.mojo).
 
-THE CONTEXT. The store's buffers belong to the base binding's process
-context (slot `MSEL_CONTEXT_SLOT`, `process_ctx`): an entry that gathers a
+THE CONTEXT. The store's buffers belong to the identical base binding's
+process context (slot `MSEL_FOLD_CONTEXT_SLOT`, `process_ctx`): an entry that gathers a
 fold runs its kernels on `msel_device_x_context()`, the same DeviceContext,
 so no buffer crosses contexts. The arena runner's `_rows_gather`
 (bindings/arena_prog_native.mojo) is the model: one gather, no download.
@@ -43,17 +43,26 @@ from core.msel_device import MselStore, MSEL_TPB, MSEL_MAX_BLOCKS
 from core.neural_context import process_ctx
 
 #: The base binding's process-lifetime context slot (bindings/_mojolearn.mojo
-#: `_DEVCTX_SLOT`), whose buffers the store holds.
+#: `_DEVCTX_SLOT`) and store name in this build's numeric mode: the base
+#: binding's own msel entries (bindings/msel_device.mojo) use these.
 comptime MSEL_CONTEXT_SLOT = (
     "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
 )
 comptime MSEL_STORE_NAME = (
     "MojoMselStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMselStoreFast"
 )
-#: THE model-selection store (one definition; bindings/msel_device.mojo
+#: The model-selection store (one definition; bindings/msel_device.mojo
 #: imports it). A `_Global` is named process-wide, so every binding module
 #: that names it reads the same store.
 comptime MSEL_STORE = _Global[StorageType=MselStore, name=MSEL_STORE_NAME, init_fn=MselStore.__init__]
+#: THE store cross-validation folds live in: model selection always connects
+#: the IDENTICAL base binding's msel entries (python/mojolearn/
+#: _native_arena_rows.py `_native('msel_put')`), whatever mode the estimator's
+#: own binding was built in, so a fold reader names the identical store and
+#: context explicitly (in an identical build these are MSEL_STORE and
+#: MSEL_CONTEXT_SLOT themselves).
+comptime MSEL_FOLD_CONTEXT_SLOT = "MojoCoreContextIdentical"
+comptime MSEL_FOLD_STORE = _Global[StorageType=MselStore, name="MojoMselStoreIdentical", init_fn=MselStore.__init__]
 
 comptime MDX_FINITE: Int32 = 0
 comptime MDX_FLAGGED: Int32 = 1
@@ -64,9 +73,9 @@ comptime _MDX_I32 = MutPointer[Int32, MutAnyOrigin]
 
 
 def msel_device_x_context() raises -> DeviceContext:
-    """The context the store's buffers live in: an entry gathering a fold
-    runs on it."""
-    return process_ctx[MSEL_CONTEXT_SLOT]()
+    """The context the fold store's buffers live in: an entry gathering a
+    fold runs on it."""
+    return process_ctx[MSEL_FOLD_CONTEXT_SLOT]()
 
 
 def _mdx_grid(total: Int) -> Int:
@@ -118,7 +127,7 @@ def msel_device_x_f32(
     if len(d_x) < rows * cols:
         raise Error("msel_device_x_f32: destination holds " + String(len(d_x)) + " words, "
                     + String(rows * cols) + " needed")
-    var store = MSEL_STORE.get_or_create_ptr()
+    var store = MSEL_FOLD_STORE.get_or_create_ptr()
     store[].check(base_id, base_rows * cols * 4)
     store[].check(index_id, rows * 8)
     # the store hands out immutable views; the kernel declares mutable
