@@ -264,12 +264,14 @@ def admitted_family_x(snapshot: ArrayMetadata, source: PythonObject, finite: Boo
 
 def admit_family(source: PythonObject, ndim: Int, name: String, context: PythonObject,
                  dense: Bool = False, finite: Bool = False, admitted: Bool = False,
-                 empty: Bool = False, refusal: String = "") raises -> AdmittedX:
+                 empty: Bool = False, refusal: String = "", defer_finite: Bool = False) raises -> AdmittedX:
     """`admit_family_meta` as the AdmittedX contract: `.array` the float32
     C-order array the kernels read, `.borrowed` when it is the input's own
-    storage."""
-    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty, refusal)
-    return admitted_family_x(snapshot, source, finite)
+    storage. Under `defer_finite` a borrowed X has `.finite` False (its
+    door tests it)."""
+    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty, refusal,
+                                     defer_finite)
+    return admitted_family_x(snapshot, source, finite and not (defer_finite and not snapshot.copied))
 
 
 def admit_family_copied(snapshot: ArrayMetadata, source: PythonObject) raises -> Bool:
