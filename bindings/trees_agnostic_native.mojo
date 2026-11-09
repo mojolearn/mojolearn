@@ -188,10 +188,8 @@ def _device_forest(model: PythonObject, mode: String, permutation: Bool, table: 
     try:
         var forest_mode = forest_effective_mode(fields, context)
         var native = trees_table(context, forest_mode, "_mojolearn_trees" if _family(kind) == "et" else "_mojolearn_rf")
-        if fast:
-            if forest_mode != "fast" and forest_mode != "identical":
-                return PythonObject(None)
-        elif forest_mode != "identical" or not (_engine(fields, forest_mode) == "sequential" and _ordered_export(native)):
+        # identical only: the FAST tier left before this point (K1 deleted its route)
+        if forest_mode != "identical" or not (_engine(fields, forest_mode) == "sequential" and _ordered_export(native)):
             return PythonObject(None)
         _ = _resident(m, fields, native, forest_mode, context)
     except:

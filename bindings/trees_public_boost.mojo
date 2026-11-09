@@ -1073,7 +1073,7 @@ def _colmajor(xt: PythonObject, x: AdmittedX, context: PythonObject) raises -> A
     var out = admitted_array(Python.tuple(x.rows, x.cols), "<f4", context, "F")
     _ = py_call_typed(_x(xt, "x_trees_transpose_f32"), _P(x.address), _A(out), Python.list(_P(x.rows), _P(x.cols)))
     _ = out  # keep the Python object alive through the native call above
-    var _keep_ret_out = AdmittedX(out, trees_address(out), x.rows, x.cols, False)
+    var _keep_ret_out = admitted_words(out, trees_address(out), x.rows, x.cols, False)
     _ = out  # keep the Python object alive through the native call above
     return _keep_ret_out^
 
@@ -1218,7 +1218,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             var mode = _member_mode(base, context)
             var cw_rows = trees_class_rows_only(py_get(py_fields(base), "class_weight"), dev_labels,
                                                 trees_table(context, mode, "_mojolearn_x_trees"), context)
-            var cw_addr = cw_rows.value().addr if cw_rows else 0
+            var cw_addr = cw_rows.value().address if cw_rows else 0
             _ada_open(session, w, trees_address(dev_labels.codes), cw_addr, n, k)
             _ = cw_rows^  # keep the rows alive through the native call above
         try:
@@ -1318,7 +1318,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     # gathered there, and only the step's four words come back per round.
     var device_rounds = _ada_device_rounds(session, "rf_regressor_fit_ada_round_export")
     if device_rounds:
-        _ada_open(session, w, y32.addr, 0, n, 0)
+        _ada_open(session, w, y32.address, 0, n, 0)
         _ = y32  # keep the Python object alive through the native call above
     try:
         for it in range(m):  # driver-loop: over the boosting rounds (one member each)
