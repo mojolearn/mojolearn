@@ -411,6 +411,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PT_COLBATCH`](#mojolearn_pt_colbatch) | Prep | DROP (quality); the opt-in name only | 2026-11-08 | [MOJOLEARN_PT_COLBATCH.patch](../experiments/removed/MOJOLEARN_PT_COLBATCH.patch) |
 | [`MOJOLEARN_MCD_BATCH_COMPAT`](#mojolearn_mcd_batch_compat) | Decomp | HOLD-quality; the opt-in name only | 2026-11-08 | [MOJOLEARN_MCD_BATCH_COMPAT.patch](../experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch) |
 | [`MOJOLEARN_CHOL_FAST_NB512`](#mojolearn_chol_fast_nb512) | Linear (Cholesky) | HOLD-speed | 2026-11-08 | [MOJOLEARN_CHOL_FAST_NB512.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch) |
+| [`MOJOLEARN_LLE_FAST_DEV_LU`](#mojolearn_lle_fast_dev_lu) | Decomp | HOLD-quality | 2026-11-08 | [MOJOLEARN_LLE_FAST_DEV_LU.patch](../experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3830,3 +3831,17 @@ public runtime qualification; this entry is not release or performance evidence.
   265.7 ms, no benefit.
 - Deleted by `@K0SHA_CHOL@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch`.
   Refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry existed. NB64 / NB128 stay as they were.
+
+### MOJOLEARN_LLE_FAST_DEV_LU
+
+- What it tried: LocallyLinearEmbedding's shift-invert factor F0 factored where it lives (`dev_lu_aux_run` in
+  x_decomp/w4_fast.mojo: copy, `launch_lu`, the lu_aux launches), instead of the kit `lu` + `lu_aux` pair, FAST + Apple.
+- Verdict: HOLD-quality, EXPERIMENTS.md (lane/apple-fast-w4-decomp-harness-r1 e9d72edb5): lle taxi 1783.8 -> 1039.0 ms but
+  trustworthiness_k15 0.8662 -> 0.8410 against FAST main; the 2026-10-05 re-check with NULL_CANON (rab14) moved istella
+  0.8851 -> 0.8615 (-2.7%), and Andrew kept it off.
+- Deleted: the define, `w4_copy_kernel`, `dev_lu_aux_run`, the w4 `dev_lu_aux_py` door and its binding alias and
+  registration, bit 1 of `x_decomp_w4_flags`, the LLE arm in `bindings/mani_decomp_native.mojo`, and the two kit
+  `lu_dev_aux` methods (`bindings/mani_kit.mojo`, `_expansion_decomp._Kit`). The `x_decomp_dev_lu_aux` name stays the
+  IDENTICAL `IDN_LU_RESIDENT` entry (x_decomp/resident.mojo), which this did not touch.
+- Deleted by `@K0SHA_LLE@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch`.
+  Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.

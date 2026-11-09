@@ -1,0 +1,340 @@
+diff --git b/bindings/_mojolearn_x_decomp.mojo a/bindings/_mojolearn_x_decomp.mojo
+index f44731f47e..bcd949e394 100644
+--- b/bindings/_mojolearn_x_decomp.mojo
++++ a/bindings/_mojolearn_x_decomp.mojo
+@@ -76,10 +76,11 @@ from x_decomp.resident import IDN_CODE_RESIDENT
+ from providers.python.x_decomp_resident_pyapi import dev_code_rows_py
+ from x_decomp.resident import IDN_EIGH_RESIDENT
+ from providers.python.x_decomp_resident_pyapi import dev_eigh_py
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
+-# IDN_LU_RESIDENT entry) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+-from providers.python.x_decomp_w4_fast_pyapi import w4_flags_py
++# merge 2026-10-05: both sides export `dev_lu_aux_py`; the w4 (FAST + Apple) one is
++# aliased here. Same Python name "x_decomp_dev_lu_aux" for both: LLE_FAST_DEV_LU is
++# FAST-only and IDN_LU_RESIDENT is IDENTICAL-only, so one build registers at most one.
++from x_decomp.w4_fast import LLE_FAST_DEV_LU
++from providers.python.x_decomp_w4_fast_pyapi import dev_lu_aux_py as w4_dev_lu_aux_py, w4_flags_py
+ from x_decomp.qfix import LU_QFIX
+ from providers.python.x_decomp_qfix_pyapi import lu_resid_py, qfix_flags_py
+ # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+@@ -252,7 +253,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[dev_rand_py]("x_decomp_dev_rand")
+         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
+         # lane/apple-fast-w4-decomp (x_decomp/w4_fast.mojo): the build's w4 flags
+-        # (bit 2 RSVD_FAST_DIRECT_IN / RSVD_IDN_DIRECT_IN)
++        # (LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN); the resident LU only when compiled in
+         m.def_function[w4_flags_py]("x_decomp_w4_flags")
+         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
+         # (bits TSVD_QFIX 2, LU_QFIX 4, QOLD defines restore; bit 1 SVD_QFIX deleted)
+@@ -270,8 +271,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         comptime if LU_RESIDENT_ENTRIES:
+             m.def_function[dev_lu_factor_py]("x_decomp_dev_lu_factor")
+             m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")
+-        # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-        # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
++        comptime if LLE_FAST_DEV_LU:
++            m.def_function[w4_dev_lu_aux_py]("x_decomp_dev_lu_aux")
+         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
+         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
+         m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
+diff --git b/bindings/mani_decomp_native.mojo a/bindings/mani_decomp_native.mojo
+index 782837f62f..1b45a1173c 100644
+--- b/bindings/mani_decomp_native.mojo
++++ a/bindings/mani_decomp_native.mojo
+@@ -696,14 +696,19 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
+     var pm: PythonObject
+     var im: PythonObject
+     var big: Float64
+-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 bit 1 device-LU arm) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+-    var fac = k.lu(f0)
+-    lu = fac[0]
+-    var aux = k.lu_aux(lu, fac[1], True)
+-    big = aux[0][0]
+-    pm = aux[2]
+-    im = aux[3]
++    if (k.w4_flags() & 1) != 0:
++        var got = k.lu_dev_aux(f0, True)
++        lu = got[0]
++        pm = got[1]
++        im = got[2]
++        big = got[3][0]
++    else:
++        var fac = k.lu(f0)
++        lu = fac[0]
++        var aux = k.lu_aux(lu, fac[1], True)
++        big = aux[0][0]
++        pm = aux[2]
++        im = aux[3]
+     if not (big > 0.0 and _mani_finite(big)):
+         return (False, PythonObject(None), PythonObject(None))
+     var en = mk_zeros(n, 1, ctx)
+diff --git b/bindings/mani_kit.mojo a/bindings/mani_kit.mojo
+index f5565b113e..776c04bf60 100644
+--- b/bindings/mani_kit.mojo
++++ a/bindings/mani_kit.mojo
+@@ -1098,9 +1098,26 @@ struct MKit(Movable):
+             stats.append(mk_at(st, i, self.ctx))
+         return (stats^, diag, pm, im)
+ 
+-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by @K0SHA_LLE@;
+-    # code recoverable at 41ffcec665.
+-    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
++    def lu_dev_aux(mut self, a: PythonObject,
++                   clamp: Bool) raises -> Tuple[PythonObject, PythonObject, PythonObject, List[Float64]]:
++        """LLE_FAST_DEV_LU: `lu` then `lu_aux` on the device, A untouched:
++        (lu, pm, im) device-resident and the four stats."""
++        var n = mk_r(a)
++        var lu = self.dout(n, n)
++        var pm = self.dout(n, 1)
++        var im = self.dout(n, 1)
++        var diag = self.dout(1, n)
++        var st = self.dout(1, 4)
++        var ia = self.did(a)
++        _ = family_call(self.fn("x_decomp_dev_lu_aux"), ia, device_identifier(matrix_device(lu)), device_identifier(matrix_device(pm)), device_identifier(matrix_device(im)), device_identifier(matrix_device(diag)), device_identifier(matrix_device(st)),
++                        mk_ints([n, 1 if clamp else 0]))
++        # The unused diagonal is still a kernel output: its numeric id does
++        # not retain the pooled device buffer while the call is running.
++        _ = diag^
++        var stats = List[Float64]()
++        for i in range(4):  # small-loop(stats: the four lu_aux status words): 4
++            stats.append(mk_at(st, i, self.ctx))
++        return (lu, pm, im, stats^)
+ 
+     def trisolve(mut self, lu: PythonObject, idx: PythonObject, b: PythonObject, trans: Int) raises -> PythonObject:
+         var n = mk_r(lu)
+diff --git b/providers/python/x_decomp_w4_fast_pyapi.mojo a/providers/python/x_decomp_w4_fast_pyapi.mojo
+index 6a2e9cd67c..4e424af344 100644
+--- b/providers/python/x_decomp_w4_fast_pyapi.mojo
++++ a/providers/python/x_decomp_w4_fast_pyapi.mojo
+@@ -5,19 +5,48 @@ the GPU binding registers. Each door reads compile-time flags or unpacks ids
+ and integers, releases the GIL and calls one typed entry in
+ x_decomp/w4_fast.mojo; no data work happens here."""
+ from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
+ 
+-from x_decomp.w4_fast import RSVD_FAST_DIRECT_IN, RSVD_IDN_DIRECT_IN
++from providers.python.x_decomp_resident_pyapi import _id, _n
++from x_decomp.w4_fast import LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN, RSVD_IDN_DIRECT_IN, dev_lu_aux_run
+ 
+ 
+ def w4_flags_py() raises -> PythonObject:
+-    """Which w4 candidates this build compiled in (bit 2 RSVD_FAST_DIRECT_IN or
+-    RSVD_IDN_DIRECT_IN; bit 1, LLE_FAST_DEV_LU, was deleted 2026-11-08; bit 4,
+-    LLE_FAST_NULL_CANON, was deleted 2026-10-09)."""
++    """Which w4 candidates this build compiled in (bit 1 LLE_FAST_DEV_LU,
++    bit 2 RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN; bit 4, LLE_FAST_NULL_CANON,
++    was deleted 2026-10-09)."""
+     var f = 0
++    comptime if LLE_FAST_DEV_LU:
++        f |= 1
+     comptime if RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN:
+         f |= 2
+     return PythonObject(f)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its door dev_lu_aux_py) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
++def dev_lu_aux_py(
++    a: PythonObject,
++    lu: PythonObject,
++    pm: PythonObject,
++    im: PythonObject,
++    diag: PythonObject,
++    st: PythonObject,
++    p: PythonObject,
++) raises -> PythonObject:
++    """p = [n, clamp]. lu = the LU factor of device matrix a (a untouched;
++    `launch_lu`, DevExec.lu's launches), then DevExec.lu_aux's launches on
++    it: pm / im the swaps' row order and its inverse (n x 1), diag (1 x n),
++    st = (max |u_ii|, zero pivots, negative pivots, swaps), and with clamp
++    the pivots under eps max |u_jj| floored in lu. Waits once at the end
++    (the scratch buffers are this call's). Returns n."""
++    var n = _n(p, 0)
++    var clamp = _n(p, 1)
++    var ia = _id(a)
++    var il = _id(lu)
++    var ipm = _id(pm)
++    var iim = _id(im)
++    var idiag = _id(diag)
++    var ist = _id(st)
++    var res = 0
++    with GILReleased(Python()):
++        res = dev_lu_aux_run(ia, il, ipm, iim, idiag, ist, n, clamp)
++    return PythonObject(res)
+diff --git b/python/mojolearn/_expansion_decomp.py a/python/mojolearn/_expansion_decomp.py
+index a1a922ff9a..7f9e628db0 100644
+--- b/python/mojolearn/_expansion_decomp.py
++++ a/python/mojolearn/_expansion_decomp.py
+@@ -527,9 +527,9 @@ class _Kit:
+ 
+     def w4_flags(self):
+         """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
+-        (`x_decomp_w4_flags`: bit 2 RSVD_FAST_DIRECT_IN on FAST + Apple or
+-        RSVD_IDN_DIRECT_IN on IDENTICAL, lane fg-pca R1; bit 1, LLE_FAST_DEV_LU,
+-        was deleted 2026-11-08; 0 on a binding without the entry)."""
++        (`x_decomp_w4_flags`: bit 1 LLE_FAST_DEV_LU, bit 2
++        RSVD_FAST_DIRECT_IN on FAST + Apple or RSVD_IDN_DIRECT_IN on
++        IDENTICAL, lane fg-pca R1; 0 on a binding without the entry)."""
+         f = self.__dict__.get("_w4_flags")
+         if f is None:
+             try:
+@@ -574,9 +574,17 @@ class _Kit:
+         self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
+         return R
+ 
+-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (_Kit.lu_dev_aux, no caller) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at
+-    # 41ffcec665.
+-    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
++    def lu_dev_aux(self, A, clamp=False):
++        """lane/apple-fast-w4-decomp LLE_FAST_DEV_LU: `lu` then `lu_aux` on
++        the device (x_decomp/w4_fast.mojo `dev_lu_aux_py`, the same launches
++        on the same words), A untouched. Returns (lu n x n, pm n x 1, im
++        n x 1, stats as four floats), lu / pm / im device-resident."""
++        n = A.r
++        lu, pm, im = self._dout(n, n), self._dout(n, 1), self._dout(n, 1)
++        diag, st = self._dout(1, n), self._dout(1, 4)
++        self.b.x_decomp_dev_lu_aux(self._did(A), lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
++                                   [n, int(bool(clamp))])
++        return lu, pm, im, [float(v) for v in st.s]  # glue: the four-field lu_aux status
+ 
+     def _use(self, *ms):
+         """The resident path for this call: the GPU binding, and an operand
+diff --git b/x_decomp/w4_fast.mojo a/x_decomp/w4_fast.mojo
+index 70cefaf89b..825bef234e 100644
+--- b/x_decomp/w4_fast.mojo
++++ a/x_decomp/w4_fast.mojo
+@@ -2,8 +2,20 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """lane/apple-fast-w4-decomp (2026-10-04): FAST + Apple candidates.
+ 
+-(LLE_FAST_DEV_LU, the device LU of LocallyLinearEmbedding's shift-invert factor, was
+-deleted 2026-11-08: HOLD-quality; see the TOMBSTONE below.)
++LLE_FAST_DEV_LU (`-D MOJOLEARN_LLE_FAST_DEV_LU`): LocallyLinearEmbedding's
++shift-invert factor F0 (n x n, 10,000 x 10,000 = 400 MB at the board's n)
++is factored where it already lives. Main (`_lle_smallest` ->
++`_Kit.lu` + `_Kit.lu_aux`) moved it through the host five times: F0.copy()
++downloads it (and copies it into a fresh array), `x_decomp_lu` uploads it,
++factors it and downloads the factor, `x_decomp_lu_aux` uploads the factor
++and (clamp) downloads it again, and the first `trisolve` uploads it once
++more. On Apple a download into host memory runs at ~3 GB/s (~130 ms per
++400 MB) and fresh host pages cost about as much again. Here
++`dev_lu_aux_py` copies F0 into a pooled device matrix and runs
++`launch_lu` then DevExec.lu_aux's five launches on it, enqueued, the
++same kernels in the same order on the same words: the factor, the pivots'
++row orders, the diagonal and the four stats are bit-identical to main's.
++Only the 4 stats come back to the host.
+ 
+ RSVD_FAST_DIRECT_IN (FAST + Apple default; `-D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF`
+ rolls back): randomized_svd's
+@@ -14,18 +26,46 @@ KernelPCA's resident pattern) instead of `_M.from_input`'s copy into a fresh
+ that the first product then uploads. The host finiteness refusal
+ (`_host_all_finite`) is unchanged. Same words reach the device: no bit moves.
+ 
+-It is read through `x_decomp_w4_flags()` (bit 2 RSVD_FAST_DIRECT_IN; bit 1,
+-LLE_FAST_DEV_LU, was deleted 2026-11-08), registered on every GPU build so a
+-quality capture can prove which arm is installed.
++Both are read by Python through `x_decomp_w4_flags()` (bit 1 LLE_FAST_DEV_LU,
++bit 2 RSVD_FAST_DIRECT_IN), registered on every GPU build so a quality
++capture can prove which arm is installed.
+ """
+ 
++from std.gpu import block_dim, block_idx, thread_idx
+ from std.sys.compile import is_defined
+ from std.sys.info import has_apple_gpu_accelerator
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
++from x_decomp.cells import F32Ptr, I32Ptr
++from x_decomp.rr import RR_OFF_TPB
++from x_decomp.device import (
++    LU_SCAL_LEN,
++    TPB,
++    _blocks,
++    _pj_off_blocks,
++    launch_lu,
++    lu_aux_clamp_kernel,
++    lu_aux_fold_kernel,
++    lu_aux_part_kernel,
++    lu_perm_kernel,
++    xd_ctx,
++)
++from x_decomp.resident import _ptr
+ 
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (HOLD-quality: lle trustworthiness_k15 istella 0.8851 -> 0.8615, taxi 0.8662 ->
+-# 0.8410 vs FAST main) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
++#: HOLD-quality, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source
++#: e9d72edb5 (2026-10-04). M3 afc_ab_def, full board size, 1 run per arm: lle
++#: taxi 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.8662 -> 0.8410 vs FAST
++#: main (arm A) is a real drop, not noise, so default OFF (FAST quality must
++#: not go down vs FAST main and must match the best opponent).
++#: 2026-10-05 re-check with LLE_FAST_NULL_CANON (deleted 2026-10-09; M3 rab14, 1 run per arm), DEV_LU + CANON vs FAST main:
++#:   lle istella 1803.9 -> 1048.9 ms (-41.9%), trustworthiness_k15 0.8851 -> 0.8615 (-2.7%, consistent across runs);
++#:   lle taxi    1745.1 ->  968.0 ms (-44.5%), trustworthiness_k15 0.8105 -> 0.8420 (arm A itself ranges 0.81-0.87 run to run).
++#:   sklearn-cpu trustworthiness: istella 0.8491, taxi 0.7708, so DEV_LU stays above the opponent on both.
++#:   Andrew (2026-10-05): 2.7% on istella is a lot, so it stays OFF. Re-judge if the istella drop goes away.
++comptime LLE_FAST_DEV_LU = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_LLE_FAST_DEV_LU"]()
++)
+ # TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: a canonical LLE answer when the null space is wider than n_components (all of N, then its nc directions of most data variance); trustworthiness down on lle taxi and istella (verdicts batch 6).
+ # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
+@@ -59,6 +99,53 @@ comptime RSVD_IDN_DIRECT_IN = (
+ )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (w4_copy_kernel, dev_lu_aux_run: its device LU) deleted 2026-11-08 by @K0SHA_LLE@; code
+-# recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
++def w4_copy_kernel(dst: F32Ptr, src: F32Ptr, n: Int32):
++    """dst[i] = src[i], a thread per word."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(n):
++        dst.unsafe_store(i, src.unsafe_load(i))
++
++
++def dev_lu_aux_run(ia: Int, il: Int, ipm: Int, iim: Int, idiag: Int, ist: Int, n: Int, clamp: Int) raises -> Int:
++    """lu = the LU factor of device matrix a (a untouched;
++    `launch_lu`, DevExec.lu's launches), then DevExec.lu_aux's launches on
++    it: pm / im the swaps' row order and its inverse (n x 1), diag (1 x n),
++    st = (max |u_ii|, zero pivots, negative pivots, swaps), and with clamp
++    the pivots under eps max |u_jj| floored in lu. Waits once at the end
++    (the scratch buffers are this call's). Returns n."""
++    if n <= 0 or n * n > 2147483647:
++        raise Error("x_decomp: dev_lu_aux needs 0 < n and n * n inside Int32")
++    var pa = _ptr(ia, n * n)
++    var pl = _ptr(il, n * n)
++    var ppm = _ptr(ipm, n)
++    var pim = _ptr(iim, n)
++    var pd = _ptr(idiag, n)
++    var pst = _ptr(ist, 4)
++    var ctx = xd_ctx()
++    var nb = _pj_off_blocks(n)
++    var dp = ctx.enqueue_create_buffer[DType.int32](n)
++    var di = ctx.enqueue_create_buffer[DType.float32](1)
++    var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
++    var dact = ctx.enqueue_create_buffer[DType.float32](n)
++    var dpart = ctx.enqueue_create_buffer[DType.float32](4 * nb)
++    ctx.enqueue_function[w4_copy_kernel](pl, pa, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
++    var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
++    launch_lu(
++        ctx, pl, pp, F32Ptr(unsafe_from_address=Int(di.unsafe_ptr())),
++        F32Ptr(unsafe_from_address=Int(ds.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dact.unsafe_ptr())), n,
++    )
++    var ppart = F32Ptr(unsafe_from_address=Int(dpart.unsafe_ptr()))
++    ctx.enqueue_function[lu_perm_kernel](pp, ppm, Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=TPB)
++    ctx.enqueue_function[lu_perm_kernel](pp, pim, Int32(n), Int32(1), grid_dim=_blocks(n), block_dim=TPB)
++    ctx.enqueue_function[lu_aux_part_kernel](pl, pp, ppart, Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
++    ctx.enqueue_function[lu_aux_fold_kernel](ppart, pst, Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB)
++    ctx.enqueue_function[lu_aux_clamp_kernel](
++        pl, pd, pst, Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
++    )
++    ctx.synchronize()
++    _ = dp^
++    _ = di^
++    _ = ds^
++    _ = dact^
++    _ = dpart^
++    return n

@@ -76,11 +76,10 @@ from x_decomp.resident import IDN_CODE_RESIDENT
 from providers.python.x_decomp_resident_pyapi import dev_code_rows_py
 from x_decomp.resident import IDN_EIGH_RESIDENT
 from providers.python.x_decomp_resident_pyapi import dev_eigh_py
-# merge 2026-10-05: both sides export `dev_lu_aux_py`; the w4 (FAST + Apple) one is
-# aliased here. Same Python name "x_decomp_dev_lu_aux" for both: LLE_FAST_DEV_LU is
-# FAST-only and IDN_LU_RESIDENT is IDENTICAL-only, so one build registers at most one.
-from x_decomp.w4_fast import LLE_FAST_DEV_LU
-from providers.python.x_decomp_w4_fast_pyapi import dev_lu_aux_py as w4_dev_lu_aux_py, w4_flags_py
+# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
+# IDN_LU_RESIDENT entry) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+from providers.python.x_decomp_w4_fast_pyapi import w4_flags_py
 from x_decomp.qfix import LU_QFIX
 from providers.python.x_decomp_qfix_pyapi import lu_resid_py, qfix_flags_py
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
@@ -253,7 +252,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[dev_rand_py]("x_decomp_dev_rand")
         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
         # lane/apple-fast-w4-decomp (x_decomp/w4_fast.mojo): the build's w4 flags
-        # (LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN); the resident LU only when compiled in
+        # (bit 2 RSVD_FAST_DIRECT_IN / RSVD_IDN_DIRECT_IN)
         m.def_function[w4_flags_py]("x_decomp_w4_flags")
         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
         # (bits TSVD_QFIX 2, LU_QFIX 4, QOLD defines restore; bit 1 SVD_QFIX deleted)
@@ -271,8 +270,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         comptime if LU_RESIDENT_ENTRIES:
             m.def_function[dev_lu_factor_py]("x_decomp_dev_lu_factor")
             m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")
-        comptime if LLE_FAST_DEV_LU:
-            m.def_function[w4_dev_lu_aux_py]("x_decomp_dev_lu_aux")
+        # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
         m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")

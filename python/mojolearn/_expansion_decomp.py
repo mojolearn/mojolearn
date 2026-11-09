@@ -527,9 +527,9 @@ class _Kit:
 
     def w4_flags(self):
         """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
-        (`x_decomp_w4_flags`: bit 1 LLE_FAST_DEV_LU, bit 2
-        RSVD_FAST_DIRECT_IN on FAST + Apple or RSVD_IDN_DIRECT_IN on
-        IDENTICAL, lane fg-pca R1; 0 on a binding without the entry)."""
+        (`x_decomp_w4_flags`: bit 2 RSVD_FAST_DIRECT_IN on FAST + Apple or
+        RSVD_IDN_DIRECT_IN on IDENTICAL, lane fg-pca R1; bit 1, LLE_FAST_DEV_LU,
+        was deleted 2026-11-08; 0 on a binding without the entry)."""
         f = self.__dict__.get("_w4_flags")
         if f is None:
             try:
@@ -574,17 +574,9 @@ class _Kit:
         self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
         return R
 
-    def lu_dev_aux(self, A, clamp=False):
-        """lane/apple-fast-w4-decomp LLE_FAST_DEV_LU: `lu` then `lu_aux` on
-        the device (x_decomp/w4_fast.mojo `dev_lu_aux_py`, the same launches
-        on the same words), A untouched. Returns (lu n x n, pm n x 1, im
-        n x 1, stats as four floats), lu / pm / im device-resident."""
-        n = A.r
-        lu, pm, im = self._dout(n, n), self._dout(n, 1), self._dout(n, 1)
-        diag, st = self._dout(1, n), self._dout(1, 4)
-        self.b.x_decomp_dev_lu_aux(self._did(A), lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
-                                   [n, int(bool(clamp))])
-        return lu, pm, im, [float(v) for v in st.s]  # glue: the four-field lu_aux status
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (_Kit.lu_dev_aux, no caller) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at
+    # 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 
     def _use(self, *ms):
         """The resident path for this call: the GPU binding, and an operand

@@ -55,6 +55,8 @@ def _check_configuration() -> Bool:
     # Lane consol-k0-dead-code (2026-11-08): loser defines whose gate was still in the code (docs/TOMBSTONES.md batch 3). Code at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch
     comptime assert not is_defined["MOJOLEARN_MCD_BATCH_COMPAT"](), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_MCD_BATCH_COMPAT, the COMPAT-only MinCovDet device C-step arm, was HOLD-quality: gap26-mcdrepair-small-ready (ab4265c9a) taxi cap3000 covariance rel .0857, precision rel .9998, support Jaccard .941 < .99, final covariance rank 7 -> 6; the shared code runs under the accepted MCD_BATCH_MMA default (use -D MOJOLEARN_MCD_BATCH_MMA_OFF for the per-candidate path); code at 41ffcec665; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+    comptime assert not is_defined["MOJOLEARN_LLE_FAST_DEV_LU"](), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_LLE_FAST_DEV_LU, LocallyLinearEmbedding's shift-invert LU on the device (x_decomp/w4_fast.mojo), was HOLD-quality: lle taxi 1783.8 -> 1039.0 ms but trustworthiness_k15 0.8662 -> 0.8410; with NULL_CANON istella 0.8851 -> 0.8615 (-2.7%, Andrew 2026-10-05: stays off); code at 41ffcec665; see docs/TOMBSTONES.md"
     return True
 
 

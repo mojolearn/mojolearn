@@ -1098,26 +1098,9 @@ struct MKit(Movable):
             stats.append(mk_at(st, i, self.ctx))
         return (stats^, diag, pm, im)
 
-    def lu_dev_aux(mut self, a: PythonObject,
-                   clamp: Bool) raises -> Tuple[PythonObject, PythonObject, PythonObject, List[Float64]]:
-        """LLE_FAST_DEV_LU: `lu` then `lu_aux` on the device, A untouched:
-        (lu, pm, im) device-resident and the four stats."""
-        var n = mk_r(a)
-        var lu = self.dout(n, n)
-        var pm = self.dout(n, 1)
-        var im = self.dout(n, 1)
-        var diag = self.dout(1, n)
-        var st = self.dout(1, 4)
-        var ia = self.did(a)
-        _ = family_call(self.fn("x_decomp_dev_lu_aux"), ia, device_identifier(matrix_device(lu)), device_identifier(matrix_device(pm)), device_identifier(matrix_device(im)), device_identifier(matrix_device(diag)), device_identifier(matrix_device(st)),
-                        mk_ints([n, 1 if clamp else 0]))
-        # The unused diagonal is still a kernel output: its numeric id does
-        # not retain the pooled device buffer while the call is running.
-        _ = diag^
-        var stats = List[Float64]()
-        for i in range(4):  # small-loop(stats: the four lu_aux status words): 4
-            stats.append(mk_at(st, i, self.ctx))
-        return (lu, pm, im, stats^)
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by @K0SHA_LLE@;
+    # code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 
     def trisolve(mut self, lu: PythonObject, idx: PythonObject, b: PythonObject, trans: Int) raises -> PythonObject:
         var n = mk_r(lu)
