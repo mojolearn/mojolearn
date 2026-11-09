@@ -465,15 +465,8 @@ struct AdmittedSambaExecution(Movable):
                         report = _samba_native_copy(layer.reports[j], publication.report_shapes[j])
                     py_setitem(publication.fields, report_names[j], report)
 
-    def forward(mut self, ids: PythonObject) raises -> PythonObject:
-        var logits = List[Float32]()
-        try:
-            logits = self.native.forward(generation_address(ids, self.keep))
-        except problem:
-            self.publish()
-            raise problem
-        self.publish()
-        return _samba_native_copy(logits, [self.batch, self.length, self.vocab])
+    # TOMBSTONE: SAMBA_THREE_TIER_FORWARD AdmittedSambaExecution.forward (the provider forward; SambaStack.forward runs SambaStackProgram) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
 def samba_provider_eligible(fields: PythonObject) raises -> Bool:
@@ -496,18 +489,8 @@ def samba_provider_eligible(fields: PythonObject) raises -> Bool:
     return True
 
 
-def samba_provider_forward(fields: PythonObject, config: PythonObject, entries: PythonObject, ids: PythonObject,
-                           state: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
-    var primitive = py_get(fields, "_native_primitives")
-    if primitive is None:
-        return PythonObject(None)
-    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
-    py_setitem(fields, "_native_primitives", primitive)
-    if not samba_provider_eligible(fields):
-        return PythonObject(None)
-    var shape = ids.shape
-    var admitted = AdmittedSambaExecution(fields, config, state, primitive, Int(py=shape[0]), Int(py=shape[1]), step, context)
-    return admitted.forward(ids)
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_provider_forward (the provider tier of samba_forward) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
 def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries: PythonObject,

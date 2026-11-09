@@ -177,7 +177,6 @@ struct NativeSambaModel(Movable):
     var state_pending: List[Int]
     var normalized: List[Float32]
     var last_hidden: List[Float32]
-    var forward_complete: Bool
     var dropout: Bool
     var dropout_words: List[Int]
     var dropout_scalars: List[Float64]
@@ -200,7 +199,6 @@ struct NativeSambaModel(Movable):
         self.state_pending = List[Int]()
         self.normalized = List[Float32]()
         self.last_hidden = List[Float32]()
-        self.forward_complete = False
         self.dropout = False
         self.dropout_words = List[Int]()
         self.dropout_scalars = List[Float64]()
@@ -238,14 +236,8 @@ struct NativeSambaModel(Movable):
         _ = self.primitive.call(2, [Int(self.normalized.unsafe_ptr()), Int(self.last_hidden.unsafe_ptr()), self.norm],
             [self.rows, self.width], [self.norm_eps])
 
-    def forward(mut self, ids: Int) raises -> List[Float32]:
-        self.forward_hidden(ids, False)
-        var logits = List[Float32](length=self.rows * self.vocab, fill=0)
-        _ = self.primitive.call(4, [Int(logits.unsafe_ptr()), Int(self.normalized.unsafe_ptr()), self.head],
-            [self.rows, self.vocab, self.width], [])
-        self.forward_complete = True
-        return logits^
-
+    # TOMBSTONE: SAMBA_THREE_TIER_FORWARD NativeSambaModel.forward (the provider forward) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
     def close_tapes(mut self) raises:
         for i in range(len(self.layers)):  # driver-loop: release only live native forward snapshots
