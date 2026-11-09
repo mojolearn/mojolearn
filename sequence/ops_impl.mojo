@@ -1528,7 +1528,7 @@ comptime PROPHET_FAST_MIN_N = 16384
 comptime PROPHET_LB_CHUNK = 8
 
 
-# TOMBSTONE: _prophet_fg_dev + lbfgs_prophet_host (FAST Prophet's host L-BFGS driver: theta uploaded and gradient + sse downloaded with a sync per evaluation, one series at a time) deleted 2026-11-09 by lane n5-prophet-adaboost-loops; code recoverable at f59d913b0b.
+# TOMBSTONE: _prophet_fg_dev + lbfgs_prophet_host (FAST Prophet's host L-BFGS driver: theta uploaded and gradient + sse downloaded with a sync per evaluation, one series at a time) deleted 2026-11-09 by b70c3eda7c; code recoverable at b70c3eda7c^.
 # Restore: git apply experiments/removed/PROPHET_FAST_HOST_LBFGS.patch
 
 

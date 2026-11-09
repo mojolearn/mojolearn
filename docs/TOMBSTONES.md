@@ -465,6 +465,7 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`lbfgs_prophet_host` + `_prophet_fg_dev` (host driver)](#fast-prophet-host-l-bfgs-driver-2026-11-09) | Sequence (Prophet FAST, N >= 16384) | removed (superseded: the L-BFGS runs on the device) | 2026-11-09 | [PROPHET_FAST_HOST_LBFGS.patch](../experiments/removed/PROPHET_FAST_HOST_LBFGS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4272,22 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## FAST Prophet host L-BFGS driver (2026-11-09)
+
+Lane n5-prophet-adaboost-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row "Prophet FAST").
+
+- Tried / was: `sequence/ops_impl.mojo` `lbfgs_prophet_host` and `_prophet_fg_dev`, FAST's (apple2) long-series fit
+  (N >= `PROPHET_FAST_MIN_N`): the L-BFGS two-loop, Armijo backtracking and stopping rules on the host, one series at a
+  time; every objective evaluation uploaded theta (P floats), ran the chunked likelihood (`OP_PROPHET_FG_PART` /
+  `OP_PROPHET_FG_SUM`), downloaded the gradient and sse and synchronized, then added the priors on the host. The series'
+  scaling (max |y|, y / scale) ran on the host and re-uploaded y per series.
+- Now: `sequence/prophet.mojo` `op_prophet_lb_ymax`, `op_prophet_lb_init`, `op_prophet_lb_ydiv`, `op_prophet_lb_step`,
+  `op_prophet_lb_active`, `op_prophet_lb_out` (codes 82-87): every series of the batch at once, its workspace row resident,
+  the trial point read in place by the likelihood; the driver reads one running-series word per `PROPHET_LB_CHUNK` (8)
+  evaluations. Same statements in the same order (`_dot`, `_fg_prior_v`, the chunk-ordered sums).
+- Verdict: superseded by the device body (no define; nothing to A/B against: same FAST arithmetic). RUN OWED: Apple FAST
+  timing of the Prophet N >= 16384 row before -> after.
+- Bits: none intended (FAST only; IDENTICAL never reached this path).
+- Code recoverable at `f59d913b0b` (= `b70c3eda7c^`); patch `experiments/removed/PROPHET_FAST_HOST_LBFGS.patch` (reverse of
+  `b70c3eda7c`, `sequence/ops_impl.mojo` only; the new kernels in `sequence/prophet.mojo` are additions).
