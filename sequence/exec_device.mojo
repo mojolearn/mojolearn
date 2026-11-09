@@ -1634,3 +1634,7 @@ struct DeviceExec(Exec, Movable):
 
     def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
         raise Error("ops: a device session launches the lm_head_v2 kernels itself")
+
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        raise Error("ops: a device session calls the CNN block entries itself")
