@@ -298,6 +298,16 @@ def byte_program_load(mut e: ByteLmProgram, param: DeviceBuffer[DType.float32], 
         s[].steps.weights_changed(Int(s[].buffer(e.blocks[l])))
 
 
+def byte_program_load_params(mut e: ByteLmProgram, param: DeviceBuffer[DType.float32]) raises:
+    """The trainer's committed parameters alone into the session (a pooled
+    optimizer's shard: its moments are a slice and its update is the pool's
+    group update, so the program only takes gradients there)."""
+    var s = ops_session[DeviceExec, OPS_DEVICE](e.sid)
+    _move(s[], e, param, BYTE_PART_PARAM, True)
+    for l in range(len(e.blocks)):  # driver-loop: over decoder layers
+        s[].steps.weights_changed(Int(s[].buffer(e.blocks[l])))
+
+
 def byte_program_store(mut e: ByteLmProgram, param: DeviceBuffer[DType.float32], m: DeviceBuffer[DType.float32],
                        v: DeviceBuffer[DType.float32], grad: DeviceBuffer[DType.float32]) raises:
     """The session's state after a call into the trainer's flat buffers:

@@ -97,7 +97,7 @@ from autograd.kernels.transformer import (
 # cross-entropy; Program.fit for the steps).
 from sequence.ops import FP
 from training.byte_lm_program import (
-    ByteLmProgram, byte_program_open, byte_program_load, byte_program_store, byte_program_fit,
+    ByteLmProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
     byte_program_eval, byte_program_gradient, byte_program_grad_out, byte_program_apply, byte_losses_finite,
 )
 from transformer.impl.llama.fused_attention import (
@@ -1578,7 +1578,16 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
     tr.released_eager_cells = 0
-    _byte_program_ready(ctx, tr)
+    if tr.buffers.optimizer_pooled:
+        # A pooled shard's update is the pool's group update on the flat
+        # buffers (training/byte_lm_optimizer_pool.mojo): the program takes
+        # the committed parameters at every gradient call.
+        if not tr.program:
+            tr.program = byte_program_open(ctx, tr.config, tr.optimizer)
+        byte_program_load_params(tr.program.value(), tr.buffers.param)
+        tr.program_synced = False
+    else:
+        _byte_program_ready(ctx, tr)
     var loss = byte_program_gradient(tr.program.value(), Int(ids.unsafe_ptr()))
     var losses: List[Float32] = [loss]
     _require_finite(losses, "loss")
