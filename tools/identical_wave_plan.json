@@ -78,7 +78,6 @@
     "pca_bits",
     "import_smoke",
     "cnn_seams",
-    "cnn_epoch_adam_controls",
     "eigh_block_expected_refusal",
     "lu_result_word",
     "rf_phase_upload_lifetime"
