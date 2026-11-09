@@ -8,7 +8,8 @@ from bindings.classical_validate import classical_check_width
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.pca_exact import pca_whiten_entries, pca_refusal
 from providers.python.pca_model_pyapi import pca_query_admitted
-from providers.python.pca_input_pyapi import pca_input_snapshot, pca_state_snapshot
+from providers.python.pca_input_pyapi import pca_state_snapshot
+from bindings.decomp_inputs import decomp_admit
 
 
 def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool,
@@ -26,12 +27,12 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     var count = Int(py=fields["n_components_"])
     if features < 1 or count < 0:
         raise Error("PCA fitted dimensions are invalid")
-    var x = pca_input_snapshot(source, context)
-    var rows = x.shape[0]
-    if x.shape[1] != (count if inverse else features):
+    var x = decomp_admit(source, "PCA", context)
+    var rows = x.rows
+    if x.cols != (count if inverse else features):
         if inverse:
             raise Error("mojolearn PCA component count differs from fit")
-        classical_check_width(x.shape[1], features, "PCA")
+        classical_check_width(x.cols, features, "PCA")
     var whiten = Bool(py=fields["whiten"])
     # The whitening path refuses non-finite (and negative) fitted state on
     # every call, as 0.8.55 did: one native scan of the four fitted buffers,
@@ -54,20 +55,20 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
         # only governs output shape. All owners and addresses are now frozen.
         try:
             if inverse:
-                _ = py_call_typed(entries["pca_whiten_inverse_transform"], x.source.addr, components.source.addr,
+                _ = py_call_typed(entries["pca_whiten_inverse_transform"], x.address, components.source.addr,
                     singular.source.addr, mean.source.addr, output_address, Python.list(rows, features, count, fit_rows))
             else:
-                _ = py_call_typed(entries["pca_whiten_transform"], x.source.addr, mean.source.addr,
+                _ = py_call_typed(entries["pca_whiten_transform"], x.address, mean.source.addr,
                     components.source.addr, singular.source.addr, output_address, Python.list(rows, features, count, fit_rows))
         except error:
             raise pca_refusal(error^)
         _ = singular^
         _ = variance^
     elif inverse:
-        _ = py_call_typed(entries["inverse_transform"], x.source.addr, components.source.addr,
+        _ = py_call_typed(entries["inverse_transform"], x.address, components.source.addr,
             mean.source.addr, output_address, Python.list(rows, features, count, 1))
     else:
-        _ = py_call_typed(entries["pca_transform"], x.source.addr, mean.source.addr,
+        _ = py_call_typed(entries["pca_transform"], x.address, mean.source.addr,
             components.source.addr, output_address, Python.list(rows, features, count))
     _ = x^
     _ = components^

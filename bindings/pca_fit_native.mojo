@@ -10,7 +10,7 @@ from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.native_loaded_module import native_loaded_module
 from bindings.pca_exact import pca_too_small, pca_whiten_entries, pca_refusal
 from providers.python.classical_family_admission_pyapi import classical_family_admit
-from providers.python.pca_input_pyapi import pca_input_snapshot
+from bindings.decomp_inputs import decomp_admit
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_capture
 from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight
 
@@ -64,16 +64,18 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         extra_setting = pca_fit_scalar_capture(fields["n_oversamples"], settings, context)
         power_setting = pca_fit_scalar_capture(fields["iterated_power"], settings, context)
     var source = args[0]
-    var x = pca_input_snapshot(source, context)
-    var rows = x.shape[0]
-    var cols = x.shape[1]
+    # The one admission path: borrowed when X already is C float32, else one
+    # parallel cast into uninitialised storage (scikit-learn wording, est PCA).
+    var x = decomp_admit(source, "PCA", context)
+    var rows = x.rows
+    var cols = x.cols
     var b = native_loaded_module("builtins")
     var source_type = py_type(source)
     # The former pca_copied reports native C-f32 ndarray/Array/buffer inputs
     # as uncopied; sequences, sparse, pandas and Torch are materialized. The
     # conversion bit is captured by the same descriptor used for execution.
     var direct = source_type is context["ndarray"] or source_type is context["array_class"] or source_type is b.memoryview or source_type is context["array_type"] or source_type is b.bytearray
-    var copied = not direct or x.copied
+    var copied = not direct or not x.borrowed
     var randomized = solver == "randomized"
     var dense = solver == "full" and cols >= 2
     if dense and py_get(entries, "pca_fit_full") is None:
@@ -156,13 +158,13 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var keep = count
     if randomized:
         try:
-            noise = py_call_typed(entries["pca_fit_randomized"], x.source.addr, components.address,
+            noise = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
                 mean.address, variance.address, ratio.address, singular.address, projection_address,
                 Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed))
         except error:
             raise pca_refusal(error^)
     else:
-        var fitted = py_call_typed(entries["pca_fit_owned"], x.source.addr, components.address,
+        var fitted = py_call_typed(entries["pca_fit_owned"], x.address, components.address,
             mean.address, variance.address, ratio.address, singular.address, projection_address,
             Python.list(rows, cols, count, Int(dense), keep_mode, Int(whiten), fraction))
         keep = Int(py=fitted[0])
