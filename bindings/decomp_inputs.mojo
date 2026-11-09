@@ -7,7 +7,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call
-from bindings.classical_arrays import classical_host_f32, classical_kind, classical_is_f32
+from bindings.classical_arrays import classical_kind, classical_is_f32
+from bindings.admitted_input import admit_x
 from bindings.classical_validate import classical_view, _cast_x, RESHAPE_HINT
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.pca_exact import pca_copied
@@ -19,7 +20,7 @@ def decomp_input(source: PythonObject, est: String, context: PythonObject) raise
     var format = host_sparse_format(source)
     if format.byte_length() > 0:
         var dense = host_sparse_dense(source, format, context)
-        return classical_host_f32(dense, 2, "X", context)
+        return admit_x(dense, 2, "X", context)
     var view = classical_view(source, context, "X")
     var kind = classical_kind(view, context)
     if kind == "c":

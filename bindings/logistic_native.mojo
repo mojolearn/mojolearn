@@ -27,7 +27,8 @@ from bindings.prep_lda_admission import lda_native_context, lda_native_labels
 from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.classical_labels import _flatten_labels
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.classical_labels import (
     ClassicalLabels, LabelsMatrix, classical_encode_labels, classical_decode_labels, classical_accuracy,
     labels_check_sample_weight, labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
@@ -267,7 +268,7 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var b = _builtins()
     logistic_fit_replacements_admit(fields, context)
     var l1_ratio = _validate_params(fields)
-    var x = classical_host_f32(args[0], 2, "X", context)
+    var x = admit_x(args[0], 2, "X", context)
     py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
@@ -402,7 +403,7 @@ def logistic_decision(model: PythonObject, fields: PythonObject, mut entries: Py
     as before, and handed back for the caller's next step)."""
     if not py_contains(fields, "_w"):
         raise Error("mojolearn LogisticRegression: call fit first")
-    var x = classical_host_f32(source, 2, "X", context)
+    var x = admit_x(source, 2, "X", context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
@@ -431,7 +432,7 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     beside the scores, decoded to `classes_`."""
     var n_targets = _n_targets(model, fields)
     if n_targets == 1:
-        var x = classical_host_f32(source, 2, "X", context)
+        var x = admit_x(source, 2, "X", context)
         var rows = Int(py=x.shape[0])
         var cols = Int(py=x.shape[1])
         if cols != Int(py=fields["n_features_in_"]):
@@ -456,7 +457,7 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     if native is not None:
         if not py_contains(fields, "_w"):
             raise Error("mojolearn LogisticRegression: call fit first")
-        var x = classical_host_f32(source, 2, "X", context)
+        var x = admit_x(source, 2, "X", context)
         var rows = Int(py=x.shape[0])
         var cols = Int(py=x.shape[1])
         if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
@@ -487,7 +488,7 @@ def _logistic_proba_fused(model: PythonObject, fields: PythonObject, mut entries
     has no `qn_proba` (the two-entry path then runs)."""
     if not py_contains(fields, "_w"):
         raise Error("mojolearn LogisticRegression: call fit first")
-    var x = classical_host_f32(source, 2, "X", context)
+    var x = admit_x(source, 2, "X", context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if Bool(py=PythonObject(cols) != fields["n_features_in_"]):

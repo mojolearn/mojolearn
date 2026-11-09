@@ -22,7 +22,8 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_typed, classical_address, classical_host_f32
+from bindings.classical_arrays import classical_typed, classical_address
+from bindings.admitted_input import admit_x
 from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish, decomp_coder_width
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
@@ -134,7 +135,7 @@ def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context:
     var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
-    var array = classical_host_f32(source, 1, name, context)
+    var array = admit_x(source, 1, name, context)
     var cols = Int(py=array.shape[0])
     var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, 1, cols)
     if held >= 0:
@@ -144,7 +145,7 @@ def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context:
 
 def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector (mean_) as a 1 x n matrix.
-    var array = classical_host_f32(source, 1, name, context)
+    var array = admit_x(source, 1, name, context)
     return kit.input(array, 1, Int(py=array.shape[0]))
 
 

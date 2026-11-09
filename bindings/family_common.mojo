@@ -15,9 +15,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_arrays import (
-    classical_address, classical_host_f32, classical_wrap_array, _store_code, classical_is_array,
+    classical_address, classical_wrap_array, _store_code, classical_is_array,
     classical_cast_kind, classical_is_f32, classical_c_order, classical_dtype_str,
 )
+from bindings.admitted_input import admit_x
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from core.family_cast_impl import family_cast_rows, family_cast_rows_f64, family_min_f32
 from core.host_parallel_copy import host_parallel_copy_bytes
@@ -199,7 +200,7 @@ def family_cast_f32(view: PythonObject, name: String, context: PythonObject) rai
     """A checked view as C-ordered float32 (the input itself when it already
     is one), the cast `_buffer.as_f32_c` makes. A NaN or an infinity raises
     `Input <name> contains NaN or infinity`, which a caller may reword."""
-    return classical_host_f32(view, Int(py=view.ndim), name, context)
+    return admit_x(view, Int(py=view.ndim), name, context)
 
 
 def family_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:

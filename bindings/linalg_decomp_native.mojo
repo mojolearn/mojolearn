@@ -16,7 +16,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
 from bindings.classical_labels import labels_view, labels_check_rank, labels_vector, labels_cast
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array, classical_typed
+from bindings.classical_arrays import classical_address, classical_wrap_array, classical_typed
+from bindings.admitted_input import admit_x
 from bindings.host_sparse_native import host_sparse_format
 from bindings.classical_validate import classical_view
 from core.decomp_native_impl import decomp_piv_valid
@@ -241,7 +242,7 @@ def _resident_solve(mut kit: DecompKit, handles: List[Int], n: Int, b: PythonObj
         if n == 0:
             return PythonObject(None)
         try:
-            array = classical_host_f32(view, 1, "b", context, admitted=True)
+            array = admit_x(view, 1, "b", context, admitted=True)
         except error:
             if String(error) == "Input b contains NaN or infinity":
                 raise Error("b: input must be finite; NaN/inf are unsupported")
@@ -407,7 +408,7 @@ def _f32_input(source: PythonObject, name: String, ndim: Int, context: PythonObj
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 sample(s) (shape="
                     + shape + ") while a minimum of 1 is required.")
     try:
-        return classical_host_f32(view, 1, name, context, admitted=True)
+        return admit_x(view, 1, name, context, admitted=True)
     except error:
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")

@@ -11,7 +11,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.host_sparse_native import host_sparse_format
 from bindings.decomp_inputs import decomp_input
 from bindings.decomp_owner_common import (
@@ -146,7 +147,7 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     if hit is not None:
         matrix = stored
     else:
-        matrix = classical_host_f32(stored, 2, name, context)
+        matrix = admit_x(stored, 2, name, context)
     if inverse:
         decomp_gemm_check(width, Int(py=matrix.shape[1]))
     var rows = Int(py=matrix.shape[0])

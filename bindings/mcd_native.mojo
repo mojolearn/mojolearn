@@ -23,7 +23,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import classical_accuracy, labels_shape_of, labels_view, labels_check_rank
-from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array
+from bindings.classical_arrays import classical_address, classical_wrap_array
+from bindings.admitted_input import admit_x
 from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
@@ -54,7 +55,7 @@ def _fitted(mut kit: DecompKit, fields: PythonObject, name: String, rows: Int, c
     var hit = kit.resident_hit(fields[name], name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
-    var array = classical_host_f32(fields[name], 1 if rows == 1 else 2, name, context)
+    var array = admit_x(fields[name], 1 if rows == 1 else 2, name, context)
     var size = Int(py=array.size)
     # On a query its device copy is kept across calls (DecompKit.resident_input).
     var held = kit.resident_input(fields[name], name, array, Int(py=classical_address(array)), array, rows, size // rows)

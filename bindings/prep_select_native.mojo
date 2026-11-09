@@ -23,7 +23,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_typed, classical_input, classical_host_f32
+from bindings.classical_arrays import classical_address, classical_typed, classical_input
+from bindings.admitted_input import admit_x
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_f32, labels_vector, classical_encode_labels
 from bindings.scaler_native import _stage, _ptr
@@ -159,7 +160,7 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
         raise Error("too many values to unpack (expected 2)")
     if d != m:
         raise Error("mojolearn: RFE importances have " + String(d) + " columns, expected " + String(m))
-    var c = classical_host_f32(coef, nd, "coef_", cc)
+    var c = admit_x(coef, nd, "coef_", cc)
     var out = pr.work(d)
     var co = pr.put(c)
     pr.stage(OP_SQSUM_COLS, d, co, rows, d, out)

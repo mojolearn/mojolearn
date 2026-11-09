@@ -9,7 +9,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
 from bindings.decomp_owner_common import (
     decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_gemm_check, decomp_int,
@@ -168,7 +169,7 @@ def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObje
     if d != fitted:
         raise Error("X has " + String(d) + " features, but NMF is expecting " + String(fitted))
     var beta = _validate(fields)
-    var h = classical_host_f32(fields["components_"], 2, "components_", context)
+    var h = admit_x(fields["components_"], 2, "components_", context)
     var result = _run(model, fields, x, Int(py=h.shape[0]), _TRANSFORM, PythonObject(None), h,
                       decomp_seed(fields["random_state"]), False, beta, context)
     _ = x^
@@ -182,7 +183,7 @@ def nmf_inverse_transform(model: PythonObject, source: PythonObject, context: Py
     decomp_check(model, fields, "components_")
     var entries = decomp_entries(model, fields, Python.tuple("x_decomp_nmf_inverse"), context)
     var w = decomp_input(source, "NMF", context)
-    var h = classical_host_f32(fields["components_"], 2, "components_", context)
+    var h = admit_x(fields["components_"], 2, "components_", context)
     var n = Int(py=w.shape[0])
     var nc = Int(py=w.shape[1])
     decomp_gemm_check(nc, Int(py=h.shape[0]))

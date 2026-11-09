@@ -8,7 +8,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
 from bindings.decomp_owner_common import (
     F32P, decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_set_mode,
@@ -122,11 +123,11 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
     var fields = py_fields(model)
     decomp_check(model, fields, "components_")
     var entries = decomp_entries(model, fields, Python.tuple("x_decomp_fa_query"), context)
-    var w = classical_host_f32(fields["components_"], 2, "components_", context)
+    var w = admit_x(fields["components_"], 2, "components_", context)
     var nc = Int(py=w.shape[0])
     var d = Int(py=w.shape[1])
-    var psi = classical_host_f32(decomp_attr(model, fields, "noise_variance_"), 1, "noise_variance_", context)
-    var mean = classical_host_f32(decomp_attr(model, fields, "mean_"), 1, "mean_", context)
+    var psi = admit_x(decomp_attr(model, fields, "noise_variance_"), 1, "noise_variance_", context)
+    var mean = admit_x(decomp_attr(model, fields, "mean_"), 1, "mean_", context)
     var x = PythonObject(None)
     var n = 0
     if op == _TRANSFORM or op == _SCORE_SAMPLES or op == _SCORE:
