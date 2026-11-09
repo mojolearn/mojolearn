@@ -9,6 +9,7 @@
 from std.memory import memcpy, MutPointer
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
+from bindings.admitted_input import admitted_finite_wording
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_drop
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
@@ -671,8 +672,15 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if not py_contains(Python.tuple("sqeuclidean", "euclidean"), metric):
         raise Error("mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
                     + "(inner product is not implemented), got " + family_repr(metric))
-    var x = admit_family_meta(args[1], 2, "dataset", context)
-    var q = admit_family_meta(args[2], 2, "queries", context)
+    # Lane a8b-device-x-neighbors-rest: a NaN or an infinity in the dataset or
+    # the queries is refused (they were not tested before): a cast by its own
+    # verdict, borrowed float32 words by the entry's one status word (behind
+    # their uploads on the GPU, one parallel scan on the CPU column).
+    var x = admit_family_meta(args[1], 2, "dataset", context, False, True,
+                              refusal=admitted_finite_wording("refine", "dataset"), defer_finite=True)
+    var q = admit_family_meta(args[2], 2, "queries", context, False, True,
+                              refusal=admitted_finite_wording("refine", "queries"), defer_finite=True)
+    var status = List[Int32](length=1, fill=Int32(0))
     var n = x.shape[0]
     var d = x.shape[1]
     var m = q.shape[0]
@@ -709,9 +717,10 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var dist = _ann_empty(m * k, "<f4", context)
     var idx = _ann_empty(m * k, "<i4", context)
     var root = Bool(py=metric == PythonObject("euclidean"))
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(m), PythonObject(k0), k_o)
-    if root:
-        _ = py_call(params.append, PythonObject(1))
+    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(m), PythonObject(k0), k_o,
+                             PythonObject(1 if root else 0))
+    if not (x.copied and q.copied):
+        _ = py_call(params.append, PythonObject(Int(status.unsafe_ptr())))
     var entry = _ann_entry(native, "x_ann_refine")
     # dataset, queries, candidates, out_d, out_i; n, d, m, k0, k (+ root:
     # the binding takes the euclidean roots)
@@ -724,6 +733,10 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = c32  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
     _ = idx  # keep the Python object alive through the native call above
+    # The dataset's and queries' finite status word (one refusal for either).
+    if status[0] != 0:
+        raise Error("Input dataset or queries contains NaN or infinity (refine).")
+    _ = status^
     return parallel_public_result(Python.tuple(_ann_view(dist, Python.tuple(m, k), context),
                                   _ann_view(idx, Python.tuple(m, k), context)),
                                   "refine", PythonObject(None), context)

@@ -839,11 +839,14 @@ def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I3
 
 def refine_device(
     x: List[Float32], n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False,
+    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False, status_addr: Int = 0,
 ) raises:
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dq = upload_f32(ctx, queries)
+    # Lane a8b-device-x-neighbors-rest: the dataset's and the queries'
+    # finite status behind their uploads, read back by the downloads below.
+    var dst = enqueue_query_status(ctx, dx, n * d, dq, m * d, status_addr)
     var dcand = upload_i32(ctx, cand)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
@@ -858,6 +861,7 @@ def refine_device(
     _ = dcand^
     _ = dq^
     _ = dx^
+    _ = dst^
     _ = ctx^
 
 

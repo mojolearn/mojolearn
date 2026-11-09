@@ -85,3 +85,21 @@ def enqueue_query_status(
     enqueue_finite_status(ctx, dq.unsafe_ptr(), n, status.unsafe_ptr(), 0)
     ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=status_addr), src_buf=status)
     return status^
+
+
+def enqueue_query_status(
+    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], na: Int,
+    mut db: DeviceBuffer[DType.float32], nb: Int, status_addr: Int,
+) raises -> DeviceBuffer[DType.int32]:
+    """`enqueue_query_status` over two uploads in one word (refine's dataset
+    and queries): 1 when either holds a NaN or an infinity."""
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    if status_addr == 0:
+        return status^
+    if status_addr < 0 or status_addr % 4 != 0:
+        raise Error("x_ann: the status address must be a positive int32-aligned address")
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    enqueue_finite_status(ctx, da.unsafe_ptr(), na, status.unsafe_ptr(), 0)
+    enqueue_finite_status(ctx, db.unsafe_ptr(), nb, status.unsafe_ptr(), 0)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=status_addr), src_buf=status)
+    return status^

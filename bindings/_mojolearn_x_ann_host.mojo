@@ -25,13 +25,15 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from core.host_finite_scan import host_finite_status
 
 
-def _query_status(params: PythonObject, at: Int, queries: Int, n: Int) raises -> Bool:
+def _query_status(params: PythonObject, at: Int, queries: Int, n: Int,
+                  other: Int = 0, n_other: Int = 0) raises -> Bool:
     """The CPU column's answer to a search's optional status word `params[at]`
     (lane a8b-device-x-neighbors-rest; the GPU binding tests the queries
     behind their upload): one parallel SIMD scan of the `n` query words,
-    written to the word (0 finite, 1 not). True when the search may run: no
-    word was asked, or the queries are finite (a flagged search is skipped
-    and the door refuses)."""
+    written to the word (0 finite, 1 not); `other` / `n_other`, when given,
+    a second span in the same word (refine's dataset). True when the search
+    may run: no word was asked, or the words are finite (a flagged search is
+    skipped and the door refuses)."""
     if len(params) <= at:
         return True
     var address = p_int(params, at)
@@ -41,6 +43,8 @@ def _query_status(params: PythonObject, at: Int, queries: Int, n: Int) raises ->
         raise Error("x_ann: the status address must be a positive int32-aligned address")
     # parallel: host_finite_status splits the words across the host's cores
     var word = host_finite_status(queries, n)
+    if word == 0 and n_other > 0:
+        word = host_finite_status(other, n_other)
     MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address).unsafe_store(0, word)
     return word == 0
 
@@ -252,8 +256,9 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
-    params: n, d, m, k0, k[, root] (root 1: the euclidean metric's square
-    roots of the kept distances, lane apple-fast-py2mojo-cluster)."""
+    params: n, d, m, k0, k[, root[, status]] (root 1: the euclidean metric's square
+    roots of the kept distances, lane apple-fast-py2mojo-cluster; status: the
+    dataset's and queries' finite status word)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var m = p_int(params, 2)
@@ -267,6 +272,8 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var cand = ptr_i32(addrs, 2)
     var od = ptr_f32(addrs, 3)
     var oi = ptr_i32(addrs, 4)
+    if not _query_status(params, 6, a_int(addrs, 1), m * d, a_int(addrs, 0), n * d):
+        return PythonObject(m)
     with GILReleased(Python()):
         refine_host(x, n, d, q, m, cand, k0, k, od, oi, root)
     return PythonObject(m)

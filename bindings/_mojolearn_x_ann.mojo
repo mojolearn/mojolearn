@@ -336,14 +336,17 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
-    params: n, d, m, k0, k[, root] (root 1: the euclidean metric's square
-    roots of the kept distances, lane apple-fast-py2mojo-cluster)."""
+    params: n, d, m, k0, k[, root[, status]] (root 1: the euclidean metric's square
+    roots of the kept distances, lane apple-fast-py2mojo-cluster; status: the
+    host address of the int32 word that receives the dataset's and queries'
+    finite status)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var m = p_int(params, 2)
     var k0 = p_int(params, 3)
     var k = p_int(params, 4)
     var root = len(params) > 5 and p_int(params, 5) != 0
+    var status = p_int(params, 6) if len(params) > 6 else 0
     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
     var x = in_f32(addrs, 0, n * d)
@@ -352,7 +355,7 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var od = List[Float32]()
     var oi = List[Int32]()
     with GILReleased(Python()):
-        refine_device(x, n, d, q, m, cand, k0, k, od, oi, root)
+        refine_device(x, n, d, q, m, cand, k0, k, od, oi, root, status)
     out_f32(od, addrs, 3)
     out_i32(oi, addrs, 4)
     return PythonObject(m)
