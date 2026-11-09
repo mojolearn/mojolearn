@@ -21,6 +21,8 @@ from xtrees.dart_units import (
     dart_predict_unit,
 )
 from std.memory import bitcast
+from core.host_finite_scan import host_all_finite_f32
+from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 
 #: The host twin exists exactly where the IDENTICAL device round does.
 comptime DART_HOST = IDN_DART_DEVICE
@@ -120,6 +122,11 @@ def dart_open(
     comptime if DART_HOST:
         if n <= 0 or d <= 0 or k <= 0 or cap_iters <= 0 or node_cap <= 0 or node_cap > 65535:
             raise Error("x_trees dart_open: needs rows, features, classes, iterations and 1 <= node_cap <= 65535")
+        # Lane a8c-device-x-linear-prep-rfe: the host column tests the X it
+        # borrows for the session (the device open's scan of its upload);
+        # the DART door's own scan before the round is deleted.
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_addr), n * d):
+            raise Error("x_trees dart_open: " + RF_NONFINITE_REFUSAL)
         var n_chunks = (n + DART_CHUNK - 1) // DART_CHUNK
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
         var id = reg[].next_id

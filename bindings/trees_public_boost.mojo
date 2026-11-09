@@ -22,8 +22,8 @@
 # float32 once per operation and handed to every member (AdaBoost's members
 # reuse its one column-major copy, a session's members its one device
 # copy); DART no longer opens (and uploads X into) a forest data session its
-# round never reads (the round's own `x_trees_dart_open` holds X; the
-# session's finite scan is kept); RandomTreesEmbedding's `fit_transform`
+# round never reads (the round's own `x_trees_dart_open` holds X and tests
+# it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
 from std.math import ceil
 from std.python import Python, PythonObject
@@ -36,7 +36,7 @@ from bindings.trees_side_records import trees_side_get, trees_side_put, trees_si
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
-    trees_helper, trees_env, trees_reshape, trees_address, trees_finite_f32,
+    trees_helper, trees_env, trees_reshape, trees_address,
     trees_encode_labels, trees_decode_labels, trees_cast,
     trees_weighted_rows, trees_call, trees_class_rows_only,
 )
@@ -504,22 +504,32 @@ struct Session(Copyable, Movable):
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
 
 
-def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, x_finite: Bool, choice: String,
+def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, choice: String,
                     context: PythonObject) raises -> Session:
     """`_trees_member_session`: the data session for the member fits of one
     ensemble on the forest binding a clone of `member` resolves (handle 0:
-    the binary has no session entry). It stands in for
-    every member's finite scan of X, so X is scanned here unless the caller
-    already did. `choice` is 'exact' or 'share' (`_ada_session_choice`)."""
+    the binary has no session entry). It stands in for every member's finite
+    scan of X: the session open tests the words it uploads (NaN and
+    infinity, on the device; the host column in its parallel scan) and is
+    refused with TREES_NONFINITE. `choice` is 'exact' or 'share'
+    (`_ada_session_choice`)."""
+    # Lane a8c-device-x-linear-prep-rfe: the host scan of X that came before
+    # the open (trees_finite_f32, an O(n d) pass the session's own device
+    # scan repeats) is deleted; `x_finite` went with it. A binary without a
+    # session entry leaves each member fit to test X (its forest door).
     var mode = _member_mode(member, context)
     var native = trees_table(context, mode, "_mojolearn_rf")
     if trees_entry(native, "rf_data_session_open") is None:
         return Session(native, 0)
-    if not x_finite and not trees_finite_f32(x.address, x.rows * x.cols):
-        raise Error(TREES_NONFINITE)
     var share = choice == "share" and mode == "fast"
-    var handle = py_call_typed(trees_entry(native, "rf_data_session_open"), _P(x.address),
+    var handle = PythonObject(0)
+    try:
+        handle = py_call_typed(trees_entry(native, "rf_data_session_open"), _P(x.address),
                                Python.list(_P(x.rows), _P(x.cols), _P(1 if row_major else 0), _P(1 if share else 0)))
+    except error:
+        if TREES_NONFINITE in String(error):
+            raise Error(TREES_NONFINITE)
+        raise error^
     return Session(native, Int(py=handle))
 
 
@@ -1179,12 +1189,12 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         var session = Session(PythonObject(None), 0)
         if dt_best:
             var cm = _colmajor(xt, x, context)
-            if not trees_finite_f32(cm.address, n * d):
-                raise Error(TREES_NONFINITE)
-            _ = cm  # keep the Python object alive through the native calls above
             if trees_env("MOJOLEARN_ADABOOST_REENCODE", "") != "1":
                 encoded = trees_encode_labels(codes, context)
-            session = _member_session(base, cm, False, True, _ada_session_choice(fields, xt, context), context)
+            # the session open tests the column-major words it uploads
+            # (lane a8c: the host scan of cm before it is deleted)
+            session = _member_session(base, cm, False, _ada_session_choice(fields, xt, context), context)
+            _ = cm  # keep the Python object alive through the native calls above
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
         var template = forest_get_params(base, context) if m > 0 else Python.dict()
@@ -1290,7 +1300,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                                                                   or Bool(py=crit == PythonObject("mse"))):
             var native = trees_table(context, _member_mode(base, context), "_mojolearn_rf")
             if trees_entry(native, "rf_regressor_fit_session_rows_export") is not None:
-                session = _member_session(base, x, True, False, _ada_session_choice(fields, xt, context), context)
+                session = _member_session(base, x, True, _ada_session_choice(fields, xt, context), context)
     var loss = Int(py=context["trees_ada_losses"][fields["loss"]])
     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
     var y_array = _as_array(y32, Python.tuple(n), context)
@@ -1660,17 +1670,11 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
     py_setitem(fields, "_bag_at", PythonObject(None))
     var depth_param = fields["max_depth"]
     var max_depth = PythonObject(None) if depth_param is None or Int(py=_int(depth_param)) <= 0 else _int(depth_param)
-    var bagged = Float64(py=_float(fields["subsample"])) < 1.0 and Int(py=_int(fields["subsample_freq"])) > 0
-    var sampled = Float64(py=_float(fields["colsample_bytree"])) < 1.0
-    if not bagged and not sampled:
-        # The Python fit opened a forest data session here whose X the
-        # round never read (`x_trees_dart_open` holds X): only its finite
-        # scan is kept, on the tier a one-tree regressor would use.
-        var probe_mode = _mode(fields, context)
-        var native = trees_table(context, probe_mode, "_mojolearn_rf")
-        if trees_entry(native, "rf_data_session_open") is not None:
-            if not trees_finite_f32(x.address, n * d):
-                raise Error(TREES_NONFINITE)
+    # TOMBSTONE: the DART door's host finite scan of X (trees_finite_f32, the scan of the forest data session
+    # the Python fit opened and the round never read) deleted 2026-11-09 by lane a8c-device-x-linear-prep-rfe:
+    # `x_trees_dart_open` tests the X it uploads (xtrees/dart_device.mojo; the host column in xtrees/dart_host.mojo)
+    # and the refusal is mapped to TREES_NONFINITE at the open below. Never reached main as a define: recoverable at
+    # 0ce88411d3.
     # `_dart_device`: the round's entries and the leaf-value cap.
     if trees_entry(xt, "x_trees_dart_open") is None:
         raise Error("NotImplementedError: mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "
@@ -1695,8 +1699,15 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
     var xgb = 1 if _truthy(fields["xgboost_dart_mode"]) else 0
     var max_drop = Int(py=_int(fields["max_drop"]))
     var drop_rate = _float(fields["drop_rate"])
-    var handle = py_call_typed(_x(xt, "x_trees_dart_open"), _P(x.address), _P(y32.address), _A(inits32),
+    var handle = PythonObject(0)
+    try:
+        handle = py_call_typed(_x(xt, "x_trees_dart_open"), _P(x.address), _P(y32.address), _A(inits32),
                                Python.list(_P(n), _P(d), _P(K), _P(kind), _P(n_iters), _P(node_cap)))
+    except error:
+        # the open's device test of X (lane a8c), in the forest's one wording
+        if TREES_NONFINITE in String(error):
+            raise Error(TREES_NONFINITE)
+        raise error^
     _ = inits32  # keep the Python object alive through the native call above
     var cache_start = -1
     var cache = PythonObject(None)
