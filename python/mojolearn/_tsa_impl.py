@@ -72,8 +72,8 @@ import sys
 
 from . import _native_archive_bridge
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
-from ._bufcheck import flat_view, nelems, probe, strided_rows
+from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._bufcheck import flat_view, probe, strided_rows
 
 
 def _one_series(src, index, n_series, steps, offset=0):
@@ -130,50 +130,8 @@ _HW_INIT_CODES = {"estimated": 1, "heuristic": 0, "cuml": 0}
 _TSA_CONTEXT["hw_init_codes"] = _HW_INIT_CODES
 
 
-def _series_major(y, name):
-    """A C-contiguous float32 buffer whose flat order is SERIES-MAJOR.
-
-    `y` arrives as cuML's `(n_obs, batch_size)` -- each time series in a
-    COLUMN, which is what `stationarity.pyx`'s `check_array(y, order="F")`
-    produces. The kernels index series `b` at `[b * n_obs, (b+1) * n_obs)`,
-    which is exactly the flat memory of the COLUMN-MAJOR float32 form of
-    `y`, so DEVIATION 2418 takes `_buffer.as_f32_colmajor` (the DEVIATION
-    1887 argument: one materialization, the f64 -> f32 cast is the same
-    elementwise cast either way). It COPIES for anything that is not
-    already float32 F-contiguous, and that is named rather than hidden:
-    on a long batch it is the dominant cost of the call, and a caller who
-    holds `(n_obs, batch_size)` float32 in Fortran order pays nothing.
-    A 1-D `y` is one series and its C-order float32 form is already
-    series-major.
-
-    Returns `(array, n_obs, batch_size)`. The caller MUST keep `array`
-    alive across the Mojo call; the Mojo side borrows the address and
-    holds nothing after it returns (`_buffer.py`).
-    """
-    try:
-        pb = probe(y)
-    except TypeError:
-        try:
-            y = Array.from_list(y, "<f4")
-        except Exception:
-            raise ValueError(
-                f"mojolearn {name}: y must be 1-D or 2-D (n_obs, n_series) "
-                f"-- an array or a nested list of numbers -- got "
-                f"{type(y).__name__}"
-            ) from None
-        pb = probe(y)
-    if pb.ndim not in (1, 2):
-        raise ValueError(
-            f"mojolearn {name}: y must be 1-D or 2-D (n_obs, n_series), got "
-            f"{pb.ndim}-D shape {pb.shape}"
-        )
-    if nelems(pb.shape) == 0:
-        raise ValueError(f"mojolearn {name}: y is empty, shape {pb.shape}")
-    if pb.ndim == 1:
-        arr, _copied = as_f32_c(y, ndim=1, name="y")
-        return arr, int(arr.shape[0]), 1
-    arr, _copied = as_f32_colmajor(y, name="y")
-    return arr, int(arr.shape[0]), int(arr.shape[1])
+# TOMBSTONE: _series_major (Python admission helper, zero callers: the TSA doors admit y natively in bindings/tsa_public_native.mojo) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch.
 
 
 # The KPSS stationarity test, with the reference
