@@ -78,7 +78,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.native_array_storage import native_scratch_bytes, native_array_zeros
 from bindings.admitted_registry import admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols
 from bindings.device_rows_door import door_is_device_rows, DoorRows
-from core.admitted_input import admitted_check_f32, admitted_check_weights_f32
+from core.admitted_input import admitted_check_f32, admitted_check_weights_f32, admitted_cast_f32
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
@@ -209,13 +209,15 @@ def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject
 
 def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
             admitted: Bool = False, defer_finite: Bool = False, order: String = "C",
-            as_array: Bool = False) raises -> PythonObject:
+            as_array: Bool = False, finite: Bool = True) raises -> PythonObject:
     """The float32 array of an input of rank `ndim` in `order` ("C", or "F"
     for a 2-D input): the input itself when it already is one (borrowed),
     otherwise one cast copy into uninitialised storage. `as_array`: the
     result is a mojolearn Array, never an ndarray (an ndarray input is then
     copied). Refuses a rank mismatch, an empty input, a non-native byte
-    order and NaN or infinity ("Input <name> contains NaN or infinity")."""
+    order and NaN or infinity ("Input <name> contains NaN or infinity").
+    `finite=False`: the no-check mode of a door that accepts NaN (the words
+    are cast or borrowed, never tested)."""
     # Order "F" is the cast with the view's axes swapped: the C-order
     # cols x rows destination of the transposed view IS the F-order
     # rows x cols array, so cast and transpose are one parallel pass
@@ -272,7 +274,15 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     var result = value if borrowed else admitted_storage_f32(rows, cols if ndim == 2 else 0, context,
                                                              "F" if want_f else "C", as_array)
     var out = _ADM_F32P(unsafe_from_address=Int(py=classical_address(result)))
-    if not (borrowed and defer_finite):
+    if not finite:
+        # The no-check mode (lane a6): a NaN-accepting door. A borrowed X
+        # is read as is; a cast X is cast and its verdict ignored.
+        if not borrowed:
+            if want_f:
+                _ = admitted_cast_f32(addr, s1, s0, cols, rows, item, kind, out)
+            else:
+                _ = admitted_cast_f32(addr, s0, s1, rows, cols, item, kind, out)
+    elif not (borrowed and defer_finite):
         if want_f:
             admitted_check_f32(addr, s1, s0, cols, rows, item, kind, name, borrowed, out)
         else:
@@ -320,7 +330,7 @@ def _numeric(view: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool, order: String,
-           as_array: Bool) raises -> PythonObject:
+           as_array: Bool, finite: Bool = True) raises -> PythonObject:
     var nd = Int(py=view.ndim)
     if nd != 2:
         raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape))
@@ -328,7 +338,7 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite
         raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(native_loaded_module("builtins").memoryview, view).format) + ", which is not a numeric array")
     try:
         return admit_x(view, 2, "X", context, admitted=True, defer_finite=defer_finite, order=order,
-                       as_array=as_array)
+                       as_array=as_array, finite=finite)
     except error:
         if String(error) == "Input X contains NaN or infinity":
             raise Error("Input X contains NaN or infinity (" + est + ").")
@@ -336,7 +346,7 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite
 
 
 def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool = False,
-                  order: String = "C", as_array: Bool = False) raises -> PythonObject:
+                  order: String = "C", as_array: Bool = False, finite: Bool = True) raises -> PythonObject:
     # The one place for scikit-learn's X refusal text.
     var kind = classical_kind(view, context)
     if kind == "c":
@@ -349,7 +359,7 @@ def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_
             raise Error("Found array with 0 sample(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
         if nd == 2 and Int(py=view.shape[1]) == 0:
             raise Error("Found array with 0 feature(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
-    return _cast_x(view, est, context, defer_finite, order, as_array)
+    return _cast_x(view, est, context, defer_finite, order, as_array, finite)
 
 
 def _admitted_rows(source: PythonObject, est: String, context: PythonObject, device_x: Bool) raises -> AdmittedX:
