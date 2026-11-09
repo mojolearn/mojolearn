@@ -15,7 +15,7 @@ def connect():
         # same native orchestration. Estimator/device dispatch stays in the
         # unchanged Mojo model-selection owner and its admitted context.
         try:
-            module = _backend.load_host_module("_mojolearn_runtime_model_selection_host")  # cpu-route: import-time connection of existing native model-selection orchestration
+            module = _backend.load_host_module("_mojolearn_runtime_model_selection_host")  # import-time: import-time connection of existing native model-selection orchestration
             entry = module.model_selection_native_call
             if not isinstance(entry, BuiltinFunctionType):
                 raise TypeError("model selection requires the compiled model_selection_native_call entry")
