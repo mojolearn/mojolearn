@@ -467,6 +467,8 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_AUTOGRAD_MOE_OFF`](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock backward) | removed (the tape is the only MoE backward) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
 | [`OP_MOEB_HIDDEN_FWD` / `OP_MOEB_OUT_FWD` (op codes 2900, 2901)](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock training forward) | removed (duplicate codes of `OP_MOE_HIDDEN` / `OP_MOE_OUT`) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
+| [`_gcn_backward_dev` / `_sage_backward_dev` hand entry chains (no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv resident backward) | removed (superseded by the tape: one native call) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
+| [`GCNConv._backward_dev` / `SAGEConv._backward_dev` (Python, no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv, dead Python copy) | removed (0 callers) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4294,3 +4296,25 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   dispatch arms and the switch; `git apply` restores them together).
 - Guard: `MOJOLEARN_AUTOGRAD_MOE_OFF` refused in `autograd/route_ops.mojo` (`moe_tape_train_step`) and in
   `core/experiment_guards_neural.mojo`. No `grid_controls` entry existed.
+
+## GCNConv and SAGEConv resident backward on the tape (2026-11-09)
+
+- What it was: `bindings/xcnn_graph_native.mojo` `_gcn_backward_dev` and `_sage_backward_dev`, the resident (GPU binding)
+  backward of the two graph layers, chained the x_cnn `_m` entries by hand from the door, one Python crossing each: GCN
+  [bias gemm], transposed spmm, dW gemm, dX gemm (up to 4); SAGE [normalisation graph_op], linear backward, [mean spmm],
+  transposed spmm or max graph_op, [root gemm, gemm, add | download] (up to 9). `GCNConv._backward_dev` and
+  `SAGEConv._backward_dev` in `python/mojolearn/_expansion_cnn.py` were an older Python copy of the same chains with 0
+  callers (`backward` goes through the native door).
+- Now: `autograd/rules_graph.mojo` records each layer's forward (GRAPH_DENSE, GRAPH_AGG the one sparse aggregate op,
+  GRAPH_MAX, GRAPH_SAGE_OUT, GRAPH_L2) and runs one tape backward whose rules launch the same entries' bodies on the same
+  arguments, reached by one call each (`x_cnn_gcn_backward_t`, `x_cnn_sage_backward_t`). The SAGE root's two GEMMs run
+  before the aggregate's transposed fold (independent outputs). The host-form backward (the CPU binding, and SAGE with
+  `project=True` or a non-resident FAST form) keeps its host entry chain.
+- Files: `bindings/xcnn_graph_native.mojo`, `python/mojolearn/_expansion_cnn.py` (deleted); `autograd/rules_graph.mojo`,
+  `bindings/_mojolearn_x_cnn.mojo`, `python/mojolearn/_native_xcnn_bridge.py` (added).
+- Verdict: removed (plan row X9). No A/B yet: RUN OWED on NVIDIA and AMD, identity lane x-cnn-gcn / x-cnn-sage (the
+  same words by construction) and the per-call backward ms (one crossing instead of up to nine).
+- Deleted 2026-11-09 by lane/x9-moe-gcn-rules; recoverable at origin/integ/pre-0867-w2 `f59d913b0b`.
+- Patch: `experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch` (the two code files; it does not remove the new rules file
+  or entries, which may stay beside the restored chains).
+- Guard: no define. No `grid_controls` entry.
