@@ -11,7 +11,7 @@ from bindings.generator_state_native import generator_init, generator_fields, ge
 from bindings.samba_state_native import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
-from bindings.py_balanced import py_call, py_setitem
+from bindings.py_balanced import py_call, py_setitem, py_setattr
 from bindings.native_model_records import bump_model_generation
 
 
@@ -122,7 +122,11 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     py_setitem(fields, "config", config)
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "n_total", n)
-    py_setitem(fields, "flat", generation_array([n]))
+    var flat = generation_array([n])
+    # lane x56d: the registry a kernel reads is read-only; the native
+    # initialization and loads below write it by address
+    py_setattr(flat, "_readonly", PythonObject(True))
+    py_setitem(fields, "flat", flat)
     py_setitem(fields, "names", Python.list())
     py_setitem(fields, "shapes", Python.dict())
     py_setitem(fields, "offsets", Python.list())

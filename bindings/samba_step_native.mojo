@@ -189,7 +189,12 @@ def _samba_parameter_pack(fields: PythonObject, opt: PythonObject, context: Pyth
         if py_type(value) is context["neural"]["array_class"]:
             if String(value.dtype) != "<f4":
                 raise Error("TypeError: Samba optimizer parameters must be float32")
-            if String(value.order) != "C" or Bool(py=value._readonly):
+            # Lane x56d: the model's own registry views are read-only to
+            # callers (bindings/samba_state_native.mojo `samba_view`); the
+            # native step writes them by address. A rebound parameter is
+            # written back through its buffer, so it must be writable.
+            var own = Int(py=value._addr) == Int(py=fields["flat"]._addr) + 4 * Int(py=fields["offsets"][i])
+            if String(value.order) != "C" or (Bool(py=value._readonly) and not own):
                 raise Error("Samba optimizer parameters must be C-contiguous and writable")
             view = value._mv
             shape = value.shape

@@ -6,6 +6,7 @@ refused before execution under the native-only public runtime contract.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.p3nc_fitted_freeze import fitted_freeze_any
 from bindings.neural_block_admission import neural_array_snapshot
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -63,7 +64,13 @@ def samba_view(flat: PythonObject, offset: Int, dims: List[Int], context: Python
     py_setattr(result, "_pin", flat._pin)
     py_setattr(result, "_mv", flat._mv[py_call(bi.slice, offset, offset + n)])
     py_setattr(result, "_addr", PythonObject(Int(py=flat._addr) + 4 * offset))
-    py_setattr(result, "_readonly", PythonObject(False))
+    # Lane x56d (the weights contract every neural family follows, decided
+    # 2026-11-09): a weight a kernel reads is read-only. The public
+    # parameters are read-only views of the registry (NumPy honours the flag
+    # through the array interface); native operations write the registry
+    # by address and move the weight epoch. Assign new arrays to change
+    # weights (`load_weights`, a checkpoint load).
+    py_setattr(result, "_readonly", PythonObject(True))
     py_setattr(result, "shape", py_call(bi.tuple, py_ints(dims)))
     py_setattr(result, "dtype", PythonObject("<f4"))
     py_setattr(result, "ndim", PythonObject(len(dims)))
@@ -379,6 +386,8 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
     py_setattr(model, "config", config)
     py_setattr(model, "numeric_mode", checked["numeric_mode"])
     py_setattr(model, "flat", checked["parameters"])
+    # lane x56d: the registry a kernel reads is read-only (see samba_view)
+    _ = fitted_freeze_any(model.flat)
     py_setattr(model, "n_total", model.flat.size)
     py_setattr(model, "names", bi.list())
     py_setattr(model, "shapes", bi.dict())

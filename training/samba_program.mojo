@@ -41,7 +41,8 @@ same kernels on every vendor and in every column, so a version-level change
 at most (identity lane `samba`).
 
 Weights: the caller's flat registry is the truth (`SambaStack.parameters()`
-are writable views of it). The program keeps a `WeightKey` (lane x45c,
+are read-only views of it since lane x56d: callers cannot edit it in place,
+the native operations that write it move the weight epoch). The program keeps a `WeightKey` (lane x45c,
 core/weight_epoch.mojo): the registry address and the weight epoch at its
 load. The per-call doors call `refresh_weights`, which reloads only when the
 key is not current (integ-w4: formerly `load_weights` on every call, the
