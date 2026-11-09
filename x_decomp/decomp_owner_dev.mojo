@@ -6,7 +6,7 @@ resident eigh / LU where the build registers `x_decomp_dev_eigh` /
 the GPU body the binding registers under that name (`ica_solve_dev_py`, ...)."""
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.decomp_owner_kit import DecompDev
-from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_run, dev_lu_run
+from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_desc_run, dev_eigh_run, dev_lu_run
 from x_decomp.ica_dev import ica_solve_dev_run
 from x_decomp.nmf import NmfArgs
 from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
@@ -36,6 +36,10 @@ struct DevDecomp(DecompDev):
     @staticmethod
     def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
         _ = dev_eigh_run(a, w, v, n, uplo)
+
+    @staticmethod
+    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+        dev_eigh_desc_run(a, w, v, n)
 
     @staticmethod
     def has_lu() -> Bool:

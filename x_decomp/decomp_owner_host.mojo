@@ -25,6 +25,10 @@ struct HostDecomp(DecompDev):
         raise Error("x_decomp: no resident matrices on the host binding")
 
     @staticmethod
+    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
     def has_lu() -> Bool:
         return False
 

@@ -58,6 +58,14 @@ trait DecompDev:
         ...
 
     @staticmethod
+    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+        """The n x n device matrix `a` into the device matrices w (1 x n,
+        DESCENDING) and v (n x n, matching vectors in columns): the resident
+        `kit_eigh` + `kit_reversed_columns` without the round trip (lane
+        n9-decomp-eigh-families; x_decomp/resident.mojo `dev_eigh_desc_run`)."""
+        ...
+
+    @staticmethod
     def has_lu() -> Bool:
         ...
 
@@ -203,6 +211,27 @@ def kit_eigh[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES]
     else:
         eigh_run[E](kit.ptr(a), pw, pv, n, 0)
     return (w, v)
+
+
+def kit_eigh_desc[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
+    """(w 1 x n DESCENDING, v n x n matching vectors in columns): `kit_eigh`
+    then `kit_reversed_columns` of both. A resident operand stays on the
+    device (`X.eigh_desc`: the same solve, the reversal as device copies, w
+    and V never home; lane n9-decomp-eigh-families); a host operand takes
+    the host-address entry and the host reversal."""
+    var n = kit.r(a)
+    var resident = False
+    comptime if RES:
+        resident = X.has_eigh() and n >= 1 and kit.c(a) == n and kit.mats[a].dev >= 0
+    if resident:
+        var w = kit.device_output(1, n)
+        var v = kit.device_output(n, n)
+        X.eigh_desc(kit.mats[a].dev, kit.mats[w].dev, kit.mats[v].dev, n)
+        return (w, v)
+    var eig = kit_eigh[E, D, RES, X](kit, a)
+    var wr = kit_reversed_columns(kit, eig[0])
+    var vr = kit_reversed_columns(kit, eig[1])
+    return (wr, vr)
 
 
 def kit_reversed_columns[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
