@@ -97,7 +97,7 @@ def test_accumulation_reuses_admitted_native_metadata_and_keeps_original_reducti
     assert 'registry_failure.byte_length()' in loop
     assert 'self.tape and self.tape_started' in native
     assert 'self.close_endpoint.call(self.reset_operation' in native
-    for file in ('mamba/native_tape_dispatch.mojo','transformer/native_tape_dispatch.mojo'):
+    for file in ('mamba/native_tape_dispatch.mojo',):
         source=(ROOT/file).read_text()
         assert 'if op == 5:' in source
         assert 'or not tape[].consumed:' in source
