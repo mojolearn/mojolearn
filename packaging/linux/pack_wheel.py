@@ -1885,7 +1885,18 @@ def main(argv=None, _gates=True):
             if core_wheels:
                 surface = audit(core_wheels, source_root=source_root)
                 (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
-                if not surface['wheels'][0]['source_payload_complete']:
+                entry = surface['wheels'][0]
+                complete = entry['source_payload_complete']
+                if a.local_version and not complete:
+                    # A measurement build ships a regenerated mojolearn/_version.py (the local
+                    # version). That one file is the only difference from the source it allows.
+                    complete = (entry.get('changed_python_payload') == ['mojolearn/_version.py']
+                                and not entry.get('missing_python_payload')
+                                and not entry.get('missing_reference_payload')
+                                and not entry.get('changed_reference_payload')
+                                and not entry.get('source_names_absent_from_wheel')
+                                and not entry.get('wheel_names_absent_from_source'))
+                if not complete:
                     raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
         if split:
             # EACH PLUGIN HOLDS EXACTLY ITS SETS AND THE CORE HOLDS NONE, the pins
