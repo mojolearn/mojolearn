@@ -25,6 +25,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed
 from bindings.admitted_input import admit_x, AdmittedX, admitted_finite_refuse
+from bindings.device_rows_door import door_rows_refuse
 from bindings.decomp_inputs import decomp_input, decomp_admit, decomp_input_copied
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
@@ -312,8 +313,10 @@ def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows:
     _ = variance  # keep the Python object alive through the native call above
 
 
-def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`TruncatedSVD.fit`; returns the converted X (kept for fit_transform)."""
+def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, fold: Bool = False) raises -> PythonObject:
+    """`TruncatedSVD.fit`; returns the converted X (kept for fit_transform).
+    `fold` (lane a8d, `fit` only): a resident fold may be fit on the device
+    (`tsvd_fit_fold`); None is returned then (no host X exists)."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     # New components replace the old: their device copy goes now (N351).
@@ -328,21 +331,50 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
                     + "'arpack' is scipy's svds (implicitly restarted Lanczos), a different algorithm; "
                     + "accepting the name and running the Gram arm would be a silent substitution, which is "
                     + "why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
-    var host = _host_only(model)
     # A SciPy sparse X (TruncatedSVD's main input) is densified once, and the
     # input_copied_ flag is read off the admission (no second view of X).
     # Lane a7d: a borrowed X is not scanned here (defer_finite); the Gram
     # entries test it over their own upload; the TSQR and randomized drivers
     # return its status word too (lane a8d).
-    var admitted = decomp_admit(source, "TruncatedSVD", context, defer_finite=True)
+    # Lane a8d: an identical exact (Gram) fit of a cross-validation fold
+    # resident on the device is gathered there by the base binding's
+    # `tsvd_fit_fold` (no host gather, no upload of X); the TSQR route is
+    # `fast` only and the randomized driver uploads X itself, so those (and
+    # the host class) get the fold's host rows.
+    var host = _host_only(model)
+    var mode = _mode(fields, context)
+    var fold_entry = py_get(context, "tsvd_fit_fold")
+    var fold_ok = fold and fold_entry is not None and not host and mode == "identical" and algorithm != "randomized"
+    var admitted = decomp_admit(source, "TruncatedSVD", context, device_x=fold_ok, defer_finite=True)
     py_setitem(fields, "input_copied_", PythonObject(decomp_input_copied(admitted, context)))
-    var x = admitted.array
     var rows = admitted.rows
     var cols = admitted.cols
     if rows < 2 or cols < 2:
         raise Error(_too_small(rows, cols))
     var nc = _components(fields, rows, cols)
-    var mode = _mode(fields, context)
+    if admitted.store.active():
+        var components = _f32(Python.tuple(nc, cols), context)
+        var singular = _f32(Python.tuple(nc), context)
+        var variance = _f32(Python.tuple(nc), context)
+        var ratio = _f32(Python.tuple(nc), context)
+        var words = py_call_typed(fold_entry, Python.list(admitted.store.base_id, admitted.store.base_rows,
+                                                          admitted.store.index_id),
+                                  Python.list(classical_address(components), classical_address(singular),
+                                              classical_address(variance), classical_address(ratio)),
+                                  Python.list(rows, cols, nc))
+        _ = components  # keep the Python object alive through the native call above
+        _ = singular  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = ratio  # keep the Python object alive through the native call above
+        door_rows_refuse(Int(py=words[0]), Int(py=words[1]), _TSVD_EST, admitted.store.base_rows)
+        py_setitem(fields, "components_", components)
+        py_setitem(fields, "singular_values_", singular)
+        py_setitem(fields, "explained_variance_", variance)
+        py_setitem(fields, "explained_variance_ratio_", ratio)
+        py_setitem(fields, "n_components_", PythonObject(nc))
+        py_setitem(fields, "n_features_in_", PythonObject(cols))
+        return PythonObject(None)
+    var x = admitted.array
     # the host class trains on the CPU: the estimators host binding of its
     # `_bind` serves the same entry names (CPU TRAINING IS PUBLIC)
     var entries = (py_call(native_loaded_module("builtins").vars, py_call(model._bind, "_mojolearn_estimators"))
@@ -488,7 +520,7 @@ def tsvd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var result = PythonObject(None)
         try:
             if operation == "fit":
-                _ = tsvd_fit(model, args[0], context)
+                _ = tsvd_fit(model, args[0], context, True)
                 result = model
             elif operation == "fit_transform":
                 # the transform projects the X the fit converted: one conversion

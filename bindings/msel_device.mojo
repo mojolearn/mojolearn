@@ -34,7 +34,7 @@ from core.msel_device import (
 )
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_device_x_context, msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
-from decomposition.pca_fold import pca_transform_fold, pca_fit_fold
+from decomposition.pca_fold import pca_transform_fold, pca_fit_fold, tsvd_fit_fold
 from glm.qn_fold import qn_fit_fold
 from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
 
@@ -490,3 +490,32 @@ def pca_fit_fold_binding(
         finite = r.finite
         in_range = r.in_range
     return Python.list(PythonObject(keep), PythonObject(noise), PythonObject(Int(finite)), PythonObject(Int(in_range)))
+
+
+def tsvd_fit_fold_binding(
+    ids: PythonObject,
+    out_addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """TruncatedSVD's Gram fit and explained variance over a model-selection
+    fold resident on the device (lane a8d; decomposition/pca_fold.mojo
+    `tsvd_fit_fold`): `ids` as `pca_fit_fold_binding`'s, `out_addrs`
+    [components, singular values, explained variance, ratio], `params`
+    [n_rows, n_features, n_components]. Returns [finite word, range word]."""
+    if len(ids) != 3 or len(out_addrs) != 4 or len(params) != 3:
+        raise Error("tsvd_fit_fold: ids, out_addrs and params must hold 3, 4 and 3 values")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var cp = _mdx_f32_ptr(Int(py=out_addrs[0]))
+    var sp = _mdx_f32_ptr(Int(py=out_addrs[1]))
+    var ep = _mdx_f32_ptr(Int(py=out_addrs[2]))
+    var rp = _mdx_f32_ptr(Int(py=out_addrs[3]))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var words: Tuple[Int32, Int32]
+    with GILReleased(Python()):
+        var ctx = msel_fold_entry_context()
+        words = tsvd_fit_fold(ctx, base_id, base_rows, index_id, cp, sp, ep, rp, nr, nf, nc)
+    return Python.list(Int(words[0]), Int(words[1]))

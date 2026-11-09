@@ -183,6 +183,7 @@ from bindings.msel_device import (
     msel_take_rows_binding,
     pca_transform_fold_binding,
     pca_fit_fold_binding,
+    tsvd_fit_fold_binding,
     qn_fit_fold_binding,
     kmeans_fit_fold_binding,
     kmeans_predict_fold_binding,
@@ -2302,6 +2303,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_take_rows_binding]("msel_take_rows")
         m.def_function[pca_transform_fold_binding]("pca_transform_fold")
         m.def_function[pca_fit_fold_binding]("pca_fit_fold")
+        m.def_function[tsvd_fit_fold_binding]("tsvd_fit_fold")
         m.def_function[qn_fit_fold_binding]("qn_fit_fold")
         m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
         m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")

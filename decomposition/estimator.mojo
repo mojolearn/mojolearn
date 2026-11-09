@@ -432,18 +432,23 @@ def tsvd_fit_device(
     n_features: Int,
     n_components: Int,
     finite_word: Int = 0,
+    resident: Bool = False,
 ) raises -> Bool:
     """`tsvd_fit_host`'s body on a caller-owned device buffer `x` of
     n_rows * n_features floats: uploads X into it, and leaves it holding X
     unchanged (the Gram only reads it), so T1 can run the explained tail on
     the same buffer. `finite_word` (lane a7d): as `pca_fit_host`'s; returns
-    True when X was flagged (nothing fit, nothing written)."""
+    True when X was flagged (nothing fit, nothing written). `resident`
+    (lane a8d): `x` already holds X (a model-selection fold gathered and
+    tested on the device, decomposition/pca_fold.mojo `tsvd_fit_fold`):
+    no upload, no test, `x_ptr` unread; the same body after it."""
     var gram = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
-        return True
+    if not resident:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+            return True
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(

@@ -19,9 +19,9 @@ words as the host-address path: no bit changes.
 from max.gpu.host import DeviceContext
 from core.device_zero import enqueue_fill
 from core.msel_device_x import msel_device_x_f32
-from decomposition.impl.linalg.detail.pca import pca_transform
+from decomposition.impl.linalg.detail.pca import pca_transform, pca_validate
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
-from decomposition.estimator import pca_fit_cov_device_x, pca_fit_full_device_x
+from decomposition.estimator import pca_fit_cov_device_x, pca_fit_full_device_x, tsvd_fit_device, _tsvd_explained_tail
 from decomposition.impl.pca_owner import pca_keep_finish
 
 
@@ -98,6 +98,50 @@ def pca_fit_fold(
     _ = x^
     var keep = pca_keep_finish(ctx, explained_ptr, ratio_ptr, n_rows, n_components, keep_mode, frac, noise)
     return PCAFoldFit(keep, noise, finite, in_range)
+
+
+def tsvd_fit_fold(
+    ctx: DeviceContext,
+    base_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises -> Tuple[Int32, Int32]:
+    """TruncatedSVD's Gram fit and its explained variance
+    (`tsvd_fit_explained_host` under one upload; lane a8d) of fold rows
+    `index_id` of the resident base: gathered on the device into the fit's
+    X buffer with the finite and range tests in the same pass, the words
+    read at that synchronisation, then `tsvd_fit_device(resident=True)` and
+    the explained tail on the same buffer. Returns (finite word, range
+    word); a flagged fold is not fit. The same rows in the same order, the
+    same kernels: no bit change. `ctx` is `msel_fold_entry_context()`."""
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_rows, x, status.unsafe_ptr(), 0)
+    var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var finite = flags.unsafe_ptr()[0]
+    var in_range = flags.unsafe_ptr()[1]
+    _ = flags^
+    _ = status^
+    if finite != 0 or in_range != 0:
+        _ = x^
+        return (finite, in_range)
+    _ = tsvd_fit_device(
+        ctx, x, components_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components, 0, True
+    )
+    pca_validate(n_rows, n_features, n_components)
+    _tsvd_explained_tail(ctx, x, components_ptr, explained_ptr, ratio_ptr, n_rows, n_features, n_components)
+    _ = x^
+    return (finite, in_range)
 
 
 def pca_transform_fold(
