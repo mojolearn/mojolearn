@@ -410,6 +410,7 @@ in the tables after the sections.
 | [`_rsvd_core`, `_randomized_decompose`, `_lanczos_top`, `_prepare_folds` (dead Python loops)](#dead-native-entries-batch-3-2026-11) | Decomposition and model selection (Python glue the native owners replaced) | removed (dead Python: no caller) | 2026-11-08 | [dead_python_loops.patch](../experiments/removed/dead_python_loops.patch) |
 | [`MOJOLEARN_PT_COLBATCH`](#mojolearn_pt_colbatch) | Prep | DROP (quality); the opt-in name only | 2026-11-08 | [MOJOLEARN_PT_COLBATCH.patch](../experiments/removed/MOJOLEARN_PT_COLBATCH.patch) |
 | [`MOJOLEARN_MCD_BATCH_COMPAT`](#mojolearn_mcd_batch_compat) | Decomp | HOLD-quality; the opt-in name only | 2026-11-08 | [MOJOLEARN_MCD_BATCH_COMPAT.patch](../experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch) |
+| [`MOJOLEARN_CHOL_FAST_NB512`](#mojolearn_chol_fast_nb512) | Linear (Cholesky) | HOLD-speed | 2026-11-08 | [MOJOLEARN_CHOL_FAST_NB512.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3821,3 +3822,11 @@ public runtime qualification; this entry is not release or performance evidence.
   `MCD_BATCH_COMPAT` is now `MCD_BATCH_MMA`; no default build changes. `tools/mcd_compat_ab.sh` now needs `MCD_DEFINE`.
 - Deleted by `@K0SHA_MCDCOMPAT@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch`
   (x_decomp/mcd_fast.mojo). Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_CHOL_FAST_NB512
+
+- What it tried: a 512-column FAST Cholesky panel (`CHOL_FAST_NB`, cholesky/checks/potrf.mojo) instead of 256.
+- Verdict: HOLD-speed, EXPERIMENTS.md (lane/apple-fast-w4-linalg 19bb1c7a1): quality PASS, w2-cholnb512-synthetic 260.4 ->
+  265.7 ms, no benefit.
+- Deleted by `@K0SHA_CHOL@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch`.
+  Refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry existed. NB64 / NB128 stay as they were.
