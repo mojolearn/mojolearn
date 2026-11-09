@@ -26,6 +26,11 @@
 #                     to 2): targets, fitted arrays, published predictions
 #   admit_weight_words(source, rows, context) -> AdmittedX
 #                     admit_weights as an AdmittedX; None is `rows` ones
+#   admit_c_view(source, name, context) -> array
+#                     any numeric input in its own dtype, C order (a view, or
+#                     one C-order copy of a strided export)
+#   admitted_dtype(view, context) -> String
+#                     the Array typestr of a view's items
 #   admit_ids(source, name, context, wide) -> Array
 #                     a 1-D integer input as fresh int64 / int32 words
 #   admit_y(...)      the float fit target (one column, finite, as long as X)
@@ -86,13 +91,14 @@ from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
     classical_wrap_array, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
-    classical_is_array, classical_is_f32, classical_c_order, classical_numpy,
+    classical_is_array, classical_is_f32, classical_c_order, classical_numpy, classical_dtype_str,
 )
+from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.native_array_storage import native_scratch_bytes, native_array_zeros, native_array_from_values
+from bindings.native_array_storage import native_scratch_bytes, native_array_zeros, native_array_from_values, native_array_from_bytes
 from bindings.py_attr import py_attr
 from bindings.admitted_registry import admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols
 from bindings.device_rows_door import door_is_device_rows, DoorRows
@@ -397,6 +403,42 @@ def admit_weight_words(source: PythonObject, rows: Int, context: PythonObject,
         w = admit_weights(source, rows, context, admitted)
     var x = AdmittedX(w, source, Int(py=classical_address(w)), rows, 1, 1, w is source, True)
     return x^
+
+
+def admitted_dtype(view: PythonObject, context: PythonObject) raises -> String:
+    """The Array typestr of an admitted view's items ("<f4", "<i8", "<u1",
+    ...): a one-byte "|" type and a native "=" one read as "<", a bool as
+    its "<u1" bytes (the reading of `_buffer_typestr`). Refuses a
+    non-native byte order."""
+    var typestr = classical_dtype_str(view, context)
+    if typestr.startswith("|") or typestr.startswith("="):
+        typestr = "<" + String(typestr[byte=1:typestr.byte_length()])
+    if typestr == "<b1":
+        typestr = "<u1"
+    if not typestr.startswith("<"):
+        raise Error("TypeError: mojolearn: an input of dtype " + typestr + " must be in native byte order")
+    return typestr
+
+
+def admit_c_view(source: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> PythonObject:
+    """The exporter's view of an input of any numeric dtype, in C order: the
+    view itself (classical_view: an ndarray, or an Array without NumPy) when
+    its words are already C-contiguous, else one C-order copy of its bytes
+    (`memoryview.tobytes('C')`, in C) as an Array of its own dtype. For the
+    doors that read a label, prior or flag vector in its own dtype; X goes
+    through admit_x."""
+    # Lane a1b-doors-opt-in-trees-linear: the former labels_view /
+    # trees_view (a LabelsView struct over the same exporters, which
+    # linearized a strided export the same way).
+    var view = classical_view(source, context, name, admitted)
+    if classical_c_order(view, context):
+        return view
+    var typestr = admitted_dtype(view, context)
+    var exported = native_buffer_view(view._mv if classical_is_array(view, context) else view)
+    var store = native_array_from_bytes(String(_store_code(typestr)), py_call(exported.tobytes, "C"))
+    var copy = classical_wrap_array(store, view.shape, typestr, "C", context)
+    _ = view^
+    return copy
 
 
 def admit_ids(source: PythonObject, name: String, context: PythonObject, wide: Bool = True,

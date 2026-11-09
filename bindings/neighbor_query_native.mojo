@@ -13,7 +13,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
 from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order
-from bindings.classical_labels import labels_view, labels_check_rank, labels_reshape
+from bindings.classical_labels import labels_reshape
+from bindings.admitted_input import classical_view
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_values
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
@@ -266,9 +267,10 @@ def _ivf_filter(source: PythonObject, n: Int, context: PythonObject) raises -> P
             bool_source = String(native_buffer_view(value).format) == "?"
     if not bool_source:
         raise Error("ValueError: IVF filter must have boolean dtype")
-    var view = labels_view(value, "filter", context)
-    labels_check_rank(view, 1, "filter")
-    if view.size() != n:
+    var view = classical_view(value, context, "filter")
+    if Int(py=view.ndim) != 1:
+        raise Error("mojolearn: filter must be 1-D, got " + String(Int(py=view.ndim)) + "-D")
+    if Int(py=view.shape[0]) != n:
         raise Error("ValueError: IVF filter must have one flag per indexed row")
     return _i32_vector(value, "filter", context)
 
