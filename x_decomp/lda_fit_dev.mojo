@@ -2,30 +2,29 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """x_decomp/lda_fit.mojo's fit loop on resident device matrices (lane
 py-runtime-b): the driver text of lda_fit.mojo on `DKit`. An online epoch
-is `lda_online_dev` (x_decomp/kit_device.mojo), as Python's `_online_pass`
-called the GPU binding (the components go down and come back up around it);
+is `lda_online_pass_dev` (x_decomp/kit_device.mojo) on the fit's resident
+X, components and Dirichlet expectation;
 the E-step takes the FAST Apple fused kernel (`launch_lda_fused_ss`) where
 Python's `_fused_estep_ss` did. GPU binding only."""
 from std.math import inf
 from x_decomp.cells import F32Ptr
 from x_decomp.kit import (
-    Mat, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_SCALE, OP_SUB, mat_from,
+    OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_SCALE, OP_SUB, mat_from,
 )
-from x_decomp.kit_device import DKit, DMat, lda_online_dev
+from x_decomp.kit_device import DKit, DMat, lda_online_pass_dev
 from x_decomp.lda_fit import LDA_F64_EPS, LDA_FLT_MIN, LdaArgs, _OP_LGAMMA
 from x_decomp.lda_fast import LDA_FUSED_SS, LFS_BLOCKS, LFS_DPB, LFS_K_CAP, LFS_V_CAP, launch_lda_fused_ss
 from x_decomp.resident import _ptr, pool_alloc, pool_free
 
 
-def _online_epoch_dev(mut k: DKit, X: DMat, Xh: Mat, mut C: DMat, mut ED: DMat, a: LdaArgs,
+def _online_epoch_dev(mut k: DKit, X: DMat, mut C: DMat, mut ED: DMat, a: LdaArgs,
                       mut draw: Int, mut nbi: Int) raises:
-    var hc = k.get(C)
-    var he = k.get(ED)
-    k.sync()
-    lda_online_dev(Xh, hc, he, a.bs, a.mdi, a.seed, draw, nbi, a.doc_prior, a.topic_prior, a.offset, a.decay,
-                   a.tol, a.total)
-    C = k.upload(hc)
-    ED = k.upload(he)
+    # X, C and ED stay resident across epochs: the pass reads the fit's own
+    # device copies (lane consol-n0-readmission; it used to take the host X,
+    # re-upload it and send C and ED home and back every epoch). The values
+    # are the same float32 words, so the bits are unchanged.
+    lda_online_pass_dev(k, X, C, ED, a.bs, a.mdi, a.seed, draw, nbi, a.doc_prior, a.topic_prior, a.offset,
+                        a.decay, a.tol, a.total)
 
 
 def _e_ss_dev(mut k: DKit, X: DMat, ED: DMat, mut Dt: DMat, mut Et: DMat, a: LdaArgs, mut ss: DMat) raises -> Bool:
@@ -104,7 +103,7 @@ def perplexity_dev(mut k: DKit, X: DMat, Dt: DMat, C: DMat, a: LdaArgs) raises -
     return k.word(k.ew1(OP_EXP, k.const(-score / word_cnt, 1, 1), 0.0))
 
 
-def lda_fit_loop_dev(mut k: DKit, X: DMat, Xh: Mat, mut C: DMat, mut ED: DMat, a: LdaArgs, mut draw: Int,
+def lda_fit_loop_dev(mut k: DKit, X: DMat, mut C: DMat, mut ED: DMat, a: LdaArgs, mut draw: Int,
                           mut nbi: Int) raises -> Int:
     """The fit loop; returns n_iter_."""
     var nc = C.r
@@ -114,7 +113,7 @@ def lda_fit_loop_dev(mut k: DKit, X: DMat, Xh: Mat, mut C: DMat, mut ED: DMat, a
     for i in range(1, a.max_iter + 1):
         it = i
         if a.online:
-            _online_epoch_dev(k, X, Xh, C, ED, a, draw, nbi)
+            _online_epoch_dev(k, X, C, ED, a, draw, nbi)
         else:
             var ss = k.zeros(0, 0)
             _ = e_step_dev(k, X, ED, nc, a, True, True, draw, ss)
@@ -142,11 +141,10 @@ def lda_fit_dev_run(
         raise Error("x_decomp: lda batch size")
     var it = 0
     var k = DKit()
-    var Xh = mat_from(px, n, v)
-    var X = k.upload(Xh)
+    var X = k.upload(mat_from(px, n, v))
     var C = k.upload(mat_from(pc, nc, v))
     var ED = k.upload(mat_from(pe, nc, v))
-    it = lda_fit_loop_dev(k, X, Xh, C, ED, a, draw, nbi)
+    it = lda_fit_loop_dev(k, X, C, ED, a, draw, nbi)
     var hc = k.get(C)
     var he = k.get(ED)
     k.sync()

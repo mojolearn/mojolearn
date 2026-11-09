@@ -92,7 +92,7 @@ from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dict_update_dev
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.moves_device import launch_move
 from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
-from x_decomp.select_ops import SEL_ORDER_MAX
+from x_decomp.select_ops import SEL_ORDER_MAX, order_rank
 
 #: `_expansion_decomp._F64_EPS`, the `adds` of LDA's `norm_phi`
 comptime _F64_EPS: Float64 = 2.220446049250313e-16
@@ -216,6 +216,16 @@ def logdet_sign_kernel(diag: F32Ptr, piv: I32Ptr, n: Int32, dst: I32Ptr):
             c += 1
         if c != Int32(0):
             _ = Atomic.fetch_add(dst.unsafe_offset(1), c)
+
+
+def order_small_i32_kernel(src: F32Ptr, dst: I32Ptr, n: Int32):
+    """`order_small_kernel`'s stable ascending order stored as int32 words
+    (dst[rank(i)] = i), the coordinate order `cd_rows_kernel` reads: the same
+    rank, the same integer the host read back as `Int(Float32(i))`."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if i < nn:
+        dst.unsafe_store(order_rank(src, nn, i), Int32(i))
 
 
 # ---- the resident matrix
@@ -780,26 +790,46 @@ struct DKit(Movable):
             res[i] = Int32(Int(h.d[i]))
         return res^
 
-    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: List[Int32]) raises -> Float64:
+    def order_small_dev(mut self, A: DMat) raises -> DMat:
+        """`order_small` kept on the device: the stable ascending order of A's
+        words as int32 bits in a (n, 1) matrix, enqueued (no download)."""
+        var n = A.n()
+        if n > SEL_ORDER_MAX:
+            raise Error("x_decomp: order_small exceeds its bound")
+        var out = DMat(n, 1)
+        if n > 0:
+            self.ctx.enqueue_function[order_small_i32_kernel](
+                A.p(), out.p().bitcast[Int32](), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+            )
+        return out^
+
+    def iota_i32(mut self, n: Int) raises -> DMat:
+        """The identity coordinate order 0..n-1 as int32 bits, uploaded once."""
+        var out = DMat(n, 1)
+        var words = List[Float32](length=max(n, 1), fill=Float32(0))
+        for j in range(n):  # small-loop(n: components): the identity order's int32 bits as upload words
+            words[j] = bitcast[DType.float32](Int32(j))
+        self.upload_into(out, words^)
+        return out^
+
+    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: DMat) raises -> Float64:
         """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`): W swept in
-        place, the violation folded by `total` and read."""
+        place, the violation folded by `total` and read. `perm` is the
+        coordinate order's W.c int32 words, resident (`order_small_dev`,
+        `iota_i32`; lane consol-n0-readmission: the order came home and went
+        back up on every half sweep)."""
         var n = W.r
         var kc = W.c
         var viol = DMat(n, 1)
         if n * kc > 0:
-            var pd = DMat(kc, 1)
-            var words = List[Float32](length=max(kc, 1), fill=Float32(0))
-            for j in range(kc):  # small-loop(kc: components): the permutation's int32 bits as upload words
-                words[j] = bitcast[DType.float32](perm[j])
-            self.upload_into(pd, words^)
+            if perm.n() < kc:
+                raise Error("x_decomp: cd_rows needs a coordinate order of W's columns")
             self.ctx.enqueue_function[cd_rows_kernel](
-                W.p(), HHt.p(), XHt.p(), pd.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
+                W.p(), HHt.p(), XHt.p(), perm.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
                 grid_dim=_blocks(n), block_dim=TPB,
             )
             var tv = self.total(viol)
-            var w = self.word(tv)
-            _ = pd^
-            return w
+            return self.word(tv)
         return 0.0
 
     def mm(self, A: DMat, B: DMat, ta: Bool, tb: Bool) raises -> DMat:
@@ -1475,19 +1505,22 @@ def _dirichlet(k: DKit, A: DMat) raises -> DMat:
     return k.ew2(OP_SUB, k.ew1(OP_DIGAMMA, A, 0.0), k.ew1(OP_DIGAMMA, k.rowsum(A), 0.0))
 
 
-def lda_online_dev(
-    X: Mat, mut comps: Mat, mut exp_dir: Mat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
+def lda_online_pass_dev(
+    mut k: DKit, Xd: DMat, mut C: DMat, mut ED: DMat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
     mut n_batch_iter: Int, doc_prior: Float64, topic_prior: Float64, offset: Float64, decay: Float64,
     tol: Float64, total_samples: Float64,
 ) raises:
-    """`lda_online_pass` (x_decomp/lda_online.mojo) with X, the components
-    and their Dirichlet expectation resident: the same cells per mini-batch.
-    The pass's weights (one per mini-batch, each `offset + n_batch_iter`
-    rounded once to float32 then logs, scale and exp, elementwise cells)
-    are computed in one vector and read in one sync before the loop."""
-    var k = DKit()
-    var n = X.r
-    var nc = comps.r
+    """`lda_online_pass` (x_decomp/lda_online.mojo) on X, the components and
+    their Dirichlet expectation already resident: the same cells per
+    mini-batch. The pass's weights (one per mini-batch, each
+    `offset + n_batch_iter` rounded once to float32 then logs, scale and
+    exp, elementwise cells) are computed in one vector and read in one sync
+    before the loop. C and ED are replaced by the pass's resident results;
+    nothing is downloaded (the fit loop keeps X, C and ED on the device
+    across epochs: lane consol-n0-readmission, X was re-uploaded and C, ED
+    went home and back every epoch)."""
+    var n = Xd.r
+    var nc = C.r
     var nb = (n + bs - 1) // bs if n > 0 else 0
     var wts = Mat(nb, 1)
     if nb > 0:
@@ -1498,12 +1531,9 @@ def lda_online_dev(
         var wd = k.ew1(OP_EXP, k.ew1(OP_SCALE, k.ew1(OP_LOGS, bd, 1e-30), -decay), 0.0)
         wts = k.get(wd)
         k.sync()
-    var Xd = k.upload(X)
-    var C = k.upload(comps)
-    var ED = k.upload(exp_dir)
     var a = 0
     var j = 0
-    while a < n:
+    while a < n:  # driver-loop: over the pass's mini-batches
         var b = min(a + bs, n)
         var Xb = DMat(rows_of=Xd, row0=a, rows=b - a)
         # _e_step(k, Xb, cal_sstats=True, random_init=True)
@@ -1523,6 +1553,22 @@ def lda_online_dev(
         n_batch_iter += 1
         j += 1
         a = b
+
+
+def lda_online_dev(
+    X: Mat, mut comps: Mat, mut exp_dir: Mat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
+    mut n_batch_iter: Int, doc_prior: Float64, topic_prior: Float64, offset: Float64, decay: Float64,
+    tol: Float64, total_samples: Float64,
+) raises:
+    """One online pass over host matrices (`partial_fit`): X, the components
+    and their Dirichlet expectation up once, `lda_online_pass_dev`, the two
+    results home."""
+    var k = DKit()
+    var Xd = k.upload(X)
+    var C = k.upload(comps)
+    var ED = k.upload(exp_dir)
+    lda_online_pass_dev(k, Xd, C, ED, bs, max_doc_iter, seed, draw, n_batch_iter, doc_prior, topic_prior,
+                        offset, decay, tol, total_samples)
     comps = k.get(C)
     exp_dir = k.get(ED)
     k.sync()

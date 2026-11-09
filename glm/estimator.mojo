@@ -788,8 +788,8 @@ def qn_fit_ovr_host(
     `n_features + fit_intercept` floats (row k = fit k); `info_ptr` receives
     three floats per fit: objective, OPT_RETCODE, num_iters.
     `has_sample_weight` (lane sk-kernels): `sw_ptr` holds `n_rows` per-row
-    weights, uploaded once; every fit gets a device copy. Unset, `sw_ptr`
-    is never read."""
+    weights, uploaded once and shared by every fit. Unset, `sw_ptr` is
+    never read."""
     qn_check_loss_args(loss, 2, 0.0)
     if n_fits <= 0 or n_rows <= 0:
         raise Error("qn_fit_ovr: n_rows and n_fits must be positive")
@@ -815,12 +815,17 @@ def qn_fit_ovr_host(
     pams.penalty_normalized = penalty_normalized
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
     for k in range(n_fits):
-        # the solver takes X and y by transfer: a device-to-device copy of X
-        # and a device-built target per class, nothing over the bus
-        var xk = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        # the solver takes X and y by transfer. X is the one resident upload
+        # shared by every class: the handle is copied (a reference count), not
+        # the n_rows x n_features words. The QN objective only reads X
+        # (`GLMWithData`: gemv / gemm / the fused gradient kernels take it as
+        # an input; nothing stores into it), so fit k sees the same bytes the
+        # per-class device-to-device copy gave it (lane consol-n0-readmission:
+        # that copy was n_rows x n_features words per class). The target is
+        # built on the device per class, nothing over the bus.
+        var xk = x
         var yk = ctx.enqueue_create_buffer[DType.float32](n_rows)
         var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-        ctx.enqueue_copy(dst_buf=xk, src_buf=x)
         ctx.enqueue_function[_ovr_target_kernel](
             codes.unsafe_ptr(), yk.unsafe_ptr(), Int32(n_rows), Int32(first_class + k),
             grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -828,8 +833,9 @@ def qn_fit_ovr_host(
         ctx.enqueue_memset(w, Float32(0.0))
         var swk = Optional[DeviceBuffer[DType.float32]]()
         if has_sample_weight:
-            var swb = ctx.enqueue_create_buffer[DType.float32](n_rows)
-            ctx.enqueue_copy(dst_buf=swb, src_buf=sw_all)
+            # shared like X: the weighted arm only reads the weights
+            # (`qn_row_weight_kernel`)
+            var swb = sw_all
             swk = Optional[DeviceBuffer[DType.float32]](swb^)
         ctx.synchronize()
         var trace = IdentityTrace()

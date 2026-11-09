@@ -242,7 +242,7 @@ def orth_ws_on_device(
     ctx: DeviceContext, a: DeviceBuffer[DType.float32], dst: DeviceBuffer[DType.float32], m: Int, l: Int
 ) raises:
     """dst = the orthonormalized columns of a (both m x l, a unchanged):
-    `orth_on_device`'s two passes with pooled work buffers; waits."""
+    `orth_on_device`'s two passes with pooled work buffers, enqueued."""
     comptime NAME = "MojoXDecompOrthWS"
     var cells = m * l
     var ns = qr_slice_count(m, l)
@@ -263,8 +263,12 @@ def orth_ws_on_device(
         )
         _ = src^
         _ = out^
-    # every launch that reads the pooled buffers is done before they go back
-    ctx.synchronize()
+    # No wait before the buffers go back (lane consol-n0-readmission: this
+    # synchronize() read nothing). The pool is this function's own name and
+    # its only taker is this function on x_decomp's one context
+    # (`dev_orth_ws_run` -> `xd_ctx`), so the next take's launches run after
+    # these in stream order, as x_decomp's resident pool (`pool_free`) already
+    # relies on.
     pool_give[NAME](dw^)
     pool_give[NAME](dq^)
     pool_give[NAME](scratch^)
