@@ -2834,6 +2834,7 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - Numbers: none. RUN OWED NVIDIA + AMD: gru-fit, lstm-fit, rnn fit (losses[] digest moves), mlp-fit (no bit change expected).
 - The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
 - Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+- **Reviewed 2026-11-09, not restored** (lane r2-restore-unmeasured-defaults): rnn_fit's default before X3 was the serial one-thread OP_SUM `sum_into`; a one-thread serial fold may not come back as a default (AGENTS.md "write code to run in parallel"), so the blocked fold (`loss_value_into`) stays rnn_fit's only reported-loss path and the serial arm stays deleted. mlp_fit's default before X3 (the loss block's blocked row-loss folds) is still its default; the deleted arm was the opt-in `-D MOJOLEARN_AUTOGRAD_LOSS` handed-in data sum, which only added launches beside that default and whose loss kinds (`LS_LOG_PROB`, `LS_BINARY_LOG_PROB`) lane m1 has since removed as dead; nothing to put back. The guard refusal stays.
 
 ### MOJOLEARN_AUTOGRAD_OPTIM
 
@@ -2844,6 +2845,7 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - Numbers: none. RUN OWED NVIDIA + AMD: mlp-fit, gru-fit, lstm-fit (ms per fit; digests must not move).
 - The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
 - Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+- **Restored 2026-11-09** by e048e42e81 (lane r2-restore-unmeasured-defaults; AGENTS.md "A measured winner is never deleted on reasoning": the promotion had no measurement): the define's default at `f7d10d2b09` was off, so the hand update is the default again: `sequence/mlp_fit.mojo` `mlp_fit` builds the OP_OPT words inline (Adam running products `pw1` / `pw2`, `launch_opt_finish` under MLP_COMPOSED_OPT_FUSE) on its own `s1`, `s2`, `s3`; `sequence/recurrent.mojo` `rnn_fit` calls `opt_step` with `OptState` and `s1`, `s2`, `s3` (`s2` filled with `init_acc`). `-D MOJOLEARN_AUTOGRAD_OPTIM` (default off) takes X3's executor optimizer (`OptimizerState` + `step_lr` / `step_lr_finish`) in both trainers for the A/B. The guard refusal in `core/experiment_guards_neural.mojo` is lifted (the define is live). Bits: none (same OP_OPT launch, same words read). RUN OWED: NVIDIA + AMD mlp-fit, gru-fit, lstm-fit, rnn fit ms per fit, B = `-D MOJOLEARN_AUTOGRAD_OPTIM` (owed row `r2-autograd-optim`).
 
 ### MOJOLEARN_AUTOGRAD_DATA
 
