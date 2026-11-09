@@ -546,6 +546,7 @@ in the tables after the sections.
 | [`DevExec._eigh_par_on`, `_eigh_td_try`, `_eigh_par_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`, `xd_first_where2_enq`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (host-driven dense eigh drivers) | REFACTORED (every dense eigh on `eigh_op_sym` / `eigh_op_dense`) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [`SAMBA_THREE_TIER_FORWARD`: `samba_resident_forward` (+ binding, descriptor op 16, `samba_resident_native_forward`), `SambaDecodeResident` (training/samba_decode_resident.mojo), the provider forward (`samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`), the device per-layer walk of `samba_forward`, `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE fused forward tail), the dead Python `SambaStack._forward*` / `_resident*` / `_afn*` routes](#samba-stack-on-one-executor-program-2026-11-09) | Neural (Samba inference) | SUPERSEDED (one executor program, `SambaStackProgram`; never A/B'd, RUN OWED) | 2026-11-09 | [SAMBA_THREE_TIER_FORWARD.patch](../experiments/removed/SAMBA_THREE_TIER_FORWARD.patch) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5014,3 +5015,37 @@ origin/lane/x4-transformer-on-executor c0b21c971c.
 - Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
   (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
   transformer/native_lm_resident_dispatch.mojo).
+
+## Samba stack on one executor program (2026-11-09)
+
+Lane x6-samba-on-executor (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X6, owed row N094), on
+origin/integ/pre-0867-w3 5b5490960d.
+
+- What moved: every device-build Samba inference call (`SambaStack.forward` stateless or with a state,
+  `SambaStack.step`, every `SambaDecodeSession`) runs `SambaStackProgram` (training/samba_program.mojo): one inference
+  `OpsSession` holding the flat registry (one upload, one device scan per load), each layer's packed weights
+  (`upload_block`, filled device to device from the registry), state and state words, and one `OPS_M3_STEP` /
+  `OPS_ATTN_STEP` per layer, the hidden state never leaving the device; embedding, final RMSNorm and the `OP_NT` head
+  are the kernels the resident forward launched, over views of the registry tensor. Entries `samba_program_open`,
+  `samba_program_shape`, `samba_program_forward`, and the `samba_decode_*` entries now on the program
+  (bindings/_mojolearn_training.mojo). The CPU per-layer route stays for host builds and the CPU inference model.
+- Deleted: the three device tiers of `samba_forward` (bindings/samba_inference_native.mojo: `_samba_resident_forward`,
+  the provider call, the device per-layer walk, the resident flag), `samba_resident_forward` with its binding, the
+  descriptor op 16 and `samba_resident_native_forward`, the forward-only arms of `_forward_blocks` / `_norm_head_forward`,
+  training/samba_decode_resident.mojo (`SambaDecodeResident` and its five entries' bodies), the decode door's
+  identical-only / descriptor gates (`_decode_device_arm`: with `_native_primitives` always installed the resident
+  decode never ran), `samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`,
+  `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE's forward tail; its two training entries stay), and the Python
+  `SambaStack._forward`, `_forward_state`, `_forward_resident`, `_resident`, `_resident_session`, `_afn*`, `_ids`,
+  `_head_weight`, `_block`, `_make_block`, `_init_tensor`, `_count_targets` (no caller; Python compute).
+- Kept, and why: the resident train step (`samba_resident_train_step`, `samba_resident_accumulated_step`, the
+  `rules_samba` tape) and the gradients routes (provider gradients, the per-layer fallback walk in
+  bindings/samba_training_native.mojo): training through the step ops needs the backward through a step op (lane X5b)
+  and a FAST/CPU train route; the fallback walk is the Apple FAST and CPU training path today.
+- Verdict: superseded, never A/B'd. RUN OWED: samba-forward, samba-decode (per-call `step` and `decode_session`), lm
+  rows untouched; NVIDIA and AMD, program vs 5b5490960d; Apple FAST samba-forward on the M3 (FAST now runs the program).
+- Bits: the Mamba-3 layers run the decode session's body (same launches as the resident forward's zero-state prefill);
+  the attention layers run the step op's `forward_only=False` launch set over the options-constructor weights (the
+  resident forward ran `forward_only=True`). Identity lane `samba` may change; every vendor and the host column move
+  together.
+- Recoverable at 5b5490960d; patch experiments/removed/SAMBA_THREE_TIER_FORWARD.patch.
