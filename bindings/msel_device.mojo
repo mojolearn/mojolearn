@@ -18,7 +18,6 @@ this binding.
     msel_rebase_offsets_i32(raw_addr, n_raw, lens_addr, parts, n_out, dst_addr)
 """
 
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
@@ -41,10 +40,10 @@ from core.neural_context import process_ctx
 comptime _MSEL_SLOT = (
     "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
 )
-comptime _MSEL_STORE_NAME = (
-    "MojoMselStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMselStoreFast"
-)
-comptime MSEL_STORE = _Global[StorageType=MselStore, name=_MSEL_STORE_NAME, init_fn=MselStore.__init__]
+# The store's one definition is core/msel_device_x.mojo (lane a6): a kernel
+# entry in any binding that gathers a fold on the device names the same
+# process-wide `_Global`.
+from core.msel_device_x import MSEL_STORE
 
 
 def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
