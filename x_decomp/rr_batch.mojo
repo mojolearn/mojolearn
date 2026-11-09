@@ -24,7 +24,7 @@ from max.gpu.memory import AddressSpace
 
 from checks.numerics import ftz
 from decomposition.spectrum_order_device import spectrum_rank_desc
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_row_off, rr_vrow
 
@@ -40,6 +40,28 @@ def rrb_part_len(n: Int) -> Int:
 
 
 def rr_batch_kernel(
+    a_all: F32Ptr, v_all: F32Ptr, cs_all: F32Ptr, part_all: F32Ptr, dg_all: F32Ptr, info: F32Ptr,
+    w_out: F32Ptr, v_out: F32Ptr, n_in: Int32, sweeps_in: Int32, tol: Float32,
+):
+    _rr_batch_body(a_all, v_all, cs_all, part_all, dg_all, info, w_out, v_out, n_in, sweeps_in, tol)
+
+
+def rr_batch_gated_kernel(
+    skip: I32Ptr,
+    a_all: F32Ptr, v_all: F32Ptr, cs_all: F32Ptr, part_all: F32Ptr, dg_all: F32Ptr, info: F32Ptr,
+    w_out: F32Ptr, v_out: F32Ptr, n_in: Int32, sweeps_in: Int32, tol: Float32,
+):
+    """`rr_batch_kernel`, every block returning at once (before any barrier)
+    when `skip[0] != 0`: the executor op's closed gate, or the tridiagonal
+    op's fallback when the tridiagonal solve was not refused
+    (x_decomp/eigh_ops.mojo, lane n7-device-linalg-ops). Same words."""
+    if skip.unsafe_load(0) != Int32(0):
+        return
+    _rr_batch_body(a_all, v_all, cs_all, part_all, dg_all, info, w_out, v_out, n_in, sweeps_in, tol)
+
+
+@always_inline
+def _rr_batch_body(
     a_all: F32Ptr, v_all: F32Ptr, cs_all: F32Ptr, part_all: F32Ptr, dg_all: F32Ptr, info: F32Ptr,
     w_out: F32Ptr, v_out: F32Ptr, n_in: Int32, sweeps_in: Int32, tol: Float32,
 ):
