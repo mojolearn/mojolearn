@@ -15,6 +15,7 @@ from cholesky.chol_ops import (
     chol_op_info_joins_loop,
     chol_op_logdet,
     chol_op_logdet_scratch_floats,
+    chol_op_zero_on_fail,
 )
 from core.compact_ops import CompactScratch, compact_op_f32, compact_op_i32, compact_op_indices
 from core.compact_ops_host import compact_indices_host
@@ -46,6 +47,7 @@ def main() raises:
     chol_op_info_joins_loop(ctx, regs.words, info, 1)
     chol_op_cho_solve(ctx, a, b, info, n, 1)
     chol_op_logdet(ctx, a, info, ld_ws, ld, n)
+    chol_op_zero_on_fail(ctx, info, b, n)
     # eigh
     var m = ctx.enqueue_create_buffer[DType.float32](n * n)
     enqueue_fill(ctx, m, Float32(1.0))

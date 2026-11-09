@@ -33,6 +33,7 @@ their loops onto them and delete the old paths.
 | `chol_op_cho_solve(ctx, l, b, info, n, nrhs)` | potrs (forward then back) | `chol_host_solve` |
 | `chol_op_logdet(ctx, l, info, scratch, out, n)` | out[0] = 2 sum log L_ii, stored only when info == 0; scratch `chol_op_logdet_scratch_floats(n)` | `CholHostFactor.logdet` |
 | `chol_op_info_joins_loop(ctx, words, info, it)` | the pivot failure stops the loop | n/a |
+| `chol_op_zero_on_fail(ctx, info, buf, count)` | `buf[0, count) = +0.0` when info != 0 (a failed fit's zero dual), read-free (lane N8) | n/a |
 
 Per iteration: `chol_op_begin`, the family builds `a` (kernel + ridge, its own kernel), `chol_op_factor`,
 `chol_op_info_joins_loop`, then solves / logdet / the family's gradient. The factor schedule per column: strips
@@ -91,10 +92,26 @@ iteration goes, and so does `SelectScratch` once its last caller moves.
   `copy_vector_from_matrix_diagonal_kernel` + `enqueue_logdet` + `cho_solve` (gaussian_process/gp_optim.mojo,
   gpr_resident.mojo, classifier.mojo, gpc_ovr.mojo, the KRR fit). `potrf_lower` stays for the trace / sabotage
   checks and the multi-GPU owner set only.
+  DONE 2026-11-09 (lane n8-gp-krr-smo): the optimizer runs every start on the device (run sequencer
+  `gp_opt_advance_kernel`, done word read per 8 evaluations); the GPC Newton loop is one `bounded_device_loop`
+  (gaussian_process/gpc_newton.mojo); the fits, lml_grad, sample_y and KRR read `info` at their own sync. KRR's
+  identity-trace route (km_check's `chol.panelNNN.*` records) keeps `potrf_lower`. `potrf_lower`'s other routes
+  stay: the public Cholesky (FAST_NOSYNC / FAST_TALL), GMM's M-step, x_decomp/device.mojo and kit_device.mojo, the
+  checks and the multi-GPU owner set still call it.
 - Decomposition (N9): the host round trips of w, V (kit_device.mojo eigh, ipca_owner.mojo, lanczos_dev.mojo /
   mani_decomp_native.mojo projected solve, lle_iter_dev.mojo), `HostExec.eigh_batch`'s serial loop over problems
   (replace with `eigh_op_dense_host`), and `DevExec._eigh_par_on`'s per-sweep three-scalar read for the k x k
   callers.
+- SMO (assigned to N8 on 2026-11-08; NOT moved by lane n8-gp-krr-smo, owed to its own lane): the drained count in
+  `select_i32` is the only drain of an outer iteration, and the host reads `diff` / `inner` (`return_buff`) on that
+  same drain for `check_stopping_condition` (diff_prev, n_small_diff, n_increased_diff and the max_iter budget that
+  `launch_block_solve` takes as a launch argument). Removing the count drain alone saves nothing. The move is all of:
+  the stop rule's state as device words with one criterion kernel; the block solve reading its iteration budget from
+  a device word; `fold_order_rank_kernel`, the row gather and both fused update_f kernels (`fast_update_f`,
+  `idn_update_f`) bounded by `compact_count_bound` over n_ws; and the non-fused tile path (poly / sigmoid /
+  precomputed / multi-device), whose `kernel_matrix_dispatch` over nnz rows would have to run over n_ws rows: up to
+  n_ws / nnz times the tile GEMM per outer iteration, which can cost more than the drain it removes. Measure that
+  arm (svc / svr board rows, late iterations where nnz << n_ws) before choosing it.
 - SMO, Spectral discretize, dictionary learning, ARIMA lock-step (N10): the drained count, the host n x k loops
   of `x_cluster/spectral_assign.mojo:232-275` (`jacobi_svd` on the host).
 

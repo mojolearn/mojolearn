@@ -23,6 +23,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_CHOL_NB128"](), "removed 2026-10-11 (lane/chol-nb128-delete, dd9a3d31b): IDN_CHOL_NB128 (128-wide blocked Cholesky) was SLOWER: cholesky synthetic NV 0.92x / AMD 2.29x (avg 1.6x, vendor split), v0005/a1614; code at b2657cc89, patch experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch"
     # wave-2 w2-decide-algos (2026-10-11): promoted (absent = new path; _OFF the old path) and removed switches.
     comptime assert not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK"](), "promoted 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d): one-block SMO solve is the IDENTICAL default (svc 0.720/0.663); drop -D MOJOLEARN_IDN_SVC_ONE_BLOCK, use -D MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF for the old path"
+    # lane n8-gp-krr-smo (2026-11-09): the GPC Newton loop is one device loop (gaussian_process/gpc_newton.mojo).
+    comptime assert not is_defined["MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF"](), "removed 2026-11-09 (lane/n8-gp-krr-smo): IDN_GPC_NEWTON_LOGDET_OFF read log|B| home per Newton iteration; the loop is now one bounded device loop over the executor's Cholesky ops and log|B| never leaves the device. Code at f59d913b0b, patch experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch (docs/TOMBSTONES.md)"
     return True
 
 
