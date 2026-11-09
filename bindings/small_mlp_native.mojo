@@ -949,10 +949,9 @@ def _predict_sessions_packed(handle: Int, inputs: PythonObject) raises -> Python
     var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
     if len(listed) == 0:
         raise Error("MLP sessions require at least one (rows, width) input")
-    # Pass 1: shapes only (metadata, never row values) to size the packed copy.
-    var views = List[PythonObject]()
-    var shapes = List[PythonObject]()
-    var counts = List[Int]()
+    # One pass: each session's shape checked (metadata, never row values)
+    # and its rows copied into one Mojo-owned row-major buffer, in order.
+    var x = List[Float32]()
     var total = 0
     for i in range(len(listed)):  # driver-loop: over the caller's session batches
         var value = listed[i]
@@ -965,23 +964,14 @@ def _predict_sessions_packed(handle: Int, inputs: PythonObject) raises -> Python
         var n = Int(py=shape[0])
         if n > 2147483647 // 8 - total:
             raise Error("neural MLP sessions: activation exceeds index range")
+        if n > 0:
+            x.resize((total + n) * 8, Float32(0))
+            _words_from_view(value, view, shape, [n, 8], "session input", Int(x.unsafe_ptr()) + 4 * total * 8)
+            _ = value  # keep the Python object alive through the native call above
         total += n
-        counts.append(n)
-        views.append(view)
-        shapes.append(shape)
     if total == 0:
         return generation_array([0, 3])
-    # Pass 2: one Mojo-owned row-major copy of every session, in order.
-    var x = List[Float32](length=total * 8, fill=Float32(0))
-    var base = 0
-    for i in range(len(listed)):  # driver-loop: over the caller's session batches
-        if counts[i] > 0:
-            _words_from_view(listed[i], views[i], shapes[i], [counts[i], 8], "session input",
-                             Int(x.unsafe_ptr()) + 4 * base * 8)
-        base += counts[i]
     mlp_require_finite(Int(x.unsafe_ptr()), total * 8, "session input")
-    _ = views^
-    _ = shapes^
     var zeros = List[Int32](length=total, fill=Int32(0))
     return _program_steps(index, entries, x, zeros, total, 1, _FORWARD, False)[1]
 
