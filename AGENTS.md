@@ -109,6 +109,9 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
 - A refactor that moves a family onto a shared runtime keeps the tuned kernel as
   an op of that runtime (one runtime path, tuned kernels inside it). It does not
   replace the kernel with the generic op.
+- Hand-tuned kernels are not touched by a refactor. What a refactor may change
+  is the plumbing around them: per-call weight uploads, per-token doors, host
+  reads per iteration, duplicate forwards for train and predict.
 - Until the measurement exists, the old code stays behind its switch, default
   unchanged. This narrows "remove what a change made unnecessary": unnecessary
   means measured, not argued.
