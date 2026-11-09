@@ -61,6 +61,8 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]() or is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]() or is_defined["MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM"]()), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_MCD_FAST_G1_GRAM, the MinCovDet batched TN self-Gram through scoped_kernel (x_decomp/mcd_bmma.mojo), was NEUTRAL: rab3-mcdg1 istella +0.1%, taxi -1.2% (Verdicts batch 4); its reach audit MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT and the benchmark-window MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM went with it; code at 41ffcec665; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
     comptime assert not is_defined["MOJOLEARN_MCD_ORDERED_COV"](), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_MCD_ORDERED_COV, MinCovDet / EllipticEnvelope's split-K covariance with ordered Neumaier fold (x_decomp/mcd_bmma.mojo), was NEUTRAL: rab3-mcdord EE istella -0.3%, MCD istella +0.4%, taxi -2.3% (Verdicts batch 4), quality HOLD (mcd-ordered-direct-q-r3); its reach probe, test seam and x_decomp_dev_mcd_cov went with it; code at 41ffcec665; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch
+    comptime assert not (is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF"]() or is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF_OFF"]()), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_EIGH_FAST_PANEL_DF, the double-float trailing matrix of the FAST panel tridiagonalization (x_decomp/eigh_tridiag.mojo), was DROPPED-slower: rab3-eighdf 693.09 -> 1107.60 ms (+59.8%), max_eigenvalue_error 4.27e-7 -> 1.71e-7 (Verdicts batch 4); its _OFF went with it; code at 41ffcec665; see docs/TOMBSTONES.md"
     return True
 
 

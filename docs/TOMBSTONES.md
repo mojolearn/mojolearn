@@ -414,6 +414,7 @@ in the tables after the sections.
 | [`MOJOLEARN_LLE_FAST_DEV_LU`](#mojolearn_lle_fast_dev_lu) | Decomp | HOLD-quality | 2026-11-08 | [MOJOLEARN_LLE_FAST_DEV_LU.patch](../experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch) |
 | [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
 | [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
+| [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3878,3 +3879,16 @@ public runtime qualification; this entry is not release or performance evidence.
 - Deleted by `@K0SHA_MCDORD@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch`
   (eight code files, the deleted pyapi file included). Refusal in `core/experiment_guards_decomposition.mojo`; no
   `grid_controls` entry existed.
+
+### MOJOLEARN_EIGH_FAST_PANEL_DF
+
+- What it tried: the FAST + Apple panel tridiagonalization of `eigh` with the trailing matrix kept as double-float (hi in A,
+  lo in an n x n buffer): the rank-2 tile update (`td_syr2k_kernel`), the column read (`_td_cell_df`) and the GEMV row dot
+  (`td_gemv_kernel`) in double-float (x_decomp/eigh_tridiag.mojo).
+- Verdict: DROPPED-slower, EXPERIMENTS.md (lane/apple-fast-eigh-panel-df @ 21eeacf90; rab3-eighdf, Verdicts batch 4):
+  693.09 -> 1107.60 ms (+59.8%), max_eigenvalue_error 4.27e-7 -> 1.71e-7.
+- Deleted: the define and its `_OFF`, `_td_cell_df` / `_td_cell_any`, the double-float arms, the low-word buffer and the
+  now-unused `alo` argument of `td_col_kernel`, `td_gemv_kernel` and `td_syr2k_kernel` (their other arithmetic is
+  unchanged, so the IDENTICAL `EIGH_TD_IDN` route keeps its bits), and `tools/eigh_panel_df_pair.py`.
+- Deleted by `@K0SHA_EIGH@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch`.
+  Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.

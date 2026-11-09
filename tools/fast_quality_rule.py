@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The FAST quality rule (CLAUDE.md, Andrew 2026-10-04), shared by the FAST
-quality tools (softmax_g2_quality, mcd_g1_quality, mcd_ordered_quality /
-mcd_ordered_oracle, eigh_w4_quality, eigh_panel_df_pair).
+quality tools (softmax_g2_quality, eigh_w4_quality; mcd_g1_quality,
+mcd_ordered_quality and eigh_panel_df_pair went with their defines, 2026-11-08).
 
 PASS = no material drop against FAST main (arm A) AND at least as good as the
 best opponent (when the fixture carries an opponent value). Noise-level
