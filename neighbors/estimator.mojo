@@ -1275,6 +1275,27 @@ def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.f
     return result
 
 
+def knn_upload_finite_status(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32], na: Int,
+    mut b: DeviceBuffer[DType.float32], nb: Int,
+) raises -> Int32:
+    """`knn_upload_finite_status` over two uploads in the one
+    synchronisation (an index and its queries): 1 when either holds a NaN
+    or an infinity."""
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    enqueue_finite_status(ctx, a.unsafe_ptr(), na, status.unsafe_ptr(), 0)
+    enqueue_finite_status(ctx, b.unsafe_ptr(), nb, status.unsafe_ptr(), 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var result = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
+    return result
+
+
 def knn_put_status(status_addr: Int, word: Int32):
     """Store a status word at the caller's host address (0: not asked)."""
     if status_addr != 0:
@@ -2570,8 +2591,15 @@ def radius_neighbors_count(
     out_indptr_ptr: MutPointer[Int32, MutUntrackedOrigin],
     metric: Int = RBC_METRIC_DEFAULT,
     metric_arg: Float32 = Float32(2.0),
+    status_addr: Int = 0,
 ) raises -> Int:
     """Pass one: how many neighbours, and where each query's row begins.
+
+    `status_addr` (not 0; lane a7b-device-x-neighbors): a host int32 word
+    that receives the finite status of the uploaded index and queries, tested
+    behind the uploads in their synchronisation; on a non-finite word the
+    pass stops there (returns 0, `out_indptr_ptr` unwritten) and the door
+    refuses.
 
     Writes `n_queries + 1` int32 into `out_indptr_ptr`, the CSR row starts,
     and returns the total edge count. The caller sizes its index and distance
@@ -2603,7 +2631,13 @@ def radius_neighbors_count(
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=index_ptr)
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
-    ctx.synchronize()
+    if status_addr != 0:
+        var word = knn_upload_finite_status(ctx, x, n_index * n_features, queries, n_queries * n_features)
+        knn_put_status(status_addr, word)
+        if word != 0:
+            return 0
+    else:
+        ctx.synchronize()
 
     var nnz = _rbc_index_and_count(
         ctx,

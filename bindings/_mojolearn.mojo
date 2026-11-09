@@ -1022,9 +1022,9 @@ def radius_neighbors_count_binding(
     That is why there are two of these and not one; the reasoning is in
     `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner.
     """
-    if len(params) != 6:
+    if len(params) != 6 and len(params) != 7:
         raise Error(
-            "radius_neighbors_count: params must hold 6 values, got "
+            "radius_neighbors_count: params must hold 6 values and optionally a status address, got "
             + String(len(params))
         )
     var ip = _f32_ptr(Int(py=index_addr))
@@ -1036,12 +1036,18 @@ def radius_neighbors_count_binding(
     var rad = Float32(Float64(py=params[3]))
     var mtr = Int(py=params[4])
     var marg = Float32(Float64(py=params[5]))
+    # Lane a7b-device-x-neighbors: params[6], when present, is the host
+    # address of the int32 finite status word of the uploaded index and
+    # queries (0 = finite; the door refuses otherwise).
+    var status = 0 if len(params) == 6 else Int(py=params[6])
+    if status < 0 or status % 4 != 0:
+        raise Error("radius_neighbors_count: the status address must be a positive int32-aligned address")
 
     var nnz: Int
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         nnz = radius_neighbors_count(
-            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg
+            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg, status
         )
         ctx.synchronize()
     return PythonObject(nnz)
