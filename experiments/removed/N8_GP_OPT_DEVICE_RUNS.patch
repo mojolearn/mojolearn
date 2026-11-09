@@ -1,5 +1,5 @@
 diff --git a/gaussian_process/gp_optim.mojo b/gaussian_process/gp_optim.mojo
-index 822cabc74e..cc830c5132 100644
+index 547124da01..cc830c5132 100644
 --- a/gaussian_process/gp_optim.mojo
 +++ b/gaussian_process/gp_optim.mojo
 @@ -5,9 +5,8 @@
@@ -72,7 +72,7 @@ index 822cabc74e..cc830c5132 100644
  
  @fieldwise_init
  struct GPOptResult(Movable):
-@@ -158,35 +149,20 @@ def gp_opt_init_kernel(
+@@ -158,37 +149,20 @@ def gp_opt_init_kernel(
  
  
  def gp_opt_step_kernel(
@@ -105,6 +105,8 @@ index 822cabc74e..cc830c5132 100644
 +    gp_opt_step_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, dpar, dls, lml, graw, Int(info))
  
  
+-# TOMBSTONE: gp_opt_run_end_kernel and the per-evaluation host loop of gpr_optimize_device (superseded by the device run sequencer) deleted 2026-11-09 by lane/n8-gp-krr-smo; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch
 -def gp_opt_advance_kernel(
 -    st: _P, si: _I, tmap: _I, bnd: _P, dpar: _P, dls: _P, rec: _P, seq: _I, t: Int32, n_runs: Int32,
 -    s0: UInt32, s1: UInt32,
@@ -119,7 +121,7 @@ index 822cabc74e..cc830c5132 100644
  
  
  def gp_opt_final_kernel(st: _P, tmap: _I, dpar: _P, dls: _P, res: _P, t: Int32):
-@@ -416,11 +392,10 @@ def gpr_optimize_device(
+@@ -418,11 +392,10 @@ def gpr_optimize_device(
      var dgrad = ctx.enqueue_create_buffer[DType.float32](max(nt * cells, 1))
      # GP_IDN_PRESCALE's scaled copy of X, one for the whole run
      var dxs = ctx.enqueue_create_buffer[DType.float32](max(n * n_features, 1))
@@ -135,7 +137,7 @@ index 822cabc74e..cc830c5132 100644
      var ddual = ctx.enqueue_create_buffer[DType.float32](n)
      var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
      var nb = gp_grad_blocks(n)
-@@ -434,81 +409,76 @@ def gpr_optimize_device(
+@@ -436,81 +409,76 @@ def gpr_optimize_device(
      var dsi = ctx.enqueue_create_buffer[DType.int32](GP_OPT_SI_LEN)
      var drec = ctx.enqueue_create_buffer[DType.float32](n_runs * 4)
      var dout = ctx.enqueue_create_buffer[DType.float32](2 * nt)
@@ -275,7 +277,7 @@ index 822cabc74e..cc830c5132 100644
      ctx.enqueue_function[gp_opt_final_kernel](  # small-launch(nt: hyperparameters): one block writes the winning theta, a few entries only
          _gp(dst), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dout), Int32(nt), grid_dim=1, block_dim=GP_OPT_TPB,
      )
-@@ -528,8 +498,8 @@ def gpr_optimize_device(
+@@ -530,8 +498,8 @@ def gpr_optimize_device(
      _ = out_theta^
      _ = out_values^
      _ = hsi^
@@ -286,7 +288,7 @@ index 822cabc74e..cc830c5132 100644
      _ = dx^
      _ = dy^
      _ = dpar^
-@@ -540,9 +510,9 @@ def gpr_optimize_device(
+@@ -542,9 +510,9 @@ def gpr_optimize_device(
      _ = dstack^
      _ = dgrad^
      _ = dxs^
@@ -299,7 +301,7 @@ index 822cabc74e..cc830c5132 100644
      _ = ddual^
      _ = dkinv^
      _ = dgpart^
-@@ -554,7 +524,6 @@ def gpr_optimize_device(
+@@ -556,7 +524,6 @@ def gpr_optimize_device(
      _ = dsi^
      _ = drec^
      _ = dout^
