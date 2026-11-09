@@ -32,6 +32,18 @@ def byte_host_program_open(config: ByteConfig, cfg: OptimizerConfig) raises -> B
     return byte_program_open_on[HostExec, OPS_HOST](HostExec(), config, cfg)
 
 
+def byte_host_program_workers(mut e: ByteHostProgram, workers: Int) raises:
+    """Cap the host session's task count at `workers` (0 keeps one per
+    physical core; 1 runs every launch on the calling thread). The count
+    decides how many threads run a launch, never what a task computes
+    (sequence/exec.mojo host_launch_tasks), so the bits are the same."""
+    if workers < 0 or workers > 1024:
+        raise Error("byte LM host: threads must be in [0, 1024] (0: one per physical core)")
+    if workers > 0:
+        var s = ops_session[HostExec, OPS_HOST](e.sid)
+        s[].ex.workers = workers
+
+
 def _move_host(mut s: OpsSession[HostExec], e: ByteHostProgram, flat: Int, part: Int, into_program: Bool) raises:
     """Copy `part` between the owner's flat list at host address `flat`
     and the session's tensors, one block copy per tensor piece."""

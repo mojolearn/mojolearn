@@ -42,8 +42,8 @@ def byte_host_operation(op: Int, addresses: List[Int], words: List[Int], scalars
         if len(addresses) != 2:
             raise Error("byte LM host: expected 2 addresses")
         # lane x7b: the trainer's program (one algorithm with the GPU
-        # columns); the thread words choose only the inference forward.
-        return byte_host_loss_native(addresses, cfg)
+        # columns); the thread words cap its host session's task count.
+        return byte_host_loss_native(addresses, cfg, use_threads, thread_count)
     if len(addresses) != 3:
         raise Error("byte LM host: expected 3 addresses")
     var dims: List[Int] = [words[12], words[13]]
