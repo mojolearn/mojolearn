@@ -11,7 +11,6 @@ _CONTEXT = None
 
 #: the compiled entries the CNN layers run (those a binary lacks are absent)
 _NAMES = (
-    "x_cnn_adam_hyper_d",
     "x_cnn_adam_r",
     "x_cnn_adaptive_pool",
     "x_cnn_adaptive_pool_m",
@@ -37,10 +36,6 @@ _NAMES = (
     "x_cnn_csr_upload",
     "x_cnn_dropout2d",
     "x_cnn_dropout2d_m",
-    "x_cnn_epoch_rows",
-    "x_cnn_fit_d",
-    "x_cnn_fit_epoch_d",
-    "x_cnn_fit_epoch_r",
     "x_cnn_gcn_loops",
     "x_cnn_gcn_norm",
     "x_cnn_gcn_norm_m",
@@ -68,7 +63,6 @@ _NAMES = (
     "x_cnn_pad2d_forward",
     "x_cnn_pad2d_m",
     "x_cnn_perm_gather",
-    "x_cnn_predict_r",
     "x_cnn_pool_shape",
     "x_cnn_relu_backward",
     "x_cnn_relu_forward",
