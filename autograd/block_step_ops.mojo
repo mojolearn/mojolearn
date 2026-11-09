@@ -1275,6 +1275,38 @@ def attn_step_run_kept(
 # so a block trained through the op has that backward's bits.
 comptime ATTN_STEP_TAG = 108
 
+# Lane r1-restore-measured-winners (2026-11-09; AGENTS.md "A measured winner
+# is never deleted on reasoning"): the byte LM hand step's cross-layer
+# fusion, restored inside the step op. The hand step passed each layer the
+# next layer's norm1 destinations (`next_norm_*`) and the next layer
+# `norm1_ready` (training/byte_lm.mojo `_byte_layer_forward_deferred` at
+# 5b5490960d), so a layer's residual2 add and the next layer's input RMSNorm
+# are one launch (`residual_rms_norm_kernel`: the exact S22 add, then S1-S4
+# with S1's ascending fold unchanged, so no bit moves). Lane x7 put each
+# layer behind its own OPS_ATTN_STEP and dropped it. Here a recorded run
+# whose input is the previous recorded run's output links the two entries
+# (`next_s` / `next_q`); at the next pass the earlier layer prepares the
+# later one's SPARE stages, writes its norm1 into them behind their reset,
+# and the later layer runs on those stages with norm1_ready (its old kept
+# stages become the spare: their backward ran in the previous pass). A run
+# whose input is not that output, a different shape or a refused fusion
+# (`residual_next_norm_fusion_enabled`: the measured route's own rule, Apple
+# column, RMSNorm without bias, within RESIDUAL_NORM_FUSE_MAX_ELEMS) computes
+# its norm1 itself, as before. Cost: one more stage set per fused layer.
+# Only the column the route runs on compiles it; A/B -D
+# MOJOLEARN_BYTE_LM_GENERIC_OPS (off: tonight's per-layer norm).
+comptime ATTN_STEP_NEXT_NORM = (
+    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_BYTE_LM_GENERIC_OPS"]()
+)
+
+
+def _attn_by_state(sc: BlockStepScratch, s_addr: Int, q_addr: Int) -> Int:
+    """The index of the attention entry over (state, word) addresses, or -1."""
+    for i in range(len(sc.attn)):  # driver-loop: over resident attention blocks
+        if sc.attn[i].s_addr == s_addr and sc.attn[i].q_addr == q_addr:
+            return i
+    return -1
+
 
 def attn_step_train_run(
     mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP,
@@ -1300,14 +1332,74 @@ def attn_step_train_run(
         # scratch mutably) and back in after it.
         var pre = AttnPrefill()
         swap(pre, sc.attn[e].kept)
-        _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, False)
+        var consume = False
+        var n_sumsq = 0
+        var n_out = 0
+        var n_w = 0
+        var n_eps = Float32(0.0)
+        var ne_s = 0
+        var ne_q = 0
+        var npre = AttnPrefill()
+        comptime if ATTN_STEP_NEXT_NORM:
+            var xa = Int(bufs[0])
+            var follows = l > 1 and sc.last_train_y != 0 and sc.last_train_y == xa
+            if follows:
+                # the previous recorded run fed this one: link the two entries
+                var pe = _attn_by_state(sc, sc.last_train_s, sc.last_train_q)
+                if pe >= 0 and pe != e:
+                    sc.attn[pe].next_s = Int(bufs[2])
+                    sc.attn[pe].next_q = Int(bufs[3])
+            consume = follows and sc.attn[e].ahead_y == xa and Bool(sc.attn[e].spare.stages)
+            sc.attn[e].ahead_y = 0
+            if consume:
+                # run on the stages the previous layer prepared; the old kept
+                # stages (their backward ran) become the spare
+                var ahead = AttnPrefill()
+                swap(ahead, sc.attn[e].spare)
+                swap(pre, ahead)
+                swap(ahead, sc.attn[e].spare)
+                pre.ahead = True
+            else:
+                pre.ahead = False
+            if l > 1 and sc.attn[e].next_s != 0:
+                var ne = _attn_by_state(sc, sc.attn[e].next_s, sc.attn[e].next_q)
+                if (ne >= 0 and ne != e and not sc.attn[ne].adopted and _same_ints(sc.attn[ne].ints, ints)
+                        and residual_next_norm_fusion_enabled(ints[0] * l, ints[1], sc.attn[ne].w.opts.norm_kind,
+                                                              sc.attn[ne].w.opts.norm_bias)):
+                    swap(npre, sc.attn[ne].spare)
+                    npre.prepare(ex.ctx, ints[0], l, ints[6], _attn_dims(ints), ints[7], sc.attn[ne].lean)
+                    n_sumsq = Int(npre.stages.value().norm1_sumsq.unsafe_ptr())
+                    n_out = Int(npre.stages.value().norm1_out.unsafe_ptr())
+                    n_w = Int(sc.attn[ne].w.norm1_w.unsafe_ptr())
+                    n_eps = sc.attn[ne].w.eps
+                    ne_s = sc.attn[ne].s_addr
+                    ne_q = sc.attn[ne].q_addr
+        _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, False, consume, n_sumsq, n_out, n_w, n_eps)
         e = attn_step_entry(ex, sc, bufs, counts, ints)
         swap(pre, sc.attn[e].kept)
         sc.attn[e].train_l = l
+        comptime if ATTN_STEP_NEXT_NORM:
+            if n_sumsq != 0:
+                var ne2 = _attn_by_state(sc, ne_s, ne_q)
+                if ne2 >= 0:
+                    npre.ahead = True
+                    swap(npre, sc.attn[ne2].spare)
+                    sc.attn[ne2].ahead_y = Int(y_out)
+                else:
+                    # the next entry went away: park the written stages (the
+                    # stream may still be writing them)
+                    sc.make_room(ex.ctx)
+                    sc.parked_attn.append(npre^)
+                    npre = AttnPrefill()
+            sc.last_train_s = Int(bufs[2])
+            sc.last_train_q = Int(bufs[3])
+            sc.last_train_y = Int(y_out)
         _ = pre^
+        _ = npre^
     except err:
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
             sc.forget(Int(bufs[k]))
+        sc.last_train_y = 0
         raise err
     return l
 
