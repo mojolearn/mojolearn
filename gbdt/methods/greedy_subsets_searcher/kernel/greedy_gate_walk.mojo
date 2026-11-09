@@ -123,7 +123,7 @@ def greedy_bin_feature_table(
     var n = cells if cells > 0 else 1
     var nf = len(layout.features)
     var feats = List[UInt32]()
-    for i in range(nf):  # small-loop(features: layout feature descriptors, once per fit): the feature table the resolution kernel walks
+    for i in range(nf):  # small-loop(nf: layout feature descriptors, once per fit): the feature table the resolution kernel walks
         var f = layout.features[i]
         feats.append(f.first_fold_index)
         feats.append(f.folds)
@@ -336,7 +336,7 @@ def greedy_gate_and_tail(
         Int32(max_depth), words.unsafe_ptr(), cover.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(GREEDY_TAIL_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[greedy_coverage_kernel](  # small-launch(one thread: two words and a compare): model structure
+    ctx.enqueue_function[greedy_coverage_kernel](  # small-launch(n_rows: a scalar operand of the coverage compare): one thread of control reading two words, no walk
         gate.unsafe_ptr(), structure.unsafe_ptr(), Int32(max_depth), Int32(n_rows),
         cover.unsafe_ptr(), words.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
