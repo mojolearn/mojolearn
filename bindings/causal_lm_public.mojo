@@ -2128,8 +2128,8 @@ def _generation_route_witness(route: String, capacity: Int, produced: Int,
 
 def _program_state_fields(st: PythonObject) raises -> PythonObject:
     var names = Python.tuple(
-        "_resident_session", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id",
-        "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens",
+        "_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window",
+        "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens",
     )
     return _generation_fields(st, names, True)
 
@@ -2152,9 +2152,6 @@ def _program_refusal(mut mods: NativeModules, s: GenerationHandle, blocks: List[
         return "the Mamba-1 profile"
     if len(blocks) == 0:
         return "a model without layers"
-    for i in range(len(blocks)):  # driver-loop: over the model's layers (admission)
-        if kind == "transformer" and py_get(blocks[i], "_arithmetic_profile", PythonObject(None)) is not None:
-            return "a layer arithmetic profile"
     var fields = _generation_fields(s.model, Python.tuple("_norm", "norm_eps"))
     if fields["_norm"] is not None and not (Float64(py=fields["norm_eps"]) > 0):
         return "a final norm with eps 0"
@@ -2241,7 +2238,18 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
             var tail = blk["_opts_tail"]
             for j in range(len(tail)):  # driver-loop: over the block's option words
                 ints.append(Int(py=tail[j]))
-            words.append(Int(py=st["cached_tokens"]))
+            var cached = Int(py=st["cached_tokens"])
+            # The arithmetic profile contract of the per-layer route: a cache
+            # written under another profile is refused, the block's profile
+            # is published onto the state after the read.
+            var old_profile = model_plain(py_get(st, "arithmetic_profile", PythonObject(None)))
+            var profile = model_plain(py_get(blk, "_arithmetic_profile", PythonObject(None)))
+            var changed = _generation_bool(py_get(blk, "_arithmetic_profile_changed", PythonObject(False)))
+            if old_profile is None and cached != 0 and changed:
+                raise Error("CausalLM: cached state requires arithmetic profile metadata")
+            if old_profile is not None and profile is not None and not Bool(py=old_profile == profile):
+                raise Error("CausalLM: state arithmetic profile differs")
+            words.append(cached)
         else:
             ints = [b, d]
             if kind == "mamba1":
@@ -2308,6 +2316,9 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
         if kind == "transformer":
             py_setitem(sts[i], "cached_tokens", ret[at])
             at += 1
+            var profile = model_plain(py_get(blocks[i], "_arithmetic_profile", PythonObject(None)))
+            if profile is not None:
+                py_setitem(sts[i], "arithmetic_profile", profile)
         elif kind == "mamba2":
             py_setitem(sts[i], "buffered_tokens", ret[at])
             at += 1

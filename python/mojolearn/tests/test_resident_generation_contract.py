@@ -34,7 +34,7 @@ def resident_model(path, *, uniform=False):
     entries = model._native_entries
     assert model.kind == "transformer"
     assert model._head_int15 is None and model._norm is not None
-    assert entries["resident_read_v1"] is True
+    assert entries["program_read"] is not None
     assert entries["native_block_operations"] is not None
     assert entries.get("parallel_call") is None
     for name in ("causal_lm_session_forward", "causal_lm_session_run",

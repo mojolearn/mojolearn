@@ -75,7 +75,7 @@ def test_explicit_legacy_route_has_independent_upload_policy(tmp_path, mode):
 @pytest.mark.parametrize("mode", ["greedy", "fp32"])
 def test_resident_route_does_not_manufacture_reload_off_arm(tmp_path, mode):
     records = _run(tmp_path, mode, "resident")
-    assert {r["route"] for r in records} == {"resident_greedy" if mode == "greedy" else "resident_sampling"}
+    assert {r["route"] for r in records} == {"program_decode"}
     assert {r["kv_policy"] for r in records} == {"already_resident"}
     assert {r["kv_uploads_skipped"] for r in records} == {"0"}
 
